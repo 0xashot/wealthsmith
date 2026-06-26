@@ -1,0 +1,154 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Primitive Motion Tokens",
+    "description": "Raw motion values for the WealthSmith design system. These tokens define durations, easing curves, delays, and transition properties.",
+    "version": "1.0.0"
+  },
+  "motion": {
+    "duration": {
+      "instant": {
+        "value": "0ms",
+        "type": "duration",
+        "description": "No animation"
+      },
+      "fast": {
+        "value": "120ms",
+        "type": "duration",
+        "description": "Fast feedback for small UI interactions"
+      },
+      "base": {
+        "value": "180ms",
+        "type": "duration",
+        "description": "Default UI transition duration"
+      },
+      "slow": {
+        "value": "240ms",
+        "type": "duration",
+        "description": "Slower transition for panels, overlays, and layout changes"
+      },
+      "slower": {
+        "value": "320ms",
+        "type": "duration",
+        "description": "Longer transition for large surfaces and major view changes"
+      }
+    },
+    "easing": {
+      "linear": {
+        "value": "linear",
+        "type": "cubicBezier",
+        "description": "Linear motion for progress indicators and continuous movement"
+      },
+      "standard": {
+        "value": "cubic-bezier(0.2, 0, 0, 1)",
+        "type": "cubicBezier",
+        "description": "Default easing for most UI transitions"
+      },
+      "entrance": {
+        "value": "cubic-bezier(0, 0, 0.2, 1)",
+        "type": "cubicBezier",
+        "description": "Easing for elements entering the screen"
+      },
+      "exit": {
+        "value": "cubic-bezier(0.4, 0, 1, 1)",
+        "type": "cubicBezier",
+        "description": "Easing for elements leaving the screen"
+      },
+      "emphasized": {
+        "value": "cubic-bezier(0.2, 0, 0, 1)",
+        "type": "cubicBezier",
+        "description": "Smooth emphasized easing for important UI changes"
+      }
+    },
+    "delay": {
+      "none": {
+        "value": "0ms",
+        "type": "duration",
+        "description": "No delay"
+      },
+      "short": {
+        "value": "60ms",
+        "type": "duration",
+        "description": "Short stagger delay"
+      },
+      "medium": {
+        "value": "120ms",
+        "type": "duration",
+        "description": "Medium stagger delay"
+      },
+      "long": {
+        "value": "180ms",
+        "type": "duration",
+        "description": "Long stagger delay"
+      }
+    },
+    "property": {
+      "opacity": {
+        "value": "opacity",
+        "type": "custom",
+        "description": "Opacity transition property"
+      },
+      "transform": {
+        "value": "transform",
+        "type": "custom",
+        "description": "Transform transition property"
+      },
+      "color": {
+        "value": "color, background-color, border-color",
+        "type": "custom",
+        "description": "Color transition properties"
+      },
+      "shadow": {
+        "value": "box-shadow",
+        "type": "custom",
+        "description": "Shadow transition property"
+      },
+      "allInteractive": {
+        "value": "background-color, border-color, color, box-shadow, transform",
+        "type": "custom",
+        "description": "Default transition properties for interactive controls"
+      }
+    },
+    "transform": {
+      "translate": {
+        "xs": {
+          "value": "2px",
+          "type": "dimension",
+          "description": "Tiny movement for pressed states"
+        },
+        "sm": {
+          "value": "4px",
+          "type": "dimension",
+          "description": "Small movement for hover or micro-interactions"
+        },
+        "md": {
+          "value": "8px",
+          "type": "dimension",
+          "description": "Default movement for entering or exiting elements"
+        },
+        "lg": {
+          "value": "16px",
+          "type": "dimension",
+          "description": "Large movement for panels, drawers, and overlays"
+        }
+      },
+      "scale": {
+        "pressed": {
+          "value": "0.98",
+          "type": "number",
+          "description": "Subtle scale for pressed interactive controls"
+        },
+        "hover": {
+          "value": "1.01",
+          "type": "number",
+          "description": "Subtle scale for hover emphasis when appropriate"
+        },
+        "default": {
+          "value": "1",
+          "type": "number",
+          "description": "Default scale"
+        }
+      }
+    }
+  }
+}
