@@ -1,0 +1,209 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Semantic Motion Tokens",
+    "description": "Semantic motion tokens map primitive motion values to product UI meaning. Components should use these tokens instead of raw durations, easing curves, and transform values.",
+    "version": "1.0.0"
+  },
+  "motion": {
+    "interaction": {
+      "hover": {
+        "value": {
+          "duration": "{motion.duration.fast}",
+          "easing": "{motion.easing.standard}",
+          "property": "{motion.property.allInteractive}"
+        },
+        "type": "custom",
+        "description": "Default motion for hover feedback on interactive controls and cards"
+      },
+      "press": {
+        "value": {
+          "duration": "{motion.duration.fast}",
+          "easing": "{motion.easing.standard}",
+          "property": "{motion.property.allInteractive}",
+          "scale": "{motion.transform.scale.pressed}"
+        },
+        "type": "custom",
+        "description": "Default motion for pressed states on buttons, cards, and controls"
+      },
+      "focus": {
+        "value": {
+          "duration": "{motion.duration.fast}",
+          "easing": "{motion.easing.standard}",
+          "property": "box-shadow, outline-color"
+        },
+        "type": "custom",
+        "description": "Default motion for keyboard focus states"
+      },
+      "selection": {
+        "value": {
+          "duration": "{motion.duration.base}",
+          "easing": "{motion.easing.standard}",
+          "property": "background-color, border-color, box-shadow"
+        },
+        "type": "custom",
+        "description": "Default motion for selected states in cards, rows, filters, and tabs"
+      }
+    },
+    "surface": {
+      "fadeIn": {
+        "value": {
+          "duration": "{motion.duration.base}",
+          "easing": "{motion.easing.entrance}",
+          "property": "{motion.property.opacity}"
+        },
+        "type": "custom",
+        "description": "Default fade-in motion for surfaces and content blocks"
+      },
+      "fadeOut": {
+        "value": {
+          "duration": "{motion.duration.fast}",
+          "easing": "{motion.easing.exit}",
+          "property": "{motion.property.opacity}"
+        },
+        "type": "custom",
+        "description": "Default fade-out motion for surfaces and content blocks"
+      },
+      "raise": {
+        "value": {
+          "duration": "{motion.duration.base}",
+          "easing": "{motion.easing.standard}",
+          "property": "{motion.property.shadow}"
+        },
+        "type": "custom",
+        "description": "Default elevation change for raised surfaces"
+      }
+    },
+    "overlay": {
+      "enter": {
+        "value": {
+          "duration": "{motion.duration.slow}",
+          "easing": "{motion.easing.entrance}",
+          "property": "opacity, transform",
+          "translate": "{motion.transform.translate.lg}"
+        },
+        "type": "custom",
+        "description": "Overlay, modal, drawer, and Smith AI panel entrance motion"
+      },
+      "exit": {
+        "value": {
+          "duration": "{motion.duration.base}",
+          "easing": "{motion.easing.exit}",
+          "property": "opacity, transform",
+          "translate": "{motion.transform.translate.lg}"
+        },
+        "type": "custom",
+        "description": "Overlay, modal, drawer, and Smith AI panel exit motion"
+      },
+      "scrim": {
+        "value": {
+          "duration": "{motion.duration.base}",
+          "easing": "{motion.easing.standard}",
+          "property": "{motion.property.opacity}"
+        },
+        "type": "custom",
+        "description": "Backdrop scrim fade motion for overlays and modals"
+      }
+    },
+    "navigation": {
+      "open": {
+        "value": {
+          "duration": "{motion.duration.slow}",
+          "easing": "{motion.easing.entrance}",
+          "property": "opacity, transform"
+        },
+        "type": "custom",
+        "description": "Navigation drawer or sidebar opening motion"
+      },
+      "close": {
+        "value": {
+          "duration": "{motion.duration.base}",
+          "easing": "{motion.easing.exit}",
+          "property": "opacity, transform"
+        },
+        "type": "custom",
+        "description": "Navigation drawer or sidebar closing motion"
+      }
+    },
+    "feedback": {
+      "success": {
+        "value": {
+          "duration": "{motion.duration.base}",
+          "easing": "{motion.easing.standard}",
+          "property": "opacity, transform, background-color"
+        },
+        "type": "custom",
+        "description": "Motion for success feedback, confirmation states, and completed actions"
+      },
+      "warning": {
+        "value": {
+          "duration": "{motion.duration.base}",
+          "easing": "{motion.easing.standard}",
+          "property": "opacity, background-color, border-color"
+        },
+        "type": "custom",
+        "description": "Motion for warning feedback and attention states"
+      },
+      "error": {
+        "value": {
+          "duration": "{motion.duration.base}",
+          "easing": "{motion.easing.standard}",
+          "property": "opacity, background-color, border-color"
+        },
+        "type": "custom",
+        "description": "Motion for error states and validation feedback"
+      }
+    },
+    "data": {
+      "valueChange": {
+        "value": {
+          "duration": "{motion.duration.base}",
+          "easing": "{motion.easing.standard}",
+          "property": "color, opacity"
+        },
+        "type": "custom",
+        "description": "Subtle motion for financial value changes and metric updates"
+      },
+      "chartUpdate": {
+        "value": {
+          "duration": "{motion.duration.slow}",
+          "easing": "{motion.easing.standard}",
+          "property": "opacity, transform"
+        },
+        "type": "custom",
+        "description": "Motion for chart updates, data refreshes, and visualized portfolio changes"
+      }
+    },
+    "loading": {
+      "skeleton": {
+        "value": {
+          "duration": "{motion.duration.slower}",
+          "easing": "{motion.easing.linear}",
+          "property": "background-position, opacity"
+        },
+        "type": "custom",
+        "description": "Motion for skeleton loaders and loading placeholders"
+      },
+      "spinner": {
+        "value": {
+          "duration": "1000ms",
+          "easing": "{motion.easing.linear}",
+          "property": "transform"
+        },
+        "type": "custom",
+        "description": "Motion for spinner rotation"
+      }
+    },
+    "reducedMotion": {
+      "default": {
+        "value": {
+          "duration": "{motion.duration.instant}",
+          "easing": "{motion.easing.linear}",
+          "property": "none"
+        },
+        "type": "custom",
+        "description": "Use when prefers-reduced-motion is enabled. Disable non-essential motion and avoid transform-based movement."
+      }
+    }
+  }
+}
