@@ -1,0 +1,300 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Semantic Spacing Tokens",
+    "description": "Semantic spacing tokens map primitive spacing values to UI meaning. Components and layouts should use these tokens instead of raw spacing values.",
+    "version": "1.0.0"
+  },
+  "spacing": {
+    "page": {
+      "padding": {
+        "mobile": {
+          "value": "{spacing.4}",
+          "type": "spacing",
+          "description": "Default page side padding on mobile screens"
+        },
+        "tablet": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Default page side padding on tablet screens"
+        },
+        "desktop": {
+          "value": "{spacing.7}",
+          "type": "spacing",
+          "description": "Default page side padding on desktop screens"
+        },
+        "wide": {
+          "value": "{spacing.10}",
+          "type": "spacing",
+          "description": "Default page side padding on wide desktop screens"
+        }
+      }
+    },
+    "section": {
+      "gap": {
+        "sm": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Small gap between related page sections"
+        },
+        "md": {
+          "value": "{spacing.7}",
+          "type": "spacing",
+          "description": "Default gap between major page sections"
+        },
+        "lg": {
+          "value": "{spacing.9}",
+          "type": "spacing",
+          "description": "Large gap between major page sections"
+        },
+        "xl": {
+          "value": "{spacing.10}",
+          "type": "spacing",
+          "description": "Extra-large gap for spacious desktop layouts"
+        }
+      },
+      "padding": {
+        "mobile": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Default vertical section padding on mobile"
+        },
+        "tablet": {
+          "value": "{spacing.7}",
+          "type": "spacing",
+          "description": "Default vertical section padding on tablet"
+        },
+        "desktop": {
+          "value": "{spacing.9}",
+          "type": "spacing",
+          "description": "Default vertical section padding on desktop"
+        },
+        "wide": {
+          "value": "{spacing.10}",
+          "type": "spacing",
+          "description": "Default vertical section padding on wide desktop"
+        }
+      }
+    },
+    "stack": {
+      "gap": {
+        "xs": {
+          "value": "{spacing.2}",
+          "type": "spacing",
+          "description": "Tight gap between highly related stacked items"
+        },
+        "sm": {
+          "value": "{spacing.4}",
+          "type": "spacing",
+          "description": "Small vertical gap between related items"
+        },
+        "md": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Default vertical gap between grouped items"
+        },
+        "lg": {
+          "value": "{spacing.7}",
+          "type": "spacing",
+          "description": "Large vertical gap between content groups"
+        },
+        "xl": {
+          "value": "{spacing.9}",
+          "type": "spacing",
+          "description": "Extra-large vertical gap between major content groups"
+        }
+      }
+    },
+    "inline": {
+      "gap": {
+        "xs": {
+          "value": "{spacing.1}",
+          "type": "spacing",
+          "description": "Micro horizontal gap between icons and labels"
+        },
+        "sm": {
+          "value": "{spacing.2}",
+          "type": "spacing",
+          "description": "Small horizontal gap between closely related inline items"
+        },
+        "md": {
+          "value": "{spacing.4}",
+          "type": "spacing",
+          "description": "Default horizontal gap between inline items"
+        },
+        "lg": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Large horizontal gap between inline groups"
+        }
+      }
+    },
+    "grid": {
+      "gutter": {
+        "mobile": {
+          "value": "{spacing.4}",
+          "type": "spacing",
+          "description": "Default grid gutter on mobile"
+        },
+        "tablet": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Default grid gutter on tablet"
+        },
+        "desktop": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Default grid gutter on desktop"
+        },
+        "wide": {
+          "value": "{spacing.7}",
+          "type": "spacing",
+          "description": "Default grid gutter on wide desktop"
+        }
+      }
+    },
+    "card": {
+      "padding": {
+        "sm": {
+          "value": "{spacing.4}",
+          "type": "spacing",
+          "description": "Compact card padding"
+        },
+        "md": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Default card padding"
+        },
+        "lg": {
+          "value": "{spacing.7}",
+          "type": "spacing",
+          "description": "Large card padding"
+        }
+      },
+      "gap": {
+        "sm": {
+          "value": "{spacing.3}",
+          "type": "spacing",
+          "description": "Compact spacing between card children"
+        },
+        "md": {
+          "value": "{spacing.4}",
+          "type": "spacing",
+          "description": "Default spacing between card children"
+        },
+        "lg": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Large spacing between card children"
+        }
+      }
+    },
+    "form": {
+      "fieldGap": {
+        "compact": {
+          "value": "{spacing.4}",
+          "type": "spacing",
+          "description": "Compact spacing between form fields"
+        },
+        "default": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Default spacing between form fields"
+        },
+        "comfortable": {
+          "value": "{spacing.7}",
+          "type": "spacing",
+          "description": "Comfortable spacing between form fields on larger screens"
+        }
+      },
+      "labelGap": {
+        "default": {
+          "value": "{spacing.2}",
+          "type": "spacing",
+          "description": "Spacing between a form label and its input"
+        }
+      },
+      "helperGap": {
+        "default": {
+          "value": "{spacing.2}",
+          "type": "spacing",
+          "description": "Spacing between an input and helper or error text"
+        }
+      }
+    },
+    "modal": {
+      "padding": {
+        "mobile": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Modal padding on mobile"
+        },
+        "desktop": {
+          "value": "{spacing.7}",
+          "type": "spacing",
+          "description": "Modal padding on desktop"
+        }
+      },
+      "gap": {
+        "default": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Default spacing between modal sections"
+        }
+      }
+    },
+    "table": {
+      "cell": {
+        "paddingX": {
+          "compact": {
+            "value": "{spacing.3}",
+            "type": "spacing",
+            "description": "Compact horizontal table cell padding"
+          },
+          "default": {
+            "value": "{spacing.4}",
+            "type": "spacing",
+            "description": "Default horizontal table cell padding"
+          }
+        },
+        "paddingY": {
+          "compact": {
+            "value": "{spacing.2}",
+            "type": "spacing",
+            "description": "Compact vertical table cell padding"
+          },
+          "default": {
+            "value": "{spacing.3}",
+            "type": "spacing",
+            "description": "Default vertical table cell padding"
+          }
+        }
+      }
+    },
+    "sidebar": {
+      "padding": {
+        "default": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Default sidebar inner padding"
+        }
+      },
+      "gap": {
+        "default": {
+          "value": "{spacing.6}",
+          "type": "spacing",
+          "description": "Default gap between sidebar sections"
+        }
+      }
+    },
+    "focus": {
+      "offset": {
+        "default": {
+          "value": "{spacing.1}",
+          "type": "spacing",
+          "description": "Default offset between focused element and focus ring"
+        }
+      }
+    }
+  }
+}
