@@ -1,0 +1,90 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Semantic Shadow Tokens",
+    "description": "Semantic shadow tokens map primitive shadow values to product UI meaning. Components should use these tokens instead of raw shadow values.",
+    "version": "1.0.0"
+  },
+  "shadow": {
+    "surface": {
+      "flat": {
+        "value": "{shadow.none}",
+        "type": "boxShadow",
+        "description": "Flat surfaces with no elevation"
+      },
+      "raised": {
+        "value": "{shadow.sm}",
+        "type": "boxShadow",
+        "description": "Low-emphasis raised cards and dashboard modules"
+      },
+      "interactive": {
+        "value": "{shadow.md}",
+        "type": "boxShadow",
+        "description": "Interactive raised surfaces such as clickable cards, dropdowns, and popovers"
+      },
+      "prominent": {
+        "value": "{shadow.lg}",
+        "type": "boxShadow",
+        "description": "Prominent elevated panels and high-priority surfaces"
+      }
+    },
+    "card": {
+      "default": {
+        "value": "{shadow.sm}",
+        "type": "boxShadow",
+        "description": "Default card shadow"
+      },
+      "hover": {
+        "value": "{shadow.md}",
+        "type": "boxShadow",
+        "description": "Card shadow on hover or active interaction"
+      },
+      "selected": {
+        "value": "{shadow.md}",
+        "type": "boxShadow",
+        "description": "Selected or emphasized card shadow"
+      }
+    },
+    "overlay": {
+      "dropdown": {
+        "value": "{shadow.md}",
+        "type": "boxShadow",
+        "description": "Dropdown, menu, and popover shadow"
+      },
+      "modal": {
+        "value": "{shadow.xl}",
+        "type": "boxShadow",
+        "description": "Modal and dialog shadow"
+      },
+      "drawer": {
+        "value": "{shadow.xl}",
+        "type": "boxShadow",
+        "description": "Drawer, side panel, and Smith AI overlay shadow"
+      }
+    },
+    "control": {
+      "default": {
+        "value": "{shadow.none}",
+        "type": "boxShadow",
+        "description": "Default controls do not use elevation"
+      },
+      "focus": {
+        "value": "{shadow.focus}",
+        "type": "boxShadow",
+        "description": "Keyboard focus ring for accessible controls"
+      }
+    },
+    "navigation": {
+      "bar": {
+        "value": "{shadow.sm}",
+        "type": "boxShadow",
+        "description": "Subtle navigation bar elevation when needed"
+      },
+      "sidebar": {
+        "value": "{shadow.sm}",
+        "type": "boxShadow",
+        "description": "Subtle sidebar elevation when separated from page content"
+      }
+    }
+  }
+}
