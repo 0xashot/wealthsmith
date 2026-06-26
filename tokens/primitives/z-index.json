@@ -1,0 +1,65 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Primitive Z-Index Tokens",
+    "description": "Raw z-index values for the WealthSmith design system. These tokens define the stacking scale used for layered UI elements.",
+    "version": "1.0.0"
+  },
+  "zIndex": {
+    "base": {
+      "value": 0,
+      "type": "number",
+      "description": "Default page and component layer"
+    },
+    "raised": {
+      "value": 10,
+      "type": "number",
+      "description": "Raised content such as cards, sticky elements, or active surfaces"
+    },
+    "sticky": {
+      "value": 100,
+      "type": "number",
+      "description": "Sticky headers, sticky table headers, and pinned UI regions"
+    },
+    "navigation": {
+      "value": 200,
+      "type": "number",
+      "description": "Primary navigation, sidebar, and top navigation layers"
+    },
+    "dropdown": {
+      "value": 300,
+      "type": "number",
+      "description": "Dropdown menus, select menus, autocomplete panels, and popovers"
+    },
+    "tooltip": {
+      "value": 400,
+      "type": "number",
+      "description": "Tooltips and small contextual overlays"
+    },
+    "overlay": {
+      "value": 500,
+      "type": "number",
+      "description": "Overlay scrims and temporary overlay backdrops"
+    },
+    "drawer": {
+      "value": 600,
+      "type": "number",
+      "description": "Drawers, side sheets, mobile navigation drawers, and Smith AI overlay panels"
+    },
+    "modal": {
+      "value": 700,
+      "type": "number",
+      "description": "Modals, dialogs, and blocking confirmation surfaces"
+    },
+    "toast": {
+      "value": 800,
+      "type": "number",
+      "description": "Toast notifications and transient system messages"
+    },
+    "system": {
+      "value": 900,
+      "type": "number",
+      "description": "Highest-priority system-level UI such as critical alerts"
+    }
+  }
+}
