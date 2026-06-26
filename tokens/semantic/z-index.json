@@ -1,0 +1,99 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Semantic Z-Index Tokens",
+    "description": "Semantic z-index tokens map primitive stacking values to product UI meaning. Components should use these tokens instead of raw z-index numbers.",
+    "version": "1.0.0"
+  },
+  "zIndex": {
+    "page": {
+      "base": {
+        "value": "{zIndex.base}",
+        "type": "number",
+        "description": "Default page content layer"
+      },
+      "raised": {
+        "value": "{zIndex.raised}",
+        "type": "number",
+        "description": "Raised page content such as active cards or elevated sections"
+      }
+    },
+    "header": {
+      "sticky": {
+        "value": "{zIndex.sticky}",
+        "type": "number",
+        "description": "Sticky page headers and sticky section headers"
+      }
+    },
+    "navigation": {
+      "primary": {
+        "value": "{zIndex.navigation}",
+        "type": "number",
+        "description": "Primary app navigation and desktop sidebar"
+      },
+      "mobileDrawer": {
+        "value": "{zIndex.drawer}",
+        "type": "number",
+        "description": "Mobile navigation drawer"
+      }
+    },
+    "menu": {
+      "dropdown": {
+        "value": "{zIndex.dropdown}",
+        "type": "number",
+        "description": "Dropdown menus, select menus, and autocomplete panels"
+      },
+      "popover": {
+        "value": "{zIndex.dropdown}",
+        "type": "number",
+        "description": "Popovers and floating contextual panels"
+      },
+      "tooltip": {
+        "value": "{zIndex.tooltip}",
+        "type": "number",
+        "description": "Tooltips and small contextual help bubbles"
+      }
+    },
+    "overlay": {
+      "scrim": {
+        "value": "{zIndex.overlay}",
+        "type": "number",
+        "description": "Overlay scrim or backdrop behind drawers, sheets, and modals"
+      },
+      "drawer": {
+        "value": "{zIndex.drawer}",
+        "type": "number",
+        "description": "Drawer, side sheet, and temporary overlay panel"
+      },
+      "modal": {
+        "value": "{zIndex.modal}",
+        "type": "number",
+        "description": "Modal, dialog, confirmation, and blocking overlay surface"
+      }
+    },
+    "smithAI": {
+      "panel": {
+        "value": "{zIndex.drawer}",
+        "type": "number",
+        "description": "Smith AI side panel or overlay panel"
+      },
+      "floatingTrigger": {
+        "value": "{zIndex.tooltip}",
+        "type": "number",
+        "description": "Floating Smith AI trigger or helper button"
+      }
+    },
+    "feedback": {
+      "toast": {
+        "value": "{zIndex.toast}",
+        "type": "number",
+        "description": "Toast notifications and transient feedback messages"
+      },
+      "criticalAlert": {
+        "value": "{zIndex.system}",
+        "type": "number",
+        "description": "Highest-priority critical alert or system message"
+      }
+    }
+  }
+}
