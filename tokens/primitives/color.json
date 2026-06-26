@@ -1,0 +1,240 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Primitive Color Tokens",
+    "description": "Raw color values from the WealthSmith color system. These tokens should not describe usage. Semantic tokens map these raw values to UI meaning.",
+    "version": "1.0.0"
+  },
+  "color": {
+    "brand": {
+      "blue": {
+        "100": {
+          "value": "#087DF2",
+          "type": "color",
+          "description": "Light brand blue accent"
+        },
+        "200": {
+          "value": "#0670F5",
+          "type": "color",
+          "description": "Brand blue hover/subtle fill"
+        },
+        "300": {
+          "value": "#0563F7",
+          "type": "color",
+          "description": "Brand blue focus/pressed tone"
+        },
+        "400": {
+          "value": "#0357FA",
+          "type": "color",
+          "description": "Brand blue hover and dark selection tone"
+        },
+        "500": {
+          "value": "#024AFC",
+          "type": "color",
+          "description": "Brand blue pressed/dark hover tone"
+        },
+        "600": {
+          "value": "#003DFF",
+          "type": "color",
+          "description": "Core WealthSmith brand blue"
+        }
+      }
+    },
+    "neutral": {
+      "white": {
+        "value": "#FFFFFF",
+        "type": "color",
+        "description": "Pure white"
+      },
+      "gray": {
+        "300": {
+          "value": "#C5C5C5",
+          "type": "color",
+          "description": "Mid gray for borders, dividers, and disabled backgrounds"
+        },
+        "600": {
+          "value": "#999CA0",
+          "type": "color",
+          "description": "Soft gray for secondary text and subtle icons"
+        }
+      },
+      "dark": {
+        "bg": {
+          "value": "#121212",
+          "type": "color",
+          "description": "Dark theme background"
+        },
+        "surface": {
+          "value": "#1C1C1C",
+          "type": "color",
+          "description": "Dark theme elevated surface"
+        }
+      }
+    },
+    "text": {
+      "primary": {
+        "value": "#0A0A0A",
+        "type": "color",
+        "description": "Primary text color for light mode"
+      },
+      "secondary": {
+        "value": "#7F858A",
+        "type": "color",
+        "description": "Secondary text color for light mode"
+      },
+      "secondaryDark": {
+        "value": "#B0B0B0",
+        "type": "color",
+        "description": "Secondary text color for dark mode"
+      }
+    },
+    "surface": {
+      "card": {
+        "value": "#F9FAFB",
+        "type": "color",
+        "description": "Card and module surface"
+      },
+      "main": {
+        "value": "#F9FAFB",
+        "type": "color",
+        "description": "Main dashboard background"
+      },
+      "mainDark": {
+        "value": "#121417",
+        "type": "color",
+        "description": "Core dark surface"
+      }
+    },
+    "semantic": {
+      "success": {
+        "solid": {
+          "value": "#16A34A",
+          "type": "color",
+          "description": "Success solid background"
+        },
+        "text": {
+          "value": "#126A35",
+          "type": "color",
+          "description": "Success text and icon tone"
+        }
+      },
+      "warning": {
+        "solid": {
+          "value": "#D97706",
+          "type": "color",
+          "description": "Warning solid background"
+        },
+        "onSolid": {
+          "value": "#111214",
+          "type": "color",
+          "description": "Text on warning background"
+        },
+        "text": {
+          "value": "#8A5204",
+          "type": "color",
+          "description": "Warning text and icon tone"
+        }
+      },
+      "danger": {
+        "solid": {
+          "value": "#DC2626",
+          "type": "color",
+          "description": "Danger and error solid background"
+        },
+        "text": {
+          "value": "#8F1A1A",
+          "type": "color",
+          "description": "Danger and error text/icon tone"
+        }
+      }
+    },
+    "overlay": {
+      "scrim": {
+        "value": "#000000",
+        "type": "color",
+        "description": "Modal backdrop base color for light mode"
+      },
+      "scrimDark": {
+        "value": "#000000",
+        "type": "color",
+        "description": "Modal backdrop base color for dark mode"
+      }
+    },
+    "disabled": {
+      "text": {
+        "value": "#B2B5B8",
+        "type": "color",
+        "description": "Disabled text"
+      },
+      "strokeDark": {
+        "value": "#333333",
+        "type": "color",
+        "description": "Disabled outline in dark mode"
+      }
+    },
+    "chart": {
+      "series": {
+        "1": {
+          "value": "#0F62FE",
+          "type": "color",
+          "description": "Primary fintech blue"
+        },
+        "2": {
+          "value": "#1192E8",
+          "type": "color",
+          "description": "Bright blue accent"
+        },
+        "3": {
+          "value": "#009D9A",
+          "type": "color",
+          "description": "Balanced teal"
+        },
+        "4": {
+          "value": "#007D79",
+          "type": "color",
+          "description": "Deep teal contrast"
+        },
+        "5": {
+          "value": "#A56EFF",
+          "type": "color",
+          "description": "Soft purple"
+        },
+        "6": {
+          "value": "#8A3FFC",
+          "type": "color",
+          "description": "Deep violet"
+        },
+        "7": {
+          "value": "#EE538B",
+          "type": "color",
+          "description": "Magenta highlight"
+        },
+        "8": {
+          "value": "#CC7000",
+          "type": "color",
+          "description": "Amber/gold for RWA representation"
+        },
+        "9": {
+          "value": "#546084",
+          "type": "color",
+          "description": "Slate blue-gray"
+        },
+        "10": {
+          "value": "#5E5E5E",
+          "type": "color",
+          "description": "Graphite neutral"
+        },
+        "11": {
+          "value": "#888888",
+          "type": "color",
+          "description": "Silver neutral"
+        },
+        "12": {
+          "value": "#7C77B3",
+          "type": "color",
+          "description": "Lavender-gray"
+        }
+      }
+    }
+  }
+}
