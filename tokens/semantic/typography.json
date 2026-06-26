@@ -1,0 +1,224 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Semantic Typography Tokens",
+    "description": "Semantic typography tokens map primitive typography values to UI meaning. Components should use these tokens instead of raw font sizes, weights, and line heights.",
+    "version": "1.0.0"
+  },
+  "typography": {
+    "display": {
+      "pageTitle": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.24}",
+          "fontWeight": "{typography.fontWeight.bold}",
+          "lineHeight": "{typography.lineHeight.32}",
+          "letterSpacing": "{typography.letterSpacing.tight}"
+        },
+        "type": "typography",
+        "description": "Primary page title or major screen heading"
+      }
+    },
+    "heading": {
+      "xl": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.24}",
+          "fontWeight": "{typography.fontWeight.bold}",
+          "lineHeight": "{typography.lineHeight.32}",
+          "letterSpacing": "{typography.letterSpacing.tight}"
+        },
+        "type": "typography",
+        "description": "Largest heading used inside product screens"
+      },
+      "lg": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.20}",
+          "fontWeight": "{typography.fontWeight.bold}",
+          "lineHeight": "{typography.lineHeight.28}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Large section heading"
+      },
+      "md": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.18}",
+          "fontWeight": "{typography.fontWeight.semibold}",
+          "lineHeight": "{typography.lineHeight.28}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Medium heading for cards, panels, and subsections"
+      },
+      "sm": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.16}",
+          "fontWeight": "{typography.fontWeight.semibold}",
+          "lineHeight": "{typography.lineHeight.24}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Small heading for compact cards and grouped content"
+      }
+    },
+    "body": {
+      "lg": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.18}",
+          "fontWeight": "{typography.fontWeight.regular}",
+          "lineHeight": "{typography.lineHeight.28}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Large body text for important explanatory content"
+      },
+      "md": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.16}",
+          "fontWeight": "{typography.fontWeight.regular}",
+          "lineHeight": "{typography.lineHeight.24}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Default body text for product UI"
+      },
+      "sm": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.14}",
+          "fontWeight": "{typography.fontWeight.regular}",
+          "lineHeight": "{typography.lineHeight.20}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Small body text for secondary content, helper copy, and dense UI"
+      }
+    },
+    "label": {
+      "md": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.14}",
+          "fontWeight": "{typography.fontWeight.medium}",
+          "lineHeight": "{typography.lineHeight.20}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Default label text for form labels, field labels, and compact UI labels"
+      },
+      "sm": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.12}",
+          "fontWeight": "{typography.fontWeight.medium}",
+          "lineHeight": "{typography.lineHeight.16}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Small utility label for non-essential metadata only"
+      }
+    },
+    "button": {
+      "md": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.16}",
+          "fontWeight": "{typography.fontWeight.semibold}",
+          "lineHeight": "{typography.lineHeight.24}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Default button text"
+      },
+      "sm": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.14}",
+          "fontWeight": "{typography.fontWeight.semibold}",
+          "lineHeight": "{typography.lineHeight.20}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Small button text for compact actions"
+      }
+    },
+    "metric": {
+      "primary": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.spaceGrotesk}",
+          "fontSize": "{typography.fontSize.24}",
+          "fontWeight": "{typography.fontWeight.bold}",
+          "lineHeight": "{typography.lineHeight.32}",
+          "letterSpacing": "{typography.letterSpacing.tight}"
+        },
+        "type": "typography",
+        "description": "Primary portfolio value, headline metric, or main financial number"
+      },
+      "secondary": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.spaceGrotesk}",
+          "fontSize": "{typography.fontSize.20}",
+          "fontWeight": "{typography.fontWeight.semibold}",
+          "lineHeight": "{typography.lineHeight.28}",
+          "letterSpacing": "{typography.letterSpacing.tight}"
+        },
+        "type": "typography",
+        "description": "Secondary financial metric or supporting numeric value"
+      },
+      "compact": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.spaceGrotesk}",
+          "fontSize": "{typography.fontSize.14}",
+          "fontWeight": "{typography.fontWeight.medium}",
+          "lineHeight": "{typography.lineHeight.20}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Compact numeric value in tables, chips, cards, or inline UI"
+      }
+    },
+    "chart": {
+      "value": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.spaceGrotesk}",
+          "fontSize": "{typography.fontSize.14}",
+          "fontWeight": "{typography.fontWeight.medium}",
+          "lineHeight": "{typography.lineHeight.20}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Chart values, axis labels, and numeric data labels"
+      },
+      "label": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.14}",
+          "fontWeight": "{typography.fontWeight.medium}",
+          "lineHeight": "{typography.lineHeight.20}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Chart labels and chart helper text"
+      }
+    },
+    "caption": {
+      "default": {
+        "value": {
+          "fontFamily": "{typography.fontFamily.manrope}",
+          "fontSize": "{typography.fontSize.14}",
+          "fontWeight": "{typography.fontWeight.regular}",
+          "lineHeight": "{typography.lineHeight.20}",
+          "letterSpacing": "{typography.letterSpacing.normal}"
+        },
+        "type": "typography",
+        "description": "Caption, helper text, timestamp, and small supporting copy"
+      }
+    }
+  }
+}
