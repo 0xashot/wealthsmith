@@ -1,0 +1,189 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Semantic Breakpoint Tokens",
+    "description": "Semantic responsive behavior tokens for the WealthSmith design system. These tokens explain how product layouts should behave at each viewport range.",
+    "version": "1.0.0"
+  },
+  "responsive": {
+    "viewport": {
+      "mobile": {
+        "value": {
+          "min": "{breakpoint.mobile.min}",
+          "max": "{breakpoint.mobile.max}"
+        },
+        "type": "custom",
+        "description": "Small-screen mobile layout range. Use single-column layouts, compact spacing, and overlay navigation or AI panels."
+      },
+      "tablet": {
+        "value": {
+          "min": "{breakpoint.tablet.min}",
+          "max": "{breakpoint.tablet.max}"
+        },
+        "type": "custom",
+        "description": "Medium-screen tablet layout range. Use expanded card layouts, 8-column grid behavior, and overlay AI panels."
+      },
+      "desktop": {
+        "value": {
+          "min": "{breakpoint.desktop.min}",
+          "max": "{breakpoint.desktop.max}"
+        },
+        "type": "custom",
+        "description": "Desktop layout range. Use 12-column grid behavior, wider dashboard layouts, and allow persistent side panels."
+      },
+      "wide": {
+        "value": {
+          "min": "{breakpoint.wide.min}"
+        },
+        "type": "custom",
+        "description": "Widescreen layout range. Use maximum content width, spacious layout rhythm, and persistent side panels where useful."
+      }
+    },
+    "layout": {
+      "columns": {
+        "mobile": {
+          "value": "{grid.columns.mobile}",
+          "type": "number",
+          "description": "Use 4-column grid behavior for mobile layouts"
+        },
+        "tablet": {
+          "value": "{grid.columns.tablet}",
+          "type": "number",
+          "description": "Use 8-column grid behavior for tablet layouts"
+        },
+        "desktop": {
+          "value": "{grid.columns.desktop}",
+          "type": "number",
+          "description": "Use 12-column grid behavior for desktop layouts"
+        },
+        "wide": {
+          "value": "{grid.columns.wide}",
+          "type": "number",
+          "description": "Use 12-column grid behavior for widescreen layouts"
+        }
+      },
+      "container": {
+        "desktop": {
+          "value": "{container.maxWidth.desktop}",
+          "type": "dimension",
+          "description": "Default maximum content width for desktop product screens"
+        },
+        "wide": {
+          "value": "{container.maxWidth.wide}",
+          "type": "dimension",
+          "description": "Maximum content width for widescreen product layouts"
+        }
+      }
+    },
+    "navigation": {
+      "mobile": {
+        "value": "compact",
+        "type": "custom",
+        "description": "Use compact navigation, drawer navigation, or bottom navigation depending on product context"
+      },
+      "tablet": {
+        "value": "adaptive",
+        "type": "custom",
+        "description": "Use adaptive navigation that can collapse or expand depending on available horizontal space"
+      },
+      "desktop": {
+        "value": "expanded",
+        "type": "custom",
+        "description": "Use expanded sidebar or top-level navigation where appropriate"
+      },
+      "wide": {
+        "value": "expanded",
+        "type": "custom",
+        "description": "Use expanded navigation with stable desktop layout behavior"
+      }
+    },
+    "smithAI": {
+      "mobile": {
+        "value": "overlay",
+        "type": "custom",
+        "description": "Smith AI should open as an overlay or full-screen panel on mobile"
+      },
+      "tablet": {
+        "value": "overlay",
+        "type": "custom",
+        "description": "Smith AI should open as an overlay panel on tablet"
+      },
+      "desktop": {
+        "value": "persistent-or-toggleable-panel",
+        "type": "custom",
+        "description": "Smith AI may appear as a persistent or toggleable side panel on desktop"
+      },
+      "wide": {
+        "value": "persistent-or-toggleable-panel",
+        "type": "custom",
+        "description": "Smith AI may appear as a persistent or toggleable side panel on widescreen layouts"
+      }
+    },
+    "contentDensity": {
+      "mobile": {
+        "value": "compact",
+        "type": "custom",
+        "description": "Use compact density with clear vertical stacking and minimal side-by-side content"
+      },
+      "tablet": {
+        "value": "balanced",
+        "type": "custom",
+        "description": "Use balanced density with limited side-by-side content"
+      },
+      "desktop": {
+        "value": "comfortable",
+        "type": "custom",
+        "description": "Use comfortable density with multi-column layouts where helpful"
+      },
+      "wide": {
+        "value": "spacious",
+        "type": "custom",
+        "description": "Use spacious density while keeping content constrained to readable max widths"
+      }
+    },
+    "cardLayout": {
+      "mobile": {
+        "value": "single-column",
+        "type": "custom",
+        "description": "Cards should stack vertically on mobile"
+      },
+      "tablet": {
+        "value": "one-to-two-columns",
+        "type": "custom",
+        "description": "Cards may use one or two columns depending on content priority"
+      },
+      "desktop": {
+        "value": "multi-column",
+        "type": "custom",
+        "description": "Cards may use multi-column dashboard layouts"
+      },
+      "wide": {
+        "value": "multi-column-constrained",
+        "type": "custom",
+        "description": "Cards may use multi-column layouts but should stay within max content width"
+      }
+    },
+    "tableBehavior": {
+      "mobile": {
+        "value": "stack-or-horizontal-scroll",
+        "type": "custom",
+        "description": "Tables should stack into cards or allow controlled horizontal scrolling on mobile"
+      },
+      "tablet": {
+        "value": "adaptive",
+        "type": "custom",
+        "description": "Tables may hide lower-priority columns or use adaptive layouts"
+      },
+      "desktop": {
+        "value": "full-table",
+        "type": "custom",
+        "description": "Tables may show full column sets on desktop"
+      },
+      "wide": {
+        "value": "full-table-constrained",
+        "type": "custom",
+        "description": "Tables may show full column sets while respecting max content width"
+      }
+    }
+  }
+}
