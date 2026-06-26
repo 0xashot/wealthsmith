@@ -1,0 +1,50 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Primitive Radius Tokens",
+    "description": "Raw border-radius values for the WealthSmith design system. These tokens define the corner-radius scale used across UI components.",
+    "version": "1.0.0"
+  },
+  "radius": {
+    "none": {
+      "value": "0px",
+      "type": "borderRadius",
+      "description": "No corner rounding"
+    },
+    "xs": {
+      "value": "2px",
+      "type": "borderRadius",
+      "description": "Tiny rounding for very small UI details"
+    },
+    "sm": {
+      "value": "4px",
+      "type": "borderRadius",
+      "description": "Subtle rounding for compact controls and small surfaces"
+    },
+    "md": {
+      "value": "8px",
+      "type": "borderRadius",
+      "description": "Default small UI rounding"
+    },
+    "lg": {
+      "value": "12px",
+      "type": "borderRadius",
+      "description": "Default rounding for buttons, inputs, cards, and common surfaces"
+    },
+    "xl": {
+      "value": "16px",
+      "type": "borderRadius",
+      "description": "Large rounding for prominent cards, panels, and dashboard modules"
+    },
+    "2xl": {
+      "value": "24px",
+      "type": "borderRadius",
+      "description": "Extra-large rounding for modals, large sheets, and elevated surfaces"
+    },
+    "full": {
+      "value": "999px",
+      "type": "borderRadius",
+      "description": "Fully rounded shape for pills, badges, avatars, and circular controls"
+    }
+  }
+}
