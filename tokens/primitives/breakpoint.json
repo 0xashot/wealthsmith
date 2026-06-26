@@ -1,0 +1,91 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Primitive Breakpoint Tokens",
+    "description": "Raw responsive breakpoint values for the WealthSmith design system. These define the viewport widths where layout behavior changes.",
+    "version": "1.0.0"
+  },
+  "breakpoint": {
+    "mobile": {
+      "min": {
+        "value": "320px",
+        "type": "dimension",
+        "description": "Minimum supported mobile viewport width"
+      },
+      "max": {
+        "value": "767px",
+        "type": "dimension",
+        "description": "Maximum mobile viewport width before tablet layout begins"
+      }
+    },
+    "tablet": {
+      "min": {
+        "value": "768px",
+        "type": "dimension",
+        "description": "Minimum tablet viewport width"
+      },
+      "max": {
+        "value": "1279px",
+        "type": "dimension",
+        "description": "Maximum tablet viewport width before desktop layout begins"
+      }
+    },
+    "desktop": {
+      "min": {
+        "value": "1280px",
+        "type": "dimension",
+        "description": "Minimum desktop viewport width"
+      },
+      "max": {
+        "value": "1727px",
+        "type": "dimension",
+        "description": "Maximum desktop viewport width before widescreen layout begins"
+      }
+    },
+    "wide": {
+      "min": {
+        "value": "1728px",
+        "type": "dimension",
+        "description": "Minimum widescreen viewport width"
+      }
+    }
+  },
+  "container": {
+    "maxWidth": {
+      "desktop": {
+        "value": "1280px",
+        "type": "dimension",
+        "description": "Default maximum content width on desktop screens"
+      },
+      "wide": {
+        "value": "1440px",
+        "type": "dimension",
+        "description": "Maximum expanded content width on widescreen layouts"
+      }
+    }
+  },
+  "grid": {
+    "columns": {
+      "mobile": {
+        "value": 4,
+        "type": "number",
+        "description": "Mobile grid column count"
+      },
+      "tablet": {
+        "value": 8,
+        "type": "number",
+        "description": "Tablet grid column count"
+      },
+      "desktop": {
+        "value": 12,
+        "type": "number",
+        "description": "Desktop grid column count"
+      },
+      "wide": {
+        "value": 12,
+        "type": "number",
+        "description": "Widescreen grid column count"
+      }
+    }
+  }
+}
