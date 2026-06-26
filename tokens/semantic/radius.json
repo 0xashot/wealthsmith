@@ -1,0 +1,96 @@
+{
+  "$schema": "https://tokens.studio/schemas/tokens.json",
+  "meta": {
+    "name": "WealthSmith Semantic Radius Tokens",
+    "description": "Semantic border-radius tokens map primitive radius values to product UI meaning. Components should use these tokens instead of raw radius values.",
+    "version": "1.0.0"
+  },
+  "radius": {
+    "surface": {
+      "sm": {
+        "value": "{radius.md}",
+        "type": "borderRadius",
+        "description": "Small surface radius for compact cards and contained UI blocks"
+      },
+      "md": {
+        "value": "{radius.lg}",
+        "type": "borderRadius",
+        "description": "Default surface radius for cards, modules, and dashboard panels"
+      },
+      "lg": {
+        "value": "{radius.xl}",
+        "type": "borderRadius",
+        "description": "Large surface radius for prominent panels and feature cards"
+      },
+      "xl": {
+        "value": "{radius.2xl}",
+        "type": "borderRadius",
+        "description": "Extra-large surface radius for modals, sheets, and high-emphasis containers"
+      }
+    },
+    "control": {
+      "sm": {
+        "value": "{radius.md}",
+        "type": "borderRadius",
+        "description": "Small control radius for compact inputs, selects, and secondary controls"
+      },
+      "md": {
+        "value": "{radius.lg}",
+        "type": "borderRadius",
+        "description": "Default control radius for buttons, inputs, selects, and action controls"
+      },
+      "lg": {
+        "value": "{radius.xl}",
+        "type": "borderRadius",
+        "description": "Large control radius for prominent CTAs and large interactive controls"
+      },
+      "pill": {
+        "value": "{radius.full}",
+        "type": "borderRadius",
+        "description": "Fully rounded control radius for pill buttons, filter chips, and segmented controls"
+      }
+    },
+    "badge": {
+      "default": {
+        "value": "{radius.full}",
+        "type": "borderRadius",
+        "description": "Default radius for badges, tags, status pills, and small labels"
+      }
+    },
+    "avatar": {
+      "default": {
+        "value": "{radius.full}",
+        "type": "borderRadius",
+        "description": "Default radius for avatars and circular identity elements"
+      }
+    },
+    "modal": {
+      "default": {
+        "value": "{radius.2xl}",
+        "type": "borderRadius",
+        "description": "Default modal and dialog radius"
+      }
+    },
+    "sheet": {
+      "default": {
+        "value": "{radius.2xl}",
+        "type": "borderRadius",
+        "description": "Default bottom sheet, side sheet, and overlay panel radius"
+      }
+    },
+    "chart": {
+      "bar": {
+        "value": "{radius.sm}",
+        "type": "borderRadius",
+        "description": "Default radius for chart bars and small visual data elements"
+      }
+    },
+    "focus": {
+      "inner": {
+        "value": "{radius.lg}",
+        "type": "borderRadius",
+        "description": "Default radius match for focused controls"
+      }
+    }
+  }
+}
