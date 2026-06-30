@@ -544,29 +544,3 @@ components/portfolio-card.md
 components/select-menu.md
 components/select-card.md
 ```
-
----
-
-## MVP Status
-
-Assets are ready for MVP when these folders are complete:
-
-```text
-assets/logo/
-assets/icons/
-```
-
-and these registry files exist:
-
-```text
-assets/logo/logo-registry.json
-assets/icons/icon-registry.json
-```
-
-After this, move to:
-
-```text
-patterns/
-```
-
-Patterns will explain how components and assets work together across full product flows.
