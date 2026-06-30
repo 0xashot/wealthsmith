@@ -1,0 +1,917 @@
+{
+  "$schema": "https://wealthsmith.ai/schemas/icon-registry.schema.json",
+  "meta": {
+    "name": "WealthSmith Icon Registry",
+    "version": "1.0.3",
+    "description": "Approved WealthSmith MVP icon assets and usage metadata."
+  },
+  "categories": {
+    "ui": "General product interface icons, including chart-related UI icons such as chart-pie.",
+    "chart": "Chart legend and chart series marker icons only.",
+    "token": "Token/asset icons. Always pair with token symbol or name. Uses fallback-token when missing.",
+    "wallet": "Wallet provider icons. Exact approved assets only; no fallback for MVP.",
+    "protocol": "Protocol/platform icons. Exact approved assets only; no fallback for MVP."
+  },
+  "icons": {
+    "arrow-up": {
+      "category": "ui",
+      "path": "assets/icons/ui/arrow-up.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "brush-cleaning": {
+      "category": "ui",
+      "path": "assets/icons/ui/brush-cleaning.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "chart-pie": {
+      "category": "ui",
+      "path": "assets/icons/ui/chart-pie.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "Chart-related UI icon for allocation, chart, or analytics contexts. Not a chart legend marker.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "check": {
+      "category": "ui",
+      "path": "assets/icons/ui/check.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity.",
+        "Only use for status when parent state explicitly provides that status."
+      ],
+      "statusCapable": true,
+      "allowedStatusUse": [
+        "selected",
+        "completed",
+        "success"
+      ]
+    },
+    "chess-knight": {
+      "category": "ui",
+      "path": "assets/icons/ui/chess-knight.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "chevron-down": {
+      "category": "ui",
+      "path": "assets/icons/ui/chevron-down.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "chevron-left": {
+      "category": "ui",
+      "path": "assets/icons/ui/chevron-left.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "chevron-right": {
+      "category": "ui",
+      "path": "assets/icons/ui/chevron-right.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "chevron-up": {
+      "category": "ui",
+      "path": "assets/icons/ui/chevron-up.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "circle-check": {
+      "category": "ui",
+      "path": "assets/icons/ui/circle-check.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity.",
+        "Only use for status when parent state explicitly provides that status."
+      ],
+      "statusCapable": true,
+      "allowedStatusUse": [
+        "success",
+        "completed"
+      ]
+    },
+    "close": {
+      "category": "ui",
+      "path": "assets/icons/ui/close.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity.",
+        "Only use for status when parent state explicitly provides that status."
+      ],
+      "statusCapable": true,
+      "allowedStatusUse": [
+        "close",
+        "dismiss",
+        "error-context"
+      ]
+    },
+    "coins": {
+      "category": "ui",
+      "path": "assets/icons/ui/coins.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "external-link": {
+      "category": "ui",
+      "path": "assets/icons/ui/external-link.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "goal": {
+      "category": "ui",
+      "path": "assets/icons/ui/goal.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "house": {
+      "category": "ui",
+      "path": "assets/icons/ui/house.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "info": {
+      "category": "ui",
+      "path": "assets/icons/ui/info.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity.",
+        "Only use for status when parent state explicitly provides that status."
+      ],
+      "statusCapable": true,
+      "allowedStatusUse": [
+        "info"
+      ]
+    },
+    "log-out": {
+      "category": "ui",
+      "path": "assets/icons/ui/log-out.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "message-circle": {
+      "category": "ui",
+      "path": "assets/icons/ui/message-circle.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "more": {
+      "category": "ui",
+      "path": "assets/icons/ui/more.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "move-right": {
+      "category": "ui",
+      "path": "assets/icons/ui/move-right.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "rotate-ccw": {
+      "category": "ui",
+      "path": "assets/icons/ui/rotate-ccw.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "shield-check": {
+      "category": "ui",
+      "path": "assets/icons/ui/shield-check.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity.",
+        "Only use for status when parent state explicitly provides that status."
+      ],
+      "statusCapable": true,
+      "allowedStatusUse": [
+        "protected",
+        "verified-context"
+      ]
+    },
+    "shield": {
+      "category": "ui",
+      "path": "assets/icons/ui/shield.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity.",
+        "Only use for status when parent state explicitly provides that status."
+      ],
+      "statusCapable": true,
+      "allowedStatusUse": [
+        "security-context"
+      ]
+    },
+    "sparkle": {
+      "category": "ui",
+      "path": "assets/icons/ui/sparkle.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "thumbs-down": {
+      "category": "ui",
+      "path": "assets/icons/ui/thumbs-down.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "thumbs-up": {
+      "category": "ui",
+      "path": "assets/icons/ui/thumbs-up.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "trending-down": {
+      "category": "ui",
+      "path": "assets/icons/ui/trending-down.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity.",
+        "Only use for status when parent state explicitly provides that status."
+      ],
+      "statusCapable": true,
+      "allowedStatusUse": [
+        "negative-trend-context"
+      ]
+    },
+    "trending-up": {
+      "category": "ui",
+      "path": "assets/icons/ui/trending-up.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity.",
+        "Only use for status when parent state explicitly provides that status."
+      ],
+      "statusCapable": true,
+      "allowedStatusUse": [
+        "positive-trend-context"
+      ]
+    },
+    "undo": {
+      "category": "ui",
+      "path": "assets/icons/ui/undo.svg",
+      "defaultSize": "md",
+      "labelRequired": false,
+      "decorativeAllowed": true,
+      "colorSource": "semantic-icon-token",
+      "usage": "General UI action, navigation, or product control.",
+      "rules": [
+        "Use for UI actions, navigation, and product controls.",
+        "Use visible text or accessible label when the icon conveys meaning.",
+        "Do not use as token, wallet, protocol, or chart legend identity."
+      ]
+    },
+    "chart-dot-marker": {
+      "category": "chart",
+      "path": "assets/icons/chart/chart-dot-marker.svg",
+      "defaultSize": "sm",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "chart-series-token",
+      "usage": "Dot marker for chart legends and category series labels.",
+      "rules": [
+        "Always pair with visible series label.",
+        "Color comes from chart data or chart series token.",
+        "Do not use as category identity without label."
+      ]
+    },
+    "chart-line-marker": {
+      "category": "chart",
+      "path": "assets/icons/chart/chart-line-marker.svg",
+      "defaultSize": "sm",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "chart-series-token",
+      "usage": "Line chart legend marker for a line series.",
+      "rules": [
+        "Always pair with visible series label.",
+        "Use for line or area chart legends such as Growth.",
+        "Do not use as a generic UI icon."
+      ],
+      "renameFrom": "chart-marker.svg"
+    },
+    "bonk": {
+      "category": "token",
+      "path": "assets/icons/token/bonk.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for BONK.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "bsol": {
+      "category": "token",
+      "path": "assets/icons/token/bsol.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for BSOL.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "dai": {
+      "category": "token",
+      "path": "assets/icons/token/dai.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for DAI.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "jitosol": {
+      "category": "token",
+      "path": "assets/icons/token/jitosol.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for JITOSOL.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "jto": {
+      "category": "token",
+      "path": "assets/icons/token/jto.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for JTO.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "jup": {
+      "category": "token",
+      "path": "assets/icons/token/jup.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for JUP.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "jupsol": {
+      "category": "token",
+      "path": "assets/icons/token/jupsol.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for JUPSOL.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "msol": {
+      "category": "token",
+      "path": "assets/icons/token/msol.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for MSOL.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "ray": {
+      "category": "token",
+      "path": "assets/icons/token/ray.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for RAY.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "sol": {
+      "category": "token",
+      "path": "assets/icons/token/sol.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for SOL.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "usdc": {
+      "category": "token",
+      "path": "assets/icons/token/usdc.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for USDC.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "usdt": {
+      "category": "token",
+      "path": "assets/icons/token/usdt.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "fallback": "assets/icons/fallback/fallback-token.svg",
+      "usage": "Token icon for USDT.",
+      "rules": [
+        "Always pair with visible token symbol or token name.",
+        "Do not use icon alone as token identity.",
+        "Use fallback-token.svg if this icon is missing or fails to load.",
+        "Do not imply token recommendation from icon presence."
+      ]
+    },
+    "fallback-token": {
+      "category": "token",
+      "path": "assets/icons/fallback/fallback-token.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "semantic-icon-token",
+      "usage": "Generic fallback icon for missing token icons.",
+      "rules": [
+        "Use only when a token icon is missing or cannot load.",
+        "Always pair with visible token symbol or token name.",
+        "Fallback token icon does not identify the token.",
+        "Never show broken image icons.",
+        "Do not guess token identity from the fallback icon."
+      ]
+    },
+    "backpack": {
+      "category": "wallet",
+      "path": "assets/icons/wallet/backpack.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Wallet provider icon for backpack.",
+      "rules": [
+        "Always pair with visible wallet/provider name or address context when identity matters.",
+        "Do not imply wallet ownership.",
+        "Do not imply custody.",
+        "Do not imply signing unless the flow actually requires signing.",
+        "Missing wallet icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "phantom": {
+      "category": "wallet",
+      "path": "assets/icons/wallet/phantom.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Wallet provider icon for phantom.",
+      "rules": [
+        "Always pair with visible wallet/provider name or address context when identity matters.",
+        "Do not imply wallet ownership.",
+        "Do not imply custody.",
+        "Do not imply signing unless the flow actually requires signing.",
+        "Missing wallet icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "solflare": {
+      "category": "wallet",
+      "path": "assets/icons/wallet/solflare.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Wallet provider icon for solflare.",
+      "rules": [
+        "Always pair with visible wallet/provider name or address context when identity matters.",
+        "Do not imply wallet ownership.",
+        "Do not imply custody.",
+        "Do not imply signing unless the flow actually requires signing.",
+        "Missing wallet icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "hubble": {
+      "category": "protocol",
+      "path": "assets/icons/protocol/hubble.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Protocol icon for hubble.",
+      "rules": [
+        "Always pair with visible protocol name when identity matters.",
+        "Do not imply WealthSmith recommends the protocol because the icon appears.",
+        "Recommendation state must come from Protocol Decision Logic.",
+        "Missing protocol icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "jito": {
+      "category": "protocol",
+      "path": "assets/icons/protocol/jito.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Protocol icon for jito.",
+      "rules": [
+        "Always pair with visible protocol name when identity matters.",
+        "Do not imply WealthSmith recommends the protocol because the icon appears.",
+        "Recommendation state must come from Protocol Decision Logic.",
+        "Missing protocol icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "jupiter": {
+      "category": "protocol",
+      "path": "assets/icons/protocol/jupiter.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Protocol icon for jupiter.",
+      "rules": [
+        "Always pair with visible protocol name when identity matters.",
+        "Do not imply WealthSmith recommends the protocol because the icon appears.",
+        "Recommendation state must come from Protocol Decision Logic.",
+        "Missing protocol icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "kamino": {
+      "category": "protocol",
+      "path": "assets/icons/protocol/kamino.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Protocol icon for kamino.",
+      "rules": [
+        "Always pair with visible protocol name when identity matters.",
+        "Do not imply WealthSmith recommends the protocol because the icon appears.",
+        "Recommendation state must come from Protocol Decision Logic.",
+        "Missing protocol icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "marinade": {
+      "category": "protocol",
+      "path": "assets/icons/protocol/marinade.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Protocol icon for marinade.",
+      "rules": [
+        "Always pair with visible protocol name when identity matters.",
+        "Do not imply WealthSmith recommends the protocol because the icon appears.",
+        "Recommendation state must come from Protocol Decision Logic.",
+        "Missing protocol icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "meteora": {
+      "category": "protocol",
+      "path": "assets/icons/protocol/meteora.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Protocol icon for meteora.",
+      "rules": [
+        "Always pair with visible protocol name when identity matters.",
+        "Do not imply WealthSmith recommends the protocol because the icon appears.",
+        "Recommendation state must come from Protocol Decision Logic.",
+        "Missing protocol icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "ondo": {
+      "category": "protocol",
+      "path": "assets/icons/protocol/ondo.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Protocol icon for ondo.",
+      "rules": [
+        "Always pair with visible protocol name when identity matters.",
+        "Do not imply WealthSmith recommends the protocol because the icon appears.",
+        "Recommendation state must come from Protocol Decision Logic.",
+        "Missing protocol icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "orca": {
+      "category": "protocol",
+      "path": "assets/icons/protocol/orca.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Protocol icon for orca.",
+      "rules": [
+        "Always pair with visible protocol name when identity matters.",
+        "Do not imply WealthSmith recommends the protocol because the icon appears.",
+        "Recommendation state must come from Protocol Decision Logic.",
+        "Missing protocol icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "raydium": {
+      "category": "protocol",
+      "path": "assets/icons/protocol/raydium.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Protocol icon for raydium.",
+      "rules": [
+        "Always pair with visible protocol name when identity matters.",
+        "Do not imply WealthSmith recommends the protocol because the icon appears.",
+        "Recommendation state must come from Protocol Decision Logic.",
+        "Missing protocol icon is an implementation issue; do not use a fallback."
+      ]
+    },
+    "sanctum": {
+      "category": "protocol",
+      "path": "assets/icons/protocol/sanctum.svg",
+      "defaultSize": "md",
+      "labelRequired": true,
+      "decorativeAllowed": false,
+      "colorSource": "asset-original-color",
+      "usage": "Protocol icon for sanctum.",
+      "rules": [
+        "Always pair with visible protocol name when identity matters.",
+        "Do not imply WealthSmith recommends the protocol because the icon appears.",
+        "Recommendation state must come from Protocol Decision Logic.",
+        "Missing protocol icon is an implementation issue; do not use a fallback."
+      ]
+    }
+  },
+  "globalRules": [
+    "Use SVG assets, not screenshots, in production.",
+    "Do not invent icon names or paths.",
+    "Do not show broken image icons.",
+    "Important icons must have visible text or accessible labels.",
+    "Token, wallet, and protocol icons must not be the only source of identity.",
+    "Only token icons use a fallback for MVP.",
+    "Wallet and protocol logos are exact approved assets; missing assets are implementation issues.",
+    "Chart marker icons must always be paired with visible series labels.",
+    "chart-pie.svg belongs to UI icons, not chart marker icons.",
+    "Do not create a separate status icon folder for MVP.",
+    "Do not use icons to imply recommendation, custody, execution, or guaranteed returns."
+  ]
+}
