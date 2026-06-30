@@ -1,0 +1,93 @@
+{
+  "$schema": "https://wealthsmith.ai/schemas/logo-registry.schema.json",
+  "meta": {
+    "name": "WealthSmith Logo Registry",
+    "version": "1.0.0",
+    "description": "Approved WealthSmith logo assets and usage metadata."
+  },
+  "logos": {
+    "wealthsmith-full-lockup": {
+      "asset": "assets/logo/wealthsmith-full-lockup.svg",
+      "type": "full-lockup",
+      "description": "Full WealthSmith logo lockup with symbol and wordmark.",
+      "approvedUse": [
+        "global-navigation",
+        "expanded-sidebar",
+        "app-shell-brand-area",
+        "onboarding-entry",
+        "auth-entry"
+      ],
+      "notForUse": [
+        "smith-ai-avatar",
+        "chart-icon",
+        "status-icon",
+        "button-icon",
+        "loading-spinner",
+        "collapsed-navigation"
+      ],
+      "background": [
+        "light"
+      ],
+      "defaultSize": {
+        "desktopExpandedNavWidth": "160-220px",
+        "tabletExpandedNavWidth": "140-180px"
+      },
+      "accessibility": {
+        "interactiveLabel": "Go to WealthSmith dashboard",
+        "decorativeWhenRepeated": true
+      },
+      "rules": [
+        "Preserve aspect ratio.",
+        "Do not recreate wordmark using live text.",
+        "Do not recolor, stretch, crop, rotate, or decorate.",
+        "Use symbol variant when space is cramped."
+      ]
+    },
+    "wealthsmith-symbol": {
+      "asset": "assets/logo/wealthsmith-symbol.svg",
+      "type": "symbol",
+      "description": "Compact WealthSmith symbol mark.",
+      "approvedUse": [
+        "smith-ai-header",
+        "smith-ai-avatar",
+        "smith-ai-trigger",
+        "collapsed-sidebar",
+        "favicon",
+        "app-icon-source"
+      ],
+      "notForUse": [
+        "full-global-navigation-when-space-allows",
+        "generic-status-icon",
+        "financial-action-icon",
+        "loading-spinner",
+        "chart-marker"
+      ],
+      "background": [
+        "light"
+      ],
+      "defaultSize": {
+        "smithAIHeader": "28-36px",
+        "smithAIAvatar": "32-40px",
+        "compact": "24-32px"
+      },
+      "accessibility": {
+        "visibleTextRecommended": "Smith AI",
+        "interactiveLabel": "Open Smith AI",
+        "decorativeWhenPairedWithText": true
+      },
+      "rules": [
+        "Pair with visible text such as Smith AI when identity matters.",
+        "Do not use as a generic magic/AI icon.",
+        "Do not use as spinner.",
+        "Do not imply autonomous execution or guaranteed outcomes."
+      ]
+    }
+  },
+  "globalRules": [
+    "Use SVG assets, not screenshots, in production.",
+    "Do not store SVG code inside markdown documentation.",
+    "Do not modify approved logo geometry or colors.",
+    "Do not use logo to communicate financial status, demo status, recommendation status, or risk status.",
+    "Do not imply custody, execution, or guaranteed returns through logo usage."
+  ]
+}
