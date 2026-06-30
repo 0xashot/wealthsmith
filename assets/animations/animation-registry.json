@@ -1,0 +1,120 @@
+{
+  "$schema": "https://wealthsmith.ai/schemas/animation-registry.schema.json",
+  "meta": {
+    "name": "WealthSmith Animation Registry",
+    "version": "1.0.0",
+    "description": "Approved WealthSmith MVP animation assets and usage metadata."
+  },
+  "animations": {
+    "smith-ai-symbol-loop": {
+      "asset": "assets/animations/smith-ai-symbol-loop.json",
+      "type": "lottie-json",
+      "format": "vector",
+      "description": "Vector-based Smith AI / WealthSmith symbol loop used for suggestion-building and Smith AI insight generation states.",
+      "dimensions": {
+        "width": 500,
+        "height": 500
+      },
+      "frameRate": 30,
+      "inPoint": 0,
+      "outPoint": 122,
+      "loop": true,
+      "containsText": false,
+      "containsWordmark": false,
+      "containsEmbeddedImages": false,
+      "approvedUse": [
+        "smith-ai-loading",
+        "building-suggestions",
+        "generating-strategy-insights",
+        "preparing-suggestion-context",
+        "loading-smith-ai-explanation"
+      ],
+      "notForUse": [
+        "generic-spinner",
+        "wallet-connection",
+        "wallet-approval",
+        "portfolio-refresh",
+        "saving-settings",
+        "adding-watch-only-address",
+        "table-loading",
+        "chart-loading",
+        "card-loading",
+        "success-animation",
+        "error-animation",
+        "celebration-animation",
+        "logo-replacement"
+      ],
+      "defaultCopy": {
+        "title": "Building Your Suggestions...",
+        "description": "We are checking your plan and wallet balance to find the best next actions.",
+        "reassurance": "No action will be taken automatically."
+      },
+      "copyRules": [
+        "Always pair the animation with clear loading copy.",
+        "Use calm, specific, non-hype language.",
+        "Do not imply guaranteed returns.",
+        "Do not imply automatic execution.",
+        "Do not imply WealthSmith can move funds.",
+        "Do not imply Smith AI creates deterministic financial logic."
+      ],
+      "reducedMotion": {
+        "behavior": "static-fallback",
+        "fallbackAsset": "assets/logo/wealthsmith-symbol.svg",
+        "rules": [
+          "Do not autoplay the loop when reduced motion is enabled.",
+          "Keep loading copy visible.",
+          "Keep the same layout dimensions where possible to avoid layout shift."
+        ]
+      },
+      "accessibility": {
+        "animationAriaHidden": true,
+        "recommendedContainerAriaBusy": true,
+        "recommendedLiveRegion": "polite",
+        "recommendedRole": "status",
+        "accessibleStatusText": "Building your suggestions. No action will be taken automatically.",
+        "rules": [
+          "Do not rely on motion alone.",
+          "Do not move focus to the animation.",
+          "Do not expose internal animation layers to screen readers.",
+          "Loading copy must be available to assistive technologies."
+        ]
+      },
+      "performance": {
+        "loadStrategy": "lazy-load-when-needed",
+        "rules": [
+          "Test with the production Lottie renderer.",
+          "Verify mobile performance.",
+          "Verify file size before production release.",
+          "Confirm the animation loops cleanly.",
+          "Confirm fallback behavior works."
+        ]
+      },
+      "implementation": {
+        "recommendedComponent": "components/loading-indicator.md",
+        "exampleUsage": {
+          "variant": "smith-ai",
+          "animation": "smith-ai-symbol-loop",
+          "title": "Building Your Suggestions...",
+          "description": "We are checking your plan and wallet balance to find the best next actions.",
+          "reassurance": "No action will be taken automatically."
+        }
+      },
+      "rules": [
+        "Use only for Smith AI or suggestion-building states.",
+        "Do not use as a generic loader.",
+        "Do not store this file in assets/logo.",
+        "Parent state controls when the animation appears and disappears.",
+        "Suggestion Engine and deterministic rules produce the structured output; animation only communicates loading."
+      ]
+    }
+  },
+  "globalRules": [
+    "Animation assets must be stored in assets/animations/.",
+    "Do not invent animation names or paths.",
+    "Do not use animation as the only loading signal.",
+    "Respect reduced motion.",
+    "Use static fallback when animation fails or reduced motion is enabled.",
+    "Do not use animations to imply guaranteed returns, custody, automatic execution, or investment certainty.",
+    "Do not use animation assets as replacement for logo assets."
+  ]
+}
