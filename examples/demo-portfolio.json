@@ -1,0 +1,112 @@
+{
+  "example_metadata": {
+    "name": "Demo portfolio",
+    "path": "examples/demo-mode/demo-portfolio.json",
+    "mode": "demo",
+    "purpose": "Official MVP demo data used to preview WealthSmith without connecting a wallet.",
+    "rules": [
+      "rules/demo-mode-rules.md",
+      "rules/wallet-and-custody-rules.md",
+      "rules/financial-logic-boundaries.md"
+    ],
+    "content": [
+      "content/demo-mode-copy.md",
+      "content/onboarding-copy.md",
+      "content/glossary.md"
+    ],
+    "patterns": [
+      "patterns/dashboard-layout.md",
+      "patterns/onboarding-with-smith-ai.md",
+      "patterns/portfolio-overview.md"
+    ],
+    "notes": [
+      "This is sample data only.",
+      "This data must not be treated as real wallet data.",
+      "Demo suggestions and Demo Top Pick must be cleared when a real wallet connects."
+    ]
+  },
+  "mode": "demo",
+  "demo_mode": true,
+  "data_source": "demo_sample",
+  "wallet": {
+    "status": "disconnected",
+    "provider": null,
+    "address": null,
+    "address_short": null,
+    "show_wallet_pill": false
+  },
+  "demo": {
+    "portfolio_id": "default_mvp_demo",
+    "is_sample_data": true,
+    "banner": {
+      "visible": true,
+      "title": "You’re in demo mode.",
+      "description": "This is a sample portfolio. Connect your wallet to personalize WealthSmith with your real portfolio.",
+      "primary_action": "Exit Demo",
+      "secondary_action": "Connect Wallet"
+    }
+  },
+  "goal": {
+    "financial_goal": {
+      "label": "Build Long-Term Wealth",
+      "value": "build_long_term_wealth"
+    },
+    "risk_tolerance": {
+      "label": "Medium",
+      "value": "medium"
+    },
+    "time_horizon": {
+      "label": "5 years",
+      "value_years": 5
+    },
+    "monthly_income_usd": 4000,
+    "monthly_expenses_usd": 1000,
+    "contribution_rhythm": {
+      "label": "Monthly",
+      "value": "monthly"
+    },
+    "monthly_saving_goal_usd": 1000
+  },
+  "portfolio": {
+    "total_value_usd": 7500,
+    "assets": [
+      {
+        "symbol": "SOL",
+        "name": "Solana",
+        "category": "crypto",
+        "value_usd": 5500,
+        "is_sample_data": true,
+        "icon": "assets/icons/token/sol.svg"
+      },
+      {
+        "symbol": "BONK",
+        "name": "Bonk",
+        "category": "meme",
+        "value_usd": 1200,
+        "is_sample_data": true,
+        "icon": "assets/icons/token/bonk.svg"
+      },
+      {
+        "symbol": "USDC",
+        "name": "USD Coin",
+        "category": "stablecoin",
+        "value_usd": 800,
+        "is_sample_data": true,
+        "icon": "assets/icons/token/usdc.svg"
+      }
+    ]
+  },
+  "copy": {
+    "portfolio_label": "Sample portfolio",
+    "suggestions_label": "Sample suggestions",
+    "smith_ai_demo_prefix": "In this demo",
+    "wallet_transition_helper": "Connect your wallet to personalize WealthSmith with your real portfolio."
+  },
+  "hard_rules": [
+    "Do not show a wallet pill in Demo Mode.",
+    "Do not call demo data real wallet data.",
+    "Do not persist demo suggestions into real wallet mode.",
+    "Do not request wallet signature in Demo Mode.",
+    "Do not imply any action is executed automatically."
+  ]
+}
