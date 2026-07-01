@@ -1,23 +1,27 @@
 # Dashboard Layout
 
-This pattern defines the WealthSmith dashboard layout across the main app states:
+This pattern defines the WealthSmith Dashboard layout and main authenticated app shell.
 
-- Dashboard with Smith AI Suggestions rail
-- Dashboard with Onboarding panel open
-- Dashboard with Ask Smith AI panel open
-- Dashboard in pre-wallet / onboarding-start state
-- Dashboard in Demo Mode
-- Dashboard across responsive breakpoints
+It covers how the Dashboard works with:
 
-The dashboard is the main WealthSmith home surface.
+- Global Nav
+- Financial Snapshot
+- Safety Buffer
+- Projected Growth
+- Current vs Recommended Allocation
+- Smith AI Suggestions
+- Onboarding panel
+- Ask Smith AI panel
+- Demo Mode banner
+- Wallet connected/disconnected states
 
-It combines financial snapshot, safety buffer, projected growth, allocation insights, suggestions, and Smith AI guidance.
+The Dashboard is the primary WealthSmith home surface.
 
 ---
 
 ## Purpose
 
-The dashboard should give users a clear, calm, and actionable view of their financial position.
+The Dashboard should give users a clear, calm, and actionable view of their financial position.
 
 It should answer:
 
@@ -27,21 +31,24 @@ It should answer:
 - What is WealthSmith suggesting next?
 - Why is WealthSmith suggesting it?
 - Can I ask Smith AI for help?
-- Am I in demo mode or using real wallet data?
+- Am I using real wallet data or Demo Mode?
 
-The dashboard should make WealthSmith feel like a trustworthy financial workspace, not a trading terminal.
+The Dashboard should feel like a trustworthy financial workspace, not a trading terminal.
 
 ---
 
 ## Core Layout Principle
 
-The dashboard has two main zones:
+The Dashboard has three major areas:
 
 ```text
-Left zone:
-  Main dashboard content
+Top:
+  Global Nav
 
-Right zone:
+Left/Main:
+  Dashboard content
+
+Right:
   Smith AI surface
 ```
 
@@ -52,26 +59,252 @@ Smith AI Suggestions
 Onboarding
 Ask Smith AI
 Smith AI Strategy Insights
+Loading suggestions
+Empty suggestions
+Error suggestions
 ```
 
-The left zone remains stable while the right zone changes.
+The left Dashboard content should remain stable while the right zone changes.
 
-This keeps the user oriented.
+This keeps users oriented.
+
+---
+
+## Main Component Dependency
+
+The official navigation component is:
+
+```text
+components/global-nav.md
+```
+
+Dashboard Layout must use Global Nav rather than recreating navigation locally.
+
+Global Nav owns reusable nav rendering rules.
+
+Dashboard Layout owns where Global Nav appears in the full page and how it works with Dashboard states.
+
+---
+
+## Global Nav Placement
+
+Global Nav appears at the top of the Dashboard shell.
+
+Required MVP sizing from `components/global-nav.md`:
+
+```text
+Outer offset:
+  top: 24px
+  left: 24px
+  right: 24px
+
+Nav container:
+  height: 64px
+  radius: 16px
+  internal horizontal padding: 12px
+
+Logo:
+  width: 221px
+  height: 32px
+```
+
+Rules:
+
+- Do not recreate the Global Nav in Dashboard code.
+- Do not duplicate nav business rules in Dashboard layout.
+- Use Global Nav props/state to render the correct variant.
+- Dashboard page content begins below Global Nav with appropriate layout spacing.
+- Demo Mode banner appears above Global Nav and is not part of Global Nav.
+
+---
+
+## Global Nav Variants Used by Dashboard
+
+Dashboard can render all four Global Nav variants.
+
+### Variant 1: Onboarding Active, No Wallet Connected
+
+Use when:
+
+```text
+onboarding_active = true
+wallet.status = disconnected
+demo_mode = false
+```
+
+Global Nav right actions:
+
+```text
+Try Demo Mode
+Connect Wallet
+```
+
+Nav item behavior:
+
+```text
+Dashboard: active/enabled
+Portfolio: disabled
+Goal: disabled
+Support: disabled
+```
+
+Dashboard right zone:
+
+```text
+Onboarding panel
+```
+
+Rules:
+
+- Portfolio, Goal, and Support are disabled.
+- Ask Smith AI button is hidden.
+- Onboarding panel is the active Smith AI surface.
+- Dashboard content shows starter/empty values until wallet/demo data exists.
+- Connect Wallet opens wallet modal.
+- Try Demo Mode starts demo flow.
+- Do not let disabled nav items navigate away from onboarding.
+
+---
+
+### Variant 2: Demo Mode
+
+Use when:
+
+```text
+demo_mode = true
+wallet.status = disconnected
+onboarding_active = false
+```
+
+Global Nav right actions:
+
+```text
+Ask Smith AI
+```
+
+Nav item behavior:
+
+```text
+Dashboard: enabled
+Portfolio: enabled
+Goal: enabled
+Support: enabled
+```
+
+Dashboard right zone:
+
+```text
+Smith AI Suggestions
+or
+Ask Smith AI panel if opened
+```
+
+Rules:
+
+- Demo Mode banner appears above Global Nav.
+- No wallet pill appears.
+- Demo suggestions are based on sample data.
+- Ask Smith AI answers must be grounded in demo/sample state.
+- Demo data must not be mixed with real wallet data.
+
+---
+
+### Variant 3: Wallet Connected
+
+Use when:
+
+```text
+wallet.status = connected
+onboarding_active = false
+demo_mode = false
+```
+
+Global Nav right actions:
+
+```text
+Wallet pill
+Ask Smith AI
+```
+
+Nav item behavior:
+
+```text
+Dashboard: enabled
+Portfolio: enabled
+Goal: enabled
+Support: enabled
+```
+
+Dashboard right zone:
+
+```text
+Smith AI Suggestions
+Smith AI Strategy Insights
+Ask Smith AI panel if opened
+```
+
+Rules:
+
+- Wallet pill appears before Ask Smith AI.
+- Wallet pill opens wallet menu.
+- Ask Smith AI opens right-side Ask Smith AI panel.
+- All primary nav items are enabled.
+- Suggestions are grounded in real wallet + saved plan state.
+- Wallet connected state does not imply custody or signing.
+
+---
+
+### Variant 4: Onboarding Active, Wallet Connected
+
+Use when:
+
+```text
+onboarding_active = true
+wallet.status = connected
+demo_mode = false
+```
+
+Global Nav right actions:
+
+```text
+Wallet pill
+```
+
+Nav item behavior:
+
+```text
+Dashboard: active/enabled
+Portfolio: disabled
+Goal: disabled
+Support: disabled
+```
+
+Dashboard right zone:
+
+```text
+Onboarding panel
+```
+
+Rules:
+
+- Portfolio, Goal, and Support are disabled.
+- Ask Smith AI button is hidden.
+- Try Demo Mode and Connect Wallet are hidden.
+- Onboarding panel continues guiding setup.
+- Dashboard preview updates as wallet and plan data loads.
+- Do not let disabled navigation lose onboarding progress.
 
 ---
 
 ## Layout Modes
 
-### Mode 1: Dashboard with Suggestions Rail
+### Mode 1: Dashboard with Smith AI Suggestions Rail
 
-This is the default post-onboarding dashboard state.
+This is the default post-onboarding Dashboard state.
 
 ```text
-Top navigation:
-  WealthSmith logo
-  Dashboard / Portfolio / Goal / Support
-  Wallet pill
-  Ask Smith AI button
+Top:
+  Global Nav
 
 Left content:
   Page title: Dashboard
@@ -91,8 +324,8 @@ Use this when:
 - Onboarding is complete.
 - Suggestions are available.
 - Ask Smith AI is closed.
-- Onboarding panel is closed.
-- The user is reviewing dashboard recommendations.
+- Demo Mode may be off or on.
+- User is reviewing Dashboard recommendations.
 
 Rules:
 
@@ -102,19 +335,17 @@ Rules:
 - Top Pick appears first when actionable suggestions exist.
 - Alert banner should sync with the top recommendation.
 - Ask Smith AI button opens the chat panel state.
+- Suggestion cards follow `patterns/suggestion-flow.md`.
 
 ---
 
-### Mode 2: Dashboard with Onboarding Open
+### Mode 2: Dashboard with Onboarding Panel Open
 
 This is used when onboarding is active or incomplete.
 
 ```text
-Top navigation:
-  WealthSmith logo
-  Dashboard / Portfolio / Goal / Support
-  Try Demo Mode + Connect Wallet
-  or wallet pill if already connected
+Top:
+  Global Nav
 
 Left content:
   Dashboard preview
@@ -134,33 +365,38 @@ Right content:
 Use this when:
 
 - User has not completed onboarding.
-- User is in the guided setup flow.
+- User is in guided setup.
 - User restarts onboarding.
-- User opens onboarding from a current setup state.
+- User connects a wallet while onboarding is active.
 
 Rules:
 
 - Onboarding panel replaces the suggestions rail.
-- Onboarding stays open while the user completes setup.
+- Onboarding stays open while setup is incomplete.
+- Portfolio, Goal, and Support are disabled in Global Nav.
 - Progress bar advances by completed onboarding steps.
 - Dashboard preview updates as user provides information.
 - Dashboard should not be hidden during onboarding on desktop.
 - User can undo the previous onboarding step.
 - User can restart onboarding from the More menu.
-- Opening Portfolio or Goal during onboarding should preserve onboarding state.
+- Wallet connected state may appear in Global Nav while onboarding remains active.
+
+See:
+
+```text
+patterns/onboarding-with-smith-ai.md
+components/global-nav.md
+```
 
 ---
 
-### Mode 3: Dashboard with Ask Smith AI Open
+### Mode 3: Dashboard with Ask Smith AI Panel Open
 
-This is used when the user opens Smith AI chat/help from the dashboard.
+This is used when the user opens Smith AI chat/help from the Dashboard.
 
 ```text
-Top navigation:
-  WealthSmith logo
-  Dashboard / Portfolio / Goal / Support
-  Wallet pill
-  Ask Smith AI button
+Top:
+  Global Nav
 
 Left content:
   Dashboard content
@@ -192,22 +428,20 @@ Rules:
 - Ask Smith AI can explain existing suggestion data.
 - Ask Smith AI must not invent deterministic recommendations.
 - Ask Smith AI must not execute actions.
-- Quick actions should be grounded in current dashboard/suggestion state.
+- Quick actions should be grounded in current Dashboard/suggestion state.
 - Prompt input stays at the bottom of the panel.
-- Close button returns to the previous dashboard right-rail state.
+- Close button returns to the previous Dashboard right-zone state.
+- Ask Smith AI is hidden while onboarding is active.
 
 ---
 
 ### Mode 4: Pre-Wallet / Start State
 
-This is the state before wallet connection or demo mode.
+This is the state before wallet connection or Demo Mode.
 
 ```text
-Top navigation:
-  WealthSmith logo
-  Dashboard / Portfolio / Goal / Support
-  Try Demo Mode
-  Connect Wallet
+Top:
+  Global Nav
 
 Left content:
   Dashboard preview
@@ -224,7 +458,7 @@ Use this when:
 
 - No wallet is connected.
 - Demo Mode is not active.
-- User has not started or completed onboarding.
+- User has not completed onboarding.
 
 Rules:
 
@@ -240,110 +474,90 @@ Rules:
 
 ### Mode 5: Demo Mode
 
-Demo Mode can wrap the dashboard layout.
+Demo Mode can wrap the Dashboard layout.
 
 ```text
 Top announcement:
   You’re in demo mode.
   Exit Demo
 
+Global Nav:
+  Ask Smith AI button
+  No wallet pill
+
 Main layout:
-  Same dashboard shell
+  Dashboard shell
   Demo data
   Demo suggestions
 ```
 
 Rules:
 
+- Demo Mode banner is rendered through `components/announcement.md`.
+- Demo Mode banner is not part of Global Nav.
 - Demo Mode must be clearly visible.
 - Demo data must not be mixed with real wallet data.
 - Exiting Demo should remove demo-specific data and suggestions.
-- Demo Mode can show suggestions, Top Pick, locked opportunities, and dashboard values.
-- Demo Mode should never imply that sample values are the user’s real wallet data.
+- Demo Mode can show suggestions, Top Pick, locked opportunities, and Dashboard values.
+- Demo Mode should never imply sample values are the user’s real wallet data.
 
 ---
 
-## Top Navigation
+## Top Navigation Rules
 
-The top navigation appears at the top of the app shell.
-
-It includes:
+Dashboard Layout uses:
 
 ```text
-WealthSmith logo
+components/global-nav.md
+```
+
+Global Nav includes:
+
+```text
+WealthSmith full logo
 Dashboard
 Portfolio
 Goal
 Support
-Wallet pill or start actions
-Ask Smith AI button when available
-```
-
-### Logo
-
-Use:
-
-```text
-assets/logo/wealthsmith-full-lockup.svg
-```
-
-Rules:
-
-- Use the full lockup in the expanded top navigation.
-- Do not recreate the logo as text.
-- Do not recolor, stretch, crop, or decorate the logo.
-- Logo may link to Dashboard if product supports it.
-
-### Navigation Tabs
-
-MVP nav items:
-
-```text
-Dashboard
-Portfolio
-Goal
-Support
-```
-
-Rules:
-
-- Active nav item should be visually clear.
-- Active nav item should be exposed programmatically.
-- Do not rely on color alone.
-- Navigation should remain stable across dashboard modes.
-- Onboarding and Ask Smith AI panel changes should not unexpectedly change the active page tab.
-- Opening Portfolio or Goal from onboarding should update the active nav tab.
-
-### Wallet / Start Actions
-
-Before wallet or demo:
-
-```text
 Try Demo Mode
 Connect Wallet
-```
-
-After wallet:
-
-```text
-[wallet icon] Phantom • 6fQ9
+Wallet pill
 Ask Smith AI
 ```
 
+Dashboard Layout should pass state into Global Nav:
+
+```json
+{
+  "active_page": "dashboard",
+  "onboarding_active": true,
+  "demo_mode": false,
+  "wallet": {
+    "status": "connected",
+    "provider": "phantom",
+    "provider_label": "Phantom",
+    "address_short": "6fQ9"
+  },
+  "smith_ai": {
+    "ask_available": false
+  }
+}
+```
+
 Rules:
 
-- Wallet pill shows wallet icon, provider name, and shortened address.
-- Wallet pill does not imply custody.
-- Wallet pill does not imply signing.
-- Wallet pill does not imply WealthSmith can move funds.
-- Ask Smith AI appears when Smith AI help is available.
-- Ask Smith AI opens the right-side Ask Smith AI panel.
+- Active page comes from router/app state.
+- Onboarding state comes from onboarding flow state.
+- Wallet state comes from wallet connection state.
+- Demo Mode state comes from app mode state.
+- Dashboard Layout does not infer these states visually.
+- Global Nav renders the correct variant.
 
 ---
 
 ## Left Dashboard Content
 
-The left dashboard content is the primary financial overview.
+The left Dashboard content is the primary financial overview.
 
 Recommended order:
 
@@ -379,7 +593,7 @@ Rules:
 
 ## Alert / Recommendation Banner
 
-The dashboard may show a recommendation banner near the top.
+The Dashboard may show a recommendation banner near the top.
 
 Examples:
 
@@ -403,6 +617,7 @@ Rules:
 - Banner should use calm action language.
 - Banner must not imply automatic execution.
 - Banner must not imply guaranteed returns.
+- Banner should be hidden or replaced by empty state if no recommendation exists.
 
 ---
 
@@ -438,9 +653,9 @@ Rules:
 - UI must not invent portfolio value.
 - Trend indicators must come from product logic.
 - Net Contributions must come from product data.
-- Use metric cards.
+- Use `components/metric-card.md`.
 - Use number typography from numeric/metric typography tokens.
-- If data is unavailable, show empty or loading state, not fake values.
+- If data is unavailable, show empty/loading/partial state, not fake values.
 
 ---
 
@@ -572,6 +787,31 @@ Rules:
 
 ---
 
+## Right Zone Priority Rules
+
+Right-zone mode priority:
+
+```text
+1. Onboarding if active/incomplete
+2. Ask Smith AI if opened by user and onboarding is not active
+3. Loading suggestions if suggestion generation is meaningfully delayed
+4. Smith AI Suggestions if actionable suggestions exist
+5. Smith AI Strategy Insights if insight results exist
+6. Empty suggestions state
+7. Error state
+```
+
+Rules:
+
+- Onboarding active overrides Ask Smith AI.
+- Ask Smith AI button is hidden during active onboarding.
+- User-opened Ask Smith AI can temporarily override Suggestions after onboarding.
+- Loading suggestions should not appear for fast results.
+- Empty state should explain what is missing.
+- Error state should keep Dashboard usable.
+
+---
+
 ## Smith AI Suggestions Rail
 
 Header example:
@@ -627,6 +867,7 @@ Rules:
 - Replaces suggestions rail.
 - Progress bar advances by completed steps.
 - Dashboard preview updates as answers are saved.
+- Global Nav disables Portfolio, Goal, and Support.
 - Undo reverts previous step when possible.
 - More menu includes Restart Onboarding.
 - Onboarding should not feel like a generic chat.
@@ -636,6 +877,7 @@ See:
 
 ```text
 patterns/onboarding-with-smith-ai.md
+components/global-nav.md
 ```
 
 ---
@@ -687,11 +929,12 @@ Rules:
 - Dashboard remains visible.
 - Close returns to prior right-zone mode.
 - Quick actions must be grounded in current plan/suggestion state.
-- Ask Smith AI may explain suggestions and dashboard values.
+- Ask Smith AI may explain suggestions and Dashboard values.
 - Ask Smith AI must not invent deterministic suggestions.
 - Ask Smith AI must not execute transactions.
 - Ask Smith AI must not move funds.
 - Ask Smith AI must not ask for wallet signature unless a separate product flow explicitly requires it.
+- Ask Smith AI is not available while onboarding is active.
 
 ---
 
@@ -725,33 +968,32 @@ Rules:
 
 ---
 
-## Right Zone Priority Rules
+## Demo Mode Banner
 
-Right-zone mode priority:
+Demo Mode banner appears above Global Nav.
+
+Example:
 
 ```text
-1. Onboarding if active/incomplete
-2. Ask Smith AI if opened by user
-3. Loading suggestions if suggestion generation is meaningfully delayed
-4. Smith AI Suggestions if actionable suggestions exist
-5. Smith AI Strategy Insights if insight results exist
-6. Empty suggestions state
-7. Error state
+You’re in demo mode.
+Exit Demo
 ```
 
 Rules:
 
-- User-opened Ask Smith AI can temporarily override Suggestions.
-- Onboarding should remain visible until completed, dismissed, or explicitly closed.
-- Loading suggestions should not appear for fast results.
-- Empty state should explain what is missing.
-- Error state should keep Dashboard usable.
+- Use `components/announcement.md`.
+- Banner should be persistent while demo mode is active.
+- Exit Demo should be available.
+- Demo Mode banner should not hide Global Nav.
+- Demo data must not be mixed with real wallet data.
+- Demo suggestions must be clearly demo-derived.
+- Dismissing demo banner should not hide the fact that Demo Mode is active unless product provides another persistent indicator.
 
 ---
 
 ## Loading Rules
 
-Dashboard layout should follow global loading delay rules.
+Dashboard layout follows global loading delay rules.
 
 ```text
 0–400ms:
@@ -823,38 +1065,17 @@ Examples:
 ```text
 Wallet connected
 Wallet disconnected
+Goal settings saved
 ```
 
 Rules:
 
 - Toasts should be short.
-- Toasts should not block the dashboard.
+- Toasts should not block the Dashboard.
 - Toasts should be dismissible.
 - Toasts should not replace persistent state.
 - Wallet disconnected toast should not imply funds moved.
 - Toasts should be announced politely to assistive technologies.
-
----
-
-## Demo Mode Banner
-
-Demo Mode banner appears above the main app shell.
-
-Example:
-
-```text
-You’re in demo mode.
-Exit Demo
-```
-
-Rules:
-
-- Banner should be persistent while demo mode is active.
-- Exit Demo should be available.
-- Demo Mode banner should not hide navigation.
-- Demo data must not be mixed with real wallet data.
-- Demo suggestions must be clearly demo-derived.
-- Dismissing demo banner should not hide the fact that Demo Mode is active unless product provides another persistent indicator.
 
 ---
 
@@ -865,7 +1086,7 @@ Rules:
 Desktop layout:
 
 ```text
-Top nav full width
+Global Nav full width within page offset
 Main content grid:
   Left dashboard content
   Right Smith AI surface
@@ -875,7 +1096,7 @@ Rules:
 
 - Right surface stays visible.
 - Left content uses available width.
-- Top nav remains stable.
+- Global Nav remains stable.
 - Page scroll should be predictable.
 - Suggestion rail can scroll if content exceeds viewport.
 - Dashboard content can extend below fold.
@@ -887,7 +1108,7 @@ Wide layout:
 - Keep content constrained to max width.
 - Do not stretch cards excessively.
 - Maintain readable line lengths.
-- Right rail should remain visually connected to dashboard.
+- Right rail should remain visually connected to Dashboard.
 
 ### Tablet
 
@@ -904,10 +1125,10 @@ Mobile layout:
 
 - Use single-column content.
 - Smith AI surfaces should become overlay, drawer, or stacked panel.
-- Ask Smith AI should not permanently cover critical dashboard content unless intentionally opened.
+- Ask Smith AI should not permanently cover critical Dashboard content unless intentionally opened.
 - Suggestion cards should be full-width.
-- Wallet pill may collapse or move into menu if needed.
-- Navigation may become compact.
+- Global Nav compact/mobile behavior should not be invented without product approval.
+- Wallet pill may collapse or move into menu only if a mobile nav spec exists.
 
 ---
 
@@ -915,7 +1136,7 @@ Mobile layout:
 
 Use semantic layout and spacing tokens.
 
-Do not hardcode raw values.
+Do not hardcode raw values repeatedly.
 
 Use:
 
@@ -929,13 +1150,15 @@ shadow.card
 breakpoint.desktop
 ```
 
-Do not use:
+Global Nav explicit MVP values should be mapped to semantic tokens:
 
 ```text
-32px
-1280px
-12px radius
-#FFFFFF
+size.globalNav.height = 64px
+radius.globalNav = 16px
+spacing.globalNav.outerOffset = 24px
+spacing.globalNav.contentPaddingX = 12px
+size.logo.fullLockup.width = 221px
+size.logo.fullLockup.height = 32px
 ```
 
 Rules:
@@ -950,15 +1173,25 @@ Rules:
 
 ## Data Requirements
 
-Dashboard layout expects structured data:
+Dashboard layout expects structured data.
+
+Example:
 
 ```json
 {
+  "app": {
+    "active_page": "dashboard",
+    "demo_mode": false
+  },
   "wallet": {
     "status": "connected",
     "provider": "phantom",
     "address_short": "6fQ9",
     "mode": "real"
+  },
+  "onboarding": {
+    "active": false,
+    "status": "complete"
   },
   "dashboard": {
     "portfolio_value": 35000,
@@ -985,7 +1218,99 @@ Rules:
 - Layout renders data.
 - Product logic computes data.
 - Components should not calculate financial values on their own.
-- Missing values require empty/partial/loading state.
+- Missing values require empty/partial/loading/error state.
+
+---
+
+## Related Patterns
+
+Dashboard Layout works with:
+
+```text
+patterns/onboarding-with-smith-ai.md
+patterns/suggestion-flow.md
+patterns/portfolio-overview.md
+patterns/wallet-connection.md
+patterns/goal-settings.md
+patterns/support-center.md
+patterns/empty-loading-error-states.md
+```
+
+Rules:
+
+- Dashboard Layout should not duplicate full rules from related patterns.
+- It should reference the correct pattern for detailed behavior.
+- Global app shell rules belong here.
+- Specific workflow rules belong in their own pattern files.
+
+---
+
+## Components Used
+
+Primary components:
+
+```text
+components/global-nav.md
+components/page-header.md
+components/card.md
+components/metric-card.md
+components/progress-bar.md
+components/chart.md
+components/alert.md
+components/announcement.md
+components/suggestion-card.md
+components/loading-indicator.md
+components/skeleton.md
+components/toast.md
+components/button.md
+components/menu-popover.md
+components/icon.md
+components/logo.md
+```
+
+Rules:
+
+- Use `global-nav.md` for navigation.
+- Use `announcement.md` for Demo Mode banner.
+- Use `suggestion-card.md` for suggestion rail.
+- Use `progress-bar.md` for Safety Buffer and onboarding progress.
+- Use `chart.md` for Projected Growth and allocation charts.
+- Use `alert.md` for top recommendation banner.
+
+---
+
+## Assets Used
+
+Logo:
+
+```text
+assets/logo/wealthsmith-full-lockup.svg
+assets/logo/wealthsmith-symbol.svg
+```
+
+Icons:
+
+```text
+assets/icons/ui/
+assets/icons/wallet/
+assets/icons/protocol/
+assets/icons/token/
+assets/icons/fallback/fallback-token.svg
+```
+
+Animation:
+
+```text
+assets/animations/smith-ai-symbol-loop.json
+```
+
+Rules:
+
+- Full lockup is rendered by Global Nav.
+- Smith symbol is used inside Smith AI surfaces.
+- Smith AI animation is used only for meaningful suggestion-building waits.
+- Do not invent asset paths.
+- Do not show broken images.
 
 ---
 
@@ -994,8 +1319,9 @@ Rules:
 Rules:
 
 - Use semantic landmarks.
-- Top nav should be keyboard accessible.
+- Global Nav should be keyboard accessible.
 - Active navigation item should be programmatically exposed.
+- Disabled onboarding nav items should be programmatically disabled or safely non-interactive.
 - Right panel heading should describe current mode.
 - Suggestion cards should be keyboard accessible if clickable.
 - Ask Smith AI close button should have accessible label.
@@ -1006,6 +1332,18 @@ Rules:
 - Toasts should use polite announcement.
 - Do not rely on color alone.
 - Respect reduced motion.
+
+Example:
+
+```text
+nav aria-label="Primary navigation"
+```
+
+Example active nav item:
+
+```text
+aria-current="page"
+```
 
 Example right-panel label:
 
@@ -1045,7 +1383,7 @@ dashboard_error
 Every state should define:
 
 ```text
-top nav actions
+Global Nav variant
 left content visibility
 right panel mode
 loading behavior
@@ -1055,12 +1393,27 @@ accessibility behavior
 
 ---
 
+## Security and Wallet Safety
+
+Rules:
+
+- Never ask for seed phrases.
+- Never ask for private keys.
+- Never imply WealthSmith holds funds.
+- Never imply wallet connection moves funds.
+- Never imply suggestion clicks execute transactions.
+- Never request wallet signature from suggestion card clicks.
+- Wallet connection is read-only for MVP.
+- Suggestion cards and Manage links open protocol pages in a new tab for MVP.
+
+---
+
 ## Claude Code Rules
 
 Claude Code should:
 
-- Use this pattern for the authenticated Dashboard shell.
-- Keep left dashboard content stable when right panel changes.
+- Use `components/global-nav.md` for top navigation.
+- Keep left Dashboard content stable when right panel changes.
 - Render only one right-panel mode at a time.
 - Use onboarding pattern when onboarding is active.
 - Use suggestion-flow pattern when suggestions are shown.
@@ -1071,11 +1424,14 @@ Claude Code should:
 - Use delay rules before showing loading.
 - Preserve Demo Mode banner when active.
 - Render wallet pill from wallet state.
-- Render Ask Smith AI from state.
+- Render Ask Smith AI from state only when allowed.
+- Disable Portfolio, Goal, and Support during active onboarding.
 - Preserve accessible labels and keyboard behavior.
 
 Claude Code must not:
 
+- Recreate Global Nav locally.
+- Invent Global Nav variants.
 - Invent dashboard financial values.
 - Invent suggestion data.
 - Invent Top Pick.
@@ -1086,22 +1442,25 @@ Claude Code must not:
 - Hide Dashboard content when Ask Smith AI opens on desktop.
 - Execute transactions from suggestions.
 - Request wallet signature from suggestion card click.
-- Hardcode raw layout values.
+- Hardcode raw layout values repeatedly.
 - Recreate logo as text.
+- Allow disabled onboarding nav links to navigate.
+- Show Ask Smith AI button during active onboarding.
 
 ---
 
 ## Do
 
+- Use Global Nav as the official top navigation.
 - Keep the top navigation stable.
-- Use the full WealthSmith lockup in the header.
+- Use the full WealthSmith lockup in Global Nav.
 - Keep Dashboard as the left anchor.
 - Use the right zone for Smith AI surfaces.
 - Show Suggestions by default after onboarding.
 - Replace Suggestions with Onboarding when onboarding is active.
-- Replace Suggestions with Ask Smith AI when user opens chat.
+- Replace Suggestions with Ask Smith AI when user opens chat after onboarding.
 - Let user close Ask Smith AI and return to previous right-zone state.
-- Show Demo Mode clearly.
+- Show Demo Mode clearly above Global Nav.
 - Keep copy calm and specific.
 - Preserve accessibility.
 
@@ -1110,7 +1469,7 @@ Claude Code must not:
 ## Do Not
 
 - Do not make Dashboard feel like a chat-only interface.
-- Do not hide financial snapshot behind Smith AI on desktop.
+- Do not hide Financial Snapshot behind Smith AI on desktop.
 - Do not show loading for fast state updates.
 - Do not use suggestion rail for onboarding questions.
 - Do not use Ask Smith AI as deterministic logic.
@@ -1119,6 +1478,7 @@ Claude Code must not:
 - Do not let right rail change active nav unexpectedly.
 - Do not use icons without labels for identity.
 - Do not imply custody, automatic action, or guaranteed outcomes.
+- Do not duplicate Global Nav logic outside `components/global-nav.md`.
 
 ---
 
@@ -1126,13 +1486,17 @@ Claude Code must not:
 
 This pattern is implemented correctly when:
 
+- Global Nav is used as the top navigation component.
+- Global Nav appears with correct spacing and sizing.
 - Top navigation is stable across Dashboard modes.
 - Dashboard content remains visible on desktop.
 - Smith AI Suggestions rail appears after onboarding when suggestions exist.
 - Onboarding panel replaces Suggestions when onboarding is active.
-- Ask Smith AI panel replaces Suggestions when opened.
+- Active onboarding disables Portfolio, Goal, and Support in Global Nav.
+- Ask Smith AI panel replaces Suggestions when opened after onboarding.
+- Ask Smith AI is hidden during active onboarding.
 - Closing Ask Smith AI restores the prior right-panel mode.
-- Demo Mode banner is visible when demo mode is active.
+- Demo Mode banner is visible above Global Nav when demo mode is active.
 - Wallet pill reflects connected wallet state.
 - Pre-wallet state shows Try Demo Mode and Connect Wallet.
 - Dashboard sections render structured data.
