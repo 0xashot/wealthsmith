@@ -1,0 +1,356 @@
+{
+  "template_metadata": {
+    "name": "Suggestion Object Template",
+    "path": "templates/suggestion-object-template.json",
+    "purpose": "Reusable structure for a single WealthSmith suggestion object produced by the Suggestion Engine and consumed by UI, Top Pick Logic, Protocol Logic, Smith AI, and QA.",
+    "template_type": "json_contract_template",
+    "source_of_truth": [
+      "rules/suggestion-engine-rules.md",
+      "rules/top-pick-rules.md",
+      "rules/protocol-selection-rules.md",
+      "rules/financial-logic-boundaries.md",
+      "rules/wallet-and-custody-rules.md",
+      "rules/smith-ai-rules.md"
+    ],
+    "related_content": [
+      "content/suggestion-card-copy.md",
+      "content/smith-ai-copy.md",
+      "content/wallet-copy.md",
+      "content/glossary.md"
+    ],
+    "related_components": [
+      "components/suggestion-card.md",
+      "components/badge.md",
+      "components/button.md",
+      "components/tooltip.md",
+      "components/icon.md"
+    ],
+    "related_patterns": [
+      "patterns/suggestion-flow.md",
+      "patterns/dashboard-layout.md"
+    ],
+    "related_examples": [
+      "examples/suggestions/suggestions-buffer-underfunded.json",
+      "examples/demo-mode/demo-suggestions.json",
+      "examples/dashboard/dashboard-connected-wallet-state.json"
+    ],
+    "notes": [
+      "This is a template, not production logic.",
+      "Use placeholders only until real product logic provides values.",
+      "UI must render this object; UI must not invent suggestion fields.",
+      "Smith AI may explain this object but must not create or modify it."
+    ]
+  },
+  "suggestion": {
+    "id": "{suggestion_id}",
+    "type": "{suggestion_type_from_suggestion_engine}",
+    "category": "{suggestion_category_from_suggestion_engine}",
+    "status": "{active|locked|disabled|stale|completed|dismissed|expired}",
+    "actionability": "{actionable|locked|disabled|informational|unavailable}",
+    "severity": "{critical|warning|medium|info|success}",
+    "priority_category": "{buffer|rebalance|capital_efficiency|optimization|education}",
+    "priority_rank": "{number_from_suggestion_engine_or_top_pick_logic}",
+    "source": "{suggestion_engine_output_source}",
+    "freshness": {
+      "status": "{fresh|stale|unknown}",
+      "generated_at": "{timestamp_from_system}",
+      "expires_at": "{timestamp_or_null}",
+      "stale_reason": "{reason_or_null}"
+    },
+    "is_top_pick": "{boolean_from_top_pick_logic}",
+    "top_pick": {
+      "eligible": "{boolean_from_top_pick_logic}",
+      "selected": "{boolean_from_top_pick_logic}",
+      "badge": "{Top Pick|null}",
+      "selection_reason": "{reason_from_top_pick_logic_or_null}",
+      "reason_codes": [
+        "{top_pick_reason_code}"
+      ],
+      "must_be_only_top_pick": true,
+      "ineligible_reason": "{locked|disabled|stale|completed|dismissed|expired|informational|guardrail_failed|null}"
+    },
+    "reason_codes": [
+      "{reason_code_from_suggestion_engine}"
+    ],
+    "guardrail_results": {
+      "passes_minimum_action_size": "{boolean_or_null}",
+      "passes_safety_buffer_rule": "{boolean_or_null}",
+      "passes_cost_threshold": "{boolean_or_null}",
+      "passes_liquidity_check": "{boolean_or_null}",
+      "passes_slippage_threshold": "{boolean_or_null}",
+      "supported_asset": "{boolean_or_null}",
+      "supported_action": "{boolean_or_null}",
+      "supported_protocol": "{boolean_or_null}",
+      "not_locked": "{boolean}",
+      "not_stale": "{boolean}",
+      "not_completed": "{boolean}",
+      "not_dismissed": "{boolean}",
+      "not_expired": "{boolean}",
+      "failure_reasons": [
+        "{guardrail_failure_reason_code}"
+      ]
+    },
+    "scores": {
+      "impact_score": "{number_from_product_logic_or_null}",
+      "urgency_score": "{number_from_product_logic_or_null}",
+      "efficiency_score": "{number_from_product_logic_or_null}",
+      "ranking_note": "{short_non_user_facing_note_or_null}",
+      "must_not_invent": true
+    },
+    "copy": {
+      "title": "{copy_from_content_or_suggestion_engine}",
+      "description": "{copy_from_content_or_suggestion_engine}",
+      "tag": "{copy_from_content_or_suggestion_engine}",
+      "impact_text": "{copy_from_product_logic_or_null}",
+      "badge": "{copy_from_content_or_null}",
+      "cta": "{copy_from_content_or_protocol_logic}",
+      "disabled_reason_text": "{copy_from_content_or_null}",
+      "helper_text": "{copy_from_content_or_null}",
+      "content_ids": {
+        "title_template": "{content_id}",
+        "description_template": "{content_id}",
+        "tag": "{content_id}",
+        "badge": "{content_id_or_null}",
+        "cta": "{content_id}",
+        "disabled_reason": "{content_id_or_null}",
+        "glossary": "{content_id_or_null}"
+      },
+      "must_not_invent": true
+    },
+    "data": {
+      "primary_asset": {
+        "symbol": "{token_symbol_or_null}",
+        "name": "{token_name_or_null}",
+        "icon": "{asset_icon_path_or_null}",
+        "value_usd": "{number_from_wallet_or_product_data_or_null}",
+        "percentage_of_portfolio": "{number_from_product_logic_or_null}"
+      },
+      "secondary_asset": {
+        "symbol": "{token_symbol_or_null}",
+        "name": "{token_name_or_null}",
+        "icon": "{asset_icon_path_or_null}",
+        "value_usd": "{number_from_wallet_or_product_data_or_null}",
+        "percentage_of_portfolio": "{number_from_product_logic_or_null}"
+      },
+      "amounts": {
+        "current_value_usd": "{number_from_product_logic_or_null}",
+        "target_value_usd": "{number_from_product_logic_or_null}",
+        "gap_value_usd": "{number_from_product_logic_or_null}",
+        "suggested_action_value_usd": "{number_from_product_logic_or_null}",
+        "minimum_action_size_usd": "{number_from_rules_or_product_logic_or_null}"
+      },
+      "safety_buffer": {
+        "current_buffer_usd": "{number_from_safety_buffer_logic_or_null}",
+        "target_buffer_usd": "{number_from_safety_buffer_logic_or_null}",
+        "buffer_gap_usd": "{number_from_safety_buffer_logic_or_null}",
+        "coverage_percent": "{number_from_safety_buffer_logic_or_null}",
+        "status": "{underfunded|funded|unknown|null}"
+      },
+      "apy": {
+        "status": "{available|unavailable|stale|not_applicable}",
+        "value_percent": "{number_from_approved_apy_source_or_null}",
+        "display": "{formatted_apy_or_Unavailable_or_NA}",
+        "source": "{approved_apy_source_or_null}",
+        "is_estimated": true,
+        "not_guaranteed": true,
+        "must_not_invent": true
+      },
+      "estimated_earnings": {
+        "status": "{available|unavailable|stale|not_applicable}",
+        "value_usd_annualized": "{number_from_product_logic_or_null}",
+        "display": "{formatted_earnings_or_Unavailable_or_NA}",
+        "source": "{approved_source_or_null}",
+        "is_estimated": true,
+        "not_guaranteed": true,
+        "must_not_invent": true
+      },
+      "source": "{wallet_data|goal_settings|safety_buffer_logic|portfolio_logic|suggestion_engine|protocol_logic}"
+    },
+    "action": {
+      "action_type": "{review_safety_buffer|review_trim|review_swap|review_vault|review_stake|open_smith_ai_explanation|none}",
+      "target": "{suggestion_detail|external_protocol|smith_ai|locked_until_condition|none}",
+      "requires_wallet_signature": false,
+      "executes_transaction": false,
+      "external_handoff": "{boolean}",
+      "completion_on_click": false,
+      "allowed_next_steps": [
+        "{open_suggestion_detail|open_external_protocol|explain_with_smith_ai|refresh_suggestions}"
+      ],
+      "forbidden_next_steps": [
+        "execute_transaction",
+        "request_wallet_signature_for_mvp_handoff",
+        "mark_complete_on_click",
+        "move_funds",
+        "invent_missing_route"
+      ]
+    },
+    "protocol_decision": {
+      "required_when": "Suggestion action target is external_protocol or protocol-specific Manage action.",
+      "value": "{protocol_decision_object_from_protocol_logic_or_null}",
+      "template_reference": "templates/protocol-decision-template.json",
+      "hard_rule": "UI must not create or guess this object."
+    },
+    "locked_or_disabled_state": {
+      "is_locked": "{boolean}",
+      "is_disabled": "{boolean}",
+      "reason_code": "{buffer_required|unsupported_asset|unsupported_protocol|below_minimum|stale_data|missing_data|guardrail_failed|null}",
+      "reason_text": "{copy_from_content_or_null}",
+      "unlock_condition": "{condition_from_product_logic_or_null}",
+      "cta_label": "{Locked|Unavailable|Refresh|Review|null}",
+      "can_be_top_pick": false
+    },
+    "ui": {
+      "component": "suggestion-card",
+      "position": "{number_from_sorted_suggestion_list}",
+      "icon": "{approved_icon_path_or_null}",
+      "fallback_icon": "{approved_fallback_icon_path_or_null}",
+      "show_top_pick_badge": "{boolean_from_is_top_pick}",
+      "show_locked_state": "{boolean}",
+      "show_disabled_state": "{boolean}",
+      "show_external_link_icon": "{boolean_from_protocol_decision}",
+      "show_tooltip": "{boolean}",
+      "accessibility": {
+        "card_label": "{accessible_suggestion_label}",
+        "cta_label": "{accessible_cta_label}",
+        "status_label": "{accessible_status_label}",
+        "external_link_label": "Opens external protocol in a new tab."
+      }
+    },
+    "smith_ai_explanation": {
+      "allowed": true,
+      "context_sources": [
+        "suggestion",
+        "top_pick",
+        "reason_codes",
+        "copy",
+        "data",
+        "action",
+        "protocol_decision"
+      ],
+      "approved_short_response": "{response_from_content_or_smith_ai_generation_grounded_in_context}",
+      "must_include": [
+        "{required_phrase_or_fact}"
+      ],
+      "must_not_include": [
+        "I chose this",
+        "I changed this",
+        "guaranteed",
+        "risk-free",
+        "funds moved",
+        "transaction submitted",
+        "send your seed phrase",
+        "send your private key"
+      ],
+      "must_not_invent": [
+        "Top Pick",
+        "recommendations",
+        "reason codes",
+        "balances",
+        "APY",
+        "estimated earnings",
+        "protocol destination",
+        "transaction status"
+      ]
+    },
+    "analytics_or_events": {
+      "viewed": {
+        "event_name": "suggestion_viewed",
+        "payload": {
+          "suggestion_id": "{suggestion_id}",
+          "type": "{suggestion_type}",
+          "category": "{suggestion_category}",
+          "is_top_pick": "{boolean}",
+          "status": "{status}"
+        }
+      },
+      "cta_clicked": {
+        "event_name": "suggestion_cta_clicked",
+        "payload": {
+          "suggestion_id": "{suggestion_id}",
+          "action_type": "{action_type}",
+          "external_handoff": "{boolean}",
+          "protocol_id": "{protocol_id_or_null}",
+          "executes_transaction": false,
+          "requires_wallet_signature": false,
+          "marks_suggestion_complete": false
+        }
+      }
+    },
+    "validation": {
+      "required_fields": [
+        "id",
+        "type",
+        "category",
+        "status",
+        "actionability",
+        "severity",
+        "reason_codes",
+        "copy.title",
+        "copy.description",
+        "copy.cta",
+        "action.executes_transaction",
+        "action.requires_wallet_signature",
+        "action.completion_on_click",
+        "ui.component"
+      ],
+      "conditional_required_fields": [
+        {
+          "when": "action.external_handoff = true",
+          "required": [
+            "protocol_decision.value.destination_protocol_id",
+            "protocol_decision.value.destination_label",
+            "protocol_decision.value.destination_url",
+            "protocol_decision.value.handoff_type",
+            "protocol_decision.value.cta_label"
+          ]
+        },
+        {
+          "when": "is_top_pick = true",
+          "required": [
+            "top_pick.selected",
+            "top_pick.selection_reason",
+            "top_pick.reason_codes"
+          ]
+        },
+        {
+          "when": "status = locked or actionability = locked",
+          "required": [
+            "locked_or_disabled_state.reason_code",
+            "locked_or_disabled_state.reason_text",
+            "locked_or_disabled_state.can_be_top_pick"
+          ]
+        }
+      ],
+      "forbidden_fields_or_values": [
+        "private_key",
+        "seed_phrase",
+        "wallet_password",
+        "guaranteed_return",
+        "risk_free",
+        "executes_transaction = true",
+        "requires_wallet_signature = true for MVP handoff click",
+        "completion_on_click = true for external protocol handoff",
+        "is_top_pick = true for locked suggestions",
+        "is_top_pick = true for stale suggestions",
+        "is_top_pick = true for informational-only suggestions"
+      ]
+    },
+    "hard_rules": [
+      "This is a template, not production logic.",
+      "Suggestion objects must come from the Suggestion Engine.",
+      "UI must not invent suggestions.",
+      "UI must not calculate Top Pick.",
+      "Smith AI must not create, change, or override suggestions.",
+      "Exactly one suggestion may be Top Pick when valid actionable suggestions exist.",
+      "Locked, stale, disabled, expired, dismissed, completed, or informational-only suggestions cannot be Top Pick.",
+      "Protocol decisions must come from Protocol Logic.",
+      "UI must not guess protocol destinations or URLs.",
+      "Suggestion card clicks do not execute transactions in MVP.",
+      "External protocol handoffs do not request wallet signatures in MVP.",
+      "External protocol handoffs do not mark suggestions complete on click.",
+      "Do not invent APY, balances, prices, estimates, earnings, projections, reason codes, or protocol destinations.",
+      "Do not ask for seed phrases, private keys, passwords, or wallet backup files.",
+      "Do not imply WealthSmith holds, controls, moves, trades, stakes, deposits, withdraws, or rebalances user funds."
+    ]
+  }
+}
