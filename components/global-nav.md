@@ -155,7 +155,7 @@ Support
 Rules:
 
 - Active item is visually highlighted.
-- Active item has an underline/indicator.
+- Active item has a bottom-edge indicator (see Active State), not a text underline.
 - Inactive items remain visible.
 - Disabled items remain visible but cannot be clicked.
 - Do not remove nav items when disabled.
@@ -194,7 +194,10 @@ Rules:
 - Active page state comes from router/app state.
 - Component does not infer active state from URL text by itself unless routing layer provides it.
 - Active item should expose `aria-current="page"`.
-- Active underline should align with the nav item label.
+- The active blue indicator sits at the bottom edge of the nav item / nav bar area.
+- The active indicator must not sit directly under the text label (no text underline).
+- The indicator aligns with the nav item's horizontal bounds, anchored to the bottom edge.
+- Dashboard remains the selected/active item while the Dashboard page is active.
 
 ---
 

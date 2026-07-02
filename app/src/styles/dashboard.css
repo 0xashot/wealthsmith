@@ -1,0 +1,663 @@
+/*
+ * Dashboard shell styles.
+ *
+ * Uses semantic token variables from tokens.generated.css exclusively,
+ * with two documented exceptions (see app/IMPLEMENTATION-NOTES.md):
+ *
+ * 1. Global Nav explicit sizing from components/global-nav.md
+ *    (height 64px, radius 16px, outer offset 24px, content padding-x 12px,
+ *    logo 221x32) — no size.globalNav.* semantic tokens exist.
+ * 2. Media query breakpoints use the literal values defined in
+ *    tokens/semantic/breakpoint.json (CSS variables cannot be used in
+ *    @media conditions): tablet >= 768px, desktop >= 1280px.
+ */
+
+/* ---------- App shell ---------- */
+
+.app-shell {
+  min-height: 100vh;
+  background: var(--color-surface-main);
+}
+
+/* ---------- Global Nav (explicit values per components/global-nav.md) ---------- */
+
+.global-nav-wrap {
+  /* spec: outer offset 24px top/left/right */
+  padding: 24px 24px 0;
+  position: relative;
+  z-index: var(--zIndex-navigation-primary);
+}
+
+.global-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap; /* below desktop: items wrap; no mobile nav is invented */
+  gap: var(--spacing-inline-gap-md);
+  min-height: 64px; /* spec: nav height (fixed on desktop, see media query) */
+  border-radius: 16px; /* spec: nav radius */
+  padding: var(--spacing-inline-gap-sm) 12px; /* spec: internal horizontal padding */
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: var(--shadow-navigation-bar);
+}
+
+/* desktop >= 1280px (tokens/semantic/breakpoint.json): fixed 64px, no wrap */
+@media (min-width: 1280px) {
+  .global-nav {
+    flex-wrap: nowrap;
+    height: 64px;
+    padding: 0 12px;
+    gap: var(--spacing-inline-gap-lg);
+  }
+
+  /* stretch nav items to the bar height so the active indicator's bottom
+     edge is the nav bar's bottom edge (nav-scoped selectors so these win
+     over the base rules declared later in this file) */
+  .global-nav .global-nav__items {
+    align-self: stretch;
+    align-items: stretch;
+  }
+
+  .global-nav .global-nav__items li {
+    display: flex;
+    align-items: stretch;
+  }
+
+  .global-nav .global-nav__item {
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+.global-nav__logo {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-control-sm);
+}
+
+.global-nav__logo:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.global-nav__items {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.global-nav__item {
+  display: inline-block;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-control-sm);
+  font: var(--typography-label-md-font);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+.global-nav__item:hover {
+  color: var(--color-text-primary);
+  background: var(--color-subdued-neutral-background-default);
+}
+
+.global-nav__item:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+/* per components/global-nav.md Active State: the active indicator sits at
+   the bottom edge of the nav item / nav bar area, aligned to the item's
+   horizontal bounds — not a text underline. 2px bar thickness is a
+   documented spec-level value (no indicator-size token exists). */
+.global-nav__item--active {
+  color: var(--color-text-primary);
+  position: relative;
+}
+
+.global-nav__item--active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: var(--radius-control-pill);
+  background: var(--color-action-primary-background-default);
+}
+
+.global-nav__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  margin-left: auto;
+}
+
+.global-nav__wallet-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-control-pill);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-subdued-neutral-background-default);
+  color: var(--color-text-primary);
+  font: var(--typography-label-md-font);
+  cursor: pointer;
+}
+
+.global-nav__wallet-pill:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.global-nav__ask-smith {
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-control-md);
+  border: none;
+  background: var(--color-action-primary-background-default);
+  color: var(--color-action-primary-text-default);
+  font: var(--typography-button-md-font);
+  box-shadow: var(--shadow-control-default);
+  cursor: pointer;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+.global-nav__ask-smith:hover {
+  background: var(--color-action-primary-background-hover);
+}
+
+.global-nav__ask-smith:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+/* ---------- Page grid ---------- */
+
+.dashboard {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-section-gap-md);
+  padding: var(--spacing-page-padding-mobile);
+  max-width: var(--responsive-layout-container-wide);
+  margin: 0 auto;
+}
+
+/* tablet >= 768px (tokens/semantic/breakpoint.json) */
+@media (min-width: 768px) {
+  .dashboard {
+    padding: var(--spacing-page-padding-tablet);
+  }
+}
+
+/* desktop >= 1280px (tokens/semantic/breakpoint.json) */
+@media (min-width: 1280px) {
+  .dashboard {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+    align-items: start;
+    padding: var(--spacing-page-padding-desktop);
+  }
+}
+
+.dashboard__main {
+  display: grid;
+  gap: var(--spacing-section-gap-sm);
+  min-width: 0;
+}
+
+/* ---------- Page header ---------- */
+
+.page-header {
+  display: grid;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+.page-header__title {
+  margin: 0;
+  font: var(--typography-display-pageTitle-font);
+  letter-spacing: var(--typography-display-pageTitle-letter-spacing);
+  color: var(--color-text-primary);
+}
+
+.page-header__description {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-card-default);
+  padding: var(--spacing-card-padding-md);
+  display: grid;
+  gap: var(--spacing-card-gap-md);
+}
+
+.card__title {
+  margin: 0;
+  font: var(--typography-heading-md-font);
+  color: var(--color-text-primary);
+}
+
+.card__caption {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+/* ---------- Alert (components/alert.md) ---------- */
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-md);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-left: 4px solid var(--color-feedback-danger-background-solid);
+  border-radius: var(--radius-surface-lg);
+  box-shadow: var(--shadow-surface-raised);
+  padding: var(--spacing-card-padding-sm) var(--spacing-card-padding-md);
+}
+
+.alert__content {
+  display: grid;
+  gap: var(--spacing-stack-gap-xs);
+  min-width: 0;
+}
+
+.alert__title {
+  margin: 0;
+  font: var(--typography-heading-sm-font);
+  color: var(--color-feedback-danger-text-tint);
+}
+
+.alert__description {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-primary);
+}
+
+.alert__action {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-control-md);
+  border: 1px solid var(--color-action-secondary-stroke-default);
+  background: transparent;
+  color: var(--color-action-secondary-text-default);
+  font: var(--typography-button-md-font);
+  cursor: pointer;
+}
+
+.alert__action:hover {
+  background: var(--color-action-secondary-background-hover);
+}
+
+.alert__action:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+/* ---------- Metrics ---------- */
+
+.snapshot__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-card-gap-md);
+}
+
+@media (min-width: 768px) {
+  .snapshot__grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.metric {
+  display: grid;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+.metric__label {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-secondary);
+}
+
+.metric__value {
+  font: var(--typography-metric-secondary-font);
+  color: var(--color-text-primary);
+}
+
+.metric__value--primary {
+  font: var(--typography-metric-primary-font);
+}
+
+/* ---------- Safety Buffer ---------- */
+
+.buffer__values {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-inline-gap-md);
+}
+
+.buffer__secondary {
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}
+
+.buffer__caption {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-feedback-danger-text-tint);
+}
+
+/* ---------- Progress bar (components/progress-bar.md) ---------- */
+
+.progress {
+  height: var(--spacing-stack-gap-sm);
+  border-radius: var(--radius-control-pill);
+  background: var(--color-subdued-neutral-background-default);
+  overflow: hidden;
+}
+
+.progress__fill {
+  height: 100%;
+  border-radius: var(--radius-control-pill);
+  background: var(--color-action-primary-background-default);
+}
+
+.progress__fill--danger {
+  background: var(--color-feedback-danger-background-solid);
+}
+
+/* ---------- Charts ---------- */
+
+.chart {
+  width: 100%;
+  height: auto;
+}
+
+.chart__axis {
+  stroke: var(--color-border-subtle);
+  stroke-width: 1;
+}
+
+.chart__line {
+  stroke: var(--color-chart-series-1);
+  stroke-width: 2;
+}
+
+.chart__dot {
+  fill: var(--color-chart-series-1);
+}
+
+/* per components/chart.md Label Typography: value labels use
+   typography.chart.value, axis labels use typography.chart.label —
+   never metric typography */
+.chart__value-label {
+  font: var(--typography-chart-value-font);
+  fill: var(--color-text-primary);
+}
+
+.chart__axis-label {
+  font: var(--typography-chart-label-font);
+  fill: var(--color-text-secondary);
+}
+
+/* ---------- Allocation chart ---------- */
+
+.allocation__legend {
+  display: flex;
+  gap: var(--spacing-inline-gap-lg);
+}
+
+.allocation__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  font: var(--typography-chart-label-font);
+  color: var(--color-text-secondary);
+}
+
+.allocation__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-chart-bar);
+  display: inline-block;
+}
+
+.allocation__swatch--current {
+  background: var(--color-chart-series-1);
+}
+
+.allocation__swatch--recommended {
+  background: var(--color-chart-series-3);
+}
+
+.allocation__groups {
+  display: grid;
+  gap: var(--spacing-card-gap-md);
+}
+
+.allocation__group {
+  display: grid;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+.allocation__group-label {
+  font: var(--typography-chart-label-font);
+  color: var(--color-text-primary);
+}
+
+.allocation__row {
+  display: grid;
+  grid-template-columns: 7.5em minmax(0, 1fr) 4em;
+  align-items: center;
+  gap: var(--spacing-inline-gap-md);
+}
+
+.allocation__row-label {
+  font: var(--typography-chart-label-font);
+  color: var(--color-text-secondary);
+}
+
+.allocation__track {
+  height: var(--spacing-stack-gap-sm);
+  border-radius: var(--radius-chart-bar);
+  background: var(--color-subdued-neutral-background-default);
+  overflow: hidden;
+}
+
+.allocation__bar {
+  height: 100%;
+  border-radius: var(--radius-chart-bar);
+}
+
+.allocation__bar--current {
+  background: var(--color-chart-series-1);
+}
+
+.allocation__bar--recommended {
+  background: var(--color-chart-series-3);
+}
+
+.allocation__value {
+  font: var(--typography-chart-value-font);
+  color: var(--color-text-primary);
+  text-align: right;
+}
+
+/* ---------- Badges (components/badge.md) ---------- */
+
+.badge {
+  display: inline-block;
+  padding: var(--spacing-inline-gap-xs) var(--spacing-inline-gap-sm);
+  border-radius: var(--radius-badge-default);
+  font: var(--typography-label-sm-font);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.badge--info {
+  background: var(--color-feedback-info-background-tint);
+  color: var(--color-feedback-info-text-tint);
+}
+
+.badge--warning {
+  background: var(--color-feedback-warning-background-tint);
+  color: var(--color-feedback-warning-text-tint);
+}
+
+.badge--danger {
+  background: var(--color-feedback-danger-background-tint);
+  color: var(--color-feedback-danger-text-tint);
+}
+
+.badge--success {
+  background: var(--color-feedback-success-background-tint);
+  color: var(--color-feedback-success-text-tint);
+}
+
+.badge--neutral {
+  background: var(--color-subdued-neutral-background-default);
+  color: var(--color-text-secondary);
+}
+
+/* ---------- Suggestion rail ---------- */
+
+.suggestion-rail {
+  display: grid;
+  gap: var(--spacing-card-gap-md);
+  align-content: start;
+}
+
+.suggestion-rail__header {
+  display: grid;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+.suggestion-rail__title {
+  margin: 0;
+  font: var(--typography-heading-lg-font);
+  color: var(--color-text-primary);
+}
+
+.suggestion-rail__description {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.suggestion-rail__cards {
+  display: grid;
+  gap: var(--spacing-card-gap-md);
+}
+
+/* ---------- Suggestion cards (components/suggestion-card.md) ---------- */
+
+.suggestion-card {
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-card-default);
+  padding: var(--spacing-card-padding-md);
+  display: grid;
+  gap: var(--spacing-card-gap-sm);
+}
+
+.suggestion-card--top-pick {
+  border-color: var(--color-action-primary-background-default);
+  border-radius: var(--radius-surface-lg);
+  box-shadow: var(--shadow-card-selected);
+  padding: var(--spacing-card-padding-lg);
+}
+
+.suggestion-card--locked {
+  background: var(--color-subdued-neutral-background-default);
+}
+
+.suggestion-card__badges {
+  display: flex;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.suggestion-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.suggestion-card__title {
+  margin: 0;
+  font: var(--typography-heading-sm-font);
+  color: var(--color-text-primary);
+}
+
+.suggestion-card__description {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.suggestion-card__impact {
+  margin: 0;
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.suggestion-card__locked-reason {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.suggestion-card__apy {
+  margin: 0;
+  font: var(--typography-metric-compact-font);
+  color: var(--color-text-secondary);
+}
+
+.suggestion-card__apy-label {
+  font: var(--typography-label-sm-font);
+}
+
+.suggestion-card__cta {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-control-md);
+  border: 1px solid var(--color-action-secondary-stroke-default);
+  background: transparent;
+  color: var(--color-action-secondary-text-default);
+  font: var(--typography-button-md-font);
+  cursor: pointer;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+.suggestion-card__cta:hover:not(:disabled) {
+  background: var(--color-action-secondary-background-hover);
+}
+
+.suggestion-card__cta:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.suggestion-card__cta:disabled {
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}

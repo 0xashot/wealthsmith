@@ -752,8 +752,13 @@ Rules:
 - UI must not calculate recommended allocation independently.
 - Chart should clearly label current vs recommended.
 - Use chart markers and legends with visible labels.
+- The section description (for example “Recommended allocation is based on your saved plan settings.”) sits directly under the section heading.
+- The chart legend sits at the bottom of the card content, below the chart body.
+- The legend must not appear between the heading and the chart body.
 - Do not present recommendation as guaranteed or risk-free.
 - If there is not enough data, show an empty or incomplete state.
+
+See `components/chart.md` (Chart Container and Legends) for the shared placement contract.
 
 ---
 

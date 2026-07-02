@@ -9,7 +9,45 @@ never modified by it.
 
 - **Step 1 (complete):** Vite + React + TypeScript scaffold, token pipeline,
   base styles, token smoke-test placeholder page.
-- **Step 2 (not started):** connected-wallet Dashboard vertical slice.
+- **Step 2 (complete):** connected-wallet Dashboard shell — Global Nav
+  (wallet-connected variant), page header, alert banner, Financial Snapshot,
+  Safety Buffer, Projected Growth, Current vs Recommended Allocation, and the
+  Smith AI Suggestions rail, all rendered from
+  `examples/dashboard/dashboard-connected-wallet-state.json`.
+- **Step 2.1 (complete):** aligned to the design-system clarification pass:
+  - Chart axis/category/legend labels use `typography.chart.label`; plot
+    value labels use `typography.chart.value` (metric typography removed
+    from charts per components/chart.md Label Typography).
+  - Chart cards: description sits directly under the heading; allocation
+    legend moved to the bottom of the card content.
+  - Global Nav active indicator is a bottom-edge bar aligned to the item's
+    horizontal bounds (nav items stretch to bar height on desktop); the
+    text underline was removed. 2px bar thickness is a documented
+    spec-level value (no indicator-size token exists).
+  - Suggestion card icons are data-driven per suggestion-card.md (Icons):
+    cards whose `protocol_decision.destination_protocol_id` names a
+    destination use the approved protocol icon (BONK card → Jupiter,
+    locked yield card → Kamino); generic UI icons only for cards with no
+    protocol identity (Safety Buffer Top Pick → shield-check). A missing
+    protocol icon logs a console error and renders the protocol name with
+    no unapproved fallback.
+- **Step 3 (not started):** interactions — protocol handoff clicks
+  (external new tab, `rel="noopener noreferrer"`), wallet menu / disconnect,
+  Ask Smith AI panel, toasts.
+
+### Step 2 intentional stubs
+
+These render per spec but have no behavior yet (explicitly deferred):
+
+- Wallet pill: renders provider + short address with `aria-haspopup="menu"`,
+  but the menu (Disconnect Wallet) is not wired.
+- Ask Smith AI button: renders per Global Nav variant 3, click is a no-op.
+- Top Pick card CTA "Review" (`open_suggestion_detail`): no detail surface
+  exists yet; button is a no-op.
+- "Review on Jupiter" CTA: renders with external-link affordance and a
+  new-tab accessible label, but does not open the protocol URL yet.
+- Portfolio / Goal / Support nav links point at their fixture routes; those
+  pages are out of slice scope (the SPA serves the Dashboard for any route).
 
 ## Token pipeline
 
@@ -68,10 +106,36 @@ preserved.
    is the approved system, not an invention.
 5. **Approved assets** will be referenced from `../assets/` (served
    read-only via Vite `server.fs.allow`), never copied or modified.
-6. **`src/App.tsx` is a temporary token smoke test** — it intentionally
-   contains no dashboard UI, no financial values, and no product copy. It
-   uses inline styles for the throwaway page only; step 2 components will
-   use proper CSS with token variables.
+6. ~~`src/App.tsx` is a temporary token smoke test~~ — replaced in step 2 by
+   the Dashboard page.
+7. **`spacing.control.*` padding tokens do not exist.** Component specs
+   reference control padding only abstractly; buttons, nav items, badges,
+   and pills map to the closest existing semantic tokens:
+   `spacing.inline.gap.sm` (8px) for control padding-y,
+   `spacing.inline.gap.md` (16px) for control padding-x,
+   `spacing.inline.gap.xs` (4px) for badge padding-y. No new token names
+   were created.
+8. **Missing tokens with documented substitutes:**
+   `color.icon.default` → icons render as approved SVG assets unmodified
+   (never recolored); `color.surface.page` → `color.surface.main`;
+   `zIndex.navigation.fixed` → `zIndex.navigation.primary`.
+9. **Alert severity styling:** the fixture alert (severity `critical`)
+   uses `color.feedback.danger.*` tokens with the state carried in text
+   (title + description), never color alone. No badge copy was added
+   beyond fixture-provided strings.
+10. **Number presentation:** chart/allocation labels format the fixture's
+    raw numbers for display only (`$7,500` via locale formatting, percents
+    to at most one decimal). No values are computed or altered in meaning.
+11. **Global Nav below desktop:** components/global-nav.md defines no mobile
+    variant and forbids inventing hamburger behavior. Below 1280px the nav
+    keeps all items visible in the same order and simply wraps
+    (`flex-wrap`, `min-height: 64px`); at desktop it is fixed at 64px with
+    no wrapping per spec. Revisit when a mobile nav spec exists.
+12. **Fixture source for the rail is the dashboard fixture (3 cards).**
+    `examples/suggestions/suggestions-buffer-underfunded.json` (4 cards,
+    adds a strategy insight) remains the per-card contract/QA reference;
+    the page-level fixture declares `suggestions_count: 3` and is treated
+    as the page source of truth.
 
 ## Commands
 

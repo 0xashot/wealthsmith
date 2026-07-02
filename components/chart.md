@@ -284,6 +284,9 @@ Rules:
 - Use `components/card.md` container behavior when the chart is presented as a card.
 - Chart container should use semantic tokens.
 - Title and description should sit outside the plotting area.
+- The description sits directly under the chart heading.
+- The legend sits at the bottom of the chart/card content, below the chart body.
+- The legend must not appear between the heading and the chart body.
 - Chart area should have enough padding for labels.
 - Do not crop labels or legends.
 - Do not force charts into cramped containers.
@@ -291,11 +294,11 @@ Rules:
 Example structure:
 
 ```text
-Section title
-Section description
 Chart card
+  Title
+  Description (directly under the title)
   Chart area
-  Legend
+  Legend (bottom of chart content)
   Optional source/update text
 ```
 
@@ -574,6 +577,9 @@ Rules:
 - Legend labels must match data labels.
 - Legend colors must match chart series.
 - Legend should be close to the chart.
+- Default legend placement is at the bottom of the chart/card content, below the chart body.
+- The legend must not appear between the chart heading and the chart body.
+- Donut charts may place the legend beside the chart where space allows, but never between the heading and the chart body.
 - Legend should not rely on color alone if labels are missing.
 - Keep labels short.
 - Use semantic chart tokens.
@@ -619,6 +625,22 @@ Rules:
 - Avoid excessive labels that make the chart noisy.
 - Do not hide essential values only in tooltips.
 - Use labels for important allocation segments.
+
+### Label Typography
+
+Use existing semantic typography tokens only:
+
+```text
+typography.chart.label -> axis labels, category labels, legend labels
+typography.chart.value -> data/value labels on the plot
+```
+
+Rules:
+
+- X-axis labels, including time labels such as `Year 0`, `Year 1`, `Year 3`, `Year 5` or `Now / 2Y / 4Y`, use the small chart-axis label styling: `typography.chart.label`.
+- Axis, category, and legend labels must not use metric typography tokens (`typography.metric.primary`, `typography.metric.secondary`, `typography.metric.compact`).
+- Metric typography is reserved for metric values, such as metric-card values and donut center labels.
+- Do not invent new typography token names for charts. If a chart needs a style no existing semantic token covers, describe the intended style in the spec and raise it with product/design instead of adding tokens.
 
 ---
 
@@ -666,6 +688,7 @@ Charts with axes must use clear axis labels and scale.
 Rules:
 
 - Axis labels should be readable.
+- Axis labels use `typography.chart.label`, never metric typography (see Label Typography).
 - Use compact number formatting.
 - Use grid lines lightly.
 - Y-axis should start at zero for bar charts unless product behavior explicitly allows otherwise.
@@ -955,7 +978,7 @@ Charts should be mobile-first.
 
 - Use simplified labels.
 - Avoid overcrowded legends.
-- Stack legend below or above chart.
+- Stack legend below the chart.
 - Use horizontal scrolling only when necessary and intentional.
 - Keep chart readable at small widths.
 - Avoid tiny tap targets for tooltip points.

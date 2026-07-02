@@ -321,6 +321,7 @@ Rules:
 - No protocol fallback icon is needed for MVP.
 - Protocol icon alone is not enough when identity matters.
 - Pair protocol icon with protocol name.
+- Suggestion cards tied to a specific protocol destination use that protocol's icon; generic UI icons are only for suggestions without a protocol identity. See `components/suggestion-card.md` (Icons).
 - Do not imply WealthSmith recommends a protocol because the icon appears.
 - Recommendation state must come from Protocol Decision Logic.
 - If a protocol logo is missing, treat it as an implementation issue and show text without a broken image.

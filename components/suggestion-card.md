@@ -548,6 +548,66 @@ Do not rely on badge color alone to communicate meaning.
 
 ---
 
+## Icons
+
+Suggestion cards may include an icon next to the title.
+
+Icon selection is driven by the structured suggestion data, not by the component's judgment.
+
+### Protocol-tied suggestions
+
+A suggestion is protocol-tied when its structured data includes a protocol
+decision with a specific destination (for example
+`protocol_decision.destination_protocol_id`), or when its title or primary
+action names a specific protocol.
+
+Protocol-tied suggestion cards use the approved protocol icon from
+`assets/icons/protocol/`.
+
+Examples:
+
+```text
+Deposit USDC into Kamino -> assets/icons/protocol/kamino.svg
+Swap BONK to USDC on Jupiter -> assets/icons/protocol/jupiter.svg
+Stake SOL on Marinade -> assets/icons/protocol/marinade.svg
+```
+
+Rules:
+
+- The protocol icon must be paired with the visible protocol name in the
+  card copy or CTA. Icon alone is not identity.
+- The icon reflects the protocol destination selected by Protocol Logic.
+  The icon never decides or implies protocol selection.
+- Preserve approved protocol brand colors. Do not recolor protocol icons.
+
+### Generic suggestions
+
+Generic UI icons from `assets/icons/ui/` are only for generic safety, risk,
+wallet, or informational suggestions that have no specific protocol identity.
+
+Examples:
+
+```text
+Top Up Your Safety Buffer (no protocol destination) -> assets/icons/ui/shield-check.svg
+Why Safety Buffer comes first (informational) -> assets/icons/ui/info.svg
+```
+
+### Missing icons
+
+- Do not invent icon paths. Use approved paths from
+  `assets/icons/icon-registry.json`.
+- Do not use protocol fallback icons in MVP. If a protocol icon is missing
+  from the registry, treat it as an implementation issue and report it;
+  render the visible protocol name without a broken image or an unapproved
+  substitute.
+
+### Accessibility
+
+- Card icons are decorative next to visible text: `aria-hidden="true"`.
+- Icons are never the only source of meaning on a suggestion card.
+
+---
+
 ## Priority Display
 
 Suggestion cards may display priority if provided by the Suggestion Engine.
