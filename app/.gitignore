@@ -1,0 +1,5 @@
+node_modules/
+dist/
+src/styles/tokens.generated.css
+*.local
+.DS_Store

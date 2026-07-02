@@ -1,0 +1,37 @@
+/*
+ * Base styles. References semantic token variables from
+ * tokens.generated.css only — no raw visual values.
+ */
+@import "./tokens.generated.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--color-surface-main);
+  color: var(--color-text-primary);
+  font: var(--typography-body-md-font);
+  letter-spacing: var(--typography-body-md-letter-spacing);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
