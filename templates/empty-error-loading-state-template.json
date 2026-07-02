@@ -1,0 +1,801 @@
+{
+  "template_metadata": {
+    "name": "Empty Error Loading State Template",
+    "path": "templates/empty-error-loading-state-template.json",
+    "purpose": "Reusable structure for WealthSmith loading, empty, error, partial, stale, unavailable, and locked states across pages, sections, cards, tables, modals, right rail, wallet, portfolio, suggestions, and Smith AI.",
+    "template_type": "json_contract_template",
+    "source_of_truth": [
+      "rules/loading-state-rules.md",
+      "rules/financial-logic-boundaries.md",
+      "rules/wallet-and-custody-rules.md",
+      "rules/suggestion-engine-rules.md",
+      "rules/top-pick-rules.md",
+      "rules/protocol-selection-rules.md",
+      "rules/smith-ai-rules.md",
+      "rules/demo-mode-rules.md"
+    ],
+    "related_content": [
+      "content/empty-error-loading-copy.md",
+      "content/wallet-copy.md",
+      "content/demo-mode-copy.md",
+      "content/suggestion-card-copy.md",
+      "content/smith-ai-copy.md",
+      "content/glossary.md"
+    ],
+    "related_components": [
+      "components/skeleton.md",
+      "components/loading-indicator.md",
+      "components/empty-state.md",
+      "components/alert.md",
+      "components/toast.md",
+      "components/button.md",
+      "components/card.md",
+      "components/table.md",
+      "components/suggestion-card.md"
+    ],
+    "related_patterns": [
+      "patterns/empty-loading-error-states.md",
+      "patterns/dashboard-layout.md",
+      "patterns/portfolio-overview.md",
+      "patterns/suggestion-flow.md",
+      "patterns/wallet-connection.md",
+      "patterns/onboarding-with-smith-ai.md"
+    ],
+    "related_templates": [
+      "templates/page-state-template.json",
+      "templates/wallet-state-template.json",
+      "templates/demo-mode-state-template.json",
+      "templates/suggestion-object-template.json",
+      "templates/top-pick-output-template.json",
+      "templates/protocol-decision-template.json",
+      "templates/smith-ai-context-template.json"
+    ],
+    "related_examples": [
+      "examples/dashboard/dashboard-connected-wallet-state.json",
+      "examples/portfolio/portfolio-liquid-assets.json",
+      "examples/portfolio/portfolio-staked-assets.json",
+      "examples/portfolio/portfolio-yield-strategies.json",
+      "examples/wallet/wallet-connected-phantom-state.json",
+      "examples/suggestions/suggestions-buffer-underfunded.json"
+    ],
+    "notes": [
+      "This is a template, not production state.",
+      "Use this when required data is loading, missing, stale, blocked, locked, unavailable, or failed.",
+      "Non-ready states must not show fake financial values.",
+      "Errors must not imply user funds are affected."
+    ]
+  },
+  "empty_error_loading_state": {
+    "id": "{state_id}",
+    "source": "{state_builder|component_state|route_loader|data_fetcher|test_fixture}",
+    "state": "{none|loading|empty|error|partial|stale|unavailable|locked|blocked}",
+    "status": "{active|resolved|dismissed|retrying}",
+    "generated_at": "{timestamp_from_system}",
+    "scope": {
+      "level": "{page|section|card|table|row|right_rail|modal|toast|inline|global}",
+      "surface": "{dashboard|portfolio|goal|support|onboarding|wallet|suggestions|smith_ai|protocol_handoff|demo_mode|global}",
+      "component": "{component_name_or_null}",
+      "section_id": "{section_id_or_null}",
+      "related_entity_id": "{suggestion_id|position_id|wallet_id|protocol_decision_id|null}"
+    },
+    "data_dependency": {
+      "required_data": [
+        "{wallet_data|portfolio_data|goal_settings|suggestion_engine_output|top_pick_output|protocol_decision|apy_data|content|demo_fixture}"
+      ],
+      "data_status": "{not_requested|loading|ready|partial|empty|error|stale|unavailable|locked|blocked}",
+      "missing_fields": [
+        "{field_path_or_empty}"
+      ],
+      "stale_fields": [
+        "{field_path_or_empty}"
+      ],
+      "unavailable_fields": [
+        "{field_path_or_empty}"
+      ],
+      "must_not_invent": true,
+      "fallback_allowed": "{boolean}",
+      "fallback_type": "{approved_empty_state|approved_unavailable_label|approved_fallback_icon|none}"
+    },
+    "timing_behavior": {
+      "loading_thresholds": {
+        "under_400ms": {
+          "behavior": "avoid_loading_ui_when_possible",
+          "visible_copy": null
+        },
+        "400_to_800ms": {
+          "behavior": "show_subtle_loading_state",
+          "component": "skeleton_or_inline_loading"
+        },
+        "over_800ms": {
+          "behavior": "show_explicit_loading_state",
+          "component": "skeleton_or_loading_indicator"
+        },
+        "over_1500ms": {
+          "behavior": "show_explanatory_loading_copy",
+          "copy_required": true
+        }
+      },
+      "retry_timing": {
+        "retry_allowed": "{boolean}",
+        "retry_action": "{retry|refresh|reconnect_wallet|reload_demo|none}",
+        "retry_cooldown_ms": "{number_or_null}",
+        "max_auto_retries": "{number_or_null}",
+        "manual_retry_label": "{Retry|Refresh|Try Again|Reconnect Wallet|null}"
+      },
+      "hard_rules": [
+        "Avoid flashing loading states for very short waits.",
+        "Use explicit loading copy for longer waits.",
+        "Do not show fake data while loading.",
+        "Do not block the whole page when only one section is loading unless required."
+      ]
+    },
+    "loading_state": {
+      "applies_when": "state = loading",
+      "component": "{skeleton|loading-indicator|inline-loading|smith-ai-animation|none}",
+      "variant": "{page|section|table|card|button|right_rail|modal|inline}",
+      "title": "{copy_from_content_or_null}",
+      "description": "{copy_from_content_or_null}",
+      "visible_copy": "{copy_from_content_or_null}",
+      "content_ids": {
+        "title": "{content_id_or_null}",
+        "description": "{content_id_or_null}",
+        "visible_copy": "{content_id_or_null}"
+      },
+      "skeleton": {
+        "show": "{boolean}",
+        "shape": "{card|table|chart|text|metric|custom}",
+        "row_count": "{number_or_null}",
+        "preserve_layout": true
+      },
+      "spinner": {
+        "show": "{boolean}",
+        "usage": "{button_only|short_inline_wait|none}",
+        "hard_rule": "Do not use spinner as the only loading signal for long waits."
+      },
+      "smith_ai_animation": {
+        "show": "{boolean}",
+        "asset": "assets/animations/smith-ai-symbol-loop.json",
+        "allowed_only_for": [
+          "smith_ai_response_wait",
+          "suggestion_building_wait"
+        ],
+        "forbidden_for": [
+          "wallet_connection",
+          "portfolio_table_loading",
+          "generic_page_loading",
+          "button_loading",
+          "chart_loading"
+        ],
+        "hard_rule": "Use Smith AI animation only for approved Smith AI or suggestion-building waits."
+      },
+      "allowed_visible_data": [
+        "previous_valid_data_if_labeled_stale",
+        "static_layout",
+        "skeleton_shapes",
+        "non-financial labels"
+      ],
+      "forbidden_visible_data": [
+        "fake_balances",
+        "fake_APY",
+        "fake_estimated_earnings",
+        "fake_suggestions",
+        "fake_Top_Pick",
+        "fake_protocol_destinations",
+        "fake_wallet_positions"
+      ],
+      "hard_rules": [
+        "Do not show fake financial values.",
+        "Do not show fake suggestions.",
+        "Do not show fake Top Pick.",
+        "Do not show fake protocol destinations.",
+        "Use skeletons for portfolio and page loading.",
+        "Use Smith AI animation only for approved Smith AI or suggestion-building waits."
+      ]
+    },
+    "empty_state": {
+      "applies_when": "state = empty",
+      "component": "empty-state",
+      "title": "{copy_from_content}",
+      "description": "{copy_from_content}",
+      "icon": "{approved_icon_path_or_null}",
+      "content_ids": {
+        "title": "{content_id}",
+        "description": "{content_id}",
+        "cta": "{content_id_or_null}"
+      },
+      "cta": {
+        "visible": "{boolean}",
+        "label": "{Connect Wallet|Try Demo Mode|Refresh|Add Goal|Ask Smith AI|null}",
+        "action": "{open_connect_wallet_modal|enter_demo_mode|refresh|open_goal_settings|open_smith_ai|null}",
+        "executes_transaction": false,
+        "requires_wallet_signature": false,
+        "moves_funds": false
+      },
+      "empty_reason": "{no_wallet|no_supported_assets|no_suggestions|no_staked_assets|no_yield_strategies|no_goal|no_results|demo_unavailable|unknown}",
+      "allowed_explanations": [
+        "no supported data found",
+        "wallet not connected",
+        "no valid actionable suggestions",
+        "no supported positions detected"
+      ],
+      "forbidden_claims": [
+        "wallet is empty when unsupported assets may exist",
+        "user has no funds",
+        "user has no staking exposure when unsupported protocols may exist",
+        "user has no yield positions when unsupported protocols may exist"
+      ],
+      "hard_rules": [
+        "Use empty state only after data has loaded successfully.",
+        "Do not use empty state for loading or error.",
+        "Do not overclaim absence of assets when unsupported assets or protocols may exist.",
+        "Do not show fake data to avoid empty state."
+      ]
+    },
+    "error_state": {
+      "applies_when": "state = error",
+      "component": "{alert|empty-state|inline-error|toast|modal}",
+      "severity": "{error|warning}",
+      "title": "{copy_from_content}",
+      "description": "{copy_from_content}",
+      "technical_error_code": "{internal_error_code_or_null}",
+      "user_visible_error_code": "{user_safe_error_code_or_null}",
+      "content_ids": {
+        "title": "{content_id}",
+        "description": "{content_id}",
+        "cta": "{content_id_or_null}"
+      },
+      "cta": {
+        "visible": "{boolean}",
+        "label": "{Retry|Refresh|Try Again|Reconnect Wallet|Choose Another Wallet|null}",
+        "action": "{retry|refresh|reconnect_wallet|open_connect_wallet_modal|choose_wallet|null}",
+        "executes_transaction": false,
+        "requires_wallet_signature": false,
+        "moves_funds": false
+      },
+      "safe_reassurance": {
+        "include_when_wallet_or_portfolio_related": true,
+        "copy": "Your funds stay in your wallet.",
+        "content_id": "wallet.non_custodial.short"
+      },
+      "allowed_visible_data": [
+        "previous_valid_data_if_labeled_stale",
+        "partial_successful_rows",
+        "safe error copy",
+        "retry CTA"
+      ],
+      "forbidden_visible_data": [
+        "fake_balances",
+        "fake_APY",
+        "fake_suggestions",
+        "fake_Top_Pick",
+        "raw_stack_trace",
+        "private_error_payload",
+        "seed_phrase_or_private_key_request"
+      ],
+      "hard_rules": [
+        "Errors must not imply funds are affected.",
+        "Errors must not ask for wallet secrets.",
+        "Do not expose raw stack traces to users.",
+        "Do not replace partial usable data with a full-page error unless the whole page failed.",
+        "Keep wallet pill visible if wallet remains connected and only portfolio loading failed."
+      ]
+    },
+    "partial_state": {
+      "applies_when": "state = partial",
+      "component": "{inline-alert|section-banner|table-note|card-note}",
+      "severity": "warning",
+      "title": "{copy_from_content}",
+      "description": "{copy_from_content}",
+      "content_ids": {
+        "title": "{content_id}",
+        "description": "{content_id}",
+        "cta": "{content_id_or_null}"
+      },
+      "loaded_data_behavior": {
+        "show_loaded_data": true,
+        "label_partial_data": true,
+        "hide_missing_rows": false,
+        "replace_missing_values_with": "Unavailable",
+        "must_not_invent_missing_values": true
+      },
+      "cta": {
+        "visible": "{boolean}",
+        "label": "{Refresh|Retry|null}",
+        "action": "{refresh|retry|null}",
+        "executes_transaction": false,
+        "requires_wallet_signature": false
+      },
+      "hard_rules": [
+        "Keep loaded data visible.",
+        "Label partial data clearly.",
+        "Use Unavailable for missing values.",
+        "Do not invent missing values.",
+        "Do not hide partial data behind a full-page error unless the page cannot function."
+      ]
+    },
+    "stale_state": {
+      "applies_when": "state = stale",
+      "component": "{inline-alert|section-banner|badge|tooltip}",
+      "severity": "warning",
+      "title": "{copy_from_content}",
+      "description": "{copy_from_content}",
+      "stale_reason": "{prices_outdated|wallet_data_outdated|suggestions_expired|protocol_decision_expired|apy_outdated|unknown}",
+      "last_updated_at": "{timestamp_or_null}",
+      "content_ids": {
+        "title": "{content_id}",
+        "description": "{content_id}",
+        "cta": "{content_id_or_null}"
+      },
+      "data_behavior": {
+        "show_previous_data": "{boolean}",
+        "label_as_stale": true,
+        "disable_sensitive_actions": true,
+        "top_pick_can_remain_active": false,
+        "protocol_handoff_can_remain_active": false
+      },
+      "cta": {
+        "visible": true,
+        "label": "Refresh",
+        "action": "refresh",
+        "executes_transaction": false,
+        "requires_wallet_signature": false
+      },
+      "hard_rules": [
+        "Stale suggestions cannot be active Top Pick.",
+        "Stale protocol decisions cannot be used for active handoffs.",
+        "Stale APY must be labeled or shown as unavailable.",
+        "Do not hide stale status.",
+        "Do not show stale data as current."
+      ]
+    },
+    "unavailable_state": {
+      "applies_when": "state = unavailable",
+      "component": "{inline-label|table-cell|card-note|empty-state}",
+      "title": "{copy_from_content_or_null}",
+      "description": "{copy_from_content_or_null}",
+      "display_value": "Unavailable",
+      "reason": "{missing_data|unsupported_asset|unsupported_protocol|apy_unavailable|price_unavailable|protocol_url_missing|network_unavailable|unknown}",
+      "content_ids": {
+        "label": "{content_id_or_null}",
+        "description": "{content_id_or_null}"
+      },
+      "hard_rules": [
+        "Use Unavailable when a value is missing and should not be estimated.",
+        "Do not invent APY.",
+        "Do not invent estimated earnings.",
+        "Do not invent prices.",
+        "Do not invent protocol URLs.",
+        "Unavailable is safer than guessed data."
+      ]
+    },
+    "locked_state": {
+      "applies_when": "state = locked",
+      "component": "{suggestion-card|button|inline-label|tooltip}",
+      "badge": "Locked",
+      "title": "{copy_from_content_or_suggestion}",
+      "description": "{copy_from_content}",
+      "locked_reason": "{buffer_required|goal_missing|wallet_required|unsupported_state|guardrail_failed|unknown}",
+      "unlock_condition": "{condition_from_product_logic_or_null}",
+      "content_ids": {
+        "badge": "suggestion.badge.locked",
+        "description": "{content_id}",
+        "disabled_reason": "{content_id}"
+      },
+      "action_behavior": {
+        "cta_enabled": false,
+        "cta_label": "Locked",
+        "executes_transaction": false,
+        "requires_wallet_signature": false,
+        "external_handoff": false,
+        "completion_on_click": false
+      },
+      "top_pick_behavior": {
+        "can_be_top_pick": false
+      },
+      "hard_rules": [
+        "Locked suggestions cannot be Top Pick.",
+        "Locked actions cannot open external handoffs unless product explicitly defines review-only behavior.",
+        "Locked CTAs must explain why they are locked.",
+        "Do not imply the user can complete a locked action."
+      ]
+    },
+    "blocked_state": {
+      "applies_when": "state = blocked",
+      "component": "{alert|inline-note|button-disabled|empty-state}",
+      "title": "{copy_from_content}",
+      "description": "{copy_from_content}",
+      "blocked_reason": "{missing_protocol_url|guardrail_failed|unsupported_wallet|unsupported_network|wallet_required|safety_buffer_required|unknown}",
+      "content_ids": {
+        "title": "{content_id}",
+        "description": "{content_id}",
+        "cta": "{content_id_or_null}"
+      },
+      "cta": {
+        "visible": "{boolean}",
+        "label": "{Refresh|Connect Wallet|Choose Another Wallet|Try Again|null}",
+        "action": "{refresh|open_connect_wallet_modal|choose_wallet|retry|null}",
+        "executes_transaction": false,
+        "requires_wallet_signature": false
+      },
+      "hard_rules": [
+        "Blocked states must explain the blocker.",
+        "Do not bypass guardrails in UI.",
+        "Do not guess missing protocol URLs.",
+        "Do not ask for wallet secrets to resolve blockers."
+      ]
+    },
+    "surface_specific_defaults": {
+      "wallet": {
+        "loading_copy": "Connecting wallet...",
+        "portfolio_loading_copy": "Loading wallet positions...",
+        "error_copy": "We couldn’t connect your wallet. Try again in a moment.",
+        "funds_safety_copy": "Your funds stay in your wallet.",
+        "hard_rules": [
+          "Wallet loading does not use Smith AI animation.",
+          "Wallet errors must not ask for seed phrase or private key.",
+          "Wallet connected state is separate from portfolio loading."
+        ]
+      },
+      "portfolio": {
+        "loading_copy": "Loading wallet positions...",
+        "empty_copy": "WealthSmith did not find supported assets in this wallet.",
+        "error_copy": "We couldn’t load portfolio data. Try again in a moment. Your funds stay in your wallet.",
+        "partial_copy": "Some wallet positions are unavailable.",
+        "hard_rules": [
+          "Use skeletons for portfolio loading.",
+          "Do not show fake balances.",
+          "Do not say the wallet is empty if unsupported assets may exist."
+        ]
+      },
+      "suggestions": {
+        "loading_copy": "Building suggestions...",
+        "empty_copy": "No suggestions available right now.",
+        "error_copy": "We couldn’t load suggestions. Try refreshing.",
+        "stale_copy": "Suggestions need refresh before review.",
+        "hard_rules": [
+          "Suggestion loading may use Smith AI animation only if it is an approved suggestion-building wait.",
+          "Do not show fake suggestions.",
+          "Do not invent Top Pick.",
+          "Stale suggestions cannot be active Top Pick."
+        ]
+      },
+      "top_pick": {
+        "empty_copy": "No Top Pick available right now.",
+        "stale_copy": "Top Pick needs refresh.",
+        "error_copy": "We couldn’t determine Top Pick right now.",
+        "hard_rules": [
+          "Do not invent Top Pick.",
+          "Do not show Top Pick when no valid actionable suggestion exists.",
+          "Locked, stale, disabled, completed, dismissed, expired, or informational-only suggestions cannot be Top Pick."
+        ]
+      },
+      "protocol_handoff": {
+        "unavailable_copy": "Protocol link unavailable.",
+        "stale_copy": "Protocol route needs refresh.",
+        "blocked_copy": "This action is not available right now.",
+        "hard_rules": [
+          "Do not guess protocol URLs.",
+          "Do not use stale protocol decisions for active handoffs.",
+          "Do not execute transactions.",
+          "Do not request wallet signatures for MVP handoff clicks.",
+          "Do not mark suggestions complete on click."
+        ]
+      },
+      "demo_mode": {
+        "loading_copy": "Loading Demo Mode...",
+        "error_copy": "We couldn’t load Demo Mode. Try again in a moment.",
+        "hard_rules": [
+          "Do not show unlabeled sample data.",
+          "Demo Mode must clearly identify sample data.",
+          "Demo Mode does not use wallet signatures."
+        ]
+      },
+      "smith_ai": {
+        "loading_copy": "Smith AI is thinking...",
+        "error_copy": "Smith AI couldn’t respond right now.",
+        "partial_copy": "Smith AI can explain the available data, but some context is missing.",
+        "hard_rules": [
+          "Smith AI must not invent missing context.",
+          "Smith AI must not choose Top Pick.",
+          "Smith AI must not choose protocols.",
+          "Smith AI must not ask for seed phrase or private key."
+        ]
+      }
+    },
+    "copy": {
+      "title": "{copy_from_content}",
+      "description": "{copy_from_content}",
+      "cta": "{copy_from_content_or_null}",
+      "helper": "{copy_from_content_or_null}",
+      "content_ids": {
+        "title": "{content_id}",
+        "description": "{content_id}",
+        "cta": "{content_id_or_null}",
+        "helper": "{content_id_or_null}",
+        "glossary": "{content_id_or_null}"
+      },
+      "fallback_copy_allowed": "{boolean}",
+      "forbidden_copy": [
+        "Funds are gone",
+        "Your wallet is empty",
+        "Guaranteed",
+        "Risk-free",
+        "Transaction submitted",
+        "Funds moved",
+        "Send your seed phrase",
+        "Send your private key",
+        "Paste your wallet backup"
+      ],
+      "must_not_invent": true
+    },
+    "actions": {
+      "primary": {
+        "visible": "{boolean}",
+        "label": "{copy_from_content_or_null}",
+        "action": "{retry|refresh|connect_wallet|try_demo_mode|open_goal_settings|open_smith_ai|none}",
+        "executes_transaction": false,
+        "requires_wallet_signature": false,
+        "moves_funds": false,
+        "marks_suggestion_complete": false
+      },
+      "secondary": {
+        "visible": "{boolean}",
+        "label": "{copy_from_content_or_null}",
+        "action": "{dismiss|learn_more|contact_support|none}",
+        "executes_transaction": false,
+        "requires_wallet_signature": false,
+        "moves_funds": false,
+        "marks_suggestion_complete": false
+      },
+      "forbidden_actions": [
+        "execute_transaction",
+        "request_wallet_signature_for_mvp_handoff",
+        "move_funds",
+        "mark_suggestion_complete_on_external_handoff_click",
+        "invent_missing_data",
+        "bypass_guardrails"
+      ]
+    },
+    "smith_ai_behavior": {
+      "can_explain_state": true,
+      "context_template_reference": "templates/smith-ai-context-template.json",
+      "allowed_explanations": [
+        "why data is loading",
+        "why no data is shown",
+        "why an error is shown",
+        "why data is partial",
+        "why data is stale",
+        "why a value is unavailable",
+        "why an action is locked or blocked"
+      ],
+      "must_not": [
+        "invent missing data",
+        "invent APY",
+        "invent estimated earnings",
+        "invent Top Pick",
+        "invent suggestions",
+        "invent protocol URLs",
+        "claim funds are affected",
+        "ask for seed phrase or private key",
+        "execute actions"
+      ],
+      "approved_response_patterns": {
+        "loading": "I’m waiting for the relevant data to finish loading before explaining this.",
+        "partial": "I can explain the data that is available, but some information is still missing or unavailable.",
+        "error": "I can’t explain that yet because the relevant data did not load. Try refreshing, and your funds stay in your wallet.",
+        "unavailable": "That value is unavailable here, so WealthSmith should show it as unavailable rather than estimate it.",
+        "locked": "This is locked because {locked_reason_from_product_logic}. It cannot be Top Pick while locked."
+      }
+    },
+    "accessibility": {
+      "role": "{status|alert|region|dialog|none}",
+      "aria_live": "{polite|assertive|off}",
+      "label": "{accessible_state_label}",
+      "description": "{accessible_state_description}",
+      "loading_announcement": "{loading_announcement_or_null}",
+      "error_announcement": "{error_announcement_or_null}",
+      "cta_label": "{accessible_cta_label_or_null}",
+      "focus_management": {
+        "move_focus_on_page_error": "{boolean}",
+        "move_focus_on_modal_error": "{boolean}",
+        "return_focus_after_retry": "{boolean}",
+        "preserve_focus_for_inline_loading": true
+      },
+      "hard_rules": [
+        "Errors must be readable without visual-only cues.",
+        "Loading states must be understandable to assistive technologies when long-running.",
+        "Icons must not be the only source of meaning.",
+        "Unavailable values must be text-readable.",
+        "Locked/disabled reasons must be available in text."
+      ]
+    },
+    "analytics_or_events": {
+      "state_shown": {
+        "event_name": "non_ready_state_shown",
+        "payload": {
+          "state": "{state}",
+          "scope_level": "{scope.level}",
+          "surface": "{scope.surface}",
+          "component": "{scope.component}",
+          "reason": "{empty_reason|error_code|stale_reason|blocked_reason|locked_reason|null}"
+        }
+      },
+      "retry_clicked": {
+        "event_name": "non_ready_state_retry_clicked",
+        "payload": {
+          "state": "{state}",
+          "surface": "{scope.surface}",
+          "action": "{retry_action}"
+        }
+      },
+      "must_not_include": [
+        "seed_phrase",
+        "private_key",
+        "wallet_password",
+        "wallet_backup_file",
+        "raw_sensitive_error_payload"
+      ]
+    },
+    "validation": {
+      "required_fields": [
+        "id",
+        "source",
+        "state",
+        "status",
+        "scope",
+        "data_dependency",
+        "copy",
+        "actions",
+        "accessibility",
+        "hard_rules"
+      ],
+      "conditional_required_fields": [
+        {
+          "when": "state = loading",
+          "required": [
+            "loading_state",
+            "timing_behavior"
+          ]
+        },
+        {
+          "when": "state = empty",
+          "required": [
+            "empty_state.title",
+            "empty_state.description",
+            "empty_state.empty_reason"
+          ]
+        },
+        {
+          "when": "state = error",
+          "required": [
+            "error_state.title",
+            "error_state.description"
+          ]
+        },
+        {
+          "when": "state = partial",
+          "required": [
+            "partial_state.title",
+            "partial_state.description",
+            "partial_state.loaded_data_behavior"
+          ]
+        },
+        {
+          "when": "state = stale",
+          "required": [
+            "stale_state.stale_reason",
+            "stale_state.data_behavior",
+            "stale_state.cta"
+          ]
+        },
+        {
+          "when": "state = unavailable",
+          "required": [
+            "unavailable_state.display_value",
+            "unavailable_state.reason"
+          ]
+        },
+        {
+          "when": "state = locked",
+          "required": [
+            "locked_state.locked_reason",
+            "locked_state.action_behavior",
+            "locked_state.top_pick_behavior"
+          ]
+        },
+        {
+          "when": "state = blocked",
+          "required": [
+            "blocked_state.blocked_reason",
+            "blocked_state.description"
+          ]
+        }
+      ],
+      "global_assertions": [
+        {
+          "id": "no_fake_data",
+          "assertion": "Non-ready states do not show fake financial data.",
+          "expected": true
+        },
+        {
+          "id": "no_fake_top_pick",
+          "assertion": "Non-ready states do not invent Top Pick.",
+          "expected": true
+        },
+        {
+          "id": "no_fake_protocol",
+          "assertion": "Non-ready states do not invent protocol destinations or URLs.",
+          "expected": true
+        },
+        {
+          "id": "errors_do_not_affect_funds",
+          "assertion": "Wallet or portfolio errors do not imply funds are affected.",
+          "expected": true
+        },
+        {
+          "id": "no_wallet_secrets",
+          "assertion": "No non-ready state asks for seed phrase or private key.",
+          "expected": true
+        },
+        {
+          "id": "stale_not_active_top_pick",
+          "assertion": "Stale suggestions cannot remain active Top Pick.",
+          "expected": true
+        },
+        {
+          "id": "locked_not_top_pick",
+          "assertion": "Locked suggestions cannot be Top Pick.",
+          "expected": true
+        },
+        {
+          "id": "smith_ai_animation_limited",
+          "assertion": "Smith AI animation is used only for approved Smith AI or suggestion-building waits.",
+          "expected": true
+        }
+      ],
+      "forbidden_fields_or_values": [
+        "private_key",
+        "seed_phrase",
+        "wallet_password",
+        "wallet_backup_file",
+        "fake_balance",
+        "fake_apy",
+        "fake_estimated_earnings",
+        "fake_top_pick",
+        "fake_suggestion",
+        "fake_protocol_url",
+        "guaranteed_return",
+        "risk_free",
+        "action.executes_transaction = true",
+        "action.requires_wallet_signature = true for MVP handoff",
+        "action.moves_funds = true",
+        "action.marks_suggestion_complete = true for external protocol handoff",
+        "state = empty before data load completes",
+        "stale_state.data_behavior.top_pick_can_remain_active = true",
+        "locked_state.top_pick_behavior.can_be_top_pick = true"
+      ]
+    },
+    "hard_rules": [
+      "This is a template, not production state.",
+      "Do not show fake data in loading, empty, error, partial, stale, unavailable, locked, or blocked states.",
+      "Do not invent balances, prices, APY, estimated earnings, projections, suggestions, Top Pick, protocol destinations, protocol URLs, wallet permissions, reason codes, or transaction status.",
+      "Use Unavailable when a value is missing and cannot be safely shown.",
+      "Use partial state when some data loaded successfully.",
+      "Use stale state when previous data exists but should not be treated as current.",
+      "Use empty state only after data loaded successfully and no supported result exists.",
+      "Errors must not imply funds are affected.",
+      "Do not ask for seed phrases, private keys, passwords, or wallet backup files.",
+      "Do not expose raw stack traces or sensitive error payloads.",
+      "Locked suggestions cannot be Top Pick.",
+      "Stale suggestions cannot be active Top Pick.",
+      "Stale protocol decisions cannot be used for active handoffs.",
+      "External protocol handoffs do not execute transactions.",
+      "External protocol handoffs do not request wallet signatures in MVP.",
+      "External protocol handoffs do not mark suggestions complete on click.",
+      "Do not imply WealthSmith holds, controls, moves, trades, swaps, stakes, deposits, withdraws, or rebalances user funds.",
+      "Use Smith AI animation only for approved Smith AI or suggestion-building waits.",
+      "Use skeletons for portfolio, table, card, and page loading.",
+      "Non-ready states must be accessible and must not rely on icons or color alone."
+    ]
+  }
+}
