@@ -1,0 +1,697 @@
+{
+  "example_metadata": {
+    "name": "Dashboard connected wallet state",
+    "path": "examples/dashboard/dashboard-connected-wallet-state.json",
+    "mode": "real_wallet",
+    "purpose": "Dashboard-level fixture showing how the main Dashboard page should render after a supported wallet is connected and portfolio data is loaded.",
+    "fixture_type": "synthetic_reference_state",
+    "rules": [
+      "rules/wallet-and-custody-rules.md",
+      "rules/suggestion-engine-rules.md",
+      "rules/top-pick-rules.md",
+      "rules/protocol-selection-rules.md",
+      "rules/smith-ai-rules.md",
+      "rules/loading-state-rules.md",
+      "rules/financial-logic-boundaries.md"
+    ],
+    "content": [
+      "content/wallet-copy.md",
+      "content/suggestion-card-copy.md",
+      "content/smith-ai-copy.md",
+      "content/empty-error-loading-copy.md",
+      "content/glossary.md"
+    ],
+    "components": [
+      "components/global-nav.md",
+      "components/page-header.md",
+      "components/metric-card.md",
+      "components/card.md",
+      "components/chart.md",
+      "components/suggestion-card.md",
+      "components/button.md",
+      "components/progress-bar.md",
+      "components/menu-popover.md",
+      "components/menu-item.md",
+      "components/toast.md"
+    ],
+    "patterns": [
+      "patterns/dashboard-layout.md",
+      "patterns/suggestion-flow.md",
+      "patterns/wallet-connection.md",
+      "patterns/portfolio-overview.md",
+      "patterns/empty-loading-error-states.md"
+    ],
+    "screenshots": {
+      "recommended_pair": "examples/dashboard/dashboard-connected-wallet-state.png",
+      "required": false,
+      "rule": "Screenshot is visual reference only. This JSON remains the implementation reference."
+    },
+    "notes": [
+      "This is synthetic fixture data, not real user data.",
+      "Production values must come from wallet data, product logic, Suggestion Engine, Top Pick Logic, and Protocol Logic.",
+      "This fixture intentionally mirrors the MVP demo portfolio shape but is a connected-wallet state, not Demo Mode."
+    ]
+  },
+  "screen": {
+    "id": "dashboard_connected_wallet_state",
+    "route": "/dashboard",
+    "page": "Dashboard",
+    "mode": "real_wallet",
+    "demo_mode": false,
+    "data_source": "connected_wallet_fixture",
+    "is_reference_fixture": true
+  },
+  "state_summary": {
+    "wallet_status": "connected",
+    "wallet_provider": "Phantom",
+    "wallet_pill": "Phantom • 6fQ9",
+    "onboarding_active": false,
+    "demo_banner_visible": false,
+    "global_nav_variant": "wallet_connected",
+    "right_rail_mode": "suggestions",
+    "smith_ai_available": true,
+    "suggestions_status": "ready",
+    "top_pick_id": "top_up_safety_buffer",
+    "top_pick_title": "Top Up Your Safety Buffer",
+    "safety_buffer_status": "underfunded",
+    "loading": false,
+    "error": false
+  },
+  "layout": {
+    "breakpoint_behavior": {
+      "mobile": {
+        "global_nav": "top",
+        "right_rail": "overlay_or_below_content",
+        "smith_ai": "overlay"
+      },
+      "tablet": {
+        "global_nav": "top",
+        "right_rail": "overlay_or_below_content",
+        "smith_ai": "overlay"
+      },
+      "desktop": {
+        "global_nav": "top",
+        "content": "main_content_with_right_rail",
+        "right_rail": "right_side_panel",
+        "smith_ai": "right_side_panel_when_open"
+      },
+      "wide": {
+        "global_nav": "top",
+        "content": "main_content_with_right_rail",
+        "right_rail": "right_side_panel",
+        "smith_ai": "right_side_panel_when_open"
+      }
+    },
+    "global_nav_specs": {
+      "outer_offset_px": {
+        "top": 24,
+        "left": 24,
+        "right": 24
+      },
+      "height_px": 64,
+      "radius_px": 16,
+      "internal_horizontal_padding_px": 12,
+      "logo_size_px": {
+        "width": 221,
+        "height": 32
+      }
+    },
+    "right_rail_priority": [
+      "onboarding_panel",
+      "ask_smith_ai_panel",
+      "suggestion_loading",
+      "suggestions",
+      "strategy_insights",
+      "empty",
+      "error"
+    ],
+    "active_right_rail_priority_result": "suggestions"
+  },
+  "demo_banner": {
+    "visible": false,
+    "reason": "Demo Mode is inactive because a real wallet is connected."
+  },
+  "wallet": {
+    "status": "connected",
+    "provider": "Phantom",
+    "provider_id": "phantom",
+    "address": "6fQ9SyntheticWalletAddressForFixtureOnly111111111",
+    "address_short": "6fQ9",
+    "address_is_synthetic": true,
+    "network": "solana",
+    "connection_type": "read_only_portfolio_view",
+    "show_wallet_pill": true,
+    "wallet_pill": {
+      "label": "Phantom • 6fQ9",
+      "accessibility_label": "Connected wallet: Phantom, address ending 6fQ9. Open wallet menu.",
+      "menu": {
+        "component": "menu-popover",
+        "items": [
+          {
+            "component": "menu-item",
+            "label": "Disconnect Wallet",
+            "action": "disconnect_wallet",
+            "content_id": "wallet.menu.disconnect"
+          }
+        ]
+      }
+    },
+    "copy": {
+      "connected_toast": "Wallet connected",
+      "read_only_helper": "WealthSmith reads supported wallet data. It cannot move funds from a read-only connection.",
+      "security_warning": "Never share your seed phrase or private key."
+    },
+    "hard_rules": [
+      "Wallet connection is read-only for portfolio viewing.",
+      "Do not imply WealthSmith can move funds.",
+      "Do not ask for seed phrase or private key.",
+      "Do not treat wallet connected as portfolio fully loaded unless portfolio state is ready.",
+      "Do not show Demo Mode banner in connected-wallet state."
+    ]
+  },
+  "global_nav": {
+    "component": "global-nav",
+    "variant": "wallet_connected",
+    "logo": {
+      "asset": "assets/logo/wealthsmith-full-lockup.svg",
+      "width_px": 221,
+      "height_px": 32,
+      "alt": "WealthSmith"
+    },
+    "nav_items": [
+      {
+        "id": "dashboard",
+        "label": "Dashboard",
+        "href": "/dashboard",
+        "active": true,
+        "disabled": false
+      },
+      {
+        "id": "portfolio",
+        "label": "Portfolio",
+        "href": "/portfolio",
+        "active": false,
+        "disabled": false
+      },
+      {
+        "id": "goal",
+        "label": "Goal",
+        "href": "/goal",
+        "active": false,
+        "disabled": false
+      },
+      {
+        "id": "support",
+        "label": "Support",
+        "href": "/support",
+        "active": false,
+        "disabled": false
+      }
+    ],
+    "right_actions": {
+      "try_demo_mode": {
+        "visible": false,
+        "reason": "Wallet is connected."
+      },
+      "connect_wallet": {
+        "visible": false,
+        "reason": "Wallet is already connected."
+      },
+      "wallet_pill": {
+        "visible": true,
+        "label": "Phantom • 6fQ9",
+        "action": "open_wallet_menu"
+      },
+      "ask_smith_ai": {
+        "visible": true,
+        "label": "Ask Smith AI",
+        "action": "open_smith_ai_panel",
+        "accessibility_label": "Ask Smith AI about this dashboard"
+      }
+    }
+  },
+  "page_header": {
+    "component": "page-header",
+    "title": "Dashboard",
+    "description": "Review your portfolio, Safety Buffer, and suggested next actions."
+  },
+  "goal": {
+    "source": "saved_goal_settings_fixture",
+    "financial_goal": {
+      "label": "Build Long-Term Wealth",
+      "value": "build_long_term_wealth"
+    },
+    "risk_tolerance": {
+      "label": "Medium",
+      "value": "medium"
+    },
+    "time_horizon": {
+      "label": "5 years",
+      "value_years": 5
+    },
+    "monthly_income_usd": 4000,
+    "monthly_expenses_usd": 1000,
+    "contribution_rhythm": {
+      "label": "Monthly",
+      "value": "monthly"
+    },
+    "monthly_saving_goal_usd": 1000
+  },
+  "portfolio_summary": {
+    "source": "connected_wallet_fixture",
+    "status": "ready",
+    "total_value_usd": 7500,
+    "assets": [
+      {
+        "symbol": "SOL",
+        "name": "Solana",
+        "category": "crypto",
+        "value_usd": 5500,
+        "percentage_of_portfolio": 73.33,
+        "icon": "assets/icons/token/sol.svg",
+        "position_type": "liquid"
+      },
+      {
+        "symbol": "BONK",
+        "name": "Bonk",
+        "category": "meme",
+        "value_usd": 1200,
+        "percentage_of_portfolio": 16.0,
+        "icon": "assets/icons/token/bonk.svg",
+        "position_type": "liquid"
+      },
+      {
+        "symbol": "USDC",
+        "name": "USD Coin",
+        "category": "stablecoin",
+        "value_usd": 800,
+        "percentage_of_portfolio": 10.67,
+        "icon": "assets/icons/token/usdc.svg",
+        "position_type": "liquid"
+      }
+    ],
+    "stablecoin_value_usd": 800,
+    "volatile_value_usd": 6700,
+    "hard_rules": [
+      "Do not invent assets.",
+      "Do not invent balances.",
+      "Use fallback token icon only when token icon is unavailable.",
+      "Portfolio classifications must come from product logic."
+    ]
+  },
+  "main_content": {
+    "sections_order": [
+      "financial_snapshot",
+      "safety_buffer",
+      "projected_growth",
+      "current_vs_recommended_allocation"
+    ],
+    "financial_snapshot": {
+      "component": "card",
+      "title": "Financial Snapshot",
+      "status": "ready",
+      "metrics": [
+        {
+          "id": "portfolio_value",
+          "label": "Portfolio Value",
+          "value": "$7,500",
+          "raw_value_usd": 7500,
+          "source": "connected_wallet_fixture"
+        },
+        {
+          "id": "monthly_saving_goal",
+          "label": "Monthly Saving Goal",
+          "value": "$1,000",
+          "raw_value_usd": 1000,
+          "source": "saved_goal_settings_fixture"
+        },
+        {
+          "id": "risk_level",
+          "label": "Risk Level",
+          "value": "Medium",
+          "raw_value": "medium",
+          "source": "saved_goal_settings_fixture"
+        },
+        {
+          "id": "time_horizon",
+          "label": "Time Horizon",
+          "value": "5 years",
+          "raw_value_years": 5,
+          "source": "saved_goal_settings_fixture"
+        }
+      ]
+    },
+    "safety_buffer": {
+      "component": "metric-card",
+      "title": "Safety Buffer",
+      "status": "underfunded",
+      "severity": "critical",
+      "values": {
+        "current_buffer_usd": 800,
+        "target_buffer_usd": 3000,
+        "buffer_gap_usd": 2200,
+        "coverage_percent": 26.67,
+        "months_covered": 0.8,
+        "target_months": 3
+      },
+      "display": {
+        "primary_value": "27% covered",
+        "secondary_value": "$800 of $3,000",
+        "caption": "$2,200 remaining to reach your Safety Buffer target."
+      },
+      "progress": {
+        "component": "progress-bar",
+        "value_percent": 26.67,
+        "accessibility_label": "Safety Buffer is 27 percent covered."
+      },
+      "source": "safety_buffer_logic_fixture",
+      "production_rule": "Production values must come from Safety Buffer logic, not UI."
+    },
+    "projected_growth": {
+      "component": "chart",
+      "title": "Projected Growth",
+      "status": "ready",
+      "display": {
+        "show_estimated_label": true,
+        "caption": "Estimated projection based on your saved plan settings.",
+        "empty_state": null,
+        "error_state": null
+      },
+      "series": [
+        {
+          "id": "contribution_projection",
+          "label": "Contributions",
+          "type": "line",
+          "marker_icon": "assets/icons/chart/chart-line-marker.svg",
+          "points": [
+            {
+              "year": 0,
+              "value_usd": 7500
+            },
+            {
+              "year": 1,
+              "value_usd": 19500
+            },
+            {
+              "year": 3,
+              "value_usd": 43500
+            },
+            {
+              "year": 5,
+              "value_usd": 67500
+            }
+          ]
+        }
+      ],
+      "source": "projection_logic_fixture",
+      "production_rule": "Production projected growth must come from projection logic, not UI."
+    },
+    "current_vs_recommended_allocation": {
+      "component": "chart",
+      "title": "Current vs Recommended Allocation",
+      "status": "ready",
+      "current_allocation": [
+        {
+          "label": "Crypto",
+          "value_percent": 89.33
+        },
+        {
+          "label": "Stables",
+          "value_percent": 10.67
+        }
+      ],
+      "recommended_allocation": [
+        {
+          "label": "Crypto",
+          "value_percent": 60
+        },
+        {
+          "label": "Stables",
+          "value_percent": 40
+        }
+      ],
+      "display": {
+        "caption": "Recommended allocation is based on your saved plan settings."
+      },
+      "source": "allocation_logic_fixture",
+      "production_rule": "Production recommended allocation must come from product logic, not UI."
+    }
+  },
+  "dashboard_alert": {
+    "visible": true,
+    "source": "top_pick",
+    "linked_suggestion_id": "top_up_safety_buffer",
+    "severity": "critical",
+    "title": "Safety Buffer is below target",
+    "description": "WealthSmith is prioritizing your stablecoin reserve before additional yield opportunities.",
+    "action": {
+      "label": "Review",
+      "target": "top_up_safety_buffer"
+    }
+  },
+  "right_rail": {
+    "component": "suggestion-rail",
+    "mode": "suggestions",
+    "title": "Smith AI Suggestions",
+    "description": "Suggested next actions based on your saved plan and connected wallet data.",
+    "state": {
+      "status": "ready",
+      "source": "suggestion_engine_fixture",
+      "loading": false,
+      "error": false,
+      "empty": false,
+      "stale": false
+    },
+    "summary": {
+      "suggestions_count": 3,
+      "top_pick_id": "top_up_safety_buffer",
+      "has_locked_suggestions": true
+    },
+    "cards": [
+      {
+        "id": "top_up_safety_buffer",
+        "title": "Top Up Your Safety Buffer",
+        "type": "fund_safety_buffer",
+        "category": "safety_buffer",
+        "badge": "Top Pick",
+        "is_top_pick": true,
+        "status": "active",
+        "actionability": "actionable",
+        "severity": "critical",
+        "priority_category": "buffer",
+        "description": "WealthSmith prioritizes adding stablecoins because your Safety Buffer is below target.",
+        "impact_text": "$2,200 remaining to reach your Safety Buffer target.",
+        "cta": {
+          "label": "Review",
+          "action": "open_suggestion_detail",
+          "executes_transaction": false,
+          "requires_wallet_signature": false,
+          "completion_on_click": false
+        },
+        "reason_codes": [
+          "buffer_low",
+          "safety_buffer_priority",
+          "buffer_override"
+        ],
+        "source": "suggestion_engine_fixture"
+      },
+      {
+        "id": "reduce_bonk_exposure",
+        "title": "Reduce Exposure to BONK",
+        "type": "trim",
+        "category": "risk_alignment",
+        "badge": "Risk Reduction",
+        "is_top_pick": false,
+        "status": "active",
+        "actionability": "actionable",
+        "severity": "medium",
+        "priority_category": "rebalance",
+        "description": "BONK is a large share of your portfolio, so WealthSmith shows a risk-alignment suggestion.",
+        "impact_text": "May reduce concentration risk.",
+        "cta": {
+          "label": "Review on Jupiter",
+          "action": "open_external_protocol",
+          "protocol_id": "jupiter",
+          "handoff_type": "external_new_tab",
+          "executes_transaction": false,
+          "requires_wallet_signature": false,
+          "completion_on_click": false
+        },
+        "reason_codes": [
+          "token_overweight",
+          "high_concentration"
+        ],
+        "protocol_decision": {
+          "source": "protocol_logic_fixture",
+          "destination_protocol_id": "jupiter",
+          "destination_label": "Jupiter",
+          "destination_url": "https://jup.ag",
+          "handoff_type": "external_new_tab",
+          "cta_label": "Review on Jupiter",
+          "eligibility_status": "eligible",
+          "reason_codes": [
+            "swap_route",
+            "supported_protocol",
+            "approved_external_destination"
+          ]
+        },
+        "source": "suggestion_engine_and_protocol_logic_fixture"
+      },
+      {
+        "id": "locked_usdc_yield",
+        "title": "Deposit USDC into Kamino",
+        "type": "vault",
+        "category": "yield_opportunity",
+        "badge": "Locked",
+        "is_top_pick": false,
+        "status": "locked",
+        "actionability": "locked",
+        "severity": "info",
+        "priority_category": "capital_efficiency",
+        "description": "This yield opportunity is locked until your Safety Buffer is fully funded.",
+        "impact_text": "Unlock after Safety Buffer is fully funded.",
+        "disabled_reason": "buffer_required",
+        "disabled_reason_text": "Your Safety Buffer needs to be fully funded before this yield opportunity unlocks.",
+        "cta": {
+          "label": "Locked",
+          "action": null,
+          "executes_transaction": false,
+          "requires_wallet_signature": false,
+          "completion_on_click": false
+        },
+        "reason_codes": [
+          "idle_stables",
+          "buffer_required"
+        ],
+        "protocol_decision": {
+          "source": "protocol_logic_fixture",
+          "destination_protocol_id": "kamino",
+          "destination_label": "Kamino",
+          "destination_url": "https://app.kamino.finance",
+          "handoff_type": "blocked_until_unlocked",
+          "cta_label": "Locked",
+          "eligibility_status": "locked_buffer_required",
+          "reason_codes": [
+            "yield_destination",
+            "supported_protocol",
+            "blocked_by_safety_buffer"
+          ]
+        },
+        "apy": {
+          "status": "unavailable",
+          "display": "Unavailable",
+          "must_not_invent": true
+        },
+        "source": "suggestion_engine_and_protocol_logic_fixture"
+      }
+    ],
+    "hard_rules": [
+      "Exactly one active actionable card is marked as Top Pick.",
+      "Locked suggestions cannot be Top Pick.",
+      "Safety Buffer underfunding takes priority over yield opportunities.",
+      "Suggestion clicks do not execute transactions.",
+      "Opening an external protocol does not mark the suggestion complete."
+    ]
+  },
+  "smith_ai": {
+    "available": true,
+    "panel_state": "closed",
+    "entry_label": "Ask Smith AI",
+    "context_mode": "real_wallet",
+    "active_context_sources": [
+      "connected_wallet_state",
+      "saved_goal_settings",
+      "suggestion_engine_output",
+      "top_pick_logic_output",
+      "protocol_logic_output",
+      "content/smith-ai-copy.md"
+    ],
+    "suggested_prompts": [
+      "Why is Safety Buffer the Top Pick?",
+      "Why is the yield suggestion locked?",
+      "What happens if I click Review on Jupiter?"
+    ],
+    "approved_sample_response": "WealthSmith marked Safety Buffer as Top Pick because your stablecoin reserve is below target. It prioritizes the buffer before additional yield opportunities. No action will be taken automatically.",
+    "must_not_say": [
+      "I chose this Top Pick",
+      "I recommend selling now",
+      "guaranteed yield",
+      "risk-free",
+      "I can move funds for you"
+    ]
+  },
+  "state_transitions": {
+    "open_ask_smith_ai": {
+      "action": "open_smith_ai_panel",
+      "result": {
+        "right_rail_mode": "ask_smith_ai",
+        "smith_ai_context_mode": "real_wallet"
+      }
+    },
+    "open_protocol_handoff": {
+      "action": "open_external_protocol",
+      "example_target": "jupiter",
+      "result": {
+        "new_tab": true,
+        "executes_transaction": false,
+        "requires_wallet_signature": false,
+        "marks_suggestion_complete": false
+      },
+      "copy": {
+        "toast": "Opened protocol in a new tab"
+      }
+    },
+    "disconnect_wallet": {
+      "action": "disconnect_wallet",
+      "result": {
+        "wallet_status": "disconnected",
+        "clear_wallet_dependent_data": true,
+        "next_state": "dashboard_no_wallet_state"
+      },
+      "copy": {
+        "toast": "Wallet disconnected",
+        "helper": "Your funds stay in your wallet."
+      }
+    }
+  },
+  "loading_error_empty_states": {
+    "loading": null,
+    "error": null,
+    "empty": null,
+    "partial_data": null,
+    "stale_data": null,
+    "note": "This fixture represents the ready connected-wallet Dashboard state. Separate files should cover dashboard-loading-state.json and dashboard-error-state.json."
+  },
+  "copy_ids": {
+    "wallet_connected_toast": "wallet.connected.toast",
+    "wallet_disconnect_menu": "wallet.menu.disconnect",
+    "wallet_read_only": "wallet.read_only.explanation",
+    "wallet_security_seed_phrase": "wallet.security.seed_phrase",
+    "top_pick_badge": "suggestion.badge.top_pick",
+    "locked_badge": "suggestion.badge.locked",
+    "locked_buffer_required": "suggestion.disabled_reason.buffer_required",
+    "top_pick_glossary": "glossary.top_pick",
+    "safety_buffer_glossary": "glossary.safety_buffer",
+    "protocol_handoff_glossary": "glossary.protocol_handoff"
+  },
+  "accessibility": {
+    "page_title": "Dashboard",
+    "global_nav_label": "Main navigation",
+    "wallet_pill_label": "Connected wallet: Phantom, address ending 6fQ9. Open wallet menu.",
+    "right_rail_label": "Smith AI Suggestions",
+    "safety_buffer_progress_label": "Safety Buffer is 27 percent covered.",
+    "ask_smith_ai_label": "Ask Smith AI about this dashboard"
+  },
+  "hard_rules": [
+    "This is a synthetic connected-wallet fixture, not real user data.",
+    "Do not show Demo Mode banner.",
+    "Do not use demo-specific copy such as “In this demo.”",
+    "Do not invent balances, APY, projections, allocation, suggestions, Top Pick, or protocol destinations.",
+    "Do not imply WealthSmith holds or controls funds.",
+    "Do not ask for seed phrase, private key, password, or wallet backup file.",
+    "Do not execute transactions from suggestion cards.",
+    "Do not request wallet signatures for protocol handoff clicks in MVP.",
+    "Do not mark external handoff suggestions complete on click.",
+    "Do not let Smith AI choose or override Top Pick."
+  ]
+}
