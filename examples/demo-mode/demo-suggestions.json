@@ -1,0 +1,401 @@
+{
+  "example_metadata": {
+    "name": "Demo suggestions",
+    "path": "examples/demo-mode/demo-suggestions.json",
+    "mode": "demo",
+    "purpose": "Shows the official MVP Demo Mode suggestion set for the sample portfolio and plan.",
+    "related_examples": [
+      "examples/demo-mode/demo-portfolio.json",
+      "examples/demo-mode/demo-dashboard-state.json",
+      "examples/demo-mode/demo-smith-ai-responses.md",
+      "examples/suggestions/suggestions-buffer-underfunded.json",
+      "examples/top-pick/top-pick-buffer-case.json"
+    ],
+    "rules": [
+      "rules/demo-mode-rules.md",
+      "rules/suggestion-engine-rules.md",
+      "rules/top-pick-rules.md",
+      "rules/protocol-selection-rules.md",
+      "rules/financial-logic-boundaries.md"
+    ],
+    "content": [
+      "content/demo-mode-copy.md",
+      "content/suggestion-card-copy.md",
+      "content/smith-ai-copy.md",
+      "content/glossary.md"
+    ],
+    "components": [
+      "components/suggestion-card.md",
+      "components/badge.md",
+      "components/button.md"
+    ],
+    "patterns": [
+      "patterns/suggestion-flow.md",
+      "patterns/dashboard-layout.md"
+    ],
+    "notes": [
+      "This is demo/sample data only.",
+      "These suggestions are not real wallet recommendations.",
+      "Production suggestions must come from the Suggestion Engine.",
+      "Production Top Pick must come from Top Pick Logic.",
+      "Production protocol destinations must come from Protocol Logic."
+    ]
+  },
+  "mode": "demo",
+  "demo_mode": true,
+  "data_source": "demo_sample",
+  "input_context": {
+    "goal": {
+      "financial_goal": "build_long_term_wealth",
+      "financial_goal_label": "Build Long-Term Wealth",
+      "risk_tolerance": "medium",
+      "risk_tolerance_label": "Medium",
+      "time_horizon_years": 5,
+      "monthly_income_usd": 4000,
+      "monthly_expenses_usd": 1000,
+      "contribution_rhythm": "monthly",
+      "monthly_saving_goal_usd": 1000
+    },
+    "portfolio": {
+      "total_value_usd": 7500,
+      "assets": [
+        {
+          "symbol": "SOL",
+          "name": "Solana",
+          "value_usd": 5500,
+          "category": "crypto"
+        },
+        {
+          "symbol": "BONK",
+          "name": "Bonk",
+          "value_usd": 1200,
+          "category": "meme"
+        },
+        {
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "value_usd": 800,
+          "category": "stablecoin"
+        }
+      ],
+      "stablecoin_value_usd": 800,
+      "volatile_value_usd": 6700
+    },
+    "safety_buffer": {
+      "status": "underfunded",
+      "current_buffer_usd": 800,
+      "target_buffer_usd": 3000,
+      "buffer_gap_usd": 2200,
+      "coverage_percent": 26.67,
+      "months_covered": 0.8,
+      "target_months": 3,
+      "source_note": "Demo fixture value. Production buffer values must come from Safety Buffer logic."
+    }
+  },
+  "suggestion_state": {
+    "status": "ready",
+    "source": "demo_sample",
+    "generated_for": "demo_portfolio",
+    "suggestions_count": 3,
+    "actionable_count": 2,
+    "locked_count": 1,
+    "disabled_count": 0,
+    "stale_count": 0,
+    "has_top_pick": true,
+    "top_pick_id": "demo_top_up_safety_buffer",
+    "empty_state": null,
+    "error_state": null,
+    "stale_state": null
+  },
+  "ordering": [
+    "demo_top_up_safety_buffer",
+    "demo_reduce_bonk_exposure",
+    "demo_locked_usdc_yield"
+  ],
+  "suggestions": [
+    {
+      "id": "demo_top_up_safety_buffer",
+      "type": "fund_safety_buffer",
+      "category": "safety_buffer",
+      "status": "active",
+      "actionability": "actionable",
+      "severity": "critical",
+      "priority_category": "buffer",
+      "priority_rank": 1,
+      "is_top_pick": true,
+      "top_pick": {
+        "selected": true,
+        "badge": "Top Pick",
+        "selection_reason": "Safety Buffer is below target in the sample portfolio, so buffer funding takes priority over yield opportunities.",
+        "reason_codes": [
+          "buffer_low",
+          "safety_buffer_priority",
+          "buffer_override"
+        ]
+      },
+      "copy": {
+        "title": "Top Up Your Safety Buffer",
+        "description": "In this demo, WealthSmith prioritizes adding stablecoins because the sample Safety Buffer is below target.",
+        "tag": "Safety Buffer",
+        "impact_text": "$2,200 remaining to reach the sample Safety Buffer target.",
+        "badge": "Top Pick",
+        "cta": "Review",
+        "content_ids": {
+          "title_template": "suggestion.buffer.title",
+          "tag": "suggestion.tag.safety_buffer",
+          "badge": "suggestion.badge.top_pick",
+          "demo_context": "demo.smith.limitation"
+        }
+      },
+      "data": {
+        "current_buffer_usd": 800,
+        "target_buffer_usd": 3000,
+        "buffer_gap_usd": 2200,
+        "coverage_percent": 26.67,
+        "source_note": "Demo fixture. Production values must come from Safety Buffer logic."
+      },
+      "action": {
+        "action_type": "review_safety_buffer",
+        "requires_wallet_signature": false,
+        "executes_transaction": false,
+        "external_handoff": false,
+        "completion_on_click": false
+      },
+      "protocol_decision": null,
+      "ui": {
+        "component": "suggestion-card",
+        "icon": "assets/icons/ui/shield-check.svg",
+        "show_top_pick_badge": true,
+        "show_locked_state": false,
+        "show_disabled_state": false,
+        "show_external_link_icon": false
+      },
+      "smith_ai_explanation": {
+        "approved_short_response": "In this demo, Safety Buffer is the Top Pick because the sample stablecoin reserve is below target. This is based on sample data, not your real wallet.",
+        "must_include": [
+          "In this demo",
+          "sample data",
+          "not your real wallet"
+        ],
+        "must_not_include": [
+          "your wallet needs",
+          "you should deposit now",
+          "Smith AI chose this"
+        ]
+      }
+    },
+    {
+      "id": "demo_reduce_bonk_exposure",
+      "type": "trim",
+      "category": "risk_alignment",
+      "status": "active",
+      "actionability": "actionable",
+      "severity": "medium",
+      "priority_category": "rebalance",
+      "priority_rank": 2,
+      "is_top_pick": false,
+      "top_pick": {
+        "selected": false,
+        "selection_reason": "Not Top Pick because the Safety Buffer override has higher priority while the sample buffer is below target.",
+        "reason_codes": [
+          "not_top_pick",
+          "buffer_override_active"
+        ]
+      },
+      "copy": {
+        "title": "Reduce Exposure to BONK",
+        "description": "In this demo, BONK is a large share of the sample portfolio, so WealthSmith shows a risk-alignment suggestion.",
+        "tag": "Risk Reduction",
+        "impact_text": "May reduce concentration risk in the sample portfolio.",
+        "badge": "Risk Reduction",
+        "cta": "Review on Jupiter",
+        "content_ids": {
+          "title_template": "suggestion.trim.title",
+          "tag": "suggestion.tag.risk_reduction",
+          "cta": "suggestion.cta.review_on_protocol"
+        }
+      },
+      "data": {
+        "asset": {
+          "symbol": "BONK",
+          "name": "Bonk",
+          "value_usd": 1200,
+          "percentage_of_portfolio": 16.0,
+          "icon": "assets/icons/token/bonk.svg"
+        },
+        "reason_codes": [
+          "token_overweight",
+          "high_concentration"
+        ],
+        "source_note": "Demo fixture. Production concentration thresholds and suggestion eligibility must come from product logic."
+      },
+      "action": {
+        "action_type": "review_trim",
+        "requires_wallet_signature": false,
+        "executes_transaction": false,
+        "external_handoff": true,
+        "completion_on_click": false
+      },
+      "protocol_decision": {
+        "source": "demo_protocol_logic_fixture",
+        "destination_protocol_id": "jupiter",
+        "destination_label": "Jupiter",
+        "destination_url": "https://jup.ag",
+        "handoff_type": "external_new_tab",
+        "cta_label": "Review on Jupiter",
+        "reason_codes": [
+          "swap_route",
+          "supported_protocol",
+          "approved_external_destination"
+        ],
+        "eligibility_status": "eligible_for_demo_handoff",
+        "excluded_protocols": []
+      },
+      "ui": {
+        "component": "suggestion-card",
+        "icon": "assets/icons/ui/trending-down.svg",
+        "show_top_pick_badge": false,
+        "show_locked_state": false,
+        "show_disabled_state": false,
+        "show_external_link_icon": true
+      },
+      "smith_ai_explanation": {
+        "approved_short_response": "In this demo, BONK is a large share of the sample portfolio, so WealthSmith shows a risk-alignment suggestion. It is not Top Pick because the sample Safety Buffer is still below target.",
+        "must_include": [
+          "In this demo",
+          "sample portfolio",
+          "not Top Pick because Safety Buffer is higher priority"
+        ],
+        "must_not_include": [
+          "you should sell BONK",
+          "trade now",
+          "guaranteed lower risk"
+        ]
+      }
+    },
+    {
+      "id": "demo_locked_usdc_yield",
+      "type": "vault",
+      "category": "yield_opportunity",
+      "status": "locked",
+      "actionability": "locked",
+      "severity": "info",
+      "priority_category": "capital_efficiency",
+      "priority_rank": 3,
+      "is_top_pick": false,
+      "top_pick": {
+        "selected": false,
+        "selection_reason": "Locked yield opportunities cannot be Top Pick while the Safety Buffer is below target.",
+        "reason_codes": [
+          "not_top_pick",
+          "locked",
+          "buffer_required"
+        ]
+      },
+      "copy": {
+        "title": "Deposit USDC into Kamino",
+        "description": "This sample yield opportunity is locked until the sample Safety Buffer is fully funded.",
+        "tag": "Locked",
+        "impact_text": "Unlock after Safety Buffer is fully funded.",
+        "badge": "Locked",
+        "cta": "Locked",
+        "disabled_reason_text": "Your Safety Buffer needs to be fully funded before this sample yield opportunity unlocks.",
+        "content_ids": {
+          "title_template": "suggestion.vault.title",
+          "tag": "suggestion.tag.locked",
+          "badge": "suggestion.badge.locked",
+          "disabled_reason": "suggestion.disabled_reason.buffer_required"
+        }
+      },
+      "data": {
+        "asset": {
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "value_usd": 800,
+          "percentage_of_portfolio": 10.67,
+          "icon": "assets/icons/token/usdc.svg"
+        },
+        "reason_codes": [
+          "idle_stables",
+          "buffer_required"
+        ],
+        "apy": {
+          "status": "unavailable_in_demo_fixture",
+          "display": "Unavailable",
+          "must_not_invent": true
+        },
+        "source_note": "Demo fixture. Production yield eligibility, APY, and estimated earnings must come from approved data sources."
+      },
+      "action": {
+        "action_type": "review_vault",
+        "requires_wallet_signature": false,
+        "executes_transaction": false,
+        "external_handoff": false,
+        "completion_on_click": false
+      },
+      "protocol_decision": {
+        "source": "demo_protocol_logic_fixture",
+        "destination_protocol_id": "kamino",
+        "destination_label": "Kamino",
+        "destination_url": "https://app.kamino.finance",
+        "handoff_type": "blocked_until_unlocked",
+        "cta_label": "Locked",
+        "reason_codes": [
+          "yield_destination",
+          "supported_protocol",
+          "blocked_by_safety_buffer"
+        ],
+        "eligibility_status": "locked_buffer_required",
+        "excluded_protocols": []
+      },
+      "ui": {
+        "component": "suggestion-card",
+        "icon": "assets/icons/ui/lock.svg",
+        "fallback_icon_if_missing": "assets/icons/ui/shield.svg",
+        "show_top_pick_badge": false,
+        "show_locked_state": true,
+        "show_disabled_state": false,
+        "show_external_link_icon": false
+      },
+      "smith_ai_explanation": {
+        "approved_short_response": "In this demo, the USDC yield opportunity is locked because the sample Safety Buffer is below target. WealthSmith prioritizes the buffer before additional yield opportunities.",
+        "must_include": [
+          "In this demo",
+          "locked because Safety Buffer is below target",
+          "sample data"
+        ],
+        "must_not_include": [
+          "you should deposit now",
+          "guaranteed APY",
+          "risk-free yield"
+        ]
+      }
+    }
+  ],
+  "dashboard_alert": {
+    "visible": true,
+    "source": "top_pick",
+    "linked_suggestion_id": "demo_top_up_safety_buffer",
+    "severity": "critical",
+    "title": "Safety Buffer is below target",
+    "description": "In this demo, WealthSmith prioritizes adding stablecoins before showing additional yield opportunities.",
+    "content_source": "demo_top_pick_summary"
+  },
+  "demo_copy_rules": [
+    "Use “In this demo” when Smith AI explains these suggestions.",
+    "Use “sample portfolio” or “sample data” when referring to values.",
+    "Do not say these are real wallet recommendations.",
+    "Do not say the user should act on demo suggestions.",
+    "Do not persist demo suggestions after real wallet connection."
+  ],
+  "hard_rules": [
+    "Exactly one suggestion may have is_top_pick = true.",
+    "Locked suggestions cannot be Top Pick.",
+    "Safety Buffer underfunding takes priority over yield opportunities.",
+    "Suggestion clicks do not execute transactions.",
+    "Protocol handoffs open externally and do not mark completion.",
+    "Demo Mode must not request wallet signatures.",
+    "Demo Mode must not show a wallet pill.",
+    "APY and estimated earnings must not be invented."
+  ]
+}
