@@ -644,6 +644,18 @@ Rules:
 - Do not use icons that conflict with action meaning.
 - Button text remains primary.
 - Icon-only button must have accessible label.
+- Button icons inherit the button text/foreground color by default
+  (`currentColor`), unless a component spec explicitly overrides them.
+- Enabled buttons: the icon matches the button text color (e.g. the action
+  color). Disabled/locked/unavailable buttons: the icon uses the disabled
+  foreground color.
+- The external-link trailing icon on a protocol handoff CTA indicates the
+  external destination and uses the CTA's primary action color while
+  enabled. See `components/suggestion-card.md` (Icons) and
+  `components/button.md` (Button Icons).
+- An icon asset with a fixed fill/stroke must be applied so it follows the
+  button color (via `currentColor` or a mask); do not leave it as its raw
+  file color.
 
 Examples:
 

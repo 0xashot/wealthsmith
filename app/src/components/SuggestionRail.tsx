@@ -6,14 +6,15 @@
  * No sorting, ranking, or Top Pick selection happens here.
  */
 import SuggestionCard from "./SuggestionCard";
-import type { RightRailState } from "../types/dashboard";
+import type { RightRailState, SuggestionCardState } from "../types/dashboard";
 
 interface Props {
   rail: RightRailState;
   railLabel: string;
+  onExternalHandoff?: (card: SuggestionCardState) => void;
 }
 
-export default function SuggestionRail({ rail, railLabel }: Props) {
+export default function SuggestionRail({ rail, railLabel, onExternalHandoff }: Props) {
   return (
     <aside className="suggestion-rail" aria-label={railLabel}>
       <div className="suggestion-rail__header">
@@ -22,7 +23,7 @@ export default function SuggestionRail({ rail, railLabel }: Props) {
       </div>
       <div className="suggestion-rail__cards">
         {rail.cards.map((card) => (
-          <SuggestionCard key={card.id} card={card} />
+          <SuggestionCard key={card.id} card={card} onExternalHandoff={onExternalHandoff} />
         ))}
       </div>
     </aside>

@@ -99,6 +99,10 @@ Aligned with your Medium-risk profile
 Rules:
 
 - Right rail remains visually connected to Smith AI.
+- When the user opens Ask Smith AI, the panel replaces the rail and follows
+  the persistent side-panel sizing/anchoring rules in
+  `components/sidebar.md` (Smith AI Companion Panel) and
+  `patterns/dashboard-layout.md` (Ask Smith AI Panel).
 - Suggestions should be scannable.
 - Dashboard should remain usable.
 - Suggestion rail should not block the Dashboard.

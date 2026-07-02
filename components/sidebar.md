@@ -163,6 +163,71 @@ Rules:
 - Smith AI should not block dashboard use unless the current flow requires it.
 - Smith AI should not replace visible required instructions.
 
+### Panel Sizing and Anchoring
+
+The Smith AI companion panel behaves like a persistent assistant sidebar
+(layout behavior only — no third-party branding or visual style).
+
+Desktop / wide:
+
+- The panel opens in the right rail / side panel area.
+- The panel uses sticky (fixed-like) positioning inside the app shell.
+- The panel must fit inside the viewport. Its bottom edge must never go
+  below the visible screen.
+- Use dynamic viewport height (`dvh`), not `vh`, so the panel respects
+  browser viewport changes. Do not use plain `height: 100vh`, because the
+  panel starts below the Global Nav.
+- Panel height is computed from the available viewport height:
+
+  ```text
+  available height = 100dvh - panelTopOffset - panelBottomOffset
+  ```
+
+- `panelTopOffset` accounts for the Global Nav height and the page spacing
+  above the content area (Global Nav outer offset + Global Nav height +
+  `spacing.page.padding.desktop`). The sticky `top` uses this same offset,
+  so the panel keeps consistent top spacing whether or not the page has
+  scrolled.
+- `panelBottomOffset` uses the same page spacing token as the app shell
+  (`spacing.page.padding.desktop`), keeping consistent bottom spacing from
+  the viewport edge.
+- The panel must not collapse to content height, and must not extend below
+  the viewport.
+- The panel top aligns with the right rail start position of the page
+  content area.
+- The page scrolls independently from the panel.
+
+Container and body behavior (desktop / wide):
+
+- Panel container: height/max-height based on the available viewport
+  height above, `overflow: hidden`, `display: flex`,
+  `flex-direction: column`, `min-height: 0`.
+- Scrollable body (conversation/content area): `flex: 1`, `min-height: 0`,
+  `overflow-y: auto`.
+- Header and the prompts/input footer area: do not shrink
+  (`flex-shrink: 0`).
+
+Internal layout, top to bottom:
+
+```text
+Header (pinned at the panel top, does not shrink)
+Conversation / content area (flex: 1; scrolls internally when content exceeds available height)
+Suggested prompts and/or prompt input, with safety note, near the bottom (does not shrink)
+```
+
+Mobile / tablet:
+
+- Smith AI is an overlay or drawer, not a narrow side panel.
+- Respect safe-area insets and bottom padding (existing page padding
+  tokens plus the device safe-area inset).
+- A visible close action is required; the overlay must not block
+  navigation without it.
+
+Sizing rules:
+
+- Use existing semantic spacing/layout tokens for offsets and padding.
+- Do not invent raw spacing values or new token names for this behavior.
+
 ---
 
 ## Onboarding Smith AI Panel

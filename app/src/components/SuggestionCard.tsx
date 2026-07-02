@@ -8,12 +8,15 @@
  * - Protocol names render with their approved icons, never icon-only.
  * - APY renders exactly as provided ("Unavailable" is displayed, not invented).
  *
- * Step 2 scope: CTA click handlers are stubs. The external protocol handoff
- * (open approved URL in new tab, rel="noopener noreferrer") is wired in a
- * later step; no transaction, signature, or completion behavior will ever
- * be attached per rules/protocol-selection-rules.md.
+ * External protocol handoff (rules/protocol-selection-rules.md, MVP):
+ * the CTA is a plain anchor to the fixture's Protocol Logic URL, opening in
+ * a new tab with rel="noopener noreferrer". Clicking it only navigates and
+ * reports the event upward for a toast — it never executes a transaction,
+ * never requests a wallet signature, and never marks the suggestion
+ * complete (the card's state is untouched by the click).
  */
 import Badge from "./Badge";
+import ButtonIcon from "./ButtonIcon";
 import type { SuggestionCardState } from "../types/dashboard";
 import shieldCheckUrl from "../../../assets/icons/ui/shield-check.svg";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
@@ -79,7 +82,13 @@ const BADGE_TONES: Record<string, "info" | "warning" | "danger" | "success" | "n
   Locked: "neutral",
 };
 
-export default function SuggestionCard({ card }: { card: SuggestionCardState }) {
+interface Props {
+  card: SuggestionCardState;
+  /** Reports an external handoff click upward (toast only — no state change). */
+  onExternalHandoff?: (card: SuggestionCardState) => void;
+}
+
+export default function SuggestionCard({ card, onExternalHandoff }: Props) {
   const isLocked = card.status === "locked";
   const isTopPick = card.is_top_pick === true;
   const isExternalHandoff =
@@ -133,17 +142,17 @@ export default function SuggestionCard({ card }: { card: SuggestionCardState }) 
           {card.cta.label}
         </button>
       ) : isExternalHandoff && card.protocol_decision ? (
-        <button
-          type="button"
+        <a
           className="suggestion-card__cta suggestion-card__cta--external"
+          href={card.protocol_decision.destination_url}
+          target="_blank"
+          rel="noopener noreferrer"
           aria-label={`${card.protocol_decision.cta_label}. Opens external protocol in a new tab.`}
-          // Handoff wiring (approved URL, new tab, noopener noreferrer) lands
-          // in a later step. It will never execute a transaction, request a
-          // signature, or mark the suggestion complete.
+          onClick={() => onExternalHandoff?.(card)}
         >
           <span>{card.cta.label}</span>
-          <img src={externalLinkUrl} alt="" width={16} height={16} aria-hidden="true" />
-        </button>
+          <ButtonIcon src={externalLinkUrl} />
+        </a>
       ) : (
         <button
           type="button"

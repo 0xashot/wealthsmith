@@ -23,5 +23,7 @@ export const dashboardState: DashboardPageState = {
   allocation: f.main_content.current_vs_recommended_allocation,
   dashboard_alert: f.dashboard_alert,
   right_rail: f.right_rail,
+  smith_ai: f.smith_ai,
+  transitions: f.state_transitions,
   accessibility: f.accessibility,
 };

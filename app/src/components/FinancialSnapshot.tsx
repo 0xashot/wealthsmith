@@ -18,7 +18,10 @@ export default function FinancialSnapshot({ title, metrics }: Props) {
         {metrics.map((m) => (
           <div key={m.id} className="metric">
             <span className="metric__label">{m.label}</span>
-            <span className="metric__value">{m.value}</span>
+            <span className={"metric__value" + (m.note ? " metric__value--unavailable" : "")}>
+              {m.value}
+            </span>
+            {m.note && <span className="metric__note">{m.note}</span>}
           </div>
         ))}
       </div>

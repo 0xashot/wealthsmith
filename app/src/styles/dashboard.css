@@ -647,10 +647,22 @@
   background: transparent;
   color: var(--color-action-secondary-text-default);
   font: var(--typography-button-md-font);
+  /* button-styled link: never browser-default underlined
+     (components/button.md — Button-Styled Links) */
+  text-decoration: none;
   cursor: pointer;
   transition-property: var(--motion-interaction-hover-property);
   transition-duration: var(--motion-interaction-hover-duration);
   transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+/* button icons inherit the CTA text color across all states
+   (components/button.md — Button Icons); masked so the fixed-fill asset
+   follows currentColor instead of rendering as its raw file color */
+.btn-icon {
+  display: inline-block;
+  flex-shrink: 0;
+  background: currentColor;
 }
 
 .suggestion-card__cta:hover:not(:disabled) {
@@ -666,4 +678,328 @@
   border-color: var(--color-border-subtle);
   color: var(--color-text-disabled);
   cursor: not-allowed;
+}
+
+/* ---------- Step 3: wallet menu (components/menu-popover.md) ---------- */
+
+.global-nav__wallet {
+  position: relative;
+  display: inline-flex;
+}
+
+.wallet-menu {
+  position: absolute;
+  top: calc(100% + var(--spacing-inline-gap-sm));
+  right: 0;
+  min-width: 200px;
+  padding: var(--spacing-inline-gap-sm);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-overlay-dropdown);
+  z-index: var(--zIndex-menu-popover);
+  display: grid;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.wallet-menu__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border: none;
+  border-radius: var(--radius-control-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: var(--typography-body-md-font);
+  cursor: pointer;
+}
+
+.wallet-menu__item:hover,
+.wallet-menu__item:focus-visible {
+  background: var(--color-subdued-neutral-background-default);
+}
+
+.wallet-menu__item--destructive {
+  color: var(--color-feedback-danger-text-tint);
+}
+
+.wallet-menu__helper {
+  margin: 0;
+  padding: 0 var(--spacing-inline-gap-md);
+  font: var(--typography-caption-default-font);
+  color: var(--color-text-secondary);
+}
+
+/* Connect Wallet CTA (primary, same treatment as Ask Smith AI) */
+.global-nav__connect {
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-control-md);
+  border: none;
+  background: var(--color-action-primary-background-default);
+  color: var(--color-action-primary-text-default);
+  font: var(--typography-button-md-font);
+  box-shadow: var(--shadow-control-default);
+  cursor: pointer;
+}
+
+/* ---------- Step 3: toasts (components/toast.md) ---------- */
+
+.toast-host {
+  position: fixed;
+  bottom: var(--spacing-page-padding-desktop);
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  gap: var(--spacing-inline-gap-sm);
+  z-index: var(--zIndex-feedback-toast);
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-md);
+  padding: var(--spacing-inline-gap-md) var(--spacing-inline-gap-lg);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-overlay-dropdown);
+}
+
+.toast__body {
+  display: grid;
+}
+
+.toast__message {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.toast__helper {
+  font: var(--typography-caption-default-font);
+  color: var(--color-text-secondary);
+}
+
+.toast__dismiss {
+  display: inline-flex;
+  padding: var(--spacing-inline-gap-sm);
+  border: none;
+  border-radius: var(--radius-control-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+/* ---------- Step 3: Ask Smith AI panel (dashboard-layout Mode 3) ---------- */
+
+/* internal layout per components/sidebar.md (Smith AI Companion Panel —
+   Panel Sizing and Anchoring): header pinned at top, conversation area
+   fills the middle and scrolls internally, prompts/input/safety note
+   near the bottom */
+.smith-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  gap: var(--spacing-card-gap-md);
+  padding: var(--spacing-card-padding-md);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-card-default);
+}
+
+/* desktop/wide: persistent assistant sidebar — sticky inside the app
+   shell, sized to fit inside the viewport so the bottom edge never falls
+   below the visible screen (components/sidebar.md — Panel Sizing and
+   Anchoring). panelTopOffset accounts for the Global Nav (24px outer
+   offset + 64px nav height — documented Global Nav spec literals, see file
+   header) plus the desktop page padding token; panelBottomOffset is the
+   same page padding token. sticky top uses panelTopOffset, so top and
+   bottom spacing stay consistent whether or not the page has scrolled. */
+@media (min-width: 1280px) {
+  .smith-panel {
+    --smith-panel-top-offset: calc(24px + 64px + var(--spacing-page-padding-desktop));
+    position: sticky;
+    top: var(--smith-panel-top-offset);
+    height: calc(100dvh - var(--smith-panel-top-offset) - var(--spacing-page-padding-desktop));
+    max-height: calc(100dvh - var(--smith-panel-top-offset) - var(--spacing-page-padding-desktop));
+  }
+}
+
+/* header and the bottom cluster (feedback, quick actions, input, safety
+   note) do not shrink; only the conversation area scrolls */
+.smith-panel__header,
+.smith-panel__feedback,
+.smith-panel__quick-actions,
+.smith-panel__form,
+.smith-panel__safety-note {
+  flex-shrink: 0;
+}
+
+/* mobile/tablet: overlay drawer (not a narrow side panel), page padding
+   tokens plus safe-area inset for bottom spacing; visible close action
+   is in the panel header */
+@media (max-width: 1279px) {
+  .smith-panel {
+    position: fixed;
+    top: var(--spacing-page-padding-mobile);
+    left: var(--spacing-page-padding-mobile);
+    right: var(--spacing-page-padding-mobile);
+    bottom: calc(var(--spacing-page-padding-mobile) + env(safe-area-inset-bottom, 0px));
+    z-index: var(--zIndex-smithAI-panel);
+    box-shadow: var(--shadow-overlay-drawer);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1279px) {
+  .smith-panel {
+    top: var(--spacing-page-padding-tablet);
+    left: var(--spacing-page-padding-tablet);
+    right: var(--spacing-page-padding-tablet);
+    bottom: calc(var(--spacing-page-padding-tablet) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.smith-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.smith-panel__title {
+  margin: 0;
+  font: var(--typography-heading-md-font);
+}
+
+.smith-panel__close {
+  display: inline-flex;
+  padding: var(--spacing-inline-gap-sm);
+  border: none;
+  border-radius: var(--radius-control-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.smith-panel__close:hover,
+.smith-panel__close:focus-visible {
+  background: var(--color-subdued-neutral-background-default);
+}
+
+/* conversation area: fills the space between header and the bottom
+   cluster; scrolls internally when content exceeds available height */
+.smith-panel__entries {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: var(--spacing-card-gap-sm);
+}
+
+.smith-panel__prompt {
+  margin: 0;
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.smith-panel__response {
+  margin: 0;
+  padding: var(--spacing-inline-gap-md);
+  background: var(--color-subdued-neutral-background-default);
+  border-radius: var(--radius-surface-sm);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-primary);
+}
+
+.smith-panel__feedback {
+  display: flex;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.smith-panel__feedback-btn {
+  display: inline-flex;
+  padding: var(--spacing-inline-gap-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
+.smith-panel__feedback-btn[aria-pressed="true"] {
+  background: var(--color-subdued-blue-background-default);
+  border-color: var(--color-action-secondary-stroke-default);
+}
+
+.smith-panel__quick-actions {
+  display: grid;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.smith-panel__quick-action {
+  text-align: left;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-action-secondary-stroke-default);
+  border-radius: var(--radius-control-md);
+  background: transparent;
+  color: var(--color-action-secondary-text-default);
+  font: var(--typography-button-sm-font);
+  cursor: pointer;
+}
+
+.smith-panel__quick-action:hover,
+.smith-panel__quick-action:focus-visible {
+  background: var(--color-action-secondary-background-hover);
+}
+
+.smith-panel__input {
+  width: 100%;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control-md);
+  background: var(--color-surface-canvas);
+  font: var(--typography-body-md-font);
+  color: var(--color-text-primary);
+}
+
+.smith-panel__safety-note {
+  margin: 0;
+  font: var(--typography-caption-default-font);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+/* ---------- Step 3: empty states / disconnected dashboard ---------- */
+
+.empty-card__description {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}
+
+.empty-card__helper {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.empty-card__action {
+  justify-self: start;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-control-md);
+  border: none;
+  background: var(--color-action-primary-background-default);
+  color: var(--color-action-primary-text-default);
+  font: var(--typography-button-md-font);
+  box-shadow: var(--shadow-control-default);
+  cursor: pointer;
+}
+
+.metric__value--unavailable {
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}
+
+.metric__note {
+  font: var(--typography-caption-default-font);
+  color: var(--color-text-secondary);
 }

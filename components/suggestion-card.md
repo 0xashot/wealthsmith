@@ -606,6 +606,31 @@ Why Safety Buffer comes first (informational) -> assets/icons/ui/info.svg
 - Card icons are decorative next to visible text: `aria-hidden="true"`.
 - Icons are never the only source of meaning on a suggestion card.
 
+### Protocol Handoff CTA
+
+An external protocol handoff CTA (for example "Review on Jupiter") is a
+button-styled link.
+
+Rules:
+
+- It may be implemented as an accessible anchor element for correct
+  external-link behavior (opens in a new tab, `rel="noopener noreferrer"`),
+  but it must be styled as a WealthSmith button, not an inline text link.
+- The label must not use browser-default underlined link styling.
+- It carries a trailing external-link icon that stays visible and
+  communicates the external destination.
+- Enabled state: the label, border, and external-link icon share the CTA's
+  primary action color (they inherit the CTA text color; see
+  `components/button.md` — Button Icons).
+- Disabled, locked, or unavailable CTAs use the disabled foreground color
+  for both label and icon.
+- Hover, focus, and active states keep the icon color synchronized with the
+  label color.
+- Use semantic color tokens only; do not hardcode raw icon or text colors.
+- Opening the protocol does not execute a transaction, request a wallet
+  signature, move funds, or mark the suggestion complete (MVP;
+  rules/protocol-selection-rules.md).
+
 ---
 
 ## Priority Display

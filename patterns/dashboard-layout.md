@@ -937,6 +937,23 @@ Rules:
 - Replaces suggestions rail.
 - Dashboard remains visible.
 - Close returns to prior right-zone mode.
+- On desktop/wide, the panel behaves like a persistent assistant sidebar:
+  sticky (fixed-like) inside the app shell, fitting inside the viewport so
+  its bottom edge never goes below the visible screen. Height is
+  `100dvh − panelTopOffset − panelBottomOffset`, where `panelTopOffset`
+  accounts for the Global Nav (outer offset + nav height) plus
+  `spacing.page.padding.desktop`, and `panelBottomOffset` is
+  `spacing.page.padding.desktop`; the sticky `top` uses the same
+  `panelTopOffset` so top and bottom spacing stay consistent whether or not
+  the page has scrolled. The panel never collapses to content height and
+  stays anchored while the main dashboard content scrolls. The container is
+  `overflow: hidden` flex-column with `min-height: 0`; the conversation
+  area is `flex: 1; min-height: 0; overflow-y: auto`; header and the
+  prompts/input footer do not shrink. See `components/sidebar.md`
+  (Smith AI Companion Panel — Panel Sizing and Anchoring).
+- On mobile/tablet, the panel is an overlay or drawer (not a narrow side
+  panel), respects safe-area and bottom padding, and always shows a
+  visible close action.
 - Quick actions must be grounded in current plan/suggestion state.
 - Ask Smith AI may explain suggestions and Dashboard values.
 - Ask Smith AI must not invent deterministic suggestions.

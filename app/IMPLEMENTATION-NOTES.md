@@ -66,9 +66,103 @@ never modified by it.
     this horizontal-bar layout, not legend series.
   - Legend marker size is 16px, consistent with the app's documented raw
     icon sizing (no `icon.size.*` tokens exist).
-- **Step 3 (not started):** interactions — protocol handoff clicks
-  (external new tab, `rel="noopener noreferrer"`), wallet menu / disconnect,
-  Ask Smith AI panel, toasts.
+- **Step 3 (complete):** MVP-safe interactions.
+  - **Wallet pill menu** (menu-popover semantics: `role="menu"`, Escape /
+    outside-click close, arrow-key navigation, focus management). Items:
+    Copy Address + Disconnect Wallet only. Copy uses the async clipboard
+    API with approved toasts for both outcomes ("Address copied." /
+    "Could not copy address.", components/toast.md). Note: content/
+    wallet-copy.md lists only Disconnect Wallet as approved menu copy;
+    "Copy Address" is sanctioned by checklist §5.4 ("Wallet menu may
+    contain Copy Address").
+  - **Disconnect** clears all wallet-dependent view state (portfolio value,
+    Safety Buffer, Projected Growth, Allocation, alert, suggestions) into
+    approved empty/unavailable states; saved goal-settings metrics persist
+    per rules/wallet-and-custody-rules.md. Toast: fixture's "Wallet
+    disconnected" + "Your funds stay in your wallet." No copy implies funds
+    moved or assets were deleted.
+  - **Connect Wallet (slice-only stub):** restores the synthetic fixture
+    session directly with the fixture's "Wallet connected" toast. The
+    wallet-connection modal flow (patterns/wallet-connection.md) is NOT
+    implemented and no wallet adapter exists — flagged as a deviation until
+    a wallet-connection step lands.
+  - **Review on Jupiter handoff:** plain anchor to the fixture Protocol
+    Logic URL (https://jup.ag), `target="_blank"`,
+    `rel="noopener noreferrer"`, fixture aria label. Click shows only the
+    fixture's approved toast ("Opened protocol in a new tab") — no
+    transaction, no signature, no completion marking, no suggestion state
+    change. Locked Kamino card remains a disabled button.
+  - **Ask Smith AI panel shell** (dashboard-layout Mode 3): replaces the
+    rail (one right-zone mode at a time), close restores the rail and
+    returns focus to the trigger. Explain-only: initial response and the
+    three quick prompts map to fixture-approved responses (dashboard
+    fixture, suggestions fixture, protocol-handoff fixture); ANY free-form
+    input gets only the approved uncertainty fallback from
+    content/smith-ai-copy.md — no live generation exists. Safety note
+    rendered. Ask Smith AI is hidden while disconnected (no grounded
+    context). Feedback buttons render accessibly (aria-pressed) but store
+    nothing. Assumption: feedback aria-labels "Helpful"/"Not helpful" and
+    the input placeholder (reusing the fixture entry_label "Ask Smith AI")
+    are UI chrome with no approved copy source; the panel omits the "More"
+    menu from the Mode 3 structure since no approved menu items exist
+    for it.
+  - **Toasts** (components/toast.md): `role="status"`/polite, dismissible,
+    auto-dismiss ~6s, approved copy only.
+- **Step 3.1 (complete):** Smith AI persistent assistant sidebar per the
+  clarified components/sidebar.md (Smith AI Companion Panel — Panel Sizing
+  and Anchoring) and patterns/dashboard-layout.md:
+  - Desktop/wide: `position: sticky` inside the right grid column,
+    `top: var(--spacing-page-padding-desktop)`,
+    `height: calc(100dvh - 2 * var(--spacing-page-padding-desktop))` —
+    fills the dynamic viewport height with consistent 32px top/bottom
+    page padding once the page scrolls; never content-height; the page
+    scrolls independently. In the unscrolled layout the panel top aligns
+    with the right rail start (below the Global Nav), so its bottom edge
+    sits below the fold until the first scroll — the documented
+    initial-alignment state.
+  - Internal layout: flex column — header pinned at top, conversation
+    area `flex: 1` with internal `overflow-y: auto`, feedback / quick
+    prompts / input / safety note clustered at the bottom.
+  - Mobile/tablet: fixed overlay drawer with page padding token insets
+    (mobile 16px / tablet 24px) plus `env(safe-area-inset-bottom)`;
+    `zIndex.smithAI.panel`; the visible close action is the panel header
+    close button.
+  - No behavior change: responses remain fixture-approved static content.
+- **Step 3.2 (complete):** Smith AI panel viewport-fit fix (was overflowing
+  ~56px below the fold because the height only subtracted 2× page padding
+  and ignored the Global Nav above the panel).
+  - Desktop height now `calc(100dvh − panelTopOffset − panelBottomOffset)`
+    where `--smith-panel-top-offset = calc(24px + 64px +
+    var(--spacing-page-padding-desktop))` (Global Nav outer offset + nav
+    height — documented spec literals — plus the desktop page padding
+    token) and `panelBottomOffset = var(--spacing-page-padding-desktop)`.
+    The sticky `top` uses the same `--smith-panel-top-offset`, so top (120px)
+    and bottom (32px) spacing are identical whether or not the page has
+    scrolled — verified at 900px and 640px viewports (heights 748 and 488,
+    both fully inside the viewport, 32px bottom gap).
+  - Container: `overflow: hidden`, flex column, `min-height: 0`, `height`
+    and `max-height` set to the available height. Conversation area:
+    `flex: 1; min-height: 0; overflow-y: auto`. Header + feedback + quick
+    actions + form + safety note: `flex-shrink: 0` so only the body
+    scrolls. Verified with 16 entries: panel height stayed fixed, body
+    scrolled internally, footer stayed pinned.
+- **Step 3.3 (complete):** protocol handoff CTA styling per the clarified
+  components/button.md (Button Icons, Button-Styled Links),
+  components/icon.md (Icons in Buttons), and components/suggestion-card.md
+  (Protocol Handoff CTA).
+  - The "Review on Jupiter" CTA stays an accessible `<a>` (new tab,
+    `rel="noopener noreferrer"`) but is styled as a button and no longer
+    browser-underlined: `text-decoration: none` on the CTA. Behavior
+    unchanged — still no transaction, signature, fund movement, or
+    completion marking; the click still only shows the approved toast.
+  - New `ButtonIcon` renders the fixed-fill external-link asset as a CSS
+    mask painted with `background: currentColor`, so the icon inherits the
+    CTA text color instead of its raw black stroke — matching the CTA
+    label/border in the enabled state (`color.action.secondary.text.default`
+    = #003DFF, verified) and automatically becoming the disabled foreground
+    color inside any disabled button (currentColor follows
+    `color.text.disabled`). Asset files untouched. Supersedes the earlier
+    `<img>` external-link icon.
 
 ### Step 2 intentional stubs
 

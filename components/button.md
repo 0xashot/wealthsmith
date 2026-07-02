@@ -103,6 +103,40 @@ A button label should remain readable and specific even without icons.
 
 Icon-only buttons must have an accessible label because they do not have visible text.
 
+### Button Icons
+
+Rules:
+
+- Leading and trailing button icons inherit the button's text/foreground
+  color by default (as if `currentColor`), unless a component spec
+  explicitly overrides them.
+- In the enabled state, the icon matches the button's text color (e.g. the
+  action color for secondary/link-style buttons).
+- In the disabled, locked, or unavailable state, the icon uses the disabled
+  foreground color, matching the disabled label.
+- Hover, focus, and active states keep the icon color synchronized with the
+  button text color.
+- Do not hardcode raw icon colors on button icons; use the inherited
+  semantic color. An icon asset with a fixed fill/stroke must be applied so
+  it follows the button color (e.g. via `currentColor` or a mask), not left
+  as its raw file color.
+- The icon stays supportive; the visible text label communicates the action.
+
+### Button-Styled Links
+
+A link element may be used when the action navigates to a URL (for example
+an external protocol handoff), but it must be styled as a WealthSmith
+button, not an inline text link.
+
+Rules:
+
+- Button-styled links must not use browser-default underlined link styling
+  (`text-decoration: none`).
+- They use the same container, color, border, radius, and state tokens as
+  the matching button variant.
+- Distinct from the `Link Button` variant below, which is intentionally
+  text-like; button-styled links look like buttons.
+
 ---
 
 ## Variants

@@ -35,11 +35,15 @@ export interface WalletState {
   status: string;
   provider: string;
   provider_id: string;
+  address: string;
   address_short: string;
   show_wallet_pill: boolean;
   wallet_pill: {
     label: string;
     accessibility_label: string;
+  };
+  copy: {
+    connected_toast: string;
   };
 }
 
@@ -48,6 +52,8 @@ export interface SnapshotMetric {
   label: string;
   value: string;
   source: string;
+  /** Optional unavailable-state helper (approved metric-card copy). */
+  note?: string;
 }
 
 export interface SafetyBufferState {
@@ -161,6 +167,18 @@ export interface AccessibilityState {
   ask_smith_ai_label: string;
 }
 
+export interface SmithAiState {
+  available: boolean;
+  entry_label: string;
+  suggested_prompts: string[];
+  approved_sample_response: string;
+}
+
+export interface StateTransitions {
+  open_protocol_handoff: { copy: { toast: string } };
+  disconnect_wallet: { copy: { toast: string; helper: string } };
+}
+
 export interface DashboardPageState {
   global_nav: GlobalNavState;
   wallet: WalletState;
@@ -171,5 +189,7 @@ export interface DashboardPageState {
   allocation: AllocationState;
   dashboard_alert: DashboardAlertState;
   right_rail: RightRailState;
+  smith_ai: SmithAiState;
+  transitions: StateTransitions;
   accessibility: AccessibilityState;
 }
