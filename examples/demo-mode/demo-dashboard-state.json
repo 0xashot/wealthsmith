@@ -1,0 +1,486 @@
+{
+  "example_metadata": {
+    "name": "Demo Dashboard state",
+    "path": "examples/demo-mode/demo-dashboard-state.json",
+    "mode": "demo",
+    "purpose": "Shows the WealthSmith Dashboard rendered in Demo Mode with sample goal data, sample portfolio data, demo banner, no wallet pill, and sample suggestions.",
+    "related_examples": [
+      "examples/demo-mode/demo-portfolio.json",
+      "examples/demo-mode/demo-suggestions.json",
+      "examples/demo-mode/demo-smith-ai-responses.md",
+      "examples/dashboard/dashboard-demo-state.json"
+    ],
+    "rules": [
+      "rules/demo-mode-rules.md",
+      "rules/wallet-and-custody-rules.md",
+      "rules/suggestion-engine-rules.md",
+      "rules/top-pick-rules.md",
+      "rules/loading-state-rules.md",
+      "rules/financial-logic-boundaries.md"
+    ],
+    "content": [
+      "content/demo-mode-copy.md",
+      "content/suggestion-card-copy.md",
+      "content/smith-ai-copy.md",
+      "content/empty-error-loading-copy.md",
+      "content/glossary.md"
+    ],
+    "components": [
+      "components/announcement.md",
+      "components/global-nav.md",
+      "components/page-header.md",
+      "components/metric-card.md",
+      "components/card.md",
+      "components/chart.md",
+      "components/suggestion-card.md",
+      "components/progress-bar.md",
+      "components/button.md"
+    ],
+    "patterns": [
+      "patterns/dashboard-layout.md",
+      "patterns/suggestion-flow.md",
+      "patterns/portfolio-overview.md",
+      "patterns/empty-loading-error-states.md"
+    ],
+    "notes": [
+      "This is a demo fixture, not production logic.",
+      "All values are sample values for Demo Mode.",
+      "Production Safety Buffer, Projected Growth, allocation, suggestions, and Top Pick must come from product logic."
+    ]
+  },
+  "app_state": {
+    "mode": "demo",
+    "demo_mode": true,
+    "data_source": "demo_sample",
+    "current_page": "dashboard",
+    "onboarding": {
+      "status": "complete",
+      "active": false,
+      "progress_percent": 100
+    },
+    "wallet": {
+      "status": "disconnected",
+      "provider": null,
+      "address": null,
+      "address_short": null,
+      "show_wallet_pill": false
+    },
+    "loading": {
+      "is_loading": false,
+      "active_loading_state": null
+    },
+    "error": {
+      "has_error": false,
+      "active_error_state": null
+    }
+  },
+  "demo_banner": {
+    "component": "announcement",
+    "visible": true,
+    "placement": "above_global_nav",
+    "variant": "demo_mode",
+    "title": "You’re in demo mode.",
+    "description": "This is a sample portfolio. Connect your wallet to personalize WealthSmith with your real portfolio.",
+    "primary_action": {
+      "label": "Exit Demo",
+      "action": "exit_demo"
+    },
+    "secondary_action": {
+      "label": "Connect Wallet",
+      "action": "open_connect_wallet_modal"
+    },
+    "dismissible": false,
+    "content_ids": {
+      "title": "demo.banner.title",
+      "description": "demo.banner.description",
+      "primary_action": "demo.banner.exit",
+      "secondary_action": "demo.banner.connect_wallet"
+    }
+  },
+  "global_nav": {
+    "component": "global-nav",
+    "variant": "demo_mode",
+    "outer_offset_px": {
+      "top": 24,
+      "left": 24,
+      "right": 24
+    },
+    "height_px": 64,
+    "radius_px": 16,
+    "internal_horizontal_padding_px": 12,
+    "logo": {
+      "asset": "assets/logo/wealthsmith-full-lockup.svg",
+      "width_px": 221,
+      "height_px": 32
+    },
+    "items": [
+      {
+        "label": "Dashboard",
+        "href": "/dashboard",
+        "active": true,
+        "disabled": false
+      },
+      {
+        "label": "Portfolio",
+        "href": "/portfolio",
+        "active": false,
+        "disabled": false
+      },
+      {
+        "label": "Goal",
+        "href": "/goal",
+        "active": false,
+        "disabled": false
+      },
+      {
+        "label": "Support",
+        "href": "/support",
+        "active": false,
+        "disabled": false
+      }
+    ],
+    "actions": {
+      "show_try_demo_mode": false,
+      "show_connect_wallet": false,
+      "show_wallet_pill": false,
+      "wallet_pill": null,
+      "show_ask_smith_ai": true,
+      "ask_smith_ai": {
+        "label": "Ask Smith AI",
+        "action": "open_smith_ai_panel"
+      }
+    },
+    "hard_rules": [
+      "Do not show wallet pill in Demo Mode.",
+      "Demo Mode banner is outside Global Nav.",
+      "Ask Smith AI is visible because onboarding is not active."
+    ]
+  },
+  "page_header": {
+    "component": "page-header",
+    "title": "Dashboard",
+    "description": "This dashboard uses sample data to show how WealthSmith works.",
+    "content_ids": {
+      "description": "demo.dashboard.helper"
+    }
+  },
+  "goal": {
+    "is_sample_data": true,
+    "financial_goal": {
+      "label": "Build Long-Term Wealth",
+      "value": "build_long_term_wealth"
+    },
+    "risk_tolerance": {
+      "label": "Medium",
+      "value": "medium"
+    },
+    "time_horizon": {
+      "label": "5 years",
+      "value_years": 5
+    },
+    "monthly_income_usd": 4000,
+    "monthly_expenses_usd": 1000,
+    "contribution_rhythm": {
+      "label": "Monthly",
+      "value": "monthly"
+    },
+    "monthly_saving_goal_usd": 1000
+  },
+  "portfolio_summary": {
+    "is_sample_data": true,
+    "total_value_usd": 7500,
+    "assets": [
+      {
+        "symbol": "SOL",
+        "name": "Solana",
+        "category": "crypto",
+        "value_usd": 5500,
+        "percentage_of_portfolio": 73.33,
+        "icon": "assets/icons/token/sol.svg"
+      },
+      {
+        "symbol": "BONK",
+        "name": "Bonk",
+        "category": "meme",
+        "value_usd": 1200,
+        "percentage_of_portfolio": 16.0,
+        "icon": "assets/icons/token/bonk.svg"
+      },
+      {
+        "symbol": "USDC",
+        "name": "USD Coin",
+        "category": "stablecoin",
+        "value_usd": 800,
+        "percentage_of_portfolio": 10.67,
+        "icon": "assets/icons/token/usdc.svg"
+      }
+    ],
+    "stablecoin_value_usd": 800,
+    "volatile_value_usd": 6700
+  },
+  "dashboard_sections": {
+    "financial_snapshot": {
+      "component": "card",
+      "title": "Financial Snapshot",
+      "metrics": [
+        {
+          "label": "Portfolio Value",
+          "value": "$7,500",
+          "raw_value_usd": 7500,
+          "is_sample_data": true
+        },
+        {
+          "label": "Monthly Saving Goal",
+          "value": "$1,000",
+          "raw_value_usd": 1000,
+          "is_sample_data": true
+        },
+        {
+          "label": "Contribution Rhythm",
+          "value": "Monthly",
+          "raw_value": "monthly",
+          "is_sample_data": true
+        }
+      ]
+    },
+    "safety_buffer": {
+      "component": "metric-card",
+      "title": "Safety Buffer",
+      "status": "underfunded",
+      "severity": "critical",
+      "is_sample_data": true,
+      "copy": {
+        "helper": "In this demo, Safety Buffer shows how WealthSmith prioritizes stablecoin reserves before additional yield opportunities."
+      },
+      "values": {
+        "current_buffer_usd": 800,
+        "target_buffer_usd": 3000,
+        "buffer_gap_usd": 2200,
+        "coverage_percent": 26.67,
+        "months_covered": 0.8,
+        "target_months": 3
+      },
+      "display": {
+        "primary_value": "27% covered",
+        "secondary_value": "$800 of $3,000",
+        "caption": "$2,200 remaining to reach the sample Safety Buffer target."
+      },
+      "source_note": "Demo fixture value. Production values must come from Safety Buffer logic."
+    },
+    "projected_growth": {
+      "component": "chart",
+      "title": "Projected Growth",
+      "status": "available",
+      "is_sample_data": true,
+      "copy": {
+        "helper": "Projected Growth is modeled from the demo plan settings."
+      },
+      "display": {
+        "caption": "Sample projection based on the demo plan.",
+        "show_estimated_label": true
+      },
+      "series": [
+        {
+          "label": "Contributions",
+          "type": "line",
+          "marker_icon": "assets/icons/chart/chart-line-marker.svg",
+          "points": [
+            {
+              "year": 0,
+              "value_usd": 7500
+            },
+            {
+              "year": 1,
+              "value_usd": 19500
+            },
+            {
+              "year": 3,
+              "value_usd": 43500
+            },
+            {
+              "year": 5,
+              "value_usd": 67500
+            }
+          ]
+        }
+      ],
+      "source_note": "Demo fixture value. Production projected growth must come from product projection logic."
+    },
+    "current_vs_recommended_allocation": {
+      "component": "chart",
+      "title": "Current vs Recommended Allocation",
+      "status": "available",
+      "is_sample_data": true,
+      "current_allocation": [
+        {
+          "label": "Crypto",
+          "value_percent": 89.33
+        },
+        {
+          "label": "Stables",
+          "value_percent": 10.67
+        }
+      ],
+      "recommended_allocation": [
+        {
+          "label": "Crypto",
+          "value_percent": 60
+        },
+        {
+          "label": "Stables",
+          "value_percent": 40
+        }
+      ],
+      "copy": {
+        "caption": "Sample allocation comparison for Demo Mode."
+      },
+      "source_note": "Demo fixture value. Production recommended allocation must come from product logic."
+    }
+  },
+  "right_rail": {
+    "mode": "suggestions",
+    "component": "suggestion-rail",
+    "title": "Smith AI Suggestions",
+    "description": "Sample suggestions based on the demo portfolio.",
+    "content_ids": {
+      "description": "demo.suggestions.helper"
+    },
+    "show_smith_ai_animation": false,
+    "suggestion_state": {
+      "status": "ready",
+      "source": "demo_sample",
+      "suggestions_count": 3,
+      "top_pick_id": "demo_top_up_safety_buffer",
+      "has_locked_suggestions": true,
+      "has_stale_suggestions": false
+    },
+    "suggestion_cards": [
+      {
+        "id": "demo_top_up_safety_buffer",
+        "type": "fund_safety_buffer",
+        "category": "safety_buffer",
+        "status": "active",
+        "actionability": "actionable",
+        "severity": "critical",
+        "is_top_pick": true,
+        "badge": "Top Pick",
+        "title": "Top Up Your Safety Buffer",
+        "description": "In this demo, WealthSmith prioritizes adding stablecoins because the sample Safety Buffer is below target.",
+        "impact_text": "$2,200 remaining to reach the sample Safety Buffer target.",
+        "cta": {
+          "label": "Review",
+          "action": "open_suggestion_detail",
+          "handoff_type": null
+        },
+        "reason_codes": [
+          "buffer_low",
+          "safety_buffer_priority"
+        ],
+        "source_note": "Demo fixture. Production suggestion must come from Suggestion Engine."
+      },
+      {
+        "id": "demo_reduce_bonk_exposure",
+        "type": "trim",
+        "category": "risk_alignment",
+        "status": "active",
+        "actionability": "actionable",
+        "severity": "medium",
+        "is_top_pick": false,
+        "badge": "Risk Reduction",
+        "title": "Reduce Exposure to BONK",
+        "description": "In this demo, BONK is a large share of the sample portfolio, so WealthSmith shows a risk-alignment suggestion.",
+        "impact_text": "May reduce concentration risk in the sample portfolio.",
+        "cta": {
+          "label": "Review on Jupiter",
+          "action": "open_external_protocol",
+          "handoff_type": "external_new_tab",
+          "protocol_id": "jupiter"
+        },
+        "reason_codes": [
+          "token_overweight",
+          "high_concentration"
+        ],
+        "source_note": "Demo fixture. Production suggestion must come from Suggestion Engine and Protocol Logic."
+      },
+      {
+        "id": "demo_locked_usdc_yield",
+        "type": "vault",
+        "category": "yield_opportunity",
+        "status": "locked",
+        "actionability": "locked",
+        "severity": "info",
+        "is_top_pick": false,
+        "badge": "Locked",
+        "title": "Deposit USDC into Kamino",
+        "description": "This sample yield opportunity is locked until the sample Safety Buffer is fully funded.",
+        "impact_text": "Unlock after Safety Buffer is fully funded.",
+        "cta": {
+          "label": "Locked",
+          "action": null,
+          "handoff_type": null
+        },
+        "disabled_reason": "buffer_required",
+        "reason_codes": [
+          "idle_stables",
+          "buffer_required"
+        ],
+        "source_note": "Demo fixture. Locked yield must not be Top Pick."
+      }
+    ],
+    "hard_rules": [
+      "Exactly one active actionable card is marked as Top Pick.",
+      "Locked suggestions cannot be Top Pick.",
+      "Opening a protocol must not execute a transaction.",
+      "Opening a protocol must not mark a suggestion completed.",
+      "Demo suggestions must not be treated as real recommendations."
+    ]
+  },
+  "smith_ai": {
+    "available": true,
+    "panel_state": "closed",
+    "entry_label": "Ask Smith AI",
+    "context_mode": "demo",
+    "suggested_prompts": [
+      "Why is Safety Buffer the Top Pick?",
+      "What does Demo Mode mean?",
+      "Why is the yield suggestion locked?"
+    ],
+    "demo_context_summary": {
+      "prefix_required": "In this demo",
+      "must_say_sample_data": true,
+      "must_not_call_data_real": true
+    },
+    "sample_response": "In this demo, Safety Buffer is the Top Pick because the sample stablecoin reserve is below target. This is based on sample data, not your real wallet."
+  },
+  "empty_loading_error_states": {
+    "dashboard_loading": null,
+    "dashboard_error": null,
+    "partial_data": null,
+    "stale_data": null
+  },
+  "copy_ids": {
+    "demo_banner_title": "demo.banner.title",
+    "demo_banner_description": "demo.banner.description",
+    "demo_dashboard_helper": "demo.dashboard.helper",
+    "demo_suggestions_helper": "demo.suggestions.helper",
+    "wallet_transition_helper": "demo.connect_wallet.helper",
+    "safety_buffer_glossary": "glossary.safety_buffer",
+    "top_pick_glossary": "glossary.top_pick"
+  },
+  "accessibility": {
+    "demo_banner_role": "status",
+    "demo_banner_accessible_label": "Demo Mode is active. This is a sample portfolio.",
+    "ask_smith_ai_accessible_label": "Ask Smith AI about this demo dashboard",
+    "safety_buffer_progress_label": "Sample Safety Buffer is 27 percent covered.",
+    "suggestion_rail_label": "Sample Smith AI Suggestions"
+  },
+  "hard_rules": [
+    "Do not show wallet pill in Demo Mode.",
+    "Do not call sample data real wallet data.",
+    "Do not imply the user should act on demo suggestions.",
+    "Do not request wallet signature in Demo Mode.",
+    "Do not imply WealthSmith executes transactions.",
+    "Do not persist demo suggestions, demo Top Pick, or demo Smith AI context after real wallet connection.",
+    "Production Dashboard values must come from product logic, not this fixture."
+  ]
+}
