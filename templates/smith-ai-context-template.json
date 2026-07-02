@@ -1,0 +1,665 @@
+{
+  "template_metadata": {
+    "name": "Smith AI Context Template",
+    "path": "templates/smith-ai-context-template.json",
+    "purpose": "Reusable structure for the context packet passed to Smith AI so it can explain WealthSmith states without inventing financial logic, suggestions, Top Pick, protocol choices, APY, balances, or actions.",
+    "template_type": "json_contract_template",
+    "source_of_truth": [
+      "rules/smith-ai-rules.md",
+      "rules/financial-logic-boundaries.md",
+      "rules/suggestion-engine-rules.md",
+      "rules/top-pick-rules.md",
+      "rules/protocol-selection-rules.md",
+      "rules/wallet-and-custody-rules.md",
+      "rules/demo-mode-rules.md"
+    ],
+    "related_content": [
+      "content/smith-ai-copy.md",
+      "content/suggestion-card-copy.md",
+      "content/wallet-copy.md",
+      "content/demo-mode-copy.md",
+      "content/glossary.md",
+      "content/empty-error-loading-copy.md"
+    ],
+    "related_components": [
+      "components/global-nav.md",
+      "components/suggestion-card.md",
+      "components/portfolio-card.md",
+      "components/table.md",
+      "components/alert.md",
+      "components/toast.md"
+    ],
+    "related_patterns": [
+      "patterns/onboarding-with-smith-ai.md",
+      "patterns/suggestion-flow.md",
+      "patterns/dashboard-layout.md",
+      "patterns/portfolio-overview.md",
+      "patterns/wallet-connection.md",
+      "patterns/empty-loading-error-states.md"
+    ],
+    "related_examples": [
+      "examples/smith-ai/smith-ai-top-pick-examples.md",
+      "examples/demo-mode/demo-smith-ai-responses.md",
+      "examples/suggestions/suggestions-buffer-underfunded.json",
+      "examples/top-pick/top-pick-buffer-case.json",
+      "examples/protocol-handoffs/protocol-jupiter-swap.json",
+      "examples/wallet/wallet-connected-phantom-state.json"
+    ],
+    "notes": [
+      "This is a template, not production logic.",
+      "Smith AI uses this context to explain product states.",
+      "Smith AI must not create recommendations or financial logic.",
+      "Smith AI must not choose Top Pick or protocol destinations.",
+      "Smith AI must not invent missing values."
+    ]
+  },
+  "smith_ai_context": {
+    "id": "{smith_ai_context_id}",
+    "source": "wealthsmith_context_builder",
+    "status": "{ready|partial|loading|error|unavailable}",
+    "generated_at": "{timestamp_from_system}",
+    "mode": "{real_wallet|demo|onboarding|support|no_wallet}",
+    "conversation_scope": {
+      "surface": "{dashboard|portfolio|goal|support|onboarding|suggestion_detail|protocol_handoff|wallet_modal|global}",
+      "user_intent": "{explain|clarify|help_navigate|support|unknown}",
+      "current_question": "{user_question_or_null}",
+      "answer_style": "calm_trustworthy_beginner_friendly",
+      "language": "{user_language_or_default_language}"
+    },
+    "page_context": {
+      "route": "{route}",
+      "page": "{Dashboard|Portfolio|Goal|Support|Onboarding|Unknown}",
+      "active_section": "{section_id_or_null}",
+      "right_rail_mode": "{suggestions|ask_smith_ai|onboarding|strategy_insights|empty|error|null}",
+      "visible_ui_state": "{ready|loading|empty|error|partial|stale}",
+      "global_nav_variant": "{onboarding_no_wallet|onboarding_wallet_connected|demo_mode|wallet_connected|no_wallet|null}",
+      "copy_ids_in_view": [
+        "{content_id}"
+      ],
+      "accessibility_context": {
+        "page_title": "{page_title}",
+        "active_region_label": "{region_label_or_null}"
+      }
+    },
+    "wallet_context": {
+      "status": "{connected|disconnected|connecting|error|demo|unknown}",
+      "provider": "{Phantom|Solflare|Backpack|null}",
+      "provider_id": "{phantom|solflare|backpack|null}",
+      "network": "solana",
+      "address_short": "{short_address_or_null}",
+      "address_full_available_to_smith_ai": false,
+      "connection_type": "{read_only_portfolio_view|none|demo}",
+      "wallet_pill_visible": "{boolean}",
+      "portfolio_data_status": "{ready|loading|partial|empty|error|unavailable|not_requested}",
+      "permissions": {
+        "can_read_public_address": "{boolean}",
+        "can_read_supported_balances": "{boolean}",
+        "can_read_supported_positions": "{boolean}",
+        "can_move_funds": false,
+        "can_trade": false,
+        "can_stake": false,
+        "can_deposit": false,
+        "can_withdraw": false,
+        "can_rebalance": false
+      },
+      "allowed_explanations": [
+        "what wallet connection means",
+        "read-only portfolio viewing",
+        "why wallet pill is visible or hidden",
+        "why portfolio data may still be loading",
+        "what disconnect does"
+      ],
+      "forbidden_claims": [
+        "WealthSmith controls the wallet",
+        "WealthSmith can move funds",
+        "Wallet connection authorizes transactions",
+        "Wallet connection means portfolio data is fully loaded",
+        "Funds are secured by WealthSmith"
+      ]
+    },
+    "demo_context": {
+      "demo_mode": "{boolean}",
+      "is_sample_data": "{boolean}",
+      "demo_banner_visible": "{boolean}",
+      "wallet_status_in_demo": "{disconnected|null}",
+      "sample_data_label_required": "{boolean}",
+      "allowed_explanations": [
+        "what Demo Mode is",
+        "that demo data is sample data",
+        "that demo suggestions are examples",
+        "that connecting a wallet exits or transitions from demo context"
+      ],
+      "forbidden_claims": [
+        "Demo data is the user's real portfolio",
+        "Demo suggestions are real recommendations",
+        "Demo Top Pick persists into real wallet mode",
+        "Demo Mode requires a wallet signature"
+      ]
+    },
+    "goal_context": {
+      "status": "{ready|missing|partial|loading|error|not_applicable}",
+      "source": "{saved_goal_settings|demo_goal_settings|onboarding_answers|null}",
+      "financial_goal": "{build_long_term_wealth|preserve_capital|generate_income|custom|null}",
+      "risk_tolerance": "{low|medium|high|null}",
+      "time_horizon_years": "{number_or_null}",
+      "monthly_income_usd": "{number_or_null}",
+      "monthly_expenses_usd": "{number_or_null}",
+      "contribution_rhythm": "{monthly|weekly|biweekly|none|null}",
+      "monthly_saving_goal_usd": "{number_or_null}",
+      "editable_by_user": "{boolean}",
+      "must_not_invent_missing_fields": true
+    },
+    "portfolio_context": {
+      "status": "{ready|loading|partial|empty|error|unavailable}",
+      "source": "{connected_wallet_data|demo_portfolio|portfolio_logic|null}",
+      "total_value_usd": "{number_or_null}",
+      "liquid_assets_value_usd": "{number_or_null}",
+      "staked_assets_value_usd": "{number_or_null}",
+      "yield_strategies_value_usd": "{number_or_null}",
+      "assets": [
+        {
+          "symbol": "{token_symbol}",
+          "name": "{token_name}",
+          "category": "{crypto|stablecoin|meme|governance|lst|rwa|unknown}",
+          "value_usd": "{number_or_null}",
+          "percentage_of_portfolio": "{number_or_null}",
+          "position_type": "{liquid|staked|yield_strategy|unknown}",
+          "source": "{wallet|protocol|demo|product_logic}",
+          "must_not_invent": true
+        }
+      ],
+      "safety_buffer": {
+        "status": "{underfunded|funded|unknown|not_applicable}",
+        "current_buffer_usd": "{number_or_null}",
+        "target_buffer_usd": "{number_or_null}",
+        "buffer_gap_usd": "{number_or_null}",
+        "coverage_percent": "{number_or_null}",
+        "months_covered": "{number_or_null}",
+        "target_months": "{number_or_null}",
+        "source": "{safety_buffer_logic|null}",
+        "must_not_invent": true
+      },
+      "allocation": {
+        "current_allocation": [
+          {
+            "label": "{allocation_bucket}",
+            "value_percent": "{number_from_product_logic_or_null}"
+          }
+        ],
+        "recommended_allocation": [
+          {
+            "label": "{allocation_bucket}",
+            "value_percent": "{number_from_product_logic_or_null}"
+          }
+        ],
+        "source": "{allocation_logic|null}",
+        "must_not_invent": true
+      },
+      "apy_and_earnings_policy": {
+        "can_explain_available_values": true,
+        "must_not_invent_apy": true,
+        "must_not_invent_estimated_earnings": true,
+        "required_phrase_when_relevant": "APY and estimated earnings can change and are not guaranteed."
+      }
+    },
+    "suggestion_context": {
+      "status": "{ready|loading|empty|error|stale|unavailable}",
+      "source": "{suggestion_engine|null}",
+      "suggestions_count": "{number_or_null}",
+      "suggestions": [
+        {
+          "id": "{suggestion_id}",
+          "title": "{suggestion_title}",
+          "type": "{suggestion_type}",
+          "category": "{suggestion_category}",
+          "status": "{active|locked|disabled|stale|completed|dismissed|expired}",
+          "actionability": "{actionable|locked|disabled|informational|unavailable}",
+          "severity": "{critical|warning|medium|info|success}",
+          "is_top_pick": "{boolean}",
+          "reason_codes": [
+            "{reason_code}"
+          ],
+          "copy": {
+            "title": "{copy_from_suggestion_engine_or_content}",
+            "description": "{copy_from_suggestion_engine_or_content}",
+            "cta": "{copy_from_suggestion_engine_protocol_logic_or_content}",
+            "content_ids": [
+              "{content_id}"
+            ]
+          },
+          "data_available_to_smith_ai": "{only_fields_passed_in_context}",
+          "must_not_invent": true
+        }
+      ],
+      "allowed_explanations": [
+        "what a suggestion means",
+        "why a suggestion appears",
+        "why a suggestion is locked",
+        "why a suggestion is not Top Pick",
+        "what clicking Review means",
+        "what external protocol handoff means"
+      ],
+      "forbidden_actions": [
+        "create_new_suggestion",
+        "modify_suggestion",
+        "mark_suggestion_complete",
+        "dismiss_suggestion_without_user_action",
+        "execute_suggestion",
+        "invent_reason_codes"
+      ]
+    },
+    "top_pick_context": {
+      "status": "{ready|no_valid_top_pick|loading|error|stale|unavailable}",
+      "source": "{top_pick_logic|null}",
+      "has_top_pick": "{boolean}",
+      "top_pick_id": "{suggestion_id_or_null}",
+      "top_pick_title": "{suggestion_title_or_null}",
+      "selection_reason": "{reason_from_top_pick_logic_or_null}",
+      "reason_codes": [
+        "{top_pick_reason_code}"
+      ],
+      "candidate_summary": {
+        "eligible_actionable_count": "{number_or_null}",
+        "excluded_count": "{number_or_null}",
+        "locked_count": "{number_or_null}",
+        "stale_count": "{number_or_null}",
+        "informational_count": "{number_or_null}",
+        "buffer_override_active": "{boolean_or_null}"
+      },
+      "allowed_explanations": [
+        "what Top Pick means",
+        "why current Top Pick was selected",
+        "why another suggestion is not Top Pick",
+        "why no Top Pick exists",
+        "why Top Pick changed"
+      ],
+      "forbidden_actions": [
+        "choose_top_pick",
+        "change_top_pick",
+        "override_top_pick_logic",
+        "invent_top_pick",
+        "invent_ranking_scores"
+      ],
+      "approved_response_pattern": "WealthSmith marked {top_pick_title} as Top Pick because {selection_reason}. No action will be taken automatically."
+    },
+    "protocol_decision_context": {
+      "status": "{ready|not_applicable|locked|blocked|stale|error|unavailable}",
+      "source": "{protocol_logic|null}",
+      "decisions": [
+        {
+          "id": "{protocol_decision_id}",
+          "suggestion_id": "{suggestion_id_or_null}",
+          "portfolio_position_id": "{portfolio_position_id_or_null}",
+          "action_type": "{action_type}",
+          "action_family": "{action_family}",
+          "destination_protocol_id": "{protocol_id}",
+          "destination_label": "{protocol_label}",
+          "destination_url_available_to_ui": "{boolean}",
+          "destination_url_visible_to_smith_ai": false,
+          "handoff_type": "{external_new_tab|blocked_until_unlocked|unavailable|none}",
+          "cta_label": "{cta_label}",
+          "eligibility_status": "{eligible|locked_buffer_required|unsupported_asset|unsupported_protocol|stale|error}",
+          "reason_codes": [
+            "{protocol_reason_code}"
+          ],
+          "executes_transaction": false,
+          "requires_wallet_signature": false,
+          "marks_suggestion_complete": false
+        }
+      ],
+      "allowed_explanations": [
+        "why a protocol appears",
+        "what external handoff means",
+        "why a protocol action is locked",
+        "why a protocol link is unavailable",
+        "that opening a protocol is review-only"
+      ],
+      "forbidden_actions": [
+        "choose_protocol",
+        "change_protocol",
+        "invent_protocol_destination",
+        "invent_protocol_url",
+        "invent_trade_route",
+        "invent_slippage",
+        "invent_trade_size",
+        "claim_transaction_complete"
+      ],
+      "approved_response_pattern": "{cta_label} opens {protocol_label} in a new tab so you can review the action externally. WealthSmith does not execute the action, move funds, or mark the suggestion complete when you open the protocol."
+    },
+    "onboarding_context": {
+      "status": "{active|complete|not_started|not_applicable}",
+      "current_step": "{step_id_or_null}",
+      "completed_steps": [
+        "{step_id}"
+      ],
+      "smith_ai_panel_should_remain_open": "{boolean}",
+      "live_dashboard_updates_allowed": "{boolean}",
+      "allowed_explanations": [
+        "why each onboarding question is asked",
+        "how answers affect plan setup",
+        "how to undo or restart onboarding",
+        "what happens after onboarding finishes"
+      ],
+      "forbidden_actions": [
+        "skip_required_step_without_user_action",
+        "invent_goal_answer",
+        "invent_wallet_data",
+        "close_smith_ai_during_active_onboarding"
+      ]
+    },
+    "support_context": {
+      "status": "{available|not_applicable}",
+      "available_support_actions": [
+        "answer_faq",
+        "open_contact_us",
+        "explain_product_state"
+      ],
+      "forbidden_support_actions": [
+        "ask_for_seed_phrase",
+        "ask_for_private_key",
+        "ask_for_password",
+        "promise_fund_recovery",
+        "claim_transaction_execution"
+      ]
+    },
+    "allowed_response_types": [
+      "explanation",
+      "clarification",
+      "navigation_help",
+      "state_summary",
+      "safe_next_step_description",
+      "unsupported_request_boundary"
+    ],
+    "forbidden_response_types": [
+      "new_financial_recommendation",
+      "manual_top_pick_override",
+      "manual_protocol_override",
+      "transaction_execution",
+      "wallet_signature_request",
+      "private_key_or_seed_phrase_request",
+      "guaranteed_outcome_claim",
+      "ungrounded_projection",
+      "ungrounded_apy_or_earnings"
+    ],
+    "response_constraints": {
+      "voice": {
+        "tone": "calm_trustworthy_beginner_friendly",
+        "style": "clear_concise_explainable",
+        "avoid": [
+          "hype",
+          "pressure",
+          "shaming",
+          "overconfidence",
+          "technical jargon without explanation"
+        ]
+      },
+      "required_phrases_when_relevant": [
+        "WealthSmith marked",
+        "No action will be taken automatically",
+        "Your funds stay in your wallet",
+        "APY and estimated earnings can change and are not guaranteed",
+        "I can explain it, but I do not choose or change it"
+      ],
+      "forbidden_phrases": [
+        "I chose this Top Pick",
+        "I changed your Top Pick",
+        "guaranteed",
+        "risk-free",
+        "best investment",
+        "trade now",
+        "swap now",
+        "transaction submitted",
+        "funds moved",
+        "send your seed phrase",
+        "send your private key"
+      ],
+      "must_not_invent": [
+        "balances",
+        "prices",
+        "APY",
+        "estimated earnings",
+        "projections",
+        "suggestions",
+        "Top Pick",
+        "reason codes",
+        "protocol destinations",
+        "protocol URLs",
+        "routes",
+        "slippage",
+        "trade size",
+        "transaction status",
+        "wallet permissions"
+      ],
+      "when_data_missing": {
+        "rule": "Say the data is unavailable or needs refresh. Do not fill gaps.",
+        "approved_phrases": [
+          "I don’t have that value available here.",
+          "That data needs to refresh before WealthSmith can show it.",
+          "WealthSmith should show this as unavailable rather than estimate it."
+        ]
+      }
+    },
+    "action_boundaries": {
+      "smith_ai_can": [
+        "explain_visible_product_state",
+        "summarize_provided_context",
+        "clarify_terms_from_glossary",
+        "explain_why_suggestion_appears",
+        "explain_why_top_pick_was_selected",
+        "explain_why_protocol_handoff_is_review_only",
+        "guide_user_to_visible_ui_actions"
+      ],
+      "smith_ai_cannot": [
+        "create_or_modify_suggestions",
+        "choose_or_change_top_pick",
+        "choose_or_change_protocol",
+        "execute_transactions",
+        "request_wallet_signatures",
+        "move_funds",
+        "stake_or_unstake_assets",
+        "deposit_or_withdraw_assets",
+        "swap_or_trade_assets",
+        "mark_suggestions_complete",
+        "fetch_private_wallet_secrets",
+        "guarantee_returns"
+      ]
+    },
+    "copy_and_content_constraints": {
+      "use_content_ids_when_available": true,
+      "content_ids": [
+        "{content_id}"
+      ],
+      "glossary_terms_available": [
+        "Top Pick",
+        "Safety Buffer",
+        "Protocol Handoff",
+        "APY",
+        "Estimated Earnings",
+        "Liquid Assets",
+        "Staked Assets",
+        "Yield Strategies",
+        "Demo Mode"
+      ],
+      "copy_source_priority": [
+        "content/",
+        "suggestion_engine_copy",
+        "top_pick_logic_copy",
+        "protocol_logic_copy",
+        "template_fallback_only_for_internal_placeholders"
+      ],
+      "hard_rule": "Do not invent final user-facing product copy when approved content exists."
+    },
+    "privacy_and_security": {
+      "never_request": [
+        "seed_phrase",
+        "private_key",
+        "wallet_password",
+        "wallet_backup_file",
+        "full_secret_recovery_phrase"
+      ],
+      "never_store_or_echo": [
+        "private_key",
+        "seed_phrase",
+        "wallet_password"
+      ],
+      "safe_wallet_reference": {
+        "use_short_address_only": true,
+        "full_address_available_to_smith_ai": false
+      },
+      "required_warning_for_secret_requests": "Never share your seed phrase or private key.",
+      "non_custodial_boundary": "WealthSmith is non-custodial. Your funds stay in your wallet."
+    },
+    "fallback_behavior": {
+      "when_context_status_loading": {
+        "response": "I’m waiting for the relevant data to finish loading before explaining this.",
+        "must_not": [
+          "invent_loading_result",
+          "show_fake_balances"
+        ]
+      },
+      "when_context_status_partial": {
+        "response": "I can explain the data that is available, but some information is still missing or unavailable.",
+        "must_not": [
+          "fill_missing_values",
+          "hide_partial_state"
+        ]
+      },
+      "when_context_status_error": {
+        "response": "I can’t explain that yet because the relevant data did not load. Try refreshing, and your funds stay in your wallet.",
+        "must_not": [
+          "imply_funds_affected",
+          "invent_error_resolution"
+        ]
+      },
+      "when_user_asks_unsupported_question": {
+        "response": "I can help explain WealthSmith’s current product state, suggestions, and wallet safety boundaries, but I can’t do that action here.",
+        "must_not": [
+          "pretend_capability_exists",
+          "execute_action"
+        ]
+      }
+    },
+    "validation": {
+      "required_fields": [
+        "id",
+        "status",
+        "mode",
+        "conversation_scope",
+        "page_context",
+        "wallet_context",
+        "response_constraints",
+        "action_boundaries",
+        "privacy_and_security"
+      ],
+      "conditional_required_fields": [
+        {
+          "when": "mode = demo",
+          "required": [
+            "demo_context.demo_mode",
+            "demo_context.is_sample_data",
+            "demo_context.sample_data_label_required"
+          ]
+        },
+        {
+          "when": "suggestion_context.status = ready",
+          "required": [
+            "suggestion_context.source",
+            "suggestion_context.suggestions"
+          ]
+        },
+        {
+          "when": "top_pick_context.has_top_pick = true",
+          "required": [
+            "top_pick_context.source",
+            "top_pick_context.top_pick_id",
+            "top_pick_context.top_pick_title",
+            "top_pick_context.selection_reason"
+          ]
+        },
+        {
+          "when": "protocol_decision_context.status = ready",
+          "required": [
+            "protocol_decision_context.source",
+            "protocol_decision_context.decisions"
+          ]
+        },
+        {
+          "when": "wallet_context.status = connected",
+          "required": [
+            "wallet_context.provider",
+            "wallet_context.provider_id",
+            "wallet_context.address_short",
+            "wallet_context.connection_type",
+            "wallet_context.permissions"
+          ]
+        }
+      ],
+      "global_assertions": [
+        {
+          "id": "smith_ai_does_not_choose_top_pick",
+          "assertion": "Smith AI context does not allow Top Pick selection or override.",
+          "expected": true
+        },
+        {
+          "id": "smith_ai_does_not_choose_protocol",
+          "assertion": "Smith AI context does not allow protocol selection or override.",
+          "expected": true
+        },
+        {
+          "id": "no_execution",
+          "assertion": "Smith AI context does not allow transaction execution.",
+          "expected": true
+        },
+        {
+          "id": "no_wallet_secrets",
+          "assertion": "Smith AI context forbids seed phrase and private key requests.",
+          "expected": true
+        },
+        {
+          "id": "no_invented_financial_values",
+          "assertion": "Smith AI context forbids invented APY, earnings, balances, suggestions, and projections.",
+          "expected": true
+        },
+        {
+          "id": "non_custodial_boundary",
+          "assertion": "Smith AI context includes non-custodial boundaries.",
+          "expected": true
+        }
+      ],
+      "forbidden_fields_or_values": [
+        "private_key",
+        "seed_phrase",
+        "wallet_password",
+        "wallet_backup_file",
+        "can_move_funds = true",
+        "can_trade = true",
+        "can_stake = true",
+        "can_deposit = true",
+        "can_withdraw = true",
+        "can_rebalance = true",
+        "smith_ai_can.choose_top_pick",
+        "smith_ai_can.choose_protocol",
+        "smith_ai_can.execute_transactions",
+        "guaranteed_return",
+        "risk_free"
+      ]
+    },
+    "hard_rules": [
+      "This is a template, not production logic.",
+      "Smith AI explains product state; it does not generate financial logic.",
+      "Smith AI must not create, change, or override suggestions.",
+      "Smith AI must not choose or change Top Pick.",
+      "Smith AI must not choose or change protocol destinations.",
+      "Smith AI must not invent balances, APY, estimated earnings, projections, reason codes, protocol URLs, routes, slippage, or trade size.",
+      "Smith AI must not execute transactions.",
+      "Smith AI must not request wallet signatures.",
+      "Smith AI must not move funds.",
+      "Smith AI must not mark suggestions complete.",
+      "Smith AI must not ask for seed phrases, private keys, passwords, or wallet backup files.",
+      "Smith AI must not claim guaranteed or risk-free outcomes.",
+      "Smith AI must use demo-aware language when demo_mode is true.",
+      "Smith AI must use unavailable/loading/error language when data is missing.",
+      "Smith AI must preserve non-custodial boundaries: WealthSmith does not hold or control user funds."
+    ]
+  }
+}
