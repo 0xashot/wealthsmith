@@ -1,0 +1,751 @@
+{
+  "template_metadata": {
+    "name": "Page State Template",
+    "path": "templates/page-state-template.json",
+    "purpose": "Reusable structure for WealthSmith page-level state used by Dashboard, Portfolio, Goal, Support, Onboarding, Demo Mode, Claude Code, UI tests, and QA.",
+    "template_type": "json_contract_template",
+    "source_of_truth": [
+      "rules/financial-logic-boundaries.md",
+      "rules/wallet-and-custody-rules.md",
+      "rules/demo-mode-rules.md",
+      "rules/suggestion-engine-rules.md",
+      "rules/top-pick-rules.md",
+      "rules/protocol-selection-rules.md",
+      "rules/smith-ai-rules.md",
+      "rules/loading-state-rules.md"
+    ],
+    "related_content": [
+      "content/ui-copy-rules.md",
+      "content/wallet-copy.md",
+      "content/demo-mode-copy.md",
+      "content/suggestion-card-copy.md",
+      "content/smith-ai-copy.md",
+      "content/empty-error-loading-copy.md",
+      "content/glossary.md"
+    ],
+    "related_components": [
+      "components/global-nav.md",
+      "components/page-header.md",
+      "components/card.md",
+      "components/metric-card.md",
+      "components/portfolio-card.md",
+      "components/suggestion-card.md",
+      "components/table.md",
+      "components/chart.md",
+      "components/alert.md",
+      "components/button.md",
+      "components/toast.md",
+      "components/skeleton.md",
+      "components/empty-state.md"
+    ],
+    "related_patterns": [
+      "patterns/dashboard-layout.md",
+      "patterns/portfolio-overview.md",
+      "patterns/suggestion-flow.md",
+      "patterns/wallet-connection.md",
+      "patterns/onboarding-with-smith-ai.md",
+      "patterns/goal-settings.md",
+      "patterns/support-center.md",
+      "patterns/empty-loading-error-states.md"
+    ],
+    "related_templates": [
+      "templates/wallet-state-template.json",
+      "templates/demo-mode-state-template.json",
+      "templates/suggestion-object-template.json",
+      "templates/top-pick-output-template.json",
+      "templates/protocol-decision-template.json",
+      "templates/smith-ai-context-template.json",
+      "templates/empty-error-loading-state-template.json"
+    ],
+    "related_examples": [
+      "examples/dashboard/dashboard-connected-wallet-state.json",
+      "examples/dashboard/dashboard-demo-state.json",
+      "examples/wallet/wallet-connected-phantom-state.json",
+      "examples/suggestions/suggestions-buffer-underfunded.json"
+    ],
+    "notes": [
+      "This is a template, not production state.",
+      "Page state coordinates already-computed product outputs.",
+      "Page state must not calculate financial logic, suggestions, Top Pick, protocol decisions, APY, balances, or projections.",
+      "UI renders this state and must not invent missing product data."
+    ]
+  },
+  "page_state": {
+    "id": "{page_state_id}",
+    "source": "{app_state_builder|route_loader|demo_state_builder|test_fixture}",
+    "status": "{ready|loading|partial|empty|error|stale}",
+    "generated_at": "{timestamp_from_system}",
+    "route": "{/dashboard|/portfolio|/goal|/support|/onboarding|/suggestion/{id}|custom_route}",
+    "page": "{Dashboard|Portfolio|Goal|Support|Onboarding|SuggestionDetail|Unknown}",
+    "mode": "{real_wallet|demo|no_wallet|onboarding|support}",
+    "demo_mode": "{boolean}",
+    "is_reference_fixture": "{boolean}",
+    "data_source": "{connected_wallet|demo_data|saved_settings|support_content|mixed|none}",
+    "freshness": {
+      "status": "{fresh|stale|unknown}",
+      "last_updated_at": "{timestamp_or_null}",
+      "stale_reason": "{reason_or_null}",
+      "refresh_available": "{boolean}"
+    },
+    "viewport_layout": {
+      "breakpoint": "{mobile|tablet|desktop|wide}",
+      "breakpoint_rules": {
+        "mobile": {
+          "width_range_px": "320-767",
+          "global_nav": "top",
+          "right_rail": "overlay_or_below_content",
+          "smith_ai": "overlay",
+          "page_padding_token": "{semantic_spacing_token}"
+        },
+        "tablet": {
+          "width_range_px": "768-1279",
+          "global_nav": "top",
+          "right_rail": "overlay_or_below_content",
+          "smith_ai": "overlay",
+          "page_padding_token": "{semantic_spacing_token}"
+        },
+        "desktop": {
+          "width_range_px": "1280-1727",
+          "global_nav": "top",
+          "right_rail": "right_side_panel",
+          "smith_ai": "right_side_panel_when_open",
+          "page_padding_token": "{semantic_spacing_token}"
+        },
+        "wide": {
+          "width_range_px": "1728+",
+          "global_nav": "top",
+          "right_rail": "right_side_panel",
+          "smith_ai": "right_side_panel_when_open",
+          "page_padding_token": "{semantic_spacing_token}"
+        }
+      },
+      "content_max_width": "{semantic_layout_token_or_null}",
+      "grid": {
+        "system": "8px_grid",
+        "columns": "{4|8|12}",
+        "gap_token": "{semantic_spacing_token}"
+      },
+      "hard_rules": [
+        "Use semantic layout and spacing tokens.",
+        "Do not hardcode raw spacing values in implementation unless the component spec explicitly requires them.",
+        "Smith AI overlays on mobile/tablet and uses a side panel on desktop/wide."
+      ]
+    },
+    "app_shell": {
+      "global_nav": {
+        "component": "global-nav",
+        "variant": "{onboarding_no_wallet|onboarding_wallet_connected|demo_mode|wallet_connected|no_wallet}",
+        "visible": true,
+        "logo": {
+          "asset": "assets/logo/wealthsmith-full-lockup.svg",
+          "alt": "WealthSmith",
+          "width_px": 221,
+          "height_px": 32
+        },
+        "nav_items": [
+          {
+            "id": "{dashboard|portfolio|goal|support}",
+            "label": "{copy_from_content}",
+            "href": "{route}",
+            "active": "{boolean}",
+            "disabled": "{boolean}",
+            "disabled_reason": "{onboarding_active|requires_wallet_or_demo|not_available|null}"
+          }
+        ],
+        "right_actions": {
+          "try_demo_mode": {
+            "visible": "{boolean}",
+            "label": "Try Demo Mode",
+            "action": "enter_demo_mode",
+            "content_id": "demo.cta.try_demo_mode"
+          },
+          "connect_wallet": {
+            "visible": "{boolean}",
+            "label": "Connect Wallet",
+            "action": "open_connect_wallet_modal",
+            "content_id": "wallet.connect.cta"
+          },
+          "wallet_pill": {
+            "visible": "{boolean}",
+            "label": "{wallet_provider} • {short_address}",
+            "action": "open_wallet_menu",
+            "icon": "{wallet_icon_path_or_null}",
+            "accessibility_label": "{accessible_wallet_pill_label}"
+          },
+          "ask_smith_ai": {
+            "visible": "{boolean}",
+            "label": "Ask Smith AI",
+            "action": "open_smith_ai_panel",
+            "content_id": "smith_ai.cta.ask"
+          }
+        },
+        "hard_rules": [
+          "Global Nav renders passed state only.",
+          "Global Nav does not fetch wallet data.",
+          "Global Nav does not decide demo state.",
+          "Wallet pill appears only after wallet connection is confirmed.",
+          "Wallet pill does not appear in Demo Mode.",
+          "Ask Smith AI is hidden during active onboarding unless the onboarding pattern explicitly shows Smith AI as the onboarding companion.",
+          "Try Demo Mode is hidden when a real wallet is connected."
+        ]
+      },
+      "demo_banner": {
+        "visible": "{boolean}",
+        "component": "{announcement|banner|null}",
+        "title": "{copy_from_demo_mode_content_or_null}",
+        "description": "{copy_from_demo_mode_content_or_null}",
+        "actions": [
+          {
+            "label": "{Exit Demo|Connect Wallet|null}",
+            "action": "{exit_demo_mode|open_connect_wallet_modal|null}"
+          }
+        ],
+        "hard_rules": [
+          "Demo banner is visible only when demo_mode = true.",
+          "Demo banner is outside Global Nav.",
+          "Demo banner must clearly label sample data.",
+          "Demo banner must not appear in connected-wallet real mode."
+        ]
+      },
+      "toasts": [
+        {
+          "id": "{toast_id}",
+          "type": "{success|info|warning|error}",
+          "message": "{copy_from_content}",
+          "content_id": "{content_id}",
+          "duration_ms": "{number_or_null}",
+          "triggered_by": "{event_name_or_null}"
+        }
+      ]
+    },
+    "wallet_state": {
+      "template_reference": "templates/wallet-state-template.json",
+      "status": "{connected|disconnected|connecting|error|demo|unknown}",
+      "provider": "{Phantom|Solflare|Backpack|null}",
+      "provider_id": "{phantom|solflare|backpack|null}",
+      "address_short": "{short_address_or_null}",
+      "network": "solana",
+      "connection_type": "{read_only_portfolio_view|none|demo}",
+      "wallet_pill_visible": "{boolean}",
+      "portfolio_data_status": "{ready|loading|partial|empty|error|unavailable|not_requested}",
+      "permissions": {
+        "can_read_public_address": "{boolean}",
+        "can_read_supported_balances": "{boolean}",
+        "can_read_supported_positions": "{boolean}",
+        "can_move_funds": false,
+        "can_trade": false,
+        "can_stake": false,
+        "can_deposit": false,
+        "can_withdraw": false,
+        "can_rebalance": false
+      },
+      "hard_rules": [
+        "Wallet connected state is separate from portfolio data readiness.",
+        "Wallet connection does not authorize transactions.",
+        "Wallet connection does not move funds.",
+        "Do not ask for seed phrase or private key."
+      ]
+    },
+    "demo_state": {
+      "template_reference": "templates/demo-mode-state-template.json",
+      "demo_mode": "{boolean}",
+      "is_sample_data": "{boolean}",
+      "sample_data_label_required": "{boolean}",
+      "wallet_status": "{disconnected|null}",
+      "wallet_pill_visible": false,
+      "demo_banner_visible": "{boolean}",
+      "hard_rules": [
+        "Demo Mode uses sample data.",
+        "Demo Mode must not imply real wallet personalization.",
+        "Demo Mode does not request signatures.",
+        "Demo Top Pick does not persist into real wallet mode."
+      ]
+    },
+    "page_header": {
+      "component": "page-header",
+      "visible": "{boolean}",
+      "title": "{copy_from_content_or_page_definition}",
+      "description": "{copy_from_content_or_page_definition_or_null}",
+      "actions": [
+        {
+          "label": "{copy_from_content}",
+          "action": "{action_id}",
+          "visible": "{boolean}",
+          "disabled": "{boolean}"
+        }
+      ]
+    },
+    "main_content": {
+      "status": "{ready|loading|partial|empty|error|stale}",
+      "sections_order": [
+        "{section_id}"
+      ],
+      "sections": [
+        {
+          "id": "{section_id}",
+          "component": "{card|metric-card|portfolio-card|table|chart|form|accordion|empty-state|custom}",
+          "title": "{copy_from_content_or_page_definition}",
+          "description": "{copy_from_content_or_page_definition_or_null}",
+          "status": "{ready|loading|partial|empty|error|stale}",
+          "data_source": "{product_logic|wallet_data|demo_data|content|none}",
+          "data": "{section_specific_data_or_null}",
+          "copy_ids": [
+            "{content_id}"
+          ],
+          "actions": [
+            {
+              "label": "{copy_from_content}",
+              "action": "{action_id}",
+              "target": "{target_id_or_route_or_null}",
+              "executes_transaction": false,
+              "requires_wallet_signature": false,
+              "external_handoff": "{boolean}",
+              "completion_on_click": false
+            }
+          ],
+          "empty_error_loading_state": {
+            "template_reference": "templates/empty-error-loading-state-template.json",
+            "state": "{none|loading|empty|error|partial|stale}",
+            "copy": "{copy_from_content_or_null}",
+            "cta": "{Retry|Refresh|Connect Wallet|Try Demo Mode|null}"
+          },
+          "hard_rules": [
+            "Section renders provided data only.",
+            "Section must not invent missing values.",
+            "Section actions do not execute transactions in MVP."
+          ]
+        }
+      ],
+      "hard_rules": [
+        "Main content must not calculate financial logic.",
+        "Main content must not invent wallet balances, APY, earnings, projections, suggestions, Top Pick, or protocol decisions.",
+        "Use unavailable/empty/loading/error state when required data is missing."
+      ]
+    },
+    "portfolio_context": {
+      "status": "{ready|loading|partial|empty|error|unavailable|not_applicable}",
+      "source": "{connected_wallet_data|demo_portfolio|portfolio_logic|null}",
+      "summary": {
+        "total_value_usd": "{number_or_null}",
+        "liquid_assets_value_usd": "{number_or_null}",
+        "staked_assets_value_usd": "{number_or_null}",
+        "yield_strategies_value_usd": "{number_or_null}",
+        "must_not_invent": true
+      },
+      "sections_available": {
+        "liquid_assets": "{boolean}",
+        "staked_assets": "{boolean}",
+        "yield_strategies": "{boolean}"
+      },
+      "hard_rules": [
+        "Portfolio values must come from wallet/on-chain/product data or clearly labeled demo data.",
+        "Do not show fake balances while loading.",
+        "Do not imply WealthSmith holds or controls funds."
+      ]
+    },
+    "goal_context": {
+      "status": "{ready|missing|partial|loading|error|not_applicable}",
+      "source": "{saved_goal_settings|demo_goal_settings|onboarding_answers|null}",
+      "financial_goal": "{value_or_null}",
+      "risk_tolerance": "{value_or_null}",
+      "time_horizon_years": "{number_or_null}",
+      "monthly_income_usd": "{number_or_null}",
+      "monthly_expenses_usd": "{number_or_null}",
+      "contribution_rhythm": "{value_or_null}",
+      "monthly_saving_goal_usd": "{number_or_null}",
+      "editable": "{boolean}",
+      "must_not_invent": true
+    },
+    "suggestion_context": {
+      "status": "{ready|loading|empty|error|stale|unavailable|not_applicable}",
+      "source": "{suggestion_engine|null}",
+      "suggestions": "{array_from_suggestion_engine_or_empty}",
+      "template_reference": "templates/suggestion-object-template.json",
+      "hard_rules": [
+        "Suggestions must come from Suggestion Engine.",
+        "UI must not invent suggestions.",
+        "UI must not invent reason codes.",
+        "Locked suggestions can render but cannot be Top Pick."
+      ]
+    },
+    "top_pick_context": {
+      "status": "{ready|no_valid_top_pick|loading|error|stale|unavailable|not_applicable}",
+      "source": "{top_pick_logic|null}",
+      "template_reference": "templates/top-pick-output-template.json",
+      "has_top_pick": "{boolean}",
+      "top_pick_id": "{suggestion_id_or_null}",
+      "hard_rules": [
+        "Top Pick must come from Top Pick Logic.",
+        "UI must not choose Top Pick.",
+        "Smith AI must not choose Top Pick.",
+        "Exactly one Top Pick may render when valid actionable suggestions exist."
+      ]
+    },
+    "protocol_decision_context": {
+      "status": "{ready|not_applicable|locked|blocked|stale|error|unavailable}",
+      "source": "{protocol_logic|null}",
+      "template_reference": "templates/protocol-decision-template.json",
+      "decisions": "{array_from_protocol_logic_or_empty}",
+      "hard_rules": [
+        "Protocol decisions must come from Protocol Logic.",
+        "UI must not guess protocol destinations or URLs.",
+        "Protocol handoffs open externally in MVP.",
+        "Protocol handoffs do not execute transactions.",
+        "Protocol handoffs do not request wallet signatures in MVP.",
+        "Protocol handoffs do not mark suggestions complete on click."
+      ]
+    },
+    "right_rail": {
+      "visible": "{boolean}",
+      "mode": "{onboarding_panel|ask_smith_ai|suggestion_loading|suggestions|strategy_insights|empty|error|null}",
+      "priority_order": [
+        "onboarding_panel",
+        "ask_smith_ai",
+        "suggestion_loading",
+        "suggestions",
+        "strategy_insights",
+        "empty",
+        "error"
+      ],
+      "active_priority_result": "{right_rail_mode}",
+      "content": {
+        "component": "{onboarding-panel|smith-ai-panel|suggestion-rail|strategy-insights|empty-state|alert|null}",
+        "status": "{ready|loading|empty|error|stale}",
+        "data_source": "{onboarding|smith_ai_context|suggestion_engine|top_pick_logic|content|null}"
+      },
+      "hard_rules": [
+        "Right rail follows priority order.",
+        "Onboarding panel takes priority during active onboarding.",
+        "Ask Smith AI panel takes priority when user opens Smith AI.",
+        "Suggestion loading state must not show fake suggestions.",
+        "Right rail must not invent suggestions or Top Pick."
+      ]
+    },
+    "smith_ai": {
+      "available": "{boolean}",
+      "panel_state": "{open|closed|unavailable}",
+      "entry_label": "Ask Smith AI",
+      "context_template_reference": "templates/smith-ai-context-template.json",
+      "context_status": "{ready|partial|loading|error|unavailable}",
+      "context_mode": "{real_wallet|demo|onboarding|support|no_wallet}",
+      "active_context_sources": [
+        "{wallet_state|demo_state|goal_context|portfolio_context|suggestion_context|top_pick_context|protocol_decision_context|content}"
+      ],
+      "suggested_prompts": [
+        "{prompt_from_content_or_page_definition}"
+      ],
+      "hard_rules": [
+        "Smith AI explains but does not calculate financial logic.",
+        "Smith AI does not choose or change Top Pick.",
+        "Smith AI does not choose or change protocols.",
+        "Smith AI does not invent missing values.",
+        "Smith AI does not execute actions.",
+        "Smith AI does not ask for seed phrases or private keys."
+      ]
+    },
+    "empty_error_loading": {
+      "template_reference": "templates/empty-error-loading-state-template.json",
+      "page_level_state": {
+        "state": "{none|loading|empty|error|partial|stale}",
+        "scope": "{page|section|card|table|right_rail|modal}",
+        "copy": {
+          "title": "{copy_from_content_or_null}",
+          "description": "{copy_from_content_or_null}",
+          "cta": "{Retry|Refresh|Connect Wallet|Try Demo Mode|null}",
+          "content_ids": [
+            "{content_id}"
+          ]
+        },
+        "show_skeleton": "{boolean}",
+        "show_spinner": "{boolean}",
+        "show_smith_ai_animation": false,
+        "retry_action": "{retry|refresh|reconnect_wallet|null}",
+        "hard_rules": [
+          "Do not show fake data.",
+          "Do not imply funds are affected by loading or error states.",
+          "Use Smith AI animation only for approved Smith AI/suggestion-building waits.",
+          "Use skeletons for portfolio/page loading."
+        ]
+      }
+    },
+    "state_transitions": {
+      "available_transitions": [
+        {
+          "id": "{transition_id}",
+          "trigger": "{user_action|system_event}",
+          "from_state": "{state_id}",
+          "to_state": "{state_id}",
+          "action": "{action_id}",
+          "side_effects": [
+            "{open_modal|open_external_tab|show_toast|refresh_data|clear_wallet_data|null}"
+          ],
+          "forbidden_side_effects": [
+            "execute_transaction",
+            "request_wallet_signature_for_mvp_handoff",
+            "move_funds",
+            "invent_data",
+            "mark_suggestion_complete_on_external_handoff_click"
+          ]
+        }
+      ],
+      "common_transitions": {
+        "open_connect_wallet_modal": {
+          "trigger": "Connect Wallet",
+          "result": "wallet_modal_open"
+        },
+        "connect_wallet_success": {
+          "trigger": "wallet_provider_success",
+          "result": "wallet_connected_portfolio_loading_or_ready",
+          "hard_rule": "Wallet connected does not mean portfolio data is ready."
+        },
+        "disconnect_wallet": {
+          "trigger": "wallet_menu_disconnect",
+          "result": "wallet_disconnected_real_wallet_data_cleared",
+          "hard_rule": "Disconnecting wallet does not move funds."
+        },
+        "enter_demo_mode": {
+          "trigger": "Try Demo Mode",
+          "result": "demo_mode_active_sample_data",
+          "hard_rule": "Demo Mode uses sample data and no wallet pill."
+        },
+        "exit_demo_mode": {
+          "trigger": "Exit Demo",
+          "result": "no_wallet_or_previous_real_state",
+          "hard_rule": "Demo Top Pick does not persist into real wallet mode."
+        },
+        "open_external_protocol": {
+          "trigger": "protocol_handoff_cta",
+          "result": "external_new_tab",
+          "hard_rule": "Does not execute transaction, request signature, move funds, or mark complete."
+        },
+        "open_smith_ai": {
+          "trigger": "Ask Smith AI",
+          "result": "smith_ai_panel_open",
+          "hard_rule": "Smith AI receives bounded context only."
+        }
+      }
+    },
+    "copy_ids": {
+      "page_title": "{content_id}",
+      "page_description": "{content_id_or_null}",
+      "primary_cta": "{content_id_or_null}",
+      "wallet_copy": [
+        "{content_id}"
+      ],
+      "demo_copy": [
+        "{content_id}"
+      ],
+      "suggestion_copy": [
+        "{content_id}"
+      ],
+      "error_empty_loading_copy": [
+        "{content_id}"
+      ],
+      "glossary_terms": [
+        "{content_id}"
+      ]
+    },
+    "accessibility": {
+      "page_title": "{page_title}",
+      "landmarks": {
+        "global_nav": "Main navigation",
+        "main": "{page_main_label}",
+        "right_rail": "{right_rail_label_or_null}",
+        "smith_ai": "Smith AI panel"
+      },
+      "focus_management": {
+        "on_modal_open": "move_focus_to_modal",
+        "on_modal_close": "return_focus_to_trigger",
+        "on_external_handoff": "keep_app_state_unchanged",
+        "on_error": "announce_error_when_appropriate"
+      },
+      "labels": {
+        "wallet_pill": "{accessible_wallet_pill_label_or_null}",
+        "ask_smith_ai": "Ask Smith AI about this page",
+        "external_protocol_link": "Opens external protocol in a new tab.",
+        "loading_state": "{accessible_loading_label_or_null}",
+        "error_state": "{accessible_error_label_or_null}"
+      },
+      "hard_rules": [
+        "Icons must not be the only source of meaning.",
+        "External links must identify that they open a new tab.",
+        "Progress values must have accessible labels.",
+        "Error and empty states must be readable without visual-only cues."
+      ]
+    },
+    "analytics_or_events": {
+      "page_viewed": {
+        "event_name": "page_viewed",
+        "payload": {
+          "page": "{page}",
+          "route": "{route}",
+          "mode": "{mode}",
+          "demo_mode": "{boolean}",
+          "wallet_status": "{wallet_status}",
+          "status": "{page_state_status}"
+        }
+      },
+      "primary_action_clicked": {
+        "event_name": "{event_name_or_null}",
+        "payload": {
+          "action": "{action_id}",
+          "executes_transaction": false,
+          "requires_wallet_signature": false,
+          "moves_funds": false
+        }
+      },
+      "must_not_include": [
+        "seed_phrase",
+        "private_key",
+        "wallet_password",
+        "wallet_backup_file"
+      ]
+    },
+    "validation": {
+      "required_fields": [
+        "id",
+        "source",
+        "status",
+        "route",
+        "page",
+        "mode",
+        "demo_mode",
+        "app_shell.global_nav",
+        "wallet_state",
+        "main_content",
+        "right_rail",
+        "smith_ai",
+        "empty_error_loading",
+        "copy_ids",
+        "accessibility",
+        "hard_rules"
+      ],
+      "conditional_required_fields": [
+        {
+          "when": "demo_mode = true",
+          "required": [
+            "demo_state.demo_mode",
+            "demo_state.is_sample_data",
+            "demo_state.demo_banner_visible",
+            "app_shell.demo_banner.visible"
+          ]
+        },
+        {
+          "when": "wallet_state.status = connected",
+          "required": [
+            "wallet_state.provider",
+            "wallet_state.provider_id",
+            "wallet_state.address_short",
+            "wallet_state.connection_type",
+            "app_shell.global_nav.right_actions.wallet_pill"
+          ]
+        },
+        {
+          "when": "suggestion_context.status = ready",
+          "required": [
+            "suggestion_context.source",
+            "suggestion_context.suggestions"
+          ]
+        },
+        {
+          "when": "top_pick_context.status = ready",
+          "required": [
+            "top_pick_context.source",
+            "top_pick_context.has_top_pick"
+          ]
+        },
+        {
+          "when": "protocol_decision_context.status = ready",
+          "required": [
+            "protocol_decision_context.source",
+            "protocol_decision_context.decisions"
+          ]
+        },
+        {
+          "when": "status = loading|empty|error|partial|stale",
+          "required": [
+            "empty_error_loading.page_level_state"
+          ]
+        }
+      ],
+      "global_assertions": [
+        {
+          "id": "page_does_not_invent_logic",
+          "assertion": "Page state renders provided product outputs and does not calculate financial logic.",
+          "expected": true
+        },
+        {
+          "id": "wallet_connection_separate_from_portfolio_loading",
+          "assertion": "Wallet connected state remains separate from portfolio readiness.",
+          "expected": true
+        },
+        {
+          "id": "demo_banner_only_demo",
+          "assertion": "Demo banner appears only when demo_mode = true.",
+          "expected": true
+        },
+        {
+          "id": "top_pick_from_logic",
+          "assertion": "Top Pick comes from Top Pick Logic, not UI or Smith AI.",
+          "expected": true
+        },
+        {
+          "id": "protocol_from_logic",
+          "assertion": "Protocol decisions come from Protocol Logic, not UI or Smith AI.",
+          "expected": true
+        },
+        {
+          "id": "no_execution",
+          "assertion": "Page-level actions do not execute transactions in MVP.",
+          "expected": true
+        },
+        {
+          "id": "no_wallet_secrets",
+          "assertion": "No state asks for seed phrases or private keys.",
+          "expected": true
+        }
+      ],
+      "forbidden_fields_or_values": [
+        "private_key",
+        "seed_phrase",
+        "wallet_password",
+        "wallet_backup_file",
+        "can_move_funds = true",
+        "can_trade = true",
+        "can_stake = true",
+        "can_deposit = true",
+        "can_withdraw = true",
+        "can_rebalance = true",
+        "executes_transaction = true for MVP page action",
+        "requires_wallet_signature = true for MVP protocol handoff",
+        "completion_on_click = true for external protocol handoff",
+        "demo_banner.visible = true when demo_mode = false",
+        "wallet_pill.visible = true when demo_mode = true",
+        "invented APY",
+        "invented balances",
+        "invented Top Pick",
+        "invented protocol destination"
+      ]
+    },
+    "hard_rules": [
+      "This is a template, not production state.",
+      "Page state coordinates product outputs; it does not create financial logic.",
+      "Do not invent balances, prices, APY, earnings, projections, suggestions, Top Pick, protocol decisions, wallet permissions, or copy.",
+      "Use loading, empty, error, partial, stale, or unavailable states when required data is missing.",
+      "Wallet connection is separate from portfolio data readiness.",
+      "Wallet connection does not authorize transactions or move funds.",
+      "Demo Mode uses sample data and must be clearly labeled.",
+      "Demo Mode must not show wallet pill.",
+      "Demo banner must not appear in real connected-wallet mode.",
+      "Suggestions must come from Suggestion Engine.",
+      "Top Pick must come from Top Pick Logic.",
+      "Protocol decisions must come from Protocol Logic.",
+      "Smith AI explains but does not generate or override product logic.",
+      "External protocol handoffs open externally in MVP and do not execute transactions.",
+      "External protocol handoffs do not request wallet signatures in MVP.",
+      "External protocol handoffs do not mark suggestions complete on click.",
+      "Do not ask for seed phrases, private keys, passwords, or wallet backup files.",
+      "Do not imply WealthSmith holds, controls, moves, trades, stakes, deposits, withdraws, or rebalances user funds."
+    ]
+  }
+}
