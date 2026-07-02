@@ -1,0 +1,435 @@
+{
+  "example_metadata": {
+    "name": "Top Pick - Safety Buffer case",
+    "path": "examples/top-pick/top-pick-buffer-case.json",
+    "mode": "real_wallet",
+    "purpose": "Canonical Top Pick fixture showing that an underfunded Safety Buffer overrides yield and optimization candidates.",
+    "fixture_type": "synthetic_reference_state",
+    "related_examples": [
+      "examples/suggestions/suggestions-buffer-underfunded.json",
+      "examples/dashboard/dashboard-connected-wallet-state.json",
+      "examples/demo-mode/demo-suggestions.json"
+    ],
+    "rules": [
+      "rules/top-pick-rules.md",
+      "rules/suggestion-engine-rules.md",
+      "rules/protocol-selection-rules.md",
+      "rules/financial-logic-boundaries.md",
+      "rules/wallet-and-custody-rules.md"
+    ],
+    "content": [
+      "content/suggestion-card-copy.md",
+      "content/smith-ai-copy.md",
+      "content/glossary.md"
+    ],
+    "components": [
+      "components/suggestion-card.md",
+      "components/badge.md"
+    ],
+    "patterns": [
+      "patterns/suggestion-flow.md",
+      "patterns/dashboard-layout.md"
+    ],
+    "notes": [
+      "This is a synthetic fixture, not production logic.",
+      "Use this to verify Safety Buffer override behavior.",
+      "Production Top Pick must be selected by Top Pick Logic, not UI or Smith AI."
+    ]
+  },
+  "scenario": {
+    "id": "top_pick_buffer_case",
+    "description": "Safety Buffer is below target, so the buffer suggestion must become Top Pick even when other actionable suggestions exist.",
+    "mode": "real_wallet",
+    "demo_mode": false,
+    "expected_top_pick_id": "top_up_safety_buffer",
+    "expected_top_pick_title": "Top Up Your Safety Buffer",
+    "expected_primary_reason": "buffer_override"
+  },
+  "input_context": {
+    "wallet": {
+      "status": "connected",
+      "provider": "Phantom",
+      "address_short": "6fQ9",
+      "address_is_synthetic": true,
+      "connection_type": "read_only_portfolio_view"
+    },
+    "goal": {
+      "financial_goal": "build_long_term_wealth",
+      "risk_tolerance": "medium",
+      "time_horizon_years": 5,
+      "monthly_income_usd": 4000,
+      "monthly_expenses_usd": 1000,
+      "contribution_rhythm": "monthly",
+      "monthly_saving_goal_usd": 1000
+    },
+    "portfolio": {
+      "total_value_usd": 7500,
+      "stablecoin_value_usd": 800,
+      "volatile_value_usd": 6700,
+      "assets": [
+        {
+          "symbol": "SOL",
+          "value_usd": 5500,
+          "percentage_of_portfolio": 73.33
+        },
+        {
+          "symbol": "BONK",
+          "value_usd": 1200,
+          "percentage_of_portfolio": 16.0
+        },
+        {
+          "symbol": "USDC",
+          "value_usd": 800,
+          "percentage_of_portfolio": 10.67
+        }
+      ]
+    },
+    "safety_buffer": {
+      "status": "underfunded",
+      "current_buffer_usd": 800,
+      "target_buffer_usd": 3000,
+      "buffer_gap_usd": 2200,
+      "coverage_percent": 26.67,
+      "months_covered": 0.8,
+      "target_months": 3
+    }
+  },
+  "top_pick_logic_inputs": {
+    "guardrails": {
+      "minimum_action_size_usd": 50,
+      "buffer_override_active": true,
+      "yield_before_buffer_allowed": false,
+      "locked_suggestions_eligible_for_top_pick": false,
+      "stale_suggestions_eligible_for_top_pick": false,
+      "completed_suggestions_eligible_for_top_pick": false,
+      "dismissed_suggestions_eligible_for_top_pick": false
+    },
+    "priority_hierarchy": [
+      {
+        "rank": 1,
+        "category": "buffer",
+        "description": "Safety Buffer actions"
+      },
+      {
+        "rank": 2,
+        "category": "rebalance",
+        "description": "Risk and allocation alignment"
+      },
+      {
+        "rank": 3,
+        "category": "capital_efficiency",
+        "description": "Yield and idle capital opportunities"
+      },
+      {
+        "rank": 4,
+        "category": "optimization",
+        "description": "Lower-priority improvements"
+      }
+    ],
+    "tie_breakers": [
+      "impact_score",
+      "urgency_score",
+      "efficiency_score"
+    ]
+  },
+  "candidate_suggestions": [
+    {
+      "id": "top_up_safety_buffer",
+      "title": "Top Up Your Safety Buffer",
+      "type": "fund_safety_buffer",
+      "category": "safety_buffer",
+      "priority_category": "buffer",
+      "status": "active",
+      "actionability": "actionable",
+      "eligible_for_top_pick": true,
+      "severity": "critical",
+      "reason_codes": [
+        "buffer_low",
+        "safety_buffer_priority",
+        "buffer_override"
+      ],
+      "guardrail_results": {
+        "passes_minimum_action_size": true,
+        "passes_buffer_rule": true,
+        "not_locked": true,
+        "not_stale": true,
+        "not_completed": true,
+        "not_dismissed": true
+      },
+      "scores": {
+        "impact_score": 0.7333,
+        "urgency_score": 1.0,
+        "efficiency_score": 0.9,
+        "score_notes": {
+          "impact_score": "Derived from buffer gap relative to target in this fixture.",
+          "urgency_score": "Critical because Safety Buffer is below target.",
+          "efficiency_score": "High because the action directly addresses the active override."
+        }
+      },
+      "expected_result": {
+        "is_top_pick": true,
+        "badge": "Top Pick",
+        "position": 1
+      }
+    },
+    {
+      "id": "reduce_bonk_exposure",
+      "title": "Reduce Exposure to BONK",
+      "type": "trim",
+      "category": "risk_alignment",
+      "priority_category": "rebalance",
+      "status": "active",
+      "actionability": "actionable",
+      "eligible_for_top_pick": true,
+      "severity": "medium",
+      "reason_codes": [
+        "token_overweight",
+        "high_concentration"
+      ],
+      "guardrail_results": {
+        "passes_minimum_action_size": true,
+        "passes_buffer_rule": true,
+        "not_locked": true,
+        "not_stale": true,
+        "not_completed": true,
+        "not_dismissed": true
+      },
+      "scores": {
+        "impact_score": 0.128,
+        "urgency_score": 0.65,
+        "efficiency_score": 0.7
+      },
+      "expected_result": {
+        "is_top_pick": false,
+        "reason": "Eligible but lower priority than Safety Buffer while buffer override is active.",
+        "position": 2
+      }
+    },
+    {
+      "id": "locked_usdc_yield",
+      "title": "Deposit USDC into Kamino",
+      "type": "vault",
+      "category": "yield_opportunity",
+      "priority_category": "capital_efficiency",
+      "status": "locked",
+      "actionability": "locked",
+      "eligible_for_top_pick": false,
+      "severity": "info",
+      "reason_codes": [
+        "idle_stables",
+        "buffer_required"
+      ],
+      "guardrail_results": {
+        "passes_minimum_action_size": true,
+        "passes_buffer_rule": false,
+        "not_locked": false,
+        "not_stale": true,
+        "not_completed": true,
+        "not_dismissed": true
+      },
+      "scores": {
+        "impact_score": null,
+        "urgency_score": null,
+        "efficiency_score": null
+      },
+      "expected_result": {
+        "is_top_pick": false,
+        "reason": "Locked yield opportunity is not eligible while Safety Buffer is below target.",
+        "position": 3
+      }
+    },
+    {
+      "id": "strategy_insight_buffer_priority",
+      "title": "Why Safety Buffer comes first",
+      "type": "strategy_insight",
+      "category": "portfolio_health",
+      "priority_category": "education",
+      "status": "active",
+      "actionability": "informational",
+      "eligible_for_top_pick": false,
+      "severity": "info",
+      "reason_codes": [
+        "buffer_low",
+        "education"
+      ],
+      "guardrail_results": {
+        "informational_only": true,
+        "not_actionable": true
+      },
+      "scores": {
+        "impact_score": null,
+        "urgency_score": null,
+        "efficiency_score": null
+      },
+      "expected_result": {
+        "is_top_pick": false,
+        "reason": "Informational insights are not eligible for Top Pick.",
+        "position": 4
+      }
+    }
+  ],
+  "selection_process": {
+    "step_1_filter_invalid_candidates": {
+      "input_count": 4,
+      "eligible_count": 2,
+      "excluded": [
+        {
+          "id": "locked_usdc_yield",
+          "reason": "locked_buffer_required"
+        },
+        {
+          "id": "strategy_insight_buffer_priority",
+          "reason": "informational_only"
+        }
+      ]
+    },
+    "step_2_apply_buffer_override": {
+      "buffer_override_active": true,
+      "buffer_candidates": [
+        "top_up_safety_buffer"
+      ],
+      "non_buffer_candidates_deprioritized": [
+        "reduce_bonk_exposure"
+      ],
+      "rule": "When Safety Buffer is below target, buffer actions outrank yield, rebalance, and optimization suggestions unless product rules explicitly allow otherwise."
+    },
+    "step_3_select_top_pick": {
+      "selected_id": "top_up_safety_buffer",
+      "selected_title": "Top Up Your Safety Buffer",
+      "selected_reason_codes": [
+        "buffer_low",
+        "safety_buffer_priority",
+        "buffer_override"
+      ]
+    }
+  },
+  "top_pick_output": {
+    "has_top_pick": true,
+    "top_pick_id": "top_up_safety_buffer",
+    "top_pick": {
+      "id": "top_up_safety_buffer",
+      "title": "Top Up Your Safety Buffer",
+      "type": "fund_safety_buffer",
+      "category": "safety_buffer",
+      "priority_category": "buffer",
+      "is_top_pick": true,
+      "badge": "Top Pick",
+      "status": "active",
+      "actionability": "actionable",
+      "severity": "critical",
+      "reason_codes": [
+        "buffer_low",
+        "safety_buffer_priority",
+        "buffer_override"
+      ],
+      "copy": {
+        "title": "Top Up Your Safety Buffer",
+        "description": "WealthSmith prioritizes adding stablecoins because your Safety Buffer is below target.",
+        "impact_text": "$2,200 remaining to reach your Safety Buffer target.",
+        "cta": "Review",
+        "content_ids": {
+          "title_template": "suggestion.buffer.title",
+          "badge": "suggestion.badge.top_pick",
+          "glossary": "glossary.top_pick"
+        }
+      },
+      "action": {
+        "action_type": "review_safety_buffer",
+        "requires_wallet_signature": false,
+        "executes_transaction": false,
+        "external_handoff": false,
+        "completion_on_click": false
+      }
+    }
+  },
+  "expected_rendering": {
+    "suggestion_order": [
+      "top_up_safety_buffer",
+      "reduce_bonk_exposure",
+      "locked_usdc_yield",
+      "strategy_insight_buffer_priority"
+    ],
+    "top_pick_badge_count": 1,
+    "top_pick_card_position": 1,
+    "dashboard_alert": {
+      "visible": true,
+      "source": "top_pick",
+      "linked_suggestion_id": "top_up_safety_buffer",
+      "title": "Safety Buffer is below target",
+      "description": "WealthSmith is prioritizing your stablecoin reserve before additional yield opportunities."
+    },
+    "locked_yield_card": {
+      "id": "locked_usdc_yield",
+      "shows_locked_badge": true,
+      "cta_label": "Locked",
+      "opens_protocol": false
+    }
+  },
+  "smith_ai_expected_explanation": {
+    "short_response": "WealthSmith marked Safety Buffer as Top Pick because your stablecoin reserve is below target. It prioritizes the buffer before additional yield opportunities. No action will be taken automatically.",
+    "must_include": [
+      "WealthSmith marked",
+      "Safety Buffer",
+      "below target",
+      "before additional yield opportunities",
+      "No action will be taken automatically"
+    ],
+    "must_not_include": [
+      "I chose this",
+      "guaranteed safety",
+      "risk-free",
+      "I moved funds",
+      "you must"
+    ]
+  },
+  "qa_assertions": [
+    {
+      "id": "exactly_one_top_pick",
+      "assertion": "Exactly one candidate has is_top_pick = true.",
+      "expected": true
+    },
+    {
+      "id": "buffer_is_top_pick",
+      "assertion": "top_up_safety_buffer is selected as Top Pick.",
+      "expected": true
+    },
+    {
+      "id": "locked_yield_not_top_pick",
+      "assertion": "locked_usdc_yield is not Top Pick.",
+      "expected": true
+    },
+    {
+      "id": "informational_not_top_pick",
+      "assertion": "strategy_insight_buffer_priority is not Top Pick.",
+      "expected": true
+    },
+    {
+      "id": "rebalance_deprioritized",
+      "assertion": "reduce_bonk_exposure is eligible but not Top Pick while buffer override is active.",
+      "expected": true
+    },
+    {
+      "id": "no_execution",
+      "assertion": "Top Pick review action does not execute a transaction.",
+      "expected": true
+    },
+    {
+      "id": "smith_ai_boundary",
+      "assertion": "Smith AI explains the Top Pick but does not choose or change it.",
+      "expected": true
+    }
+  ],
+  "hard_rules": [
+    "This fixture is not production logic.",
+    "Production Top Pick must come from Top Pick Logic.",
+    "UI must not choose Top Pick.",
+    "Smith AI must not choose or override Top Pick.",
+    "Exactly one suggestion may be Top Pick when eligible actionable suggestions exist.",
+    "Locked suggestions cannot be Top Pick.",
+    "Informational insights cannot be Top Pick.",
+    "Safety Buffer underfunding overrides yield opportunities.",
+    "Suggestion clicks do not execute transactions.",
+    "Do not request wallet signatures for MVP suggestion review.",
+    "Do not invent APY, earnings, balances, projections, or protocol destinations."
+  ]
+}
