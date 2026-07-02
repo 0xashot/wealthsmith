@@ -1,0 +1,518 @@
+{
+  "template_metadata": {
+    "name": "Protocol Decision Template",
+    "path": "templates/protocol-decision-template.json",
+    "purpose": "Reusable structure for Protocol Logic output used by suggestion cards, portfolio Manage links, protocol handoffs, Smith AI explanations, QA, and analytics.",
+    "template_type": "json_contract_template",
+    "source_of_truth": [
+      "rules/protocol-selection-rules.md",
+      "rules/suggestion-engine-rules.md",
+      "rules/top-pick-rules.md",
+      "rules/wallet-and-custody-rules.md",
+      "rules/financial-logic-boundaries.md",
+      "rules/smith-ai-rules.md"
+    ],
+    "related_content": [
+      "content/suggestion-card-copy.md",
+      "content/wallet-copy.md",
+      "content/smith-ai-copy.md",
+      "content/glossary.md"
+    ],
+    "related_components": [
+      "components/suggestion-card.md",
+      "components/button.md",
+      "components/icon.md",
+      "components/toast.md",
+      "components/tooltip.md"
+    ],
+    "related_patterns": [
+      "patterns/suggestion-flow.md",
+      "patterns/portfolio-overview.md",
+      "patterns/wallet-connection.md"
+    ],
+    "related_examples": [
+      "examples/protocol-handoffs/protocol-jupiter-swap.json",
+      "examples/suggestions/suggestions-buffer-underfunded.json",
+      "examples/portfolio/portfolio-yield-strategies.json"
+    ],
+    "notes": [
+      "This is a template, not production routing logic.",
+      "Production protocol destination must come from Protocol Logic.",
+      "UI must not guess protocol destination, URL, route, APY, trade size, or completion state.",
+      "MVP protocol handoffs open external protocols for review only."
+    ]
+  },
+  "protocol_decision": {
+    "id": "{protocol_decision_id}",
+    "source": "protocol_logic",
+    "status": "{eligible|locked|blocked|unavailable|stale|error}",
+    "suggestion_id": "{suggestion_id_or_null}",
+    "portfolio_position_id": "{portfolio_position_id_or_null}",
+    "action_type": "{review_swap|review_trim|review_vault|review_stake|review_lending|review_lp|manage_position|none}",
+    "action_family": "{swap_or_trim|staking|lending|vault|liquidity|rwa|manage_existing_position|none}",
+    "freshness": {
+      "status": "{fresh|stale|unknown}",
+      "checked_at": "{timestamp_from_system}",
+      "expires_at": "{timestamp_or_null}",
+      "stale_reason": "{reason_or_null}",
+      "hard_rule": "Do not use stale protocol decisions for active handoffs."
+    },
+    "input_context": {
+      "mode": "{real_wallet|demo}",
+      "wallet_status": "{connected|disconnected|demo|unknown}",
+      "network": "solana",
+      "asset_inputs": [
+        {
+          "symbol": "{token_symbol}",
+          "name": "{token_name_or_null}",
+          "role": "{source|destination|deposit|withdraw|stake|unstake|position_asset}",
+          "value_usd": "{number_from_product_logic_or_null}",
+          "amount": "{amount_from_product_logic_or_null}",
+          "must_not_invent": true
+        }
+      ],
+      "suggestion_context": {
+        "suggestion_type": "{suggestion_type_or_null}",
+        "suggestion_category": "{suggestion_category_or_null}",
+        "is_top_pick": "{boolean_or_null}",
+        "reason_codes": [
+          "{reason_code_from_suggestion_or_top_pick_logic}"
+        ]
+      },
+      "portfolio_position_context": {
+        "position_type": "{liquid|staked|yield_strategy|null}",
+        "detected_protocol_id": "{protocol_id_or_null}",
+        "position_source": "{wallet|protocol|indexer|product_logic|null}"
+      }
+    },
+    "destination": {
+      "protocol_id": "{destination_protocol_id_from_protocol_logic}",
+      "protocol_label": "{destination_protocol_label_from_protocol_logic}",
+      "protocol_icon": "{assets/icons/protocol/{protocol_id}.svg}",
+      "protocol_icon_fallback_allowed": false,
+      "destination_url": "{approved_protocol_url_from_protocol_metadata}",
+      "route_path": "{approved_route_path_or_null}",
+      "handoff_type": "{external_new_tab|blocked_until_unlocked|unavailable|none}",
+      "cta_label": "{copy_from_protocol_logic_or_content}",
+      "cta_content_id": "{content_id}",
+      "accessibility_label": "{accessible_external_link_label}",
+      "hard_rules": [
+        "Protocol ID must come from Protocol Logic.",
+        "Protocol URL must come from approved protocol metadata.",
+        "UI must not construct or guess protocol URLs.",
+        "No protocol fallback is allowed for MVP protocol identity."
+      ]
+    },
+    "eligibility": {
+      "status": "{eligible|locked_buffer_required|unsupported_asset|unsupported_action|unsupported_protocol|below_minimum|guardrail_failed|stale|unavailable|error}",
+      "eligible_for_handoff": "{boolean_from_protocol_logic}",
+      "eligible_for_top_pick": "{boolean_from_top_pick_logic_or_null}",
+      "reason_codes": [
+        "{protocol_reason_code}"
+      ],
+      "guardrail_results": {
+        "supported_protocol": "{boolean}",
+        "supported_action_family": "{boolean}",
+        "supported_asset": "{boolean}",
+        "approved_external_destination": "{boolean}",
+        "passes_minimum_action_size": "{boolean_or_null}",
+        "passes_safety_buffer_rule": "{boolean_or_null}",
+        "passes_cost_threshold": "{boolean_or_null}",
+        "passes_liquidity_check": "{boolean_or_null}",
+        "passes_slippage_threshold": "{boolean_or_null}",
+        "not_stale": "{boolean}",
+        "failure_reasons": [
+          "{guardrail_failure_reason_code}"
+        ]
+      },
+      "locked_or_blocked": {
+        "is_locked": "{boolean}",
+        "is_blocked": "{boolean}",
+        "reason_code": "{buffer_required|unsupported_protocol|unsupported_asset|stale_data|missing_url|guardrail_failed|null}",
+        "reason_text": "{copy_from_content_or_null}",
+        "unlock_condition": "{condition_from_product_logic_or_null}",
+        "cta_label": "{Locked|Unavailable|Refresh|Review|null}"
+      }
+    },
+    "handoff_behavior": {
+      "handoff_type": "{external_new_tab|blocked_until_unlocked|unavailable|none}",
+      "opens_new_tab": "{boolean}",
+      "executes_transaction": false,
+      "requires_wallet_signature": false,
+      "marks_suggestion_complete": false,
+      "moves_funds": false,
+      "changes_portfolio_balances": false,
+      "allowed_side_effects": [
+        "open_approved_external_url_in_new_tab",
+        "show_non_execution_toast",
+        "track_analytics_event_if_enabled"
+      ],
+      "forbidden_side_effects": [
+        "execute_transaction",
+        "request_transaction_signature",
+        "request_wallet_signature_for_mvp_handoff",
+        "move_funds",
+        "mark_suggestion_complete",
+        "change_top_pick",
+        "change_portfolio_balances",
+        "invent_missing_route"
+      ],
+      "toast_after_click": {
+        "show": "{boolean}",
+        "message": "{copy_from_content}",
+        "content_id": "{protocol.handoff.opened_new_tab|protocol.handoff.unavailable|protocol.handoff.locked|null}",
+        "must_not_say": [
+          "Transaction submitted",
+          "Swap completed",
+          "Funds moved",
+          "Position updated",
+          "Deposit completed"
+        ]
+      },
+      "state_after_click": {
+        "suggestion_status": "{unchanged|active|locked|unavailable}",
+        "completion_status": "not_completed",
+        "wallet_signature_requested": false,
+        "transaction_executed": false,
+        "funds_moved": false
+      }
+    },
+    "copy": {
+      "cta": "{copy_from_protocol_logic_or_content}",
+      "helper": "{copy_from_content_or_null}",
+      "safety_note": "No action will be taken automatically.",
+      "opened_toast": "Opened protocol in a new tab",
+      "unavailable_title": "Protocol link unavailable",
+      "unavailable_description": "We couldn’t open the protocol link right now.",
+      "stale_title": "Protocol route needs refresh",
+      "stale_description": "Refresh suggestions before reviewing this action.",
+      "content_ids": {
+        "cta": "{content_id}",
+        "helper": "{content_id_or_null}",
+        "opened_toast": "protocol.handoff.opened_new_tab",
+        "protocol_handoff_glossary": "glossary.protocol_handoff",
+        "wallet_read_only": "wallet.read_only.explanation"
+      },
+      "forbidden_copy": [
+        "Swap now",
+        "Execute now",
+        "Complete swap",
+        "Complete deposit",
+        "Transaction submitted",
+        "Funds moved",
+        "Guaranteed route",
+        "Risk-free"
+      ],
+      "must_not_invent": true
+    },
+    "ui_rendering": {
+      "component_context": "{suggestion-card|portfolio-table-action|manage-link|button}",
+      "show_protocol_identity": "{boolean}",
+      "show_protocol_icon": "{boolean}",
+      "show_external_link_icon": "{boolean}",
+      "show_locked_state": "{boolean}",
+      "show_disabled_state": "{boolean}",
+      "cta_enabled": "{boolean_from_eligibility}",
+      "cta_label": "{copy_from_protocol_logic_or_content}",
+      "button_variant": "{primary|secondary|tertiary|disabled}",
+      "accessibility": {
+        "cta_label": "{accessible_cta_label}",
+        "external_link_label": "Opens external protocol in a new tab.",
+        "disabled_reason_label": "{accessible_disabled_reason_or_null}",
+        "protocol_label": "{protocol_label}"
+      },
+      "hard_rules": [
+        "Icon must not be the only source of protocol identity.",
+        "External link must have accessible label.",
+        "Disabled/locked handoffs must expose the reason in text.",
+        "Do not show a protocol handoff CTA if destination_url is missing."
+      ]
+    },
+    "smith_ai_context": {
+      "allowed": true,
+      "context_fields_to_pass": [
+        "protocol_decision.status",
+        "protocol_decision.action_type",
+        "protocol_decision.action_family",
+        "protocol_decision.destination",
+        "protocol_decision.eligibility",
+        "protocol_decision.handoff_behavior",
+        "protocol_decision.copy"
+      ],
+      "approved_explanation_pattern": "{cta_label} opens {protocol_label} in a new tab so you can review the action externally. WealthSmith does not execute the action, move funds, or mark the suggestion complete when you open the protocol.",
+      "can_explain": [
+        "why this protocol appears",
+        "what external handoff means",
+        "why a protocol is locked or unavailable",
+        "that WealthSmith does not execute the action",
+        "that opening a protocol does not mark completion"
+      ],
+      "must_not": [
+        "choose a different protocol",
+        "invent a route",
+        "invent slippage",
+        "invent trade size",
+        "invent APY",
+        "claim the action is complete",
+        "request seed phrase or private key",
+        "request wallet signature from chat"
+      ]
+    },
+    "supported_mvp_protocol_reference": {
+      "protocols": [
+        {
+          "id": "hubble",
+          "label": "Hubble",
+          "allowed_action_families": [
+            "{from_protocol_logic}"
+          ]
+        },
+        {
+          "id": "jito",
+          "label": "Jito",
+          "allowed_action_families": [
+            "staking",
+            "manage_existing_position"
+          ]
+        },
+        {
+          "id": "jupiter",
+          "label": "Jupiter",
+          "allowed_action_families": [
+            "swap_or_trim",
+            "staking",
+            "manage_existing_position"
+          ]
+        },
+        {
+          "id": "kamino",
+          "label": "Kamino",
+          "allowed_action_families": [
+            "lending",
+            "vault",
+            "manage_existing_position"
+          ]
+        },
+        {
+          "id": "marinade",
+          "label": "Marinade",
+          "allowed_action_families": [
+            "staking",
+            "manage_existing_position"
+          ]
+        },
+        {
+          "id": "meteora",
+          "label": "Meteora",
+          "allowed_action_families": [
+            "liquidity",
+            "vault",
+            "manage_existing_position"
+          ]
+        },
+        {
+          "id": "ondo",
+          "label": "Ondo",
+          "allowed_action_families": [
+            "rwa",
+            "manage_existing_position"
+          ]
+        },
+        {
+          "id": "orca",
+          "label": "Orca",
+          "allowed_action_families": [
+            "liquidity",
+            "manage_existing_position"
+          ]
+        },
+        {
+          "id": "raydium",
+          "label": "Raydium",
+          "allowed_action_families": [
+            "liquidity",
+            "manage_existing_position"
+          ]
+        },
+        {
+          "id": "sanctum",
+          "label": "Sanctum",
+          "allowed_action_families": [
+            "staking",
+            "manage_existing_position"
+          ]
+        }
+      ],
+      "hard_rule": "This reference list is for MVP validation. Final destination still comes from Protocol Logic."
+    },
+    "failure_states": {
+      "missing_protocol_url": {
+        "status": "blocked",
+        "title": "Protocol link unavailable",
+        "description": "We couldn’t open the protocol link right now.",
+        "cta": "Try Again",
+        "hard_rule": "Do not guess or construct a protocol URL in the UI."
+      },
+      "popup_blocked_or_new_tab_failed": {
+        "status": "error",
+        "title": "We couldn’t open the protocol",
+        "description": "Open the protocol manually or try again.",
+        "cta": "Try Again",
+        "hard_rule": "Do not mark suggestion complete if the new tab fails."
+      },
+      "protocol_decision_stale": {
+        "status": "stale",
+        "title": "Protocol route needs refresh",
+        "description": "Refresh suggestions before reviewing this action.",
+        "cta": "Refresh",
+        "hard_rule": "Do not use stale protocol decisions for active handoffs."
+      },
+      "blocked_until_unlocked": {
+        "status": "locked",
+        "title": "{locked_title_from_content}",
+        "description": "{locked_description_from_content}",
+        "cta": "Locked",
+        "hard_rule": "Locked protocol decisions cannot open external handoffs."
+      }
+    },
+    "analytics_or_events": {
+      "protocol_handoff_viewed": {
+        "event_name": "protocol_handoff_viewed",
+        "payload": {
+          "protocol_id": "{protocol_id}",
+          "suggestion_id": "{suggestion_id_or_null}",
+          "action_family": "{action_family}",
+          "handoff_type": "{handoff_type}",
+          "eligibility_status": "{eligibility_status}"
+        }
+      },
+      "protocol_handoff_opened": {
+        "event_name": "protocol_handoff_opened",
+        "payload": {
+          "suggestion_id": "{suggestion_id_or_null}",
+          "portfolio_position_id": "{portfolio_position_id_or_null}",
+          "protocol_id": "{protocol_id}",
+          "handoff_type": "external_new_tab",
+          "action_family": "{action_family}",
+          "executes_transaction": false,
+          "requires_wallet_signature": false,
+          "marks_suggestion_complete": false
+        }
+      }
+    },
+    "validation": {
+      "required_fields": [
+        "id",
+        "source",
+        "status",
+        "action_type",
+        "action_family",
+        "destination.protocol_id",
+        "destination.protocol_label",
+        "destination.destination_url",
+        "destination.handoff_type",
+        "destination.cta_label",
+        "eligibility.status",
+        "eligibility.reason_codes",
+        "handoff_behavior.executes_transaction",
+        "handoff_behavior.requires_wallet_signature",
+        "handoff_behavior.marks_suggestion_complete"
+      ],
+      "conditional_required_fields": [
+        {
+          "when": "handoff_behavior.handoff_type = external_new_tab",
+          "required": [
+            "destination.destination_url",
+            "destination.accessibility_label",
+            "handoff_behavior.opens_new_tab",
+            "copy.opened_toast"
+          ]
+        },
+        {
+          "when": "eligibility.status = locked_buffer_required",
+          "required": [
+            "eligibility.locked_or_blocked.reason_code",
+            "eligibility.locked_or_blocked.reason_text",
+            "eligibility.locked_or_blocked.unlock_condition"
+          ]
+        },
+        {
+          "when": "status = stale",
+          "required": [
+            "freshness.stale_reason",
+            "failure_states.protocol_decision_stale"
+          ]
+        }
+      ],
+      "global_assertions": [
+        {
+          "id": "protocol_from_protocol_logic",
+          "assertion": "Destination protocol comes from Protocol Logic.",
+          "expected": true
+        },
+        {
+          "id": "url_from_metadata",
+          "assertion": "Destination URL comes from approved protocol metadata.",
+          "expected": true
+        },
+        {
+          "id": "handoff_external_review_only",
+          "assertion": "MVP handoff opens externally for review only.",
+          "expected": true
+        },
+        {
+          "id": "no_execution",
+          "assertion": "Protocol handoff does not execute a transaction.",
+          "expected": true
+        },
+        {
+          "id": "no_signature",
+          "assertion": "Protocol handoff does not request wallet signature in MVP.",
+          "expected": true
+        },
+        {
+          "id": "no_completion_on_click",
+          "assertion": "Protocol handoff does not mark suggestion complete on click.",
+          "expected": true
+        },
+        {
+          "id": "smith_ai_boundary",
+          "assertion": "Smith AI explains the handoff but does not choose protocol or execute action.",
+          "expected": true
+        }
+      ],
+      "forbidden_fields_or_values": [
+        "private_key",
+        "seed_phrase",
+        "wallet_password",
+        "guaranteed_return",
+        "risk_free",
+        "handoff_behavior.executes_transaction = true",
+        "handoff_behavior.requires_wallet_signature = true for MVP handoff click",
+        "handoff_behavior.marks_suggestion_complete = true",
+        "destination.protocol_id invented by UI",
+        "destination.destination_url invented by UI",
+        "trade route invented by UI",
+        "slippage invented by UI",
+        "APY invented by UI or Smith AI"
+      ]
+    },
+    "hard_rules": [
+      "This is a template, not production routing logic.",
+      "Production protocol decisions must come from Protocol Logic.",
+      "UI must not choose protocols.",
+      "Smith AI must not choose protocols.",
+      "UI must not guess protocol URLs.",
+      "Use approved protocol metadata for destination URLs.",
+      "No protocol fallback is allowed for MVP protocol identity.",
+      "MVP protocol handoffs open external protocols in a new tab.",
+      "Protocol handoffs do not execute transactions.",
+      "Protocol handoffs do not request wallet signatures in MVP.",
+      "Protocol handoffs do not mark suggestions complete on click.",
+      "Protocol handoffs do not move funds.",
+      "Do not invent route, slippage, trade size, APY, estimated earnings, balances, or transaction status.",
+      "Do not ask for seed phrases, private keys, passwords, or wallet backup files.",
+      "Do not imply WealthSmith holds, controls, moves, trades, swaps, stakes, deposits, withdraws, or rebalances user funds."
+    ]
+  }
+}
