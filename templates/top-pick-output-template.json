@@ -1,0 +1,481 @@
+{
+  "template_metadata": {
+    "name": "Top Pick Output Template",
+    "path": "templates/top-pick-output-template.json",
+    "purpose": "Reusable structure for deterministic Top Pick Logic output consumed by Dashboard, Suggestion Rail, Suggestion Card, Smith AI, QA, and analytics.",
+    "template_type": "json_contract_template",
+    "source_of_truth": [
+      "rules/top-pick-rules.md",
+      "rules/suggestion-engine-rules.md",
+      "rules/protocol-selection-rules.md",
+      "rules/financial-logic-boundaries.md",
+      "rules/wallet-and-custody-rules.md",
+      "rules/smith-ai-rules.md"
+    ],
+    "related_content": [
+      "content/suggestion-card-copy.md",
+      "content/smith-ai-copy.md",
+      "content/glossary.md"
+    ],
+    "related_components": [
+      "components/suggestion-card.md",
+      "components/badge.md",
+      "components/alert.md",
+      "components/tooltip.md"
+    ],
+    "related_patterns": [
+      "patterns/suggestion-flow.md",
+      "patterns/dashboard-layout.md"
+    ],
+    "related_examples": [
+      "examples/top-pick/top-pick-buffer-case.json",
+      "examples/suggestions/suggestions-buffer-underfunded.json",
+      "examples/dashboard/dashboard-connected-wallet-state.json",
+      "examples/smith-ai/smith-ai-top-pick-examples.md"
+    ],
+    "notes": [
+      "This is a template, not production logic.",
+      "Production Top Pick must be selected by deterministic Top Pick Logic.",
+      "UI must render this output and must not choose Top Pick.",
+      "Smith AI may explain this output but must not choose or change it."
+    ]
+  },
+  "top_pick_output": {
+    "id": "{top_pick_output_id}",
+    "source": "top_pick_logic",
+    "status": "{ready|no_valid_top_pick|stale|error}",
+    "generated_at": "{timestamp_from_system}",
+    "freshness": {
+      "status": "{fresh|stale|unknown}",
+      "expires_at": "{timestamp_or_null}",
+      "stale_reason": "{reason_or_null}"
+    },
+    "input_summary": {
+      "wallet_status": "{connected|disconnected|demo|unknown}",
+      "demo_mode": "{boolean}",
+      "suggestions_count": "{number_from_suggestion_engine}",
+      "eligible_actionable_count": "{number_from_top_pick_logic}",
+      "locked_count": "{number_from_top_pick_logic}",
+      "disabled_count": "{number_from_top_pick_logic}",
+      "stale_count": "{number_from_top_pick_logic}",
+      "informational_count": "{number_from_top_pick_logic}",
+      "completed_or_dismissed_count": "{number_from_top_pick_logic}",
+      "safety_buffer_status": "{underfunded|funded|unknown|null}",
+      "buffer_override_active": "{boolean_from_top_pick_logic}"
+    },
+    "has_top_pick": "{boolean_from_top_pick_logic}",
+    "top_pick_id": "{suggestion_id_or_null}",
+    "top_pick": {
+      "required_when": "has_top_pick = true",
+      "value": {
+        "id": "{selected_suggestion_id}",
+        "title": "{copy_from_suggestion_or_content}",
+        "type": "{suggestion_type_from_suggestion_engine}",
+        "category": "{suggestion_category_from_suggestion_engine}",
+        "priority_category": "{buffer|rebalance|capital_efficiency|optimization|education}",
+        "status": "active",
+        "actionability": "actionable",
+        "severity": "{critical|warning|medium|info|success}",
+        "is_top_pick": true,
+        "badge": "Top Pick",
+        "reason_codes": [
+          "{top_pick_reason_code}"
+        ],
+        "selection_reason": "{reason_from_top_pick_logic}",
+        "copy": {
+          "title": "{copy_from_suggestion_or_content}",
+          "description": "{copy_from_suggestion_or_content}",
+          "impact_text": "{copy_from_product_logic_or_null}",
+          "cta": "{copy_from_suggestion_or_protocol_logic}",
+          "content_ids": {
+            "title_template": "{content_id}",
+            "description_template": "{content_id}",
+            "badge": "suggestion.badge.top_pick",
+            "cta": "{content_id}",
+            "glossary": "glossary.top_pick"
+          },
+          "must_not_invent": true
+        },
+        "action": {
+          "action_type": "{review_safety_buffer|review_trim|review_swap|review_vault|review_stake|open_smith_ai_explanation}",
+          "target": "{suggestion_detail|external_protocol|smith_ai}",
+          "requires_wallet_signature": false,
+          "executes_transaction": false,
+          "external_handoff": "{boolean}",
+          "completion_on_click": false
+        },
+        "protocol_decision": {
+          "required_when": "top_pick.action.external_handoff = true",
+          "value": "{protocol_decision_object_from_protocol_logic_or_null}",
+          "template_reference": "templates/protocol-decision-template.json",
+          "hard_rule": "Top Pick Logic must not invent protocol destinations."
+        }
+      }
+    },
+    "no_top_pick": {
+      "required_when": "has_top_pick = false",
+      "reason_code": "{no_valid_actionable_suggestions|all_locked|all_stale|all_disabled|all_completed_or_dismissed|suggestions_unavailable|error|null}",
+      "title": "{copy_from_content_or_null}",
+      "description": "{copy_from_content_or_null}",
+      "cta": "{Refresh|Connect Wallet|Try Demo Mode|null}",
+      "content_ids": {
+        "title": "{content_id_or_null}",
+        "description": "{content_id_or_null}",
+        "cta": "{content_id_or_null}"
+      },
+      "hard_rule": "Do not invent a Top Pick when no valid actionable suggestion exists."
+    },
+    "eligibility_filters": {
+      "required_candidate_status": [
+        "active"
+      ],
+      "required_actionability": [
+        "actionable"
+      ],
+      "excluded_statuses": [
+        "locked",
+        "disabled",
+        "stale",
+        "completed",
+        "dismissed",
+        "expired"
+      ],
+      "excluded_actionability": [
+        "locked",
+        "disabled",
+        "informational",
+        "unavailable"
+      ],
+      "required_guardrails": [
+        "passes_minimum_action_size",
+        "passes_safety_buffer_rule",
+        "passes_cost_threshold",
+        "passes_liquidity_check",
+        "passes_slippage_threshold",
+        "supported_asset",
+        "supported_action",
+        "not_stale",
+        "not_completed",
+        "not_dismissed",
+        "not_expired"
+      ],
+      "hard_rules": [
+        "Locked suggestions cannot be Top Pick.",
+        "Stale suggestions cannot be active Top Pick.",
+        "Disabled suggestions cannot be Top Pick.",
+        "Completed, dismissed, or expired suggestions cannot be active Top Pick.",
+        "Informational insights cannot be Top Pick.",
+        "Exactly one Top Pick may exist when valid actionable suggestions exist."
+      ]
+    },
+    "priority_model": {
+      "priority_hierarchy": [
+        {
+          "rank": 1,
+          "priority_category": "buffer",
+          "label": "Safety Buffer actions",
+          "description": "Funding or restoring the Safety Buffer."
+        },
+        {
+          "rank": 2,
+          "priority_category": "rebalance",
+          "label": "Rebalance actions",
+          "description": "Risk and allocation alignment."
+        },
+        {
+          "rank": 3,
+          "priority_category": "capital_efficiency",
+          "label": "Capital efficiency actions",
+          "description": "Idle capital, staking, and yield opportunities after guardrails pass."
+        },
+        {
+          "rank": 4,
+          "priority_category": "optimization",
+          "label": "Optimization actions",
+          "description": "Lower-priority improvements."
+        }
+      ],
+      "tie_breakers": [
+        "impact_score",
+        "urgency_score",
+        "efficiency_score"
+      ],
+      "buffer_override": {
+        "active": "{boolean_from_top_pick_logic}",
+        "reason_code": "buffer_override",
+        "rule": "When Safety Buffer is below target, eligible buffer actions outrank yield, staking, vault, DCA, and optimization suggestions unless explicit product rules allow otherwise."
+      }
+    },
+    "candidate_results": [
+      {
+        "id": "{suggestion_id}",
+        "title": "{suggestion_title}",
+        "type": "{suggestion_type}",
+        "category": "{suggestion_category}",
+        "priority_category": "{priority_category}",
+        "status": "{active|locked|disabled|stale|completed|dismissed|expired}",
+        "actionability": "{actionable|locked|disabled|informational|unavailable}",
+        "eligible_for_top_pick": "{boolean_from_top_pick_logic}",
+        "selected": "{boolean_from_top_pick_logic}",
+        "is_top_pick": "{boolean_from_top_pick_logic}",
+        "rank_before_filters": "{number_or_null}",
+        "rank_after_filters": "{number_or_null}",
+        "exclusion_reason": "{locked|disabled|stale|completed|dismissed|expired|informational|guardrail_failed|lower_priority|null}",
+        "reason_codes": [
+          "{reason_code}"
+        ],
+        "guardrail_results": {
+          "passes_minimum_action_size": "{boolean_or_null}",
+          "passes_safety_buffer_rule": "{boolean_or_null}",
+          "passes_cost_threshold": "{boolean_or_null}",
+          "passes_liquidity_check": "{boolean_or_null}",
+          "passes_slippage_threshold": "{boolean_or_null}",
+          "supported_asset": "{boolean_or_null}",
+          "supported_action": "{boolean_or_null}",
+          "supported_protocol": "{boolean_or_null}",
+          "not_locked": "{boolean}",
+          "not_stale": "{boolean}",
+          "not_completed": "{boolean}",
+          "not_dismissed": "{boolean}",
+          "not_expired": "{boolean}",
+          "failure_reasons": [
+            "{guardrail_failure_reason_code}"
+          ]
+        },
+        "scores": {
+          "impact_score": "{number_from_product_logic_or_null}",
+          "urgency_score": "{number_from_product_logic_or_null}",
+          "efficiency_score": "{number_from_product_logic_or_null}",
+          "must_not_invent": true
+        },
+        "selection_note": "{short_non_user_facing_note_from_top_pick_logic}"
+      }
+    ],
+    "excluded_candidates": [
+      {
+        "id": "{suggestion_id}",
+        "title": "{suggestion_title}",
+        "exclusion_reason": "{locked|disabled|stale|completed|dismissed|expired|informational|guardrail_failed|lower_priority}",
+        "exclusion_reason_codes": [
+          "{reason_code}"
+        ],
+        "can_be_shown_in_ui": "{boolean}",
+        "can_be_explained_by_smith_ai": "{boolean}",
+        "can_be_top_pick": false
+      }
+    ],
+    "selected_candidate_trace": {
+      "step_1_filter_invalid_candidates": {
+        "input_count": "{number}",
+        "eligible_count": "{number}",
+        "excluded_count": "{number}",
+        "excluded_ids": [
+          "{suggestion_id}"
+        ]
+      },
+      "step_2_apply_priority_hierarchy": {
+        "highest_available_priority_category": "{buffer|rebalance|capital_efficiency|optimization|null}",
+        "buffer_override_active": "{boolean}",
+        "candidate_ids_after_priority": [
+          "{suggestion_id}"
+        ]
+      },
+      "step_3_apply_tie_breakers": {
+        "tie_breakers_used": [
+          "{impact_score|urgency_score|efficiency_score}"
+        ],
+        "selected_id": "{suggestion_id_or_null}"
+      },
+      "step_4_validate_single_top_pick": {
+        "exactly_one_top_pick": "{boolean}",
+        "selected_id": "{suggestion_id_or_null}",
+        "validation_errors": [
+          "{validation_error_or_empty}"
+        ]
+      }
+    },
+    "dashboard_alert": {
+      "visible": "{boolean_from_has_top_pick_and_page_rules}",
+      "source": "top_pick",
+      "linked_suggestion_id": "{top_pick_id_or_null}",
+      "severity": "{critical|warning|medium|info|success|null}",
+      "title": "{copy_from_content_or_top_pick_suggestion_or_null}",
+      "description": "{copy_from_content_or_top_pick_suggestion_or_null}",
+      "action": {
+        "label": "{Review|Refresh|Connect Wallet|null}",
+        "target": "{top_pick_id_or_null}"
+      },
+      "hard_rule": "Dashboard alert must reflect Top Pick output and must not invent a different priority."
+    },
+    "suggestion_list_rendering": {
+      "ordered_suggestion_ids": [
+        "{suggestion_id}"
+      ],
+      "top_pick_badge_count": "{0|1}",
+      "top_pick_card_position": "{1_or_null}",
+      "locked_cards_can_render": true,
+      "locked_cards_can_be_top_pick": false,
+      "informational_cards_can_render": true,
+      "informational_cards_can_be_top_pick": false
+    },
+    "smith_ai_context": {
+      "allowed": true,
+      "template_reference": "templates/smith-ai-context-template.json",
+      "context_fields_to_pass": [
+        "top_pick_output.status",
+        "top_pick_output.has_top_pick",
+        "top_pick_output.top_pick_id",
+        "top_pick_output.top_pick.value",
+        "top_pick_output.no_top_pick",
+        "top_pick_output.candidate_results",
+        "top_pick_output.excluded_candidates",
+        "top_pick_output.priority_model",
+        "top_pick_output.input_summary"
+      ],
+      "approved_explanation_pattern": "WealthSmith marked {top_pick_title} as Top Pick because {selection_reason}. No action will be taken automatically.",
+      "must_include_when_relevant": [
+        "WealthSmith marked",
+        "Top Pick",
+        "deterministic logic",
+        "eligible suggestions",
+        "No action will be taken automatically"
+      ],
+      "must_not_include": [
+        "I chose this",
+        "I changed this",
+        "guaranteed",
+        "risk-free",
+        "funds moved",
+        "transaction submitted",
+        "send your seed phrase",
+        "send your private key"
+      ],
+      "must_not_invent": [
+        "Top Pick",
+        "selection reason",
+        "reason codes",
+        "scores",
+        "APY",
+        "estimated earnings",
+        "protocol destination",
+        "transaction status"
+      ]
+    },
+    "validation": {
+      "required_fields": [
+        "status",
+        "source",
+        "has_top_pick",
+        "top_pick_id",
+        "candidate_results",
+        "eligibility_filters",
+        "priority_model",
+        "selected_candidate_trace"
+      ],
+      "conditional_required_fields": [
+        {
+          "when": "has_top_pick = true",
+          "required": [
+            "top_pick.value.id",
+            "top_pick.value.title",
+            "top_pick.value.is_top_pick",
+            "top_pick.value.reason_codes",
+            "top_pick.value.selection_reason",
+            "dashboard_alert"
+          ]
+        },
+        {
+          "when": "has_top_pick = false",
+          "required": [
+            "no_top_pick.reason_code",
+            "no_top_pick.description"
+          ]
+        },
+        {
+          "when": "top_pick.value.action.external_handoff = true",
+          "required": [
+            "top_pick.value.protocol_decision.value.destination_protocol_id",
+            "top_pick.value.protocol_decision.value.destination_label",
+            "top_pick.value.protocol_decision.value.destination_url",
+            "top_pick.value.protocol_decision.value.handoff_type"
+          ]
+        }
+      ],
+      "global_assertions": [
+        {
+          "id": "single_top_pick",
+          "assertion": "At most one candidate has is_top_pick = true.",
+          "expected": true
+        },
+        {
+          "id": "top_pick_matches_id",
+          "assertion": "If has_top_pick is true, top_pick_id matches top_pick.value.id.",
+          "expected": true
+        },
+        {
+          "id": "top_pick_actionable",
+          "assertion": "If has_top_pick is true, selected candidate is active and actionable.",
+          "expected": true
+        },
+        {
+          "id": "locked_not_top_pick",
+          "assertion": "Locked candidates are never Top Pick.",
+          "expected": true
+        },
+        {
+          "id": "stale_not_top_pick",
+          "assertion": "Stale candidates are never active Top Pick.",
+          "expected": true
+        },
+        {
+          "id": "smith_ai_boundary",
+          "assertion": "Smith AI explains Top Pick but does not choose or change it.",
+          "expected": true
+        }
+      ],
+      "forbidden_fields_or_values": [
+        "private_key",
+        "seed_phrase",
+        "wallet_password",
+        "guaranteed_return",
+        "risk_free",
+        "top_pick.value.action.executes_transaction = true",
+        "top_pick.value.action.requires_wallet_signature = true for MVP handoff click",
+        "top_pick.value.action.completion_on_click = true for external protocol handoff",
+        "selected locked candidate",
+        "selected stale candidate",
+        "selected informational-only candidate",
+        "multiple selected Top Picks"
+      ]
+    },
+    "qa_assertions": [
+      {
+        "id": "{qa_assertion_id}",
+        "assertion": "{human_readable_assertion}",
+        "expected": "{expected_value}",
+        "source": "{rule_or_template_reference}"
+      }
+    ],
+    "hard_rules": [
+      "This is a template, not production logic.",
+      "Production Top Pick must come from deterministic Top Pick Logic.",
+      "UI must not choose Top Pick.",
+      "Smith AI must not choose or change Top Pick.",
+      "Suggestion Engine provides candidates; Top Pick Logic selects the Top Pick.",
+      "Exactly one suggestion may be Top Pick when valid actionable suggestions exist.",
+      "Locked suggestions cannot be Top Pick.",
+      "Stale suggestions cannot be active Top Pick.",
+      "Disabled suggestions cannot be Top Pick.",
+      "Completed, dismissed, or expired suggestions cannot be active Top Pick.",
+      "Informational-only suggestions cannot be Top Pick.",
+      "Safety Buffer underfunding overrides yield, staking, vault, DCA, and optimization suggestions unless explicit product rules allow otherwise.",
+      "Protocol decisions must come from Protocol Logic.",
+      "Top Pick clicks do not execute transactions in MVP.",
+      "External protocol handoffs do not request wallet signatures in MVP.",
+      "External protocol handoffs do not mark suggestions complete on click.",
+      "Do not invent APY, balances, prices, earnings, projections, scores, reason codes, or protocol destinations.",
+      "Do not ask for seed phrases, private keys, passwords, or wallet backup files.",
+      "Do not imply WealthSmith holds, controls, moves, trades, stakes, deposits, withdraws, or rebalances user funds."
+    ]
+  }
+}
