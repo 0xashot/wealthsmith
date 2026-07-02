@@ -1,0 +1,543 @@
+{
+  "example_metadata": {
+    "name": "Portfolio - Yield Strategies",
+    "path": "examples/portfolio/portfolio-yield-strategies.json",
+    "mode": "real_wallet",
+    "purpose": "Canonical Portfolio fixture showing supported yield strategy positions detected from protocols such as Kamino, Orca, Raydium, Meteora, Hubble, and Ondo.",
+    "fixture_type": "synthetic_reference_state",
+    "related_examples": [
+      "examples/portfolio/portfolio-liquid-assets.json",
+      "examples/portfolio/portfolio-staked-assets.json",
+      "examples/dashboard/dashboard-connected-wallet-state.json",
+      "examples/protocol-handoffs/protocol-kamino-yield.json"
+    ],
+    "rules": [
+      "rules/wallet-and-custody-rules.md",
+      "rules/financial-logic-boundaries.md",
+      "rules/protocol-selection-rules.md",
+      "rules/loading-state-rules.md",
+      "rules/smith-ai-rules.md"
+    ],
+    "content": [
+      "content/wallet-copy.md",
+      "content/empty-error-loading-copy.md",
+      "content/glossary.md",
+      "content/smith-ai-copy.md"
+    ],
+    "components": [
+      "components/table.md",
+      "components/portfolio-card.md",
+      "components/icon.md",
+      "components/badge.md",
+      "components/button.md",
+      "components/tooltip.md",
+      "components/empty-state.md"
+    ],
+    "patterns": [
+      "patterns/portfolio-overview.md",
+      "patterns/wallet-connection.md",
+      "patterns/empty-loading-error-states.md"
+    ],
+    "notes": [
+      "This is synthetic fixture data, not real user wallet data.",
+      "Production yield strategy positions must come from wallet/on-chain/protocol detection logic.",
+      "Production APY and estimated earnings must come from approved data sources.",
+      "Yield Strategies are read-only in MVP and do not imply WealthSmith controls funds."
+    ]
+  },
+  "scenario": {
+    "id": "portfolio_yield_strategies",
+    "description": "Connected wallet has supported protocol positions in lending/vault/liquidity strategies.",
+    "mode": "real_wallet",
+    "demo_mode": false,
+    "wallet_status": "connected",
+    "portfolio_section": "yield_strategies",
+    "expected_behavior": [
+      "Show Yield Strategies table when supported protocol positions are detected.",
+      "Use approved protocol icons.",
+      "Show APY and estimated earnings only when provided by approved data sources.",
+      "Show Unavailable when APY or earnings are missing.",
+      "Show Manage on protocol links for detected protocol positions.",
+      "Manage links open external protocols in a new tab and do not execute transactions."
+    ]
+  },
+  "wallet": {
+    "status": "connected",
+    "provider": "Phantom",
+    "address": "6fQ9SyntheticWalletAddressForFixtureOnly111111111",
+    "address_short": "6fQ9",
+    "address_is_synthetic": true,
+    "network": "solana",
+    "connection_type": "read_only_portfolio_view",
+    "wallet_pill": "Phantom • 6fQ9"
+  },
+  "portfolio_summary": {
+    "status": "ready",
+    "source": "connected_wallet_fixture",
+    "total_value_usd": 15500,
+    "liquid_assets_value_usd": 7500,
+    "staked_assets_value_usd": 4500,
+    "yield_strategies_value_usd": 3500,
+    "liquid_assets_percent": 48.39,
+    "staked_assets_percent": 29.03,
+    "yield_strategies_percent": 22.58,
+    "yield_strategy_count": 3,
+    "supported_yield_strategy_count": 3,
+    "unsupported_yield_strategy_count": 0
+  },
+  "section": {
+    "id": "yield_strategies",
+    "title": "Yield Strategies",
+    "description": "Supported protocol positions where assets are deployed in strategies such as lending, vaults, or liquidity positions.",
+    "component": "table",
+    "status": "ready",
+    "empty_state": null,
+    "error_state": null,
+    "stale_state": null,
+    "partial_data_state": null,
+    "glossary_reference": "glossary.yield_strategies"
+  },
+  "table": {
+    "component": "table",
+    "columns": [
+      {
+        "id": "strategy",
+        "label": "Strategy",
+        "type": "strategy_identity",
+        "required": true
+      },
+      {
+        "id": "protocol",
+        "label": "Protocol",
+        "type": "protocol_identity",
+        "required": true
+      },
+      {
+        "id": "assets",
+        "label": "Assets",
+        "type": "token_list",
+        "required": true
+      },
+      {
+        "id": "value_usd",
+        "label": "Value",
+        "type": "currency",
+        "required": true,
+        "align": "right"
+      },
+      {
+        "id": "estimated_apy",
+        "label": "Est. APY",
+        "type": "percentage_or_unavailable",
+        "required": false,
+        "align": "right"
+      },
+      {
+        "id": "estimated_earnings",
+        "label": "Est. Earnings",
+        "type": "currency_or_unavailable",
+        "required": false,
+        "align": "right"
+      },
+      {
+        "id": "risk_note",
+        "label": "Risk Note",
+        "type": "text_or_badge",
+        "required": false
+      },
+      {
+        "id": "action",
+        "label": "Action",
+        "type": "external_handoff",
+        "required": false,
+        "align": "right"
+      }
+    ],
+    "rows": [
+      {
+        "id": "yield_kamino_usdc_lending",
+        "strategy": {
+          "label": "USDC Lending",
+          "type": "lending",
+          "value": "lending_position"
+        },
+        "protocol": {
+          "id": "kamino",
+          "label": "Kamino",
+          "icon": "assets/icons/protocol/kamino.svg",
+          "fallback_allowed": false
+        },
+        "assets": [
+          {
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "icon": "assets/icons/token/usdc.svg",
+            "value_usd": 1500
+          }
+        ],
+        "value_usd": 1500,
+        "display_value": "$1,500",
+        "portfolio_share_percent": 9.68,
+        "estimated_apy": {
+          "status": "available",
+          "value_percent": 5.25,
+          "display": "5.25%",
+          "source": "apy_data_fixture",
+          "is_estimated": true,
+          "not_guaranteed": true
+        },
+        "estimated_earnings": {
+          "status": "available",
+          "value_usd_annualized": 78.75,
+          "display": "$78.75/yr est.",
+          "source": "apy_data_fixture",
+          "is_estimated": true,
+          "not_guaranteed": true
+        },
+        "risk_note": {
+          "label": "Lending risk",
+          "value": "lending_risk"
+        },
+        "detection": {
+          "source": "protocol_position_fixture",
+          "method": "supported_protocol_position_detection",
+          "confidence": "high"
+        },
+        "action": {
+          "label": "Manage on Kamino",
+          "action": "open_external_protocol",
+          "protocol_id": "kamino",
+          "destination_url": "https://app.kamino.finance",
+          "handoff_type": "external_new_tab",
+          "executes_transaction": false,
+          "requires_wallet_signature": false,
+          "completion_on_click": false,
+          "show_external_link_icon": true
+        }
+      },
+      {
+        "id": "yield_orca_sol_usdc_lp",
+        "strategy": {
+          "label": "SOL/USDC Liquidity",
+          "type": "liquidity_position",
+          "value": "lp_position"
+        },
+        "protocol": {
+          "id": "orca",
+          "label": "Orca",
+          "icon": "assets/icons/protocol/orca.svg",
+          "fallback_allowed": false
+        },
+        "assets": [
+          {
+            "symbol": "SOL",
+            "name": "Solana",
+            "icon": "assets/icons/token/sol.svg",
+            "value_usd": 650
+          },
+          {
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "icon": "assets/icons/token/usdc.svg",
+            "value_usd": 650
+          }
+        ],
+        "value_usd": 1300,
+        "display_value": "$1,300",
+        "portfolio_share_percent": 8.39,
+        "estimated_apy": {
+          "status": "available",
+          "value_percent": 9.1,
+          "display": "9.10%",
+          "source": "apy_data_fixture",
+          "is_estimated": true,
+          "not_guaranteed": true
+        },
+        "estimated_earnings": {
+          "status": "available",
+          "value_usd_annualized": 118.3,
+          "display": "$118.30/yr est.",
+          "source": "apy_data_fixture",
+          "is_estimated": true,
+          "not_guaranteed": true
+        },
+        "risk_note": {
+          "label": "LP risk",
+          "value": "liquidity_position_risk"
+        },
+        "detection": {
+          "source": "protocol_position_fixture",
+          "method": "supported_lp_position_detection",
+          "confidence": "high"
+        },
+        "action": {
+          "label": "Manage on Orca",
+          "action": "open_external_protocol",
+          "protocol_id": "orca",
+          "destination_url": "https://www.orca.so",
+          "handoff_type": "external_new_tab",
+          "executes_transaction": false,
+          "requires_wallet_signature": false,
+          "completion_on_click": false,
+          "show_external_link_icon": true
+        }
+      },
+      {
+        "id": "yield_meteora_usdc_vault",
+        "strategy": {
+          "label": "USDC Vault",
+          "type": "vault",
+          "value": "vault_position"
+        },
+        "protocol": {
+          "id": "meteora",
+          "label": "Meteora",
+          "icon": "assets/icons/protocol/meteora.svg",
+          "fallback_allowed": false
+        },
+        "assets": [
+          {
+            "symbol": "USDC",
+            "name": "USD Coin",
+            "icon": "assets/icons/token/usdc.svg",
+            "value_usd": 700
+          }
+        ],
+        "value_usd": 700,
+        "display_value": "$700",
+        "portfolio_share_percent": 4.52,
+        "estimated_apy": {
+          "status": "unavailable",
+          "value_percent": null,
+          "display": "Unavailable",
+          "source": null,
+          "is_estimated": true,
+          "not_guaranteed": true,
+          "must_not_invent": true
+        },
+        "estimated_earnings": {
+          "status": "unavailable",
+          "value_usd_annualized": null,
+          "display": "Unavailable",
+          "source": null,
+          "is_estimated": true,
+          "not_guaranteed": true,
+          "must_not_invent": true
+        },
+        "risk_note": {
+          "label": "Vault risk",
+          "value": "vault_risk"
+        },
+        "detection": {
+          "source": "protocol_position_fixture",
+          "method": "supported_vault_position_detection",
+          "confidence": "medium"
+        },
+        "action": {
+          "label": "Manage on Meteora",
+          "action": "open_external_protocol",
+          "protocol_id": "meteora",
+          "destination_url": "https://app.meteora.ag",
+          "handoff_type": "external_new_tab",
+          "executes_transaction": false,
+          "requires_wallet_signature": false,
+          "completion_on_click": false,
+          "show_external_link_icon": true
+        }
+      }
+    ],
+    "sorting": {
+      "default_sort": "value_usd_desc",
+      "available_sorts": [
+        "value_usd_desc",
+        "value_usd_asc",
+        "estimated_apy_desc",
+        "strategy_az",
+        "protocol_az"
+      ]
+    },
+    "summary_row": {
+      "label": "Total Yield Strategies",
+      "value_usd": 3500,
+      "display_value": "$3,500",
+      "portfolio_share_percent": 22.58,
+      "display_portfolio_share": "22.58%"
+    }
+  },
+  "asset_deployment_overview": {
+    "component": "portfolio-card",
+    "title": "Asset Deployment Overview",
+    "segments": [
+      {
+        "label": "Liquid Assets",
+        "value_usd": 7500,
+        "percent": 48.39
+      },
+      {
+        "label": "Staked Assets",
+        "value_usd": 4500,
+        "percent": 29.03
+      },
+      {
+        "label": "Yield Strategies",
+        "value_usd": 3500,
+        "percent": 22.58
+      }
+    ],
+    "source": "portfolio_classification_fixture",
+    "production_rule": "Production deployment classification must come from portfolio classification logic."
+  },
+  "protocol_handoff_rules": {
+    "handoff_type": "external_new_tab",
+    "applies_to_actions": [
+      "Manage on Kamino",
+      "Manage on Orca",
+      "Manage on Meteora"
+    ],
+    "global_rules": [
+      "Manage links open external protocols in a new tab.",
+      "Manage links do not execute transactions.",
+      "Manage links do not request wallet signatures in MVP.",
+      "Manage links do not mark any portfolio action as completed.",
+      "Destination URLs must come from approved protocol metadata."
+    ]
+  },
+  "copy": {
+    "section_title": "Yield Strategies",
+    "section_description": "Supported protocol positions where assets are deployed in strategies such as lending, vaults, or liquidity positions.",
+    "apy_tooltip": "Estimated APY can change and is not guaranteed.",
+    "earnings_tooltip": "Estimated earnings are modeled from available APY data and may change.",
+    "risk_tooltip": "Yield strategies can involve protocol, market, liquidity, and position-specific risks.",
+    "empty_title": "No yield strategies found",
+    "empty_description": "WealthSmith did not find supported yield strategy positions in this wallet.",
+    "partial_data_title": "Some yield strategies are unavailable",
+    "partial_data_description": "WealthSmith loaded part of your portfolio, but some yield strategy positions could not be checked.",
+    "error_title": "We couldn’t load yield strategies",
+    "error_description": "Try again in a moment. Your funds stay in your wallet.",
+    "content_ids": {
+      "yield_strategies_glossary": "glossary.yield_strategies",
+      "apy_glossary": "glossary.apy",
+      "estimated_earnings_glossary": "glossary.estimated_earnings",
+      "protocol_handoff_glossary": "glossary.protocol_handoff",
+      "wallet_read_only": "wallet.read_only.explanation"
+    }
+  },
+  "smith_ai_context": {
+    "allowed": true,
+    "example_user_question": "What are Yield Strategies?",
+    "approved_response": "Yield Strategies are supported protocol positions where assets are deployed in strategies such as lending, vaults, or liquidity positions. WealthSmith can show detected positions and open external protocols for review, but it does not deposit, withdraw, or move funds for you. APY and estimated earnings can change and are not guaranteed.",
+    "must_include": [
+      "supported protocol positions",
+      "external protocols for review",
+      "does not deposit, withdraw, or move funds",
+      "APY and estimated earnings can change"
+    ],
+    "must_not_include": [
+      "guaranteed yield",
+      "risk-free",
+      "WealthSmith deposited these assets",
+      "send your seed phrase"
+    ]
+  },
+  "state_variants": {
+    "loading": {
+      "status": "loading",
+      "visible_copy": "Loading wallet positions...",
+      "component": "skeleton",
+      "rules": [
+        "Do not show fake yield positions.",
+        "Do not use Smith AI animation for portfolio table loading."
+      ]
+    },
+    "empty": {
+      "status": "empty",
+      "title": "No yield strategies found",
+      "description": "WealthSmith did not find supported yield strategy positions in this wallet.",
+      "rules": [
+        "Use only when wallet/protocol checks completed successfully.",
+        "Do not say the user has no yield positions if unsupported protocols may exist."
+      ]
+    },
+    "error": {
+      "status": "error",
+      "title": "We couldn’t load yield strategies",
+      "description": "Try again in a moment. Your funds stay in your wallet.",
+      "cta": "Retry",
+      "rules": [
+        "Do not imply funds are affected.",
+        "Do not show fake yield positions."
+      ]
+    },
+    "partial": {
+      "status": "partial",
+      "title": "Some yield strategies are unavailable",
+      "description": "WealthSmith loaded part of your portfolio, but some yield strategy positions could not be checked.",
+      "rules": [
+        "Keep loaded rows visible.",
+        "Do not hide partial data behind a full-page error."
+      ]
+    },
+    "apy_unavailable": {
+      "status": "available_position_missing_apy",
+      "display": "Unavailable",
+      "rules": [
+        "Do not invent APY.",
+        "Do not invent estimated earnings from unavailable APY."
+      ]
+    }
+  },
+  "qa_assertions": [
+    {
+      "id": "shows_yield_strategies_table",
+      "assertion": "Yield Strategies table is visible when supported positions are ready.",
+      "expected": true
+    },
+    {
+      "id": "uses_supported_protocol_icons",
+      "assertion": "Kamino, Orca, and Meteora use approved protocol icons.",
+      "expected": true
+    },
+    {
+      "id": "uses_supported_token_icons",
+      "assertion": "USDC and SOL use approved token icons.",
+      "expected": true
+    },
+    {
+      "id": "total_matches_rows",
+      "assertion": "Total yield strategies equals sum of row values.",
+      "expected": 3500
+    },
+    {
+      "id": "apy_unavailable_not_invented",
+      "assertion": "Unavailable APY is displayed as Unavailable and not invented.",
+      "expected": true
+    },
+    {
+      "id": "manage_links_external_only",
+      "assertion": "Manage links open external protocols and do not execute transactions.",
+      "expected": true
+    },
+    {
+      "id": "no_guaranteed_yield_copy",
+      "assertion": "Yield copy does not imply guaranteed or risk-free returns.",
+      "expected": true
+    },
+    {
+      "id": "read_only_boundary",
+      "assertion": "Copy does not imply WealthSmith deposits, withdraws, controls, or moves funds.",
+      "expected": true
+    }
+  ],
+  "hard_rules": [
+    "This fixture is not production data.",
+    "Production yield strategies must come from wallet/on-chain/protocol detection logic.",
+    "Do not invent yield positions, APY, estimated earnings, protocol destinations, or balances.",
+    "Do not imply WealthSmith deposits, withdraws, holds, controls, or moves funds.",
+    "Do not describe APY, yield, or estimated earnings as guaranteed.",
+    "Do not describe yield strategies as risk-free.",
+    "Do not ask for seed phrases, private keys, passwords, or wallet backup files.",
+    "Use approved protocol icons only; no protocol fallback for MVP.",
+    "Use fallback token icon only when an approved token icon is unavailable.",
+    "Keep Yield Strategies separate from Liquid Assets and Staked Assets."
+  ]
+}
