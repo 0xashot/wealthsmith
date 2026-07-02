@@ -1,0 +1,484 @@
+{
+  "example_metadata": {
+    "name": "Wallet - Connected Phantom state",
+    "path": "examples/wallet/wallet-connected-phantom-state.json",
+    "mode": "real_wallet",
+    "purpose": "Canonical wallet fixture showing a supported Phantom wallet connected in read-only portfolio-view mode.",
+    "fixture_type": "synthetic_reference_state",
+    "related_examples": [
+      "examples/dashboard/dashboard-connected-wallet-state.json",
+      "examples/portfolio/portfolio-liquid-assets.json",
+      "examples/suggestions/suggestions-buffer-underfunded.json"
+    ],
+    "rules": [
+      "rules/wallet-and-custody-rules.md",
+      "rules/financial-logic-boundaries.md",
+      "rules/smith-ai-rules.md",
+      "rules/demo-mode-rules.md",
+      "rules/loading-state-rules.md"
+    ],
+    "content": [
+      "content/wallet-copy.md",
+      "content/ui-copy-rules.md",
+      "content/smith-ai-copy.md",
+      "content/empty-error-loading-copy.md",
+      "content/glossary.md"
+    ],
+    "components": [
+      "components/global-nav.md",
+      "components/menu-popover.md",
+      "components/menu-item.md",
+      "components/button.md",
+      "components/toast.md",
+      "components/modal.md",
+      "components/icon.md"
+    ],
+    "patterns": [
+      "patterns/wallet-connection.md",
+      "patterns/dashboard-layout.md",
+      "patterns/portfolio-overview.md",
+      "patterns/empty-loading-error-states.md"
+    ],
+    "notes": [
+      "This is synthetic fixture data, not a real wallet address.",
+      "Wallet connection is read-only for portfolio viewing.",
+      "Wallet connected state must remain separate from portfolio data loading.",
+      "WealthSmith must not imply custody, execution, or fund movement."
+    ]
+  },
+  "scenario": {
+    "id": "wallet_connected_phantom",
+    "description": "User has connected Phantom successfully. Wallet pill is visible in Global Nav. Portfolio data may load separately.",
+    "mode": "real_wallet",
+    "demo_mode": false,
+    "wallet_status": "connected",
+    "wallet_provider": "Phantom",
+    "expected_behavior": [
+      "Show wallet pill as Phantom • 6fQ9.",
+      "Do not show Demo Mode banner.",
+      "Do not show Connect Wallet CTA as primary nav action.",
+      "Show Ask Smith AI when onboarding is not active.",
+      "Wallet connection does not imply funds moved.",
+      "Wallet connection does not imply portfolio data is fully loaded.",
+      "Wallet menu contains Disconnect Wallet."
+    ]
+  },
+  "wallet": {
+    "status": "connected",
+    "provider": {
+      "id": "phantom",
+      "label": "Phantom",
+      "icon": "assets/icons/wallet/phantom.svg",
+      "supported": true
+    },
+    "network": {
+      "id": "solana",
+      "label": "Solana",
+      "supported": true
+    },
+    "address": {
+      "full": "6fQ9SyntheticWalletAddressForFixtureOnly111111111",
+      "short": "6fQ9",
+      "is_synthetic": true,
+      "display_default": "short"
+    },
+    "connection_type": "read_only_portfolio_view",
+    "connected_at": "synthetic_fixture_timestamp",
+    "requires_message_signature_for_this_fixture": false,
+    "requires_transaction_signature_for_this_fixture": false,
+    "permissions": {
+      "can_read_public_address": true,
+      "can_read_supported_balances": true,
+      "can_read_supported_positions": true,
+      "can_move_funds": false,
+      "can_trade": false,
+      "can_stake": false,
+      "can_deposit": false,
+      "can_withdraw": false,
+      "can_rebalance": false
+    },
+    "hard_rules": [
+      "Do not ask for seed phrase or private key.",
+      "Do not imply WealthSmith controls the wallet.",
+      "Do not imply wallet connection authorizes transactions.",
+      "Do not imply wallet connection moves funds.",
+      "Do not treat this synthetic address as real user data."
+    ]
+  },
+  "global_nav_state": {
+    "component": "global-nav",
+    "variant": "wallet_connected",
+    "current_page": "dashboard",
+    "onboarding_active": false,
+    "demo_mode": false,
+    "logo": {
+      "asset": "assets/logo/wealthsmith-full-lockup.svg",
+      "width_px": 221,
+      "height_px": 32,
+      "alt": "WealthSmith"
+    },
+    "nav_items": [
+      {
+        "id": "dashboard",
+        "label": "Dashboard",
+        "href": "/dashboard",
+        "active": true,
+        "disabled": false
+      },
+      {
+        "id": "portfolio",
+        "label": "Portfolio",
+        "href": "/portfolio",
+        "active": false,
+        "disabled": false
+      },
+      {
+        "id": "goal",
+        "label": "Goal",
+        "href": "/goal",
+        "active": false,
+        "disabled": false
+      },
+      {
+        "id": "support",
+        "label": "Support",
+        "href": "/support",
+        "active": false,
+        "disabled": false
+      }
+    ],
+    "right_actions": {
+      "try_demo_mode": {
+        "visible": false,
+        "reason": "A real wallet is connected."
+      },
+      "connect_wallet": {
+        "visible": false,
+        "reason": "Wallet is already connected."
+      },
+      "wallet_pill": {
+        "visible": true,
+        "label": "Phantom • 6fQ9",
+        "action": "open_wallet_menu",
+        "icon": "assets/icons/wallet/phantom.svg",
+        "accessibility_label": "Connected wallet: Phantom, address ending 6fQ9. Open wallet menu."
+      },
+      "ask_smith_ai": {
+        "visible": true,
+        "label": "Ask Smith AI",
+        "action": "open_smith_ai_panel",
+        "accessibility_label": "Ask Smith AI about this dashboard"
+      }
+    },
+    "hard_rules": [
+      "Show wallet pill only after wallet connection is confirmed.",
+      "Do not show wallet pill in Demo Mode.",
+      "Do not show Try Demo Mode when wallet is connected.",
+      "Ask Smith AI is visible because onboarding is not active."
+    ]
+  },
+  "wallet_pill": {
+    "component": "button",
+    "variant": "wallet_pill",
+    "visible": true,
+    "label": "Phantom • 6fQ9",
+    "provider_label": "Phantom",
+    "address_short": "6fQ9",
+    "icon": "assets/icons/wallet/phantom.svg",
+    "action": "open_wallet_menu",
+    "content_id": "wallet.connected.pill",
+    "accessibility": {
+      "aria_label": "Connected wallet: Phantom, address ending 6fQ9. Open wallet menu.",
+      "aria_expanded": false,
+      "opens": "wallet_menu"
+    },
+    "hard_rules": [
+      "Do not show the full address by default in Global Nav.",
+      "Do not use wallet pill as proof portfolio data is fully loaded.",
+      "Do not use wallet pill in Demo Mode."
+    ]
+  },
+  "wallet_menu": {
+    "component": "menu-popover",
+    "trigger": "wallet_pill",
+    "visible_when_open": true,
+    "header": {
+      "provider": "Phantom",
+      "address_display": "Address ending 6fQ9",
+      "copy_address_action": {
+        "label": "Copy Address",
+        "action": "copy_wallet_address",
+        "toast": "Address copied"
+      }
+    },
+    "items": [
+      {
+        "id": "disconnect_wallet",
+        "component": "menu-item",
+        "label": "Disconnect Wallet",
+        "action": "disconnect_wallet",
+        "content_id": "wallet.menu.disconnect",
+        "destructive": false
+      }
+    ],
+    "helper": {
+      "text": "Your funds stay in your wallet.",
+      "content_id": "wallet.non_custodial.short"
+    },
+    "hard_rules": [
+      "MVP wallet menu should stay simple.",
+      "Do not show Transfer Funds.",
+      "Do not show Export Key.",
+      "Do not show Recover Wallet.",
+      "Do not show unsupported actions."
+    ]
+  },
+  "connection_success": {
+    "event": "wallet_connected",
+    "toast": {
+      "component": "toast",
+      "message": "Wallet connected",
+      "content_id": "wallet.connected.toast"
+    },
+    "optional_helper": {
+      "message": "WealthSmith is loading supported balances and positions.",
+      "content_id": "wallet.connected.loading_positions_helper"
+    },
+    "state_after_success": {
+      "wallet_status": "connected",
+      "show_wallet_pill": true,
+      "portfolio_data_status": "loading_or_ready_separately",
+      "demo_mode": false
+    },
+    "hard_rules": [
+      "Do not say portfolio loaded until portfolio data is ready.",
+      "Do not say funds are secured.",
+      "Do not say transaction complete.",
+      "Do not say funds moved."
+    ]
+  },
+  "portfolio_loading_separation": {
+    "wallet_connection_status": "connected",
+    "portfolio_data_status": "separate_state",
+    "possible_portfolio_states_after_wallet_connect": [
+      "loading",
+      "ready",
+      "partial",
+      "error",
+      "empty"
+    ],
+    "loading_copy": "Loading wallet positions...",
+    "error_copy": "We couldn’t load portfolio data. Try again in a moment. Your funds stay in your wallet.",
+    "hard_rules": [
+      "Wallet connected does not mean portfolio positions are loaded.",
+      "Do not show fake balances while loading.",
+      "Do not hide wallet pill if portfolio data fails but wallet remains connected.",
+      "Portfolio section errors should not imply funds are affected."
+    ]
+  },
+  "disconnect_flow": {
+    "trigger": "wallet_menu.disconnect_wallet",
+    "confirmation_required": false,
+    "action": "disconnect_wallet",
+    "result": {
+      "wallet_status": "disconnected",
+      "show_wallet_pill": false,
+      "clear_wallet_dependent_real_data": true,
+      "clear_suggestion_engine_output": true,
+      "clear_top_pick_output": true,
+      "clear_protocol_decisions": true,
+      "clear_real_wallet_smith_ai_context": true,
+      "funds_affected": false,
+      "next_recommended_state": "dashboard_no_wallet_state"
+    },
+    "toast": {
+      "message": "Wallet disconnected",
+      "content_id": "wallet.disconnected.toast"
+    },
+    "helper": {
+      "message": "Your funds stay in your wallet.",
+      "content_id": "wallet.non_custodial.short"
+    },
+    "hard_rules": [
+      "Disconnecting does not move funds.",
+      "Disconnecting should clear wallet-dependent real data safely.",
+      "Disconnecting should not be described as deleting funds.",
+      "Do not call disconnect Log Out unless account auth exists."
+    ]
+  },
+  "copy": {
+    "connect_wallet_cta": "Connect Wallet",
+    "connected_toast": "Wallet connected",
+    "disconnected_toast": "Wallet disconnected",
+    "wallet_pill_format": "{wallet_provider} • {short_address}",
+    "wallet_pill_example": "Phantom • 6fQ9",
+    "disconnect_menu_item": "Disconnect Wallet",
+    "read_only_explanation": "Read-only means WealthSmith can use public wallet and supported protocol data to show your portfolio and suggestions. It does not give WealthSmith permission to move funds.",
+    "non_custodial_explanation": "WealthSmith is non-custodial. Your funds stay in your wallet, and WealthSmith does not hold your crypto or private keys.",
+    "security_warning": "Never share your seed phrase or private key.",
+    "content_ids": {
+      "connect_cta": "wallet.connect.cta",
+      "connected_toast": "wallet.connected.toast",
+      "disconnected_toast": "wallet.disconnected.toast",
+      "disconnect_menu": "wallet.menu.disconnect",
+      "read_only": "wallet.read_only.explanation",
+      "non_custodial": "wallet.non_custodial.explanation",
+      "seed_phrase_warning": "wallet.security.seed_phrase"
+    }
+  },
+  "smith_ai_context": {
+    "allowed": true,
+    "context_mode": "real_wallet",
+    "can_explain": [
+      "wallet connection state",
+      "read-only behavior",
+      "why wallet pill is visible",
+      "what disconnect does",
+      "why portfolio data may still be loading",
+      "seed phrase/private key safety"
+    ],
+    "example_user_question": "What does connecting Phantom let WealthSmith do?",
+    "approved_response": "Connecting Phantom lets WealthSmith read supported wallet balances and positions so it can personalize your dashboard and suggestions. Your funds stay in your wallet, and WealthSmith does not get permission to move funds from a read-only connection.",
+    "must_include": [
+      "read supported wallet balances and positions",
+      "funds stay in your wallet",
+      "does not get permission to move funds"
+    ],
+    "must_not_include": [
+      "WealthSmith controls your wallet",
+      "WealthSmith can move funds",
+      "send your seed phrase",
+      "transaction approved"
+    ]
+  },
+  "state_variants": {
+    "connected_portfolio_loading": {
+      "wallet_status": "connected",
+      "portfolio_status": "loading",
+      "wallet_pill_visible": true,
+      "visible_copy": "Loading wallet positions...",
+      "rules": [
+        "Keep wallet pill visible.",
+        "Do not show fake portfolio data.",
+        "Do not use Smith AI animation for wallet or portfolio table loading."
+      ]
+    },
+    "connected_portfolio_partial": {
+      "wallet_status": "connected",
+      "portfolio_status": "partial",
+      "visible_copy": "Some wallet positions are unavailable.",
+      "rules": [
+        "Keep loaded data visible.",
+        "Do not say wallet is empty.",
+        "Do not imply funds are affected."
+      ]
+    },
+    "connected_portfolio_error": {
+      "wallet_status": "connected",
+      "portfolio_status": "error",
+      "visible_copy": "We couldn’t load portfolio data. Try again in a moment. Your funds stay in your wallet.",
+      "rules": [
+        "Keep wallet pill visible if wallet remains connected.",
+        "Do not imply wallet connection failed if only portfolio loading failed."
+      ]
+    }
+  },
+  "analytics_or_events": {
+    "wallet_connected": {
+      "event_name": "wallet_connected",
+      "payload": {
+        "wallet_provider": "phantom",
+        "network": "solana",
+        "connection_type": "read_only_portfolio_view",
+        "demo_mode": false
+      },
+      "must_not_include": [
+        "seed_phrase",
+        "private_key",
+        "full_wallet_backup",
+        "password"
+      ]
+    },
+    "wallet_menu_opened": {
+      "event_name": "wallet_menu_opened",
+      "payload": {
+        "wallet_provider": "phantom",
+        "wallet_status": "connected"
+      }
+    },
+    "wallet_disconnected": {
+      "event_name": "wallet_disconnected",
+      "payload": {
+        "wallet_provider": "phantom",
+        "funds_affected": false
+      }
+    }
+  },
+  "accessibility": {
+    "wallet_pill_aria_label": "Connected wallet: Phantom, address ending 6fQ9. Open wallet menu.",
+    "wallet_menu_label": "Wallet menu",
+    "copy_address_label": "Copy wallet address",
+    "disconnect_wallet_label": "Disconnect Wallet",
+    "security_warning_announcement": "Never share your seed phrase or private key."
+  },
+  "qa_assertions": [
+    {
+      "id": "wallet_pill_visible",
+      "assertion": "Wallet pill is visible after Phantom connection.",
+      "expected": true
+    },
+    {
+      "id": "wallet_pill_format",
+      "assertion": "Wallet pill uses provider plus short address.",
+      "expected": "Phantom • 6fQ9"
+    },
+    {
+      "id": "demo_banner_hidden",
+      "assertion": "Demo banner is hidden when real wallet is connected.",
+      "expected": true
+    },
+    {
+      "id": "connect_wallet_hidden",
+      "assertion": "Connect Wallet CTA is hidden in Global Nav when wallet is connected.",
+      "expected": true
+    },
+    {
+      "id": "disconnect_available",
+      "assertion": "Wallet menu includes Disconnect Wallet.",
+      "expected": true
+    },
+    {
+      "id": "read_only_boundary",
+      "assertion": "Wallet copy says read-only connection does not move funds.",
+      "expected": true
+    },
+    {
+      "id": "no_secret_request",
+      "assertion": "No state asks for seed phrase or private key.",
+      "expected": true
+    },
+    {
+      "id": "portfolio_loading_separate",
+      "assertion": "Wallet connected state remains separate from portfolio loading state.",
+      "expected": true
+    },
+    {
+      "id": "disconnect_no_funds_affected",
+      "assertion": "Disconnecting wallet does not affect funds.",
+      "expected": true
+    }
+  ],
+  "hard_rules": [
+    "This fixture is not real wallet data.",
+    "Do not ask for seed phrases, private keys, passwords, or wallet backup files.",
+    "Do not imply WealthSmith holds, controls, protects, secures, moves, trades, stakes, deposits, withdraws, or rebalances user funds.",
+    "Do not imply wallet connection authorizes transactions.",
+    "Do not show wallet pill before connection is confirmed.",
+    "Do not show wallet pill in Demo Mode.",
+    "Do not treat wallet connected as portfolio fully loaded.",
+    "Do not show fake balances while portfolio data loads.",
+    "Do not call disconnecting wallet a fund movement or deletion.",
+    "Do not use Smith AI animation for wallet connection.",
+    "Do not include unsupported wallet actions in the menu."
+  ]
+}
