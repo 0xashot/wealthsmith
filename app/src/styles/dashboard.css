@@ -382,9 +382,15 @@
 
 /* ---------- Charts ---------- */
 
-.chart {
+/* the SVG coordinate width tracks the host's rendered width (1 unit =
+   1 CSS px), so label text renders at its token's true pixel size —
+   no viewBox stretching (components/chart.md Label Typography) */
+.chart-host {
   width: 100%;
-  height: auto;
+}
+
+.chart {
+  display: block;
 }
 
 .chart__axis {
@@ -416,32 +422,32 @@
 
 /* ---------- Allocation chart ---------- */
 
-.allocation__legend {
-  display: flex;
-  gap: var(--spacing-inline-gap-lg);
+/* approved chart legend markers (components/chart.md Legend Markers),
+   tinted with series color tokens via mask; 16px matches the app's
+   documented raw icon sizing (no icon.size.* tokens exist) */
+.legend-marker {
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  flex-shrink: 0;
 }
 
-.allocation__legend-item {
+/* legend row: horizontally centered at the bottom of the chart/card
+   content, markers vertically aligned with labels (components/chart.md
+   Legends) */
+.chart-legend {
+  display: flex;
+  gap: var(--spacing-inline-gap-lg);
+  align-items: center;
+  justify-content: center;
+}
+
+.chart-legend__item {
   display: inline-flex;
   align-items: center;
   gap: var(--spacing-inline-gap-sm);
   font: var(--typography-chart-label-font);
   color: var(--color-text-secondary);
-}
-
-.allocation__swatch {
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-chart-bar);
-  display: inline-block;
-}
-
-.allocation__swatch--current {
-  background: var(--color-chart-series-1);
-}
-
-.allocation__swatch--recommended {
-  background: var(--color-chart-series-3);
 }
 
 .allocation__groups {

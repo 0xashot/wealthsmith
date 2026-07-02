@@ -695,6 +695,8 @@ Rules:
 - Do not calculate buffer in UI component code.
 - Underfunded buffer should influence suggestion priority.
 - Use clear month coverage labels.
+- Card content order: title, main metric (coverage percent + current-of-target values), progress bar, explanation/error text, then the centered Covered Buffer legend at the bottom.
+- The Covered Buffer legend uses the approved dot marker (`assets/icons/chart/chart-dot-marker.svg`) paired with visible text, horizontally centered, placed after the explanation text.
 - Do not imply funds are held by WealthSmith.
 - Do not imply stablecoin reserves are risk-free.
 - Do not hide underfunded state.
@@ -718,7 +720,9 @@ Rules:
 - Use modeled/estimated language.
 - Do not use guaranteed language.
 - Chart should be readable and accessible.
+- The MVP Dashboard Projected Growth chart uses milestone x-axis spacing: visible milestone labels (Year 0, Year 1, Year 3, Year 5) are evenly distributed across the x-axis, and each milestone's data point, value label, and axis label share the same x-position. See `components/chart.md` (Axis Label Positioning).
 - Chart legend should have visible labels.
+- The legend (approved line marker + series label) is horizontally centered at the bottom of the card content.
 - Do not rely on chart color alone.
 - If projection data is unavailable, show placeholder or empty state.
 - If projection update is fast, do not show loading.
@@ -753,7 +757,7 @@ Rules:
 - Chart should clearly label current vs recommended.
 - Use chart markers and legends with visible labels.
 - The section description (for example “Recommended allocation is based on your saved plan settings.”) sits directly under the section heading.
-- The chart legend sits at the bottom of the card content, below the chart body.
+- The chart legend sits horizontally centered at the bottom of the card content, below the chart body, using approved dot markers paired with visible text.
 - The legend must not appear between the heading and the chart body.
 - Do not present recommendation as guaranteed or risk-free.
 - If there is not enough data, show an empty or incomplete state.

@@ -7,6 +7,7 @@
  * and does not hide the underfunded state.
  */
 import type { SafetyBufferState } from "../types/dashboard";
+import LegendMarker from "./LegendMarker";
 
 export default function SafetyBufferCard({ buffer }: { buffer: SafetyBufferState }) {
   const pct = buffer.progress.value_percent;
@@ -34,6 +35,19 @@ export default function SafetyBufferCard({ buffer }: { buffer: SafetyBufferState
         />
       </div>
       <p className="buffer__caption">{buffer.display.caption}</p>
+      {/* content order per patterns/dashboard-layout.md Safety Buffer:
+          title, metric, progress bar, explanation text, then the centered
+          Covered Buffer legend last. Approved dot marker; marker color
+          matches the progress fill (danger while underfunded) */}
+      <div className="chart-legend">
+        <span className="chart-legend__item">
+          <LegendMarker
+            variant="dot"
+            colorToken="--color-feedback-danger-background-solid"
+          />
+          Covered Buffer
+        </span>
+      </div>
     </section>
   );
 }

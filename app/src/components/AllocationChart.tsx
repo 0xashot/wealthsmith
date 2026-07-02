@@ -4,6 +4,7 @@
  * as text (never color-only), recommendation values come from product logic.
  */
 import type { AllocationState } from "../types/dashboard";
+import LegendMarker from "./LegendMarker";
 
 const fmtPct = (v: number) =>
   Number.isInteger(v) ? `${v}%` : `${v.toFixed(1)}%`;
@@ -54,13 +55,15 @@ export default function AllocationChart({ allocation }: { allocation: Allocation
         ))}
       </div>
 
-      <div className="allocation__legend" aria-hidden="true">
-        <span className="allocation__legend-item">
-          <span className="allocation__swatch allocation__swatch--current" />
+      {/* approved dot markers per components/chart.md Legend Markers,
+          paired with visible text labels */}
+      <div className="chart-legend">
+        <span className="chart-legend__item">
+          <LegendMarker variant="dot" colorToken="--color-chart-series-1" />
           Current
         </span>
-        <span className="allocation__legend-item">
-          <span className="allocation__swatch allocation__swatch--recommended" />
+        <span className="chart-legend__item">
+          <LegendMarker variant="dot" colorToken="--color-chart-series-3" />
           Recommended
         </span>
       </div>

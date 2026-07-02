@@ -187,6 +187,22 @@ Optional:
 
 Progress meaning should be understandable without relying on color alone.
 
+### Progress Legend
+
+A progress bar presented as chart-like content (for example the Dashboard
+Safety Buffer card) may include a legend for its fill color.
+
+Rules:
+
+- The legend uses the approved dot marker
+  (`assets/icons/chart/chart-dot-marker.svg`) paired with a visible text
+  label, never icon-only.
+- The legend marker color matches the current fill color.
+- The legend row is horizontally centered at the bottom of the card
+  content, after helper/explanation/error text.
+- See `components/chart.md` (Legend Markers) and
+  `patterns/dashboard-layout.md` (Safety Buffer) for placement and order.
+
 ---
 
 ## Variants

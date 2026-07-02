@@ -298,7 +298,7 @@ Chart card
   Title
   Description (directly under the title)
   Chart area
-  Legend (bottom of chart content)
+  Legend (bottom of chart content, horizontally centered)
   Optional source/update text
 ```
 
@@ -577,13 +577,35 @@ Rules:
 - Legend labels must match data labels.
 - Legend colors must match chart series.
 - Legend should be close to the chart.
-- Default legend placement is at the bottom of the chart/card content, below the chart body.
+- The legend row belongs at the bottom of the chart/card content, below the chart body, unless a specific component spec says otherwise.
+- The legend row is horizontally centered.
+- Legend marker and text label are vertically aligned within each legend item.
 - The legend must not appear between the chart heading and the chart body.
 - Donut charts may place the legend beside the chart where space allows, but never between the heading and the chart body.
 - Legend should not rely on color alone if labels are missing.
 - Keep labels short.
 - Use semantic chart tokens.
 - Do not invent legend categories.
+
+### Legend Markers
+
+Use the approved chart marker assets from the icon registry:
+
+```text
+assets/icons/chart/chart-line-marker.svg -> line/trend series legends (e.g. Growth)
+assets/icons/chart/chart-dot-marker.svg  -> categorical, allocation, and single-color progress legends (e.g. Crypto, Stables, Covered Buffer)
+```
+
+Rules:
+
+- Line charts use the approved line-marker legend icon for the line series (e.g. Growth).
+- Single-color progress/bar legends use the approved dot-marker icon.
+- Multi-series allocation legends use approved dot-marker icons, one per series.
+- Legend markers must be paired with visible text labels, never icon-only.
+- Marker color comes from chart series tokens or chart data (see `assets/icons/README.md`, Chart Icons).
+- Do not create ad-hoc inline legend icons or shapes.
+- Do not use plain text-only legends when an approved chart marker exists.
+- Do not invent marker asset paths. If a required marker is missing from the registry, report it as an implementation issue instead of inventing a substitute.
 
 Examples:
 
@@ -631,15 +653,19 @@ Rules:
 Use existing semantic typography tokens only:
 
 ```text
-typography.chart.label -> axis labels, category labels, legend labels
-typography.chart.value -> data/value labels on the plot
+typography.chart.value -> chart value labels (numeric data labels, e.g. dollar values above chart points): metric/number styling (Space Grotesk)
+typography.chart.label -> chart axis labels, category labels, legend labels: small chart-axis label styling (Manrope)
 ```
 
 Rules:
 
-- X-axis labels, including time labels such as `Year 0`, `Year 1`, `Year 3`, `Year 5` or `Now / 2Y / 4Y`, use the small chart-axis label styling: `typography.chart.label`.
+- Chart value labels use metric/number styling through `typography.chart.value`.
+- Chart axis labels use small chart-axis / small-label styling through `typography.chart.label`.
+- X-axis labels, including time labels such as `Year 0`, `Year 1`, `Year 3`, `Year 5` or `Now / 2Y / 4Y`, must not use metric-size typography. They use `typography.chart.label`.
 - Axis, category, and legend labels must not use metric typography tokens (`typography.metric.primary`, `typography.metric.secondary`, `typography.metric.compact`).
 - Metric typography is reserved for metric values, such as metric-card values and donut center labels.
+- Axis labels must not visually compete with the chart's value labels.
+- Labels must render at the token's actual pixel size. SVG implementations must not let viewBox scaling inflate or shrink label text relative to surrounding UI text.
 - Do not invent new typography token names for charts. If a chart needs a style no existing semantic token covers, describe the intended style in the spec and raise it with product/design instead of adding tokens.
 
 ---
@@ -706,6 +732,45 @@ Examples:
 160k
 200k
 ```
+
+### Axis Label Positioning
+
+There are two x-axis positioning modes. A chart uses exactly one.
+
+#### Milestone spacing
+
+Used by the MVP Dashboard Projected Growth chart.
+
+```text
+x = milestoneIndex / (milestoneCount - 1)
+```
+
+Rules:
+
+- The MVP Dashboard Projected Growth chart uses milestone spacing, not continuous-time spacing.
+- Visible milestone labels have equal visual gaps across the available x-axis.
+- Year 0, Year 1, Year 3, Year 5 are evenly distributed: 0%, 33.3%, 66.7%, 100%.
+- The data point, value label, and x-axis label for each milestone share the same visual x-position.
+- Do not use the continuous-time formula below for this chart.
+
+#### Continuous-time spacing
+
+Used for continuous-time charts where the axis represents proportional elapsed time.
+
+```text
+x = (year - minYear) / (maxYear - minYear)
+```
+
+Rules:
+
+- Only appropriate for continuous-time charts, not milestone charts.
+- Do not mix continuous-time and milestone spacing in one chart.
+
+#### Shared rules
+
+- Use one shared coordinate calculation for the data point x-position, the value label x-position, and the x-axis label x-position.
+- Small label offsets are allowed only to prevent edge clipping; they must not break alignment with the data point.
+- Axis label text remains small and muted: small chart-axis typography (`typography.chart.label`), never metric typography.
 
 ---
 

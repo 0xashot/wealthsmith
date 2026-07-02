@@ -178,6 +178,7 @@ Rules:
 - Chart marker icons are not identity icons.
 - Always pair them with visible series labels.
 - Color should come from chart data or chart series tokens.
+- Use `chart-line-marker.svg` for line/trend series legends (e.g. Growth); use `chart-dot-marker.svg` for categorical, allocation, and single-color progress legends (e.g. Crypto, Stables, Covered Buffer). See `components/chart.md` (Legend Markers).
 - Do not name them after one data category.
 
 Good:

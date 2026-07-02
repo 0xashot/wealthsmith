@@ -31,6 +31,41 @@ never modified by it.
     protocol identity (Safety Buffer Top Pick → shield-check). A missing
     protocol icon logs a console error and renders the protocol name with
     no unapproved fallback.
+- **Step 2.2 (complete):** chart legend markers and axis alignment per the
+  clarified components/chart.md (Legend Markers, Axis Label Positioning):
+  - All chart legends use the approved marker assets
+    (`assets/icons/chart/chart-line-marker.svg` for the line series,
+    `chart-dot-marker.svg` for allocation/progress legends), paired with
+    visible text labels. The ad-hoc CSS swatches were removed.
+  - The approved marker SVGs ship with a fixed `#0A0A0A` fill, so
+    `LegendMarker` applies them as CSS masks tinted with chart series
+    color tokens ("color should come from chart series tokens",
+    assets/icons/README.md). Asset files are untouched. Note: masking
+    renders the line marker as a solid silhouette (the white dot-center
+    knockout in the source asset cannot survive an alpha mask).
+  - Projected Growth uses milestone x-spacing per components/chart.md
+    (Axis Label Positioning): `x = milestoneIndex / (milestoneCount − 1)`,
+    so Year 0/1/3/5 sit at 0%/33.3%/66.7%/100% with equal visual gaps.
+    One shared coordinate function positions the data point, value label,
+    and axis label (the continuous-time formula is documented in chart.md
+    for continuous-time charts only and is not used here). All labels use
+    `textAnchor="middle"`; 32px plot side-padding prevents edge clipping
+    without breaking point alignment.
+  - All chart legends (`.chart-legend`) are horizontally centered at the
+    bottom of the card content with markers vertically aligned to labels;
+    the Safety Buffer card order is title → metric → progress bar →
+    explanation text → centered Covered Buffer legend
+    (patterns/dashboard-layout.md).
+  - Legend labels: "Contributions" comes from the fixture series label
+    (chart.md: legend labels must match data labels — the clarification's
+    "Growth" example maps to this fixture's line series). "Covered Buffer"
+    comes from the patterns/dashboard-layout.md Safety Buffer example; its
+    marker color matches the progress fill (danger while underfunded).
+    The allocation legend entries are the chart's actual series
+    (Current / Recommended); Crypto and Stables are row group labels in
+    this horizontal-bar layout, not legend series.
+  - Legend marker size is 16px, consistent with the app's documented raw
+    icon sizing (no `icon.size.*` tokens exist).
 - **Step 3 (not started):** interactions — protocol handoff clicks
   (external new tab, `rel="noopener noreferrer"`), wallet menu / disconnect,
   Ask Smith AI panel, toasts.
