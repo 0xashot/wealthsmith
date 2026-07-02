@@ -1,0 +1,376 @@
+{
+  "example_metadata": {
+    "name": "Portfolio - Liquid Assets",
+    "path": "examples/portfolio/portfolio-liquid-assets.json",
+    "mode": "real_wallet",
+    "purpose": "Canonical Portfolio fixture showing supported liquid assets detected directly in a connected wallet.",
+    "fixture_type": "synthetic_reference_state",
+    "related_examples": [
+      "examples/dashboard/dashboard-connected-wallet-state.json",
+      "examples/suggestions/suggestions-buffer-underfunded.json",
+      "examples/portfolio/portfolio-staked-assets.json",
+      "examples/portfolio/portfolio-yield-strategies.json"
+    ],
+    "rules": [
+      "rules/wallet-and-custody-rules.md",
+      "rules/financial-logic-boundaries.md",
+      "rules/protocol-selection-rules.md",
+      "rules/loading-state-rules.md",
+      "rules/smith-ai-rules.md"
+    ],
+    "content": [
+      "content/wallet-copy.md",
+      "content/empty-error-loading-copy.md",
+      "content/glossary.md",
+      "content/smith-ai-copy.md"
+    ],
+    "components": [
+      "components/table.md",
+      "components/portfolio-card.md",
+      "components/icon.md",
+      "components/badge.md",
+      "components/tooltip.md",
+      "components/empty-state.md"
+    ],
+    "patterns": [
+      "patterns/portfolio-overview.md",
+      "patterns/wallet-connection.md",
+      "patterns/empty-loading-error-states.md"
+    ],
+    "notes": [
+      "This is synthetic fixture data, not real user wallet data.",
+      "Production balances and classifications must come from wallet/on-chain/product data.",
+      "Liquid Assets are read-only in MVP and do not imply WealthSmith controls funds."
+    ]
+  },
+  "scenario": {
+    "id": "portfolio_liquid_assets",
+    "description": "Connected wallet has supported liquid SOL, BONK, and USDC balances. No staking or yield strategy positions are included in this specific fixture.",
+    "mode": "real_wallet",
+    "demo_mode": false,
+    "wallet_status": "connected",
+    "portfolio_section": "liquid_assets",
+    "expected_behavior": [
+      "Show Liquid Assets table.",
+      "Use approved token icons.",
+      "Show values and allocation percentages from provided data.",
+      "Do not show protocol manage links for liquid wallet balances.",
+      "Do not imply WealthSmith can move or manage these assets."
+    ]
+  },
+  "wallet": {
+    "status": "connected",
+    "provider": "Phantom",
+    "address": "6fQ9SyntheticWalletAddressForFixtureOnly111111111",
+    "address_short": "6fQ9",
+    "address_is_synthetic": true,
+    "network": "solana",
+    "connection_type": "read_only_portfolio_view",
+    "wallet_pill": "Phantom • 6fQ9"
+  },
+  "portfolio_summary": {
+    "status": "ready",
+    "source": "connected_wallet_fixture",
+    "total_value_usd": 7500,
+    "liquid_assets_value_usd": 7500,
+    "staked_assets_value_usd": 0,
+    "yield_strategies_value_usd": 0,
+    "liquid_assets_percent": 100,
+    "staked_assets_percent": 0,
+    "yield_strategies_percent": 0,
+    "asset_count": 3,
+    "supported_asset_count": 3,
+    "unsupported_asset_count": 0
+  },
+  "section": {
+    "id": "liquid_assets",
+    "title": "Liquid Assets",
+    "description": "Supported tokens held directly in your connected wallet.",
+    "component": "table",
+    "status": "ready",
+    "empty_state": null,
+    "error_state": null,
+    "stale_state": null,
+    "partial_data_state": null,
+    "glossary_reference": "glossary.liquid_assets"
+  },
+  "table": {
+    "component": "table",
+    "columns": [
+      {
+        "id": "asset",
+        "label": "Asset",
+        "type": "asset_identity",
+        "required": true
+      },
+      {
+        "id": "category",
+        "label": "Category",
+        "type": "badge_or_text",
+        "required": true
+      },
+      {
+        "id": "value_usd",
+        "label": "Value",
+        "type": "currency",
+        "required": true,
+        "align": "right"
+      },
+      {
+        "id": "portfolio_share",
+        "label": "Portfolio Share",
+        "type": "percentage",
+        "required": true,
+        "align": "right"
+      },
+      {
+        "id": "status",
+        "label": "Status",
+        "type": "text",
+        "required": false
+      }
+    ],
+    "rows": [
+      {
+        "id": "liquid_sol",
+        "asset": {
+          "symbol": "SOL",
+          "name": "Solana",
+          "icon": "assets/icons/token/sol.svg",
+          "fallback_icon": "assets/icons/fallback/fallback-token.svg",
+          "fallback_used": false
+        },
+        "category": {
+          "label": "Crypto",
+          "value": "crypto"
+        },
+        "value_usd": 5500,
+        "display_value": "$5,500",
+        "portfolio_share_percent": 73.33,
+        "display_portfolio_share": "73.33%",
+        "position_type": "liquid",
+        "source": "connected_wallet_fixture",
+        "status": {
+          "label": "Liquid",
+          "value": "liquid"
+        },
+        "actions": [],
+        "hard_rules": [
+          "Do not show Manage link for plain liquid wallet balance.",
+          "Do not imply WealthSmith can stake or move SOL from this table."
+        ]
+      },
+      {
+        "id": "liquid_bonk",
+        "asset": {
+          "symbol": "BONK",
+          "name": "Bonk",
+          "icon": "assets/icons/token/bonk.svg",
+          "fallback_icon": "assets/icons/fallback/fallback-token.svg",
+          "fallback_used": false
+        },
+        "category": {
+          "label": "Meme",
+          "value": "meme"
+        },
+        "value_usd": 1200,
+        "display_value": "$1,200",
+        "portfolio_share_percent": 16.0,
+        "display_portfolio_share": "16.00%",
+        "position_type": "liquid",
+        "source": "connected_wallet_fixture",
+        "status": {
+          "label": "Liquid",
+          "value": "liquid"
+        },
+        "actions": [],
+        "hard_rules": [
+          "Do not shame meme-token exposure in the portfolio table.",
+          "Risk-alignment suggestions belong in Suggestions, not this table."
+        ]
+      },
+      {
+        "id": "liquid_usdc",
+        "asset": {
+          "symbol": "USDC",
+          "name": "USD Coin",
+          "icon": "assets/icons/token/usdc.svg",
+          "fallback_icon": "assets/icons/fallback/fallback-token.svg",
+          "fallback_used": false
+        },
+        "category": {
+          "label": "Stablecoin",
+          "value": "stablecoin"
+        },
+        "value_usd": 800,
+        "display_value": "$800",
+        "portfolio_share_percent": 10.67,
+        "display_portfolio_share": "10.67%",
+        "position_type": "liquid",
+        "source": "connected_wallet_fixture",
+        "status": {
+          "label": "Liquid",
+          "value": "liquid"
+        },
+        "actions": [],
+        "hard_rules": [
+          "Do not describe USDC as risk-free.",
+          "Safety Buffer calculations belong to Safety Buffer logic, not this table."
+        ]
+      }
+    ],
+    "sorting": {
+      "default_sort": "value_usd_desc",
+      "available_sorts": [
+        "value_usd_desc",
+        "value_usd_asc",
+        "asset_az",
+        "portfolio_share_desc"
+      ]
+    },
+    "summary_row": {
+      "label": "Total Liquid Assets",
+      "value_usd": 7500,
+      "display_value": "$7,500",
+      "portfolio_share_percent": 100,
+      "display_portfolio_share": "100%"
+    }
+  },
+  "asset_deployment_overview": {
+    "component": "portfolio-card",
+    "title": "Asset Deployment Overview",
+    "segments": [
+      {
+        "label": "Liquid Assets",
+        "value_usd": 7500,
+        "percent": 100
+      },
+      {
+        "label": "Staked Assets",
+        "value_usd": 0,
+        "percent": 0
+      },
+      {
+        "label": "Yield Strategies",
+        "value_usd": 0,
+        "percent": 0
+      }
+    ],
+    "source": "portfolio_classification_fixture",
+    "production_rule": "Production deployment classification must come from portfolio classification logic."
+  },
+  "copy": {
+    "section_title": "Liquid Assets",
+    "section_description": "Supported tokens held directly in your connected wallet.",
+    "empty_title": "No liquid assets found",
+    "empty_description": "WealthSmith did not find supported liquid assets in this wallet.",
+    "partial_data_title": "Some liquid assets are unavailable",
+    "partial_data_description": "WealthSmith loaded part of your portfolio, but some liquid assets could not be checked.",
+    "error_title": "We couldn’t load liquid assets",
+    "error_description": "Try again in a moment. Your funds stay in your wallet.",
+    "content_ids": {
+      "liquid_assets_glossary": "glossary.liquid_assets",
+      "wallet_read_only": "wallet.read_only.explanation",
+      "portfolio_empty_supported_assets": "empty.portfolio.no_supported_assets",
+      "portfolio_error": "empty.portfolio.error"
+    }
+  },
+  "smith_ai_context": {
+    "allowed": true,
+    "example_user_question": "What are Liquid Assets?",
+    "approved_response": "Liquid Assets are supported tokens held directly in your connected wallet and not currently shown as staked assets or yield strategy positions. WealthSmith reads this data to show your portfolio, but it does not move funds from your wallet.",
+    "must_include": [
+      "supported tokens",
+      "connected wallet",
+      "does not move funds"
+    ],
+    "must_not_include": [
+      "risk-free",
+      "WealthSmith manages these assets",
+      "WealthSmith can move them",
+      "send your seed phrase"
+    ]
+  },
+  "state_variants": {
+    "loading": {
+      "status": "loading",
+      "visible_copy": "Loading wallet positions...",
+      "component": "skeleton",
+      "rules": [
+        "Do not show fake balances.",
+        "Do not use Smith AI animation for portfolio table loading."
+      ]
+    },
+    "empty": {
+      "status": "empty",
+      "title": "No liquid assets found",
+      "description": "WealthSmith did not find supported liquid assets in this wallet.",
+      "rules": [
+        "Use only when wallet data loaded successfully and no supported liquid assets are found.",
+        "Do not say wallet is empty if unsupported assets may exist."
+      ]
+    },
+    "error": {
+      "status": "error",
+      "title": "We couldn’t load liquid assets",
+      "description": "Try again in a moment. Your funds stay in your wallet.",
+      "cta": "Retry",
+      "rules": [
+        "Do not imply funds are affected.",
+        "Do not show fake balances."
+      ]
+    },
+    "partial": {
+      "status": "partial",
+      "title": "Some liquid assets are unavailable",
+      "description": "WealthSmith loaded part of your portfolio, but some liquid assets could not be checked.",
+      "rules": [
+        "Keep loaded rows visible.",
+        "Do not hide partial data behind a full-page error."
+      ]
+    }
+  },
+  "qa_assertions": [
+    {
+      "id": "shows_liquid_assets_table",
+      "assertion": "Liquid Assets table is visible when data is ready.",
+      "expected": true
+    },
+    {
+      "id": "uses_supported_token_icons",
+      "assertion": "SOL, BONK, and USDC use approved token icons.",
+      "expected": true
+    },
+    {
+      "id": "total_matches_rows",
+      "assertion": "Total liquid assets equals sum of SOL, BONK, and USDC values.",
+      "expected": 7500
+    },
+    {
+      "id": "no_manage_links_for_plain_liquid_assets",
+      "assertion": "Plain liquid wallet balances do not show Manage protocol links.",
+      "expected": true
+    },
+    {
+      "id": "read_only_boundary",
+      "assertion": "Liquid Assets copy does not imply WealthSmith controls or moves funds.",
+      "expected": true
+    },
+    {
+      "id": "no_fake_data",
+      "assertion": "Loading/error/empty states do not show fake balances.",
+      "expected": true
+    }
+  ],
+  "hard_rules": [
+    "This fixture is not production data.",
+    "Production liquid assets must come from wallet/on-chain/product data.",
+    "Do not invent balances, prices, token classifications, or icons.",
+    "Do not show protocol Manage links for plain liquid wallet balances.",
+    "Do not imply WealthSmith holds, controls, moves, swaps, stakes, deposits, or withdraws assets.",
+    "Do not describe stablecoins as risk-free.",
+    "Do not ask for seed phrases, private keys, passwords, or wallet backup files.",
+    "Use fallback token icon only when an approved token icon is unavailable.",
+    "Keep Liquid Assets separate from Staked Assets and Yield Strategies."
+  ]
+}
