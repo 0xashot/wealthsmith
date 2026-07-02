@@ -1,0 +1,327 @@
+{
+  "example_metadata": {
+    "name": "Protocol handoff - Jupiter swap",
+    "path": "examples/protocol-handoffs/protocol-jupiter-swap.json",
+    "mode": "real_wallet",
+    "purpose": "Canonical MVP protocol handoff fixture for a swap/trim/rebalance action routed to Jupiter as an external new-tab review.",
+    "fixture_type": "synthetic_reference_state",
+    "related_examples": [
+      "examples/suggestions/suggestions-buffer-underfunded.json",
+      "examples/dashboard/dashboard-connected-wallet-state.json",
+      "examples/top-pick/top-pick-buffer-case.json"
+    ],
+    "rules": [
+      "rules/protocol-selection-rules.md",
+      "rules/suggestion-engine-rules.md",
+      "rules/top-pick-rules.md",
+      "rules/wallet-and-custody-rules.md",
+      "rules/financial-logic-boundaries.md",
+      "rules/smith-ai-rules.md"
+    ],
+    "content": [
+      "content/suggestion-card-copy.md",
+      "content/wallet-copy.md",
+      "content/smith-ai-copy.md",
+      "content/glossary.md"
+    ],
+    "components": [
+      "components/suggestion-card.md",
+      "components/button.md",
+      "components/icon.md",
+      "components/toast.md",
+      "components/tooltip.md"
+    ],
+    "patterns": [
+      "patterns/suggestion-flow.md",
+      "patterns/wallet-connection.md",
+      "patterns/dashboard-layout.md"
+    ],
+    "notes": [
+      "This is a synthetic fixture, not production routing logic.",
+      "Production protocol destination must come from Protocol Logic.",
+      "The UI must not guess protocol URLs.",
+      "MVP handoff opens an external protocol page and does not execute a transaction."
+    ]
+  },
+  "scenario": {
+    "id": "protocol_jupiter_swap",
+    "description": "User has an actionable trim/rebalance-style suggestion that should open Jupiter for external review.",
+    "mode": "real_wallet",
+    "demo_mode": false,
+    "wallet_status": "connected",
+    "suggestion_id": "reduce_bonk_exposure",
+    "action_family": "swap_or_trim",
+    "destination_protocol_id": "jupiter",
+    "expected_handoff_type": "external_new_tab"
+  },
+  "input_context": {
+    "wallet": {
+      "status": "connected",
+      "provider": "Phantom",
+      "address": "6fQ9SyntheticWalletAddressForFixtureOnly111111111",
+      "address_short": "6fQ9",
+      "address_is_synthetic": true,
+      "network": "solana",
+      "connection_type": "read_only_portfolio_view"
+    },
+    "suggestion": {
+      "id": "reduce_bonk_exposure",
+      "title": "Reduce Exposure to BONK",
+      "type": "trim",
+      "category": "risk_alignment",
+      "status": "active",
+      "actionability": "actionable",
+      "severity": "medium",
+      "is_top_pick": false,
+      "reason_codes": [
+        "token_overweight",
+        "high_concentration"
+      ],
+      "asset": {
+        "symbol": "BONK",
+        "name": "Bonk",
+        "value_usd": 1200,
+        "percentage_of_portfolio": 16.0,
+        "icon": "assets/icons/token/bonk.svg"
+      },
+      "intended_action": {
+        "action_type": "review_trim",
+        "source_token": "BONK",
+        "destination_token": "USDC",
+        "source_amount_usd": null,
+        "note": "Exact amount and route must come from product logic or the external protocol. UI must not invent trade size."
+      }
+    },
+    "guardrails": {
+      "minimum_action_size_usd": 50,
+      "passes_minimum_action_size": true,
+      "supported_protocol": true,
+      "supported_action_family": true,
+      "approved_external_destination": true,
+      "requires_wallet_signature_for_handoff": false,
+      "executes_transaction_in_wealthsmith": false,
+      "completion_on_handoff_click": false
+    }
+  },
+  "protocol_decision": {
+    "source": "protocol_logic_fixture",
+    "suggestion_id": "reduce_bonk_exposure",
+    "action_type": "review_trim",
+    "action_family": "swap_or_trim",
+    "destination_protocol_id": "jupiter",
+    "destination_label": "Jupiter",
+    "destination_url": "https://jup.ag",
+    "destination_icon": "assets/icons/protocol/jupiter.svg",
+    "handoff_type": "external_new_tab",
+    "cta_label": "Review on Jupiter",
+    "eligibility_status": "eligible",
+    "reason_codes": [
+      "swap_route",
+      "supported_protocol",
+      "supported_action_family",
+      "approved_external_destination"
+    ],
+    "excluded_protocols": [],
+    "freshness": {
+      "status": "fresh",
+      "checked_at": "synthetic_fixture_timestamp"
+    },
+    "hard_rules": [
+      "Destination protocol must come from Protocol Logic.",
+      "Destination URL must come from approved protocol metadata.",
+      "UI must not guess protocol URL.",
+      "Handoff does not execute a transaction.",
+      "Handoff does not request a wallet signature in MVP.",
+      "Handoff does not mark suggestion completed."
+    ]
+  },
+  "ui_rendering": {
+    "component": "suggestion-card",
+    "card": {
+      "id": "reduce_bonk_exposure",
+      "title": "Reduce Exposure to BONK",
+      "description": "BONK is a large share of your portfolio, so WealthSmith shows a risk-alignment suggestion.",
+      "tag": "Risk Reduction",
+      "badge": "Risk Reduction",
+      "impact_text": "May reduce concentration risk.",
+      "is_top_pick": false,
+      "status": "active",
+      "actionability": "actionable",
+      "severity": "medium"
+    },
+    "cta": {
+      "label": "Review on Jupiter",
+      "action": "open_external_protocol",
+      "handoff_type": "external_new_tab",
+      "opens_new_tab": true,
+      "show_external_link_icon": true,
+      "icon": "assets/icons/ui/external-link.svg",
+      "accessibility_label": "Review on Jupiter. Opens external protocol in a new tab."
+    },
+    "protocol_identity": {
+      "label": "Jupiter",
+      "icon": "assets/icons/protocol/jupiter.svg",
+      "fallback_allowed": false
+    },
+    "toast_after_click": {
+      "show": true,
+      "message": "Opened protocol in a new tab",
+      "content_id": "protocol.handoff.opened_new_tab",
+      "must_not_say": [
+        "Swap completed",
+        "Transaction submitted",
+        "Funds moved"
+      ]
+    },
+    "state_after_click": {
+      "suggestion_status": "active",
+      "completion_status": "not_completed",
+      "wallet_signature_requested": false,
+      "transaction_executed": false,
+      "funds_moved": false
+    }
+  },
+  "copy": {
+    "cta": "Review on Jupiter",
+    "handoff_helper": "Opening the protocol lets you review the action externally. WealthSmith does not execute the transaction or move funds for you.",
+    "safety_note": "No action will be taken automatically.",
+    "smith_ai_short_explanation": "Review on Jupiter opens Jupiter in a new tab so you can review the action externally. WealthSmith does not execute the swap, move funds, or mark the suggestion complete when you open the protocol.",
+    "content_ids": {
+      "suggestion_cta": "suggestion.cta.review_on_protocol",
+      "protocol_handoff_glossary": "glossary.protocol_handoff",
+      "wallet_read_only": "wallet.read_only.explanation"
+    },
+    "forbidden_copy": [
+      "Swap now",
+      "Execute on Jupiter",
+      "Complete swap",
+      "Transaction submitted",
+      "Funds moved",
+      "WealthSmith swapped BONK"
+    ]
+  },
+  "smith_ai_behavior": {
+    "allowed": true,
+    "can_explain": [
+      "why Jupiter appears",
+      "what external handoff means",
+      "that WealthSmith does not execute the action",
+      "that opening the protocol does not mark completion"
+    ],
+    "must_not": [
+      "choose a different protocol",
+      "invent a route",
+      "invent slippage",
+      "invent trade size",
+      "claim the swap is complete",
+      "request seed phrase or private key",
+      "request a signature from chat"
+    ],
+    "approved_response": "Review on Jupiter opens Jupiter in a new tab so you can review the action externally. WealthSmith does not execute the swap, move funds, or mark the suggestion complete when you open the protocol."
+  },
+  "event_contract": {
+    "on_cta_click": {
+      "event_name": "protocol_handoff_opened",
+      "payload": {
+        "suggestion_id": "reduce_bonk_exposure",
+        "protocol_id": "jupiter",
+        "handoff_type": "external_new_tab",
+        "action_family": "swap_or_trim",
+        "executes_transaction": false,
+        "requires_wallet_signature": false,
+        "marks_suggestion_complete": false
+      },
+      "allowed_side_effects": [
+        "open approved external URL in new tab",
+        "show non-execution toast",
+        "track analytics event if analytics is enabled"
+      ],
+      "forbidden_side_effects": [
+        "submit transaction",
+        "request transaction signature",
+        "move funds",
+        "mark suggestion completed",
+        "change Top Pick",
+        "change portfolio balances"
+      ]
+    }
+  },
+  "failure_states": {
+    "missing_protocol_url": {
+      "status": "blocked",
+      "title": "Protocol link unavailable",
+      "description": "We couldn’t open the protocol link right now.",
+      "cta": "Try Again",
+      "hard_rule": "Do not guess or construct a protocol URL in the UI."
+    },
+    "popup_blocked_or_new_tab_failed": {
+      "status": "error",
+      "title": "We couldn’t open the protocol",
+      "description": "Open Jupiter manually or try again.",
+      "cta": "Try Again",
+      "hard_rule": "Do not mark suggestion complete if the new tab fails."
+    },
+    "protocol_decision_stale": {
+      "status": "stale",
+      "title": "Protocol route needs refresh",
+      "description": "Refresh suggestions before reviewing this action.",
+      "cta": "Refresh",
+      "hard_rule": "Do not use stale protocol decisions for active handoffs."
+    }
+  },
+  "qa_assertions": [
+    {
+      "id": "uses_jupiter",
+      "assertion": "Protocol destination is Jupiter.",
+      "expected": true
+    },
+    {
+      "id": "handoff_type_external_new_tab",
+      "assertion": "Handoff type is external_new_tab.",
+      "expected": true
+    },
+    {
+      "id": "cta_copy_safe",
+      "assertion": "CTA uses Review on Jupiter, not Swap now.",
+      "expected": true
+    },
+    {
+      "id": "does_not_execute_transaction",
+      "assertion": "CTA click does not execute a transaction.",
+      "expected": true
+    },
+    {
+      "id": "does_not_request_signature",
+      "assertion": "CTA click does not request wallet signature in MVP.",
+      "expected": true
+    },
+    {
+      "id": "does_not_mark_complete",
+      "assertion": "CTA click does not mark suggestion complete.",
+      "expected": true
+    },
+    {
+      "id": "uses_protocol_logic",
+      "assertion": "Protocol destination comes from Protocol Logic fixture.",
+      "expected": true
+    },
+    {
+      "id": "smith_ai_boundary",
+      "assertion": "Smith AI explains the handoff but does not choose protocol or execute action.",
+      "expected": true
+    }
+  ],
+  "hard_rules": [
+    "This fixture is not production routing logic.",
+    "Production protocol destination must come from Protocol Logic.",
+    "UI must not guess protocol URLs.",
+    "Use Review on Jupiter, not Swap now.",
+    "Open Jupiter in a new tab.",
+    "Do not execute a transaction.",
+    "Do not request wallet signature for MVP handoff click.",
+    "Do not mark suggestion complete on click.",
+    "Do not claim funds moved.",
+    "Do not invent route, slippage, trade size, APY, or estimated result.",
+    "Do not ask for seed phrase, private key, password, or wallet backup file."
+  ]
+}
