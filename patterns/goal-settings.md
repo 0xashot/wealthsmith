@@ -162,6 +162,10 @@ Discard Changes: hidden
 Rules:
 
 - Users can review current plan assumptions.
+- View Mode renders the same fields as Edit Mode as read-only form controls (same input-like and select-like shape, labels, and card layout), not a separate plain-text summary.
+- Read-only inputs and select triggers keep the approved control shape and show the saved value; read-only inputs are not editable and read-only select triggers do not open.
+- Read-only fields use a quieter read-only surface, do not show a focus/active ring on click, mute the dropdown chevron, and are not in the tab order.
+- Read-only state is quieter than the editable/focus state but must not look disabled-unavailable.
 - Fields should look readable, not disabled in a confusing way.
 - Values should come from saved plan state.
 - Empty optional values should be clearly labeled.

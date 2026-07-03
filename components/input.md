@@ -461,6 +461,8 @@ Use:
 
 The label and helper text should remain readable.
 
+On focus, the field border should also rise to the approved active/focus border (the primary/action border used by select-menu triggers) so the state reads clearly beyond the ring alone. Text, currency, and select-trigger controls should share a consistent focus treatment: active/focus border plus focus ring. Error state takes priority — an invalid focused field keeps its error border while still showing the focus ring. Use semantic tokens only.
+
 ### Filled
 
 Use when the input has a value.
@@ -498,6 +500,8 @@ Examples:
 - System-calculated value shown in a form
 
 Read-only values may allow copy.
+
+Read-only controls may use a quieter read-only surface than editable inputs. When a read-only input is not meant to be interactive, it should not show a focus/active ring on click and should be kept out of the tab order (`readOnly` plus `tabindex="-1"`, or an equivalent non-interactive pattern). Read-only is different from disabled: the saved value stays visible and readable, not unavailable.
 
 ### Error
 

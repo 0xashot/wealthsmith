@@ -23,7 +23,6 @@ import {
   RISK_OPTIONS,
   CONTRIBUTION_OPTIONS,
   TIMELINE_OPTIONS,
-  labelFor,
 } from "../state/goalState";
 import {
   TOAST_ADDRESS_COPIED,
@@ -77,8 +76,6 @@ interface Draft {
   expenses: string;
   saving: string;
 }
-
-const fmtUsd = (n: number) => `$${n.toLocaleString("en-US")}`;
 
 function draftFromSaved(s: SavedGoal): Draft {
   return {
@@ -229,6 +226,8 @@ export default function GoalPage({
 
   // ---- field renderers -----------------------------------------------------
 
+  // Choice field: SelectMenu in edit mode; read-only SelectMenu (same shape) in
+  // view mode. Value comes from the draft while editing, saved state otherwise.
   const selectField = (
     id: string,
     label: string,
@@ -241,14 +240,19 @@ export default function GoalPage({
       <span className="goal-field__label" id={id}>
         {label}
       </span>
-      {editMode ? (
-        <SelectMenu labelId={id} options={options} value={value} onChange={onSelect} />
-      ) : (
-        <span className="goal-field__value">{labelFor(options, savedValue)}</span>
-      )}
+      <SelectMenu
+        labelId={id}
+        options={options}
+        value={editMode ? value : savedValue}
+        onChange={onSelect}
+        readOnly={!editMode}
+      />
     </div>
   );
 
+  // Currency field: the same input in both modes — editable in edit mode,
+  // `readOnly` in view mode (showing the saved value; blank optional = empty,
+  // never a fake zero). Errors and edit helper only apply in edit mode.
   const currencyField = (
     key: "income" | "expenses" | "saving",
     label: string,
@@ -259,44 +263,39 @@ export default function GoalPage({
     const id = `goal-${key}`;
     const helperId = `${id}-helper`;
     const errorId = `${id}-error`;
-    const error = showErrors ? errors[key] : undefined;
+    const error = editMode && showErrors ? errors[key] : undefined;
+    const readOnlyValue = savedValue == null ? "" : String(savedValue);
     return (
       <div className="goal-field">
         <label className="goal-field__label" htmlFor={id}>
           {label}
           {optional && <span className="goal-field__optional"> ({GOAL_OPTIONAL})</span>}
         </label>
-        {editMode ? (
-          <>
-            <div className="goal-currency">
-              <span className="goal-currency__prefix" aria-hidden="true">
-                $
-              </span>
-              <input
-                id={id}
-                type="text"
-                inputMode="numeric"
-                autoComplete="off"
-                className="goal-input goal-currency__input"
-                value={draft[key]}
-                onChange={(e) => set({ [key]: e.target.value } as Partial<Draft>)}
-                aria-describedby={error ? `${helperId} ${errorId}` : helperId}
-                aria-invalid={error ? true : undefined}
-              />
-            </div>
-            <p className="goal-field__helper" id={helperId}>
-              {helper}
-            </p>
-            {error && (
-              <p className="goal-field__error" id={errorId} role="alert">
-                {error}
-              </p>
-            )}
-          </>
-        ) : (
-          <span className="goal-field__value">
-            {savedValue == null ? "—" : fmtUsd(savedValue)}
+        <div className="goal-currency">
+          <span className="goal-currency__prefix" aria-hidden="true">
+            $
           </span>
+          <input
+            id={id}
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            className="goal-input goal-currency__input"
+            value={editMode ? draft[key] : readOnlyValue}
+            readOnly={!editMode}
+            tabIndex={editMode ? undefined : -1}
+            onChange={(e) => set({ [key]: e.target.value } as Partial<Draft>)}
+            aria-describedby={error ? `${helperId} ${errorId}` : helperId}
+            aria-invalid={error ? true : undefined}
+          />
+        </div>
+        <p className="goal-field__helper" id={helperId}>
+          {helper}
+        </p>
+        {error && (
+          <p className="goal-field__error" id={errorId} role="alert">
+            {error}
+          </p>
         )}
       </div>
     );

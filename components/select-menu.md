@@ -578,6 +578,23 @@ Use when selection is unavailable.
 
 Disabled reason should be clear when not obvious.
 
+### Read-Only
+
+Use when the selected value is shown but cannot currently be changed (for example, a saved setting in a view/read-only form state).
+
+Rules:
+
+- Retain the control shape (trigger and selected value).
+- Show the selected value.
+- Do not open the menu.
+- Use a quieter read-only surface than editable controls; read-only should read as a saved value in a control-shaped container.
+- Do not show a focus or active/open ring on click.
+- Mute or hide the dropdown indicator (chevron) so it does not imply an interactive dropdown.
+- Read-only controls are not keyboard-interactive (not in the tab order) unless product explicitly requires it.
+- Read-only is different from disabled: read-only shows a visible saved value that cannot currently be edited; disabled means unavailable.
+- Style read-only quieter than the editable/focus state, without the disabled-unavailable treatment.
+- Use semantic tokens only.
+
 ### Loading
 
 Use while options are loading.
@@ -662,6 +679,19 @@ border-radius: 8px
 box-shadow: 0px 4px 12px rgba(0,0,0,0.2)
 z-index: 9999
 ```
+
+---
+
+## Placement
+
+Select menu popovers should support adaptive, viewport-aware placement (see `components/menu-popover.md` — Placement).
+
+- Default placement is below the trigger.
+- If there is not enough space below, placement may flip above the trigger.
+- If neither side fully fits, choose the side with more space and constrain the menu height with internal scrolling.
+- Keep the popover aligned to the trigger width and visually connected to the trigger.
+- Do not let the popover overflow outside the viewport or force the page to scroll just to reveal the menu.
+- Use semantic spacing, radius, border, surface, shadow, and typography tokens.
 
 ---
 

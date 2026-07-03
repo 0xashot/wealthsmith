@@ -525,6 +525,53 @@ never modified by it.
     the trigger (rAF-deferred). Draft/save/validation behavior unchanged; the
     earlier styled-native-select approach is fully superseded (dead `.goal-select`
     CSS removed).
+  - **View mode = read-only form controls (not plain text):** Edit-off now renders
+    the same fields as Edit-on but read-only — same input/select shape, labels, and
+    card layout. Currency fields are the same `<input>` with `readOnly` (saved
+    value; blank optional = empty, no fake zero, no error/aria-invalid in view).
+    Choice fields use a new `SelectMenu` `readOnly` prop → a `role="textbox"`
+    `aria-readonly` control (label-associated, value visible, `tabIndex=0`) that
+    does not open. Read-only controls are clearly quieter than editable: a subtle
+    read-only surface (`color.subdued.neutral.background.default`, distinct from
+    the card and from the disabled grey), subtle border, `cursor: default`, and a
+    **muted dropdown chevron** (`color.text.secondary`, 0.6 opacity). They are not
+    keyboard-interactive (`tabIndex=-1`) and show **no focus/active ring on click**
+    (`:read-only:focus{,-visible}` and `.select-menu__trigger--readonly:focus`
+    clear the ring) — not `disabled` (saved values stay readable/available).
+    Removed the old `.goal-field__value` plain-text rendering + CSS.
+    Edit-mode editing/validation/Save/Discard and the SelectMenu open state are
+    unchanged. Source-of-truth clarified: `components/select-menu.md` gained a
+    Read-Only state; `patterns/goal-settings.md` View Mode now says fields render
+    as read-only form controls matching Edit Mode. (`components/input.md` already
+    defined Read-Only.)
+  - **Consistent input focus (currency fields):** focused `.goal-input` now
+    raises its border to the primary/action token
+    (`color.action.primary.background.default`) plus the focus ring
+    (`shadow.control.focus`), matching the SelectMenu trigger's active treatment.
+    Error keeps priority — `.goal-input[aria-invalid="true"]:focus-visible` (higher
+    specificity) preserves the danger border while still showing the ring.
+    Clarified in `components/input.md` (Focus): focused inputs use the active/focus
+    border + ring, consistent with select triggers, error takes priority.
+  - **Viewport-aware popover placement:** on open, a `useLayoutEffect` measures
+    the trigger rect + viewport and picks placement before paint — below by
+    default, **flipped above** (`.select-menu__popover--above`) when there isn't
+    enough room below; if neither side fully fits it uses the larger side and caps
+    `max-height` with internal scroll (`overflow-y:auto`). Popover stays
+    trigger-width and connected; never forced page scroll. Keyboard/selected/
+    active/read-only/validation behavior all unchanged. Clarified in
+    `components/select-menu.md` (new Placement section; menu-popover.md already
+    covered viewport-aware placement).
+  - **Disabled Save button (button.md spec + readability, Option A):** disabled
+    primary keeps `color.disabled.background.default` (#C5C5C5) but the label uses
+    the approved muted foreground `color.text.secondary` (#7F858A) instead of the
+    disabled-text token — the disabled-text token (#B2B5B8) was only ~1.19:1 on
+    the solid disabled fill (unreadable); #7F858A raises it to ~2.16:1 (readable
+    yet clearly muted/inactive). No opacity, no shadow, `cursor: not-allowed`,
+    native `disabled` blocks clicks. Enabled Save stays primary (`action.primary`),
+    Discard stays a secondary outline. Global disabled tokens unchanged. Clarified
+    in `components/button.md` (Disabled): disabled labels must remain readable;
+    use `color.text.secondary` when the disabled-text token is too low-contrast on
+    the disabled background; do not stack opacity.
   - **Open/active trigger state:** while open (`[aria-expanded="true"]`) the
     trigger shows a stronger primary border (`color.action.primary.background.default`)
     + focus ring (`shadow.control.focus`), and the chevron rotates 180° (points

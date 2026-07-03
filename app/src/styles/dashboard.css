@@ -1663,11 +1663,6 @@
   color: var(--color-text-secondary);
 }
 
-.goal-field__value {
-  font: var(--typography-body-md-font);
-  color: var(--color-text-primary);
-}
-
 .goal-input {
   width: 100%;
   padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
@@ -1678,13 +1673,38 @@
   font: var(--typography-body-md-font);
 }
 
+/* Focus: primary/action border + focus ring, matching the SelectMenu trigger's
+   active state (components/input.md — Focus). */
 .goal-input:focus-visible {
   outline: none;
+  border-color: var(--color-action-primary-background-default);
   box-shadow: var(--shadow-control-focus);
 }
 
 .goal-input[aria-invalid="true"] {
   border-color: var(--color-feedback-danger-background-solid);
+}
+
+/* Error takes priority over the focus border (higher specificity), but the
+   field still shows the focus ring. */
+.goal-input[aria-invalid="true"]:focus-visible {
+  border-color: var(--color-feedback-danger-background-solid);
+}
+
+/* Read-only (view mode): a quieter read-only surface with a subtle border, not
+   editable, not keyboard-interactive (tabindex=-1), and no focus/active ring on
+   click — reads as a saved value in a control-shaped container, not disabled. */
+.goal-input:read-only {
+  background-color: var(--color-subdued-neutral-background-default);
+  border-color: var(--color-border-subtle);
+  cursor: default;
+}
+
+.goal-input:read-only:focus,
+.goal-input:read-only:focus-visible {
+  outline: none;
+  border-color: var(--color-border-subtle);
+  box-shadow: none;
 }
 
 /* ---------- Select Menu (components/select-menu.md + menu-popover.md) ---------- */
@@ -1727,6 +1747,26 @@
   box-shadow: var(--shadow-control-focus);
 }
 
+/* Read-only (view mode): same control shape, quieter read-only surface, not
+   keyboard-interactive (tabindex=-1), no focus/active ring on click, and a muted
+   dropdown chevron (does not imply an interactive dropdown). Not disabled. */
+.select-menu__trigger--readonly {
+  cursor: default;
+  background-color: var(--color-subdued-neutral-background-default);
+  border-color: var(--color-border-subtle);
+}
+
+.select-menu__trigger--readonly:focus,
+.select-menu__trigger--readonly:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.select-menu__trigger--readonly .select-menu__chevron {
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+}
+
 .select-menu__value {
   flex-grow: 1;
 }
@@ -1765,6 +1805,13 @@
   box-shadow: var(--shadow-overlay-dropdown);
   animation: modal-scrim-in var(--motion-overlay-enter-duration)
     var(--motion-overlay-enter-easing);
+}
+
+/* Flipped above the trigger when there is not enough room below (viewport-aware
+   placement); stays trigger-width and visually connected. */
+.select-menu__popover--above {
+  top: auto;
+  bottom: calc(100% + var(--spacing-inline-gap-sm));
 }
 
 .select-menu__option {
@@ -1869,9 +1916,13 @@
   background: var(--color-action-primary-background-hover);
 }
 
+/* Disabled primary per components/button.md (Disabled): keep the disabled
+   background token, but use the approved muted foreground (color.text.secondary)
+   for the label — the disabled-text token is too low-contrast (~1.19:1) on the
+   solid disabled fill. No shadow, not-allowed cursor, no opacity. */
 .goal-btn--primary:disabled {
   background: var(--color-disabled-background-default);
-  color: var(--color-text-disabled);
+  color: var(--color-text-secondary);
   box-shadow: none;
   cursor: not-allowed;
 }

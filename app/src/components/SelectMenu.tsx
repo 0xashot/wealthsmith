@@ -15,7 +15,7 @@
  * items; Enter/Space (native button) selects; Escape or outside-click closes and
  * returns focus to the trigger.
  */
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import ButtonIcon from "./ButtonIcon";
 import chevronDownUrl from "../../../assets/icons/ui/chevron-down.svg";
 import checkUrl from "../../../assets/icons/ui/check.svg";
@@ -29,6 +29,9 @@ interface Props {
   onChange: (value: string) => void;
   ariaInvalid?: boolean;
   ariaDescribedby?: string;
+  /** Read-only (view mode): shows the value in the control shape but does not
+   *  open. Not the same as disabled. */
+  readOnly?: boolean;
 }
 
 export default function SelectMenu({
@@ -38,16 +41,51 @@ export default function SelectMenu({
   onChange,
   ariaInvalid,
   ariaDescribedby,
+  readOnly,
 }: Props) {
   const [open, setOpen] = useState(false);
+  // Viewport-aware placement: default below; flip above when there is not enough
+  // room below; constrain height with internal scroll if neither side fits fully.
+  const [placement, setPlacement] = useState<"below" | "above">("below");
+  const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const menuId = useId();
   const valueId = useId();
   const selectedIndex = Math.max(0, options.findIndex((o) => o.value === value));
   const selectedLabel = options[selectedIndex]?.label ?? "";
+
+  // Choose placement (above/below) + max-height before paint, based on the space
+  // available around the trigger. Runs before the browser paints so the menu
+  // does not visibly jump.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPlacement("below");
+      setMaxHeight(undefined);
+      return;
+    }
+    const trigger = triggerRef.current;
+    const pop = popoverRef.current;
+    if (!trigger || !pop) return;
+    const VIEWPORT_MARGIN = 8; // keep the menu a few px inside the viewport edge
+    const rect = trigger.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_MARGIN;
+    const spaceAbove = rect.top - VIEWPORT_MARGIN;
+    const popHeight = pop.offsetHeight;
+    if (popHeight <= spaceBelow) {
+      setPlacement("below");
+      setMaxHeight(undefined);
+    } else if (spaceAbove > spaceBelow) {
+      setPlacement("above");
+      setMaxHeight(Math.max(0, Math.min(popHeight, spaceAbove)));
+    } else {
+      setPlacement("below");
+      setMaxHeight(Math.max(0, spaceBelow));
+    }
+  }, [open]);
 
   // Focus the selected item when the menu opens.
   useEffect(() => {
@@ -105,6 +143,28 @@ export default function SelectMenu({
     }
   };
 
+  // Read-only (view mode): same control shape, shows the value, does not open.
+  // Rendered as a read-only textbox (not disabled) so the value stays clearly
+  // exposed and label-associated.
+  if (readOnly) {
+    return (
+      <div className="select-menu">
+        <div
+          className="select-menu__trigger select-menu__trigger--readonly"
+          role="textbox"
+          aria-readonly="true"
+          aria-labelledby={labelId}
+          tabIndex={-1}
+        >
+          <span className="select-menu__value">{selectedLabel}</span>
+          <span className="select-menu__chevron" aria-hidden="true">
+            <ButtonIcon src={chevronDownUrl} size={16} />
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="select-menu" ref={rootRef}>
       <button
@@ -130,7 +190,12 @@ export default function SelectMenu({
 
       {open && (
         <div
-          className="select-menu__popover"
+          ref={popoverRef}
+          className={
+            "select-menu__popover" +
+            (placement === "above" ? " select-menu__popover--above" : "")
+          }
+          style={maxHeight != null ? { maxHeight, overflowY: "auto" } : undefined}
           role="menu"
           id={menuId}
           aria-labelledby={labelId}

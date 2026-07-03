@@ -430,6 +430,8 @@ Token guidance:
 - Text: `color.disabled.text.default`
 - Stroke: `color.disabled.stroke.default`
 
+Disabled labels must remain readable. If the disabled text token is too low-contrast on the disabled background (e.g., on a solid disabled primary fill), use the approved muted foreground `color.text.secondary` for the button label — readable enough to identify the action while still muted and clearly inactive. Do not stack opacity on disabled tokens. Disabled buttons remain non-interactive and visually unavailable.
+
 ### Loading
 
 Use when the action has been triggered and the system is processing.
