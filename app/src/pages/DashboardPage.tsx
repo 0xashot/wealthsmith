@@ -52,6 +52,9 @@ interface Props {
   onDisconnect: () => void;
   onConnectWallet: () => void;
   onTryDemo: () => void;
+  /** connected only: in-app page switch + active page (undefined disables nav) */
+  activePage?: string;
+  onNavigate?: (id: string) => void;
 }
 
 export default function DashboardPage({
@@ -60,6 +63,8 @@ export default function DashboardPage({
   onDisconnect,
   onConnectWallet,
   onTryDemo,
+  activePage,
+  onNavigate,
 }: Props) {
   const connected = mode === "connected";
   const [railMode, setRailMode] = useState<RightRailMode>("suggestions");
@@ -134,6 +139,8 @@ export default function DashboardPage({
         askSmithAiLabel={s.global_nav.right_actions.ask_smith_ai.accessibility_label}
         askAvailable={s.smith_ai.available}
         askButtonRef={askButtonRef}
+        activePage={activePage}
+        onNavigate={onNavigate}
         onCopyAddress={onCopyAddress}
         onDisconnect={disconnect}
         onConnectWallet={connectWallet}

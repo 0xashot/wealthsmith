@@ -40,6 +40,12 @@ interface Props {
   wallet?: WalletState;
   walletPillLabel?: string;
   askButtonRef?: React.RefObject<HTMLButtonElement>;
+  /** Active page id ("dashboard" | "portfolio"); when set, overrides the
+   *  fixture's per-item active flag. */
+  activePage?: string;
+  /** In-app page switch (connected only). Dashboard/Portfolio navigate; other
+   *  items are no-ops. When undefined, no nav item navigates. */
+  onNavigate?: (id: string) => void;
   onCopyAddress?: () => void;
   onDisconnect?: () => void;
   onConnectWallet?: () => void;
@@ -56,6 +62,8 @@ export default function GlobalNav({
   wallet,
   walletPillLabel,
   askButtonRef,
+  activePage,
+  onNavigate,
   onCopyAddress,
   onDisconnect,
   onConnectWallet,
@@ -135,19 +143,31 @@ export default function GlobalNav({
         </a>
 
         <ul className="global-nav__items">
-          {nav.nav_items.map((item) => (
-            <li key={item.id}>
-              <a
-                className={
-                  "global-nav__item" + (item.active ? " global-nav__item--active" : "")
-                }
-                href={item.href}
-                aria-current={item.active ? "page" : undefined}
-              >
-                {item.label}
-              </a>
-            </li>
-          ))}
+          {nav.nav_items.map((item) => {
+            const isActive = activePage ? item.id === activePage : item.active;
+            const navigable =
+              !!onNavigate && (item.id === "dashboard" || item.id === "portfolio");
+            return (
+              <li key={item.id}>
+                <a
+                  className={
+                    "global-nav__item" + (isActive ? " global-nav__item--active" : "")
+                  }
+                  href={item.href}
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={(e) => {
+                    // SPA: never trigger a real browser navigation. Only the
+                    // in-scope Dashboard/Portfolio items switch pages; Goal /
+                    // Support (and demo/disconnected) are safe no-ops.
+                    e.preventDefault();
+                    if (navigable) onNavigate!(item.id);
+                  }}
+                >
+                  {item.label}
+                </a>
+              </li>
+            );
+          })}
         </ul>
 
         <div className="global-nav__actions">

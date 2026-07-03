@@ -1091,3 +1091,68 @@
   font: var(--typography-caption-default-font);
   color: var(--color-text-secondary);
 }
+
+/* ---------- Portfolio: single-column layout + Deployment Overview ---------- */
+
+/* Portfolio Step 1 has no right rail yet: collapse the grid to one column */
+@media (min-width: 1280px) {
+  .dashboard--single {
+    grid-template-columns: 1fr;
+  }
+}
+
+.deployment__total {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.deployment__total-label {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-secondary);
+}
+
+.deployment__total-value {
+  font: var(--typography-metric-primary-font);
+  color: var(--color-text-primary);
+}
+
+/* segmented deployment bar (Liquid / Staked / Yield); not color-only —
+   values + percentages render as text in the legend below */
+.deployment__bar {
+  display: flex;
+  width: 100%;
+  height: var(--spacing-card-gap-sm);
+  border-radius: var(--radius-control-pill);
+  overflow: hidden;
+  background: var(--color-subdued-neutral-background-default);
+}
+
+.deployment__bar-segment {
+  height: 100%;
+}
+
+.deployment__legend {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: var(--spacing-inline-gap-lg);
+}
+
+.deployment__legend-item {
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.deployment__legend-label {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.deployment__legend-value {
+  font: var(--typography-metric-compact-font);
+  color: var(--color-text-primary);
+}
+
+.deployment__legend-percent {
+  font: var(--typography-chart-label-font);
+  color: var(--color-text-secondary);
+}

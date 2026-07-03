@@ -157,7 +157,7 @@ export interface RightRailState {
 
 export interface PageHeaderState {
   title: string;
-  description: string;
+  description?: string;
 }
 
 export interface AccessibilityState {

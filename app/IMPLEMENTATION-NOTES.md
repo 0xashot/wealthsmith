@@ -259,6 +259,53 @@ never modified by it.
     removed (fixtures provide `display.caption` directly). No behavior
     change — verified captions/values/icons render identically.
 
+## Portfolio Overview slice
+
+- **Dashboard alignment (source-of-truth, approved Path A):** aligned the
+  connected Dashboard to the fuller $15,500 portfolio in
+  `examples/dashboard/dashboard-connected-wallet-state.json` — Portfolio Value
+  $7,500→$15,500, projection 15,500/27,500/51,500/75,500 ($1,000/mo, no
+  yield), current allocation 76.45/23.55 (recommended 60/40 unchanged),
+  portfolio_summary total + deployment totals + stable/volatile + liquid
+  percentages, all product-approved values. Safety Buffer, suggestions, Top
+  Pick, protocol unchanged.
+- **Portfolio Step 1 (complete):** connected Portfolio nav + page shell +
+  Asset Deployment Overview.
+  - **Navigation:** App holds a connected-only `activePage`
+    (`dashboard | portfolio`); Global Nav is now navigable via
+    `onNavigate`/`activePage`. All nav clicks `preventDefault` (no dead
+    browser navigation in any mode); only Dashboard/Portfolio switch pages
+    when connected. Goal/Support and demo/disconnected nav items are safe
+    no-ops. Mode transitions reset `activePage` to `dashboard`.
+  - **State:** `state/portfolioState.ts` composes from the Portfolio
+    fixtures; the yield-strategies fixture is the complete $15,500 source for
+    total + deployment segments (Liquid $7,500 / Staked $4,500 / Yield
+    $3,500). Page title "Portfolio" (approved label); no invented page
+    description.
+  - **DeploymentOverview** component: total value + segmented bar (chart
+    series tokens 1/2/3) + legend (approved dot markers + label/value/%),
+    `role="img"` accessible summary, not color-only. Values verbatim from
+    the fixture.
+  - **Portfolio page** reuses the connected wallet state for the Global Nav
+    pill (same Phantom•6fQ9 wallet); wallet menu (Copy Address + Disconnect,
+    with the same approved toasts) is functional.
+  - **Portfolio Ask Smith AI (enabled):** available on the connected
+    Portfolio page (consistent with Dashboard); opens the same
+    `AskSmithAiPanel` shell in the right zone (page becomes two-column while
+    open, single-column when closed — no persistent suggestions rail yet).
+    Content is `state/portfolioSmithAi.ts`: three fixture-backed prompts
+    ("What are Liquid/Staked/Yield Assets?") whose answers are the verbatim
+    approved `smith_ai_context` responses from `examples/portfolio/*`; the
+    opener + free-form fallback is a generic, safe capability statement
+    (no numbers, no advice, no execution — assembled from approved fragments
+    + the custody phrase from the liquid fixture). Explain-only; verified a
+    free-form advice question ("Should I sell my SOL?") returns only the safe
+    fallback.
+  - Out of scope this step: Liquid/Staked/Yield tables, Manage protocol
+    links, Portfolio Smith AI, right-rail suggestions, demo Portfolio page.
+    Verified: Dashboard $15,500 intact, Portfolio nav works, deployment
+    $7,500/$4,500/$3,500, demo + disconnected unaffected, no console errors.
+
 ### Step 2 intentional stubs
 
 These render per spec but have no behavior yet (explicitly deferred):
