@@ -584,6 +584,75 @@ never modified by it.
     "Choice Field Rendering" note (choice fields render as Select Menu controls,
     not browser-default selects) — both still apply to the in-app popover.
 
+## Support Center slice
+
+- **Scope (approved, connected-only — Decision D):** a connected Support page
+  (`SupportPage.tsx`) reachable from the Global Nav Support item (`"support"`
+  added to the navigable set + `App` routing). Demo/disconnected Support are out
+  of scope; the Support nav item is a safe no-op in those modes and the search
+  UI never renders there. Reuses the connected wallet state (Phantom • 6fQ9) for
+  the nav pill; wallet menu (Copy Address + Disconnect, approved toasts) works.
+- **FAQ content (Decision C — recommended Content-ID set first):**
+  `state/supportFaq.ts` transcribes the canonical FAQ **verbatim** from
+  `content/support-faq-content.md` — ~25 items across 11 categories. Types keep
+  paragraph + list structure (`FaqBlock = string | { list: string[] }`).
+  Supported wallets (Phantom/Solflare/Backpack) and the 10 protocol names match
+  the source exactly; nothing is invented. `filterFaq(query)` is a local,
+  case-insensitive filter over question + answer text + tags; empty query returns
+  all, empty categories are dropped, and no synthetic results are ever produced.
+- **Accordion (`Accordion.tsx`, per components/accordion.md):** multiple-open,
+  `useId` header/panel ids, `<button aria-expanded aria-controls>` heading +
+  `role="region" aria-labelledby` panel, chevron rotation (not icon-only state),
+  answer blocks render as `<p>`/`<ul>`. Panel fade respects
+  `prefers-reduced-motion`.
+- **Contact Us (Decision A — local prototype stub):** `ContactUsModal.tsx`
+  validates email + description **locally only**. On a valid submit it
+  **does not send an email, submit a ticket, make any network request, attach
+  wallet data, request a signature, or ask for secrets** — it just closes and
+  fires the approved toast **"Message saved in this prototype."** (deliberately
+  not "Message sent"). Visible prototype note **"This prototype does not send
+  support messages."** (also `aria-describedby` the dialog) and safety note
+  **"Do not include seed phrases, private keys, or passwords."** Validation copy:
+  "Enter your email so we can reply." / "Enter a valid email address." /
+  "Describe what you need help with." (`role="alert"`, `aria-invalid`, focus to
+  first invalid field, typed input preserved). No seed-phrase/private-key/
+  password/recovery fields exist. Contact Us stays available even on a no-result
+  search (a standalone action card, plus the FAQ "Contact Us" category).
+- **Ask Smith AI on Support (Decision B — FAQ-backed static only):** reuses the
+  shared `AskSmithAiPanel` with `state/supportSmithAi.ts`. Opener + free-form
+  fallback are the approved capability statement ("I can explain WealthSmith
+  support topics from the FAQ … I can't change your account or move funds. For
+  account-specific help, use Contact Us."). Three prompts ("Is WealthSmith
+  custodial?", "What is Demo Mode?", "Which wallets are supported?") return
+  **verbatim FAQ answers**; any free-form input returns only the approved
+  fallback. No live AI, no invented answers, no financial advice, no account
+  changes, no fund movement, no signatures.
+- **Accessibility / focus:** SupportPage toggles background `inert` (a `bgRef`
+  wrapper) while the modal is open and returns focus to the trigger on close;
+  the modal itself traps Tab, closes on Escape / Cancel / close button, and moves
+  focus in on mount. Nav active state uses `aria-current="page"`.
+- **Non-custodial / MVP-safe:** no real ticket submission, no email, no network,
+  no live data, no live AI, no wallet signature, no transaction, no fund
+  movement, and secrets are never requested; `examples/`/`content/` sources are
+  never mutated.
+- **Approved-copy discipline:** all Support strings live in `approvedCopy.ts`
+  (SUPPORT_*/CONTACT_*); FAQ + Smith AI strings are transcribed verbatim from the
+  canonical sources.
+- **Verified in-browser:** Support opens from connected nav (`aria-current`),
+  11 FAQ sections / 25 accordion triggers render, accordion toggles
+  `aria-expanded` + rotates chevron + reveals verbatim answers, search "phantom"
+  filters to the wallets FAQ with no invented rows, a no-match query shows the
+  "No help articles found" card while Contact Us + Ask Smith AI stay available.
+  Contact modal: role=dialog/aria-modal, prototype + safety notes shown, empty
+  and invalid-email submits show the alert copy and keep the modal open, and a
+  **valid submit fired the "Message saved in this prototype." toast with 0
+  network calls, closed the modal, cleared inert, and returned focus to the
+  trigger.** Support Ask Smith AI showed the approved opener, 3 prompts, the
+  verbatim non-custodial answer, and the safety note. Regression sweep:
+  Dashboard ($15,500 / 3 cards), Portfolio (deployment overview + 6 manage
+  links), and Goal (4 read-only selects) nav still work; disconnected and Demo
+  states are unchanged and expose no Support UI; **no console errors.**
+
 ### Step 2 intentional stubs
 
 These render per spec but have no behavior yet (explicitly deferred):

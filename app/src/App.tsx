@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 import DashboardPage from "./pages/DashboardPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import GoalPage from "./pages/GoalPage";
+import SupportPage from "./pages/SupportPage";
 import DemoDashboardPage from "./pages/DemoDashboardPage";
 import ToastHost, { type ToastData } from "./components/ToastHost";
 import ConnectWalletModal from "./components/ConnectWalletModal";
@@ -27,7 +28,7 @@ import { DEMO_EXIT_TOAST } from "./state/approvedCopy";
 import "./styles/dashboard.css";
 
 export type AppMode = "connected" | "demo" | "disconnected";
-export type ConnectedPage = "dashboard" | "portfolio" | "goal";
+export type ConnectedPage = "dashboard" | "portfolio" | "goal" | "support";
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("connected");
@@ -69,7 +70,8 @@ export default function App() {
 
   // In-app page switch (connected only).
   const navigate = (id: string) => {
-    if (id === "dashboard" || id === "portfolio" || id === "goal") setActivePage(id);
+    if (id === "dashboard" || id === "portfolio" || id === "goal" || id === "support")
+      setActivePage(id);
   };
 
   // Transitions always land on the Dashboard page so a mode change never
@@ -135,6 +137,14 @@ export default function App() {
         onDisconnect={goDisconnected}
         savedGoal={savedGoal}
         onSaveGoal={setSavedGoal}
+      />
+    );
+  } else if (mode === "connected" && activePage === "support") {
+    page = (
+      <SupportPage
+        pushToast={pushToast}
+        onNavigate={navigate}
+        onDisconnect={goDisconnected}
       />
     );
   } else {

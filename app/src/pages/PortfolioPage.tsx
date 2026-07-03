@@ -19,7 +19,11 @@ import { useRef, useState } from "react";
 import { dashboardState as connected } from "../state/dashboardState";
 import { portfolioState as p } from "../state/portfolioState";
 import { portfolioSmithAiContent } from "../state/portfolioSmithAi";
-import { TOAST_ADDRESS_COPIED, TOAST_COPY_FAILED } from "../state/approvedCopy";
+import {
+  TOAST_ADDRESS_COPIED,
+  TOAST_COPY_FAILED,
+  ASK_SMITH_LABEL_PORTFOLIO,
+} from "../state/approvedCopy";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
 import DeploymentOverview from "../components/DeploymentOverview";
@@ -83,7 +87,7 @@ export default function PortfolioPage({ pushToast, onNavigate, onDisconnect }: P
         wallet={connected.wallet}
         navLabel={connected.accessibility.global_nav_label}
         walletPillLabel={connected.accessibility.wallet_pill_label}
-        askSmithAiLabel={connected.global_nav.right_actions.ask_smith_ai.accessibility_label}
+        askSmithAiLabel={ASK_SMITH_LABEL_PORTFOLIO}
         askAvailable={true}
         askButtonRef={askButtonRef}
         activePage="portfolio"

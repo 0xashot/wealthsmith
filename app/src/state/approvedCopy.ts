@@ -68,6 +68,18 @@ export const SMITH_FALLBACK =
 /** patterns/dashboard-layout.md — accessibility example */
 export const SMITH_CLOSE_LABEL = "Close Ask Smith AI panel";
 
+/**
+ * Page-appropriate Ask Smith AI accessible labels. The connected Dashboard
+ * fixture's label ("Ask Smith AI about this dashboard") is dashboard-specific,
+ * so the other connected pages use their own accurate labels instead of reusing
+ * it. Visible button text is unchanged (still "Ask Smith AI"); only the
+ * accessible name differs. Dashboard keeps its fixture label; Demo keeps the
+ * demo fixture's already demo-aware label.
+ */
+export const ASK_SMITH_LABEL_PORTFOLIO = "Ask Smith AI about your portfolio";
+export const ASK_SMITH_LABEL_GOAL = "Ask Smith AI about your goal settings";
+export const ASK_SMITH_LABEL_SUPPORT = "Ask Smith AI about support topics";
+
 /* ---------- Demo Mode (verbatim from demo fixtures / demo-mode-rules.md) ---------- */
 
 /** components/global-nav.md / rules/demo-mode-rules.md — primary CTA */
@@ -163,3 +175,37 @@ export const GOAL_PROTOTYPE_NOTE =
 export const GOAL_ERR_REQUIRED_AMOUNT = "Enter an amount to continue.";
 export const GOAL_ERR_INVALID_AMOUNT = "Enter a valid amount.";
 export const GOAL_ERR_POSITIVE_AMOUNT = "Enter a positive amount.";
+
+/* ---------- Support page (patterns/support-center.md, content/support-faq-content.md) ---------- */
+
+/** patterns/support-center.md — page title / nav label. */
+export const SUPPORT_PAGE_TITLE = "Support";
+
+/** patterns/support-center.md — Search Behavior (placeholder) + Accessibility (label). */
+export const SUPPORT_SEARCH_PLACEHOLDER = "Search help articles or keywords";
+export const SUPPORT_SEARCH_LABEL = "Search support articles";
+
+/** patterns/support-center.md — Empty States (Search No Results). */
+export const SUPPORT_NO_RESULT_TITLE = "No help articles found";
+export const SUPPORT_NO_RESULT_DESC = "Try another keyword, ask Smith AI, or contact us.";
+
+/* Contact Us modal (patterns/support-center.md — Contact Us Modal + Decisions). */
+/** patterns/support-center.md — Contact Us entry point / modal title. */
+export const CONTACT_TITLE = "Contact Us";
+/** patterns/support-center.md — Contact Us Modal fields + actions. */
+export const CONTACT_FIELD_EMAIL = "Your Email";
+export const CONTACT_FIELD_DESCRIPTION = "Description";
+export const CONTACT_CANCEL = "Cancel";
+export const CONTACT_SEND = "Send Message";
+/** patterns/support-center.md — Contact Form recommended safety copy. */
+export const CONTACT_SAFETY_NOTE = "Do not include seed phrases, private keys, or passwords.";
+/** Approved prototype note (Decision A) — visible in the Contact Us modal. */
+export const CONTACT_PROTOTYPE_NOTE = "This prototype does not send support messages.";
+/** Approved prototype-safe success toast (Decision A — replaces "Message sent"). */
+export const CONTACT_SUCCESS_TOAST = "Message saved in this prototype.";
+/** patterns/support-center.md — Contact Form Validation copy. */
+export const CONTACT_ERR_EMAIL_REQUIRED = "Enter your email so we can reply.";
+export const CONTACT_ERR_EMAIL_INVALID = "Enter a valid email address.";
+export const CONTACT_ERR_DESC_REQUIRED = "Describe what you need help with.";
+/** patterns/support-center.md — Accessibility (modal close button accessible label). */
+export const CONTACT_CLOSE_LABEL = "Close Contact Us dialog";

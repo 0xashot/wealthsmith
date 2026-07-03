@@ -52,6 +52,7 @@ import {
   GOAL_ERR_REQUIRED_AMOUNT,
   GOAL_ERR_INVALID_AMOUNT,
   GOAL_ERR_POSITIVE_AMOUNT,
+  ASK_SMITH_LABEL_GOAL,
 } from "../state/approvedCopy";
 import type { GoalOption, SavedGoal } from "../types/goal";
 import GlobalNav from "../components/GlobalNav";
@@ -313,7 +314,7 @@ export default function GoalPage({
         wallet={connected.wallet}
         navLabel={connected.accessibility.global_nav_label}
         walletPillLabel={connected.accessibility.wallet_pill_label}
-        askSmithAiLabel={connected.global_nav.right_actions.ask_smith_ai.accessibility_label}
+        askSmithAiLabel={ASK_SMITH_LABEL_GOAL}
         askAvailable={true}
         askButtonRef={askButtonRef}
         activePage="goal"
