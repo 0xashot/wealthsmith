@@ -469,6 +469,15 @@ never modified by it.
     not on the Connect button click; `App.connectFromDemo` removed (the single
     `handleWalletConnected` path serves disconnected + demo, and switching to
     connected unmounts the demo page so demo state cannot leak).
+  - **A11y polish (P1/P2/P3 from QA):** (P1) a persistent visually-hidden
+    `role="status"` live region announces the approved "Connecting..." copy once
+    when connecting starts (empty when idle; new `.sr-only` utility). (P2) while
+    connecting, all three wallet rows get `aria-disabled="true"` + a muted
+    disabled style (`border-subtle`/`text-disabled`/`not-allowed`) — the selected
+    row still shows "Connecting..."; `aria-disabled` (not native `disabled`) keeps
+    them focusable so the focus trap stays intact, and `select` still guards
+    activation. (P3) `aria-labelledby`/`aria-describedby` now use `useId()` instead
+    of hard-coded IDs. No flow/behavior change.
 
 ### Step 2 intentional stubs
 

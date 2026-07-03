@@ -20,7 +20,7 @@
  * is trapped while open, Escape closes when idle, and focus returns to the
  * triggering element on close.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import ButtonIcon from "./ButtonIcon";
 import closeUrl from "../../../assets/icons/ui/close.svg";
 import phantomUrl from "../../../assets/icons/wallet/phantom.svg";
@@ -60,8 +60,8 @@ export default function ConnectWalletModal({ onClose, onConnected }: Props) {
   const firstOptionRef = useRef<HTMLButtonElement>(null);
   const timerRef = useRef<number | null>(null);
 
-  const titleId = "connect-wallet-title";
-  const descId = "connect-wallet-desc";
+  const titleId = useId();
+  const descId = useId();
 
   // Move focus into the modal on open. Focus RETURN to the trigger is handled by
   // App after the background `inert` is cleared (restoring focus here would fail
@@ -157,6 +157,11 @@ export default function ConnectWalletModal({ onClose, onConnected }: Props) {
                   type="button"
                   className="wallet-option"
                   aria-label={`Connect ${w.label} wallet`}
+                  // Disabled (for AT + visually) while a connection is in
+                  // progress. aria-disabled (not native `disabled`) keeps the
+                  // row focusable so the focus trap stays intact; `select` also
+                  // guards against activation.
+                  aria-disabled={isConnecting || undefined}
                   onClick={() => select(w.id)}
                 >
                   <img
@@ -178,6 +183,12 @@ export default function ConnectWalletModal({ onClose, onConnected }: Props) {
         </ul>
 
         <p className="modal__security">{WALLET_CONNECT_SECURITY_NOTE}</p>
+
+        {/* Polite live region so the transient connecting state is announced
+            once (empty until connecting; approved copy only, no new copy). */}
+        <span className="sr-only" role="status">
+          {isConnecting ? WALLET_CONNECTING : ""}
+        </span>
       </div>
     </div>
   );
