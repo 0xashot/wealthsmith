@@ -241,6 +241,23 @@ never modified by it.
     3 demo cards with exactly 1 Top Pick, icons shield-check/jupiter/kamino,
     locked Kamino disabled, demo Ask Smith AI demo-aware, demo→connected
     clears all `demo_` state. No console errors on clean load.
+- **Demo Step 3.1 (source-of-truth cleanup, approved):** two fixture
+  consistency fixes (design-system fixtures, not app logic).
+  - `examples/dashboard/dashboard-demo-state.json`: aligned chart display
+    metadata to the connected fixture — `projected_growth` caption moved
+    from `copy.caption` into `display.caption` (helper kept in `copy`);
+    `current_vs_recommended_allocation` `copy` block renamed to `display`.
+    Exact copy, values, chart data, and percentages unchanged.
+  - `examples/demo-mode/demo-suggestions.json`: the locked Kamino card's
+    `ui.icon` was the nonexistent `assets/icons/ui/lock.svg` (with a
+    `fallback_icon_if_missing` workaround). Changed to the approved
+    `assets/icons/protocol/kamino.svg` (the protocol-tied icon the app
+    already renders from protocol metadata) and removed the fallback field.
+    No change to order, locked state, disabled reason, APY, or protocol
+    decision/URL.
+  - App: the Step-3 caption normalization in `demoDashboardState.ts` is now
+    removed (fixtures provide `display.caption` directly). No behavior
+    change — verified captions/values/icons render identically.
 
 ### Step 2 intentional stubs
 

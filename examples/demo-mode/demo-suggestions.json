@@ -350,8 +350,7 @@
       },
       "ui": {
         "component": "suggestion-card",
-        "icon": "assets/icons/ui/lock.svg",
-        "fallback_icon_if_missing": "assets/icons/ui/shield.svg",
+        "icon": "assets/icons/protocol/kamino.svg",
         "show_top_pick_badge": false,
         "show_locked_state": true,
         "show_disabled_state": false,

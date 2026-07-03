@@ -321,11 +321,11 @@
       "status": "ready",
       "is_sample_data": true,
       "copy": {
-        "helper": "Projected Growth is modeled from the demo plan settings.",
-        "caption": "Sample projection based on the demo plan."
+        "helper": "Projected Growth is modeled from the demo plan settings."
       },
       "display": {
         "show_estimated_label": true,
+        "caption": "Sample projection based on the demo plan.",
         "empty_state": null,
         "error_state": null
       },
@@ -383,7 +383,7 @@
           "value_percent": 40
         }
       ],
-      "copy": {
+      "display": {
         "caption": "Sample allocation comparison for Demo Mode."
       },
       "source": "demo_sample_fixture",
