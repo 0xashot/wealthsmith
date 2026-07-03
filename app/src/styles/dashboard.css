@@ -1251,16 +1251,41 @@
 
 /* Deferred Manage handoff: rendered disabled/non-functional this step. Matches
    the secondary button styling so a later step can wire it up in place. */
+/* Manage protocol handoff: review-only external link, styled as a secondary
+   button-styled link (components/button.md — Button-Styled Links), matching the
+   suggestion card CTA. The disabled variant (no fixture URL) stays a button. */
 .portfolio-table__manage {
   display: inline-flex;
   align-items: center;
+  gap: var(--spacing-inline-gap-sm);
   padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
   border-radius: var(--radius-control-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--color-action-secondary-stroke-default);
   background: transparent;
-  color: var(--color-text-disabled);
+  color: var(--color-action-secondary-text-default);
   font: var(--typography-button-md-font);
+  /* button-styled link: never browser-default underlined */
+  text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+.portfolio-table__manage:hover:not(:disabled) {
+  background: var(--color-action-secondary-background-hover);
+}
+
+.portfolio-table__manage:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+/* URL-less rows: keep Manage disabled (fixture-approved deferred state). */
+.portfolio-table__manage:disabled {
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-disabled);
   cursor: not-allowed;
 }
 

@@ -391,6 +391,32 @@ never modified by it.
     Yield); the only remaining Portfolio work is wiring the live Manage
     protocol handoffs (review-only, out of scope until a later step).
 
+- **Portfolio Step 5 (complete):** Manage protocol handoffs (Staked + Yield).
+  The deferred Manage buttons are now review-only external handoff links via a
+  shared `ManageHandoff` component. Where the fixture provides a valid
+  `action.destination_url` (validated http(s) in `portfolioState.resolveActionHref`),
+  Manage is a real `<a href target="_blank" rel="noopener noreferrer">` styled as
+  a secondary button-styled link (reusing `.portfolio-table__manage`), with the
+  external-link icon via `ButtonIcon` (inherits text color). URL-less rows keep
+  a disabled button (fixture-approved deferred state; missing URL reported, never
+  invented). All 6 fixture rows have valid URLs, so all 6 are enabled.
+  - **Accessible names** say what opens and where: Staked =
+    `Manage {symbol} on {protocol} in a new tab` (e.g. "Manage JitoSOL on Jito in
+    a new tab"); Yield = `Manage {strategy} on {protocol} in a new tab` (e.g.
+    "Manage SOL/USDC Liquidity on Orca in a new tab"). Visible label stays the
+    fixture's `action.label` ("Manage on Jito").
+  - **Click behavior:** the anchor opens the protocol in a new tab natively;
+    `onClick` only pushes the approved toast
+    `connected.transitions.open_protocol_handoff.copy.toast` = "Opened protocol
+    in a new tab" (same string the Dashboard/Jupiter handoff uses). No execution,
+    no wallet signature, no fund movement, no completion, no portfolio/row state
+    change (verified: row content identical before/after click; `window.open`
+    not called; row values unchanged).
+  - Wired URLs (fixture verbatim): Jito `https://www.jito.network/staking`,
+    Marinade `https://marinade.finance`, Jupiter `https://jup.ag`, Kamino
+    `https://app.kamino.finance`, Orca `https://www.orca.so`, Meteora
+    `https://app.meteora.ag`. Liquid Assets remains Manage-free.
+
 ### Step 2 intentional stubs
 
 These render per spec but have no behavior yet (explicitly deferred):

@@ -52,9 +52,10 @@ export interface StakedAssetRow {
   display_value: string;
   estimated_apy: EstimatedCell;
   estimated_earnings: EstimatedCell;
-  /** Manage handoff label from the fixture (e.g. "Manage on Jito"). Rendered
-   *  as a deferred/disabled control this step — no handoff is wired yet. */
+  /** Manage handoff label from the fixture (e.g. "Manage on Jito"). */
   action_label: string;
+  /** Fixture `action.destination_url` if valid; null keeps Manage disabled. */
+  action_href: string | null;
 }
 
 export interface StakedSection {
@@ -84,9 +85,10 @@ export interface YieldStrategyRow {
   estimated_earnings: EstimatedCell;
   /** Visible risk-note text from the fixture (e.g. "Lending risk"). */
   risk_note_label: string;
-  /** Manage handoff label from the fixture (e.g. "Manage on Kamino"). Rendered
-   *  as a deferred/disabled control this step — no handoff is wired yet. */
+  /** Manage handoff label from the fixture (e.g. "Manage on Kamino"). */
   action_label: string;
+  /** Fixture `action.destination_url` if valid; null keeps Manage disabled. */
+  action_href: string | null;
 }
 
 export interface YieldSection {

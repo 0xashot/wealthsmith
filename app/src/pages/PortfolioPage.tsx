@@ -59,6 +59,14 @@ export default function PortfolioPage({ pushToast, onNavigate, onDisconnect }: P
     onDisconnect();
   };
 
+  // Review-only Manage handoff: the anchor itself opens the protocol in a new
+  // tab (fixture URL, target=_blank, rel=noopener noreferrer). Here we only show
+  // the approved safe toast — no execution, signature, fund movement, completion,
+  // or portfolio/row state change. Same approved string the Dashboard uses.
+  const onManageHandoff = () => {
+    pushToast(connected.transitions.open_protocol_handoff.copy.toast);
+  };
+
   const openAskSmithAi = () => setRightZone("ask_smith_ai");
   const closeAskSmithAi = () => {
     setRightZone("none");
@@ -96,9 +104,8 @@ export default function PortfolioPage({ pushToast, onNavigate, onDisconnect }: P
             segments={p.deployment.segments}
           />
           <LiquidAssetsSection section={p.liquid} />
-          <StakedAssetsSection section={p.staked} />
-          <YieldStrategiesSection section={p.yield} />
-          {/* Next step: live Manage protocol handoff links (review-only). */}
+          <StakedAssetsSection section={p.staked} onManage={onManageHandoff} />
+          <YieldStrategiesSection section={p.yield} onManage={onManageHandoff} />
         </main>
 
         {smithOpen && (

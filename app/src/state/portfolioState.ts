@@ -28,6 +28,22 @@ const y = yieldFixture as any;
 const lq = liquidFixture as any;
 const st = stakedFixture as any;
 
+/**
+ * Resolve a fixture Manage handoff destination URL. Only http(s) URLs from the
+ * fixture are accepted; anything missing/invalid returns null so the row keeps
+ * a disabled Manage (fixture-approved deferred state). Missing URLs are
+ * reported — never invented (rules/protocol-selection-rules.md).
+ */
+function resolveActionHref(action: any, rowId: string): string | null {
+  const url = action?.destination_url;
+  if (typeof url === "string" && /^https?:\/\//.test(url)) return url;
+  console.error(
+    `[design-system] Manage action for row "${rowId}" has no valid destination_url; ` +
+      "keeping Manage disabled (no URL invented)."
+  );
+  return null;
+}
+
 const liquidRows: LiquidAssetRow[] = lq.table.rows.map((r: any) => ({
   id: r.id,
   asset: { symbol: r.asset.symbol, name: r.asset.name, icon: r.asset.icon },
@@ -55,6 +71,7 @@ const stakedRows: StakedAssetRow[] = st.table.rows.map((r: any) => ({
     available: r.estimated_earnings.status === "available",
   },
   action_label: r.action.label,
+  action_href: resolveActionHref(r.action, r.id),
 }));
 
 // Yield-strategy rows are rendered from the yield fixture only. Assets is the
@@ -76,6 +93,7 @@ const yieldRows: YieldStrategyRow[] = y.table.rows.map((r: any) => ({
   },
   risk_note_label: r.risk_note.label,
   action_label: r.action.label,
+  action_href: resolveActionHref(r.action, r.id),
 }));
 
 export const portfolioState: PortfolioPageState = {

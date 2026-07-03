@@ -8,10 +8,11 @@
  * unavailable APY/earnings show the approved "Unavailable" state (never
  * invented). Risk notes render as visible text, never color-only.
  *
- * Action (Manage) is DEFERRED this step: the fixture provides Manage handoffs
- * (Kamino/Orca/Meteora), but the external protocol handoff is out of scope
- * here, so the control is rendered disabled/non-functional (no navigation, no
- * window.open, no transaction, no signature, no completion). Wired up later.
+ * Action (Manage) is a review-only external handoff (ManageHandoff): where the
+ * fixture provides a valid destination URL it opens the protocol in a new tab
+ * and toasts — it never executes a transaction, requests a signature, moves
+ * funds, marks anything complete, or changes row state. URL-less rows stay
+ * disabled.
  */
 import type { YieldSection, YieldStrategyAsset, EstimatedCell } from "../types/portfolio";
 import PortfolioTable, {
@@ -19,6 +20,7 @@ import PortfolioTable, {
   type PortfolioRow,
 } from "./PortfolioTable";
 import ProtocolIdentity from "./ProtocolIdentity";
+import ManageHandoff from "./ManageHandoff";
 import { resolveTokenIcon } from "../state/iconRegistry";
 
 const COLUMNS: PortfolioColumn[] = [
@@ -67,7 +69,13 @@ function StrategyAssets({ assets }: { assets: YieldStrategyAsset[] }) {
   );
 }
 
-export default function YieldStrategiesSection({ section }: { section: YieldSection }) {
+interface Props {
+  section: YieldSection;
+  /** Reports a Manage handoff click upward (toast only — no state change). */
+  onManage: () => void;
+}
+
+export default function YieldStrategiesSection({ section, onManage }: Props) {
   const rows: PortfolioRow[] = section.rows.map((r) => ({
     id: r.id,
     cells: [
@@ -78,11 +86,14 @@ export default function YieldStrategiesSection({ section }: { section: YieldSect
       estimated(r.estimated_apy),
       estimated(r.estimated_earnings),
       <span className="portfolio-table__risk">{r.risk_note_label}</span>,
-      // Deferred Manage handoff: disabled, non-functional. No href/onClick,
-      // so nothing opens, executes, signs, or completes this step.
-      <button type="button" className="portfolio-table__manage" disabled>
-        {r.action_label}
-      </button>,
+      // Review-only external handoff: opens the protocol in a new tab + toasts.
+      // Accessible name says what opens and where (strategy + protocol).
+      <ManageHandoff
+        label={r.action_label}
+        href={r.action_href}
+        accessibleName={`Manage ${r.strategy_label} on ${r.protocol.label} in a new tab`}
+        onOpen={onManage}
+      />,
     ],
   }));
 
