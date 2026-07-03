@@ -185,6 +185,39 @@ never modified by it.
     `role="region"` + `aria-labelledby` referencing the heading, removing
     the duplicate accessible name.
 
+## Demo Mode slice
+
+- **Demo Step 1 (complete):** demo state/data layer — `state/demoDashboardState.ts`
+  (screen chrome from `examples/dashboard/dashboard-demo-state.json`; the
+  dashboard alert + each card's protocol_decision/APY/disabled-reason enriched
+  from the demo suggestion output `examples/demo-mode/demo-suggestions.json`,
+  a documented source relationship), `state/demoSmithAi.ts` (demo-aware
+  approved responses + demo fallback), demo copy constants, demo types.
+- **Demo Step 2 (complete):** minimal 3-mode app state machine + DemoBanner.
+  - `App.tsx` owns `mode: connected | demo | disconnected` and the shared
+    ToastHost. Local fixture-driven machine only — no wallet adapters, no
+    routing, no live Smith AI.
+  - `GlobalNav` is now mode-driven: connected → wallet pill + Ask Smith AI;
+    demo → Ask Smith AI only (no pill; Connect Wallet lives in the banner);
+    disconnected → Connect Wallet + Try Demo Mode. Wallet menu (Copy Address +
+    Disconnect) only in connected.
+  - `AskSmithAiPanel` was parameterized to a mode-agnostic `content` prop
+    (`SmithAiContent`); connected content assembled in `state/connectedSmithAi.ts`
+    (identical to before), demo content in `state/demoSmithAi.ts`. This makes
+    the demo Ask Smith AI functional and demo-aware (folding the previously
+    planned "demo Smith AI panel" step in here so the nav's Ask Smith AI is
+    not a dead control).
+  - `DemoBanner` (announcement.md): full-width above Global Nav, `role="status"`
+    `aria-live="polite"`, not dismissible, Exit Demo + Connect Wallet.
+  - `DemoDashboardPage` is the minimal demo shell (banner + demo nav + demo
+    page header + demo rail header + working demo Ask Smith AI). Demo left
+    cards / charts / suggestion cards are the next step; the rail shows its
+    approved header only for now.
+  - Transitions verified: connected↔disconnected, disconnected→demo (Try Demo),
+    demo→disconnected (Exit Demo, "Exited Demo Mode" toast), demo→connected
+    (Connect Wallet, "Wallet connected" toast). No `demo_` suggestion ids
+    appear in connected mode — demo never persists into real mode.
+
 ### Step 2 intentional stubs
 
 These render per spec but have no behavior yet (explicitly deferred):

@@ -743,6 +743,94 @@
   cursor: pointer;
 }
 
+/* Try Demo Mode — secondary (outline) per components/global-nav.md */
+.global-nav__try-demo {
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-control-md);
+  border: 1px solid var(--color-action-secondary-stroke-default);
+  background: transparent;
+  color: var(--color-action-secondary-text-default);
+  font: var(--typography-button-md-font);
+  cursor: pointer;
+}
+
+.global-nav__try-demo:hover {
+  background: var(--color-action-secondary-background-hover);
+}
+
+.global-nav__try-demo:focus-visible,
+.global-nav__connect:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+/* ---------- Step 2: Demo Mode banner (components/announcement.md) ---------- */
+
+/* full-width, above Global Nav; persistent; brand background + inverse text */
+.demo-banner {
+  width: 100%;
+  background: var(--color-action-primary-background-default);
+  color: var(--color-text-inverse);
+  z-index: var(--zIndex-feedback-criticalAlert);
+}
+
+.demo-banner__content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-md);
+  max-width: var(--responsive-layout-container-wide);
+  margin: 0 auto;
+  padding: var(--spacing-inline-gap-md) var(--spacing-page-padding-desktop);
+}
+
+.demo-banner__text {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+}
+
+.demo-banner__title {
+  font: var(--typography-label-md-font);
+}
+
+.demo-banner__description {
+  color: var(--color-text-inverse);
+  opacity: 0.9;
+}
+
+.demo-banner__actions {
+  display: inline-flex;
+  gap: var(--spacing-inline-gap-sm);
+  flex-shrink: 0;
+}
+
+.demo-banner__action {
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-control-md);
+  font: var(--typography-button-sm-font);
+  cursor: pointer;
+}
+
+/* primary (Exit Demo): solid light chip on the brand background */
+.demo-banner__action--primary {
+  border: none;
+  background: var(--color-surface-card);
+  color: var(--color-text-primary);
+}
+
+/* secondary (Connect Wallet): outline on the brand background */
+.demo-banner__action--secondary {
+  border: 1px solid var(--color-text-inverse);
+  background: transparent;
+  color: var(--color-text-inverse);
+}
+
+.demo-banner__action:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
 /* ---------- Step 3: toasts (components/toast.md) ---------- */
 
 .toast-host {

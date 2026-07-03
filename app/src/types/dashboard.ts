@@ -19,9 +19,11 @@ export interface GlobalNavState {
   logo: { asset: string; width_px: number; height_px: number; alt: string };
   nav_items: NavItem[];
   right_actions: {
-    try_demo_mode: { visible: boolean };
-    connect_wallet: { visible: boolean };
-    wallet_pill: { visible: boolean; label: string; action: string };
+    // `label`/`action` are optional so both the connected and demo fixtures
+    // fit (the demo fixture marks these actions not-visible with no label).
+    try_demo_mode: { visible: boolean; label?: string; action?: string };
+    connect_wallet: { visible: boolean; label?: string; action?: string };
+    wallet_pill: { visible: boolean; label?: string; action?: string; value?: string | null };
     ask_smith_ai: {
       visible: boolean;
       label: string;
@@ -174,6 +176,21 @@ export interface SmithAiState {
   approved_sample_response: string;
 }
 
+/**
+ * Content injected into the (mode-agnostic) Ask Smith AI panel. Both connected
+ * and demo modes build this from their own approved fixtures; the panel renders
+ * it and generates nothing. `responses` maps a prompt to its approved answer;
+ * anything not in the map falls back to `fallback`.
+ */
+export interface SmithAiContent {
+  panelLabel: string;
+  entryLabel: string;
+  opener: string;
+  prompts: string[];
+  responses: Record<string, string>;
+  fallback: string;
+}
+
 export interface StateTransitions {
   open_protocol_handoff: { copy: { toast: string } };
   disconnect_wallet: { copy: { toast: string; helper: string } };
@@ -191,5 +208,71 @@ export interface DashboardPageState {
   right_rail: RightRailState;
   smith_ai: SmithAiState;
   transitions: StateTransitions;
+  accessibility: AccessibilityState;
+}
+
+/* ---------- Demo Mode (examples/demo-mode/*, rules/demo-mode-rules.md) ---------- */
+
+/** Wallet in Demo Mode: always disconnected, never a pill (no address). */
+export interface DemoWalletState {
+  status: "disconnected";
+  show_wallet_pill: false;
+}
+
+/** Announcement banner shown above Global Nav while demo data is active. */
+export interface DemoBannerState {
+  visible: boolean;
+  title: string;
+  description: string;
+  primary_action: { label: string; action: "exit_demo" };
+  secondary_action: { label: string; action: "open_connect_wallet_modal" };
+  dismissible: false;
+  accessibility_label: string;
+}
+
+/**
+ * Demo Smith AI panel context. Unlike the connected SmithAiState there is no
+ * single approved_sample_response — demo responses come from the demo
+ * suggestion output and demo-smith-ai-responses.md via state/demoSmithAi.ts.
+ */
+export interface DemoSmithAiState {
+  available: boolean;
+  entry_label: string;
+  context_mode: "demo";
+  suggested_prompts: string[];
+  required_demo_phrasing: string[];
+  must_not_say: string[];
+}
+
+export interface DemoStateTransitions {
+  exit_demo: { copy: { toast: string } };
+  connect_wallet: { copy: { helper: string } };
+}
+
+/**
+ * Demo Dashboard page state.
+ *
+ * Screen chrome (nav, banner, header, snapshot, charts, rail cards, Smith AI,
+ * accessibility) comes from examples/demo-mode/dashboard-demo-state.json.
+ * `dashboard_alert` and each card's `protocol_decision` are rendered from the
+ * demo suggestion output (examples/demo-mode/demo-suggestions.json) — the
+ * canonical demo suggestion source — not invented by the page.
+ */
+export interface DemoDashboardPageState {
+  mode: "demo";
+  is_sample_data: true;
+  demo_banner: DemoBannerState;
+  global_nav: GlobalNavState;
+  wallet: DemoWalletState;
+  page_header: PageHeaderState;
+  financial_snapshot: { title: string; metrics: SnapshotMetric[] };
+  safety_buffer: SafetyBufferState;
+  projected_growth: ProjectedGrowthState;
+  allocation: AllocationState;
+  /** From demo-suggestions.json (demo Top Pick / suggestion output). */
+  dashboard_alert: DashboardAlertState;
+  right_rail: RightRailState;
+  smith_ai: DemoSmithAiState;
+  transitions: DemoStateTransitions;
   accessibility: AccessibilityState;
 }

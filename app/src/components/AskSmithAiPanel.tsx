@@ -2,27 +2,15 @@
  * AskSmithAiPanel — Ask Smith AI right-panel shell per
  * patterns/dashboard-layout.md (Mode 3) and rules/smith-ai-rules.md.
  *
- * Explain-only shell: every response shown here is fixture-approved static
- * copy. There is no live generation, no recommendation creation, no Top Pick
- * or protocol selection, and no execution of any kind.
- *
- * Response sources:
- * - Initial response + suggested prompts:
- *   examples/dashboard/dashboard-connected-wallet-state.json (smith_ai)
- * - Locked-yield prompt:
- *   examples/suggestions/suggestions-buffer-underfunded.json
- *   (locked_usdc_yield.smith_ai_explanation.approved_short_response)
- * - Jupiter handoff prompt:
- *   examples/protocol-handoffs/protocol-jupiter-swap.json
- *   (smith_ai_behavior.approved_response)
- * - Free-form input: approved uncertainty fallback from
- *   content/smith-ai-copy.md — never a generated answer.
+ * Explain-only, mode-agnostic shell: all copy comes from the injected
+ * `content` (built by the caller from approved fixtures — connected or demo).
+ * There is NO live generation: suggested prompts map to approved responses,
+ * and any other input returns the approved fallback. No recommendation
+ * creation, no Top Pick or protocol selection, no execution of any kind.
  */
 import { useEffect, useRef, useState } from "react";
-import type { SmithAiState } from "../types/dashboard";
-import { SMITH_CLOSE_LABEL, SMITH_FALLBACK, SMITH_SAFETY_NOTE } from "../state/approvedCopy";
-import suggestionsFixture from "../../../examples/suggestions/suggestions-buffer-underfunded.json";
-import protocolFixture from "../../../examples/protocol-handoffs/protocol-jupiter-swap.json";
+import type { SmithAiContent } from "../types/dashboard";
+import { SMITH_CLOSE_LABEL, SMITH_SAFETY_NOTE } from "../state/approvedCopy";
 import closeUrl from "../../../assets/icons/ui/close.svg";
 import thumbsUpUrl from "../../../assets/icons/ui/thumbs-up.svg";
 import thumbsDownUrl from "../../../assets/icons/ui/thumbs-down.svg";
@@ -33,41 +21,24 @@ interface Entry {
 }
 
 interface Props {
-  smithAi: SmithAiState;
-  panelLabel: string;
+  content: SmithAiContent;
   onClose: () => void;
 }
 
-const lockedSuggestion = (suggestionsFixture as any).suggestions.find(
-  (sugg: any) => sugg.id === "locked_usdc_yield"
-);
-
-export default function AskSmithAiPanel({ smithAi, panelLabel, onClose }: Props) {
+export default function AskSmithAiPanel({ content, onClose }: Props) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const [input, setInput] = useState("");
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
   const [entries, setEntries] = useState<Entry[]>([
-    { prompt: null, response: smithAi.approved_sample_response },
+    { prompt: null, response: content.opener },
   ]);
 
   useEffect(() => {
     closeRef.current?.focus();
   }, []);
 
-  /**
-   * Fixture-approved responses only, keyed by the fixture's suggested
-   * prompts. Anything else gets the approved uncertainty fallback.
-   */
-  const promptResponses: Record<string, string> = {
-    "Why is Safety Buffer the Top Pick?": smithAi.approved_sample_response,
-    "Why is the yield suggestion locked?":
-      lockedSuggestion?.smith_ai_explanation?.approved_short_response ?? SMITH_FALLBACK,
-    "What happens if I click Review on Jupiter?":
-      (protocolFixture as any).smith_ai_behavior?.approved_response ?? SMITH_FALLBACK,
-  };
-
   const answer = (prompt: string) => {
-    const response = promptResponses[prompt] ?? SMITH_FALLBACK;
+    const response = content.responses[prompt] ?? content.fallback;
     setEntries((prev) => [...prev, { prompt, response }]);
   };
 
@@ -80,7 +51,7 @@ export default function AskSmithAiPanel({ smithAi, panelLabel, onClose }: Props)
   };
 
   return (
-    <aside className="smith-panel" aria-label={panelLabel}>
+    <aside className="smith-panel" aria-label={content.panelLabel}>
       <div className="smith-panel__header">
         <h2 className="smith-panel__title">Ask Smith AI</h2>
         <button
@@ -125,7 +96,7 @@ export default function AskSmithAiPanel({ smithAi, panelLabel, onClose }: Props)
       </div>
 
       <div className="smith-panel__quick-actions">
-        {smithAi.suggested_prompts.map((prompt) => (
+        {content.prompts.map((prompt) => (
           <button
             key={prompt}
             type="button"
@@ -143,8 +114,8 @@ export default function AskSmithAiPanel({ smithAi, panelLabel, onClose }: Props)
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={smithAi.entry_label}
-          aria-label={smithAi.entry_label}
+          placeholder={content.entryLabel}
+          aria-label={content.entryLabel}
         />
       </form>
 

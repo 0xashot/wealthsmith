@@ -67,3 +67,27 @@ export const SMITH_FALLBACK =
 
 /** patterns/dashboard-layout.md — accessibility example */
 export const SMITH_CLOSE_LABEL = "Close Ask Smith AI panel";
+
+/* ---------- Demo Mode (verbatim from demo fixtures / demo-mode-rules.md) ---------- */
+
+/** components/global-nav.md / rules/demo-mode-rules.md — primary CTA */
+export const TRY_DEMO_MODE = "Try Demo Mode";
+
+/** dashboard-demo-state.json demo_banner.title (also announcement.md) */
+export const DEMO_BANNER_TITLE = "You’re in demo mode.";
+
+/** dashboard-demo-state.json demo_banner.description */
+export const DEMO_BANNER_DESCRIPTION =
+  "This is a sample portfolio. Connect your wallet to personalize WealthSmith with your real portfolio.";
+
+/** dashboard-demo-state.json demo_banner.actions[0].label */
+export const DEMO_BANNER_EXIT = "Exit Demo";
+
+/** dashboard-demo-state.json demo_banner.actions[1].label */
+export const DEMO_BANNER_CONNECT = "Connect Wallet";
+
+/** dashboard-demo-state.json demo_banner.accessibility.label */
+export const DEMO_BANNER_ARIA = "Demo Mode is active. This is a sample portfolio.";
+
+/** dashboard-demo-state.json state_transitions.exit_demo.copy.toast */
+export const DEMO_EXIT_TOAST = "Exited Demo Mode";

@@ -1,22 +1,22 @@
 /**
- * GlobalNav — renders wallet-connected / disconnected variants per
- * components/global-nav.md and rules/wallet-and-custody-rules.md.
+ * GlobalNav — mode-driven top navigation per components/global-nav.md and
+ * rules/wallet-and-custody-rules.md. Pure renderer; decides nothing.
  *
- * Pure renderer: wallet state, nav items, and action visibility all come
- * from page state props. The component decides nothing.
+ * Right actions by mode:
+ * - connected:    wallet pill (menu) + Ask Smith AI
+ * - demo:         Ask Smith AI only (no wallet pill; the Connect Wallet CTA
+ *                 lives in the demo banner outside the nav)
+ * - disconnected: Connect Wallet + Try Demo Mode (no wallet pill)
  *
- * Wallet pill menu (components/menu-popover.md, checklist §5.4):
- * - Items: Copy Address (address is available in state) and Disconnect
- *   Wallet only. No Transfer Funds / Export Key / Recover Wallet.
- * - Copying and disconnecting are read-only app-state actions: no funds
- *   move, no signature is requested, no transaction exists.
- * - Keyboard: Escape closes and refocuses the pill, arrows move between
- *   items, outside click closes.
+ * Wallet pill menu (components/menu-popover.md, checklist §5.4): Copy Address
+ * + Disconnect Wallet only. Copying and disconnecting are read-only app-state
+ * actions — no funds move, no signature, no transaction.
  */
 import { useEffect, useRef, useState } from "react";
 import type { GlobalNavState, WalletState } from "../types/dashboard";
 import {
   CONNECT_WALLET_LABEL,
+  TRY_DEMO_MODE,
   WALLET_MENU_COPY_ADDRESS,
   WALLET_MENU_DISCONNECT,
   WALLET_MENU_HELPER,
@@ -28,41 +28,50 @@ const WALLET_ICONS: Record<string, string> = {
   phantom: phantomIconUrl,
 };
 
+export type NavMode = "connected" | "demo" | "disconnected";
+
 interface Props {
+  mode: NavMode;
   nav: GlobalNavState;
-  wallet: WalletState;
-  connected: boolean;
   navLabel: string;
-  walletPillLabel: string;
   askSmithAiLabel: string;
-  askButtonRef: React.RefObject<HTMLButtonElement>;
-  onCopyAddress: () => void;
-  onDisconnect: () => void;
-  onConnectWallet: () => void;
-  onOpenAskSmithAi: () => void;
+  askAvailable: boolean;
+  /** connected only */
+  wallet?: WalletState;
+  walletPillLabel?: string;
+  askButtonRef?: React.RefObject<HTMLButtonElement>;
+  onCopyAddress?: () => void;
+  onDisconnect?: () => void;
+  onConnectWallet?: () => void;
+  onTryDemo?: () => void;
+  onOpenAskSmithAi?: () => void;
 }
 
 export default function GlobalNav({
+  mode,
   nav,
-  wallet,
-  connected,
   navLabel,
-  walletPillLabel,
   askSmithAiLabel,
+  askAvailable,
+  wallet,
+  walletPillLabel,
   askButtonRef,
   onCopyAddress,
   onDisconnect,
   onConnectWallet,
+  onTryDemo,
   onOpenAskSmithAi,
 }: Props) {
-  const { right_actions } = nav;
-  const walletIcon = WALLET_ICONS[wallet.provider_id];
+  const showWalletPill = mode === "connected" && !!wallet?.show_wallet_pill;
+  const showAskSmithAi = (mode === "connected" || mode === "demo") && askAvailable;
+  const showConnectWallet = mode === "disconnected";
+  const showTryDemo = mode === "disconnected";
+  const walletIcon = wallet ? WALLET_ICONS[wallet.provider_id] : undefined;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const pillRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // outside click closes the menu (components/menu-popover.md)
   useEffect(() => {
     if (!menuOpen) return;
     const onPointerDown = (e: PointerEvent) => {
@@ -77,12 +86,9 @@ export default function GlobalNav({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [menuOpen]);
 
-  // focus first menu item on open
   useEffect(() => {
     if (menuOpen) {
-      menuRef.current
-        ?.querySelector<HTMLButtonElement>('[role="menuitem"]')
-        ?.focus();
+      menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
     }
   }, [menuOpen]);
 
@@ -133,8 +139,7 @@ export default function GlobalNav({
             <li key={item.id}>
               <a
                 className={
-                  "global-nav__item" +
-                  (item.active ? " global-nav__item--active" : "")
+                  "global-nav__item" + (item.active ? " global-nav__item--active" : "")
                 }
                 href={item.href}
                 aria-current={item.active ? "page" : undefined}
@@ -146,7 +151,7 @@ export default function GlobalNav({
         </ul>
 
         <div className="global-nav__actions">
-          {connected && right_actions.wallet_pill.visible && (
+          {showWalletPill && wallet && (
             <div className="global-nav__wallet" onKeyDown={onMenuKeyDown}>
               <button
                 ref={pillRef}
@@ -160,7 +165,7 @@ export default function GlobalNav({
                 {walletIcon && (
                   <img src={walletIcon} alt="" width={20} height={20} aria-hidden="true" />
                 )}
-                <span>{right_actions.wallet_pill.label}</span>
+                <span>{nav.right_actions.wallet_pill.label}</span>
               </button>
               {menuOpen && (
                 <div ref={menuRef} className="wallet-menu" role="menu">
@@ -171,7 +176,7 @@ export default function GlobalNav({
                       className="wallet-menu__item"
                       onClick={() => {
                         closeMenu(true);
-                        onCopyAddress();
+                        onCopyAddress?.();
                       }}
                     >
                       {WALLET_MENU_COPY_ADDRESS}
@@ -183,7 +188,7 @@ export default function GlobalNav({
                     className="wallet-menu__item wallet-menu__item--destructive"
                     onClick={() => {
                       closeMenu(false);
-                      onDisconnect();
+                      onDisconnect?.();
                     }}
                   >
                     {WALLET_MENU_DISCONNECT}
@@ -193,7 +198,16 @@ export default function GlobalNav({
               )}
             </div>
           )}
-          {!connected && (
+          {showTryDemo && (
+            <button
+              type="button"
+              className="global-nav__try-demo"
+              onClick={onTryDemo}
+            >
+              {TRY_DEMO_MODE}
+            </button>
+          )}
+          {showConnectWallet && (
             <button
               type="button"
               className="global-nav__connect"
@@ -202,7 +216,7 @@ export default function GlobalNav({
               {CONNECT_WALLET_LABEL}
             </button>
           )}
-          {connected && right_actions.ask_smith_ai.visible && (
+          {showAskSmithAi && (
             <button
               ref={askButtonRef}
               type="button"
@@ -210,7 +224,7 @@ export default function GlobalNav({
               aria-label={askSmithAiLabel}
               onClick={onOpenAskSmithAi}
             >
-              {right_actions.ask_smith_ai.label}
+              {nav.right_actions.ask_smith_ai.label}
             </button>
           )}
         </div>
