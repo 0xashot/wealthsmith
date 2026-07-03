@@ -18,6 +18,23 @@ export default function AllocationChart({ allocation }: { allocation: Allocation
         ?.value_percent ?? null,
   }));
 
+  // Accessible text summary from fixture values only (same pattern as
+  // ProjectedGrowthChart: role="img" + aria-label so the chart is read as
+  // one described image, not color-only bars). components/chart.md
+  // (Accessibility).
+  const summary =
+    `${allocation.title}. ` +
+    groups
+      .map(
+        (g) =>
+          `${g.label}: current ${fmtPct(g.current)}` +
+          (g.recommended !== null
+            ? `, recommended ${fmtPct(g.recommended)}`
+            : ", recommended unavailable") +
+          "."
+      )
+      .join(" ");
+
   return (
     <section className="card" aria-label={allocation.title}>
       {/* per components/chart.md Chart Container: description directly under
@@ -25,7 +42,7 @@ export default function AllocationChart({ allocation }: { allocation: Allocation
       <h2 className="card__title">{allocation.title}</h2>
       <p className="card__caption">{allocation.display.caption}</p>
 
-      <div className="allocation__groups">
+      <div className="allocation__groups" role="img" aria-label={summary}>
         {groups.map((g) => (
           <div key={g.label} className="allocation__group">
             <span className="allocation__group-label">{g.label}</span>

@@ -163,6 +163,27 @@ never modified by it.
     color inside any disabled button (currentColor follows
     `color.text.disabled`). Asset files untouched. Supersedes the earlier
     `<img>` external-link icon.
+- **Step 3.4 (complete):** QA polish P1/P3/P4 (app-only, no source-of-truth
+  changes; no financial/suggestion/Top Pick/protocol/Smith AI behavior
+  changed).
+  - **P1:** the Top Pick "Review" button is no longer inert. It calls a page
+    `onReviewSuggestion` handler that scrolls to and focuses the
+    suggestion's on-dashboard detail area (read-only). For the buffer Top
+    Pick that is the Safety Buffer card (`#safety-buffer`, `tabIndex={-1}`),
+    matching the suggestions fixture's `action.target = "safety_buffer_detail"`.
+    No execution, signature, completion, route, or Top Pick change
+    (verified: Top Pick count stays 1 after click).
+  - **P3:** AllocationChart now exposes an accessible summary via
+    `role="img"` + `aria-label` on the bars container (same pattern as
+    ProjectedGrowthChart), built from fixture values only:
+    "Current vs Recommended Allocation. Crypto: current 89.3%, recommended
+    60%. Stables: current 10.7%, recommended 40%." Not color-only; values
+    unchanged.
+  - **P4:** AlertBanner is static on the connected dashboard load, so it
+    stays a labeled region (no aria-live — avoids noise and is unreliable
+    for a conditionally mounted node). Changed `aria-label={title}` to
+    `role="region"` + `aria-labelledby` referencing the heading, removing
+    the duplicate accessible name.
 
 ### Step 2 intentional stubs
 

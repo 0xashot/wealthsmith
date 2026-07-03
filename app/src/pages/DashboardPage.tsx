@@ -19,6 +19,7 @@
  */
 import { useRef, useState } from "react";
 import { dashboardState as s } from "../state/dashboardState";
+import type { SuggestionCardState } from "../types/dashboard";
 import {
   ALLOCATION_EMPTY,
   CONNECT_WALLET_LABEL,
@@ -96,6 +97,21 @@ export default function DashboardPage() {
   // noreferrer). This handler only shows the approved non-execution toast.
   const onExternalHandoff = () => {
     pushToast(s.transitions.open_protocol_handoff.copy.toast);
+  };
+
+  // "Review" on a non-external, non-locked suggestion (the buffer Top Pick):
+  // move to that suggestion's on-dashboard detail area, read-only. No
+  // execution, signature, completion, or Top Pick change. View-routing only:
+  // the buffer suggestion's detail lives in the Safety Buffer card; anything
+  // else focuses the card itself.
+  const onReviewSuggestion = (card: SuggestionCardState) => {
+    const targetId =
+      card.category === "safety_buffer" ? "safety-buffer" : `suggestion-${card.id}`;
+    const el = document.getElementById(targetId);
+    if (el) {
+      el.scrollIntoView({ block: "nearest" });
+      (el as HTMLElement).focus();
+    }
   };
 
   const openAskSmithAi = () => setRailMode("ask_smith_ai");
@@ -195,6 +211,7 @@ export default function DashboardPage() {
             rail={s.right_rail}
             railLabel={s.accessibility.right_rail_label}
             onExternalHandoff={onExternalHandoff}
+            onReview={onReviewSuggestion}
           />
         )}
       </div>

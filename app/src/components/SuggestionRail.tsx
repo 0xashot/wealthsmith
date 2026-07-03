@@ -12,9 +12,15 @@ interface Props {
   rail: RightRailState;
   railLabel: string;
   onExternalHandoff?: (card: SuggestionCardState) => void;
+  onReview?: (card: SuggestionCardState) => void;
 }
 
-export default function SuggestionRail({ rail, railLabel, onExternalHandoff }: Props) {
+export default function SuggestionRail({
+  rail,
+  railLabel,
+  onExternalHandoff,
+  onReview,
+}: Props) {
   return (
     <aside className="suggestion-rail" aria-label={railLabel}>
       <div className="suggestion-rail__header">
@@ -23,7 +29,12 @@ export default function SuggestionRail({ rail, railLabel, onExternalHandoff }: P
       </div>
       <div className="suggestion-rail__cards">
         {rail.cards.map((card) => (
-          <SuggestionCard key={card.id} card={card} onExternalHandoff={onExternalHandoff} />
+          <SuggestionCard
+            key={card.id}
+            card={card}
+            onExternalHandoff={onExternalHandoff}
+            onReview={onReview}
+          />
         ))}
       </div>
     </aside>

@@ -13,7 +13,9 @@ export default function SafetyBufferCard({ buffer }: { buffer: SafetyBufferState
   const pct = buffer.progress.value_percent;
 
   return (
-    <section className="card" aria-label={buffer.title}>
+    // id + tabIndex: this card is the on-dashboard detail area for the
+    // Safety Buffer suggestion; the Top Pick "Review" action focuses it.
+    <section id="safety-buffer" tabIndex={-1} className="card" aria-label={buffer.title}>
       <h2 className="card__title">{buffer.title}</h2>
       <div className="buffer__values">
         <span className="metric__value metric__value--primary">

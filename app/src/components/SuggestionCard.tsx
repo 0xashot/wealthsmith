@@ -86,9 +86,15 @@ interface Props {
   card: SuggestionCardState;
   /** Reports an external handoff click upward (toast only — no state change). */
   onExternalHandoff?: (card: SuggestionCardState) => void;
+  /**
+   * Non-external, non-locked "Review" click. Navigates to the suggestion's
+   * on-dashboard detail area (read-only): no execution, no signature, no
+   * completion, no Top Pick change.
+   */
+  onReview?: (card: SuggestionCardState) => void;
 }
 
-export default function SuggestionCard({ card, onExternalHandoff }: Props) {
+export default function SuggestionCard({ card, onExternalHandoff, onReview }: Props) {
   const isLocked = card.status === "locked";
   const isTopPick = card.is_top_pick === true;
   const isExternalHandoff =
@@ -157,7 +163,7 @@ export default function SuggestionCard({ card, onExternalHandoff }: Props) {
         <button
           type="button"
           className="suggestion-card__cta"
-          // Suggestion detail navigation is implemented in a later step.
+          onClick={() => onReview?.(card)}
         >
           {card.cta.label}
         </button>
