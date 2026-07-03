@@ -346,6 +346,29 @@ never modified by it.
   The fixture's `total_value_usd` (7500) remains the liquid-section total per
   the composed-view framing.
 
+- **Portfolio Step 3 (complete):** Staked Assets table.
+  `examples/portfolio/portfolio-staked-assets.json` rendered via the reusable
+  `PortfolioTable` with the fixture's own columns: Asset, Protocol, Type, Value,
+  Est. APY, Est. Earnings, Action. New `ProtocolIdentity` (protocol icon +
+  visible name) + `resolveProtocolIcon` (assets/icons/protocol/*; **no protocol
+  fallback in MVP** — a missing icon is reported and the name renders alone;
+  the token fallback is never reused for protocols). Est. APY / Est. Earnings
+  render the fixture's preformatted `display` verbatim; JupSOL's unavailable
+  APY/earnings show the approved "Unavailable" state (muted, never invented/$0).
+  Nothing computed — no APY, earnings, shares, balances, or percentages.
+  - **Manage/Action deferred:** the fixture provides Manage handoffs
+    (Jito/Marinade/Jupiter), but the external handoff is out of scope this step,
+    so the Action column renders a **disabled, non-functional** button showing
+    the fixture `action.label`. No href/onClick → nothing navigates, opens a
+    tab, executes, signs, or completes (verified: `window.open` not called on
+    click). It is wired up in the next step.
+  - **No fixture change (no pause needed):** the Staked fixture's
+    `portfolio_summary`/`portfolio_share_percent`/summary `display_portfolio_share`
+    are a standalone $12,000-subset scenario (Staked = 37.5%), but the Staked
+    table has **no Portfolio Share column**, so those fields are not rendered —
+    no rendered inconsistency exists. Only the $4,500 staked total is shown,
+    which is consistent with the composed $15,500 portfolio.
+
 ### Step 2 intentional stubs
 
 These render per spec but have no behavior yet (explicitly deferred):

@@ -33,6 +33,38 @@ export interface LiquidSection {
   empty: { title: string; description: string };
 }
 
+/** Est. APY / Est. Earnings cell: a preformatted string that is either the
+ *  approved value ("6.40%", "$128/yr est.") or the approved "Unavailable"
+ *  state. `available` drives muted styling only — the string is never
+ *  computed or invented (unavailable APY/earnings stay "Unavailable"). */
+export interface EstimatedCell {
+  display: string;
+  available: boolean;
+}
+
+export interface StakedAssetRow {
+  id: string;
+  asset: { symbol: string; name: string; icon: string };
+  protocol: { id: string; label: string; icon: string };
+  /** Position type label from the fixture (e.g. "Liquid Staking Token"). */
+  type_label: string;
+  /** Preformatted currency string from the fixture (e.g. "$2,000"). */
+  display_value: string;
+  estimated_apy: EstimatedCell;
+  estimated_earnings: EstimatedCell;
+  /** Manage handoff label from the fixture (e.g. "Manage on Jito"). Rendered
+   *  as a deferred/disabled control this step — no handoff is wired yet. */
+  action_label: string;
+}
+
+export interface StakedSection {
+  title: string;
+  description: string;
+  rows: StakedAssetRow[];
+  summary: { label: string; display_value: string };
+  empty: { title: string; description: string };
+}
+
 export interface PortfolioPageState {
   /** Canonical connected-wallet total (aligned with the Dashboard: $15,500). */
   total_value_usd: number;
@@ -42,4 +74,5 @@ export interface PortfolioPageState {
     segments: DeploymentSegment[];
   };
   liquid: LiquidSection;
+  staked: StakedSection;
 }

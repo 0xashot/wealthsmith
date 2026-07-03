@@ -15,6 +15,11 @@ const tokenIcons = import.meta.glob(
   { eager: true, query: "?url", import: "default" }
 ) as Record<string, string>;
 
+const protocolIcons = import.meta.glob(
+  "../../../assets/icons/protocol/*.svg",
+  { eager: true, query: "?url", import: "default" }
+) as Record<string, string>;
+
 export interface ResolvedIcon {
   url: string;
   fallback: boolean;
@@ -30,4 +35,24 @@ export function resolveTokenIcon(fixturePath: string): ResolvedIcon {
       "using fallback-token.svg (symbol/name still identifies the token)."
   );
   return { url: fallbackTokenUrl, fallback: true };
+}
+
+/**
+ * Resolve a fixture protocol-icon path (matched by filename) to a bundled URL.
+ *
+ * Per patterns/portfolio-overview.md + the fixture hard rules there is NO
+ * protocol fallback for MVP: a missing approved protocol icon is an
+ * implementation issue. We return `null` (the visible protocol name still
+ * identifies it) and report — we never invent an icon or reuse the token
+ * fallback for a protocol.
+ */
+export function resolveProtocolIcon(fixturePath: string): string | null {
+  const file = fixturePath.split("/").pop();
+  const entry = Object.entries(protocolIcons).find(([p]) => p.endsWith(`/${file}`));
+  if (entry) return entry[1];
+  console.error(
+    `[design-system] Missing approved protocol icon "${fixturePath}"; ` +
+      "rendering the protocol name text only (no protocol fallback icon in MVP)."
+  );
+  return null;
 }

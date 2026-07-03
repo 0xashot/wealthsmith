@@ -16,10 +16,16 @@
  */
 import yieldFixture from "../../../examples/portfolio/portfolio-yield-strategies.json";
 import liquidFixture from "../../../examples/portfolio/portfolio-liquid-assets.json";
-import type { LiquidAssetRow, PortfolioPageState } from "../types/portfolio";
+import stakedFixture from "../../../examples/portfolio/portfolio-staked-assets.json";
+import type {
+  LiquidAssetRow,
+  StakedAssetRow,
+  PortfolioPageState,
+} from "../types/portfolio";
 
 const y = yieldFixture as any;
 const lq = liquidFixture as any;
+const st = stakedFixture as any;
 
 const liquidRows: LiquidAssetRow[] = lq.table.rows.map((r: any) => ({
   id: r.id,
@@ -28,6 +34,26 @@ const liquidRows: LiquidAssetRow[] = lq.table.rows.map((r: any) => ({
   display_value: r.display_value,
   display_portfolio_share: r.display_portfolio_share,
   status: r.status,
+}));
+
+// Staked rows are rendered from the fixture only. Est. APY / Est. Earnings use
+// the fixture's preformatted `display` (available value or "Unavailable"); the
+// `status` flag drives muted styling only — no APY/earnings are computed.
+const stakedRows: StakedAssetRow[] = st.table.rows.map((r: any) => ({
+  id: r.id,
+  asset: { symbol: r.asset.symbol, name: r.asset.name, icon: r.asset.icon },
+  protocol: { id: r.protocol.id, label: r.protocol.label, icon: r.protocol.icon },
+  type_label: r.position_type.label,
+  display_value: r.display_value,
+  estimated_apy: {
+    display: r.estimated_apy.display,
+    available: r.estimated_apy.status === "available",
+  },
+  estimated_earnings: {
+    display: r.estimated_earnings.display,
+    available: r.estimated_earnings.status === "available",
+  },
+  action_label: r.action.label,
 }));
 
 export const portfolioState: PortfolioPageState = {
@@ -48,6 +74,19 @@ export const portfolioState: PortfolioPageState = {
     empty: {
       title: lq.copy.empty_title,
       description: lq.copy.empty_description,
+    },
+  },
+  staked: {
+    title: st.section.title,
+    description: st.section.description,
+    rows: stakedRows,
+    summary: {
+      label: st.table.summary_row.label,
+      display_value: st.table.summary_row.display_value,
+    },
+    empty: {
+      title: st.copy.empty_title,
+      description: st.copy.empty_description,
     },
   },
 };
