@@ -1366,3 +1366,167 @@
   font: var(--typography-body-md-font);
   color: var(--color-text-secondary);
 }
+
+/* ---------- Connect Wallet modal (components/modal.md, patterns/wallet-connection.md) ---------- */
+
+.modal-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--zIndex-overlay-scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-inline-gap-lg);
+  background: var(--color-overlay-scrim);
+  animation: modal-scrim-in var(--motion-overlay-enter-duration)
+    var(--motion-overlay-enter-easing);
+}
+
+.modal {
+  position: relative;
+  z-index: var(--zIndex-overlay-modal);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-modal-gap-default);
+  width: min(100%, 26rem);
+  padding: var(--spacing-modal-padding-desktop);
+  background: var(--color-surface-card);
+  border-radius: var(--radius-modal-default);
+  box-shadow: var(--shadow-overlay-modal);
+  animation: modal-in var(--motion-overlay-enter-duration)
+    var(--motion-overlay-enter-easing);
+}
+
+.modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-md);
+}
+
+.modal__title {
+  margin: 0;
+  font: var(--typography-heading-lg-font);
+  color: var(--color-text-primary);
+}
+
+.modal__close {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-inline-gap-sm);
+  border: none;
+  border-radius: var(--radius-control-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.modal__close:hover:not(:disabled) {
+  background: var(--color-action-secondary-background-hover);
+}
+
+.modal__close:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.modal__close:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.modal__intro {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}
+
+.modal__description {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.wallet-option-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.wallet-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-md);
+  padding: var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control-lg);
+  background: transparent;
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+.wallet-option:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-action-secondary-background-hover);
+}
+
+.wallet-option:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.wallet-option__icon {
+  flex-shrink: 0;
+  border-radius: var(--radius-control-pill);
+}
+
+.wallet-option__label {
+  flex-grow: 1;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-primary);
+}
+
+.wallet-option__status {
+  margin-left: auto;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.modal__security {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-primary);
+}
+
+@keyframes modal-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-overlay-enter-translate));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-scrim,
+  .modal {
+    animation: none;
+  }
+}

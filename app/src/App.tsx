@@ -13,11 +13,12 @@
  *
  * Toasts are owned here so they persist across mode switches.
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import DashboardPage from "./pages/DashboardPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import DemoDashboardPage from "./pages/DemoDashboardPage";
 import ToastHost, { type ToastData } from "./components/ToastHost";
+import ConnectWalletModal from "./components/ConnectWalletModal";
 import { dashboardState } from "./state/dashboardState";
 import { DEMO_EXIT_TOAST } from "./state/approvedCopy";
 import "./styles/dashboard.css";
@@ -29,7 +30,24 @@ export default function App() {
   const [mode, setMode] = useState<AppMode>("connected");
   const [activePage, setActivePage] = useState<ConnectedPage>("dashboard");
   const [toasts, setToasts] = useState<ToastData[]>([]);
+  const [connectModalOpen, setConnectModalOpen] = useState(false);
   const nextToastId = useRef(1);
+  const pageWrapRef = useRef<HTMLDivElement>(null);
+  // The element that opened the modal, so focus can return to it on close.
+  const connectTriggerRef = useRef<HTMLElement | null>(null);
+
+  // While the Connect Wallet modal is open, take the rest of the page out of the
+  // accessibility tree and tab order (native `inert`) so focus stays trapped in
+  // the modal and background content is hidden from assistive tech. On close,
+  // clear inert first, then return focus to the trigger (focusing while the
+  // trigger's ancestor is still inert would be a no-op).
+  useEffect(() => {
+    if (pageWrapRef.current) pageWrapRef.current.inert = connectModalOpen;
+    if (!connectModalOpen && connectTriggerRef.current) {
+      connectTriggerRef.current.focus?.();
+      connectTriggerRef.current = null;
+    }
+  }, [connectModalOpen]);
 
   const pushToast = (message: string, helper?: string) => {
     const id = nextToastId.current++;
@@ -62,10 +80,27 @@ export default function App() {
     setActivePage("dashboard");
     setMode("disconnected");
   };
-  const connectFromDemo = () => {
-    pushToast(dashboardState.wallet.copy.connected_toast);
+
+  // Connect Wallet now opens the modal (from disconnected or Demo Mode). The
+  // actual stub connection happens on a wallet selection inside the modal.
+  // Capture the trigger so focus can return to it on cancel/close.
+  const openConnectModal = () => {
+    connectTriggerRef.current = document.activeElement as HTMLElement | null;
+    setConnectModalOpen(true);
+  };
+  const closeConnectModal = () => setConnectModalOpen(false);
+
+  // Stub connection succeeded: switch to the approved connected-wallet fixture,
+  // land on the Dashboard, and show the approved toast. Switching to connected
+  // mode unmounts the demo page, so demo state cannot leak in. No adapter, no
+  // signature, no transaction, no fund movement. The trigger is discarded (the
+  // page fully re-renders to connected), so focus is not sent to a stale node.
+  const handleWalletConnected = () => {
+    connectTriggerRef.current = null;
+    setConnectModalOpen(false);
     setActivePage("dashboard");
     setMode("connected");
+    pushToast(dashboardState.wallet.copy.connected_toast);
   };
 
   let page;
@@ -74,7 +109,7 @@ export default function App() {
       <DemoDashboardPage
         pushToast={pushToast}
         onExitDemo={exitDemo}
-        onConnectWallet={connectFromDemo}
+        onConnectWallet={openConnectModal}
       />
     );
   } else if (mode === "connected" && activePage === "portfolio") {
@@ -93,7 +128,7 @@ export default function App() {
         activePage={mode === "connected" ? activePage : undefined}
         onNavigate={mode === "connected" ? navigate : undefined}
         onDisconnect={goDisconnected}
-        onConnectWallet={() => setMode("connected")}
+        onConnectWallet={openConnectModal}
         onTryDemo={goDemo}
       />
     );
@@ -101,7 +136,13 @@ export default function App() {
 
   return (
     <>
-      {page}
+      <div ref={pageWrapRef}>{page}</div>
+      {connectModalOpen && (
+        <ConnectWalletModal
+          onClose={closeConnectModal}
+          onConnected={handleWalletConnected}
+        />
+      )}
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </>
   );

@@ -90,9 +90,10 @@ export default function DashboardPage({
     onDisconnect();
   };
 
-  // Slice-only stub: restores the synthetic fixture session.
+  // Opens the Connect Wallet modal (App owns it). The approved "Wallet
+  // connected" toast now fires on a successful selection inside the modal, not
+  // on this click.
   const connectWallet = () => {
-    pushToast(s.wallet.copy.connected_toast);
     onConnectWallet();
   };
 

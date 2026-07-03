@@ -97,3 +97,24 @@ export const DEMO_EXIT_TOAST = "Exited Demo Mode";
  * the connected slice uses via state_transitions.open_protocol_handoff).
  */
 export const PROTOCOL_OPENED_TOAST = "Opened protocol in a new tab";
+
+/* ---------- Connect Wallet modal (content/wallet-copy.md) ---------- */
+
+/** content/wallet-copy.md — Connect Wallet Modal, modal title (also `wallet.connect.modal_title`). */
+export const WALLET_CONNECT_MODAL_TITLE = "Connect Wallet";
+
+/** content/wallet-copy.md — Connect Wallet Modal, intro copy (`wallet.connect.intro`). */
+export const WALLET_CONNECT_INTRO = "Choose a wallet to continue.";
+
+/** content/wallet-copy.md — Connect Wallet Modal, safety helper (`wallet.connect.helper`). */
+export const WALLET_CONNECT_HELPER =
+  "WealthSmith reads balances and positions only. Your funds stay in your wallet.";
+
+/** content/wallet-copy.md — Connect Wallet Modal, security note (`wallet.security.seed_phrase`). */
+export const WALLET_CONNECT_SECURITY_NOTE = "Never share your seed phrase or private key.";
+
+/** content/wallet-copy.md — Wallet Connection Loading, button/modal pending (`wallet.loading.connecting`). */
+export const WALLET_CONNECTING = "Connecting...";
+
+/** patterns/wallet-connection.md — Modal Accessibility, close button accessible label. */
+export const WALLET_CONNECT_CLOSE_LABEL = "Close connect wallet dialog";

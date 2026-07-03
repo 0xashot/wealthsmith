@@ -437,6 +437,39 @@ never modified by it.
     `<h2 id>` (was a duplicating `aria-label`); the segmented bar keeps its
     `role="img"` accessible summary.
 
+- **Wallet Connection Modal (complete):** stub-only Connect Wallet modal
+  (`ConnectWalletModal.tsx`). Connect Wallet (disconnected GlobalNav/empty states
+  and the Demo Mode banner) now opens the modal instead of connecting instantly;
+  App owns `connectModalOpen` and renders the modal as a sibling of the page.
+  - **Stub connection:** selecting Phantom / Solflare / Backpack shows a short
+    `"Connecting..."` state (~600 ms, `aria-busy`), then connects to the single
+    approved connected-wallet fixture and toasts `"Wallet connected"`. **No real
+    adapter, no install detection, no signature, no message/transaction signing,
+    no balance fetch, no `window.open`, no fund movement**; never asks for a seed
+    phrase/private key/password/recovery phrase/backup file (only warns never to
+    share them).
+  - **PROTOTYPE LIMITATION (approved — Option A):** all three wallets are
+    selectable but every success connects to the one Phantom • 6fQ9 fixture
+    (Solflare/Backpack addresses/pills are not invented). Real provider-specific
+    state is out of scope until wallet adapters exist. **No live error path**
+    this pass (stub always succeeds); approved error copy remains in
+    `content/wallet-copy.md` for later adapter work.
+  - **Copy (verbatim, `content/wallet-copy.md` via `approvedCopy.ts`):** title
+    "Connect Wallet", intro "Choose a wallet to continue.", helper "WealthSmith
+    reads balances and positions only. Your funds stay in your wallet.", security
+    note "Never share your seed phrase or private key.", "Connecting...",
+    "Wallet connected".
+  - **A11y:** `role="dialog"` + `aria-modal`, `aria-labelledby` (title) +
+    `aria-describedby` (helper); focus moves in on open; focus trap (Tab/Shift+Tab
+    wrap); Escape closes when idle; visible labelled close button; background page
+    `inert` while open (App toggles `pageWrapRef.inert`); focus returns to the
+    trigger on close (App restores after clearing inert). Wallet rows are
+    keyboard `<button>`s with visible labels + approved decorative icons.
+  - **Wiring change:** the `"Wallet connected"` toast now fires on modal success,
+    not on the Connect button click; `App.connectFromDemo` removed (the single
+    `handleWalletConnected` path serves disconnected + demo, and switching to
+    connected unmounts the demo page so demo state cannot leak).
+
 ### Step 2 intentional stubs
 
 These render per spec but have no behavior yet (explicitly deferred):
