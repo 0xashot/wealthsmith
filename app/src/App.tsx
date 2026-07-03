@@ -16,21 +16,28 @@
 import { useEffect, useRef, useState } from "react";
 import DashboardPage from "./pages/DashboardPage";
 import PortfolioPage from "./pages/PortfolioPage";
+import GoalPage from "./pages/GoalPage";
 import DemoDashboardPage from "./pages/DemoDashboardPage";
 import ToastHost, { type ToastData } from "./components/ToastHost";
 import ConnectWalletModal from "./components/ConnectWalletModal";
 import { dashboardState } from "./state/dashboardState";
+import { initialSavedGoal } from "./state/goalState";
+import type { SavedGoal } from "./types/goal";
 import { DEMO_EXIT_TOAST } from "./state/approvedCopy";
 import "./styles/dashboard.css";
 
 export type AppMode = "connected" | "demo" | "disconnected";
-export type ConnectedPage = "dashboard" | "portfolio";
+export type ConnectedPage = "dashboard" | "portfolio" | "goal";
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>("connected");
   const [activePage, setActivePage] = useState<ConnectedPage>("dashboard");
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
+  // Local, in-memory saved plan state for the Goal page (Option A: Goal-page
+  // scope only — no propagation into Dashboard/derived outputs this slice).
+  // Initialized from the approved fixture; persists across nav for the session.
+  const [savedGoal, setSavedGoal] = useState<SavedGoal>(initialSavedGoal);
   const nextToastId = useRef(1);
   const pageWrapRef = useRef<HTMLDivElement>(null);
   // The element that opened the modal, so focus can return to it on close.
@@ -62,7 +69,7 @@ export default function App() {
 
   // In-app page switch (connected only).
   const navigate = (id: string) => {
-    if (id === "dashboard" || id === "portfolio") setActivePage(id);
+    if (id === "dashboard" || id === "portfolio" || id === "goal") setActivePage(id);
   };
 
   // Transitions always land on the Dashboard page so a mode change never
@@ -118,6 +125,16 @@ export default function App() {
         pushToast={pushToast}
         onNavigate={navigate}
         onDisconnect={goDisconnected}
+      />
+    );
+  } else if (mode === "connected" && activePage === "goal") {
+    page = (
+      <GoalPage
+        pushToast={pushToast}
+        onNavigate={navigate}
+        onDisconnect={goDisconnected}
+        savedGoal={savedGoal}
+        onSaveGoal={setSavedGoal}
       />
     );
   } else {

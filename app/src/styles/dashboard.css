@@ -1562,3 +1562,208 @@
     animation: none;
   }
 }
+
+/* ---------- Goal Settings (patterns/goal-settings.md) ---------- */
+
+/* Prototype-boundary note (Decision C): calm, always visible on the Goal page. */
+.goal-note {
+  margin: 0;
+  padding: var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  background: var(--color-subdued-neutral-background-default);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.goal-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Edit Mode toggle (components/toggle.md). Switch geometry uses component-level
+   px values (no toggle-size semantic tokens exist); colors are tokenized. */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.toggle__label {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.toggle__switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-control-pill);
+  background: var(--color-disabled-background-default);
+  cursor: pointer;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+.toggle__switch[data-checked="true"] {
+  background: var(--color-action-primary-background-default);
+}
+
+.toggle__switch:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.toggle__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-control-pill);
+  background: var(--color-surface-card);
+  transition: transform var(--motion-interaction-hover-duration)
+    var(--motion-interaction-hover-easing);
+}
+
+.toggle__switch[data-checked="true"] .toggle__thumb {
+  transform: translateX(20px);
+}
+
+/* Field grid: single column, two columns on desktop where space allows. */
+.goal-fields {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-stack-gap-md);
+}
+
+@media (min-width: 1280px) {
+  .goal-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.goal-field {
+  display: grid;
+  gap: var(--spacing-inline-gap-xs);
+  align-content: start;
+}
+
+.goal-field__label {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.goal-field__optional {
+  font: var(--typography-caption-default-font);
+  color: var(--color-text-secondary);
+}
+
+.goal-field__value {
+  font: var(--typography-body-md-font);
+  color: var(--color-text-primary);
+}
+
+.goal-select,
+.goal-input {
+  width: 100%;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control-md);
+  background: var(--color-surface-card);
+  color: var(--color-text-primary);
+  font: var(--typography-body-md-font);
+}
+
+.goal-select:focus-visible,
+.goal-input:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.goal-input[aria-invalid="true"] {
+  border-color: var(--color-feedback-danger-background-solid);
+}
+
+.goal-currency {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.goal-currency__prefix {
+  position: absolute;
+  left: var(--spacing-inline-gap-md);
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+  pointer-events: none;
+}
+
+.goal-currency__input {
+  padding-left: calc(var(--spacing-inline-gap-md) * 2);
+}
+
+.goal-field__helper {
+  margin: 0;
+  font: var(--typography-caption-default-font);
+  color: var(--color-text-secondary);
+}
+
+.goal-field__error {
+  margin: 0;
+  font: var(--typography-caption-default-font);
+  color: var(--color-feedback-danger-text-tint);
+}
+
+.goal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-inline-gap-md);
+}
+
+.goal-btn {
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-lg);
+  border-radius: var(--radius-control-md);
+  font: var(--typography-button-md-font);
+  cursor: pointer;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+.goal-btn--secondary {
+  border: 1px solid var(--color-action-secondary-stroke-default);
+  background: transparent;
+  color: var(--color-action-secondary-text-default);
+}
+
+.goal-btn--secondary:hover {
+  background: var(--color-action-secondary-background-hover);
+}
+
+.goal-btn--primary {
+  border: none;
+  background: var(--color-action-primary-background-default);
+  color: var(--color-action-primary-text-default);
+  box-shadow: var(--shadow-control-default);
+}
+
+.goal-btn--primary:hover:not(:disabled) {
+  background: var(--color-action-primary-background-hover);
+}
+
+.goal-btn--primary:disabled {
+  background: var(--color-disabled-background-default);
+  color: var(--color-text-disabled);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.goal-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}

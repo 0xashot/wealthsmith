@@ -479,6 +479,34 @@ never modified by it.
     activation. (P3) `aria-labelledby`/`aria-describedby` now use `useId()` instead
     of hard-coded IDs. No flow/behavior change.
 
+- **Goal Settings (complete):** connected Goal page (`GoalPage.tsx`) reachable
+  from the Global Nav Goal item (added `"goal"` to `GlobalNav` navigable set +
+  `App` `ConnectedPage`/`navigate`/routing). View Mode shows the fixture `goal`
+  block; Edit Mode edits a local string draft. `ToggleSwitch` (`role="switch"`)
+  drives Edit Mode; three section cards (Goal & Risk Tolerance / Finances /
+  Contribution and Timeline) with approved labels; choice fields are native
+  `<select>` with the approved option lists (`goalState.ts`), currency fields are
+  `<input inputMode="numeric">` with `$` prefix. Monthly Saving Goal optional
+  (blank → null, shown as "—").
+  - **Save/Discard:** Save validates (approved onboarding validation copy),
+    commits draft → App-held `savedGoal` (persists across nav for the session),
+    exits edit, toasts approved "Goal settings saved". Disabled with no changes;
+    on invalid it shows accessible errors (`role="alert"`, `aria-invalid`,
+    `aria-describedby`) and focuses the first bad field instead of saving.
+    Discard reverts the draft. Toggling Edit off with unsaved changes is a no-op
+    (never silently discards/saves). No "Reset" (not in source-of-truth).
+  - **Option A (approved):** saving updates the **Goal page only** — Dashboard
+    Financial Snapshot, suggestions, Top Pick, Safety Buffer, Projected Growth,
+    allocation, and protocol decisions are NOT recalculated (no approved
+    recalculation logic exists). The approved prototype-boundary note is shown
+    verbatim on the page. Verified: after a Goal save, the Dashboard is unchanged.
+  - **Decision B (approved):** Ask Smith AI is hidden on the Goal page
+    (`askAvailable={false}`) — no approved Goal-specific Smith AI content;
+    Dashboard/Portfolio Smith AI unchanged.
+  - Non-custodial/MVP-safe: no wallet signature, no transaction, no live data,
+    no live AI; the `examples/` fixture is never mutated. `time_horizon`
+    `value_years: 5` maps to the "5 Years" option (no value invented).
+
 ### Step 2 intentional stubs
 
 These render per spec but have no behavior yet (explicitly deferred):

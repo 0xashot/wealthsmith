@@ -146,7 +146,8 @@ export default function GlobalNav({
           {nav.nav_items.map((item) => {
             const isActive = activePage ? item.id === activePage : item.active;
             const navigable =
-              !!onNavigate && (item.id === "dashboard" || item.id === "portfolio");
+              !!onNavigate &&
+              (item.id === "dashboard" || item.id === "portfolio" || item.id === "goal");
             return (
               <li key={item.id}>
                 <a

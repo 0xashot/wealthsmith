@@ -118,3 +118,48 @@ export const WALLET_CONNECTING = "Connecting...";
 
 /** patterns/wallet-connection.md — Modal Accessibility, close button accessible label. */
 export const WALLET_CONNECT_CLOSE_LABEL = "Close connect wallet dialog";
+
+/* ---------- Goal Settings (patterns/goal-settings.md, content) ---------- */
+
+/** patterns/goal-settings.md — page title "Goal" (also global_nav goal item label). */
+export const GOAL_PAGE_TITLE = "Goal";
+
+/** patterns/goal-settings.md — Copy Rules / Page Sections (section headings). */
+export const GOAL_SECTION_GOAL_RISK = "Goal & Risk Tolerance";
+export const GOAL_SECTION_FINANCES = "Finances";
+export const GOAL_SECTION_CONTRIBUTION = "Contribution and Timeline";
+
+/** patterns/goal-settings.md — Edit Mode (visible toggle label). */
+export const GOAL_EDIT_MODE_LABEL = "Edit Mode";
+
+/** patterns/goal-settings.md — Field Groups (field labels). */
+export const GOAL_FIELD_FINANCIAL_GOAL = "Financial Goal";
+export const GOAL_FIELD_RISK = "Risk Tolerance";
+export const GOAL_FIELD_INCOME = "Income";
+export const GOAL_FIELD_EXPENSES = "Expenses";
+export const GOAL_FIELD_SAVING = "Monthly Saving Goal";
+export const GOAL_FIELD_CONTRIBUTION = "Contribution Frequency";
+export const GOAL_FIELD_TIMELINE = "Timeline";
+
+/** patterns/goal-settings.md — Copy Rules ("Optional" marker + helper copy). */
+export const GOAL_OPTIONAL = "Optional";
+export const GOAL_HELPER_INCOME = "Estimate your average monthly income";
+export const GOAL_HELPER_EXPENSES = "Estimate your average monthly expenses";
+export const GOAL_HELPER_SAVING = "We’ll use this to model your contribution plan";
+
+/** patterns/goal-settings.md — footer actions. */
+export const GOAL_SAVE = "Save Changes";
+export const GOAL_DISCARD = "Discard Changes";
+
+/** patterns/goal-settings.md — Save Confirmation; also content/empty-error-loading-copy.md + content/ui-copy-rules.md. */
+export const GOAL_SAVED_TOAST = "Goal settings saved";
+
+/** Approved prototype-boundary note (Decision C) — visible on the Goal page. */
+export const GOAL_PROTOTYPE_NOTE =
+  "Saving updates your plan settings here. In this prototype, your Dashboard, " +
+  "suggestions, Safety Buffer, and projections are not recalculated.";
+
+/** content/onboarding-copy.md — Field Validation Copy. */
+export const GOAL_ERR_REQUIRED_AMOUNT = "Enter an amount to continue.";
+export const GOAL_ERR_INVALID_AMOUNT = "Enter a valid amount.";
+export const GOAL_ERR_POSITIVE_AMOUNT = "Enter a positive amount.";
