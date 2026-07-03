@@ -12,8 +12,10 @@
  * live data. The examples/ fixture is never mutated.
  *
  * Read-only wallet context reuses the connected Dashboard state (Phantom • 6fQ9)
- * for the Global Nav pill. Ask Smith AI is intentionally hidden here (Decision
- * B) — no approved Goal-specific Smith AI content exists.
+ * for the Global Nav pill. Ask Smith AI is visible on Goal and opens the shared
+ * panel with Goal-safe, static, explain-only content (state/goalSmithAi.ts): it
+ * does not recalculate the Dashboard, suggestions, Safety Buffer, projections,
+ * Top Pick, or protocol decisions, and provides no live AI or investment advice.
  */
 import { useRef, useState } from "react";
 import { dashboardState as connected } from "../state/dashboardState";
