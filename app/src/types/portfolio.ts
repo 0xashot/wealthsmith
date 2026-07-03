@@ -65,6 +65,38 @@ export interface StakedSection {
   empty: { title: string; description: string };
 }
 
+export interface YieldStrategyAsset {
+  symbol: string;
+  name: string;
+  icon: string;
+}
+
+export interface YieldStrategyRow {
+  id: string;
+  /** Strategy label from the fixture (e.g. "USDC Lending", "SOL/USDC Liquidity"). */
+  strategy_label: string;
+  protocol: { id: string; label: string; icon: string };
+  /** One or more tokens in the strategy (LP pairs show both sides). */
+  assets: YieldStrategyAsset[];
+  /** Preformatted currency string from the fixture (e.g. "$1,500"). */
+  display_value: string;
+  estimated_apy: EstimatedCell;
+  estimated_earnings: EstimatedCell;
+  /** Visible risk-note text from the fixture (e.g. "Lending risk"). */
+  risk_note_label: string;
+  /** Manage handoff label from the fixture (e.g. "Manage on Kamino"). Rendered
+   *  as a deferred/disabled control this step — no handoff is wired yet. */
+  action_label: string;
+}
+
+export interface YieldSection {
+  title: string;
+  description: string;
+  rows: YieldStrategyRow[];
+  summary: { label: string; display_value: string };
+  empty: { title: string; description: string };
+}
+
 export interface PortfolioPageState {
   /** Canonical connected-wallet total (aligned with the Dashboard: $15,500). */
   total_value_usd: number;
@@ -75,4 +107,5 @@ export interface PortfolioPageState {
   };
   liquid: LiquidSection;
   staked: StakedSection;
+  yield: YieldSection;
 }

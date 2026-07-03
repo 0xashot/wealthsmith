@@ -369,6 +369,28 @@ never modified by it.
     no rendered inconsistency exists. Only the $4,500 staked total is shown,
     which is consistent with the composed $15,500 portfolio.
 
+- **Portfolio Step 4 (complete):** Yield Strategies table.
+  `examples/portfolio/portfolio-yield-strategies.json` rendered via the reusable
+  `PortfolioTable` with the fixture's own columns: Strategy, Protocol, Assets,
+  Value, Est. APY, Est. Earnings, Risk Note, Action. New `YieldStrategiesSection`
+  reuses `ProtocolIdentity` + `resolveTokenIcon`; the **Assets** column renders
+  the fixture's token list as compact icon + visible symbol per token (LP pairs
+  list both sides, e.g. SOL + USDC). Risk notes render as **visible text**
+  (`portfolio-table__risk`), never color-only. Est. APY / Est. Earnings render
+  the fixture `display` verbatim; the Meteora vault's unavailable APY/earnings
+  show the approved muted "Unavailable" (never invented). Nothing computed —
+  no APY, earnings, shares, values, percentages, or risk labels.
+  - **Manage/Action deferred** (same pattern as Step 3): disabled,
+    non-functional button showing the fixture `action.label`
+    (Kamino/Orca/Meteora). No href/onClick → nothing navigates, opens a tab,
+    executes, signs, or completes (verified: `window.open` not called on click).
+  - **No fixture change:** the yield fixture is the canonical complete portfolio
+    ($15,500), so its summary/shares are already consistent — no inconsistency,
+    no pause. Yield total $3,500 matches the deployment overview.
+  - Portfolio page now renders all three deployment tables (Liquid, Staked,
+    Yield); the only remaining Portfolio work is wiring the live Manage
+    protocol handoffs (review-only, out of scope until a later step).
+
 ### Step 2 intentional stubs
 
 These render per spec but have no behavior yet (explicitly deferred):

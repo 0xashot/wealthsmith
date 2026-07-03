@@ -1206,6 +1206,42 @@
   color: var(--color-text-secondary);
 }
 
+.portfolio-table__strategy {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-primary);
+}
+
+/* Risk Note: always visible text (never color-only) so the risk is legible
+   without relying on hue. */
+.portfolio-table__risk {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+/* Assets column: compact token list (icon + visible symbol per token; LP pairs
+   list both sides). Icons are decorative — the symbol carries identity. */
+.portfolio-table__assets {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.portfolio-table__asset {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+}
+
+.portfolio-table__asset-icon {
+  flex-shrink: 0;
+  border-radius: var(--radius-control-pill);
+}
+
+.portfolio-table__asset-symbol {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-primary);
+}
+
 /* Est. APY / Est. Earnings "Unavailable" state (never invented) — muted so it
    reads as unavailable, not as a zero value. */
 .portfolio-table__unavailable {

@@ -25,6 +25,7 @@ import PageHeader from "../components/PageHeader";
 import DeploymentOverview from "../components/DeploymentOverview";
 import LiquidAssetsSection from "../components/LiquidAssetsSection";
 import StakedAssetsSection from "../components/StakedAssetsSection";
+import YieldStrategiesSection from "../components/YieldStrategiesSection";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 
 type RightZoneMode = "none" | "ask_smith_ai";
@@ -96,7 +97,8 @@ export default function PortfolioPage({ pushToast, onNavigate, onDisconnect }: P
           />
           <LiquidAssetsSection section={p.liquid} />
           <StakedAssetsSection section={p.staked} />
-          {/* Next step: Yield Strategies table + live Manage protocol links. */}
+          <YieldStrategiesSection section={p.yield} />
+          {/* Next step: live Manage protocol handoff links (review-only). */}
         </main>
 
         {smithOpen && (

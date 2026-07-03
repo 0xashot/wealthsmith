@@ -20,6 +20,7 @@ import stakedFixture from "../../../examples/portfolio/portfolio-staked-assets.j
 import type {
   LiquidAssetRow,
   StakedAssetRow,
+  YieldStrategyRow,
   PortfolioPageState,
 } from "../types/portfolio";
 
@@ -56,6 +57,27 @@ const stakedRows: StakedAssetRow[] = st.table.rows.map((r: any) => ({
   action_label: r.action.label,
 }));
 
+// Yield-strategy rows are rendered from the yield fixture only. Assets is the
+// fixture's token list (LP pairs list both sides); risk notes and Est. cells
+// come straight from the fixture — nothing is computed or classified here.
+const yieldRows: YieldStrategyRow[] = y.table.rows.map((r: any) => ({
+  id: r.id,
+  strategy_label: r.strategy.label,
+  protocol: { id: r.protocol.id, label: r.protocol.label, icon: r.protocol.icon },
+  assets: r.assets.map((a: any) => ({ symbol: a.symbol, name: a.name, icon: a.icon })),
+  display_value: r.display_value,
+  estimated_apy: {
+    display: r.estimated_apy.display,
+    available: r.estimated_apy.status === "available",
+  },
+  estimated_earnings: {
+    display: r.estimated_earnings.display,
+    available: r.estimated_earnings.status === "available",
+  },
+  risk_note_label: r.risk_note.label,
+  action_label: r.action.label,
+}));
+
 export const portfolioState: PortfolioPageState = {
   total_value_usd: y.portfolio_summary.total_value_usd,
   page_header: { title: "Portfolio" },
@@ -87,6 +109,19 @@ export const portfolioState: PortfolioPageState = {
     empty: {
       title: st.copy.empty_title,
       description: st.copy.empty_description,
+    },
+  },
+  yield: {
+    title: y.section.title,
+    description: y.section.description,
+    rows: yieldRows,
+    summary: {
+      label: y.table.summary_row.label,
+      display_value: y.table.summary_row.display_value,
+    },
+    empty: {
+      title: y.copy.empty_title,
+      description: y.copy.empty_description,
     },
   },
 };
