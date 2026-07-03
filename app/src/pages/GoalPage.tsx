@@ -15,8 +15,9 @@
  * for the Global Nav pill. Ask Smith AI is intentionally hidden here (Decision
  * B) — no approved Goal-specific Smith AI content exists.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { dashboardState as connected } from "../state/dashboardState";
+import { goalSmithAiContent } from "../state/goalSmithAi";
 import {
   FINANCIAL_GOAL_OPTIONS,
   RISK_OPTIONS,
@@ -55,6 +56,8 @@ import type { GoalOption, SavedGoal } from "../types/goal";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
 import ToggleSwitch from "../components/ToggleSwitch";
+import SelectMenu from "../components/SelectMenu";
+import AskSmithAiPanel from "../components/AskSmithAiPanel";
 
 interface Props {
   pushToast: (message: string, helper?: string) => void;
@@ -148,6 +151,14 @@ export default function GoalPage({
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => draftFromSaved(savedGoal));
   const [showErrors, setShowErrors] = useState(false);
+  const [smithOpen, setSmithOpen] = useState(false);
+  const askButtonRef = useRef<HTMLButtonElement>(null);
+
+  const openAskSmithAi = () => setSmithOpen(true);
+  const closeAskSmithAi = () => {
+    setSmithOpen(false);
+    askButtonRef.current?.focus();
+  };
 
   const errors = validate(draft);
   const hasErrors = Object.keys(errors).length > 0;
@@ -227,22 +238,11 @@ export default function GoalPage({
     savedValue: string
   ) => (
     <div className="goal-field">
-      <label className="goal-field__label" htmlFor={id}>
+      <span className="goal-field__label" id={id}>
         {label}
-      </label>
+      </span>
       {editMode ? (
-        <select
-          id={id}
-          className="goal-select"
-          value={value}
-          onChange={(e) => onSelect(e.target.value)}
-        >
-          {options.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <SelectMenu labelId={id} options={options} value={value} onChange={onSelect} />
       ) : (
         <span className="goal-field__value">{labelFor(options, savedValue)}</span>
       )}
@@ -313,14 +313,16 @@ export default function GoalPage({
         navLabel={connected.accessibility.global_nav_label}
         walletPillLabel={connected.accessibility.wallet_pill_label}
         askSmithAiLabel={connected.global_nav.right_actions.ask_smith_ai.accessibility_label}
-        askAvailable={false}
+        askAvailable={true}
+        askButtonRef={askButtonRef}
         activePage="goal"
         onNavigate={onNavigate}
         onCopyAddress={onCopyAddress}
         onDisconnect={disconnect}
+        onOpenAskSmithAi={openAskSmithAi}
       />
 
-      <div className="dashboard dashboard--single">
+      <div className={"dashboard" + (smithOpen ? "" : " dashboard--single")}>
         <main className="dashboard__main">
           <PageHeader header={{ title: GOAL_PAGE_TITLE }} />
 
@@ -410,6 +412,10 @@ export default function GoalPage({
             </div>
           )}
         </main>
+
+        {smithOpen && (
+          <AskSmithAiPanel content={goalSmithAiContent} onClose={closeAskSmithAi} />
+        )}
       </div>
     </div>
   );

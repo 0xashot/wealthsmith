@@ -500,12 +500,42 @@ never modified by it.
     allocation, and protocol decisions are NOT recalculated (no approved
     recalculation logic exists). The approved prototype-boundary note is shown
     verbatim on the page. Verified: after a Goal save, the Dashboard is unchanged.
-  - **Decision B (approved):** Ask Smith AI is hidden on the Goal page
-    (`askAvailable={false}`) — no approved Goal-specific Smith AI content;
-    Dashboard/Portfolio Smith AI unchanged.
+  - **Ask Smith AI on Goal (Decision B reversed):** Ask Smith AI is now shown in
+    Global Nav on the Goal page (connected: Dashboard/Portfolio/Goal all show it;
+    Demo demo-safe; disconnected hides it). It opens the shared `AskSmithAiPanel`
+    with new Goal-safe static content (`goalSmithAi.ts`): explain-only, 3 approved
+    prompts + responses, approved fallback; it explicitly states the prototype
+    does not recalculate the Dashboard/suggestions/Safety Buffer/projections. No
+    live AI, no advice, no invented values.
   - Non-custodial/MVP-safe: no wallet signature, no transaction, no live data,
     no live AI; the `examples/` fixture is never mutated. `time_horizon`
     `value_years: 5` maps to the "5 Years" option (no value invented).
+  - **Choice fields → in-app SelectMenu popover:** the four choice fields now use
+    a reusable custom `SelectMenu.tsx` (components/select-menu.md + menu-popover.md
+    + menu-item.md) instead of a native `<select>`. Closed trigger is a
+    WealthSmith control (card surface / `color.border.strong` / `radius.control.md`
+    / approved padding / `typography.body.md`) with the approved chevron; open
+    state is an **in-app menu popover** (`role="menu"`, `menuitemradio` options,
+    selected item `aria-checked` + check icon) using menu-popover tokens
+    (`color.surface.card`, `color.border.subtle`, `radius.surface.md`,
+    `shadow.overlay.dropdown`, `zIndex.menu.dropdown`, `spacing.card.padding.sm`,
+    `spacing.stack.gap.xs`) below the trigger — no browser/OS dropdown. Keyboard:
+    trigger focusable, Enter/Space or Arrow opens, Arrow/Home/End move between
+    items, Enter/Space selects, Escape/outside-click closes and returns focus to
+    the trigger (rAF-deferred). Draft/save/validation behavior unchanged; the
+    earlier styled-native-select approach is fully superseded (dead `.goal-select`
+    CSS removed).
+  - **Open/active trigger state:** while open (`[aria-expanded="true"]`) the
+    trigger shows a stronger primary border (`color.action.primary.background.default`)
+    + focus ring (`shadow.control.focus`), and the chevron rotates 180° (points
+    up); the rule sits after the error rule so open still reads as active, and
+    the rotation transition respects `prefers-reduced-motion`. Selected menu item
+    keeps its selected row (`color.selection.background.default`) + checkmark.
+    Popover stays trigger-width and directly below (visually connected).
+  - **Source-of-truth clarified (user-directed):** `components/select-menu.md`
+    gained a "Native Select Styling" section and `patterns/goal-settings.md` a
+    "Choice Field Rendering" note (choice fields render as Select Menu controls,
+    not browser-default selects) — both still apply to the in-app popover.
 
 ### Step 2 intentional stubs
 

@@ -1668,18 +1668,16 @@
   color: var(--color-text-primary);
 }
 
-.goal-select,
 .goal-input {
   width: 100%;
   padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-control-md);
-  background: var(--color-surface-card);
+  background-color: var(--color-surface-card);
   color: var(--color-text-primary);
   font: var(--typography-body-md-font);
 }
 
-.goal-select:focus-visible,
 .goal-input:focus-visible {
   outline: none;
   box-shadow: var(--shadow-control-focus);
@@ -1687,6 +1685,121 @@
 
 .goal-input[aria-invalid="true"] {
   border-color: var(--color-feedback-danger-background-solid);
+}
+
+/* ---------- Select Menu (components/select-menu.md + menu-popover.md) ---------- */
+
+.select-menu {
+  position: relative;
+}
+
+/* Closed trigger: styled as a WealthSmith input/control. */
+.select-menu__trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control-md);
+  background-color: var(--color-surface-card);
+  color: var(--color-text-primary);
+  font: var(--typography-body-md-font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.select-menu__trigger:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.select-menu__trigger[aria-invalid="true"] {
+  border-color: var(--color-feedback-danger-background-solid);
+}
+
+/* Open/active state: stronger primary border + focus ring so the trigger
+   clearly reads as active while the popover is open (focus lives on an option
+   inside the popover, so the trigger has no :focus-visible of its own). Placed
+   after the error rule so an invalid+open control still reads as active. */
+.select-menu__trigger[aria-expanded="true"] {
+  border-color: var(--color-action-primary-background-default);
+  box-shadow: var(--shadow-control-focus);
+}
+
+.select-menu__value {
+  flex-grow: 1;
+}
+
+/* Chevron indicates open/closed: points up (rotated) while the menu is open. */
+.select-menu__chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  transition: transform var(--motion-interaction-hover-duration)
+    var(--motion-interaction-hover-easing);
+}
+
+.select-menu__trigger[aria-expanded="true"] .select-menu__chevron {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .select-menu__chevron {
+    transition: none;
+  }
+}
+
+/* Open state: in-app menu popover below the trigger (menu-popover.md tokens). */
+.select-menu__popover {
+  position: absolute;
+  top: calc(100% + var(--spacing-inline-gap-sm));
+  left: 0;
+  right: 0;
+  z-index: var(--zIndex-menu-dropdown);
+  display: grid;
+  gap: var(--spacing-stack-gap-xs);
+  padding: var(--spacing-card-padding-sm);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-overlay-dropdown);
+  animation: modal-scrim-in var(--motion-overlay-enter-duration)
+    var(--motion-overlay-enter-easing);
+}
+
+.select-menu__option {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  width: 100%;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border: none;
+  border-radius: var(--radius-control-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: var(--typography-body-md-font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.select-menu__option:hover,
+.select-menu__option:focus-visible {
+  outline: none;
+  background: var(--color-subdued-neutral-background-default);
+}
+
+.select-menu__option--selected {
+  background: var(--color-selection-background-default);
+}
+
+.select-menu__check {
+  display: inline-flex;
+  width: 1rem;
+  flex-shrink: 0;
+}
+
+.select-menu__option-label {
+  flex-grow: 1;
 }
 
 .goal-currency {

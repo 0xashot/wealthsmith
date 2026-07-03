@@ -300,6 +300,17 @@ Rules:
 
 ---
 
+## Choice Field Rendering
+
+The choice fields — Financial Goal, Risk Tolerance, Contribution Frequency, and Timeline — render as WealthSmith Select Menu controls (`components/select-menu.md`).
+
+- Do not render them as unstyled browser-default `<select>` controls.
+- The closed trigger uses the approved input/control treatment: card/input surface, `color.border.strong`, `radius.control.md`, approved control padding and `typography.body.md`, the approved chevron indicator (`assets/icons/ui/chevron-down.svg`), a visible label above the control, and the selected value visible.
+- Focus, hover, disabled, and error states use semantic tokens.
+- A styled native select is acceptable as a fallback only if it visually matches the design system (see `components/select-menu.md` — Native Select Styling).
+
+---
+
 ## Approved Field Options
 
 ### Financial Goal
