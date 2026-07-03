@@ -8,6 +8,7 @@
  * Not color-only: values and percentages render as text, and the bar carries
  * a role="img" accessible summary (components/chart.md).
  */
+import { useId } from "react";
 import type { DeploymentSegment } from "../types/portfolio";
 import LegendMarker from "./LegendMarker";
 
@@ -29,6 +30,10 @@ interface Props {
 }
 
 export default function DeploymentOverview({ title, totalValueUsd, segments }: Props) {
+  // Single source of the region's accessible name: the visible heading
+  // (aria-labelledby), matching the Portfolio table sections.
+  const headingId = useId();
+
   const summary =
     `${title}. Total ${fmtUsd(totalValueUsd)}. ` +
     segments
@@ -36,8 +41,10 @@ export default function DeploymentOverview({ title, totalValueUsd, segments }: P
       .join(" ");
 
   return (
-    <section className="card" aria-label={title}>
-      <h2 className="card__title">{title}</h2>
+    <section className="card" aria-labelledby={headingId}>
+      <h2 id={headingId} className="card__title">
+        {title}
+      </h2>
       <div className="deployment__total">
         <span className="deployment__total-label">Total Portfolio Value</span>
         <span className="deployment__total-value">{fmtUsd(totalValueUsd)}</span>

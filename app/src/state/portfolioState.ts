@@ -96,6 +96,16 @@ const yieldRows: YieldStrategyRow[] = y.table.rows.map((r: any) => ({
   action_href: resolveActionHref(r.action, r.id),
 }));
 
+// Approved estimate/risk disclaimers, surfaced under each table. Only the
+// fixture's own `copy.*_tooltip` strings are used (verbatim); missing ones are
+// simply omitted — no disclaimer copy is invented. Joined with a space for a
+// single aria-describedby note (announced once on table entry).
+const joinNotes = (...parts: (string | undefined)[]) =>
+  parts.filter((p): p is string => typeof p === "string" && p.length > 0).join(" ");
+
+const stakedNote = joinNotes(st.copy.apy_tooltip, st.copy.earnings_tooltip, st.copy.risk_tooltip);
+const yieldNote = joinNotes(y.copy.apy_tooltip, y.copy.earnings_tooltip, y.copy.risk_tooltip);
+
 export const portfolioState: PortfolioPageState = {
   total_value_usd: y.portfolio_summary.total_value_usd,
   page_header: { title: "Portfolio" },
@@ -128,6 +138,7 @@ export const portfolioState: PortfolioPageState = {
       title: st.copy.empty_title,
       description: st.copy.empty_description,
     },
+    note: stakedNote,
   },
   yield: {
     title: y.section.title,
@@ -141,5 +152,6 @@ export const portfolioState: PortfolioPageState = {
       title: y.copy.empty_title,
       description: y.copy.empty_description,
     },
+    note: yieldNote,
   },
 };

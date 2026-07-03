@@ -64,6 +64,9 @@ export interface StakedSection {
   rows: StakedAssetRow[];
   summary: { label: string; display_value: string };
   empty: { title: string; description: string };
+  /** Approved fixture disclaimer copy (APY + earnings tooltips), surfaced under
+   *  the table via aria-describedby. */
+  note: string;
 }
 
 export interface YieldStrategyAsset {
@@ -97,6 +100,9 @@ export interface YieldSection {
   rows: YieldStrategyRow[];
   summary: { label: string; display_value: string };
   empty: { title: string; description: string };
+  /** Approved fixture disclaimer copy (APY + earnings + risk tooltips),
+   *  surfaced under the table via aria-describedby. */
+  note: string;
 }
 
 export interface PortfolioPageState {

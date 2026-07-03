@@ -417,6 +417,26 @@ never modified by it.
     `https://app.kamino.finance`, Orca `https://www.orca.so`, Meteora
     `https://app.meteora.ag`. Liquid Assets remains Manage-free.
 
+- **Portfolio Step 5.1 (a11y/trust polish — P1/P2/P4 from QA):** no financial,
+  APY, earnings, URL, suggestion, Top Pick, or Smith AI behavior changed.
+  - **P1 (Label in Name, WCAG 2.5.3):** Manage aria-label now contains the
+    visible label verbatim: `${action_label}. Opens ${protocol} in a new tab.`
+    (e.g. "Manage on Jito. Opens Jito in a new tab."). Href/target/rel/icon
+    unchanged; still review-only toast, no execution.
+  - **P2 (surface approved disclaimers):** each staked/yield table now renders a
+    muted footnote wired via `aria-describedby` on the `<table>` (announced once
+    on table entry — no per-cell noise; visible trust cue for sighted users).
+    Copy is the fixtures' own `copy.*_tooltip` **verbatim**, joined with a space,
+    missing ones omitted (never invented): Staked = apy_tooltip + earnings_tooltip;
+    Yield = apy_tooltip + earnings_tooltip + risk_tooltip. A full hover-tooltip
+    component was out of scope for this small pass, and a per-column header
+    tooltip would pollute every cell's header announcement (the noise QA warned
+    about), so the described-by note is the accessible, non-noisy choice. Liquid
+    table has no note. New `PortfolioTable` optional `note` prop.
+  - **P4 (DeploymentOverview):** region now uses `aria-labelledby` → the visible
+    `<h2 id>` (was a duplicating `aria-label`); the segmented bar keeps its
+    `role="img"` accessible summary.
+
 ### Step 2 intentional stubs
 
 These render per spec but have no behavior yet (explicitly deferred):

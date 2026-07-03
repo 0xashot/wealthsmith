@@ -87,11 +87,12 @@ export default function YieldStrategiesSection({ section, onManage }: Props) {
       estimated(r.estimated_earnings),
       <span className="portfolio-table__risk">{r.risk_note_label}</span>,
       // Review-only external handoff: opens the protocol in a new tab + toasts.
-      // Accessible name says what opens and where (strategy + protocol).
+      // Accessible name contains the visible label verbatim (WCAG 2.5.3 Label
+      // in Name), then says what opens and where.
       <ManageHandoff
         label={r.action_label}
         href={r.action_href}
-        accessibleName={`Manage ${r.strategy_label} on ${r.protocol.label} in a new tab`}
+        accessibleName={`${r.action_label}. Opens ${r.protocol.label} in a new tab.`}
         onOpen={onManage}
       />,
     ],
@@ -115,6 +116,7 @@ export default function YieldStrategiesSection({ section, onManage }: Props) {
       columns={COLUMNS}
       rows={rows}
       summaryCells={summaryCells}
+      note={section.note}
       emptyTitle={section.empty.title}
       emptyDescription={section.empty.description}
     />

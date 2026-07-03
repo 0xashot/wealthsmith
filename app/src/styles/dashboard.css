@@ -1342,6 +1342,14 @@
   color: var(--color-text-primary);
 }
 
+/* Approved estimate/risk disclaimer under the table (aria-describedby target).
+   Muted footnote — visible trust cue for everyone, announced once for AT. */
+.portfolio-table__note {
+  margin: var(--spacing-inline-gap-md) 0 0;
+  font: var(--typography-caption-default-font);
+  color: var(--color-text-secondary);
+}
+
 .portfolio-table__empty {
   display: grid;
   gap: var(--spacing-inline-gap-sm);

@@ -29,6 +29,12 @@ interface Props {
   rows: PortfolioRow[];
   /** Optional summary row cells (same order as `columns`). */
   summaryCells?: ReactNode[];
+  /**
+   * Optional approved explanatory note rendered under the table and wired to it
+   * via `aria-describedby` (announced once on table entry — no per-cell noise).
+   * Used to surface the fixtures' estimate/risk disclaimers.
+   */
+  note?: string;
   emptyTitle?: string;
   emptyDescription?: string;
 }
@@ -39,6 +45,7 @@ export default function PortfolioTable({
   columns,
   rows,
   summaryCells,
+  note,
   emptyTitle,
   emptyDescription,
 }: Props) {
@@ -48,6 +55,7 @@ export default function PortfolioTable({
   // Single source of the accessible name: the visible heading. The section
   // region and the table are both labelled by it (no duplicate literal label).
   const headingId = useId();
+  const noteId = useId();
 
   return (
     <section className="card" aria-labelledby={headingId}>
@@ -65,7 +73,11 @@ export default function PortfolioTable({
         </div>
       ) : (
         <div className="portfolio-table__scroll">
-          <table className="portfolio-table" aria-labelledby={headingId}>
+          <table
+            className="portfolio-table"
+            aria-labelledby={headingId}
+            aria-describedby={note ? noteId : undefined}
+          >
             <thead>
               <tr>
                 {columns.map((col) => (
@@ -105,6 +117,11 @@ export default function PortfolioTable({
               </tfoot>
             )}
           </table>
+          {note && (
+            <p id={noteId} className="portfolio-table__note">
+              {note}
+            </p>
+          )}
         </div>
       )}
     </section>
