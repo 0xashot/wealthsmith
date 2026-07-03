@@ -302,9 +302,49 @@ never modified by it.
     free-form advice question ("Should I sell my SOL?") returns only the safe
     fallback.
   - Out of scope this step: Liquid/Staked/Yield tables, Manage protocol
-    links, Portfolio Smith AI, right-rail suggestions, demo Portfolio page.
+    links, right-rail suggestions, demo Portfolio page. (Portfolio Ask Smith
+    AI was folded in above.)
     Verified: Dashboard $15,500 intact, Portfolio nav works, deployment
     $7,500/$4,500/$3,500, demo + disconnected unaffected, no console errors.
+- **Portfolio Step 2 (complete):** Liquid Assets table.
+  - Reusable `PortfolioTable` (semantic `<table>`, `<th scope="col">`,
+    right-aligned numeric column, optional `<tfoot>` summary, approved empty
+    state), `AssetIdentity` (token icon + visible name + symbol; icon
+    decorative), and `state/iconRegistry.ts` (resolves fixture token-icon
+    paths to bundled URLs via `import.meta.glob`; missing token → fallback-
+    token.svg + console report, never invented). `LiquidAssetsSection` maps
+    the fixture rows into the table.
+  - Rendered columns (from `portfolio-liquid-assets.json`): **Asset**
+    (icon+name+symbol), **Category** (badge), **Value** (right), **Status**.
+    3 fixture rows (SOL/BONK/USDC), summary "Total Liquid Assets $7,500". No
+    Manage links (liquid rows have empty `actions`). No amount/balance column
+    (the fixture provides none — not invented).
+- **Portfolio Step 2.1 (Portfolio Share resolved, approved Option B):**
+  - Source-of-truth: `examples/portfolio/portfolio-liquid-assets.json` — the
+    three liquid rows' `portfolio_share_percent` + `display_portfolio_share`
+    now represent each asset's share of the full $15,500 portfolio
+    (product-approved): SOL 73.33→**35.48%**, BONK 16→**7.74%**,
+    USDC 10.67→**5.16%** ($5,500/$1,200/$800 ÷ $15,500). Balances, display
+    values, total liquid ($7,500), and deployment overview unchanged.
+  - App: the **Portfolio Share** column is now rendered from the corrected
+    fixture (verbatim `display_portfolio_share`, not computed). Column order
+    matches the fixture: Asset · Category · Value · Portfolio Share · Status.
+    The summary row shows total value only (no total-share %). Now consistent
+    with the deployment overview (35.48+7.74+5.16 = 48.38% ≈ Liquid 48.4%).
+  - Accessibility: `PortfolioTable` labels both the section region and the
+    `<table>` via `aria-labelledby` → the visible `<h2>` (single accessible
+    name, no duplicate literal label).
+- **Portfolio Step 2.2 (liquid-total share reconciled, approved):**
+  `examples/portfolio/portfolio-liquid-assets.json` — the liquid-total
+  portfolio-share metadata now reflects the $15,500 portfolio:
+  `summary_row.portfolio_share_percent` 100→**48.39** / `display_portfolio_share`
+  "100%"→"48.39%", and `portfolio_summary.liquid_assets_percent` 100→**48.39**
+  (= $7,500/$15,500, matching the approved deployment overview). Row shares,
+  balances, display values, and total liquid value ($7,500) unchanged. No app
+  change needed (these fields aren't rendered — the summary row shows the
+  total value only); verified no "100%" appears anywhere in the liquid table.
+  The fixture's `total_value_usd` (7500) remains the liquid-section total per
+  the composed-view framing.
 
 ### Step 2 intentional stubs
 

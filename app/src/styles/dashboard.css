@@ -1156,3 +1156,99 @@
   font: var(--typography-chart-label-font);
   color: var(--color-text-secondary);
 }
+
+/* ---------- Portfolio tables (components/table.md) ---------- */
+
+.portfolio-table__scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.portfolio-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.portfolio-table__cell {
+  text-align: left;
+  padding: var(--spacing-table-cell-paddingY-default) var(--spacing-table-cell-paddingX-default);
+  border-bottom: 1px solid var(--color-border-subtle);
+  vertical-align: middle;
+}
+
+.portfolio-table__cell--right {
+  text-align: right;
+}
+
+.portfolio-table__header {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.portfolio-table tbody .portfolio-table__cell {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-primary);
+}
+
+.portfolio-table__value {
+  font: var(--typography-metric-compact-font);
+  color: var(--color-text-primary);
+}
+
+.portfolio-table__status {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.portfolio-table__summary {
+  border-top: 1px solid var(--color-border-subtle);
+  border-bottom: none;
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+/* asset identity cell: icon + visible name + symbol */
+.asset-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.asset-identity__icon {
+  flex-shrink: 0;
+  border-radius: var(--radius-control-pill);
+}
+
+.asset-identity__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.asset-identity__name {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-primary);
+}
+
+.asset-identity__symbol {
+  font: var(--typography-caption-default-font);
+  color: var(--color-text-secondary);
+}
+
+.portfolio-table__empty {
+  display: grid;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.portfolio-table__empty-title {
+  margin: 0;
+  font: var(--typography-heading-sm-font);
+  color: var(--color-text-primary);
+}
+
+.portfolio-table__empty-description {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}

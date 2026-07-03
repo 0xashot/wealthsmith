@@ -75,7 +75,7 @@
     "liquid_assets_value_usd": 7500,
     "staked_assets_value_usd": 0,
     "yield_strategies_value_usd": 0,
-    "liquid_assets_percent": 100,
+    "liquid_assets_percent": 48.39,
     "staked_assets_percent": 0,
     "yield_strategies_percent": 0,
     "asset_count": 3,
@@ -146,8 +146,8 @@
         },
         "value_usd": 5500,
         "display_value": "$5,500",
-        "portfolio_share_percent": 73.33,
-        "display_portfolio_share": "73.33%",
+        "portfolio_share_percent": 35.48,
+        "display_portfolio_share": "35.48%",
         "position_type": "liquid",
         "source": "connected_wallet_fixture",
         "status": {
@@ -175,8 +175,8 @@
         },
         "value_usd": 1200,
         "display_value": "$1,200",
-        "portfolio_share_percent": 16.0,
-        "display_portfolio_share": "16.00%",
+        "portfolio_share_percent": 7.74,
+        "display_portfolio_share": "7.74%",
         "position_type": "liquid",
         "source": "connected_wallet_fixture",
         "status": {
@@ -204,8 +204,8 @@
         },
         "value_usd": 800,
         "display_value": "$800",
-        "portfolio_share_percent": 10.67,
-        "display_portfolio_share": "10.67%",
+        "portfolio_share_percent": 5.16,
+        "display_portfolio_share": "5.16%",
         "position_type": "liquid",
         "source": "connected_wallet_fixture",
         "status": {
@@ -232,8 +232,8 @@
       "label": "Total Liquid Assets",
       "value_usd": 7500,
       "display_value": "$7,500",
-      "portfolio_share_percent": 100,
-      "display_portfolio_share": "100%"
+      "portfolio_share_percent": 48.39,
+      "display_portfolio_share": "48.39%"
     }
   },
   "asset_deployment_overview": {

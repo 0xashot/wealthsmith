@@ -23,6 +23,7 @@ import { TOAST_ADDRESS_COPIED, TOAST_COPY_FAILED } from "../state/approvedCopy";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
 import DeploymentOverview from "../components/DeploymentOverview";
+import LiquidAssetsSection from "../components/LiquidAssetsSection";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 
 type RightZoneMode = "none" | "ask_smith_ai";
@@ -92,7 +93,8 @@ export default function PortfolioPage({ pushToast, onNavigate, onDisconnect }: P
             totalValueUsd={p.total_value_usd}
             segments={p.deployment.segments}
           />
-          {/* Next step: Liquid / Staked / Yield tables + Manage links. */}
+          <LiquidAssetsSection section={p.liquid} />
+          {/* Next step: Staked / Yield tables + Manage links. */}
         </main>
 
         {smithOpen && (
