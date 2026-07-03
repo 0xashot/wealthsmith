@@ -55,7 +55,11 @@ export default function App() {
   return (
     <>
       {mode === "demo" ? (
-        <DemoDashboardPage onExitDemo={exitDemo} onConnectWallet={connectFromDemo} />
+        <DemoDashboardPage
+          pushToast={pushToast}
+          onExitDemo={exitDemo}
+          onConnectWallet={connectFromDemo}
+        />
       ) : (
         <DashboardPage
           mode={mode}

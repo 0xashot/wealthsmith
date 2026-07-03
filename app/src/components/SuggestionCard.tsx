@@ -52,10 +52,12 @@ const PROTOCOL_ICONS: Record<string, string> = {
 
 /**
  * Generic UI icons — only for suggestions with no protocol identity
- * (generic safety, risk, wallet, or informational suggestions).
+ * (generic safety, risk, wallet, or informational suggestions). Keyed by
+ * category so it works for both connected and demo ids (e.g. the demo buffer
+ * suggestion id is `demo_top_up_safety_buffer`).
  */
-const GENERIC_ICONS: Record<string, string> = {
-  top_up_safety_buffer: shieldCheckUrl,
+const GENERIC_ICONS_BY_CATEGORY: Record<string, string> = {
+  safety_buffer: shieldCheckUrl,
 };
 
 function resolveCardIcon(card: SuggestionCardState): string | undefined {
@@ -73,7 +75,7 @@ function resolveCardIcon(card: SuggestionCardState): string | undefined {
     }
     return icon;
   }
-  return GENERIC_ICONS[card.id];
+  return GENERIC_ICONS_BY_CATEGORY[card.category];
 }
 
 const BADGE_TONES: Record<string, "info" | "warning" | "danger" | "success" | "neutral"> = {
@@ -97,9 +99,12 @@ interface Props {
 export default function SuggestionCard({ card, onExternalHandoff, onReview }: Props) {
   const isLocked = card.status === "locked";
   const isTopPick = card.is_top_pick === true;
+  // Connected uses "eligible"; demo uses "eligible_for_demo_handoff" — both
+  // are review-only external handoffs. Locked cards never reach here.
+  const eligibility = card.protocol_decision?.eligibility_status;
   const isExternalHandoff =
     card.cta.action === "open_external_protocol" &&
-    card.protocol_decision?.eligibility_status === "eligible";
+    (eligibility === "eligible" || eligibility === "eligible_for_demo_handoff");
   const icon = resolveCardIcon(card);
 
   const className = [

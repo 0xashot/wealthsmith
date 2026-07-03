@@ -1,34 +1,47 @@
 /**
- * DemoDashboardPage — Demo Mode Dashboard shell per rules/demo-mode-rules.md
+ * DemoDashboardPage — full Demo Mode Dashboard per rules/demo-mode-rules.md
  * and patterns/dashboard-layout.md (Mode 5).
  *
- * STEP 2 SCOPE: state-machine + shell only. This renders the persistent Demo
- * banner (outside Global Nav), the demo Global Nav variant (no wallet pill,
- * Ask Smith AI visible), the demo page header, and a working demo-aware Ask
- * Smith AI panel. The demo left-content cards, charts, and suggestion cards
- * are rendered in the next step; the rail currently shows its approved header
- * only.
+ * Renders the demo body by REUSING the same data-driven components as the
+ * connected Dashboard, driven entirely by demoDashboardState (screen chrome
+ * from dashboard-demo-state.json; alert + protocol decisions from the demo
+ * suggestion output demo-suggestions.json). Sample data only.
  *
- * Sample data only. No wallet pill. No transactions, signatures, or fund
- * movement. Demo state does not persist into connected mode (App clears it by
- * switching modes).
+ * Non-custodial / MVP-safe: no wallet pill, no wallet adapter, no signature,
+ * no transaction, no fund movement, no suggestion completion. The Jupiter
+ * handoff opens the fixture URL in a new tab (rel="noopener noreferrer") and
+ * only shows the approved toast. Demo state does not persist into connected
+ * mode (App switches modes, unmounting this page).
  */
 import { useRef, useState } from "react";
 import { demoDashboardState as d } from "../state/demoDashboardState";
 import { demoSmithAiContent } from "../state/demoSmithAi";
+import { PROTOCOL_OPENED_TOAST } from "../state/approvedCopy";
+import type { SuggestionCardState } from "../types/dashboard";
 import GlobalNav from "../components/GlobalNav";
 import DemoBanner from "../components/DemoBanner";
 import PageHeader from "../components/PageHeader";
+import AlertBanner from "../components/AlertBanner";
+import FinancialSnapshot from "../components/FinancialSnapshot";
+import SafetyBufferCard from "../components/SafetyBufferCard";
+import ProjectedGrowthChart from "../components/ProjectedGrowthChart";
+import AllocationChart from "../components/AllocationChart";
+import SuggestionRail from "../components/SuggestionRail";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 
 type RightRailMode = "suggestions" | "ask_smith_ai";
 
 interface Props {
+  pushToast: (message: string, helper?: string) => void;
   onExitDemo: () => void;
   onConnectWallet: () => void;
 }
 
-export default function DemoDashboardPage({ onExitDemo, onConnectWallet }: Props) {
+export default function DemoDashboardPage({
+  pushToast,
+  onExitDemo,
+  onConnectWallet,
+}: Props) {
   const [railMode, setRailMode] = useState<RightRailMode>("suggestions");
   const askButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -36,6 +49,24 @@ export default function DemoDashboardPage({ onExitDemo, onConnectWallet }: Props
   const closeAskSmithAi = () => {
     setRailMode("suggestions");
     askButtonRef.current?.focus();
+  };
+
+  // Sample handoff: the card's anchor opens the fixture URL in a new tab.
+  // This handler only shows the approved non-execution toast.
+  const onExternalHandoff = () => {
+    pushToast(PROTOCOL_OPENED_TOAST);
+  };
+
+  // "Review" on the sample buffer Top Pick → its on-dashboard detail area,
+  // read-only. No execution/signature/completion/Top Pick change.
+  const onReviewSuggestion = (card: SuggestionCardState) => {
+    const targetId =
+      card.category === "safety_buffer" ? "safety-buffer" : `suggestion-${card.id}`;
+    const el = document.getElementById(targetId);
+    if (el) {
+      el.scrollIntoView({ block: "nearest" });
+      (el as HTMLElement).focus();
+    }
   };
 
   return (
@@ -55,19 +86,25 @@ export default function DemoDashboardPage({ onExitDemo, onConnectWallet }: Props
       <div className="dashboard">
         <main className="dashboard__main">
           <PageHeader header={d.page_header} />
-          {/* Step 3: demo Financial Snapshot, Safety Buffer, charts, alert. */}
+          <AlertBanner alert={d.dashboard_alert} />
+          <FinancialSnapshot
+            title={d.financial_snapshot.title}
+            metrics={d.financial_snapshot.metrics}
+          />
+          <SafetyBufferCard buffer={d.safety_buffer} />
+          <ProjectedGrowthChart growth={d.projected_growth} />
+          <AllocationChart allocation={d.allocation} />
         </main>
 
         {railMode === "ask_smith_ai" ? (
           <AskSmithAiPanel content={demoSmithAiContent} onClose={closeAskSmithAi} />
         ) : (
-          <aside className="suggestion-rail" aria-label={d.accessibility.right_rail_label}>
-            <div className="suggestion-rail__header">
-              <h2 className="suggestion-rail__title">{d.right_rail.title}</h2>
-              <p className="suggestion-rail__description">{d.right_rail.description}</p>
-            </div>
-            {/* Step 3: demo suggestion cards (Top Pick, Jupiter handoff, locked). */}
-          </aside>
+          <SuggestionRail
+            rail={d.right_rail}
+            railLabel={d.accessibility.right_rail_label}
+            onExternalHandoff={onExternalHandoff}
+            onReview={onReviewSuggestion}
+          />
         )}
       </div>
     </div>

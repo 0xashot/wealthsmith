@@ -217,6 +217,30 @@ never modified by it.
     demo→disconnected (Exit Demo, "Exited Demo Mode" toast), demo→connected
     (Connect Wallet, "Wallet connected" toast). No `demo_` suggestion ids
     appear in connected mode — demo never persists into real mode.
+- **Demo Step 3 (complete):** full Demo Mode Dashboard body, rendered by
+  REUSING the connected components (PageHeader, AlertBanner, FinancialSnapshot,
+  SafetyBufferCard, ProjectedGrowthChart, AllocationChart, SuggestionRail,
+  SuggestionCard, AskSmithAiPanel) driven by `demoDashboardState`.
+  - Two small data-driven changes to `SuggestionCard` (used by both modes):
+    generic icons keyed by category (`safety_buffer` → shield-check) so demo
+    ids resolve, and the external-handoff predicate accepts the demo
+    eligibility value `eligible_for_demo_handoff` (in addition to `eligible`).
+    Connected icons/handoff verified unchanged.
+  - **Fixture-shape fix (app-side only):** the demo fixture stores chart
+    captions under `copy.caption`, while the charts read `display.caption`
+    (as the connected fixture provides); demo allocation has no `display` at
+    all, which crashed AllocationChart. Normalized in `demoDashboardState.ts`
+    (caption text still from the fixture). Flagged below as a fixture
+    inconsistency for the design-system owners.
+  - Jupiter handoff toast reuses the approved "Opened protocol in a new tab"
+    string (`PROTOCOL_OPENED_TOAST`, from protocol-jupiter-swap.json). Review-
+    only: new tab, `rel="noopener noreferrer"`, no execution/signature/
+    completion.
+  - Verified: demo banner above nav, no wallet pill, snapshot $7,500/$1,000/
+    Medium/5 years, Safety Buffer 27%, charts + rail all "sample"-captioned,
+    3 demo cards with exactly 1 Top Pick, icons shield-check/jupiter/kamino,
+    locked Kamino disabled, demo Ask Smith AI demo-aware, demo→connected
+    clears all `demo_` state. No console errors on clean load.
 
 ### Step 2 intentional stubs
 

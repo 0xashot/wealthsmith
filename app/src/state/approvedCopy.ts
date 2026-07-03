@@ -91,3 +91,9 @@ export const DEMO_BANNER_ARIA = "Demo Mode is active. This is a sample portfolio
 
 /** dashboard-demo-state.json state_transitions.exit_demo.copy.toast */
 export const DEMO_EXIT_TOAST = "Exited Demo Mode";
+
+/**
+ * protocol-jupiter-swap.json toast_after_click.message (same approved string
+ * the connected slice uses via state_transitions.open_protocol_handoff).
+ */
+export const PROTOCOL_OPENED_TOAST = "Opened protocol in a new tab";

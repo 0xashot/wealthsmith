@@ -68,6 +68,27 @@ const dashboard_alert = {
   },
 };
 
+/**
+ * Normalize chart caption shape to the component contract. The demo fixture
+ * stores chart captions under `copy.caption`, while ProjectedGrowthChart /
+ * AllocationChart read `display.caption` (as the connected fixture provides).
+ * The caption text still comes from the fixture — nothing is invented.
+ */
+const rawGrowth = s.main_content.projected_growth;
+const projected_growth = {
+  ...rawGrowth,
+  display: {
+    ...rawGrowth.display,
+    caption: rawGrowth.copy?.caption ?? rawGrowth.display?.caption ?? "",
+  },
+};
+
+const rawAlloc = s.main_content.current_vs_recommended_allocation;
+const allocation = {
+  ...rawAlloc,
+  display: { caption: rawAlloc.copy?.caption ?? rawAlloc.display?.caption ?? "" },
+};
+
 export const demoDashboardState: DemoDashboardPageState = {
   mode: "demo",
   is_sample_data: true,
@@ -88,8 +109,8 @@ export const demoDashboardState: DemoDashboardPageState = {
   page_header: s.page_header,
   financial_snapshot: s.main_content.financial_snapshot,
   safety_buffer: s.main_content.safety_buffer,
-  projected_growth: s.main_content.projected_growth,
-  allocation: s.main_content.current_vs_recommended_allocation,
+  projected_growth,
+  allocation,
   dashboard_alert,
   right_rail: { ...s.right_rail, cards },
   smith_ai: s.smith_ai,
