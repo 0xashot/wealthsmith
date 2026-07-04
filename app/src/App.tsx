@@ -2,7 +2,13 @@
  * App — minimal local state machine for the Dashboard / Portfolio slices.
  *
  * Modes:  connected | demo | disconnected
- * Connected page (in-app switch, no router/URL): dashboard | portfolio
+ * Connected page (in-app switch, no router/URL): dashboard | portfolio | goal | support
+ *
+ * Onboarding gate (patterns/onboarding-with-smith-ai.md — Onboarding Visibility
+ * Rule): onboarding_active = mode !== "demo" && (disconnected || !goalCompleted).
+ * When active it renders the onboarding surface instead of the page. Step 1
+ * shows the disconnected onboarding shell; goalCompleted starts true so the
+ * connected Dashboard is unchanged.
  *
  * Fixture-driven only: no real wallet adapters, no live Smith AI, no routing.
  * Transitions:
@@ -18,11 +24,13 @@ import DashboardPage from "./pages/DashboardPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import GoalPage from "./pages/GoalPage";
 import SupportPage from "./pages/SupportPage";
+import OnboardingExperience from "./pages/OnboardingExperience";
 import DemoDashboardPage from "./pages/DemoDashboardPage";
 import ToastHost, { type ToastData } from "./components/ToastHost";
 import ConnectWalletModal from "./components/ConnectWalletModal";
 import { dashboardState } from "./state/dashboardState";
 import { initialSavedGoal } from "./state/goalState";
+import { isOnboardingActive } from "./state/onboardingState";
 import type { SavedGoal } from "./types/goal";
 import { DEMO_EXIT_TOAST } from "./state/approvedCopy";
 import "./styles/dashboard.css";
@@ -39,6 +47,11 @@ export default function App() {
   // scope only — no propagation into Dashboard/derived outputs this slice).
   // Initialized from the approved fixture; persists across nav for the session.
   const [savedGoal, setSavedGoal] = useState<SavedGoal>(initialSavedGoal);
+  // Onboarding gate (Onboarding Visibility Rule). The existing connected fixture
+  // is a completed plan, so goalCompleted initializes true and the connected
+  // Dashboard is unchanged. Disconnected always shows onboarding regardless. The
+  // setter arrives with the goal-setup steps in a later step of this slice.
+  const [goalCompleted] = useState(true);
   const nextToastId = useRef(1);
   const pageWrapRef = useRef<HTMLDivElement>(null);
   // The element that opened the modal, so focus can return to it on close.
@@ -112,6 +125,10 @@ export default function App() {
     pushToast(dashboardState.wallet.copy.connected_toast);
   };
 
+  // Onboarding is not optional: shown whenever disconnected, or connected with an
+  // incomplete goal. Demo Mode overrides onboarding while active.
+  const onboardingActive = isOnboardingActive(mode, goalCompleted);
+
   let page;
   if (mode === "demo") {
     page = (
@@ -119,6 +136,16 @@ export default function App() {
         pushToast={pushToast}
         onExitDemo={exitDemo}
         onConnectWallet={openConnectModal}
+      />
+    );
+  } else if (onboardingActive) {
+    // Onboarding surface (Step 1: disconnected welcome/entry shell). It does not
+    // recalculate suggestions/Top Pick/Safety Buffer/projections/allocation/
+    // protocol decisions.
+    page = (
+      <OnboardingExperience
+        onConnectWallet={openConnectModal}
+        onTryDemo={goDemo}
       />
     );
   } else if (mode === "connected" && activePage === "portfolio") {

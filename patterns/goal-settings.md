@@ -764,6 +764,9 @@ Rules:
 - Do not maintain separate conflicting goal states.
 - If onboarding is active and user opens Goal, preserve onboarding state.
 - If onboarding is complete, Goal page is the primary edit surface.
+- Goal Settings option definitions (Approved Field Options) are canonical for onboarding goal fields; onboarding must use the same field IDs and option labels.
+- Completing the required Goal fields (Financial Goal, Risk Tolerance, Timeline, Income, Expenses, Contribution Frequency) sets `goal_completed = true`. Monthly Saving Goal is optional and does not affect `goal_completed`.
+- While `goal_completed` is false, the app keeps onboarding visible (see the Onboarding Visibility Rule in `patterns/onboarding-with-smith-ai.md`).
 
 ---
 

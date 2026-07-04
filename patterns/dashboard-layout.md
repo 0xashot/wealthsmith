@@ -122,6 +122,14 @@ Rules:
 
 Dashboard can render all four Global Nav variants.
 
+`onboarding_active` is derived, not set manually:
+
+```text
+onboarding_active = mode !== "demo" && (wallet.status === "disconnected" || goal_completed === false)
+```
+
+`goal_completed` is true only when all required Goal fields are saved (see `patterns/goal-settings.md` Approved Field Options and `patterns/onboarding-with-smith-ai.md`). Onboarding is always visible while disconnected, remains visible after wallet connection until goal setup is complete, and is hidden only when the wallet is connected and `goal_completed` is true. Demo Mode overrides onboarding while active.
+
 ### Variant 1: Onboarding Active, No Wallet Connected
 
 Use when:

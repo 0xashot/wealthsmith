@@ -2050,3 +2050,70 @@
   font: var(--typography-body-sm-font);
   color: var(--color-text-primary);
 }
+
+/* ---------- Onboarding panel (patterns/onboarding-with-smith-ai.md) ---------- */
+
+/* Reuses .suggestion-rail (right column) + .card (container) + .progress +
+   .goal-btn. Only panel-specific spacing/typography is added here. */
+.onboarding-panel__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-card-gap-md);
+}
+
+.onboarding-panel__title {
+  margin: 0;
+  font: var(--typography-heading-sm-font);
+  color: var(--color-text-primary);
+}
+
+.onboarding-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-card-gap-sm);
+}
+
+.onboarding-panel__symbol {
+  display: block;
+}
+
+.onboarding-panel__welcome-title {
+  margin: 0;
+  font: var(--typography-heading-md-font);
+  color: var(--color-text-primary);
+}
+
+.onboarding-panel__desc {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}
+
+.onboarding-panel__companion {
+  margin: 0;
+  padding: var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  background: var(--color-subdued-neutral-background-default);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.onboarding-panel__helper {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.onboarding-panel__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-card-gap-sm);
+}
+
+.onboarding-panel__note,
+.onboarding-panel__security {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}

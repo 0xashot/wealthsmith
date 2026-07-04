@@ -174,6 +174,7 @@ Rules:
 - Ask Smith AI is allowed.
 - Navigation items are enabled so users can explore the product.
 - Demo Mode must not be confused with active onboarding.
+- Demo Mode overrides onboarding while active: entering Demo Mode forces `onboarding_active = false` and shows Demo Mode instead of onboarding. Exiting Demo Mode returns to the correct disconnected/onboarding state (`onboarding_active` is re-derived from wallet status and `goal_completed`).
 
 See:
 

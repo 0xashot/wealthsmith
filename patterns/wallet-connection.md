@@ -320,6 +320,7 @@ Rules:
 - Do not show fake portfolio values while scanning.
 - Advance onboarding progress only after wallet connection is saved.
 - Continue to wallet data loaded state when balances are available.
+- Connecting a wallet alone does not complete onboarding. `onboarding_active` remains true until the required Goal fields are saved (`goal_completed = true`); see `patterns/onboarding-with-smith-ai.md`.
 
 After data loads:
 

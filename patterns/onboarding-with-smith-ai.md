@@ -89,6 +89,44 @@ These values must come from structured product logic.
 
 ---
 
+## Onboarding Visibility Rule
+
+Onboarding is not optional and is not hidden behind a temporary entry point.
+
+Completion is defined by saved plan state:
+
+```text
+goal_completed = true only when all required Goal fields are saved:
+  Financial Goal
+  Risk Tolerance
+  Time Horizon
+  Monthly Income
+  Monthly Expenses
+  Contribution Frequency
+Monthly Saving Goal is optional and does not affect goal_completed.
+```
+
+Visibility is derived, not set manually:
+
+```text
+onboarding_active = mode !== "demo" && (wallet.status === "disconnected" || goal_completed === false)
+```
+
+Rules:
+
+- Onboarding is always visible in disconnected mode.
+- Onboarding remains visible after wallet connection if goal setup is incomplete.
+- Connecting a wallet alone does not complete onboarding.
+- Completing the required Goal fields sets goal_completed = true.
+- Onboarding is hidden only when the wallet is connected AND goal_completed is true.
+- Demo Mode overrides onboarding while active: entering Demo Mode shows Demo Mode instead of onboarding.
+- Exiting Demo Mode returns to the correct disconnected/onboarding state.
+- Onboarding must not recalculate Dashboard suggestions, Top Pick, Safety Buffer, projected growth, allocation, or protocol decisions. Those come from product logic only.
+
+Goal field option definitions are canonical from `patterns/goal-settings.md` (Approved Field Options). Onboarding goal fields must use the same field IDs and option labels as Goal Settings so onboarding feeds Goal Settings without mismatched IDs or labels.
+
+---
+
 ## When to Use
 
 Use this pattern when:

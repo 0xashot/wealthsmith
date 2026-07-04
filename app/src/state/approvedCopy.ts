@@ -209,3 +209,30 @@ export const CONTACT_ERR_EMAIL_INVALID = "Enter a valid email address.";
 export const CONTACT_ERR_DESC_REQUIRED = "Describe what you need help with.";
 /** patterns/support-center.md — Accessibility (modal close button accessible label). */
 export const CONTACT_CLOSE_LABEL = "Close Contact Us dialog";
+
+/* ---------- Onboarding (verbatim from content/onboarding-copy.md) ----------
+ * Step 1 (disconnected onboarding shell): Welcome + Wallet/Demo entry copy.
+ * Option labels for goal fields come from Goal Settings (goalState.ts) per the
+ * approved Decision A — not repeated here. Later steps add their own copy. */
+/** patterns/onboarding-with-smith-ai.md + dashboard-layout.md — panel heading. */
+export const ONBOARDING_PANEL_LABEL = "Onboarding";
+/** patterns/onboarding-with-smith-ai.md — Accessibility (progress bar label). */
+export const ONBOARDING_PROGRESS_LABEL = "Onboarding progress";
+/** onboarding-copy.md — Welcome Step (onboarding.welcome.title). */
+export const ONBOARDING_WELCOME_TITLE = "Build your WealthSmith plan";
+/** onboarding-copy.md — Welcome Step (onboarding.welcome.description). */
+export const ONBOARDING_WELCOME_DESC =
+  "Answer a few questions so WealthSmith can personalize your dashboard and suggestions.";
+/** onboarding-copy.md — Welcome Step (onboarding.welcome.helper). */
+export const ONBOARDING_WELCOME_HELPER = "You can update these settings later.";
+/** onboarding-copy.md — Welcome Step (Smith AI companion message). */
+export const ONBOARDING_WELCOME_COMPANION =
+  "I’ll help you set up your plan step by step. WealthSmith uses these answers to personalize your dashboard and suggestions.";
+/** onboarding-copy.md — Wallet Entry Step (wallet helper). */
+export const ONBOARDING_WALLET_HELPER =
+  "WealthSmith reads balances and positions only. Your funds stay in your wallet.";
+/** onboarding-copy.md — Wallet Entry Step (demo helper). */
+export const ONBOARDING_DEMO_HELPER =
+  "Demo Mode uses sample data and does not connect your wallet.";
+/** onboarding-copy.md — Wallet Entry Step (security note). */
+export const ONBOARDING_SECURITY_NOTE = "Never share your seed phrase or private key.";
