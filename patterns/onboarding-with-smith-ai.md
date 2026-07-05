@@ -237,6 +237,7 @@ components/card.md
 components/progress-bar.md
 components/select-card.md
 components/chip.md
+components/choice-chip.md
 components/input.md
 components/toast.md
 components/menu-popover.md
@@ -247,6 +248,13 @@ components/portfolio-card.md
 components/chart.md
 components/alert.md
 ```
+
+Note: onboarding guided choice questions (for example Financial Goal, Risk Level,
+Time Horizon, Contribution Rhythm) may use Choice Chips (`components/choice-chip.md`)
+in a future implementation for a more conversational feel. Choice Chips must use
+the same canonical option IDs and approved labels as Goal Settings. The current
+implementation uses `components/select-menu.md`; this is a forward-looking option
+only and does not change existing onboarding behavior.
 
 Navigation/layout components:
 

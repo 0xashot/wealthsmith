@@ -87,6 +87,7 @@ pagination.md
 input.md
 select-menu.md
 select-card.md
+choice-chip.md
 ```
 
 ### Containers and Surfaces
@@ -297,6 +298,7 @@ card.md
 chart.md
 checkbox.md
 chip.md
+choice-chip.md
 divider.md
 empty-state.md
 global-nav.md
