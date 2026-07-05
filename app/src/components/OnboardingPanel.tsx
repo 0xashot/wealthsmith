@@ -4,24 +4,23 @@
  *
  *  - Disconnected (Variant 1): welcome + wallet/demo entry (Step 1).
  *  - Connected + goal incomplete (Variant 4): the goal-setup questions with
- *    Back / Continue, progress, and required-field validation (Step 2).
+ *    Back / Continue, progress, and required-field validation (Step 2), ending
+ *    in a Review step + Finish Setup (Step 3).
  *
- * Layout: this is the right-rail assistant panel and uses the same sizing/
- * anchoring as the Ask Smith AI panel (components/sidebar.md) — the `.onboarding-panel`
- * element is the flex-column card; the header/progress stay pinned at the top,
- * the actions stay at the bottom, and `.onboarding-panel__body` scrolls
- * internally when content exceeds the available height (see dashboard.css).
+ * Layout: right-rail assistant panel matching the Ask Smith AI panel sizing/
+ * anchoring (components/sidebar.md) — header/progress pinned top, actions pinned
+ * bottom, `.onboarding-panel__body` scrolls internally.
  *
  * Explain-only, non-custodial: the Smith companion message is static approved
  * copy (no live AI). Choice options come from Goal Settings (Decision A);
- * currency fields use WealthSmith input styling. Answers are held as a LOCAL
- * draft only — nothing is committed to saved plan state, and nothing here
+ * currency fields use WealthSmith input styling. On Finish, the collected answers
+ * are committed to the SAME local savedGoal state Goal Settings uses (via
+ * onComplete) and the app routes to the connected Dashboard — nothing here
  * recalculates the Dashboard, suggestions, Top Pick, Safety Buffer, projections,
  * allocation, or protocol decisions. No wallet signature, transaction, fund
- * movement, or secret request. Review / Finish / completion arrive in a later
- * step; the final step's Continue is intentionally disabled until then.
+ * movement, or secret request.
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import OnboardingProgress from "./OnboardingProgress";
 import SelectMenu from "./SelectMenu";
 import smithSymbolUrl from "../../../assets/logo/wealthsmith-symbol.svg";
@@ -38,6 +37,18 @@ import {
   ONBOARDING_BACK,
   ONBOARDING_SKIP,
   ONBOARDING_SAVING_OPTIONAL,
+  ONBOARDING_GOAL_LABEL,
+  ONBOARDING_HORIZON_LABEL,
+  ONBOARDING_RISK_LABEL,
+  ONBOARDING_INCOME_LABEL,
+  ONBOARDING_EXPENSES_LABEL,
+  ONBOARDING_CONTRIB_LABEL,
+  ONBOARDING_SAVING_LABEL,
+  ONBOARDING_REVIEW_TITLE,
+  ONBOARDING_REVIEW_DESC,
+  ONBOARDING_REVIEW_HELPER,
+  ONBOARDING_REVIEW_COMPANION,
+  ONBOARDING_FINISH,
   CONNECT_WALLET_LABEL,
   TRY_DEMO_MODE,
 } from "../state/approvedCopy";
@@ -47,14 +58,26 @@ import {
   initialOnboardingAnswers,
   stepError,
   stepOrdinal,
+  requiredFieldsValid,
+  buildSavedGoal,
   type OnboardingAnswers,
 } from "../state/onboardingState";
+import {
+  FINANCIAL_GOAL_OPTIONS,
+  RISK_OPTIONS,
+  TIMELINE_OPTIONS,
+  CONTRIBUTION_OPTIONS,
+  labelFor,
+} from "../state/goalState";
+import type { SavedGoal } from "../types/goal";
 
 interface Props {
   /** Onboarding phase: disconnected = welcome/entry; connected = goal setup. */
   mode: "disconnected" | "connected";
   onConnectWallet: () => void;
   onTryDemo: () => void;
+  /** Finish Setup: commit the collected answers + complete onboarding. */
+  onComplete: (savedGoal: SavedGoal) => void;
 }
 
 const LABEL_ID = "onb-field-label";
@@ -62,12 +85,37 @@ const INPUT_ID = "onb-field-input";
 const HELPER_ID = "onb-field-helper";
 const ERROR_ID = "onb-field-error";
 
-export default function OnboardingPanel({ mode, onConnectWallet, onTryDemo }: Props) {
+/** Display a currency answer as "$X,XXX", or an em dash when blank. */
+function money(raw: string): string {
+  const t = raw.trim().replace(/[$,\s]/g, "");
+  if (t === "") return "—";
+  const n = Number(t);
+  return Number.isFinite(n) ? `$${n.toLocaleString()}` : "—";
+}
+
+export default function OnboardingPanel({
+  mode,
+  onConnectWallet,
+  onTryDemo,
+  onComplete,
+}: Props) {
   // Goal-setup draft state (used in the connected phase). Declared unconditionally
   // so it survives the disconnected → connected transition.
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<OnboardingAnswers>(initialOnboardingAnswers);
   const [showError, setShowError] = useState(false);
+
+  // Move focus to the step heading on step changes (predictable focus), skipping
+  // the initial mount so we don't steal focus on first render.
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    headingRef.current?.focus();
+  }, [stepIndex]);
 
   const set = (key: keyof OnboardingAnswers, value: string) =>
     setAnswers((prev) => ({ ...prev, [key]: value }));
@@ -109,34 +157,93 @@ export default function OnboardingPanel({ mode, onConnectWallet, onTryDemo }: Pr
     );
   }
 
-  // ---- Connected + goal incomplete: goal-setup steps (Step 2) ---------------
+  // ---- Connected + goal incomplete: goal-setup + review (Step 2/3) ----------
+  const isReview = stepIndex === GOAL_SETUP_STEPS.length;
+
+  const onBack = () => {
+    setStepIndex((i) => Math.max(0, i - 1));
+    setShowError(false);
+  };
+
+  // ---- Review step ----------------------------------------------------------
+  if (isReview) {
+    const rows: { label: string; value: string }[] = [
+      { label: ONBOARDING_GOAL_LABEL, value: labelFor(FINANCIAL_GOAL_OPTIONS, answers.financial_goal) },
+      { label: ONBOARDING_RISK_LABEL, value: labelFor(RISK_OPTIONS, answers.risk_tolerance) },
+      { label: ONBOARDING_HORIZON_LABEL, value: labelFor(TIMELINE_OPTIONS, answers.timeline) },
+      { label: ONBOARDING_INCOME_LABEL, value: money(answers.income) },
+      { label: ONBOARDING_EXPENSES_LABEL, value: money(answers.expenses) },
+      { label: ONBOARDING_CONTRIB_LABEL, value: labelFor(CONTRIBUTION_OPTIONS, answers.contribution_frequency) },
+      { label: ONBOARDING_SAVING_LABEL, value: money(answers.saving) },
+    ];
+    const canFinish = requiredFieldsValid(answers);
+    return (
+      <aside className="onboarding-panel" aria-label={ONBOARDING_PANEL_LABEL}>
+        <h2 className="onboarding-panel__title">{ONBOARDING_PANEL_LABEL}</h2>
+        <OnboardingProgress current={stepOrdinal("review")} total={ONBOARDING_TOTAL_STEPS} />
+        <div className="onboarding-panel__body">
+          <img
+            className="onboarding-panel__symbol"
+            src={smithSymbolUrl}
+            alt=""
+            width={40}
+            height={40}
+            aria-hidden="true"
+          />
+          <h3 className="onboarding-panel__welcome-title" ref={headingRef} tabIndex={-1}>
+            {ONBOARDING_REVIEW_TITLE}
+          </h3>
+          <p className="onboarding-panel__desc">{ONBOARDING_REVIEW_DESC}</p>
+          <p className="onboarding-panel__companion" role="status" aria-live="polite">
+            {ONBOARDING_REVIEW_COMPANION}
+          </p>
+          <dl className="onboarding-review">
+            {rows.map((r) => (
+              <div className="onboarding-review__row" key={r.label}>
+                <dt className="onboarding-review__label">{r.label}</dt>
+                <dd className="onboarding-review__value">{r.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="onboarding-panel__helper">{ONBOARDING_REVIEW_HELPER}</p>
+        </div>
+        <div className="onboarding-panel__nav">
+          <button type="button" className="goal-btn goal-btn--secondary" onClick={onBack}>
+            {ONBOARDING_BACK}
+          </button>
+          <button
+            type="button"
+            className="goal-btn goal-btn--primary"
+            onClick={() => onComplete(buildSavedGoal(answers))}
+            disabled={!canFinish}
+          >
+            {ONBOARDING_FINISH}
+          </button>
+        </div>
+      </aside>
+    );
+  }
+
+  // ---- Field step -----------------------------------------------------------
   const step = GOAL_SETUP_STEPS[stepIndex];
   const value = answers[step.draftKey];
   const error = showError ? stepError(step, value) : undefined;
   const isFirst = stepIndex === 0;
-  const isLast = stepIndex === GOAL_SETUP_STEPS.length - 1;
 
   const onContinue = () => {
     if (stepError(step, value)) {
       setShowError(true);
       return;
     }
-    if (!isLast) {
-      setStepIndex((i) => i + 1);
-      setShowError(false);
-    }
-  };
-  const onBack = () => {
-    if (!isFirst) {
-      setStepIndex((i) => i - 1);
-      setShowError(false);
-    }
+    // Advances through the field steps and, from the last field, into Review.
+    setStepIndex((i) => i + 1);
+    setShowError(false);
   };
   const onSkip = () => {
-    // Optional field: leave blank (approved skip). No advance from the last step
-    // until Review/Finish exists.
+    // Optional field: leave blank (approved skip), then continue to Review.
     set(step.draftKey, "");
     setShowError(false);
+    setStepIndex((i) => i + 1);
   };
 
   return (
@@ -153,7 +260,9 @@ export default function OnboardingPanel({ mode, onConnectWallet, onTryDemo }: Pr
           height={40}
           aria-hidden="true"
         />
-        <h3 className="onboarding-panel__welcome-title">{step.title}</h3>
+        <h3 className="onboarding-panel__welcome-title" ref={headingRef} tabIndex={-1}>
+          {step.title}
+        </h3>
         <p className="onboarding-panel__desc">{step.description}</p>
         <p className="onboarding-panel__companion" role="status" aria-live="polite">
           {step.companion}
@@ -227,12 +336,7 @@ export default function OnboardingPanel({ mode, onConnectWallet, onTryDemo }: Pr
             {ONBOARDING_SKIP}
           </button>
         )}
-        <button
-          type="button"
-          className="goal-btn goal-btn--primary"
-          onClick={onContinue}
-          disabled={isLast}
-        >
+        <button type="button" className="goal-btn goal-btn--primary" onClick={onContinue}>
           {ONBOARDING_CONTINUE}
         </button>
       </div>

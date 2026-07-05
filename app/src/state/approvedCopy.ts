@@ -322,3 +322,18 @@ export const ONBOARDING_SAVING_ERR_INVALID =
 
 /** onboarding-copy.md — Field Validation Copy (Negative Amount). */
 export const ONBOARDING_ERR_POSITIVE = "Enter a positive amount.";
+
+/* ---- Step 3: Review + Finish. Verbatim from content/onboarding-copy.md
+ * (Review Step + Finish / Transition Step). Row labels reuse the step caption
+ * constants above (Decision A / user Step-3 field naming). ---- */
+export const ONBOARDING_REVIEW_TITLE = "Review your plan";
+export const ONBOARDING_REVIEW_DESC =
+  "Check your answers before WealthSmith prepares your dashboard.";
+export const ONBOARDING_REVIEW_HELPER = "You can edit these settings later from Goal.";
+export const ONBOARDING_REVIEW_COMPANION =
+  "Review your plan inputs before finishing setup. WealthSmith will use saved values to prepare your dashboard and suggestions.";
+export const ONBOARDING_FINISH = "Finish Setup";
+/** onboarding-copy.md — Finish / Transition Step (Success title), used as the
+ *  completion toast (no dedicated finish-toast copy exists; this is the safest
+ *  approved completion string). */
+export const ONBOARDING_FINISH_TOAST = "Your WealthSmith dashboard is ready";

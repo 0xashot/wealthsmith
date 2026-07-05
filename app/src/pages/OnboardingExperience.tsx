@@ -33,6 +33,7 @@ import PageHeader from "../components/PageHeader";
 import EmptyStateCard from "../components/EmptyStateCard";
 import FinancialSnapshot from "../components/FinancialSnapshot";
 import OnboardingPanel from "../components/OnboardingPanel";
+import type { SavedGoal } from "../types/goal";
 
 interface Props {
   mode: "disconnected" | "connected";
@@ -41,6 +42,8 @@ interface Props {
   /** Connected phase: wallet menu actions. */
   onCopyAddress: () => void;
   onDisconnect: () => void;
+  /** Finish Setup: commit answers + complete onboarding (connected phase). */
+  onComplete: (savedGoal: SavedGoal) => void;
 }
 
 export default function OnboardingExperience({
@@ -49,6 +52,7 @@ export default function OnboardingExperience({
   onTryDemo,
   onCopyAddress,
   onDisconnect,
+  onComplete,
 }: Props) {
   const connected = mode === "connected";
 
@@ -101,6 +105,7 @@ export default function OnboardingExperience({
           mode={mode}
           onConnectWallet={onConnectWallet}
           onTryDemo={onTryDemo}
+          onComplete={onComplete}
         />
       </div>
     </div>

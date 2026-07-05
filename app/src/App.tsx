@@ -36,6 +36,7 @@ import {
   DEMO_EXIT_TOAST,
   TOAST_ADDRESS_COPIED,
   TOAST_COPY_FAILED,
+  ONBOARDING_FINISH_TOAST,
 } from "./state/approvedCopy";
 import "./styles/dashboard.css";
 
@@ -150,6 +151,19 @@ export default function App() {
     goDisconnected();
   };
 
+  // Finish Setup (onboarding complete): commit the collected answers into the
+  // same local savedGoal state Goal Settings uses, mark onboarding complete so
+  // it stops showing (goalCompleted = true), land on the connected Dashboard,
+  // and show the approved completion toast. No Dashboard recalculation: the
+  // connected fixture outputs (suggestions/Top Pick/Safety Buffer/projections/
+  // allocation/protocol) are unchanged (Option A — Goal-page-scoped save).
+  const handleOnboardingComplete = (goal: SavedGoal) => {
+    setSavedGoal(goal);
+    setGoalCompleted(true);
+    setActivePage("dashboard");
+    pushToast(ONBOARDING_FINISH_TOAST);
+  };
+
   // Onboarding is not optional: shown whenever disconnected, or connected with an
   // incomplete goal. Demo Mode overrides onboarding while active.
   const onboardingActive = isOnboardingActive(mode, goalCompleted);
@@ -174,6 +188,7 @@ export default function App() {
         onTryDemo={goDemo}
         onCopyAddress={copyWalletAddress}
         onDisconnect={disconnectFromOnboarding}
+        onComplete={handleOnboardingComplete}
       />
     );
   } else if (mode === "connected" && activePage === "portfolio") {

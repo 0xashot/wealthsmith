@@ -2191,3 +2191,31 @@
   cursor: default;
   pointer-events: none;
 }
+
+/* Review step (Step 3): labelled summary rows (definition list). */
+.onboarding-review {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+.onboarding-review__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--spacing-inline-gap-md);
+}
+
+.onboarding-review__label {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.onboarding-review__value {
+  margin: 0;
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+  text-align: right;
+}

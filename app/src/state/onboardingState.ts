@@ -13,7 +13,7 @@
  * Nothing here computes or invents financial values, suggestions, Top Pick, or
  * protocol decisions.
  */
-import type { GoalOption } from "../types/goal";
+import type { GoalOption, SavedGoal } from "../types/goal";
 import {
   FINANCIAL_GOAL_OPTIONS,
   RISK_OPTIONS,
@@ -266,6 +266,45 @@ export function stepError(step: OnboardingFieldStep, value: string): string | un
   if (p.negative) return step.positiveError;
   if (!p.valid) return step.invalidError;
   return undefined;
+}
+
+/** Numeric value of a currency field (assumes already validated). */
+function amountToNumber(raw: string): number {
+  return Number(raw.trim().replace(/[$,\s]/g, ""));
+}
+
+/**
+ * True when all required fields are valid for completion: income and expenses
+ * must be present + valid + non-negative; Monthly Saving Goal is optional (blank
+ * OR valid). Choice fields always carry a valid default. (Selects are canonical
+ * Goal Settings options; nothing invented.)
+ */
+export function requiredFieldsValid(a: OnboardingAnswers): boolean {
+  const inc = parseOnboardingAmount(a.income);
+  const exp = parseOnboardingAmount(a.expenses);
+  const sav = parseOnboardingAmount(a.saving);
+  const incOk = !inc.blank && inc.valid && !inc.negative;
+  const expOk = !exp.blank && exp.valid && !exp.negative;
+  const savOk = sav.blank || (sav.valid && !sav.negative);
+  return incOk && expOk && savOk;
+}
+
+/**
+ * Build the local SavedGoal (same shape Goal Settings uses) from onboarding
+ * answers. Blank Monthly Saving Goal is saved as null (never coerced to 0). No
+ * product logic, no derived values — this only commits the collected inputs.
+ */
+export function buildSavedGoal(a: OnboardingAnswers): SavedGoal {
+  const sav = parseOnboardingAmount(a.saving);
+  return {
+    financial_goal: a.financial_goal,
+    risk_tolerance: a.risk_tolerance,
+    timeline: a.timeline,
+    contribution_frequency: a.contribution_frequency,
+    income_monthly: amountToNumber(a.income),
+    expenses_monthly: amountToNumber(a.expenses),
+    monthly_saving_goal: sav.blank ? null : amountToNumber(a.saving),
+  };
 }
 
 /**
