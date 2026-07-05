@@ -318,6 +318,40 @@ Rules:
 
 ---
 
+## Connected Onboarding Preview (Wallet Connected, Goal Incomplete)
+
+When a wallet is connected but goal setup is not complete, the left dashboard
+preview must not use disconnected "connect a wallet" copy (the wallet pill is
+already visible). It shows a connected/incomplete empty-preview state instead —
+no portfolio values, no suggestions, no Top Pick, nothing recalculated.
+
+Title:
+
+```text
+Finish setting up your plan
+```
+
+Description:
+
+```text
+Your wallet is connected. Complete your goal setup to view your WealthSmith dashboard.
+```
+
+Metric / empty-section helper:
+
+```text
+Complete goal setup to see this metric.
+```
+
+Rules:
+
+- Do not show "No wallet connected" or ask the user to connect a wallet.
+- Do not show portfolio values, suggestions, or Top Pick.
+- Do not recalculate anything.
+- Disconnected onboarding copy is unchanged (still uses "No wallet connected").
+
+---
+
 ## Demo Mode Started State
 
 Banner:

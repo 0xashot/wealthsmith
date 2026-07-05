@@ -237,6 +237,15 @@ export const ONBOARDING_DEMO_HELPER =
 /** onboarding-copy.md — Wallet Entry Step (security note). */
 export const ONBOARDING_SECURITY_NOTE = "Never share your seed phrase or private key.";
 
+/* Connected onboarding preview (wallet connected, goal incomplete) — verbatim
+ * from content/onboarding-copy.md (Connected Onboarding Preview). Replaces the
+ * disconnected "connect a wallet" copy on the left preview once a wallet is
+ * connected; still shows no portfolio values / suggestions / Top Pick. */
+export const ONBOARDING_PREVIEW_TITLE = "Finish setting up your plan";
+export const ONBOARDING_PREVIEW_DESC =
+  "Your wallet is connected. Complete your goal setup to view your WealthSmith dashboard.";
+export const ONBOARDING_PREVIEW_METRIC = "Complete goal setup to see this metric.";
+
 /* ---- Step 2: goal-setup steps (connected onboarding). Titles/helpers/
  * companion/validation are verbatim from content/onboarding-copy.md. Choice
  * OPTIONS come from Goal Settings (state/goalState.ts, Decision A); the field
