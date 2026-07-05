@@ -1,20 +1,21 @@
 /**
  * OnboardingExperience — the onboarding surface per patterns/onboarding-with-smith-ai.md
- * and patterns/dashboard-layout.md (Mode 2 / Variant 1: Onboarding Active, No
- * Wallet Connected).
+ * and patterns/dashboard-layout.md.
  *
- * STEP 1 SCOPE: the disconnected onboarding shell only.
- *   Left  = the starter/empty Dashboard preview (same empty states as the
- *           disconnected Dashboard — no fake values).
- *   Right = the onboarding panel (welcome + wallet/demo entry).
- * The goal-setup steps, review, finish, and the connected-but-incomplete
- * (Variant 4) flow are added in later steps.
+ *  - Variant 1 (disconnected): welcome/entry, nav shows Connect Wallet + Try
+ *    Demo Mode, no wallet pill.
+ *  - Variant 4 (connected + goal incomplete): wallet pill shown, Connect Wallet /
+ *    Try Demo Mode hidden, goal-setup steps in the panel.
+ *
+ * In both variants Portfolio / Goal / Support are disabled in the Global Nav and
+ * the global Ask Smith AI button is hidden — the onboarding companion is the only
+ * Smith surface. The left column stays the starter/empty Dashboard preview (no
+ * fake values, no normal connected Dashboard content while onboarding is active).
  *
  * Non-custodial / MVP-safe: no wallet adapter, no signatures, no transactions,
- * no fund movement, no live data, no live AI, no invented values. Connect Wallet
- * opens the existing modal (App-owned); Try Demo Mode enters existing Demo Mode.
- * Per the Onboarding Visibility Rule this must NOT recalculate suggestions, Top
- * Pick, Safety Buffer, projections, allocation, or protocol decisions.
+ * no fund movement, no live data, no live AI, no invented values. Per the
+ * Onboarding Visibility Rule this must NOT recalculate suggestions, Top Pick,
+ * Safety Buffer, projections, allocation, or protocol decisions.
  */
 import { dashboardState as s } from "../state/dashboardState";
 import {
@@ -34,14 +35,25 @@ import FinancialSnapshot from "../components/FinancialSnapshot";
 import OnboardingPanel from "../components/OnboardingPanel";
 
 interface Props {
+  mode: "disconnected" | "connected";
   onConnectWallet: () => void;
   onTryDemo: () => void;
+  /** Connected phase: wallet menu actions. */
+  onCopyAddress: () => void;
+  onDisconnect: () => void;
 }
 
-export default function OnboardingExperience({ onConnectWallet, onTryDemo }: Props) {
-  // Wallet-derived metrics are unavailable while disconnected (approved
-  // metric-card fallback); no fake values are shown. Mirrors the disconnected
-  // Dashboard exactly so the preview stays faithful.
+export default function OnboardingExperience({
+  mode,
+  onConnectWallet,
+  onTryDemo,
+  onCopyAddress,
+  onDisconnect,
+}: Props) {
+  const connected = mode === "connected";
+
+  // Wallet-derived metrics are unavailable while onboarding (approved fallback);
+  // no fake values are shown. Mirrors the disconnected Dashboard preview.
   const disconnectedMetrics = s.financial_snapshot.metrics.map((m) =>
     m.source === "connected_wallet_fixture"
       ? { ...m, value: METRIC_NOT_AVAILABLE, note: METRIC_UNAVAILABLE }
@@ -51,13 +63,19 @@ export default function OnboardingExperience({ onConnectWallet, onTryDemo }: Pro
   return (
     <div className="app-shell">
       <GlobalNav
-        mode="disconnected"
+        mode={mode}
         nav={s.global_nav}
+        wallet={connected ? s.wallet : undefined}
         navLabel={s.accessibility.global_nav_label}
+        walletPillLabel={connected ? s.accessibility.wallet_pill_label : undefined}
         askSmithAiLabel={s.global_nav.right_actions.ask_smith_ai.accessibility_label}
         askAvailable={false}
+        activePage="dashboard"
+        onboardingActive
         onConnectWallet={onConnectWallet}
         onTryDemo={onTryDemo}
+        onCopyAddress={onCopyAddress}
+        onDisconnect={onDisconnect}
       />
 
       <div className="dashboard">
@@ -67,8 +85,8 @@ export default function OnboardingExperience({ onConnectWallet, onTryDemo }: Pro
             title={DISCONNECTED_TITLE}
             description={DISCONNECTED_DESCRIPTION}
             helper={DISCONNECTED_HELPER}
-            actionLabel={CONNECT_WALLET_LABEL}
-            onAction={onConnectWallet}
+            actionLabel={connected ? undefined : CONNECT_WALLET_LABEL}
+            onAction={connected ? undefined : onConnectWallet}
           />
           <FinancialSnapshot
             title={s.financial_snapshot.title}
@@ -79,7 +97,11 @@ export default function OnboardingExperience({ onConnectWallet, onTryDemo }: Pro
           <EmptyStateCard title={s.allocation.title} description={ALLOCATION_EMPTY} />
         </main>
 
-        <OnboardingPanel onConnectWallet={onConnectWallet} onTryDemo={onTryDemo} />
+        <OnboardingPanel
+          mode={mode}
+          onConnectWallet={onConnectWallet}
+          onTryDemo={onTryDemo}
+        />
       </div>
     </div>
   );

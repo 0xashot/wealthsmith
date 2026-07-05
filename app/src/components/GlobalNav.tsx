@@ -43,6 +43,10 @@ interface Props {
   /** Active page id ("dashboard" | "portfolio"); when set, overrides the
    *  fixture's per-item active flag. */
   activePage?: string;
+  /** While onboarding is active, Portfolio/Goal/Support are disabled (Dashboard
+   *  stays active) and are not reachable — patterns/dashboard-layout.md
+   *  Variants 1 & 4. */
+  onboardingActive?: boolean;
   /** In-app page switch (connected only). Dashboard/Portfolio navigate; other
    *  items are no-ops. When undefined, no nav item navigates. */
   onNavigate?: (id: string) => void;
@@ -63,6 +67,7 @@ export default function GlobalNav({
   walletPillLabel,
   askButtonRef,
   activePage,
+  onboardingActive,
   onNavigate,
   onCopyAddress,
   onDisconnect,
@@ -145,7 +150,11 @@ export default function GlobalNav({
         <ul className="global-nav__items">
           {nav.nav_items.map((item) => {
             const isActive = activePage ? item.id === activePage : item.active;
+            // While onboarding is active, only Dashboard is enabled; Portfolio/
+            // Goal/Support are disabled and not reachable (Variants 1 & 4).
+            const disabled = !!onboardingActive && item.id !== "dashboard";
             const navigable =
+              !disabled &&
               !!onNavigate &&
               (item.id === "dashboard" ||
                 item.id === "portfolio" ||
@@ -155,14 +164,19 @@ export default function GlobalNav({
               <li key={item.id}>
                 <a
                   className={
-                    "global-nav__item" + (isActive ? " global-nav__item--active" : "")
+                    "global-nav__item" +
+                    (isActive ? " global-nav__item--active" : "") +
+                    (disabled ? " global-nav__item--disabled" : "")
                   }
                   href={item.href}
                   aria-current={isActive ? "page" : undefined}
+                  aria-disabled={disabled ? true : undefined}
+                  tabIndex={disabled ? -1 : undefined}
                   onClick={(e) => {
                     // SPA: never trigger a real browser navigation. Only the
                     // in-scope Dashboard/Portfolio items switch pages; Goal /
-                    // Support (and demo/disconnected) are safe no-ops.
+                    // Support (and demo/disconnected) are safe no-ops. Disabled
+                    // onboarding items never navigate.
                     e.preventDefault();
                     if (navigable) onNavigate!(item.id);
                   }}

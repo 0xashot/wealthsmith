@@ -2053,21 +2053,59 @@
 
 /* ---------- Onboarding panel (patterns/onboarding-with-smith-ai.md) ---------- */
 
-/* Reuses .suggestion-rail (right column) + .card (container) + .progress +
-   .goal-btn. Only panel-specific spacing/typography is added here. */
-.onboarding-panel__card {
+/* Right-rail assistant panel: matches the Ask Smith AI panel sizing/anchoring
+   (components/sidebar.md — Panel Sizing and Anchoring). Same right column of the
+   dashboard grid (so width matches .smith-panel), same viewport-aware height on
+   desktop; header/progress pinned at the top, actions pinned at the bottom, the
+   body scrolls internally when content exceeds the available height. Reuses
+   .progress + .goal-btn + .goal-field. */
+.onboarding-panel {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   gap: var(--spacing-card-gap-md);
+  padding: var(--spacing-card-padding-md);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-card-default);
+}
+
+/* desktop/wide: sticky assistant sidebar sized to fit inside the viewport — the
+   same panelTopOffset/bottom-padding calc as .smith-panel so the bottom edge
+   never falls below the visible screen and top/bottom spacing stay consistent. */
+@media (min-width: 1280px) {
+  .onboarding-panel {
+    --onboarding-panel-top-offset: calc(24px + 64px + var(--spacing-page-padding-desktop));
+    position: sticky;
+    top: var(--onboarding-panel-top-offset);
+    height: calc(
+      100dvh - var(--onboarding-panel-top-offset) - var(--spacing-page-padding-desktop)
+    );
+    max-height: calc(
+      100dvh - var(--onboarding-panel-top-offset) - var(--spacing-page-padding-desktop)
+    );
+  }
 }
 
 .onboarding-panel__title {
+  flex-shrink: 0;
   margin: 0;
   font: var(--typography-heading-sm-font);
   color: var(--color-text-primary);
 }
 
+/* Progress bar stays pinned below the header. */
+.onboarding-progress {
+  flex-shrink: 0;
+}
+
+/* Scrollable content area (flex:1); header above and actions below do not shrink. */
 .onboarding-panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-card-gap-sm);
@@ -2106,6 +2144,7 @@
 }
 
 .onboarding-panel__actions {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-card-gap-sm);
@@ -2113,7 +2152,42 @@
 
 .onboarding-panel__note,
 .onboarding-panel__security {
+  flex-shrink: 0;
   margin: 0;
   font: var(--typography-body-sm-font);
   color: var(--color-text-secondary);
+}
+
+/* Goal-setup step (Step 2): Back / Skip / Continue row. Back sits left, the
+   rest right. Reuses .goal-field / .goal-currency / .goal-input / SelectMenu. */
+.onboarding-panel__nav {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-card-gap-sm);
+}
+
+.onboarding-panel__nav .goal-btn--secondary:first-child {
+  margin-right: auto;
+}
+
+.goal-btn:disabled {
+  cursor: not-allowed;
+}
+
+.goal-btn--secondary:disabled {
+  color: var(--color-text-disabled);
+  border-color: var(--color-border-subtle);
+}
+
+.goal-btn--secondary:disabled:hover {
+  background: transparent;
+}
+
+/* Disabled nav items while onboarding is active (Variants 1 & 4): dimmed and
+   non-interactive; Dashboard stays active. */
+.global-nav__item--disabled {
+  color: var(--color-text-disabled);
+  cursor: default;
+  pointer-events: none;
 }

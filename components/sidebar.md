@@ -168,6 +168,9 @@ Rules:
 The Smith AI companion panel behaves like a persistent assistant sidebar
 (layout behavior only — no third-party branding or visual style).
 
+The onboarding panel (`patterns/onboarding-with-smith-ai.md`) uses this same
+right-rail sizing and anchoring behavior.
+
 Desktop / wide:
 
 - The panel opens in the right rail / side panel area.

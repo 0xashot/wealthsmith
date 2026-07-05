@@ -236,3 +236,89 @@ export const ONBOARDING_DEMO_HELPER =
   "Demo Mode uses sample data and does not connect your wallet.";
 /** onboarding-copy.md — Wallet Entry Step (security note). */
 export const ONBOARDING_SECURITY_NOTE = "Never share your seed phrase or private key.";
+
+/* ---- Step 2: goal-setup steps (connected onboarding). Titles/helpers/
+ * companion/validation are verbatim from content/onboarding-copy.md. Choice
+ * OPTIONS come from Goal Settings (state/goalState.ts, Decision A); the field
+ * caption labels below are onboarding presentation only. ---- */
+/** onboarding-copy.md — Global Onboarding Labels. */
+export const ONBOARDING_CONTINUE = "Continue";
+export const ONBOARDING_BACK = "Back";
+export const ONBOARDING_SKIP = "Skip for now";
+
+/** Financial Goal step. */
+export const ONBOARDING_GOAL_TITLE = "What is your financial goal?";
+export const ONBOARDING_GOAL_DESC =
+  "Choose the goal that best matches what you want WealthSmith to help you plan for.";
+export const ONBOARDING_GOAL_HELPER = "You can update this later.";
+export const ONBOARDING_GOAL_COMPANION =
+  "Your goal helps WealthSmith frame suggestions around what you care about most, like long-term growth, stability, or yield.";
+export const ONBOARDING_GOAL_LABEL = "Financial Goal";
+
+/** Time Horizon step. */
+export const ONBOARDING_HORIZON_TITLE = "What is your time horizon?";
+export const ONBOARDING_HORIZON_DESC = "How long do you expect this plan to run?";
+export const ONBOARDING_HORIZON_HELPER =
+  "This helps WealthSmith model Projected Growth and prioritize suggestions.";
+export const ONBOARDING_HORIZON_COMPANION =
+  "Time horizon helps WealthSmith understand whether your plan is short-term or long-term. Longer timelines can usually tolerate different tradeoffs than short timelines.";
+export const ONBOARDING_HORIZON_LABEL = "Time Horizon";
+
+/** Risk Level step. */
+export const ONBOARDING_RISK_TITLE = "What risk level feels right for this plan?";
+export const ONBOARDING_RISK_DESC = "Choose how much volatility you are comfortable with.";
+export const ONBOARDING_RISK_HELPER =
+  "Risk tolerance helps WealthSmith compare your current portfolio with your target allocation.";
+export const ONBOARDING_RISK_COMPANION =
+  "Risk tolerance helps WealthSmith understand how much volatility may fit your plan. You can adjust this later if your comfort level changes.";
+export const ONBOARDING_RISK_LABEL = "Risk Level";
+
+/** Monthly Income step. */
+export const ONBOARDING_INCOME_TITLE = "What is your average monthly income?";
+export const ONBOARDING_INCOME_DESC = "Enter your approximate monthly income.";
+export const ONBOARDING_INCOME_HELPER =
+  "This helps WealthSmith understand your plan inputs. You can update it later.";
+export const ONBOARDING_INCOME_LABEL = "Monthly Income";
+export const ONBOARDING_INCOME_PLACEHOLDER = "4,000";
+export const ONBOARDING_INCOME_COMPANION =
+  "Income helps WealthSmith understand your planning context. Use your best estimate; you can update it later.";
+export const ONBOARDING_INCOME_ERR_MISSING = "Enter your monthly income.";
+export const ONBOARDING_INCOME_ERR_INVALID = "Enter a valid monthly income amount.";
+
+/** Monthly Expenses step. */
+export const ONBOARDING_EXPENSES_TITLE = "What are your average monthly expenses?";
+export const ONBOARDING_EXPENSES_DESC = "Enter your approximate monthly expenses.";
+export const ONBOARDING_EXPENSES_HELPER =
+  "This helps WealthSmith calculate your Safety Buffer target.";
+export const ONBOARDING_EXPENSES_LABEL = "Monthly Expenses";
+export const ONBOARDING_EXPENSES_PLACEHOLDER = "1,000";
+export const ONBOARDING_EXPENSES_COMPANION =
+  "Expenses help WealthSmith estimate your Safety Buffer target. Use an average monthly amount that feels realistic.";
+export const ONBOARDING_EXPENSES_ERR_MISSING = "Enter your monthly expenses.";
+export const ONBOARDING_EXPENSES_ERR_INVALID = "Enter a valid monthly expenses amount.";
+
+/** Contribution Rhythm step. */
+export const ONBOARDING_CONTRIB_TITLE = "How often do you plan to contribute?";
+export const ONBOARDING_CONTRIB_DESC =
+  "Choose how often you expect to add funds to this plan.";
+export const ONBOARDING_CONTRIB_HELPER =
+  "This helps WealthSmith model contributions over time.";
+export const ONBOARDING_CONTRIB_COMPANION =
+  "Contribution frequency helps WealthSmith model your plan. Choose the closest option; it does not create automatic deposits.";
+export const ONBOARDING_CONTRIB_LABEL = "Contribution Rhythm";
+
+/** Monthly Saving Goal step (optional). */
+export const ONBOARDING_SAVING_TITLE = "What is your monthly saving goal?";
+export const ONBOARDING_SAVING_DESC = "Enter the amount you hope to set aside each month.";
+export const ONBOARDING_SAVING_HELPER =
+  "This is optional and helps WealthSmith model your contribution plan.";
+export const ONBOARDING_SAVING_LABEL = "Monthly Saving Goal";
+export const ONBOARDING_SAVING_OPTIONAL = "Optional";
+export const ONBOARDING_SAVING_PLACEHOLDER = "1,000";
+export const ONBOARDING_SAVING_COMPANION =
+  "Monthly Saving Goal is optional. It helps WealthSmith model contributions, but it does not mean WealthSmith will move or invest funds automatically.";
+export const ONBOARDING_SAVING_ERR_INVALID =
+  "Monthly saving goal must be a positive amount if entered.";
+
+/** onboarding-copy.md — Field Validation Copy (Negative Amount). */
+export const ONBOARDING_ERR_POSITIVE = "Enter a positive amount.";

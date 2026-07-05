@@ -32,7 +32,11 @@ import { dashboardState } from "./state/dashboardState";
 import { initialSavedGoal } from "./state/goalState";
 import { isOnboardingActive } from "./state/onboardingState";
 import type { SavedGoal } from "./types/goal";
-import { DEMO_EXIT_TOAST } from "./state/approvedCopy";
+import {
+  DEMO_EXIT_TOAST,
+  TOAST_ADDRESS_COPIED,
+  TOAST_COPY_FAILED,
+} from "./state/approvedCopy";
 import "./styles/dashboard.css";
 
 export type AppMode = "connected" | "demo" | "disconnected";
@@ -49,9 +53,10 @@ export default function App() {
   const [savedGoal, setSavedGoal] = useState<SavedGoal>(initialSavedGoal);
   // Onboarding gate (Onboarding Visibility Rule). The existing connected fixture
   // is a completed plan, so goalCompleted initializes true and the connected
-  // Dashboard is unchanged. Disconnected always shows onboarding regardless. The
-  // setter arrives with the goal-setup steps in a later step of this slice.
-  const [goalCompleted] = useState(true);
+  // Dashboard is unchanged on a normal load. Connecting a wallet does NOT complete
+  // onboarding — it flips this to false so onboarding stays visible (Variant 4).
+  // Completion (goalCompleted = true from finishing setup) arrives in a later step.
+  const [goalCompleted, setGoalCompleted] = useState(true);
   const nextToastId = useRef(1);
   const pageWrapRef = useRef<HTMLDivElement>(null);
   // The element that opened the modal, so focus can return to it on close.
@@ -122,7 +127,27 @@ export default function App() {
     setConnectModalOpen(false);
     setActivePage("dashboard");
     setMode("connected");
+    // Connecting a wallet alone does not complete onboarding: keep onboarding
+    // visible (connected + goal incomplete, Variant 4) until goal setup finishes.
+    setGoalCompleted(false);
     pushToast(dashboardState.wallet.copy.connected_toast);
+  };
+
+  // Wallet menu actions for the connected onboarding surface (Variant 4).
+  const copyWalletAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(dashboardState.wallet.address);
+      pushToast(TOAST_ADDRESS_COPIED);
+    } catch {
+      pushToast(TOAST_COPY_FAILED);
+    }
+  };
+  const disconnectFromOnboarding = () => {
+    pushToast(
+      dashboardState.transitions.disconnect_wallet.copy.toast,
+      dashboardState.transitions.disconnect_wallet.copy.helper
+    );
+    goDisconnected();
   };
 
   // Onboarding is not optional: shown whenever disconnected, or connected with an
@@ -139,13 +164,16 @@ export default function App() {
       />
     );
   } else if (onboardingActive) {
-    // Onboarding surface (Step 1: disconnected welcome/entry shell). It does not
-    // recalculate suggestions/Top Pick/Safety Buffer/projections/allocation/
-    // protocol decisions.
+    // Onboarding surface. Disconnected → welcome/entry (Variant 1); connected +
+    // goal incomplete → goal-setup steps (Variant 4). It does not recalculate
+    // suggestions/Top Pick/Safety Buffer/projections/allocation/protocol decisions.
     page = (
       <OnboardingExperience
+        mode={mode === "connected" ? "connected" : "disconnected"}
         onConnectWallet={openConnectModal}
         onTryDemo={goDemo}
+        onCopyAddress={copyWalletAddress}
+        onDisconnect={disconnectFromOnboarding}
       />
     );
   } else if (mode === "connected" && activePage === "portfolio") {

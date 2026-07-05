@@ -889,6 +889,11 @@ Rules:
 - More menu includes Restart Onboarding.
 - Onboarding should not feel like a generic chat.
 - Onboarding state should persist across nav changes.
+- The onboarding panel uses the same right-rail sizing/anchoring as the Ask
+  Smith AI panel (see `components/sidebar.md` — Panel Sizing and Anchoring):
+  on desktop/wide it is sticky with a viewport-aware height, does not collapse
+  to content height, does not extend below the viewport, keeps the same bottom
+  page padding, and scrolls its body internally when needed.
 
 See:
 

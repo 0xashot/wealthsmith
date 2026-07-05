@@ -288,6 +288,15 @@ Rules:
 - Dashboard/Portfolio updates appear on the left.
 - Main content should not be blocked by Smith AI.
 - Both left and right areas should scroll safely if content exceeds viewport.
+- The onboarding panel uses the same right-rail assistant panel sizing and
+  anchoring behavior as the Ask Smith AI panel (see `components/sidebar.md` —
+  Panel Sizing and Anchoring, and `patterns/dashboard-layout.md`). On desktop/
+  wide it is sticky/fixed-like with a viewport-aware height
+  (`100dvh − panelTopOffset − panelBottomOffset`), not plain content height;
+  its bottom stays inside the viewport with the same bottom page padding, the
+  header/progress stay pinned at the top, the primary action area stays near
+  the bottom, and the onboarding body scrolls internally when content exceeds
+  the available height. Mobile/tablet remains stacked/drawer-like.
 
 ### Tablet
 
