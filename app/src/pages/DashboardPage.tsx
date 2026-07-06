@@ -1,24 +1,28 @@
 /**
- * DashboardPage — connected-wallet Dashboard per patterns/dashboard-layout.md.
+ * DashboardPage — Dashboard for the REAL connected-wallet and disconnected modes
+ * (patterns/dashboard-layout.md; App owns the mode and the shared ToastHost).
  *
- * Handles the `connected` and `disconnected` app modes (App owns the mode and
- * the shared ToastHost). Behavior is unchanged from the QA'd connected slice;
- * the only structural change is that connected/disconnected and toasts are now
- * controlled by App instead of local state, and the disconnected state now
- * offers Try Demo Mode.
+ * Real connected wallet mode (`connected`) shows LIVE, read-only wallet facts and
+ * safe "unavailable" states — NOT the connected-wallet fixture. Per the product
+ * rule, fixture Portfolio Value ($15,500), Safety Buffer, Projected Growth,
+ * Allocation, Top Pick, and suggestions must never be presented as the connected
+ * wallet's real data (rules/financial-logic-boundaries.md). Those fixtures live
+ * on only in Demo Mode and the example reference fixture (dev/tests). The live
+ * wallet summary comes from RealWalletSummary (useWalletPortfolio); the full live
+ * asset table lives on the Portfolio page.
+ *
+ * Ask Smith AI is available in real-wallet mode with REAL-WALLET-SAFE content
+ * (realWalletSmithAi.ts): it only explains the read-only connection and why some
+ * values aren't shown yet — it never presents fixture Top Pick / suggestions as
+ * the user's real data.
  *
  * - Disconnecting clears wallet-dependent data from view per
  *   rules/wallet-and-custody-rules.md (goal-settings values persist; no copy
- *   implies funds moved). Connect Wallet restores the synthetic fixture
- *   session — a slice-only stub; no wallet adapter exists.
- * - External protocol handoff: navigation happens on the card's own anchor;
- *   the handler only shows the approved toast. No transaction, signature,
- *   completion, or suggestion state change.
+ *   implies funds moved).
  */
 import { useRef, useState } from "react";
 import { dashboardState as s } from "../state/dashboardState";
-import { connectedSmithAiContent } from "../state/connectedSmithAi";
-import type { SuggestionCardState } from "../types/dashboard";
+import { realWalletSmithAiContent } from "../state/realWalletSmithAi";
 import {
   ALLOCATION_EMPTY,
   CONNECT_WALLET_LABEL,
@@ -30,17 +34,13 @@ import {
   METRIC_UNAVAILABLE,
   SUGGESTIONS_EMPTY_DESCRIPTION,
   SUGGESTIONS_EMPTY_TITLE,
-  TOAST_ADDRESS_COPIED,
-  TOAST_COPY_FAILED,
+  REAL_WALLET_SUGGESTIONS_TITLE,
+  REAL_WALLET_SUGGESTIONS_DESC,
 } from "../state/approvedCopy";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
-import AlertBanner from "../components/AlertBanner";
 import FinancialSnapshot from "../components/FinancialSnapshot";
-import SafetyBufferCard from "../components/SafetyBufferCard";
-import ProjectedGrowthChart from "../components/ProjectedGrowthChart";
-import AllocationChart from "../components/AllocationChart";
-import SuggestionRail from "../components/SuggestionRail";
+import RealWalletSummary from "../components/RealWalletSummary";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 import EmptyStateCard from "../components/EmptyStateCard";
 
@@ -52,6 +52,7 @@ interface Props {
   onDisconnect: () => void;
   onConnectWallet: () => void;
   onTryDemo: () => void;
+  onCopyAddress: (address: string) => void;
   /** connected only: in-app page switch + active page (undefined disables nav) */
   activePage?: string;
   onNavigate?: (id: string) => void;
@@ -59,10 +60,10 @@ interface Props {
 
 export default function DashboardPage({
   mode,
-  pushToast,
   onDisconnect,
   onConnectWallet,
   onTryDemo,
+  onCopyAddress,
   activePage,
   onNavigate,
 }: Props) {
@@ -70,56 +71,19 @@ export default function DashboardPage({
   const [railMode, setRailMode] = useState<RightRailMode>("suggestions");
   const askButtonRef = useRef<HTMLButtonElement>(null);
 
-  const onCopyAddress = async () => {
-    try {
-      await navigator.clipboard.writeText(s.wallet.address);
-      pushToast(TOAST_ADDRESS_COPIED);
-    } catch {
-      pushToast(TOAST_COPY_FAILED);
-    }
-  };
-
-  // Clears wallet-dependent view state. No funds move, no signature is
-  // requested; saved goal settings persist (rules/wallet-and-custody-rules.md).
-  const disconnect = () => {
-    setRailMode("suggestions");
-    pushToast(
-      s.transitions.disconnect_wallet.copy.toast,
-      s.transitions.disconnect_wallet.copy.helper
-    );
-    onDisconnect();
-  };
-
-  // Opens the Connect Wallet modal (App owns it). The approved "Wallet
-  // connected" toast now fires on a successful selection inside the modal, not
-  // on this click.
-  const connectWallet = () => {
-    onConnectWallet();
-  };
-
-  // Navigation is handled by the card's anchor (new tab, noopener noreferrer).
-  // This handler only shows the approved non-execution toast.
-  const onExternalHandoff = () => {
-    pushToast(s.transitions.open_protocol_handoff.copy.toast);
-  };
-
-  // "Review" on the buffer Top Pick: move to its on-dashboard detail area,
-  // read-only. No execution/signature/completion/Top Pick change.
-  const onReviewSuggestion = (card: SuggestionCardState) => {
-    const targetId =
-      card.category === "safety_buffer" ? "safety-buffer" : `suggestion-${card.id}`;
-    const el = document.getElementById(targetId);
-    if (el) {
-      el.scrollIntoView({ block: "nearest" });
-      (el as HTMLElement).focus();
-    }
-  };
-
   const openAskSmithAi = () => setRailMode("ask_smith_ai");
   const closeAskSmithAi = () => {
     setRailMode("suggestions");
     askButtonRef.current?.focus();
   };
+
+  // The disconnect toast + return-to-Dashboard is owned by App (fires once for
+  // menu and extension-side disconnects). No funds move, no signature; saved goal
+  // settings persist.
+  const disconnect = () => onDisconnect();
+
+  // Opens the Connect Wallet modal (App owns it).
+  const connectWallet = () => onConnectWallet();
 
   // Disconnected snapshot: wallet-derived metric becomes unavailable
   // (approved metric-card fallback); goal-settings metrics persist.
@@ -138,7 +102,8 @@ export default function DashboardPage({
         navLabel={s.accessibility.global_nav_label}
         walletPillLabel={s.accessibility.wallet_pill_label}
         askSmithAiLabel={s.global_nav.right_actions.ask_smith_ai.accessibility_label}
-        askAvailable={s.smith_ai.available}
+        // Available in real-wallet mode with real-wallet-safe explainer content.
+        askAvailable={connected}
         askButtonRef={askButtonRef}
         activePage={activePage}
         onNavigate={onNavigate}
@@ -154,16 +119,9 @@ export default function DashboardPage({
           <PageHeader header={s.page_header} />
 
           {connected ? (
-            <>
-              <AlertBanner alert={s.dashboard_alert} />
-              <FinancialSnapshot
-                title={s.financial_snapshot.title}
-                metrics={s.financial_snapshot.metrics}
-              />
-              <SafetyBufferCard buffer={s.safety_buffer} />
-              <ProjectedGrowthChart growth={s.projected_growth} />
-              <AllocationChart allocation={s.allocation} />
-            </>
+            // Real connected wallet: live, read-only facts + safe unavailable
+            // states. No fixture financial values are shown.
+            <RealWalletSummary />
           ) : (
             <>
               <EmptyStateCard
@@ -184,7 +142,18 @@ export default function DashboardPage({
           )}
         </main>
 
-        {!connected ? (
+        {connected && railMode === "ask_smith_ai" ? (
+          <AskSmithAiPanel content={realWalletSmithAiContent} onClose={closeAskSmithAi} />
+        ) : connected ? (
+          <aside className="suggestion-rail" aria-label={s.accessibility.right_rail_label}>
+            {/* Suggestion Engine has no live inputs yet — safe coming-soon state,
+                never fixture suggestions or Top Pick presented as the user's. */}
+            <EmptyStateCard
+              title={REAL_WALLET_SUGGESTIONS_TITLE}
+              description={REAL_WALLET_SUGGESTIONS_DESC}
+            />
+          </aside>
+        ) : (
           <aside className="suggestion-rail" aria-label={s.accessibility.right_rail_label}>
             <EmptyStateCard
               title={SUGGESTIONS_EMPTY_TITLE}
@@ -193,15 +162,6 @@ export default function DashboardPage({
               onAction={connectWallet}
             />
           </aside>
-        ) : railMode === "ask_smith_ai" ? (
-          <AskSmithAiPanel content={connectedSmithAiContent} onClose={closeAskSmithAi} />
-        ) : (
-          <SuggestionRail
-            rail={s.right_rail}
-            railLabel={s.accessibility.right_rail_label}
-            onExternalHandoff={onExternalHandoff}
-            onReview={onReviewSuggestion}
-          />
         )}
       </div>
     </div>

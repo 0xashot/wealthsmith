@@ -49,7 +49,8 @@
     "notes": [
       "This is synthetic fixture data, not real user data.",
       "Production values must come from wallet data, product logic, Suggestion Engine, Top Pick Logic, and Protocol Logic.",
-      "This fixture intentionally mirrors the MVP demo portfolio shape but is a connected-wallet state, not Demo Mode."
+      "This fixture intentionally mirrors the MVP demo portfolio shape but is a connected-wallet state, not Demo Mode.",
+      "portfolioDataSource: example_fixture. This file is a dev/tests/storybook reference ONLY. The running app must NOT render these values (portfolio value, Safety Buffer, projection, allocation, Top Pick, suggestions) as a real connected wallet's data; real-wallet mode uses live read-only wallet reads and safe unavailable states. See patterns/wallet-connection.md (Data Mode Separation)."
     ]
   },
   "screen": {

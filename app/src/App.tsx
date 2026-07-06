@@ -1,25 +1,24 @@
 /**
- * App — minimal local state machine for the Dashboard / Portfolio slices.
+ * App — local state machine for the Dashboard / Portfolio slices, now driven by a
+ * REAL Solana wallet connection (wallet-adapter) for connected/disconnected state.
  *
  * Modes:  connected | demo | disconnected
+ *   - connected     = a real wallet is connected (useWallet().connected + publicKey)
+ *   - demo          = Demo Mode active (independent of wallet)
+ *   - disconnected  = no wallet, not demo
  * Connected page (in-app switch, no router/URL): dashboard | portfolio | goal | support
  *
  * Onboarding gate (patterns/onboarding-with-smith-ai.md — Onboarding Visibility
  * Rule): onboarding_active = mode !== "demo" && (disconnected || !goalCompleted).
- * When active it renders the onboarding surface instead of the page. Step 1
- * shows the disconnected onboarding shell; goalCompleted starts true so the
- * connected Dashboard is unchanged.
- *
- * Fixture-driven only: no real wallet adapters, no live Smith AI, no routing.
- * Transitions:
- *   connected → disconnected (Disconnect)     connected ← disconnected (Connect Wallet)
- *   disconnected → demo (Try Demo Mode)        demo → disconnected (Exit Demo)
- *   demo → connected (Connect Wallet, slice stub — clears demo by switching)
- *   Dashboard ⇄ Portfolio (Global Nav, connected only)
- *
- * Toasts are owned here so they persist across mode switches.
+ * On load there is no wallet → disconnected onboarding. Connecting a wallet does
+ * NOT complete onboarding (goalCompleted is unchanged), so onboarding stays
+ * visible until Finish Setup. No Dashboard recalculation from the real wallet:
+ * connected Dashboard/Portfolio/Goal/Support stay fixture-backed; only the wallet
+ * pill shows the real name + shortened publicKey. READ-ONLY: no balance fetch, no
+ * signing, no transactions.
  */
 import { useEffect, useRef, useState } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import DashboardPage from "./pages/DashboardPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import GoalPage from "./pages/GoalPage";
@@ -46,25 +45,23 @@ export type AppMode = "connected" | "demo" | "disconnected";
 export type ConnectedPage = "dashboard" | "portfolio" | "goal" | "support";
 
 export default function App() {
-  const [mode, setMode] = useState<AppMode>("connected");
+  // Real wallet-adapter state drives connected/disconnected. No signing, no reads.
+  const { connected, publicKey, disconnect } = useWallet();
+  const walletConnected = connected && !!publicKey;
+
   const [activePage, setActivePage] = useState<ConnectedPage>("dashboard");
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   // Local, in-memory saved plan state for the Goal page (Option A: Goal-page
   // scope only — no propagation into Dashboard/derived outputs this slice).
-  // Initialized from the approved fixture; persists across nav for the session.
   const [savedGoal, setSavedGoal] = useState<SavedGoal>(initialSavedGoal);
-  // Onboarding gate (Onboarding Visibility Rule). The existing connected fixture
-  // is a completed plan, so goalCompleted initializes true and the connected
-  // Dashboard is unchanged on a normal load. Connecting a wallet does NOT complete
-  // onboarding — it flips this to false so onboarding stays visible (Variant 4).
-  // Completion (goalCompleted = true from finishing setup) arrives in a later step.
-  const [goalCompleted, setGoalCompleted] = useState(true);
-  // End-of-onboarding guided tour (transcript items 20–22): after the plan
-  // summary, Smith walks the user through the real Portfolio and Goal pages with
-  // a companion overlay, then Finish Setup completes onboarding. `tourStage` is
-  // null outside the tour; `tourAnswers`/`tourGoal` hold the collected plan so the
-  // Goal page can preview it and completion can commit it.
+  // Demo Mode is independent of the wallet (sample data).
+  const [demoActive, setDemoActive] = useState(false);
+  // Onboarding gate. Starts incomplete so the first real wallet connection lands
+  // in onboarding (Variant 4). Finish Setup sets it true and it persists for the
+  // session (reconnecting after finishing goes straight to the Dashboard).
+  const [goalCompleted, setGoalCompleted] = useState(false);
+  // End-of-onboarding guided tour (transcript items 20–22).
   const [tourStage, setTourStage] = useState<TourStage>(null);
   const [tourGoal, setTourGoal] = useState<SavedGoal | null>(null);
   const nextToastId = useRef(1);
@@ -72,18 +69,7 @@ export default function App() {
   // The element that opened the modal, so focus can return to it on close.
   const connectTriggerRef = useRef<HTMLElement | null>(null);
 
-  // While the Connect Wallet modal is open, take the rest of the page out of the
-  // accessibility tree and tab order (native `inert`) so focus stays trapped in
-  // the modal and background content is hidden from assistive tech. On close,
-  // clear inert first, then return focus to the trigger (focusing while the
-  // trigger's ancestor is still inert would be a no-op).
-  useEffect(() => {
-    if (pageWrapRef.current) pageWrapRef.current.inert = connectModalOpen;
-    if (!connectModalOpen && connectTriggerRef.current) {
-      connectTriggerRef.current.focus?.();
-      connectTriggerRef.current = null;
-    }
-  }, [connectModalOpen]);
+  const mode: AppMode = demoActive ? "demo" : walletConnected ? "connected" : "disconnected";
 
   const pushToast = (message: string, helper?: string) => {
     const id = nextToastId.current++;
@@ -96,76 +82,83 @@ export default function App() {
   const dismissToast = (id: number) =>
     setToasts((prev) => prev.filter((t) => t.id !== id));
 
+  // React to real wallet connect/disconnect transitions (menu, or the extension
+  // side). Connecting leaves Demo Mode, lands on the Dashboard, closes the modal,
+  // and announces — but does NOT complete onboarding (goalCompleted unchanged).
+  const prevConnected = useRef(walletConnected);
+  useEffect(() => {
+    const was = prevConnected.current;
+    prevConnected.current = walletConnected;
+    if (!was && walletConnected) {
+      setDemoActive(false);
+      setActivePage("dashboard");
+      setConnectModalOpen(false);
+      connectTriggerRef.current = null;
+      pushToast(dashboardState.wallet.copy.connected_toast);
+    } else if (was && !walletConnected) {
+      setActivePage("dashboard");
+      pushToast(
+        dashboardState.transitions.disconnect_wallet.copy.toast,
+        dashboardState.transitions.disconnect_wallet.copy.helper
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletConnected]);
+
+  // While the Connect Wallet modal is open, take the rest of the page out of the
+  // accessibility tree and tab order (native `inert`). On close, clear inert first,
+  // then return focus to the trigger.
+  useEffect(() => {
+    if (pageWrapRef.current) pageWrapRef.current.inert = connectModalOpen;
+    if (!connectModalOpen && connectTriggerRef.current) {
+      connectTriggerRef.current.focus?.();
+      connectTriggerRef.current = null;
+    }
+  }, [connectModalOpen]);
+
   // In-app page switch (connected only).
   const navigate = (id: string) => {
     if (id === "dashboard" || id === "portfolio" || id === "goal" || id === "support")
       setActivePage(id);
   };
 
-  // Transitions always land on the Dashboard page so a mode change never
-  // leaves a stale Portfolio view.
-  const goDisconnected = () => {
-    setActivePage("dashboard");
-    setMode("disconnected");
-  };
-  const goDemo = () => {
-    setActivePage("dashboard");
-    setMode("demo");
-  };
-  const exitDemo = () => {
-    pushToast(DEMO_EXIT_TOAST);
-    setActivePage("dashboard");
-    setMode("disconnected");
+  // Disconnect the REAL wallet (wallet menu / page). The transition effect handles
+  // the toast + returning to the Dashboard. No fake connected state is preserved.
+  const disconnectWallet = () => {
+    void disconnect();
   };
 
-  // Connect Wallet now opens the modal (from disconnected or Demo Mode). The
-  // actual stub connection happens on a wallet selection inside the modal.
-  // Capture the trigger so focus can return to it on cancel/close.
+  const goDemo = () => {
+    setActivePage("dashboard");
+    setDemoActive(true);
+  };
+  const exitDemo = () => {
+    setDemoActive(false);
+    setActivePage("dashboard");
+    pushToast(DEMO_EXIT_TOAST);
+  };
+
+  // Connect Wallet opens the modal (from disconnected or Demo Mode); the real
+  // connection happens on a wallet selection inside the modal.
   const openConnectModal = () => {
     connectTriggerRef.current = document.activeElement as HTMLElement | null;
     setConnectModalOpen(true);
   };
   const closeConnectModal = () => setConnectModalOpen(false);
 
-  // Stub connection succeeded: switch to the approved connected-wallet fixture,
-  // land on the Dashboard, and show the approved toast. Switching to connected
-  // mode unmounts the demo page, so demo state cannot leak in. No adapter, no
-  // signature, no transaction, no fund movement. The trigger is discarded (the
-  // page fully re-renders to connected), so focus is not sent to a stale node.
-  const handleWalletConnected = () => {
-    connectTriggerRef.current = null;
-    setConnectModalOpen(false);
-    setActivePage("dashboard");
-    setMode("connected");
-    // Connecting a wallet alone does not complete onboarding: keep onboarding
-    // visible (connected + goal incomplete, Variant 4) until goal setup finishes.
-    setGoalCompleted(false);
-    pushToast(dashboardState.wallet.copy.connected_toast);
-  };
-
-  // Wallet menu actions for the connected onboarding surface (Variant 4).
-  const copyWalletAddress = async () => {
+  // Copy the REAL connected address (passed up from the Global Nav pill menu).
+  const copyWalletAddress = async (address: string) => {
     try {
-      await navigator.clipboard.writeText(dashboardState.wallet.address);
+      await navigator.clipboard.writeText(address);
       pushToast(TOAST_ADDRESS_COPIED);
     } catch {
       pushToast(TOAST_COPY_FAILED);
     }
   };
-  const disconnectFromOnboarding = () => {
-    pushToast(
-      dashboardState.transitions.disconnect_wallet.copy.toast,
-      dashboardState.transitions.disconnect_wallet.copy.helper
-    );
-    goDisconnected();
-  };
 
-  // Finish Setup (onboarding complete): commit the collected answers into the
-  // same local savedGoal state Goal Settings uses, mark onboarding complete so
-  // it stops showing (goalCompleted = true), land on the connected Dashboard,
-  // and show the approved completion toast. No Dashboard recalculation: the
-  // connected fixture outputs (suggestions/Top Pick/Safety Buffer/projections/
-  // allocation/protocol) are unchanged (Option A — Goal-page-scoped save).
+  // Finish Setup (onboarding complete): commit the collected answers into the same
+  // local savedGoal state Goal Settings uses, mark onboarding complete, land on the
+  // Dashboard, and toast. No Dashboard recalculation (Option A — Goal-page-scoped).
   const handleOnboardingComplete = (goal: SavedGoal) => {
     setSavedGoal(goal);
     setGoalCompleted(true);
@@ -175,16 +168,12 @@ export default function App() {
     pushToast(ONBOARDING_FINISH_TOAST, ONBOARDING_FINISH_HELPER);
   };
 
-  // Start the guided tour: keep the onboarding layout (and its sidebar) in place;
-  // swap the main column to the Portfolio then Goal views while the Onboarding
-  // panel shows the tour step. No commit until Finish. No recalculation.
+  // Start the guided tour: keep the onboarding layout (and its sidebar) in place.
   const startOnboardingTour = (answers: OnboardingAnswers) => {
     setTourGoal(buildSavedGoal(answers));
     setTourStage("portfolio");
   };
 
-  // Onboarding is not optional: shown whenever disconnected, or connected with an
-  // incomplete goal. Demo Mode overrides onboarding while active.
   const onboardingActive = isOnboardingActive(mode, goalCompleted);
 
   let page;
@@ -197,19 +186,13 @@ export default function App() {
       />
     );
   } else if (onboardingActive) {
-    // Onboarding surface. Disconnected → welcome/entry (Variant 1); connected +
-    // goal incomplete → the scripted Smith AI conversation (Variant 4), then the
-    // end-of-flow tour: the Onboarding sidebar stays in place while the main
-    // column swaps to the Portfolio / Goal view (tourStage). It does not
-    // recalculate suggestions/Top Pick/Safety Buffer/projections/allocation/
-    // protocol decisions, move funds, sign, or collect secrets.
     page = (
       <OnboardingExperience
         mode={mode === "connected" ? "connected" : "disconnected"}
         onConnectWallet={openConnectModal}
         onTryDemo={goDemo}
         onCopyAddress={copyWalletAddress}
-        onDisconnect={disconnectFromOnboarding}
+        onDisconnect={disconnectWallet}
         onComplete={handleOnboardingComplete}
         onTour={startOnboardingTour}
         tourStage={tourStage}
@@ -224,7 +207,8 @@ export default function App() {
       <PortfolioPage
         pushToast={pushToast}
         onNavigate={navigate}
-        onDisconnect={goDisconnected}
+        onDisconnect={disconnectWallet}
+        onCopyAddress={copyWalletAddress}
       />
     );
   } else if (mode === "connected" && activePage === "goal") {
@@ -232,7 +216,8 @@ export default function App() {
       <GoalPage
         pushToast={pushToast}
         onNavigate={navigate}
-        onDisconnect={goDisconnected}
+        onDisconnect={disconnectWallet}
+        onCopyAddress={copyWalletAddress}
         savedGoal={savedGoal}
         onSaveGoal={setSavedGoal}
       />
@@ -242,7 +227,8 @@ export default function App() {
       <SupportPage
         pushToast={pushToast}
         onNavigate={navigate}
-        onDisconnect={goDisconnected}
+        onDisconnect={disconnectWallet}
+        onCopyAddress={copyWalletAddress}
       />
     );
   } else {
@@ -252,9 +238,10 @@ export default function App() {
         pushToast={pushToast}
         activePage={mode === "connected" ? activePage : undefined}
         onNavigate={mode === "connected" ? navigate : undefined}
-        onDisconnect={goDisconnected}
+        onDisconnect={disconnectWallet}
         onConnectWallet={openConnectModal}
         onTryDemo={goDemo}
+        onCopyAddress={copyWalletAddress}
       />
     );
   }
@@ -262,12 +249,7 @@ export default function App() {
   return (
     <>
       <div ref={pageWrapRef}>{page}</div>
-      {connectModalOpen && (
-        <ConnectWalletModal
-          onClose={closeConnectModal}
-          onConnected={handleWalletConnected}
-        />
-      )}
+      {connectModalOpen && <ConnectWalletModal onClose={closeConnectModal} />}
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </>
   );

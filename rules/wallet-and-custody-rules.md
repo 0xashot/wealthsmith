@@ -236,6 +236,12 @@ Rules:
 - Support/Contact Us should not require wallet connection.
 - Suggestion clicks open protocol pages for MVP; they do not execute transactions.
 - Manage links open protocol pages for MVP; they do not execute transactions.
+- **Wallet connection itself requires no signature.** Connecting must not call
+  `signMessage` / `signTransaction` / `sendTransaction`; it uses only the wallet's
+  `connect()` and the returned publicKey. Proof-of-ownership via signature is out
+  of scope for MVP connection. Ledger-backed Phantom accounts therefore connect
+  with no on-device approval. Any signature is reserved for a later, explicit,
+  user-approved action — never for connecting.
 
 ---
 
@@ -493,6 +499,24 @@ Rules:
 - Connecting a wallet should not silently merge demo and real state.
 - Smith AI must know whether it is explaining demo data or real wallet data.
 - Demo Mode suggestions must not persist as real-wallet recommendations.
+
+Hard Rule:
+
+```text
+If a real wallet is connected, the app must not present dummy/fixture portfolio
+data as the user's real wallet data.
+```
+
+- Real connected wallet mode uses live read-only wallet reads (see
+  patterns/wallet-connection.md — Read-Only Wallet Portfolio Discovery + Data Mode
+  Separation).
+- Prototype/reference fixtures (Demo Mode fixtures, the connected-wallet example
+  fixture, portfolio example fixtures) may be used for demo/dev/tests only — not
+  as the connected wallet's real holdings, value, allocation, Top Pick, or
+  suggestions.
+- If a value cannot be computed for a real wallet yet (USD value, APY, allocation,
+  suggestions), show a safe unavailable/coming-soon state instead of a fixture
+  value.
 
 ---
 

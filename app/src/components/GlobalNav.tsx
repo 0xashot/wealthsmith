@@ -21,11 +21,16 @@ import {
   WALLET_MENU_DISCONNECT,
   WALLET_MENU_HELPER,
 } from "../state/approvedCopy";
+import { useWalletDisplay } from "../wallet/useWalletDisplay";
 import logoUrl from "../../../assets/logo/wealthsmith-full-lockup.svg";
 import phantomIconUrl from "../../../assets/icons/wallet/phantom.svg";
+import solflareIconUrl from "../../../assets/icons/wallet/solflare.svg";
+import backpackIconUrl from "../../../assets/icons/wallet/backpack.svg";
 
 const WALLET_ICONS: Record<string, string> = {
   phantom: phantomIconUrl,
+  solflare: solflareIconUrl,
+  backpack: backpackIconUrl,
 };
 
 export type NavMode = "connected" | "demo" | "disconnected";
@@ -50,7 +55,8 @@ interface Props {
   /** In-app page switch (connected only). Dashboard/Portfolio navigate; other
    *  items are no-ops. When undefined, no nav item navigates. */
   onNavigate?: (id: string) => void;
-  onCopyAddress?: () => void;
+  /** Copy the connected wallet address (the real base58 address is passed in). */
+  onCopyAddress?: (address: string) => void;
   onDisconnect?: () => void;
   onConnectWallet?: () => void;
   onTryDemo?: () => void;
@@ -79,7 +85,18 @@ export default function GlobalNav({
   const showAskSmithAi = (mode === "connected" || mode === "demo") && askAvailable;
   const showConnectWallet = mode === "disconnected";
   const showTryDemo = mode === "disconnected";
-  const walletIcon = wallet ? WALLET_ICONS[wallet.provider_id] : undefined;
+
+  // Real connected wallet (name + shortened publicKey). When connected it drives
+  // the pill label/icon/address; the fixture `wallet` prop only provides the
+  // show_wallet_pill flag + structure. Read-only — no signing, no fetching.
+  const realWallet = useWalletDisplay();
+  const pillIcon =
+    WALLET_ICONS[realWallet?.providerId ?? wallet?.provider_id ?? ""] ?? undefined;
+  const pillLabel = realWallet?.label ?? nav.right_actions.wallet_pill.label;
+  const pillAccessibleLabel = realWallet
+    ? `Connected wallet: ${realWallet.name}, address ending ${realWallet.addressShort}. Open wallet menu.`
+    : walletPillLabel;
+  const copyAddress = realWallet?.address ?? wallet?.address ?? "";
 
   const [menuOpen, setMenuOpen] = useState(false);
   const pillRef = useRef<HTMLButtonElement>(null);
@@ -197,26 +214,26 @@ export default function GlobalNav({
                 ref={pillRef}
                 type="button"
                 className="global-nav__wallet-pill"
-                aria-label={walletPillLabel}
+                aria-label={pillAccessibleLabel}
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
                 onClick={() => setMenuOpen((open) => !open)}
               >
-                {walletIcon && (
-                  <img src={walletIcon} alt="" width={20} height={20} aria-hidden="true" />
+                {pillIcon && (
+                  <img src={pillIcon} alt="" width={20} height={20} aria-hidden="true" />
                 )}
-                <span>{nav.right_actions.wallet_pill.label}</span>
+                <span>{pillLabel}</span>
               </button>
               {menuOpen && (
                 <div ref={menuRef} className="wallet-menu" role="menu">
-                  {wallet.address && (
+                  {copyAddress && (
                     <button
                       type="button"
                       role="menuitem"
                       className="wallet-menu__item"
                       onClick={() => {
                         closeMenu(true);
-                        onCopyAddress?.();
+                        onCopyAddress?.(copyAddress);
                       }}
                     >
                       {WALLET_MENU_COPY_ADDRESS}

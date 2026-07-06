@@ -260,6 +260,45 @@ Rules:
 - Suggestions are grounded in real wallet + saved plan state.
 - Wallet connected state does not imply custody or signing.
 
+#### Real Connected Wallet Dashboard (Live Data)
+
+When a **real** wallet is connected, the Dashboard must render live read-only
+wallet data and safe states — never the connected-wallet fixture — because
+presenting fixture values as the user's real holdings is misleading.
+
+```text
+Real connected wallet Dashboard shows:
+  Wallet connected + wallet label (provider • short address)
+  Assets detected count
+  Native SOL amount (if available)
+  SPL token count
+  Recognized LST/staked token count
+  Recognized protocols
+  Portfolio Value: unavailable state until pricing is connected
+  Suggestions: safe coming-soon state (no fixture Top Pick/suggestions)
+```
+
+Rules:
+
+- Do not show the fixture Portfolio Value (for example $15,500) as the connected
+  wallet value.
+- Do not show fixture Safety Buffer, Projected Growth, or Allocation as if
+  calculated from the connected wallet.
+- Do not show fixture suggestions or Top Pick as personalized to the connected
+  wallet.
+- Derive only safe facts from live positions (counts + native SOL amount). Do not
+  derive USD value, allocation percentages, projected growth, Safety Buffer, or
+  suggestions from wallet data without approved pricing/product logic.
+- The connected-wallet fixture (`examples/dashboard/dashboard-connected-wallet-state.json`)
+  remains for tests/storybook/dev reference only. Demo Mode keeps its own fixtures.
+- Ask Smith AI is available in real-wallet mode, but only with real-wallet-safe
+  explainer content (`app/src/state/realWalletSmithAi.ts`): it explains the
+  read-only connection and why some values aren't shown yet, and never presents
+  fixture Top Pick / suggestions / positions as the user's real data.
+
+See `app/src/components/RealWalletSummary.tsx` and
+`patterns/wallet-connection.md` (Data Mode Separation).
+
 ---
 
 ### Variant 4: Onboarding Active, Wallet Connected

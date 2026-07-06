@@ -55,7 +55,7 @@ interface Props {
   /** Global-nav Try Demo Mode entry (not offered inside the onboarding panel). */
   onTryDemo: () => void;
   /** Connected phase: wallet menu actions. */
-  onCopyAddress: () => void;
+  onCopyAddress: (address: string) => void;
   onDisconnect: () => void;
   /** Finish Setup: commit answers + complete onboarding (connected phase). */
   onComplete: (savedGoal: SavedGoal) => void;

@@ -10,6 +10,117 @@ WealthSmith does not custody funds, move funds, execute transactions, or request
 
 ---
 
+## MVP Connection Is Read-Only (No Signing)
+
+The implemented MVP wallet connection (Solana wallet-adapter: Phantom, Solflare,
+Backpack, and Phantom accounts backed by Ledger) is **connection only**:
+
+- Connecting uses the wallet's `connect()` and the returned **publicKey** only. It
+  **must not** call `signMessage`, `signTransaction`, or `sendTransaction`, and must
+  not request any signature or approval to connect (`autoConnect` is off).
+- **Proof-of-wallet ownership via signature is out of scope** for MVP connection.
+  Signatures may be requested **only later**, for explicit, clearly-labelled,
+  user-approved actions — never as part of connecting.
+- **Ledger-backed Phantom accounts** connect through Phantom as normal wallet
+  accounts. Because WealthSmith requests no signature on connect, connecting a
+  Ledger-backed account requires **no on-device approval** — the connected
+  publicKey is used as-is.
+- Connection alone does not fetch balances, scan the portfolio, or change any
+  Dashboard/Goal/Portfolio fixture — only the wallet pill shows the real
+  wallet name + shortened publicKey.
+
+See `app/src/wallet/SolanaWalletProvider.tsx` and `app/src/components/ConnectWalletModal.tsx`.
+
+---
+
+## Read-Only Wallet Portfolio Discovery
+
+After connection, WealthSmith may **read** what the connected wallet holds. This
+is discovery only — still no signing, no transactions, no fund movement.
+
+- Wallet reads are **read-only**: the connected `publicKey` is used with RPC reads
+  (`getBalance` for native SOL, `getParsedTokenAccountsByOwner` for SPL tokens).
+  No `signMessage` / `signTransaction` / `signAllTransactions` / `sendTransaction`,
+  and no permission beyond the existing connection — so Ledger-backed Phantom reads
+  need no on-device approval.
+- **Token balances are separate from protocol positions.** SPL token balances come
+  from the wallet's token accounts; protocol positions (e.g. Kamino obligations,
+  native Jupiter validator stake) require protocol-specific read logic.
+- **LSTs are classified as staked/yield assets only when the mint is recognized**
+  in the approved mint mapping (`app/src/wallet/walletPosition.ts` → `TOKEN_REGISTRY`:
+  JupSOL, mSOL, bSOL, JitoSOL, plus USDC/USDT/BONK). Unrecognized mints show as a
+  generic token — never inferred as an LST/protocol position.
+- **JupSOL** held in the wallet is classified as a Jupiter / JupSOL LST position.
+  **Native SOL stake accounts** (SOL delegated directly to a validator) are also
+  detected read-only via the Stake program (`getParsedProgramAccounts` filtered by
+  the wallet's withdraw authority) and shown as "Staked SOL" with the validator.
+- **Kamino** lending positions are detected read-only (`app/src/wallet/protocolPositions.ts`):
+  the user's obligations are read from Kamino's public REST API, and each
+  deposit/borrow reserve's underlying mint is resolved **on-chain** (reserve
+  liquidity-mint offset) and mapped to a symbol — e.g. "USDC supplied on Kamino".
+  Positions are shown as detected (supplied/borrowed); no USD value or APY is
+  invented. See [`docs/kamino-position-detection-plan.md`](../docs/kamino-position-detection-plan.md).
+  They are not inferred from unrelated token balances.
+- **No USD value and no APY are invented.** `valueUsd`/`apy` stay null until an
+  approved pricing/APY source exists.
+- Live wallet reads are surfaced in a clearly-marked **read-only "Live Wallet
+  Assets"** section, which is the **primary** Portfolio content in real-wallet
+  mode. Fetch only when connected; clear + cancel on disconnect; no polling
+  (manual refresh).
+
+See `app/src/wallet/useWalletPortfolio.ts` and `app/src/components/LiveWalletAssets.tsx`.
+
+---
+
+## Data Mode Separation (Demo vs Real Wallet vs Disconnected)
+
+The app renders portfolio-shaped content in exactly one of three data modes, and
+they must never be mixed. A `portfolioDataSource` flag makes this explicit
+(`app/src/state/portfolioDataSource.ts`):
+
+- **`demo_fixture`** — Demo Mode. Sample fixture values, sample suggestions,
+  sample Top Pick. Demo Mode banner is visible. This is the only normal-flow mode
+  that renders those fixtures.
+- **`real_wallet`** — a real wallet is connected. The app shows **live, read-only
+  wallet data** and **safe "unavailable" states**. It must **not** render fixture
+  Portfolio Value, Safety Buffer, Projected Growth, Allocation, Top Pick, or
+  suggestions as the connected wallet's real data.
+- **`example_fixture`** — the connected-wallet reference fixture
+  (`examples/dashboard/dashboard-connected-wallet-state.json`). For tests /
+  storybook / dev reference **only** — never the normal real-wallet flow.
+
+Hard Rule:
+
+```text
+If a real wallet is connected, the app must not present dummy/fixture portfolio
+data as the user's real wallet data.
+```
+
+### Real Connected Wallet Mode behavior
+
+- **Dashboard** shows a live wallet summary (wallet label, assets detected, native
+  SOL, SPL token count, recognized LST count, recognized protocols) derived only
+  from read-only reads. Portfolio Value shows an unavailable state
+  ("Portfolio value needs pricing data before it can be shown.") because pricing
+  is not connected. Suggestions show a safe coming-soon state. No fixture value,
+  Safety Buffer, projection, allocation, or Top Pick is shown.
+- **Portfolio** shows the read-only **Live Wallet Assets** as the primary content.
+  Fixture Liquid / Staked / Yield / Deployment sections are **hidden** in
+  real-wallet mode (they would present sample balances/APY/Manage handoffs as the
+  user's real positions). Manage / review-only protocol handoffs are hidden unless
+  they correspond to a detected live position.
+- **Ask Smith AI** is available in real-wallet mode with real-wallet-safe explainer
+  content (`app/src/state/realWalletSmithAi.ts`) — it explains the read-only
+  connection and why some values aren't shown yet, and must not present fixture
+  Top Pick / suggestions / positions as the user's real data.
+- If a value cannot be computed yet (USD value, APY, allocation, suggestions),
+  show a safe unavailable/coming-soon state — never a fixture value.
+
+See `app/src/components/RealWalletSummary.tsx`, `app/src/pages/DashboardPage.tsx`,
+and `app/src/pages/PortfolioPage.tsx`.
+
+---
+
 ## Purpose
 
 The wallet connection flow should help users:

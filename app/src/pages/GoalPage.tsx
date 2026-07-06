@@ -19,11 +19,7 @@
 import { useRef, useState } from "react";
 import { dashboardState as connected } from "../state/dashboardState";
 import { goalSmithAiContent } from "../state/goalSmithAi";
-import {
-  TOAST_ADDRESS_COPIED,
-  TOAST_COPY_FAILED,
-  ASK_SMITH_LABEL_GOAL,
-} from "../state/approvedCopy";
+import { ASK_SMITH_LABEL_GOAL } from "../state/approvedCopy";
 import type { SavedGoal } from "../types/goal";
 import GlobalNav from "../components/GlobalNav";
 import GoalSettings from "../components/GoalSettings";
@@ -33,6 +29,7 @@ interface Props {
   pushToast: (message: string, helper?: string) => void;
   onNavigate: (id: string) => void;
   onDisconnect: () => void;
+  onCopyAddress: (address: string) => void;
   savedGoal: SavedGoal;
   onSaveGoal: (goal: SavedGoal) => void;
 }
@@ -41,6 +38,7 @@ export default function GoalPage({
   pushToast,
   onNavigate,
   onDisconnect,
+  onCopyAddress,
   savedGoal,
   onSaveGoal,
 }: Props) {
@@ -51,23 +49,6 @@ export default function GoalPage({
   const closeAskSmithAi = () => {
     setSmithOpen(false);
     askButtonRef.current?.focus();
-  };
-
-  const onCopyAddress = async () => {
-    try {
-      await navigator.clipboard.writeText(connected.wallet.address);
-      pushToast(TOAST_ADDRESS_COPIED);
-    } catch {
-      pushToast(TOAST_COPY_FAILED);
-    }
-  };
-
-  const disconnect = () => {
-    pushToast(
-      connected.transitions.disconnect_wallet.copy.toast,
-      connected.transitions.disconnect_wallet.copy.helper
-    );
-    onDisconnect();
   };
 
   return (
@@ -84,7 +65,7 @@ export default function GoalPage({
         activePage="goal"
         onNavigate={onNavigate}
         onCopyAddress={onCopyAddress}
-        onDisconnect={disconnect}
+        onDisconnect={onDisconnect}
         onOpenAskSmithAi={openAskSmithAi}
       />
 

@@ -136,6 +136,71 @@ export const WALLET_CONNECTING = "Connecting...";
 /** patterns/wallet-connection.md — Modal Accessibility, close button accessible label. */
 export const WALLET_CONNECT_CLOSE_LABEL = "Close connect wallet dialog";
 
+/* content/wallet-copy.md — Wallet Not Installed / connection-failed / rejected states. */
+export const WALLET_NOT_DETECTED_ROW = "Not detected";
+export const WALLET_NOT_DETECTED_TITLE = "Wallet not detected";
+export const WALLET_NOT_DETECTED_DESC = "Install or open a supported wallet, then try again.";
+export const WALLET_CONNECT_FAILED_TITLE = "Wallet connection failed";
+export const WALLET_CONNECT_FAILED_DESC =
+  "We couldn’t connect to your wallet. Try again or choose another supported wallet.";
+export const WALLET_REJECTED_TITLE = "Connection not approved";
+export const WALLET_REJECTED_DESC = "You did not approve the connection in your wallet.";
+export const WALLET_TRY_AGAIN = "Try Again";
+
+/* Live Wallet Assets — read-only wallet portfolio discovery (patterns/portfolio-overview.md,
+ * rules/wallet-and-custody-rules.md). Read-only; no values/APY invented. */
+export const LIVE_WALLET_TITLE = "Live Wallet Assets";
+export const LIVE_WALLET_DESC =
+  "Read-only view of what your connected wallet holds. Balances are read from the blockchain — nothing is moved or signed.";
+export const LIVE_WALLET_LOADING = "Reading your wallet…";
+export const LIVE_WALLET_ERROR_TITLE = "Couldn’t read your wallet";
+export const LIVE_WALLET_ERROR_DESC =
+  "We couldn’t read your wallet right now. Try again in a moment.";
+export const LIVE_WALLET_EMPTY_TITLE = "No readable assets found";
+export const LIVE_WALLET_EMPTY_DESC =
+  "This wallet holds no assets we can read yet.";
+export const LIVE_WALLET_REFRESH = "Refresh";
+export const LIVE_WALLET_NOTE =
+  "Read-only wallet view. Amounts are on-chain balances; USD value and APY are not shown yet, and no action is taken.";
+
+/* Partial-read warnings + total-failure error (patterns/portfolio-overview.md —
+ * Partial Data State / Error States; rules/wallet-and-custody-rules.md — Wallet
+ * Error States). Independent reads mean one failure never hides the others. */
+export const LIVE_WALLET_WARNING_TOKENS =
+  "Token balances couldn’t be read from the current RPC. Native SOL is shown — try refreshing, or set a dedicated Solana RPC to read tokens.";
+export const LIVE_WALLET_WARNING_TOKEN2022 =
+  "Some Token-2022 assets couldn’t be read from the current RPC.";
+export const LIVE_WALLET_ERROR_ALL = "Couldn’t read wallet assets. Try again.";
+
+/* Real Connected Wallet Mode — safe live-data states shown instead of fixture
+ * portfolio values when a real wallet is connected (patterns/wallet-connection.md
+ * — Data Mode Separation, patterns/dashboard-layout.md — Real Connected Wallet
+ * Dashboard, rules/financial-logic-boundaries.md). No fixture values, Top Pick,
+ * suggestions, allocation, or USD portfolio value are presented as the user's. */
+export const REAL_WALLET_CONNECTED_TITLE = "Wallet connected";
+export const REAL_WALLET_CONNECTED_DESC =
+  "Live wallet assets are shown below. No funds are moved. WealthSmith is reading wallet data only.";
+export const REAL_WALLET_NO_FUNDS_NOTE =
+  "No funds are moved. WealthSmith is reading wallet data only.";
+
+/** Wallet summary fact labels (counts / on-chain balances only — not financial logic). */
+export const REAL_WALLET_FACT_ASSETS = "Assets detected";
+export const REAL_WALLET_FACT_NATIVE_SOL = "Native SOL";
+export const REAL_WALLET_FACT_TOKENS = "SPL tokens";
+export const REAL_WALLET_FACT_LST = "Staked (LST)";
+export const REAL_WALLET_FACT_PROTOCOLS = "Recognized protocols";
+export const REAL_WALLET_FACT_NONE = "None detected";
+
+/** Portfolio value: unavailable until pricing exists (no invented USD value). */
+export const REAL_WALLET_VALUE_TITLE = "Portfolio Value";
+export const REAL_WALLET_VALUE_DESC =
+  "Portfolio value needs pricing data before it can be shown.";
+
+/** Suggestions: safe coming-soon state (Suggestion Engine has no live inputs yet). */
+export const REAL_WALLET_SUGGESTIONS_TITLE = "Smith AI Suggestions";
+export const REAL_WALLET_SUGGESTIONS_DESC =
+  "Suggestions are not generated yet for live wallets in this prototype.";
+
 /* ---------- Goal Settings (patterns/goal-settings.md, content) ---------- */
 
 /** patterns/goal-settings.md — page title "Goal" (also global_nav goal item label). */

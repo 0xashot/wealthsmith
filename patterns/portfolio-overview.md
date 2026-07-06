@@ -919,6 +919,33 @@ Your wallet balances are still visible.
 
 ---
 
+## Real Connected Wallet Mode
+
+When a **real** wallet is connected, the Portfolio page shows live read-only
+wallet data as its primary content and must not present fixture positions as the
+user's real holdings.
+
+Rules:
+
+- Show the read-only **Live Wallet Assets** section (native SOL, SPL tokens,
+  recognized LSTs) at the top / primary area.
+- **Hide** the fixture Asset Deployment Overview, Liquid Assets, Staked Assets,
+  and Yield Strategies sections in real-wallet mode. They contain sample balances,
+  APY, and Manage handoffs that are not the connected wallet's real positions.
+- Do not show fixture Balance Overview / Crypto Assets Allocation totals (for
+  example $15,500) as the connected wallet's value.
+- Keep Manage / review-only protocol handoffs hidden or disabled unless they
+  correspond to a **detected live position**.
+- No USD portfolio value, APY, or estimated earnings until approved pricing/APY
+  sources exist — show safe empty/unavailable states instead of fixture numbers.
+- The portfolio fixtures (`examples/portfolio/*`, `state/portfolioState.ts`) remain
+  for Demo Mode and dev/tests only.
+
+See `app/src/pages/PortfolioPage.tsx`, `app/src/components/LiveWalletAssets.tsx`,
+and `patterns/wallet-connection.md` (Data Mode Separation).
+
+---
+
 ## Demo Mode Behavior
 
 Demo Mode can show a complete sample Portfolio page.

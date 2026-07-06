@@ -759,6 +759,36 @@ Carry demo suggestions into real wallet mode.
 Let Smith AI talk about demo data as if it is the user’s wallet.
 ```
 
+Hard Rule:
+
+```text
+Fixture/example values must never be presented as a real connected wallet's data.
+```
+
+When a real wallet is connected:
+
+```text
+Do not show fixture Portfolio Value as the connected wallet value.
+Do not show fixture Safety Buffer, Projected Growth, or Allocation as real.
+Do not show fixture suggestions or Top Pick as personalized to the wallet.
+Do not derive USD value, allocation, projection, Safety Buffer, or suggestions
+  from wallet balances without approved pricing/product logic.
+Show safe unavailable/coming-soon states instead of fixture values.
+```
+
+Allowed for a real connected wallet (safe facts only):
+
+```text
+Assets detected count
+Native SOL amount (on-chain balance)
+SPL token count
+Recognized LST/staked token count
+Recognized protocol names
+```
+
+See `patterns/wallet-connection.md` (Data Mode Separation) and
+`app/src/state/portfolioDataSource.ts`.
+
 ---
 
 ## Support Content Boundary

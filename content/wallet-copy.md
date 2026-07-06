@@ -172,6 +172,12 @@ Start Earning
 
 ## Connect Wallet Modal
 
+> Implementation note: the connect modal renders only the **title**, the **wallet
+> options**, and the **close** control. The intro, safety helper, and security
+> note below are NOT shown in the modal (removed per product decision); they
+> remain approved wallet copy for other surfaces. The modal still never asks for a
+> seed phrase, private key, password, recovery phrase, or backup file.
+
 Modal title:
 
 ```text
@@ -626,9 +632,23 @@ Supported wallet helper:
 Supported wallets: Phantom, Solflare, Backpack.
 ```
 
+Connect modal behavior: a wallet is "detected" only when its extension is actually
+installed (adapter readyState `Installed`). A wallet that is not detected shows the
+"Not detected" row status, and **clicking it opens that wallet's official page in a
+new tab** (`target="_blank"`, `rel="noopener noreferrer"`) — there is no error state
+for the not-detected case, and it never fake-connects.
+
+Approved Wallet Sites (official pages, the only approved wallet URLs):
+
+```text
+Phantom  — https://phantom.app/
+Solflare — https://solflare.com/
+Backpack — https://backpack.app/
+```
+
 Rules:
 
-- Do not link to unapproved URLs unless metadata provides them.
+- Only the approved wallet sites above may be linked; do not link other URLs.
 - Do not promote one wallet as best.
 - Do not invent wallet install instructions.
 

@@ -16,8 +16,6 @@ import { dashboardState as connected } from "../state/dashboardState";
 import { supportSmithAiContent } from "../state/supportSmithAi";
 import { filterFaq } from "../state/supportFaq";
 import {
-  TOAST_ADDRESS_COPIED,
-  TOAST_COPY_FAILED,
   SUPPORT_PAGE_TITLE,
   SUPPORT_SEARCH_PLACEHOLDER,
   SUPPORT_SEARCH_LABEL,
@@ -37,9 +35,15 @@ interface Props {
   pushToast: (message: string, helper?: string) => void;
   onNavigate: (id: string) => void;
   onDisconnect: () => void;
+  onCopyAddress: (address: string) => void;
 }
 
-export default function SupportPage({ pushToast, onNavigate, onDisconnect }: Props) {
+export default function SupportPage({
+  pushToast,
+  onNavigate,
+  onDisconnect,
+  onCopyAddress,
+}: Props) {
   const [query, setQuery] = useState("");
   const [contactOpen, setContactOpen] = useState(false);
   const [smithOpen, setSmithOpen] = useState(false);
@@ -56,23 +60,6 @@ export default function SupportPage({ pushToast, onNavigate, onDisconnect }: Pro
       contactTriggerRef.current = null;
     }
   }, [contactOpen]);
-
-  const onCopyAddress = async () => {
-    try {
-      await navigator.clipboard.writeText(connected.wallet.address);
-      pushToast(TOAST_ADDRESS_COPIED);
-    } catch {
-      pushToast(TOAST_COPY_FAILED);
-    }
-  };
-
-  const disconnect = () => {
-    pushToast(
-      connected.transitions.disconnect_wallet.copy.toast,
-      connected.transitions.disconnect_wallet.copy.helper
-    );
-    onDisconnect();
-  };
 
   const openAskSmithAi = () => setSmithOpen(true);
   const closeAskSmithAi = () => {
@@ -109,7 +96,7 @@ export default function SupportPage({ pushToast, onNavigate, onDisconnect }: Pro
           activePage="support"
           onNavigate={onNavigate}
           onCopyAddress={onCopyAddress}
-          onDisconnect={disconnect}
+          onDisconnect={onDisconnect}
           onOpenAskSmithAi={openAskSmithAi}
         />
 

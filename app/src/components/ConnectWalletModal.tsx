@@ -1,26 +1,26 @@
 /**
- * ConnectWalletModal — read-only wallet-connection modal per
- * patterns/wallet-connection.md, components/modal.md, and content/wallet-copy.md.
+ * ConnectWalletModal — read-only REAL wallet-connection modal
+ * (patterns/wallet-connection.md, rules/wallet-and-custody-rules.md, content/wallet-copy.md).
  *
- * PROTOTYPE / STUB ONLY. This modal demonstrates supported-wallet selection UX.
- * It does NOT integrate a real wallet adapter, detect installed wallets, request
- * a signature, sign a message, execute a transaction, fetch balances, or move
- * funds — and it never asks for a seed phrase, private key, password, recovery
- * phrase, or backup file (it only warns the user never to share them).
+ * Connects to real Phantom, Solflare, and Backpack wallets (and Phantom accounts
+ * backed by Ledger) via the Solana wallet-adapter. READ-ONLY CONNECTION:
+ *  - No message signing and NO signature request on connect (no signMessage /
+ *    signTransaction / sendTransaction). Only the wallet's connect() and the
+ *    returned publicKey are used.
+ *  - Ledger-backed Phantom accounts connect through Phantom as normal accounts,
+ *    with no on-device approval required, because WealthSmith requests no signature.
+ *  - No balance/token fetch, no portfolio scan, no transaction, no fund movement.
+ *  - Never asks for a seed phrase, private key, password, recovery phrase, or backup.
  *
- * All three approved MVP wallets (Phantom, Solflare, Backpack) are selectable.
- * Because there is exactly one approved connected-wallet fixture (Phantom •
- * 6fQ9) and provider-specific wallet data must never be invented, every
- * successful selection connects to that same fixture (documented prototype
- * limitation — see IMPLEMENTATION-NOTES.md). Selecting a wallet shows a short
- * safe "Connecting..." state, then calls `onConnected`.
- *
- * Accessibility: role="dialog" + aria-modal, labelled by the visible title and
- * described by the visible read-only reassurance copy; focus moves in on open,
- * is trapped while open, Escape closes when idle, and focus returns to the
- * triggering element on close.
+ * The approved three wallets are always listed. Installed ones connect via the
+ * adapter; a not-installed one shows the approved "Wallet not detected" state
+ * (no invented install URL). Connection failures show approved, non-blaming copy;
+ * a real failure never fake-connects. On success, App detects useWallet().connected
+ * and closes the modal.
  */
 import { useEffect, useId, useRef, useState } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletReadyState, type WalletName } from "@solana/wallet-adapter-base";
 import ButtonIcon from "./ButtonIcon";
 import closeUrl from "../../../assets/icons/ui/close.svg";
 import phantomUrl from "../../../assets/icons/wallet/phantom.svg";
@@ -28,65 +28,105 @@ import solflareUrl from "../../../assets/icons/wallet/solflare.svg";
 import backpackUrl from "../../../assets/icons/wallet/backpack.svg";
 import {
   WALLET_CONNECT_MODAL_TITLE,
-  WALLET_CONNECT_INTRO,
-  WALLET_CONNECT_HELPER,
-  WALLET_CONNECT_SECURITY_NOTE,
   WALLET_CONNECTING,
   WALLET_CONNECT_CLOSE_LABEL,
+  WALLET_NOT_DETECTED_ROW,
+  WALLET_NOT_DETECTED_TITLE,
+  WALLET_NOT_DETECTED_DESC,
+  WALLET_CONNECT_FAILED_TITLE,
+  WALLET_CONNECT_FAILED_DESC,
+  WALLET_REJECTED_TITLE,
+  WALLET_REJECTED_DESC,
 } from "../state/approvedCopy";
 
-/** Approved MVP wallets (patterns/wallet-connection.md, content/wallet-copy.md).
- *  Labels + icons are the approved set — nothing invented. */
+/** Approved MVP wallets + their official pages (content/wallet-copy.md — Approved
+ *  Wallet Sites). A not-installed wallet opens its official page in a new tab. */
 const WALLET_OPTIONS = [
-  { id: "phantom", label: "Phantom", icon: phantomUrl },
-  { id: "solflare", label: "Solflare", icon: solflareUrl },
-  { id: "backpack", label: "Backpack", icon: backpackUrl },
+  { key: "phantom", label: "Phantom", icon: phantomUrl, url: "https://phantom.app/" },
+  { key: "solflare", label: "Solflare", icon: solflareUrl, url: "https://solflare.com/" },
+  { key: "backpack", label: "Backpack", icon: backpackUrl, url: "https://backpack.app/" },
 ] as const;
 
-/** Short, safe pending window before the stub connects (within the loading-delay
- *  guidance in patterns/wallet-connection.md). No provider call happens here. */
-const CONNECT_DELAY_MS = 600;
+interface ErrState {
+  title: string;
+  desc: string;
+}
 
 interface Props {
   /** Close the modal without connecting (Escape / close button / scrim). */
   onClose: () => void;
-  /** Stub connection succeeded → App switches to the connected fixture + toasts. */
-  onConnected: () => void;
 }
 
-export default function ConnectWalletModal({ onClose, onConnected }: Props) {
-  const [connectingId, setConnectingId] = useState<string | null>(null);
+/** Map a wallet-adapter error to approved, non-blaming copy. Never a raw stack. */
+function mapError(e: unknown): ErrState {
+  const err = e as { name?: string; message?: string; error?: { code?: number } };
+  const name = err?.name ?? "";
+  const msg = (err?.message ?? "").toLowerCase();
+  const code = err?.error?.code;
+  if (name === "WalletNotReadyError") {
+    return { title: WALLET_NOT_DETECTED_TITLE, desc: WALLET_NOT_DETECTED_DESC };
+  }
+  if (code === 4001 || /reject|declin|denied|cancel/.test(msg)) {
+    return { title: WALLET_REJECTED_TITLE, desc: WALLET_REJECTED_DESC };
+  }
+  return { title: WALLET_CONNECT_FAILED_TITLE, desc: WALLET_CONNECT_FAILED_DESC };
+}
+
+export default function ConnectWalletModal({ onClose }: Props) {
+  const { wallets, select, connect, connecting, connected, wallet } = useWallet();
+
+  const [pendingName, setPendingName] = useState<string | null>(null);
+  const [error, setError] = useState<ErrState | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstOptionRef = useRef<HTMLButtonElement>(null);
-  const timerRef = useRef<number | null>(null);
-
   const titleId = useId();
-  const descId = useId();
 
-  // Move focus into the modal on open. Focus RETURN to the trigger is handled by
-  // App after the background `inert` is cleared (restoring focus here would fail
-  // while the trigger's ancestor is still inert).
   useEffect(() => {
     firstOptionRef.current?.focus();
-    return () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    };
   }, []);
 
-  const isConnecting = connectingId !== null;
+  const busy = connecting || pendingName !== null;
 
-  const select = (id: string) => {
-    if (isConnecting) return; // guard against double-activation
-    setConnectingId(id);
-    timerRef.current = window.setTimeout(() => {
-      onConnected();
-    }, CONNECT_DELAY_MS);
+  // Find the registered adapter for an approved wallet, by name. "Detected" means
+  // the extension is actually installed (Installed) — a merely "Loadable" wallet
+  // (e.g. Solflare's web fallback when the extension is absent) is shown as not
+  // detected and opens the wallet's official page instead of connecting.
+  const adapterFor = (key: string) =>
+    wallets.find((w) => w.adapter.name.toLowerCase().includes(key));
+  const isDetected = (key: string) =>
+    adapterFor(key)?.readyState === WalletReadyState.Installed;
+
+  // After a wallet is selected, connect it (no signature). Guarded so we only
+  // connect the wallet we just picked.
+  useEffect(() => {
+    if (!pendingName) return;
+    if (wallet?.adapter.name === pendingName && !connected && !connecting) {
+      connect().catch((e) => {
+        setError(mapError(e));
+        setPendingName(null);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingName, wallet, connected, connecting]);
+
+  const pick = (key: string, url: string) => {
+    if (busy) return;
+    const adapter = adapterFor(key);
+    if (!adapter || !isDetected(key)) {
+      // Not installed → open the wallet's official page in a new tab so the user
+      // can install/open it. No error state, and never a fake connection.
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setError(null);
+    setPendingName(adapter.adapter.name);
+    select(adapter.adapter.name as WalletName);
   };
 
-  // Focus trap + Escape (Escape only when idle, per pattern).
+  // Focus trap + Escape (Escape only when idle).
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
-      if (!isConnecting) {
+      if (!busy) {
         e.preventDefault();
         onClose();
       }
@@ -111,9 +151,8 @@ export default function ConnectWalletModal({ onClose, onConnected }: Props) {
   return (
     <div
       className="modal-scrim"
-      // Scrim closes the modal only when idle (safe dismissal per modal.md).
       onClick={() => {
-        if (!isConnecting) onClose();
+        if (!busy) onClose();
       }}
     >
       <div
@@ -122,8 +161,7 @@ export default function ConnectWalletModal({ onClose, onConnected }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={descId}
-        aria-busy={isConnecting || undefined}
+        aria-busy={busy || undefined}
         onKeyDown={onKeyDown}
         onClick={(e) => e.stopPropagation()}
       >
@@ -136,33 +174,34 @@ export default function ConnectWalletModal({ onClose, onConnected }: Props) {
             className="modal__close"
             aria-label={WALLET_CONNECT_CLOSE_LABEL}
             onClick={onClose}
-            disabled={isConnecting}
+            disabled={busy}
           >
             <ButtonIcon src={closeUrl} size={18} />
           </button>
         </div>
 
-        <p className="modal__intro">{WALLET_CONNECT_INTRO}</p>
-        <p id={descId} className="modal__description">
-          {WALLET_CONNECT_HELPER}
-        </p>
+        {error && (
+          <div className="modal__wallet-error" role="alert">
+            <p className="modal__wallet-error-title">{error.title}</p>
+            <p className="modal__wallet-error-desc">{error.desc}</p>
+          </div>
+        )}
 
         <ul className="wallet-option-list">
           {WALLET_OPTIONS.map((w, i) => {
-            const pending = connectingId === w.id;
+            const detected = isDetected(w.key);
+            const pending = pendingName === adapterFor(w.key)?.adapter.name && busy;
             return (
-              <li key={w.id}>
+              <li key={w.key}>
                 <button
                   ref={i === 0 ? firstOptionRef : undefined}
                   type="button"
                   className="wallet-option"
-                  aria-label={`Connect ${w.label} wallet`}
-                  // Disabled (for AT + visually) while a connection is in
-                  // progress. aria-disabled (not native `disabled`) keeps the
-                  // row focusable so the focus trap stays intact; `select` also
-                  // guards against activation.
-                  aria-disabled={isConnecting || undefined}
-                  onClick={() => select(w.id)}
+                  aria-label={
+                    detected ? `Connect ${w.label} wallet` : `Get ${w.label} (opens in a new tab)`
+                  }
+                  aria-disabled={busy || undefined}
+                  onClick={() => pick(w.key, w.url)}
                 >
                   <img
                     className="wallet-option__icon"
@@ -173,21 +212,22 @@ export default function ConnectWalletModal({ onClose, onConnected }: Props) {
                     aria-hidden="true"
                   />
                   <span className="wallet-option__label">{w.label}</span>
-                  {pending && (
+                  {pending ? (
                     <span className="wallet-option__status">{WALLET_CONNECTING}</span>
-                  )}
+                  ) : !detected ? (
+                    <span className="wallet-option__status wallet-option__status--muted">
+                      {WALLET_NOT_DETECTED_ROW}
+                    </span>
+                  ) : null}
                 </button>
               </li>
             );
           })}
         </ul>
 
-        <p className="modal__security">{WALLET_CONNECT_SECURITY_NOTE}</p>
-
-        {/* Polite live region so the transient connecting state is announced
-            once (empty until connecting; approved copy only, no new copy). */}
+        {/* Polite live region so the transient connecting state is announced. */}
         <span className="sr-only" role="status">
-          {isConnecting ? WALLET_CONNECTING : ""}
+          {busy ? WALLET_CONNECTING : ""}
         </span>
       </div>
     </div>

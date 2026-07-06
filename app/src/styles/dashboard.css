@@ -1497,6 +1497,82 @@
   color: var(--color-text-secondary);
 }
 
+/* Live Wallet Assets — read-only wallet-read section on the Portfolio page. */
+.live-wallet__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-md);
+}
+
+.live-wallet__badge {
+  margin-left: var(--spacing-inline-gap-sm);
+  padding: var(--spacing-inline-gap-xs) var(--spacing-inline-gap-sm);
+  border-radius: var(--radius-control-pill);
+  background: var(--color-subdued-neutral-background-default);
+  color: var(--color-text-secondary);
+  font: var(--typography-caption-default-font);
+  vertical-align: middle;
+}
+
+.live-wallet__refresh {
+  flex-shrink: 0;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-action-secondary-stroke-default);
+  border-radius: var(--radius-control-md);
+  background: transparent;
+  color: var(--color-action-secondary-text-default);
+  font: var(--typography-button-sm-font);
+  cursor: pointer;
+}
+
+.live-wallet__refresh:hover:not(:disabled) {
+  background: var(--color-action-secondary-background-hover);
+}
+
+.live-wallet__refresh:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+/* Partial-read warning: some reads failed but usable data (e.g. SOL) still shows. */
+.live-wallet__warning {
+  margin: 0 0 var(--spacing-stack-sm);
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-control-md);
+  background: var(--color-feedback-warning-background-tint);
+  color: var(--color-feedback-warning-text-tint);
+  font: var(--typography-body-sm-font);
+}
+
+/* "Not detected" row status is quieter than the "Connecting..." status. */
+.wallet-option__status--muted {
+  color: var(--color-text-disabled);
+}
+
+/* Connection error / not-detected notice above the wallet list. */
+.modal__wallet-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-xs);
+  padding: var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-sm);
+  background: var(--color-subdued-neutral-background-default);
+}
+
+.modal__wallet-error-title {
+  margin: 0;
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.modal__wallet-error-desc {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
 /* Wallet options while a connection is in progress: visually disabled (muted,
    not-allowed). aria-disabled keeps them focusable so the focus trap stays
    intact; activation is guarded in the component. */
