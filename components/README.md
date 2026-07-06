@@ -112,6 +112,7 @@ loading-indicator.md
 skeleton.md
 empty-state.md
 progress-bar.md
+smith-ai-typing-indicator.md
 ```
 
 ### Data Display
@@ -319,6 +320,7 @@ select-card.md
 select-menu.md
 sidebar.md
 skeleton.md
+smith-ai-typing-indicator.md
 suggestion-card.md
 table.md
 tabs.md

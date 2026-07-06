@@ -1,5 +1,12 @@
 # Onboarding Copy
 
+> **Note:** the connected onboarding conversation now follows the scripted Smith AI
+> "financial planner" flow in [`docs/onboarding-conversation-handoff.md`](../docs/onboarding-conversation-handoff.md),
+> composed in `app/src/state/onboardingScript.ts` (Smith intro → per-answer
+> acknowledgments that echo the user's inputs → plan summary → Portfolio/Goal
+> tour). The step copy below still backs the field labels, placeholders, input
+> helpers, and validation used by that flow.
+
 This file defines approved WealthSmith copy for onboarding.
 
 Onboarding collects the user’s plan inputs and prepares the product to personalize Dashboard, Portfolio, Suggestions, Top Pick, and Smith AI explanations.
@@ -179,22 +186,25 @@ Rules:
 
 ## Welcome Step
 
-Title:
+Smith AI welcomes the user first, in first person, then explains the two ways to
+start. This is the first message the user sees in disconnected onboarding.
+
+Title (Smith greeting):
 
 ```text
-Build your WealthSmith plan
+Hi, I’m Smith. I’ll help you set up your WealthSmith plan.
 ```
 
 Description:
 
 ```text
-Answer a few questions so WealthSmith can personalize your dashboard and suggestions.
+Connect your wallet to see wallet-backed portfolio context, or try Demo Mode with sample data.
 ```
 
 Helper:
 
 ```text
-You can update these settings later.
+You can update your plan later.
 ```
 
 Primary action:
@@ -218,15 +228,23 @@ Connect Wallet
 Smith AI companion message:
 
 ```text
-I’ll help you set up your plan step by step. WealthSmith uses these answers to personalize your dashboard and suggestions.
+Whenever you’re ready, choose how you’d like to start.
 ```
 
 Rules:
 
+- Smith greets the user first, warmly and in first person.
 - Do not imply onboarding creates trades.
+- Do not say wallet data is loaded, fetched, or analyzed — only that the user can
+  connect to see wallet-backed context.
 - Do not imply answers must be perfect.
 - Keep it short.
 - Provide Demo Mode as a low-friction path if available.
+- The disconnected onboarding panel shows only the Smith greeting and a single
+  Connect Wallet action — Try Demo Mode is NOT offered inside the onboarding panel.
+  (Try Demo Mode remains available in the Global Nav bar.) The read-only, demo, and
+  seed-phrase safety notes are NOT rendered on this first step (those strings remain
+  approved for other surfaces).
 
 ---
 
@@ -352,6 +370,40 @@ Rules:
 
 ---
 
+## Connected Onboarding Welcome (Chat)
+
+When the wallet is connected and goal setup is incomplete, Smith AI opens the chat
+by acknowledging the connection safely — before asking the first question. This is
+the first Smith message in the connected onboarding conversation.
+
+Title (Smith acknowledgment):
+
+```text
+Great — your wallet is connected.
+```
+
+Description:
+
+```text
+Now I’ll ask a few quick questions so WealthSmith can shape your plan around your goals.
+```
+
+Smith AI companion message:
+
+```text
+It only takes a moment, you stay in control, and nothing is bought, sold, or moved during setup.
+```
+
+Rules:
+
+- Acknowledge only that the wallet is "connected" — do not claim wallet data was
+  loaded, fetched, or analyzed (no live wallet analysis exists in this state).
+- Do not claim recommendations, suggestions, or a Top Pick are already generated.
+- Reassure the user that no transactions happen during onboarding.
+- Keep it short and warm; then proceed to the first question.
+
+---
+
 ## Demo Mode Started State
 
 Banner:
@@ -385,13 +437,13 @@ Rules:
 Title:
 
 ```text
-What is your financial goal?
+What’s your main goal right now?
 ```
 
 Description:
 
 ```text
-Choose the goal that best matches what you want WealthSmith to help you plan for.
+Choose the answer that feels closest — you can update it later.
 ```
 
 Helper:
@@ -418,7 +470,7 @@ Build Long-Term Wealth
 Smith AI companion message:
 
 ```text
-Your goal helps WealthSmith frame suggestions around what you care about most, like long-term growth, stability, or yield.
+This helps WealthSmith frame your plan around what matters most to you.
 ```
 
 Rules:
@@ -435,19 +487,19 @@ Rules:
 Title:
 
 ```text
-What is your time horizon?
+How long do you want this plan to look ahead?
 ```
 
 Description:
 
 ```text
-How long do you expect this plan to run?
+This helps WealthSmith frame your plan around your timeline.
 ```
 
 Helper:
 
 ```text
-This helps WealthSmith model Projected Growth and prioritize suggestions.
+This helps WealthSmith frame your plan around your timeline.
 ```
 
 Approved answer options:
@@ -474,7 +526,7 @@ Alternative if exact value is used:
 Smith AI companion message:
 
 ```text
-Time horizon helps WealthSmith understand whether your plan is short-term or long-term. Longer timelines can usually tolerate different tradeoffs than short timelines.
+Longer timelines and shorter ones can call for different tradeoffs.
 ```
 
 Rules:
@@ -491,19 +543,19 @@ Rules:
 Title:
 
 ```text
-What risk level feels right for this plan?
+How much risk are you comfortable with?
 ```
 
 Description:
 
 ```text
-Choose how much volatility you are comfortable with.
+There’s no perfect answer — pick what feels right for you today.
 ```
 
 Helper:
 
 ```text
-Risk tolerance helps WealthSmith compare your current portfolio with your target allocation.
+There’s no perfect answer. Pick what feels right for your comfort level today.
 ```
 
 Approved answer options:
@@ -536,7 +588,7 @@ Accepts more volatility for higher growth potential.
 Smith AI companion message:
 
 ```text
-Risk tolerance helps WealthSmith understand how much volatility may fit your plan. You can adjust this later if your comfort level changes.
+You can adjust this later if your comfort level changes.
 ```
 
 Rules:
@@ -553,19 +605,19 @@ Rules:
 Title:
 
 ```text
-What is your average monthly income?
+What’s your monthly income?
 ```
 
 Description:
 
 ```text
-Enter your approximate monthly income.
+A rough estimate is fine — this helps show how much room your plan has to work with.
 ```
 
 Helper:
 
 ```text
-This helps WealthSmith understand your plan inputs. You can update it later.
+Use your best estimate. You can update it later.
 ```
 
 Field label:
@@ -595,7 +647,7 @@ Enter a valid monthly income amount.
 Smith AI companion message:
 
 ```text
-Income helps WealthSmith understand your planning context. Use your best estimate; you can update it later.
+You can update it later.
 ```
 
 Rules:
@@ -612,19 +664,19 @@ Rules:
 Title:
 
 ```text
-What are your average monthly expenses?
+What do you usually spend each month?
 ```
 
 Description:
 
 ```text
-Enter your approximate monthly expenses.
+We use this to understand your Safety Buffer before exploring any new ideas.
 ```
 
 Helper:
 
 ```text
-This helps WealthSmith calculate your Safety Buffer target.
+Use an average monthly amount. You can update it later.
 ```
 
 Field label:
@@ -654,7 +706,7 @@ Enter a valid monthly expenses amount.
 Smith AI companion message:
 
 ```text
-Expenses help WealthSmith estimate your Safety Buffer target. Use an average monthly amount that feels realistic.
+An average month is perfect.
 ```
 
 Rules:
@@ -671,19 +723,19 @@ Rules:
 Title:
 
 ```text
-How often do you plan to contribute?
+How often do you expect to add money?
 ```
 
 Description:
 
 ```text
-Choose how often you expect to add funds to this plan.
+This helps WealthSmith understand your investing rhythm.
 ```
 
 Helper:
 
 ```text
-This helps WealthSmith model contributions over time.
+This helps WealthSmith understand your investing rhythm.
 ```
 
 Approved answer options:
@@ -705,7 +757,7 @@ Monthly
 Smith AI companion message:
 
 ```text
-Contribution frequency helps WealthSmith model your plan. Choose the closest option; it does not create automatic deposits.
+Choose the closest option — it doesn’t set up any automatic deposits.
 ```
 
 Rules:
@@ -722,19 +774,19 @@ Rules:
 Title:
 
 ```text
-What is your monthly saving goal?
+Do you have a monthly saving goal?
 ```
 
 Description:
 
 ```text
-Enter the amount you hope to set aside each month.
+This one’s optional — you can skip it for now.
 ```
 
 Helper:
 
 ```text
-This is optional and helps WealthSmith model your contribution plan.
+Optional. You can add this later.
 ```
 
 Field label:
@@ -776,7 +828,7 @@ Recommended MVP default/demo value:
 Smith AI companion message:
 
 ```text
-Monthly Saving Goal is optional. It helps WealthSmith model contributions, but it does not mean WealthSmith will move or invest funds automatically.
+It just helps WealthSmith picture your contributions; nothing is moved or invested automatically.
 ```
 
 Rules:
@@ -794,19 +846,19 @@ Rules:
 Title:
 
 ```text
-Review your plan
+Here’s what I have so far.
 ```
 
 Description:
 
 ```text
-Check your answers before WealthSmith prepares your dashboard.
+Take a look at your answers before I open your dashboard.
 ```
 
 Helper:
 
 ```text
-You can edit these settings later from Goal.
+You can edit any of these later from Goal.
 ```
 
 Approved summary labels:
@@ -843,11 +895,14 @@ Restart Onboarding
 Smith AI companion message:
 
 ```text
-Review your plan inputs before finishing setup. WealthSmith will use saved values to prepare your dashboard and suggestions.
+You can edit any of these later from Goal settings.
 ```
 
 Rules:
 
+- Smith summarizes the saved answers; it does not advise or recommend.
+- Do not use "Here is your strategy", "Here is what you should do", or "Here are
+  your recommendations".
 - Show saved/selected values clearly.
 - Do not show unresolved variables.
 - Do not show demo values as real values.
@@ -882,13 +937,19 @@ Strategy insight loading:
 Preparing strategy insights...
 ```
 
-Success title:
+Success title (also used as the onboarding completion toast):
 
 ```text
 Your WealthSmith dashboard is ready
 ```
 
-Success description:
+Success/completion reassurance helper (shown with the completion toast):
+
+```text
+You’ll see your portfolio view next. Nothing has been moved or changed.
+```
+
+Dashboard page subheading (unchanged; not the completion toast):
 
 ```text
 Review your portfolio, Safety Buffer, and suggested next actions.
@@ -903,11 +964,13 @@ Go to Dashboard
 Smith AI companion message:
 
 ```text
-Your setup is complete. WealthSmith will now use your saved plan and available portfolio data to prepare your dashboard.
+Your setup is complete. WealthSmith will use your saved plan to prepare your dashboard next.
 ```
 
 Rules:
 
+- Finish copy must not imply funds moved or transactions happened; keep the
+  "nothing has been moved or changed" reassurance.
 - Use Smith AI animation only for meaningful suggestion/insight waits.
 - Do not show loading for fast transitions.
 - Do not imply funds are moving.
@@ -1106,7 +1169,7 @@ Rules:
 ### Initial Companion Message
 
 ```text
-I’ll guide you through setup. WealthSmith uses these answers to personalize your dashboard and suggestions.
+Hi, I’m Smith. I’ll help you set up your WealthSmith plan, one question at a time.
 ```
 
 ### Step Helper
@@ -1140,6 +1203,141 @@ Rules:
 - Smith AI should not save values without user action.
 - Smith AI should not generate recommendations directly from onboarding chat.
 - Smith AI should explain, not decide.
+
+---
+
+## Onboarding Tour Messages (Structured)
+
+The end-of-onboarding tour messages (transcript items 21–22) are **long, so they
+use structured formatting** for readability: an intro sentence, a short section
+label, a vertical bullet list with **bold section labels** and a short
+description, and a closing next-step sentence. Rendered directly on the panel
+surface (no bubble); only the section labels are bold. Approved content types:
+`paragraph` and `bullet_list` (bold label + short text). No arbitrary HTML.
+
+### Portfolio Overview (item 21)
+
+```text
+Here’s your full Portfolio Overview.
+
+You’ll see:
+
+• Balance Overview — all wallets and holdings in one view.
+• Crypto Assets Allocation — how your crypto is balanced.
+• Assets Deployment Overview — where your funds are working right now.
+
+As you start investing or rebalancing, I’ll keep these updated automatically.
+
+Next, let’s visit your Goal Page so you can see how everything connects.
+```
+
+Bold labels: **Balance Overview**, **Crypto Assets Allocation**,
+**Assets Deployment Overview**.
+
+### Goal setup (item 22)
+
+Intro, then a bullet list with bold labels echoing the saved answers, then the
+closing next-step sentences:
+
+```text
+Here’s your current Goal setup — everything you’ve shared so far:
+
+• Goal — {financial goal}
+• Timeline — {timeline}
+• Risk profile — {risk}
+• Monthly income — {income}
+• Expenses — {expenses}
+• Contribution rhythm — {frequency} ({monthly saving})
+
+You can edit any of these anytime — or just ask me, and I’ll help you update your goal.
+
+You’re now ready to explore your AI Strategy Steps — actionable insights tailored to your goals, risk, and cash flow.
+```
+
+Rules:
+
+- Do not render bullet groups as one inline paragraph; each bullet is on its own line.
+- Bold only the section labels; do not overuse bold.
+- Keep spacing between the intro, list, and closing sentence.
+- Must wrap cleanly in the narrow panel with no horizontal overflow.
+
+---
+
+## Typing Indicator Copy
+
+Shown briefly while the scripted onboarding reveals the next Smith AI message
+(the conversational "writing…" beat). See
+`components/smith-ai-typing-indicator.md`.
+
+Visible text:
+
+```text
+Smith is writing…
+```
+
+Accessible label:
+
+```text
+Smith AI is writing.
+```
+
+Rules:
+
+- Deterministic and short (~400–700ms); the flow is scripted, not live AI.
+- Must not imply live AI computation.
+- Must not block sending an answer or validation.
+- Respect reduced motion (static Smith symbol, no looping animation).
+
+---
+
+## Chat Controls Copy
+
+The connected onboarding chat has an amount-input send action and an undo action.
+
+Send button accessible label:
+
+```text
+Send
+```
+
+Undo button accessible label (see Global Onboarding Labels — Undo):
+
+```text
+Undo
+```
+
+More (menu) button accessible label:
+
+```text
+More
+```
+
+More menu action:
+
+```text
+Restart Onboarding
+```
+
+Rules:
+
+- The Send button is an icon button (approved up-arrow icon); its accessible name
+  is "Send".
+- Undo removes the last user answer and steps back one question.
+- Optional amount fields may be sent empty (blank), which is saved as null.
+- The More button is an icon button (approved `more.svg` kebab icon); its
+  accessible name is "More". It opens a popover menu whose only action is
+  "Restart Onboarding" (`rotate-ccw.svg` icon), which clears all collected answers
+  and returns to the first question. Restart does not disconnect the wallet or
+  change the Dashboard/saved goal (onboarding commits only on Finish).
+- Undo and More stay available throughout the connected onboarding, including the
+  first question and the end-of-onboarding tour steps (Portfolio and Goal). At the
+  first connected question, Undo reverses the wallet connection (disconnects, back
+  to the disconnected welcome). During the tour, Undo steps back through the tour
+  (Goal → Portfolio → plan summary). Restart clears everything and returns to the
+  first question.
+- On the Goal step of the tour the Goal page's Edit Mode toggle is disabled, with
+  the hover/focus tooltip: "Unable to edit your goal during the onboarding or in
+  demo mode."
 
 ---
 
@@ -1341,42 +1539,48 @@ Recommended content IDs:
 
 ```json
 {
-  "onboarding.welcome.title": "Build your WealthSmith plan",
-  "onboarding.welcome.description": "Answer a few questions so WealthSmith can personalize your dashboard and suggestions.",
-  "onboarding.welcome.helper": "You can update these settings later.",
+  "onboarding.welcome.title": "Hi, I’m Smith. I’ll help you set up your WealthSmith plan.",
+  "onboarding.welcome.description": "Connect your wallet to see wallet-backed portfolio context, or try Demo Mode with sample data.",
+  "onboarding.welcome.helper": "You can update your plan later.",
+  "onboarding.welcome.companion": "Whenever you’re ready, choose how you’d like to start.",
   "onboarding.get_started.cta": "Get Started",
+
+  "onboarding.connected_welcome.title": "Great — your wallet is connected.",
+  "onboarding.connected_welcome.description": "Now I’ll ask a few quick questions so WealthSmith can shape your plan around your goals.",
+  "onboarding.connected_welcome.companion": "It only takes a moment, you stay in control, and nothing is bought, sold, or moved during setup.",
 
   "onboarding.wallet.title": "Connect your wallet or try Demo Mode",
   "onboarding.wallet.description": "Connect your wallet to personalize WealthSmith with your real portfolio, or try Demo Mode with sample data.",
   "onboarding.wallet.helper": "WealthSmith reads balances and positions only. Your funds stay in your wallet.",
   "onboarding.demo.helper": "Demo Mode uses sample data and does not connect your wallet.",
 
-  "onboarding.goal.title": "What is your financial goal?",
-  "onboarding.goal.description": "Choose the goal that best matches what you want WealthSmith to help you plan for.",
+  "onboarding.goal.title": "What’s your main goal right now?",
+  "onboarding.goal.description": "Choose the answer that feels closest — you can update it later.",
 
-  "onboarding.time_horizon.title": "What is your time horizon?",
-  "onboarding.time_horizon.description": "How long do you expect this plan to run?",
+  "onboarding.time_horizon.title": "How long do you want this plan to look ahead?",
+  "onboarding.time_horizon.description": "This helps WealthSmith frame your plan around your timeline.",
 
-  "onboarding.risk.title": "What risk level feels right for this plan?",
-  "onboarding.risk.description": "Choose how much volatility you are comfortable with.",
+  "onboarding.risk.title": "How much risk are you comfortable with?",
+  "onboarding.risk.description": "There’s no perfect answer — pick what feels right for you today.",
 
-  "onboarding.income.title": "What is your average monthly income?",
+  "onboarding.income.title": "What’s your monthly income?",
   "onboarding.income.label": "Monthly Income",
 
-  "onboarding.expenses.title": "What are your average monthly expenses?",
+  "onboarding.expenses.title": "What do you usually spend each month?",
   "onboarding.expenses.label": "Monthly Expenses",
 
-  "onboarding.contribution_frequency.title": "How often do you plan to contribute?",
+  "onboarding.contribution_frequency.title": "How often do you expect to add money?",
 
-  "onboarding.monthly_saving_goal.title": "What is your monthly saving goal?",
-  "onboarding.monthly_saving_goal.helper": "This is optional and helps WealthSmith model your contribution plan.",
+  "onboarding.monthly_saving_goal.title": "Do you have a monthly saving goal?",
+  "onboarding.monthly_saving_goal.helper": "Optional. You can add this later.",
 
-  "onboarding.review.title": "Review your plan",
-  "onboarding.review.description": "Check your answers before WealthSmith prepares your dashboard.",
+  "onboarding.review.title": "Here’s what I have so far.",
+  "onboarding.review.description": "Take a look at your answers before I open your dashboard.",
 
   "onboarding.finish.cta": "Finish Setup",
   "onboarding.finish.loading": "Preparing your dashboard...",
   "onboarding.finish.success.title": "Your WealthSmith dashboard is ready",
+  "onboarding.finish.success.helper": "You’ll see your portfolio view next. Nothing has been moved or changed.",
   "onboarding.finish.success.cta": "Go to Dashboard",
 
   "onboarding.undo.cta": "Undo",

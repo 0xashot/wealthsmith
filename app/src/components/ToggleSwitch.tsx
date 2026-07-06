@@ -11,11 +11,26 @@ interface Props {
   /** Visible label text; also the switch's accessible name (Label in Name). */
   label: string;
   labelId: string;
+  /** When true the switch cannot be toggled (and shows `tooltip` on hover). */
+  disabled?: boolean;
+  /** Hover/focus tooltip shown while disabled. */
+  tooltip?: string;
 }
 
-export default function ToggleSwitch({ checked, onChange, label, labelId }: Props) {
+export default function ToggleSwitch({
+  checked,
+  onChange,
+  label,
+  labelId,
+  disabled = false,
+  tooltip,
+}: Props) {
   return (
-    <span className="toggle">
+    <span
+      className="toggle"
+      data-disabled={disabled || undefined}
+      data-tooltip={disabled && tooltip ? tooltip : undefined}
+    >
       <span className="toggle__label" id={labelId}>
         {label}
       </span>
@@ -24,9 +39,11 @@ export default function ToggleSwitch({ checked, onChange, label, labelId }: Prop
         role="switch"
         aria-checked={checked}
         aria-labelledby={labelId}
+        aria-disabled={disabled || undefined}
         className="toggle__switch"
         data-checked={checked}
-        onClick={() => onChange(!checked)}
+        disabled={disabled}
+        onClick={() => !disabled && onChange(!checked)}
       >
         <span className="toggle__thumb" aria-hidden="true" />
       </button>

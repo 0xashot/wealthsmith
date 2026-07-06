@@ -1,5 +1,22 @@
 # Onboarding with Smith AI
 
+> **Implemented conversational flow:** the connected onboarding now plays the
+> scripted Smith AI "financial planner" conversation from
+> [`docs/onboarding-conversation-handoff.md`](../docs/onboarding-conversation-handoff.md)
+> (items 1–22), composed in `app/src/state/onboardingScript.ts`. Smith introduces
+> himself, acknowledges the wallet connection, asks one question at a time and
+> echoes the user's real answers back, computes available cash (income − expenses),
+> then ends with a guided tour: the Onboarding sidebar stays open in place while
+> the main column swaps to the Portfolio view then the real Goal Settings content
+> (Open Portfolio → Open Goal → Finish Setup), and the matching nav tab
+> highlights. It stays deterministic and
+> scripted: no live wallet read, no live AI, and it does not recalculate the
+> Dashboard/Goal/Portfolio fixtures, move funds, sign, or collect secrets.
+> Multi-year projection figures are fixed illustrative script. The **first time**
+> onboarding opens in a session it shows a centered 64×64 Smith AI loading beat
+> ("Smith AI getting ready") before the content — see
+> [`components/smith-ai-initial-loading-state.md`](../components/smith-ai-initial-loading-state.md).
+
 This pattern defines the WealthSmith onboarding experience where Smith AI guides the user through wallet connection, goal setup, risk profile, cash-flow inputs, contribution rhythm, and review.
 
 During onboarding, Smith AI stays visible and active while the Dashboard and Portfolio update in response to the user’s answers.
@@ -238,6 +255,7 @@ components/progress-bar.md
 components/select-card.md
 components/chip.md
 components/choice-chip.md
+components/smith-ai-typing-indicator.md
 components/input.md
 components/toast.md
 components/menu-popover.md
@@ -249,12 +267,43 @@ components/chart.md
 components/alert.md
 ```
 
-Note: onboarding guided choice questions (for example Financial Goal, Risk Level,
-Time Horizon, Contribution Rhythm) may use Choice Chips (`components/choice-chip.md`)
-in a future implementation for a more conversational feel. Choice Chips must use
-the same canonical option IDs and approved labels as Goal Settings. The current
-implementation uses `components/select-menu.md`; this is a forward-looking option
-only and does not change existing onboarding behavior.
+Note: the connected goal-setup onboarding is presented as a **chat with Smith AI**
+(Gemini-style):
+
+- Smith AI messages have **no chat bubble** — the Smith avatar sits on the left
+  and the approved message text renders directly on the panel surface.
+- Each Smith AI message is the **whole approved text for the step written as one
+  continuous message** (question + its explanation together, not split into a
+  separate title and description block) and is **typed out** (typewriter, not
+  shown all at once), using a single type token and `color.text.primary`. The
+  question and its explanation are separated by a **single line break with no
+  blank line between them**, so the message reads as one flowing thought.
+- The Smith avatar is the **`sparcle.svg` icon in `color.action.primary`** (no
+  Smith logo and no looping animation are used in onboarding); the writing cue is
+  the typewriter itself (`components/smith-ai-typing-indicator.md`).
+- The **quick selections (Choice Chips) and the amount input sit at the bottom** of
+  the panel, like a chat input area. There are **no Back/Continue buttons**.
+  Conversational quick-reply chips are compact — max height **32px on desktop,
+  40px on mobile** (see `components/choice-chip.md`).
+- Selecting a chip or sending an amount appears as a **user message bubble** in the
+  transcript, then Smith asks the next question. Amount fields use a WealthSmith
+  input with a **Send** button (approved up-arrow icon, primary color); optional
+  amounts may be sent empty (blank).
+- An **Undo** control (top-right) removes the last user answer and steps back one
+  question. It uses the same squared, subtle-neutral hover treatment as the Ask
+  Smith AI close button, and shows an **"Undo" tooltip** on hover/focus.
+- To the right of Undo, a **More** control (kebab / `more.svg` icon) opens a
+  popover menu (mirrors the wallet pill menu — `components/menu-popover.md`) with
+  a single **"Restart Onboarding"** action (`rotate-ccw.svg` icon). Restart clears
+  all collected answers and returns to the first question (re-typed from the top);
+  it does **not** disconnect the wallet or touch the Dashboard/savedGoal
+  (onboarding only commits on Finish). The menu closes on outside click or Escape.
+- The onboarding **progress bar transitions smoothly**.
+
+This is a deterministic, scripted flow (no live AI, no API call, no invented
+guidance). Choice Chips use the same canonical option IDs and approved labels as
+Goal Settings; validation, Review/Finish, savedGoal, and goalCompleted behavior
+are unchanged, and Goal Settings itself is not changed.
 
 Navigation/layout components:
 

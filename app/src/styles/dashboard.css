@@ -914,12 +914,9 @@
   }
 }
 
-/* header and the bottom cluster (feedback, quick actions, input, safety
-   note) do not shrink; only the conversation area scrolls */
+/* header, reply cluster, and safety note do not shrink; only the conversation
+   area scrolls (.smith-panel__replies gets flex-shrink from the shared rule) */
 .smith-panel__header,
-.smith-panel__feedback,
-.smith-panel__quick-actions,
-.smith-panel__form,
 .smith-panel__safety-note {
   flex-shrink: 0;
 }
@@ -979,24 +976,9 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
-  display: grid;
-  align-content: start;
-  gap: var(--spacing-card-gap-sm);
-}
-
-.smith-panel__prompt {
-  margin: 0;
-  font: var(--typography-label-md-font);
-  color: var(--color-text-primary);
-}
-
-.smith-panel__response {
-  margin: 0;
-  padding: var(--spacing-inline-gap-md);
-  background: var(--color-subdued-neutral-background-default);
-  border-radius: var(--radius-surface-sm);
-  font: var(--typography-body-sm-font);
-  color: var(--color-text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-card-gap-md);
 }
 
 .smith-panel__feedback {
@@ -1018,27 +1000,7 @@
   border-color: var(--color-action-secondary-stroke-default);
 }
 
-.smith-panel__quick-actions {
-  display: grid;
-  gap: var(--spacing-inline-gap-sm);
-}
-
-.smith-panel__quick-action {
-  text-align: left;
-  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
-  border: 1px solid var(--color-action-secondary-stroke-default);
-  border-radius: var(--radius-control-md);
-  background: transparent;
-  color: var(--color-action-secondary-text-default);
-  font: var(--typography-button-sm-font);
-  cursor: pointer;
-}
-
-.smith-panel__quick-action:hover,
-.smith-panel__quick-action:focus-visible {
-  background: var(--color-action-secondary-background-hover);
-}
-
+/* Free-text ask field (sits in the .chat-input__row next to the Send button). */
 .smith-panel__input {
   width: 100%;
   padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
@@ -1052,6 +1014,39 @@
 .smith-panel__safety-note {
   margin: 0;
   font: var(--typography-caption-default-font);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+/* First-open Smith AI loading state — a centered 64×64 animation + calm label,
+   filling the panel/card body. No bubble, no border, no generic spinner. */
+.smith-initial-loading {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-card-gap-sm);
+  padding: var(--spacing-card-padding-md);
+}
+
+.smith-initial-loading__symbol {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.smith-initial-loading__symbol img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.smith-initial-loading__label {
+  margin: 0;
+  font: var(--typography-body-sm-font);
   color: var(--color-text-secondary);
   text-align: center;
 }
@@ -1589,6 +1584,45 @@
   gap: var(--spacing-inline-gap-sm);
 }
 
+/* Disabled switch (e.g. Edit Mode during onboarding / demo) + hover tooltip. */
+.toggle[data-tooltip] {
+  position: relative;
+}
+
+.toggle__switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.toggle[data-disabled] .toggle__label {
+  color: var(--color-text-disabled);
+}
+
+.toggle[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--zIndex-menu-tooltip);
+  max-width: 260px;
+  padding: var(--spacing-inline-gap-xs) var(--spacing-inline-gap-sm);
+  border-radius: var(--radius-control-sm);
+  background: var(--color-text-primary);
+  color: var(--color-surface-card);
+  font: var(--typography-caption-default-font);
+  line-height: 1.4;
+  white-space: normal;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.toggle[data-tooltip]:hover::after,
+.toggle[data-tooltip]:focus-within::after {
+  opacity: 1;
+}
+
 .toggle__label {
   font: var(--typography-label-md-font);
   color: var(--color-text-primary);
@@ -2090,15 +2124,146 @@
 }
 
 .onboarding-panel__title {
-  flex-shrink: 0;
   margin: 0;
   font: var(--typography-heading-sm-font);
   color: var(--color-text-primary);
 }
 
-/* Progress bar stays pinned below the header. */
+/* Header row: title left, Undo control right. */
+.onboarding-panel__header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+/* Undo control — same squared, subtle-neutral hover treatment as the Ask Smith
+   AI close button (.smith-panel__close), with a small "Undo" tooltip on hover. */
+.onboarding-undo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius-control-sm);
+  cursor: pointer;
+}
+
+.onboarding-undo:hover:not(:disabled),
+.onboarding-undo:focus-visible {
+  background: var(--color-subdued-neutral-background-default);
+  color: var(--color-text-primary);
+}
+
+.onboarding-undo:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.onboarding-undo:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+/* Hover/focus tooltip label, anchored under the control (top-right of panel). */
+.onboarding-undo[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  padding: var(--spacing-inline-gap-xs) var(--spacing-inline-gap-sm);
+  border-radius: var(--radius-control-sm);
+  background: var(--color-text-primary);
+  color: var(--color-surface-card);
+  font: var(--typography-caption-default-font);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: var(--zIndex-smithAI-panel);
+}
+
+.onboarding-undo[data-tooltip]:hover:not(:disabled)::after,
+.onboarding-undo[data-tooltip]:focus-visible::after {
+  opacity: 1;
+}
+
+/* Header controls cluster: Undo + More (kebab) menu, right-aligned. */
+.onboarding-panel__header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+}
+
+.onboarding-more {
+  position: relative;
+  display: inline-flex;
+}
+
+/* The More button reuses the squared .onboarding-undo hover treatment; when the
+   menu is open it takes a subtle blue active state. */
+.onboarding-more__btn[aria-expanded="true"] {
+  background: var(--color-subdued-blue-background-default);
+  color: var(--color-action-primary-background-default);
+}
+
+/* More menu popover — mirrors the wallet pill menu (components/menu-popover.md). */
+.onboarding-menu {
+  position: absolute;
+  top: calc(100% + var(--spacing-inline-gap-sm));
+  right: 0;
+  min-width: 220px;
+  padding: var(--spacing-inline-gap-sm);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-overlay-dropdown);
+  z-index: var(--zIndex-menu-popover);
+  display: grid;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.onboarding-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  width: 100%;
+  text-align: left;
+  white-space: nowrap;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border: none;
+  border-radius: var(--radius-control-sm);
+  background: transparent;
+  color: var(--color-text-primary);
+  font: var(--typography-body-md-font);
+  cursor: pointer;
+}
+
+.onboarding-menu__item:hover,
+.onboarding-menu__item:focus-visible {
+  background: var(--color-subdued-neutral-background-default);
+  outline: none;
+}
+
+/* Plan-summary + tour actions (Open Portfolio / Open Goal / Finish) in the panel. */
+.onboarding-tour-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-card-gap-sm);
+}
+
+/* Progress bar stays pinned below the header; the fill transitions smoothly. */
 .onboarding-progress {
   flex-shrink: 0;
+}
+
+.onboarding-progress .progress__fill {
+  transition: width 0.35s ease;
 }
 
 /* Scrollable content area (flex:1); header above and actions below do not shrink. */
@@ -2218,4 +2383,319 @@
   font: var(--typography-label-md-font);
   color: var(--color-text-primary);
   text-align: right;
+}
+
+/* ---------- Conversational onboarding (Smith AI flow) ---------- */
+
+/* Smith AI assistant message: 32×32 static avatar + copy bubble. */
+.onboarding-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+/* Smith AI avatar — the sparkle icon painted in the primary/action color
+   (no logo, no animation). */
+.smith-avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--color-action-primary-background-default);
+}
+
+/* Gemini-style assistant message: NO chat bubble — the text renders directly on
+   the panel surface (no background, border, radius, or shadow). */
+.onboarding-msg__content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+.onboarding-msg__title {
+  margin: 0;
+  font: var(--typography-heading-sm-font);
+  color: var(--color-text-primary);
+}
+
+.onboarding-msg__text,
+.onboarding-msg__helper {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+/* Smooth reveal of the message text and the answer controls (soft fade + slide). */
+.onboarding-reveal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-xs);
+  animation: onb-reveal 0.28s ease-out both;
+}
+
+@keyframes onb-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Reduced motion: no avatar crossfade, no reveal animation (show immediately). */
+@media (prefers-reduced-motion: reduce) {
+  .smith-avatar__anim {
+    display: none;
+    transition: none;
+  }
+  .onboarding-reveal {
+    animation: none;
+  }
+}
+
+/* User answer area (chips or input) under the Smith message. */
+.onboarding-answer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-card-gap-sm);
+}
+
+/* Choice Chips (components/choice-chip.md): pill radio-group reply options. */
+.choice-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-card-gap-sm);
+}
+
+.choice-chip {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: var(--spacing-card-gap-sm) var(--spacing-inline-gap-lg);
+  border-radius: var(--radius-control-pill);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-subdued-neutral-background-default);
+  color: var(--color-text-primary);
+  font: var(--typography-body-md-font);
+  cursor: pointer;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+.choice-chip:hover {
+  background: var(--color-action-secondary-background-hover);
+  border-color: var(--color-action-secondary-stroke-default);
+}
+
+.choice-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.choice-chip:active {
+  background: var(--color-action-secondary-background-pressed);
+}
+
+/* Selected: primary-tinted surface + primary border + action text + medium
+   weight — state conveyed by border + background + weight, not color alone. */
+.choice-chip--selected {
+  background: var(--color-selection-background-default);
+  border-color: var(--color-action-primary-background-default);
+  color: var(--color-action-secondary-text-default);
+  font: var(--typography-button-md-font);
+}
+
+.choice-chip:disabled {
+  color: var(--color-text-disabled);
+  border-color: var(--color-border-subtle);
+  cursor: not-allowed;
+}
+
+/* ---------- Onboarding chat (Smith AI conversation) ---------- */
+
+/* One type token + text-primary for every Smith AI question. */
+.chat-question {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+}
+
+/* Structured Smith message (long tour messages): paragraphs + a vertical
+   bullet list with bold section labels — readable, no bubble, no overflow. */
+.onboarding-rich {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-card-gap-sm);
+}
+
+.onboarding-msg-bullets {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+.onboarding-msg-bullets__item {
+  position: relative;
+  padding-left: var(--spacing-inline-gap-md);
+  font: var(--typography-body-md-font);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  overflow-wrap: break-word;
+}
+
+.onboarding-msg-bullets__item::before {
+  content: "•";
+  position: absolute;
+  left: var(--spacing-inline-gap-xs);
+  color: var(--color-text-secondary);
+}
+
+.onboarding-msg-bullets__label {
+  color: var(--color-text-primary);
+}
+
+/* Typewriter caret while a question types. */
+.chat-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.1em;
+  background: var(--color-text-primary);
+  animation: chat-caret-blink 1s step-end infinite;
+}
+
+@keyframes chat-caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* A turn = Smith question (+ its user reply bubble once answered). */
+.chat-turn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+/* User reply message — right-aligned bubble (user messages DO use a bubble). */
+.chat-user {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.chat-user__bubble {
+  max-width: 80%;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-surface-md);
+  background: var(--color-selection-background-default);
+  color: var(--color-text-primary);
+  font: var(--typography-body-sm-font);
+}
+
+/* Bottom input area (quick replies / amount input / Finish), pinned below the
+   scrolling transcript. */
+.onboarding-chat__input,
+.smith-panel__replies {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-card-gap-sm);
+  padding-top: var(--spacing-card-gap-sm);
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.onboarding-chat__finish {
+  align-self: stretch;
+}
+
+/* Conversational quick-reply chips are compact — 40px on mobile, 32px on desktop
+   (components/choice-chip.md — Conversational quick-reply exception). Shared by
+   the onboarding chat and the Ask Smith AI conversation. */
+.onboarding-chat__input .choice-chip,
+.smith-panel__replies .choice-chip {
+  box-sizing: border-box;
+  min-height: 0;
+  height: 40px;
+  padding: 0 var(--spacing-inline-gap-md);
+  font: var(--typography-body-sm-font);
+}
+
+@media (min-width: 1280px) {
+  .onboarding-chat__input .choice-chip,
+  .smith-panel__replies .choice-chip {
+    height: 32px;
+  }
+}
+
+/* Amount input with a Send button (Gemini-style, WealthSmith colors + icon). */
+.chat-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+.chat-input__row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.chat-input__field {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-input__send {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: var(--radius-control-pill);
+  background: var(--color-action-primary-background-default);
+  color: var(--color-action-primary-text-default);
+  cursor: pointer;
+}
+
+.chat-input__send:hover:not(:disabled) {
+  background: var(--color-action-primary-background-hover);
+}
+
+.chat-input__send:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.chat-input__send:disabled {
+  background: var(--color-disabled-background-default);
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
+/* Reduced motion: no caret blink, no progress-fill transition. */
+@media (prefers-reduced-motion: reduce) {
+  .chat-caret {
+    animation: none;
+  }
+  .onboarding-progress .progress__fill {
+    transition: none;
+  }
 }

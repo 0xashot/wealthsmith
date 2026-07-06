@@ -795,6 +795,33 @@ WealthSmith does not execute transactions from chat. You can review product-prov
 
 ## Quick Action Rules
 
+Smith AI quick actions may appear in the panel. In the Ask Smith AI conversation
+they are presented as **quick-reply Choice Chips** — the same compact chips used
+in the onboarding chat (max height 32px desktop / 40px mobile; see
+`components/choice-chip.md`) — not full-width list buttons. Selecting a chip adds
+the user's question as a right-aligned bubble and Smith's approved reply is typed
+out beside the sparkle avatar. See "Ask Smith AI conversation layout" below.
+
+### Ask Smith AI conversation layout
+
+The Ask Smith AI panel is a **chat with Smith AI, styled like the onboarding
+conversation** (`patterns/onboarding-with-smith-ai.md`), with two differences:
+there is **no progress bar** and **no Undo** control (Ask Smith AI is not a
+stepped flow). Specifically:
+
+- Smith replies have **no chat bubble** — the **`sparcle.svg` avatar in
+  `color.action.primary`** sits on the left and the approved reply text renders
+  directly on the surface, **typed out** (typewriter); only the newest reply
+  types, earlier turns are shown in full.
+- The user's questions (chip taps or free-text) appear as **right-aligned user
+  bubbles**.
+- The approved suggested prompts are **quick-reply Choice Chips**; a free-text
+  field with a **Send** button (approved up-arrow icon, primary color) lets the
+  user ask anything else. Chips and Send are disabled while a reply is typing.
+- This stays **explain-only and deterministic** — suggested prompts map to
+  approved responses and any other input returns the approved fallback. No live
+  generation, recommendation creation, Top Pick/protocol selection, or execution.
+
 Smith AI quick actions may appear in the panel.
 
 Allowed quick actions:

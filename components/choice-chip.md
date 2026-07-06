@@ -157,6 +157,11 @@ approved, predefined prompt — it does not free-type or invent a query.
 - **Height:** 44px minimum on desktop; never below 40px. There is no control-height
   token today; height is achieved by label line-height + vertical padding, with a
   documented `min-height` if needed (see Token Usage → Missing tokens).
+  - **Conversational quick-reply exception (Smith AI chat):** quick-reply chips
+    in the Smith AI **onboarding chat** and the **Ask Smith AI conversation** are
+    compact — max height **32px on desktop** and **40px on mobile** — to read as
+    chat reply options rather than form controls. This overrides the 44px/40px
+    minimum for those conversational contexts only.
 - **Horizontal padding:** 20–24px depending on label length → `spacing.inline.gap.lg`
   (24px). (20px is not a discrete token; 24px is the standard.)
 - **Vertical padding:** 10–12px → `spacing.card.gap.sm` (12px).

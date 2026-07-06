@@ -30,13 +30,15 @@ import ToastHost, { type ToastData } from "./components/ToastHost";
 import ConnectWalletModal from "./components/ConnectWalletModal";
 import { dashboardState } from "./state/dashboardState";
 import { initialSavedGoal } from "./state/goalState";
-import { isOnboardingActive } from "./state/onboardingState";
+import { isOnboardingActive, buildSavedGoal, type OnboardingAnswers } from "./state/onboardingState";
 import type { SavedGoal } from "./types/goal";
+import type { TourStage } from "./pages/OnboardingExperience";
 import {
   DEMO_EXIT_TOAST,
   TOAST_ADDRESS_COPIED,
   TOAST_COPY_FAILED,
   ONBOARDING_FINISH_TOAST,
+  ONBOARDING_FINISH_HELPER,
 } from "./state/approvedCopy";
 import "./styles/dashboard.css";
 
@@ -58,6 +60,13 @@ export default function App() {
   // onboarding — it flips this to false so onboarding stays visible (Variant 4).
   // Completion (goalCompleted = true from finishing setup) arrives in a later step.
   const [goalCompleted, setGoalCompleted] = useState(true);
+  // End-of-onboarding guided tour (transcript items 20–22): after the plan
+  // summary, Smith walks the user through the real Portfolio and Goal pages with
+  // a companion overlay, then Finish Setup completes onboarding. `tourStage` is
+  // null outside the tour; `tourAnswers`/`tourGoal` hold the collected plan so the
+  // Goal page can preview it and completion can commit it.
+  const [tourStage, setTourStage] = useState<TourStage>(null);
+  const [tourGoal, setTourGoal] = useState<SavedGoal | null>(null);
   const nextToastId = useRef(1);
   const pageWrapRef = useRef<HTMLDivElement>(null);
   // The element that opened the modal, so focus can return to it on close.
@@ -161,7 +170,17 @@ export default function App() {
     setSavedGoal(goal);
     setGoalCompleted(true);
     setActivePage("dashboard");
-    pushToast(ONBOARDING_FINISH_TOAST);
+    setTourStage(null);
+    setTourGoal(null);
+    pushToast(ONBOARDING_FINISH_TOAST, ONBOARDING_FINISH_HELPER);
+  };
+
+  // Start the guided tour: keep the onboarding layout (and its sidebar) in place;
+  // swap the main column to the Portfolio then Goal views while the Onboarding
+  // panel shows the tour step. No commit until Finish. No recalculation.
+  const startOnboardingTour = (answers: OnboardingAnswers) => {
+    setTourGoal(buildSavedGoal(answers));
+    setTourStage("portfolio");
   };
 
   // Onboarding is not optional: shown whenever disconnected, or connected with an
@@ -179,8 +198,11 @@ export default function App() {
     );
   } else if (onboardingActive) {
     // Onboarding surface. Disconnected → welcome/entry (Variant 1); connected +
-    // goal incomplete → goal-setup steps (Variant 4). It does not recalculate
-    // suggestions/Top Pick/Safety Buffer/projections/allocation/protocol decisions.
+    // goal incomplete → the scripted Smith AI conversation (Variant 4), then the
+    // end-of-flow tour: the Onboarding sidebar stays in place while the main
+    // column swaps to the Portfolio / Goal view (tourStage). It does not
+    // recalculate suggestions/Top Pick/Safety Buffer/projections/allocation/
+    // protocol decisions, move funds, sign, or collect secrets.
     page = (
       <OnboardingExperience
         mode={mode === "connected" ? "connected" : "disconnected"}
@@ -189,6 +211,12 @@ export default function App() {
         onCopyAddress={copyWalletAddress}
         onDisconnect={disconnectFromOnboarding}
         onComplete={handleOnboardingComplete}
+        onTour={startOnboardingTour}
+        tourStage={tourStage}
+        tourGoal={tourGoal}
+        onSetTourStage={setTourStage}
+        onSaveTourGoal={setTourGoal}
+        pushToast={pushToast}
       />
     );
   } else if (mode === "connected" && activePage === "portfolio") {

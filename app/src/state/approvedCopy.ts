@@ -68,6 +68,11 @@ export const SMITH_FALLBACK =
 /** patterns/dashboard-layout.md — accessibility example */
 export const SMITH_CLOSE_LABEL = "Close Ask Smith AI panel";
 
+/** components/smith-ai-initial-loading-state.md — visible + status copy shown with
+ *  the first-open Smith AI loading animation (paired copy, per the animation
+ *  registry). Calm, non-hype; no live-AI / execution / fund-movement implication. */
+export const SMITH_INITIAL_LOADING_LABEL = "Smith AI getting ready";
+
 /**
  * Page-appropriate Ask Smith AI accessible labels. The connected Dashboard
  * fixture's label ("Ask Smith AI about this dashboard") is dashboard-specific,
@@ -143,6 +148,9 @@ export const GOAL_SECTION_CONTRIBUTION = "Contribution and Timeline";
 
 /** patterns/goal-settings.md — Edit Mode (visible toggle label). */
 export const GOAL_EDIT_MODE_LABEL = "Edit Mode";
+/** Shown on the disabled Edit Mode toggle (onboarding tour / demo). */
+export const GOAL_EDIT_DISABLED_TOOLTIP =
+  "Unable to edit your goal during the onboarding or in demo mode.";
 
 /** patterns/goal-settings.md — Field Groups (field labels). */
 export const GOAL_FIELD_FINANCIAL_GOAL = "Financial Goal";
@@ -218,16 +226,25 @@ export const CONTACT_CLOSE_LABEL = "Close Contact Us dialog";
 export const ONBOARDING_PANEL_LABEL = "Onboarding";
 /** patterns/onboarding-with-smith-ai.md — Accessibility (progress bar label). */
 export const ONBOARDING_PROGRESS_LABEL = "Onboarding progress";
-/** onboarding-copy.md — Welcome Step (onboarding.welcome.title). */
-export const ONBOARDING_WELCOME_TITLE = "Build your WealthSmith plan";
+/** onboarding-copy.md — Welcome Step (onboarding.welcome.title). Smith greets first. */
+export const ONBOARDING_WELCOME_TITLE =
+  "Hi, I’m Smith. I’ll help you set up your WealthSmith plan.";
 /** onboarding-copy.md — Welcome Step (onboarding.welcome.description). */
 export const ONBOARDING_WELCOME_DESC =
-  "Answer a few questions so WealthSmith can personalize your dashboard and suggestions.";
+  "Connect your wallet to see wallet-backed portfolio context, or try Demo Mode with sample data.";
 /** onboarding-copy.md — Welcome Step (onboarding.welcome.helper). */
-export const ONBOARDING_WELCOME_HELPER = "You can update these settings later.";
+export const ONBOARDING_WELCOME_HELPER = "You can update your plan later.";
 /** onboarding-copy.md — Welcome Step (Smith AI companion message). */
 export const ONBOARDING_WELCOME_COMPANION =
-  "I’ll help you set up your plan step by step. WealthSmith uses these answers to personalize your dashboard and suggestions.";
+  "Whenever you’re ready, choose how you’d like to start.";
+/** onboarding-copy.md — Connected Onboarding Welcome (Chat). Smith acknowledges
+ *  the connection safely before the first question — no claim that wallet data
+ *  was loaded/analyzed, no claim recommendations already exist. */
+export const ONBOARDING_CONNECTED_TITLE = "Great — your wallet is connected.";
+export const ONBOARDING_CONNECTED_DESC =
+  "Now I’ll ask a few quick questions so WealthSmith can shape your plan around your goals.";
+export const ONBOARDING_CONNECTED_COMPANION =
+  "It only takes a moment, you stay in control, and nothing is bought, sold, or moved during setup.";
 /** onboarding-copy.md — Wallet Entry Step (wallet helper). */
 export const ONBOARDING_WALLET_HELPER =
   "WealthSmith reads balances and positions only. Your funds stay in your wallet.";
@@ -246,6 +263,16 @@ export const ONBOARDING_PREVIEW_DESC =
   "Your wallet is connected. Complete your goal setup to view your WealthSmith dashboard.";
 export const ONBOARDING_PREVIEW_METRIC = "Complete goal setup to see this metric.";
 
+/* Conversational typing indicator — verbatim from content/onboarding-copy.md
+ * (Typing Indicator Copy) + components/smith-ai-typing-indicator.md. */
+export const ONBOARDING_TYPING = "Smith is writing…";
+export const ONBOARDING_TYPING_LABEL = "Smith AI is writing.";
+/* Chat controls — content/onboarding-copy.md (Chat Controls Copy + Global Labels). */
+export const ONBOARDING_SEND = "Send";
+export const ONBOARDING_UNDO = "Undo";
+export const ONBOARDING_MORE = "More";
+export const ONBOARDING_RESTART = "Restart Onboarding";
+
 /* ---- Step 2: goal-setup steps (connected onboarding). Titles/helpers/
  * companion/validation are verbatim from content/onboarding-copy.md. Choice
  * OPTIONS come from Goal Settings (state/goalState.ts, Decision A); the field
@@ -256,76 +283,77 @@ export const ONBOARDING_BACK = "Back";
 export const ONBOARDING_SKIP = "Skip for now";
 
 /** Financial Goal step. */
-export const ONBOARDING_GOAL_TITLE = "What is your financial goal?";
+export const ONBOARDING_GOAL_TITLE = "What’s your main goal right now?";
 export const ONBOARDING_GOAL_DESC =
-  "Choose the goal that best matches what you want WealthSmith to help you plan for.";
+  "Choose the answer that feels closest — you can update it later.";
 export const ONBOARDING_GOAL_HELPER = "You can update this later.";
 export const ONBOARDING_GOAL_COMPANION =
-  "Your goal helps WealthSmith frame suggestions around what you care about most, like long-term growth, stability, or yield.";
+  "This helps WealthSmith frame your plan around what matters most to you.";
 export const ONBOARDING_GOAL_LABEL = "Financial Goal";
 
 /** Time Horizon step. */
-export const ONBOARDING_HORIZON_TITLE = "What is your time horizon?";
-export const ONBOARDING_HORIZON_DESC = "How long do you expect this plan to run?";
+export const ONBOARDING_HORIZON_TITLE = "How long do you want this plan to look ahead?";
+export const ONBOARDING_HORIZON_DESC =
+  "This helps WealthSmith frame your plan around your timeline.";
 export const ONBOARDING_HORIZON_HELPER =
-  "This helps WealthSmith model Projected Growth and prioritize suggestions.";
+  "This helps WealthSmith frame your plan around your timeline.";
 export const ONBOARDING_HORIZON_COMPANION =
-  "Time horizon helps WealthSmith understand whether your plan is short-term or long-term. Longer timelines can usually tolerate different tradeoffs than short timelines.";
+  "Longer timelines and shorter ones can call for different tradeoffs.";
 export const ONBOARDING_HORIZON_LABEL = "Time Horizon";
 
 /** Risk Level step. */
-export const ONBOARDING_RISK_TITLE = "What risk level feels right for this plan?";
-export const ONBOARDING_RISK_DESC = "Choose how much volatility you are comfortable with.";
+export const ONBOARDING_RISK_TITLE = "How much risk are you comfortable with?";
+export const ONBOARDING_RISK_DESC =
+  "There’s no perfect answer — pick what feels right for you today.";
 export const ONBOARDING_RISK_HELPER =
-  "Risk tolerance helps WealthSmith compare your current portfolio with your target allocation.";
+  "There’s no perfect answer. Pick what feels right for your comfort level today.";
 export const ONBOARDING_RISK_COMPANION =
-  "Risk tolerance helps WealthSmith understand how much volatility may fit your plan. You can adjust this later if your comfort level changes.";
+  "You can adjust this later if your comfort level changes.";
 export const ONBOARDING_RISK_LABEL = "Risk Level";
 
 /** Monthly Income step. */
-export const ONBOARDING_INCOME_TITLE = "What is your average monthly income?";
-export const ONBOARDING_INCOME_DESC = "Enter your approximate monthly income.";
+export const ONBOARDING_INCOME_TITLE = "What’s your monthly income?";
+export const ONBOARDING_INCOME_DESC =
+  "A rough estimate is fine — this helps show how much room your plan has to work with.";
 export const ONBOARDING_INCOME_HELPER =
-  "This helps WealthSmith understand your plan inputs. You can update it later.";
+  "Use your best estimate. You can update it later.";
 export const ONBOARDING_INCOME_LABEL = "Monthly Income";
 export const ONBOARDING_INCOME_PLACEHOLDER = "4,000";
-export const ONBOARDING_INCOME_COMPANION =
-  "Income helps WealthSmith understand your planning context. Use your best estimate; you can update it later.";
+export const ONBOARDING_INCOME_COMPANION = "You can update it later.";
 export const ONBOARDING_INCOME_ERR_MISSING = "Enter your monthly income.";
 export const ONBOARDING_INCOME_ERR_INVALID = "Enter a valid monthly income amount.";
 
 /** Monthly Expenses step. */
-export const ONBOARDING_EXPENSES_TITLE = "What are your average monthly expenses?";
-export const ONBOARDING_EXPENSES_DESC = "Enter your approximate monthly expenses.";
+export const ONBOARDING_EXPENSES_TITLE = "What do you usually spend each month?";
+export const ONBOARDING_EXPENSES_DESC =
+  "We use this to understand your Safety Buffer before exploring any new ideas.";
 export const ONBOARDING_EXPENSES_HELPER =
-  "This helps WealthSmith calculate your Safety Buffer target.";
+  "Use an average monthly amount. You can update it later.";
 export const ONBOARDING_EXPENSES_LABEL = "Monthly Expenses";
 export const ONBOARDING_EXPENSES_PLACEHOLDER = "1,000";
-export const ONBOARDING_EXPENSES_COMPANION =
-  "Expenses help WealthSmith estimate your Safety Buffer target. Use an average monthly amount that feels realistic.";
+export const ONBOARDING_EXPENSES_COMPANION = "An average month is perfect.";
 export const ONBOARDING_EXPENSES_ERR_MISSING = "Enter your monthly expenses.";
 export const ONBOARDING_EXPENSES_ERR_INVALID = "Enter a valid monthly expenses amount.";
 
 /** Contribution Rhythm step. */
-export const ONBOARDING_CONTRIB_TITLE = "How often do you plan to contribute?";
+export const ONBOARDING_CONTRIB_TITLE = "How often do you expect to add money?";
 export const ONBOARDING_CONTRIB_DESC =
-  "Choose how often you expect to add funds to this plan.";
+  "This helps WealthSmith understand your investing rhythm.";
 export const ONBOARDING_CONTRIB_HELPER =
-  "This helps WealthSmith model contributions over time.";
+  "This helps WealthSmith understand your investing rhythm.";
 export const ONBOARDING_CONTRIB_COMPANION =
-  "Contribution frequency helps WealthSmith model your plan. Choose the closest option; it does not create automatic deposits.";
+  "Choose the closest option — it doesn’t set up any automatic deposits.";
 export const ONBOARDING_CONTRIB_LABEL = "Contribution Rhythm";
 
 /** Monthly Saving Goal step (optional). */
-export const ONBOARDING_SAVING_TITLE = "What is your monthly saving goal?";
-export const ONBOARDING_SAVING_DESC = "Enter the amount you hope to set aside each month.";
-export const ONBOARDING_SAVING_HELPER =
-  "This is optional and helps WealthSmith model your contribution plan.";
+export const ONBOARDING_SAVING_TITLE = "Do you have a monthly saving goal?";
+export const ONBOARDING_SAVING_DESC = "This one’s optional — you can skip it for now.";
+export const ONBOARDING_SAVING_HELPER = "Optional. You can add this later.";
 export const ONBOARDING_SAVING_LABEL = "Monthly Saving Goal";
 export const ONBOARDING_SAVING_OPTIONAL = "Optional";
 export const ONBOARDING_SAVING_PLACEHOLDER = "1,000";
 export const ONBOARDING_SAVING_COMPANION =
-  "Monthly Saving Goal is optional. It helps WealthSmith model contributions, but it does not mean WealthSmith will move or invest funds automatically.";
+  "It just helps WealthSmith picture your contributions; nothing is moved or invested automatically.";
 export const ONBOARDING_SAVING_ERR_INVALID =
   "Monthly saving goal must be a positive amount if entered.";
 
@@ -335,14 +363,17 @@ export const ONBOARDING_ERR_POSITIVE = "Enter a positive amount.";
 /* ---- Step 3: Review + Finish. Verbatim from content/onboarding-copy.md
  * (Review Step + Finish / Transition Step). Row labels reuse the step caption
  * constants above (Decision A / user Step-3 field naming). ---- */
-export const ONBOARDING_REVIEW_TITLE = "Review your plan";
+export const ONBOARDING_REVIEW_TITLE = "Here’s what I have so far.";
 export const ONBOARDING_REVIEW_DESC =
-  "Check your answers before WealthSmith prepares your dashboard.";
-export const ONBOARDING_REVIEW_HELPER = "You can edit these settings later from Goal.";
+  "Take a look at your answers before I open your dashboard.";
+export const ONBOARDING_REVIEW_HELPER = "You can edit any of these later from Goal.";
 export const ONBOARDING_REVIEW_COMPANION =
-  "Review your plan inputs before finishing setup. WealthSmith will use saved values to prepare your dashboard and suggestions.";
+  "You can edit any of these later from Goal settings.";
 export const ONBOARDING_FINISH = "Finish Setup";
 /** onboarding-copy.md — Finish / Transition Step (Success title), used as the
- *  completion toast (no dedicated finish-toast copy exists; this is the safest
- *  approved completion string). */
+ *  completion toast. */
 export const ONBOARDING_FINISH_TOAST = "Your WealthSmith dashboard is ready";
+/** onboarding-copy.md — Finish / Transition Step (completion reassurance helper).
+ *  Shown with the completion toast; must not imply funds moved or transactions. */
+export const ONBOARDING_FINISH_HELPER =
+  "You’ll see your portfolio view next. Nothing has been moved or changed.";

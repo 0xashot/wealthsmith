@@ -151,8 +151,10 @@ export default function GlobalNav({
           {nav.nav_items.map((item) => {
             const isActive = activePage ? item.id === activePage : item.active;
             // While onboarding is active, only Dashboard is enabled; Portfolio/
-            // Goal/Support are disabled and not reachable (Variants 1 & 4).
-            const disabled = !!onboardingActive && item.id !== "dashboard";
+            // Goal/Support are disabled (Variants 1 & 4) — except the active tab
+            // during the end-of-onboarding tour, which highlights (Open Portfolio /
+            // Open Goal) but is still not a navigation target (no onNavigate here).
+            const disabled = !!onboardingActive && item.id !== "dashboard" && !isActive;
             const navigable =
               !disabled &&
               !!onNavigate &&
