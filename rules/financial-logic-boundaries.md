@@ -776,7 +776,27 @@ Do not derive USD value, allocation, projection, Safety Buffer, or suggestions
 Show safe unavailable/coming-soon states instead of fixture values.
 ```
 
-Allowed for a real connected wallet (safe facts only):
+USD value from an APPROVED price feed is permitted (a sourced price is not an
+invented one). The approved feeds are DefiLlama (`coins.llama.fi`, primary — with a
+confidence score) and Jupiter (`lite-api.jup.ag/price/v3`, fallback), read
+best-effort in `app/src/wallet/tokenPrices.ts`. Rules for sourced USD:
+
+```text
+USD value = sourced price × on-chain amount, ONLY when a price is returned.
+Drop low-confidence prices (DefiLlama confidence below the floor) → show "—".
+A position with no sourced price stays "—" (never $0, never estimated).
+Label sourced values with the source + an "as of" time (prices are a snapshot).
+Portfolio Value / value-based allocation are the SUM/% of priced positions only;
+  exclude unpriced positions and say so.
+Still never invent: APY, projections, Safety Buffer, suggestions, Top Pick.
+Scope: native SOL, tokens, stables, LSTs, native stake are priced (scope A).
+  Composite protocol/LP positions (Kamino, Orca, Raydium, Meteora, Hubble) are
+  priced by summing sourced prices of their underlying legs, debt legs subtracting
+  (scope B). If ANY leg lacks a price, the whole position shows "—" (never partial).
+  A position with no known amount (e.g. Kamino cToken lending) stays "—".
+```
+
+Allowed for a real connected wallet (safe facts + sourced USD):
 
 ```text
 Assets detected count
@@ -784,6 +804,9 @@ Native SOL amount (on-chain balance)
 SPL token count
 Recognized LST/staked token count
 Recognized protocol names
+Sourced USD price + value per position (approved feed; else "—")
+Portfolio Value = sum of priced positions (labeled "as of", excludes unpriced)
+Value-based allocation % over priced positions
 ```
 
 See `patterns/wallet-connection.md` (Data Mode Separation) and

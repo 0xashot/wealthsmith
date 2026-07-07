@@ -26,7 +26,7 @@ import { ASK_SMITH_LABEL_PORTFOLIO } from "../state/approvedCopy";
 import { dashboardState as connected } from "../state/dashboardState";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
-import LiveWalletAssets from "../components/LiveWalletAssets";
+import RealWalletPortfolio from "../components/RealWalletPortfolio";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 
 interface Props {
@@ -72,9 +72,11 @@ export default function PortfolioPage({
       <div className={"dashboard" + (smithOpen ? "" : " dashboard--single")}>
         <main className="dashboard__main">
           <PageHeader header={p.page_header} />
-          {/* Live, read-only wallet assets are the primary Portfolio content in
-              real-wallet mode. */}
-          <LiveWalletAssets />
+          {/* Real-wallet Portfolio: the product Portfolio layout (Balance
+              Overview, Crypto Assets Allocation, Deployment, Liquid, Staked, Yield)
+              populated from live read-only positions, plus the detailed detected-
+              assets table. No fixture values. */}
+          <RealWalletPortfolio />
         </main>
 
         {smithOpen && (

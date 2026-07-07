@@ -27,8 +27,10 @@ const ORCA_LIST_URL = "https://api.mainnet.orca.so/v1/whirlpool/list";
 interface WhirlpoolMeta {
   aSymbol: string;
   aDecimals: number;
+  aMint?: string;
   bSymbol: string;
   bDecimals: number;
+  bMint?: string;
   /** Pool fee APR (percent), from Orca's 7-day window. */
   feeAprPct?: number;
 }
@@ -46,16 +48,18 @@ async function fetchWhirlpoolMeta(): Promise<Map<string, WhirlpoolMeta>> {
     for (const raw of j.whirlpools ?? []) {
       const w = raw as {
         address?: string;
-        tokenA?: { symbol?: string; decimals?: number };
-        tokenB?: { symbol?: string; decimals?: number };
+        tokenA?: { mint?: string; symbol?: string; decimals?: number };
+        tokenB?: { mint?: string; symbol?: string; decimals?: number };
         feeApr?: { week?: number };
       };
       if (!w.address || !w.tokenA || !w.tokenB) continue;
       map.set(w.address, {
         aSymbol: w.tokenA.symbol ?? "?",
         aDecimals: w.tokenA.decimals ?? 0,
+        aMint: w.tokenA.mint,
         bSymbol: w.tokenB.symbol ?? "?",
         bDecimals: w.tokenB.decimals ?? 0,
+        bMint: w.tokenB.mint,
         feeAprPct: typeof w.feeApr?.week === "number" ? w.feeApr.week * 100 : undefined,
       });
     }
@@ -215,6 +219,13 @@ export async function fetchOrcaPositions(
       mint: p.nftMint,
       protocol: "Orca",
       amount: `${fmt(amtA)} ${m.aSymbol} + ${fmt(amtB)} ${m.bSymbol}`,
+      legs:
+        m.aMint && m.bMint
+          ? [
+              { mint: m.aMint, uiAmount: amtA, side: "long" },
+              { mint: m.bMint, uiAmount: amtB, side: "long" },
+            ]
+          : undefined,
       detection: "protocol_api",
       valueUsd: null,
       apy: m.feeAprPct ?? null,

@@ -41,6 +41,8 @@ interface PoolMeta {
   decB: number;
   symA: string;
   symB: string;
+  mintA?: string;
+  mintB?: string;
   /** Pool fee APR (percent) from Raydium's API. */
   aprPct?: number;
 }
@@ -65,7 +67,10 @@ async function fetchPoolMeta(
     }
   });
 
-  const api = new Map<string, { symA?: string; symB?: string; aprPct?: number }>();
+  const api = new Map<
+    string,
+    { symA?: string; symB?: string; mintA?: string; mintB?: string; aprPct?: number }
+  >();
   try {
     const res = await fetch(RAYDIUM_POOL_API + poolIds.join(","));
     if (res.ok) {
@@ -73,8 +78,8 @@ async function fetchPoolMeta(
       for (const raw of j.data ?? []) {
         const p = raw as {
           id?: string;
-          mintA?: { symbol?: string };
-          mintB?: { symbol?: string };
+          mintA?: { symbol?: string; address?: string };
+          mintB?: { symbol?: string; address?: string };
           day?: { apr?: number };
           week?: { apr?: number };
         };
@@ -83,6 +88,8 @@ async function fetchPoolMeta(
         api.set(p.id, {
           symA: p.mintA?.symbol,
           symB: p.mintB?.symbol,
+          mintA: p.mintA?.address,
+          mintB: p.mintB?.address,
           aprPct: typeof apr === "number" ? apr : undefined,
         });
       }
@@ -101,6 +108,8 @@ async function fetchPoolMeta(
       decB: oc.decB,
       symA: a?.symA ?? "?",
       symB: a?.symB ?? "?",
+      mintA: a?.mintA,
+      mintB: a?.mintB,
       aprPct: a?.aprPct,
     });
   }
@@ -182,6 +191,13 @@ export async function fetchRaydiumPositions(
       mint: p.nftMint,
       protocol: "Raydium",
       amount: `${fmt(amtA)} ${m.symA} + ${fmt(amtB)} ${m.symB}`,
+      legs:
+        m.mintA && m.mintB
+          ? [
+              { mint: m.mintA, uiAmount: amtA, side: "long" },
+              { mint: m.mintB, uiAmount: amtB, side: "long" },
+            ]
+          : undefined,
       detection: "protocol_api",
       valueUsd: null,
       apy: m.aprPct ?? null,

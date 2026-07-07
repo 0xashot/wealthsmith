@@ -52,6 +52,10 @@ export async function fetchMeteoraDlmmPositions(
       name: "Meteora DLMM",
       protocol: "Meteora",
       amount: `${fmt(xUi)} ${symX} + ${fmt(yUi)} ${symY}`,
+      legs: [
+        { mint: mintX, uiAmount: xUi, side: "long" },
+        { mint: mintY, uiAmount: yUi, side: "long" },
+      ],
       detection: "protocol_api",
       valueUsd: null,
       apy: null, // Meteora's DLMM APY API is unavailable → no sourced APY yet

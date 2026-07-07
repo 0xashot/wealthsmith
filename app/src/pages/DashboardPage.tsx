@@ -35,7 +35,7 @@ import {
   SUGGESTIONS_EMPTY_DESCRIPTION,
   SUGGESTIONS_EMPTY_TITLE,
   REAL_WALLET_SUGGESTIONS_TITLE,
-  REAL_WALLET_SUGGESTIONS_DESC,
+  STRATEGY_STEPS_COMING,
 } from "../state/approvedCopy";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
@@ -146,11 +146,12 @@ export default function DashboardPage({
           <AskSmithAiPanel content={realWalletSmithAiContent} onClose={closeAskSmithAi} />
         ) : connected ? (
           <aside className="suggestion-rail" aria-label={s.accessibility.right_rail_label}>
-            {/* Suggestion Engine has no live inputs yet — safe coming-soon state,
-                never fixture suggestions or Top Pick presented as the user's. */}
+            {/* Strategy Steps / Suggestion Engine has no live inputs yet — safe
+                coming-soon state, never fixture suggestions or Top Pick as the
+                user's. Same right-rail structure as Demo Mode. */}
             <EmptyStateCard
               title={REAL_WALLET_SUGGESTIONS_TITLE}
-              description={REAL_WALLET_SUGGESTIONS_DESC}
+              description={STRATEGY_STEPS_COMING}
             />
           </aside>
         ) : (

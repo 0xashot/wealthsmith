@@ -50,6 +50,8 @@ interface PortfolioState {
   error?: string;
   /** Partial-read warning (some reads failed but usable data remains). */
   warning?: string;
+  /** When sourced prices were applied (ms epoch), for an "as of" label. */
+  pricedAsOf?: number;
 }
 
 /** Loosely-typed parsed token account — validated defensively before use. */
@@ -87,7 +89,8 @@ type ReadName =
   | "raydium_amm"
   | "meteora_dlmm"
   | "meteora_damm"
-  | "hubble";
+  | "hubble"
+  | "token_prices";
 
 /**
  * Kamino Earn Vault positions (incl. farm-staked shares) via the heavy Kamino SDK,
@@ -170,6 +173,58 @@ async function loadHubbleLoans(
 ): Promise<WalletPosition[]> {
   const mod = await import("./hubble");
   return mod.fetchHubbleLoans(connection, ownerB58);
+}
+
+/** Canonical wrapped-SOL mint — prices native SOL and native stake. */
+const SOL_MINT = "So11111111111111111111111111111111111111112";
+
+/** Sourced USD prices (DefiLlama → Jupiter fallback) for detected mints, lazy. */
+async function loadTokenPrices(
+  mints: string[]
+): Promise<Map<string, { priceUsd: number }>> {
+  const mod = await import("./tokenPrices");
+  return mod.fetchTokenPrices(mints);
+}
+
+/**
+ * The mint to price a position by (scope A): native SOL + native stake price via
+ * the SOL mint; plain tokens + LSTs price by their own mint. Protocol/LP composite
+ * positions are not priced here (that's scope B). Returns undefined = don't price.
+ */
+function priceMintFor(p: WalletPosition): string | undefined {
+  if (p.type === "native" || p.type === "stake") return SOL_MINT;
+  if (p.type === "token" || p.type === "lst") return p.mint;
+  return undefined;
+}
+
+/**
+ * Apply sourced prices to one position. Scope A: a single-mint asset →
+ * priceUsd × uiAmount. Scope B: a composite position with `legs` → sum of legs
+ * (debt legs subtract). If ANY required price is missing, valueUsd stays null so
+ * the row shows "—" (never a partial or invented value).
+ */
+function applyPrice(
+  p: WalletPosition,
+  prices: Map<string, { priceUsd: number }>
+): WalletPosition {
+  const mint = priceMintFor(p);
+  if (mint) {
+    const pi = prices.get(mint);
+    if (pi && typeof p.uiAmount === "number") {
+      return { ...p, priceUsd: pi.priceUsd, valueUsd: pi.priceUsd * p.uiAmount };
+    }
+    return p;
+  }
+  if (p.legs && p.legs.length > 0) {
+    let total = 0;
+    for (const leg of p.legs) {
+      const pi = prices.get(leg.mint);
+      if (!pi) return p; // any unpriced leg → leave valueUsd null ("—")
+      total += (leg.side === "debt" ? -1 : 1) * pi.priceUsd * leg.uiAmount;
+    }
+    return { ...p, valueUsd: total };
+  }
+  return p;
 }
 
 /** Build a normalized position from one parsed token account, or null to skip. */
@@ -567,7 +622,6 @@ export function useWalletPortfolio(): WalletPortfolio {
       const lpCandidates = positions
         .filter((p) => p.name === "Unknown token" && typeof p.mint === "string" && typeof p.uiAmount === "number")
         .map((p) => ({ mint: p.mint as string, uiAmount: p.uiAmount as number, rawAmount: p.amount }));
-
       const [apyRes, orcaRes, raydiumRes, raydiumAmmRes, meteoraRes, meteoraDammRes, hubbleRes] =
         await Promise.allSettled([
         apyMints.length > 0
@@ -606,21 +660,44 @@ export function useWalletPortfolio(): WalletPortfolio {
       ];
       const hubblePositions = hubbleRes.status === "fulfilled" ? hubbleRes.value : [];
       const extraPositions = [...lpPositions, ...hubblePositions];
-      if (apys.size > 0 || extraPositions.length > 0) {
-        // Apply APY to yield rows.
-        let merged = positions.map((p) =>
-          needsApy(p) && p.mint && apys.has(p.mint) ? { ...p, apy: apys.get(p.mint) ?? null } : p
+      // Build the merged set: APY on yield rows, resolve LP rows (replacing the
+      // matching "unknown token" row), append Hubble loans.
+      let merged = positions.map((p) =>
+        needsApy(p) && p.mint && apys.has(p.mint) ? { ...p, apy: apys.get(p.mint) ?? null } : p
+      );
+      if (extraPositions.length > 0) {
+        const consumed = new Set(lpPositions.map((p) => p.mint));
+        merged = merged.filter(
+          (p) => !(p.name === "Unknown token" && p.mint && consumed.has(p.mint))
         );
-        // Replace the "unknown token" NFT rows that turned out to be LP positions,
-        // then append the resolved LP + Hubble protocol rows.
-        if (extraPositions.length > 0) {
-          const consumed = new Set(lpPositions.map((p) => p.mint));
-          merged = merged.filter(
-            (p) => !(p.name === "Unknown token" && p.mint && consumed.has(p.mint))
-          );
-          merged = sortPositions([...merged, ...extraPositions]);
+        merged = sortPositions([...merged, ...extraPositions]);
+      }
+
+      // PRICE (sourced USD, best-effort): scope A = single-mint assets; scope B =
+      // composite protocol/LP positions valued from their legs. Fetched AFTER the
+      // merge so LP/protocol leg mints are known. Never invented — unpriced → "—".
+      const priceMints: string[] = [];
+      for (const p of merged) {
+        const m = priceMintFor(p);
+        if (m) priceMints.push(m);
+        for (const leg of p.legs ?? []) priceMints.push(leg.mint);
+      }
+      let pricedAsOf: number | undefined;
+      if (priceMints.length > 0) {
+        const prices = await withTimeout(
+          loadTokenPrices(priceMints),
+          PROTOCOL_TIMEOUT_MS,
+          "token_prices"
+        ).catch(() => new Map<string, { priceUsd: number }>());
+        if (cancelled || myReq !== reqId.current) return;
+        if (prices.size > 0) {
+          merged = merged.map((p) => applyPrice(p, prices));
+          pricedAsOf = Date.now();
         }
-        setState({ status: "ready", positions: merged, warning });
+      }
+
+      if (apys.size > 0 || extraPositions.length > 0 || pricedAsOf != null) {
+        setState({ status: "ready", positions: merged, warning, pricedAsOf });
       }
     })().catch(() => {
       // Defensive: never leave a stuck loading state.

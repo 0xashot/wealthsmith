@@ -921,28 +921,59 @@ Your wallet balances are still visible.
 
 ## Real Connected Wallet Mode
 
-When a **real** wallet is connected, the Portfolio page shows live read-only
-wallet data as its primary content and must not present fixture positions as the
-user's real holdings.
+When a **real** wallet is connected, the Portfolio page **reuses the same product
+Portfolio structure** (Balance Overview → Crypto Assets Allocation → Assets
+Deployment Overview → Liquid Assets → Staked Assets → Yield Strategies),
+**populated entirely from live read-only positions**, with the detailed
+**Detected Wallet Assets** table beneath. It must feel like the normal Portfolio
+product page — not a developer-only table. Fixture positions are never presented
+as the user's real holdings.
 
 Rules:
 
-- Show the read-only **Live Wallet Assets** section (native SOL, SPL tokens,
-  recognized LSTs) at the top / primary area.
-- **Hide** the fixture Asset Deployment Overview, Liquid Assets, Staked Assets,
-  and Yield Strategies sections in real-wallet mode. They contain sample balances,
-  APY, and Manage handoffs that are not the connected wallet's real positions.
+- Reuse the product section *shells* and populate them from the live
+  `WalletPosition[]` (grouped via `walletSummary.ts` helpers):
+  - **Balance Overview** — Portfolio Value = **sourced** USD total (approved feed,
+    labeled "as of", excludes unpriced) + live counts (Assets detected, Native SOL,
+    SPL tokens, Staked/LST, Protocol positions). Falls back to "Pricing not
+    connected" only when nothing is priced.
+  - **Crypto Assets Allocation** — **value-based %** over priced positions when
+    prices exist; otherwise category counts. Never an invented %.
+  - Position tables carry a **Value** column: sourced USD per row, or "—" when
+    unpriced. Composite protocol/LP positions (Kamino/Orca/Raydium/Meteora/Hubble)
+    are valued from their underlying legs (debt legs subtract); any position with an
+    unpriced leg or no known amount shows "—".
+  - **Assets Deployment Overview** — counts of wallet-held, LST/staked, native
+    stake, protocol positions, and unknown tokens.
+  - **Liquid Assets** — `type: native` + `type: token` (incl. recognized stables).
+  - **Staked Assets** — `type: lst` + `type: stake` (JupSOL/mSOL/bSOL/JitoSOL,
+    Sanctum LSTs, native stake); APY only if sourced, else "—".
+  - **Yield Strategies** — `type: protocol` positions (Kamino/Jito/Hubble/Meteora/
+    Orca/Raydium/Ondo…); APY only if sourced, else "—".
+- An empty category shows a polished "none detected" state **inside the same card**,
+  never a blank/broken area.
+- Reposition the read-only **Detected Wallet Assets** table (formerly the top-level
+  "Live Wallet Assets" table) BELOW the grouped product sections as the full
+  detailed table. It is not a developer-only view.
 - Do not show fixture Balance Overview / Crypto Assets Allocation totals (for
-  example $15,500) as the connected wallet's value.
+  example $15,500) as the connected wallet's value. Real value-based fields use a
+  **sourced** price feed (DefiLlama → Jupiter, `tokenPrices.ts`) — labeled "as of",
+  excluding unpriced positions — and fall back to unavailable states, never
+  fixtures or invented USD.
 - Keep Manage / review-only protocol handoffs hidden or disabled unless they
-  correspond to a **detected live position**.
+  correspond to a **detected live position** and approved review-only behavior
+  (not wired in this prototype).
 - No USD portfolio value, APY, or estimated earnings until approved pricing/APY
   sources exist — show safe empty/unavailable states instead of fixture numbers.
 - The portfolio fixtures (`examples/portfolio/*`, `state/portfolioState.ts`) remain
   for Demo Mode and dev/tests only.
+- The page calls `useWalletPortfolio` ONCE and passes the read state to the section
+  components (single read cycle); one failed protocol read never breaks the layout.
 
-See `app/src/pages/PortfolioPage.tsx`, `app/src/components/LiveWalletAssets.tsx`,
-and `patterns/wallet-connection.md` (Data Mode Separation).
+See `app/src/pages/PortfolioPage.tsx`, `app/src/components/RealWalletPortfolio.tsx`
+(which composes `LiveMetricGrid`, `PositionsSection`, and the detailed
+`LiveWalletAssets` table via `PositionsTable`), and `patterns/wallet-connection.md`
+(Data Mode Separation).
 
 ---
 

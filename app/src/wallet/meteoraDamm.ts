@@ -57,8 +57,10 @@ export async function fetchMeteoraDammPositions(
       const share = Number(rawAmount) / lpSupply; // both raw — LP decimals cancel
       const decA = amm.tokenAMint.decimals;
       const decB = amm.tokenBMint.decimals;
-      const symA = symOf(amm.tokenAMint.address.toString());
-      const symB = symOf(amm.tokenBMint.address.toString());
+      const mintA = amm.tokenAMint.address.toString();
+      const mintB = amm.tokenBMint.address.toString();
+      const symA = symOf(mintA);
+      const symB = symOf(mintB);
       const amtA = (share * Number(amm.poolInfo.tokenAAmount)) / 10 ** decA;
       const amtB = (share * Number(amm.poolInfo.tokenBAmount)) / 10 ** decB;
       positions.push({
@@ -70,6 +72,10 @@ export async function fetchMeteoraDammPositions(
         mint,
         protocol: "Meteora",
         amount: `${fmt(amtA)} ${symA} + ${fmt(amtB)} ${symB}`,
+        legs: [
+          { mint: mintA, uiAmount: amtA, side: "long" },
+          { mint: mintB, uiAmount: amtB, side: "long" },
+        ],
         detection: "protocol_api",
         valueUsd: null,
         apy: null,

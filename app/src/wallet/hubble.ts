@@ -15,7 +15,7 @@
  */
 import { Connection, PublicKey } from "@solana/web3.js";
 import { Hubble } from "@hubbleprotocol/hubble-sdk";
-import type { WalletPosition } from "./walletPosition";
+import type { PositionLeg, WalletPosition } from "./walletPosition";
 
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 const num = (v: unknown): number => Number((v as { toString(): string })?.toString?.() ?? v ?? 0);
@@ -31,6 +31,15 @@ const BASE_COLLATERAL: Array<[string, string]> = [
   ["ftt", "FTT"],
 ];
 
+const USDH_MINT = "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX";
+/** Collateral keys we can map to a mint for pricing. Others → position stays "—". */
+const COLLATERAL_MINT: Record<string, string> = {
+  sol: "So11111111111111111111111111111111111111112",
+  msol: "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",
+};
+/** Sentinel mint that never resolves a price → forces the loan's value to "—". */
+const UNPRICEABLE = "UNPRICEABLE";
+
 export async function fetchHubbleLoans(
   connection: Connection,
   owner: string
@@ -44,17 +53,28 @@ export async function fetchHubbleLoans(
     const debt = num(loan?.usdhDebt);
     if (!(debt > 0)) return; // only loans with outstanding USDH debt
 
-    // Summarize deposited collateral (amounts only; valueUsd stays null).
+    // Summarize deposited collateral + build priceable legs (collateral = long,
+    // USDH debt = debt). A collateral type we can't map to a mint, or any
+    // extra-collateral, adds an UNPRICEABLE leg so the loan's value stays "—"
+    // rather than being understated.
     const c = loan?.collateral ?? {};
     const parts: string[] = [];
+    const legs: PositionLeg[] = [];
     for (const [key, sym] of BASE_COLLATERAL) {
       const amt = num(c[key]);
-      if (amt > 0) parts.push(`${fmt(amt)} ${sym}`);
+      if (amt > 0) {
+        parts.push(`${fmt(amt)} ${sym}`);
+        legs.push({ mint: COLLATERAL_MINT[key] ?? UNPRICEABLE, uiAmount: amt, side: "long" });
+      }
     }
     const extras = Array.isArray(c.extraCollaterals) ? c.extraCollaterals : [];
     const extraCount = extras.filter((e: unknown) => num((e as { amount?: unknown })?.amount) > 0).length;
-    if (extraCount > 0) parts.push(`+${extraCount} more`);
+    if (extraCount > 0) {
+      parts.push(`+${extraCount} more`);
+      legs.push({ mint: UNPRICEABLE, uiAmount: extraCount, side: "long" });
+    }
     const collateral = parts.length > 0 ? parts.join(" + ") : "collateral";
+    legs.push({ mint: USDH_MINT, uiAmount: debt, side: "debt" });
 
     positions.push({
       id: `hubble-loan-${owner}-${i}`,
@@ -65,6 +85,7 @@ export async function fetchHubbleLoans(
       protocol: "Hubble",
       side: "borrowed",
       amount: `${fmt(debt)} USDH debt · ${collateral}`,
+      legs,
       detection: "protocol_api",
       valueUsd: null,
       apy: null, // interest-free borrow (one-time fee) — no ongoing APR to source

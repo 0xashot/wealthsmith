@@ -11,6 +11,15 @@
  * pricing/APY source exists.
  */
 
+/** One underlying token leg of a composite position (for scope-B USD valuation). */
+export interface PositionLeg {
+  mint: string;
+  /** Human (ui) amount of this leg the wallet effectively holds. */
+  uiAmount: number;
+  /** "long" = held/collateral (adds value); "debt" = borrowed (subtracts). */
+  side?: "long" | "debt";
+}
+
 /** Normalized read-only position (per the approved data model). */
 export interface WalletPosition {
   id: string;
@@ -41,7 +50,27 @@ export interface WalletPosition {
     | "recognized_lst_mint"
     | "protocol_api"
     | "native_stake";
-  valueUsd?: null;
+  /**
+   * USD spot price per whole token, from an APPROVED price feed only (DefiLlama /
+   * Jupiter — see tokenPrices.ts). Never invented. Undefined/null when no confident
+   * price is available (the position then shows "—").
+   */
+  priceUsd?: number | null;
+  /**
+   * USD value of the holding, set ONLY when sourced prices exist. For a plain
+   * asset that's priceUsd × uiAmount; for a composite protocol/LP position it's the
+   * sum of its `legs` (debt legs subtract). Stays null when any input is unpriced —
+   * never estimated or defaulted to zero.
+   */
+  valueUsd?: number | null;
+  /**
+   * Underlying token legs of a COMPOSITE protocol/LP position (scope B pricing):
+   * each leg is priced by its own mint and summed. `side: "debt"` legs subtract
+   * (e.g. a Hubble USDH loan). Absent for plain single-asset positions (which are
+   * priced via the top-level mint instead). If ANY leg has no sourced price, the
+   * whole position's valueUsd stays null ("—") — never a partial value.
+   */
+  legs?: PositionLeg[];
   /**
    * APY as a PERCENT (e.g. 5.24 = 5.24%), from an authoritative source only
    * (protocol SDK, on-chain rewards, approved APY API) — never invented. Null/

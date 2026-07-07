@@ -262,33 +262,58 @@ Rules:
 
 #### Real Connected Wallet Dashboard (Live Data)
 
-When a **real** wallet is connected, the Dashboard must render live read-only
-wallet data and safe states — never the connected-wallet fixture — because
-presenting fixture values as the user's real holdings is misleading.
+When a **real** wallet is connected, the Dashboard **reuses the same product
+layout as Demo Mode** (Financial Snapshot → Safety Buffer → Projected Growth →
+Asset Mix, plus the right-rail Strategy Steps), but every value is a **live,
+read-only wallet fact — never the connected-wallet fixture.** It must feel like
+the real product, not a stripped-down developer view. Where a card's inputs don't
+exist yet (USD pricing, projection/contribution logic, an expense+stablecoin
+Safety Buffer, suggestion inputs), the **same card shows a polished "unavailable"
+state** instead of an invented value.
 
 ```text
-Real connected wallet Dashboard shows:
-  Wallet connected + wallet label (provider • short address)
-  Assets detected count
-  Native SOL amount (if available)
-  SPL token count
-  Recognized LST/staked token count
-  Recognized protocols
-  Portfolio Value: unavailable state until pricing is connected
-  Suggestions: safe coming-soon state (no fixture Top Pick/suggestions)
+Real connected wallet Dashboard (same layout as Demo, live data):
+  Wallet connected header  → wallet label (provider • short address), Read-only
+                             badge, Refresh, "No funds are moved" note
+  Financial Snapshot       → Portfolio Value = "Pricing not connected"
+                             (unavailable) + live counts: Assets detected,
+                             Native SOL amount, SPL tokens, Staked (LST),
+                             Recognized protocols
+  Safety Buffer            → unavailable ("needs expense and stablecoin data")
+                             until a real (non-fixture) expenses input + recognized
+                             stablecoins exist
+  Projected Growth         → unavailable ("needs pricing and contribution logic")
+  Asset Mix                → live breakdown by category COUNT (Native, Tokens,
+                             Stablecoins, Staked/LST, Native stake, Protocol
+                             positions, Unknown), captioned that value-based
+                             allocation needs pricing
+  Strategy Steps (rail)    → safe coming-soon state (no fixture Top Pick/suggestions)
 ```
 
 Rules:
 
-- Do not show the fixture Portfolio Value (for example $15,500) as the connected
-  wallet value.
-- Do not show fixture Safety Buffer, Projected Growth, or Allocation as if
-  calculated from the connected wallet.
+- **Portfolio Value** shows the **sourced** USD total — sum of priced positions
+  from an approved feed (DefiLlama → Jupiter, `tokenPrices.ts`), labeled with an
+  "as of" time; it excludes unpriced positions. It falls back to the unavailable
+  state ("Pricing not connected") only when nothing is priced. Never the fixture
+  $15,500, never an invented value.
+- **Asset Mix** shows **value-based** allocation (each category's % of sourced USD)
+  when priced; otherwise it falls back to honest category counts. Never invented %.
+- Do not show fixture Safety Buffer, Projected Growth, or Allocation values as if
+  calculated from the connected wallet — reuse the card *shells*, not the numbers.
+- The **Safety Buffer** may compute a cautious stablecoin buffer ONLY from a real,
+  non-fixture monthly-expenses input plus recognized stablecoin amounts
+  (USDC/USDT/USDH/DAI in the registry). No such expenses source flows to the
+  dashboard in this prototype, so it shows the unavailable state — it must never
+  fall back to the fixture $800/$3,000.
+- **Asset Mix / allocation %** must be **value-based only from sourced prices** (or
+  category counts when unpriced) — never an invented percentage.
 - Do not show fixture suggestions or Top Pick as personalized to the connected
-  wallet.
-- Derive only safe facts from live positions (counts + native SOL amount). Do not
-  derive USD value, allocation percentages, projected growth, Safety Buffer, or
-  suggestions from wallet data without approved pricing/product logic.
+  wallet; the Strategy Steps rail shows a safe coming-soon state.
+- Derive only safe facts + **sourced** USD (approved feed) from live positions. Do
+  not derive allocation from an *invented* price, and do not derive projected
+  growth, Safety
+  Buffer, or suggestions from wallet data without approved pricing/product logic.
 - The connected-wallet fixture (`examples/dashboard/dashboard-connected-wallet-state.json`)
   remains for tests/storybook/dev reference only. Demo Mode keeps its own fixtures.
 - Ask Smith AI is available in real-wallet mode, but only with real-wallet-safe
@@ -296,8 +321,9 @@ Rules:
   read-only connection and why some values aren't shown yet, and never presents
   fixture Top Pick / suggestions / positions as the user's real data.
 
-See `app/src/components/RealWalletSummary.tsx` and
-`patterns/wallet-connection.md` (Data Mode Separation).
+See `app/src/components/RealWalletSummary.tsx` (which composes `RealWalletHeader`,
+`LiveMetricGrid`, and `EmptyStateCard`) and `patterns/wallet-connection.md`
+(Data Mode Separation).
 
 ---
 

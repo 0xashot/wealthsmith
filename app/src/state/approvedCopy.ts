@@ -161,7 +161,7 @@ export const LIVE_WALLET_EMPTY_DESC =
   "This wallet holds no assets we can read yet.";
 export const LIVE_WALLET_REFRESH = "Refresh";
 export const LIVE_WALLET_NOTE =
-  "Read-only wallet view. Amounts are on-chain balances; USD value and APY are not shown yet, and no action is taken.";
+  "Read-only wallet view. Amounts are on-chain balances; USD values and APY are sourced from public price/yield feeds where available (else “—”), and no action is taken.";
 
 /* Partial-read warnings + total-failure error (patterns/portfolio-overview.md —
  * Partial Data State / Error States; rules/wallet-and-custody-rules.md — Wallet
@@ -200,6 +200,55 @@ export const REAL_WALLET_VALUE_DESC =
 export const REAL_WALLET_SUGGESTIONS_TITLE = "Smith AI Suggestions";
 export const REAL_WALLET_SUGGESTIONS_DESC =
   "Suggestions are not generated yet for live wallets in this prototype.";
+
+/* ---------- Real Connected Wallet — product layout (live data) ----------
+ * The real-wallet Dashboard and Portfolio reuse the SAME product layout as Demo
+ * Mode, but every value is a live read-only wallet fact — never a fixture. Where
+ * an input (pricing, projection/contribution logic, suggestion inputs) does not
+ * exist yet, the SAME card shows a polished "unavailable" state instead of an
+ * invented value. No USD value, APY, allocation %, projection, or suggestion is
+ * invented (patterns/dashboard-layout.md — Real Connected Wallet Dashboard;
+ * patterns/portfolio-overview.md — Real Connected Wallet Mode;
+ * rules/financial-logic-boundaries.md). */
+
+/** Unavailable-state copy shown inside product cards when an input is missing. */
+export const PRICING_NOT_CONNECTED = "Pricing not connected";
+export const ALLOCATION_NEEDS_PRICING = "Value-based allocation needs pricing data.";
+export const PROJECTED_GROWTH_NEEDS =
+  "Projected Growth needs pricing and contribution logic before it can be shown.";
+export const STRATEGY_STEPS_COMING =
+  "Strategy Steps will appear after WealthSmith has pricing, portfolio rules, and suggestion inputs connected.";
+export const SAFETY_BUFFER_NEEDS = "Safety Buffer needs expense and stablecoin data.";
+export const DETECTED_FROM_WALLET = "Detected from your connected wallet.";
+export const REAL_WALLET_NONE_DETECTED = "None detected in this wallet.";
+
+/** Product section titles (approved product section names — reused live). */
+export const DASH_ASSET_MIX_TITLE = "Asset Mix";
+export const DASH_ASSET_MIX_CAPTION =
+  "Breakdown of detected assets by category. Value-based allocation needs pricing data.";
+export const PORT_BALANCE_TITLE = "Balance Overview";
+export const PORT_ALLOCATION_TITLE = "Crypto Assets Allocation";
+export const PORT_DEPLOYMENT_TITLE = "Assets Deployment Overview";
+export const PORT_LIQUID_TITLE = "Liquid Assets";
+export const PORT_STAKED_TITLE = "Staked Assets";
+export const PORT_YIELD_TITLE = "Yield Strategies";
+export const DETECTED_ASSETS_TITLE = "Detected Wallet Assets";
+
+/* Sourced pricing (tokenPrices.ts — DefiLlama primary, Jupiter fallback). USD
+ * values come ONLY from these approved feeds, labeled with source + "as of" time;
+ * unpriced positions stay "—". Never invented (rules/financial-logic-boundaries.md). */
+export const PRICES_AS_OF_PREFIX = "Prices as of";
+export const PRICES_SOURCE_NOTE = "Live prices via DefiLlama and Jupiter.";
+export const ALLOCATION_BY_VALUE_CAPTION =
+  "Allocation by USD value. Excludes positions without a sourced price.";
+export const VALUE_EXCLUDES_UNPRICED = "Excludes positions without a sourced price.";
+
+/** Additional live-fact / category labels (counts + on-chain balances only). */
+export const REAL_WALLET_FACT_STAKE = "Native stake";
+export const REAL_WALLET_FACT_PROTOCOL_POSITIONS = "Protocol positions";
+export const REAL_WALLET_FACT_STABLES = "Stablecoins";
+export const REAL_WALLET_FACT_UNKNOWN = "Unknown tokens";
+export const REAL_WALLET_FACT_WALLET_HELD = "Wallet-held assets";
 
 /* ---------- Goal Settings (patterns/goal-settings.md, content) ---------- */
 

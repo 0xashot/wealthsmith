@@ -47,3 +47,170 @@ export function deriveWalletSummary(positions: WalletPosition[]): WalletSummary 
     protocols,
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * Category grouping — used to populate the product Dashboard/Portfolio
+ * layout from live positions. These derive ONLY counts and category
+ * membership (never USD value or APY), so the product cards can show a
+ * real breakdown without inventing pricing.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Stablecoin symbols eligible for the Safety Buffer / stables category. A
+ * position only counts as a stablecoin when it is a RECOGNIZED registry token
+ * with one of these symbols — an unknown mint is never treated as a stablecoin.
+ */
+export const STABLE_SYMBOLS = new Set(["USDC", "USDT", "USDH", "DAI"]);
+
+/** True only for a recognized (non-unknown) SPL token with a stablecoin symbol. */
+export function isStablecoin(p: WalletPosition): boolean {
+  return p.type === "token" && p.name !== "Unknown token" && STABLE_SYMBOLS.has(p.symbol);
+}
+
+/** Recognized stablecoin positions (USDC/USDT/USDH/DAI present in the registry). */
+export function getStablecoinPositions(positions: WalletPosition[]): WalletPosition[] {
+  return positions.filter(isStablecoin);
+}
+
+/** Liquid, wallet-held assets: native SOL + plain SPL tokens (incl. stables). */
+export function getLiquidPositions(positions: WalletPosition[]): WalletPosition[] {
+  return positions.filter((p) => p.type === "native" || p.type === "token");
+}
+
+/** Staked assets: recognized LSTs + native stake accounts. */
+export function getStakedPositions(positions: WalletPosition[]): WalletPosition[] {
+  return positions.filter((p) => p.type === "lst" || p.type === "stake");
+}
+
+/** Protocol positions (Kamino/Jito/Hubble/Meteora/Orca/Raydium/Ondo, etc.). */
+export function getProtocolPositions(positions: WalletPosition[]): WalletPosition[] {
+  return positions.filter((p) => p.type === "protocol");
+}
+
+export interface PositionCategories {
+  native: WalletPosition[];
+  /** Plain tokens that are neither recognized stablecoins nor unknown. */
+  tokens: WalletPosition[];
+  stables: WalletPosition[];
+  unknown: WalletPosition[];
+  lst: WalletPosition[];
+  stake: WalletPosition[];
+  protocol: WalletPosition[];
+}
+
+/** Split positions into mutually-exclusive display categories. */
+export function groupPositionsByCategory(positions: WalletPosition[]): PositionCategories {
+  return {
+    native: positions.filter((p) => p.type === "native"),
+    stables: positions.filter(isStablecoin),
+    unknown: positions.filter((p) => p.name === "Unknown token"),
+    tokens: positions.filter(
+      (p) => p.type === "token" && !isStablecoin(p) && p.name !== "Unknown token"
+    ),
+    lst: positions.filter((p) => p.type === "lst"),
+    stake: positions.filter((p) => p.type === "stake"),
+    protocol: positions.filter((p) => p.type === "protocol"),
+  };
+}
+
+export interface RealWalletSummary extends WalletSummary {
+  stableCount: number;
+  stakeCount: number;
+  protocolCount: number;
+  unknownCount: number;
+  /** Non-zero categories for the Asset Mix card: [label, count]. */
+  categories: Array<{ label: string; count: number }>;
+}
+
+/**
+ * Dashboard summary — the safe counts + native SOL amount that populate the
+ * real-wallet Financial Snapshot and Asset Mix cards. No USD/APY is derived.
+ */
+export function deriveRealWalletDashboardSummary(
+  positions: WalletPosition[]
+): RealWalletSummary {
+  const base = deriveWalletSummary(positions);
+  const g = groupPositionsByCategory(positions);
+  const categories: Array<{ label: string; count: number }> = [
+    { label: "Native SOL", count: g.native.length },
+    { label: "Tokens", count: g.tokens.length },
+    { label: "Stablecoins", count: g.stables.length },
+    { label: "Staked (LST)", count: g.lst.length },
+    { label: "Native stake", count: g.stake.length },
+    { label: "Protocol positions", count: g.protocol.length },
+    { label: "Unknown tokens", count: g.unknown.length },
+  ].filter((c) => c.count > 0);
+
+  return {
+    ...base,
+    stableCount: g.stables.length,
+    stakeCount: g.stake.length,
+    protocolCount: g.protocol.length,
+    unknownCount: g.unknown.length,
+    categories,
+  };
+}
+
+/**
+ * Portfolio summary — same category facts, exposed for the Portfolio Balance
+ * Overview / Crypto Assets Allocation / Deployment sections. Identical shape to
+ * the dashboard summary (kept as a distinct name for call-site clarity).
+ */
+export function deriveRealWalletPortfolioSummary(
+  positions: WalletPosition[]
+): RealWalletSummary {
+  return deriveRealWalletDashboardSummary(positions);
+}
+
+/* ------------------------------------------------------------------ *
+ * Value (USD) — populated ONLY from sourced prices (tokenPrices.ts).
+ * Positions without a price keep valueUsd null and are excluded from the
+ * total; they are never estimated or counted as zero.
+ * ------------------------------------------------------------------ */
+
+/** Format a USD amount, e.g. $1,234.56 (more decimals for sub-$1 prices). */
+export function formatUsd(n: number): string {
+  return n.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: Math.abs(n) < 1 ? 6 : 2,
+  });
+}
+
+export interface ValueBreakdown {
+  /** Sum of priced positions' USD value; null when nothing is priced. */
+  totalUsd: number | null;
+  /** True when at least one detected holding has no sourced price (shown as "—"). */
+  anyUnpriced: boolean;
+  /** Value-based allocation over priced positions (non-zero categories only). */
+  byCategory: Array<{ label: string; valueUsd: number; pct: number }>;
+}
+
+/** Derive the value total + value-based category allocation from sourced prices. */
+export function deriveValueBreakdown(positions: WalletPosition[]): ValueBreakdown {
+  const val = (p: WalletPosition) => (typeof p.valueUsd === "number" ? p.valueUsd : 0);
+  const priced = positions.filter((p) => typeof p.valueUsd === "number");
+  const totalUsd = priced.length > 0 ? priced.reduce((s, p) => s + (p.valueUsd as number), 0) : null;
+  const g = groupPositionsByCategory(positions);
+  const cats: Array<[string, WalletPosition[]]> = [
+    ["Native SOL", g.native],
+    ["Tokens", g.tokens],
+    ["Stablecoins", g.stables],
+    ["Staked (LST)", g.lst],
+    ["Native stake", g.stake],
+    ["Protocol positions", g.protocol],
+    ["Unknown tokens", g.unknown],
+  ];
+  const byCategory =
+    totalUsd && totalUsd > 0
+      ? cats
+          .map(([label, arr]) => {
+            const v = arr.reduce((s, p) => s + val(p), 0);
+            return { label, valueUsd: v, pct: (v / totalUsd) * 100 };
+          })
+          .filter((c) => c.valueUsd > 0)
+      : [];
+  // "Unpriced" = a real holding (has an amount) with no sourced value.
+  const anyUnpriced = positions.some((p) => typeof p.uiAmount === "number" && p.valueUsd == null);
+  return { totalUsd, anyUnpriced, byCategory };
+}

@@ -99,6 +99,8 @@ export async function fetchKaminoVaultPositions(
       protocol: "Kamino",
       amount: uiAmount != null ? String(uiAmount) : "",
       uiAmount,
+      // Single underlying token → one long leg, priced by the vault token mint.
+      legs: mint && uiAmount != null ? [{ mint, uiAmount, side: "long" }] : undefined,
       side: "supplied",
       detection: "protocol_api",
       valueUsd: null,

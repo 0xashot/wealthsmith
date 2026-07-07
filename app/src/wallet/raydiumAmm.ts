@@ -23,8 +23,8 @@ export interface HeldLpToken {
 
 interface RaydiumPool {
   lpMint?: { address?: string };
-  mintA?: { symbol?: string };
-  mintB?: { symbol?: string };
+  mintA?: { symbol?: string; address?: string };
+  mintB?: { symbol?: string; address?: string };
   mintAmountA?: number;
   mintAmountB?: number;
   lpAmount?: number;
@@ -68,6 +68,8 @@ export async function fetchRaydiumAmmPositions(
     const symB = p.mintB?.symbol ?? "?";
     const amtA = share * (p.mintAmountA ?? 0);
     const amtB = share * (p.mintAmountB ?? 0);
+    const mintA = p.mintA?.address;
+    const mintB = p.mintB?.address;
     const apr = typeof p.week?.apr === "number" ? p.week.apr : p.day?.apr;
     positions.push({
       id: `raydium-amm-${c.mint}`,
@@ -78,6 +80,13 @@ export async function fetchRaydiumAmmPositions(
       mint: c.mint,
       protocol: "Raydium",
       amount: `${fmt(amtA)} ${symA} + ${fmt(amtB)} ${symB}`,
+      legs:
+        mintA && mintB
+          ? [
+              { mint: mintA, uiAmount: amtA, side: "long" },
+              { mint: mintB, uiAmount: amtB, side: "long" },
+            ]
+          : undefined,
       detection: "protocol_api",
       valueUsd: null,
       apy: typeof apr === "number" ? apr : null,
