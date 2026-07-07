@@ -22,6 +22,10 @@ import {
   formatUsd,
 } from "../wallet/walletSummary";
 import { deriveProjection } from "../wallet/projectedGrowth";
+import {
+  deriveRecommendedAllocation,
+  deriveAllocationDeltas,
+} from "../wallet/recommendedAllocation";
 import { dashboardState as s } from "../state/dashboardState";
 import { RISK_OPTIONS, labelFor } from "../state/goalState";
 import type { SavedGoal } from "../types/goal";
@@ -48,7 +52,13 @@ import {
   PG_LABEL_PROJECTED,
   PG_MODELED_RETURN_PREFIX,
   ALLOCATION_NEEDS_PRICING,
-  ALLOCATION_CURRENT_CAPTION,
+  ALLOCATION_COMPARE_CAPTION,
+  ALLOCATION_NO_RISK,
+  ALLOCATION_GROUP_CURRENT,
+  ALLOCATION_GROUP_RECOMMENDED,
+  ALLOCATION_DELTA_ON,
+  ALLOCATION_DELTA_OVER,
+  ALLOCATION_DELTA_UNDER,
   ALLOCATION_LABEL_CRYPTO,
   ALLOCATION_LABEL_STABLES,
 } from "../state/approvedCopy";
@@ -110,11 +120,41 @@ export default function DashboardBody({ goal }: Props) {
   const cryptoPct = total > 0 ? (cryptoUsd / total) * 100 : 0;
   const stablePct = total > 0 ? (stableUsd / total) * 100 : 0;
   const showAllocation = priced && total > 0;
+
+  // Recommended (target) allocation — deterministic risk-based product logic
+  // applied to the current priced total. Null when no saved risk level.
+  const recommended = deriveRecommendedAllocation({
+    riskTolerance: goal?.risk_tolerance,
+    totalPricedUsd: showAllocation ? total : null,
+  });
+  const allocationDeltas =
+    recommended != null
+      ? deriveAllocationDeltas({
+          current: { cryptoUsd, stableUsd, cryptoPct, stablePct },
+          recommended,
+        })
+      : null;
+  /** Overweight/underweight label for a current−target percentage-point delta. */
+  const deltaLabel = (deltaPct: number): string => {
+    const pts = Math.round(deltaPct);
+    if (pts === 0) return ALLOCATION_DELTA_ON;
+    return pts > 0
+      ? `${ALLOCATION_DELTA_OVER} +${pts} pts`
+      : `${ALLOCATION_DELTA_UNDER} ${pts} pts`;
+  };
+  const deltaClass = (deltaPct: number): string => {
+    const pts = Math.round(deltaPct);
+    if (pts === 0) return "allocation__delta--on";
+    return pts > 0 ? "allocation__delta--over" : "allocation__delta--under";
+  };
   const allocationSummary =
     `${s.allocation.title}. Current mix by value: ` +
     `${ALLOCATION_LABEL_CRYPTO} ${formatUsd(cryptoUsd)} (${cryptoPct.toFixed(0)}%), ` +
     `${ALLOCATION_LABEL_STABLES} ${formatUsd(stableUsd)} (${stablePct.toFixed(0)}%). ` +
-    `Recommended allocation unavailable.`;
+    (recommended != null
+      ? `Recommended target: ${ALLOCATION_LABEL_CRYPTO} ${formatUsd(recommended.cryptoUsd)} (${recommended.cryptoPct}%), ` +
+        `${ALLOCATION_LABEL_STABLES} ${formatUsd(recommended.stableUsd)} (${recommended.stablePct}%).`
+      : `Recommended allocation unavailable.`);
 
   // Deterministic Projected Growth — priced starting value + saved plan inputs.
   const projection = deriveProjection({
@@ -304,8 +344,14 @@ export default function DashboardBody({ goal }: Props) {
           </div>
         ) : showAllocation ? (
           <div className="card">
-            <div className="allocation__groups" role="img" aria-label={allocationSummary}>
+            <div
+              className="allocation__groups allocation__groups--compare"
+              role="img"
+              aria-label={allocationSummary}
+            >
+              {/* Current — live wallet allocation (values unchanged from before). */}
               <div className="allocation__group">
+                <span className="allocation__group-label">{ALLOCATION_GROUP_CURRENT}</span>
                 <div className="allocation__row">
                   <span className="allocation__row-label">{ALLOCATION_LABEL_CRYPTO}</span>
                   <div className="allocation__track">
@@ -317,6 +363,11 @@ export default function DashboardBody({ goal }: Props) {
                   <span className="allocation__value">
                     {formatUsd(cryptoUsd)} · {cryptoPct.toFixed(0)}%
                   </span>
+                  {allocationDeltas && (
+                    <span className={`allocation__delta ${deltaClass(allocationDeltas.cryptoDeltaPct)}`}>
+                      {deltaLabel(allocationDeltas.cryptoDeltaPct)}
+                    </span>
+                  )}
                 </div>
                 <div className="allocation__row">
                   <span className="allocation__row-label">{ALLOCATION_LABEL_STABLES}</span>
@@ -329,10 +380,50 @@ export default function DashboardBody({ goal }: Props) {
                   <span className="allocation__value">
                     {formatUsd(stableUsd)} · {stablePct.toFixed(0)}%
                   </span>
+                  {allocationDeltas && (
+                    <span className={`allocation__delta ${deltaClass(allocationDeltas.stableDeltaPct)}`}>
+                      {deltaLabel(allocationDeltas.stableDeltaPct)}
+                    </span>
+                  )}
                 </div>
               </div>
+
+              {/* Recommended — risk-based target applied to the current priced total. */}
+              {recommended && (
+                <div className="allocation__group">
+                  <span className="allocation__group-label">
+                    {ALLOCATION_GROUP_RECOMMENDED}
+                  </span>
+                  <div className="allocation__row">
+                    <span className="allocation__row-label">{ALLOCATION_LABEL_CRYPTO}</span>
+                    <div className="allocation__track">
+                      <div
+                        className="allocation__bar allocation__bar--current"
+                        style={{ width: `${recommended.cryptoPct}%` }}
+                      />
+                    </div>
+                    <span className="allocation__value">
+                      {formatUsd(recommended.cryptoUsd)} · {recommended.cryptoPct}%
+                    </span>
+                  </div>
+                  <div className="allocation__row">
+                    <span className="allocation__row-label">{ALLOCATION_LABEL_STABLES}</span>
+                    <div className="allocation__track">
+                      <div
+                        className="allocation__bar allocation__bar--recommended"
+                        style={{ width: `${recommended.stablePct}%` }}
+                      />
+                    </div>
+                    <span className="allocation__value">
+                      {formatUsd(recommended.stableUsd)} · {recommended.stablePct}%
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
-            <p className="card__caption">{ALLOCATION_CURRENT_CAPTION}</p>
+            <p className="card__caption">
+              {recommended ? ALLOCATION_COMPARE_CAPTION : ALLOCATION_NO_RISK}
+            </p>
             <div className="chart-legend">
               <span className="chart-legend__item">
                 <LegendMarker variant="dot" colorToken="--color-chart-series-1" />

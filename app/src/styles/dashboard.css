@@ -613,6 +613,31 @@
   text-align: right;
 }
 
+/* Current vs Recommended comparison: extra column for the overweight/underweight
+   delta badge. Scoped to --compare so Demo Mode's allocation chart is unchanged. */
+.allocation__groups--compare .allocation__row {
+  grid-template-columns: 7.5em minmax(0, 1fr) 4em auto;
+}
+
+.allocation__delta {
+  font: var(--typography-label-sm-font);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.allocation__delta--over {
+  color: var(--color-feedback-warning-text-tint);
+}
+
+.allocation__delta--under {
+  color: var(--color-feedback-info-text-tint);
+}
+
+.allocation__delta--on {
+  color: var(--color-feedback-success-text-tint);
+}
+
 /* ---------- Badges (components/badge.md) ---------- */
 
 .badge {

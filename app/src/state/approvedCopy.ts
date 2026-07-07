@@ -281,6 +281,17 @@ export const ALLOCATION_CURRENT_CAPTION =
   "Your current mix by USD value. A recommended target mix needs your plan's allocation logic.";
 export const ALLOCATION_LABEL_CRYPTO = "Crypto";
 export const ALLOCATION_LABEL_STABLES = "Stables";
+/** Current vs Recommended Allocation — group labels + compare captions. */
+export const ALLOCATION_GROUP_CURRENT = "Current";
+export const ALLOCATION_GROUP_RECOMMENDED = "Recommended";
+export const ALLOCATION_COMPARE_CAPTION =
+  "Your live mix vs a risk-based target. Target values apply your saved risk level to your current priced holdings — a modeled target, not advice.";
+export const ALLOCATION_NO_RISK =
+  "Set your risk level to see a recommended target mix.";
+/** Overweight / underweight labels vs the risk-based target (per bucket). */
+export const ALLOCATION_DELTA_ON = "On target";
+export const ALLOCATION_DELTA_OVER = "Overweight";
+export const ALLOCATION_DELTA_UNDER = "Underweight";
 
 /** Additional live-fact / category labels (counts + on-chain balances only). */
 export const REAL_WALLET_FACT_STAKE = "Native stake";
