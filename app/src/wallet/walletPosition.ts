@@ -14,7 +14,17 @@
 /** Normalized read-only position (per the approved data model). */
 export interface WalletPosition {
   id: string;
-  source: "wallet" | "jupiter" | "kamino";
+  source:
+    | "wallet"
+    | "jupiter"
+    | "kamino"
+    | "jito"
+    | "sanctum"
+    | "ondo"
+    | "orca"
+    | "raydium"
+    | "meteora"
+    | "hubble";
   type: "native" | "token" | "lst" | "stake" | "protocol";
   symbol: string;
   name?: string;
@@ -49,13 +59,14 @@ export const TOKEN_2022_PROGRAM_ID = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuE
 interface TokenInfo {
   symbol: string;
   name: string;
-  /** Approved icon path (resolved via iconRegistry). */
-  icon: string;
+  /** Approved icon path (resolved via iconRegistry). Optional — falls back to the
+   *  generic token icon when there's no local asset. */
+  icon?: string;
   type: "token" | "lst";
   /** Underlying protocol for LSTs (display only). */
   protocol?: string;
   /** Where the position is attributed for the "Source" column. */
-  source: "wallet" | "jupiter" | "kamino";
+  source: "wallet" | "jupiter" | "kamino" | "ondo" | "hubble";
 }
 
 /**
@@ -91,6 +102,22 @@ export const TOKEN_REGISTRY: Record<string, TokenInfo> = {
     icon: "assets/icons/token/sol.svg",
     type: "token",
     source: "wallet",
+  },
+  // Hubble USDH — a crypto-collateralized stablecoin (non-yield-bearing; no APY).
+  USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX: {
+    symbol: "USDH",
+    name: "USDH Stablecoin",
+    type: "token",
+    protocol: "Hubble",
+    source: "hubble",
+  },
+  // Ondo USDY — a Treasury-backed yield-bearing token (APY sourced separately).
+  A1KLoBrKBde8Ty9qtNQUtq3C2ortoC3u7twggz7sEto6: {
+    symbol: "USDY",
+    name: "Ondo US Dollar Yield",
+    type: "token",
+    protocol: "Ondo",
+    source: "ondo",
   },
   // Recognized LSTs / staked assets
   jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v: {

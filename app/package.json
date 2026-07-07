@@ -12,7 +12,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@hubbleprotocol/hubble-sdk": "^8.0.4",
+    "@jito-foundation/vault-sdk": "1.0.0",
     "@kamino-finance/klend-sdk": "9.1.2",
+    "@meteora-ag/dlmm": "1.9.11",
+    "@meteora-ag/dynamic-amm-sdk": "1.4.1",
+    "@orca-so/whirlpools-core": "2.0.0",
     "@solana/kit": "^2.3.0",
     "@solana/spl-stake-pool": "1.1.8",
     "@solana/wallet-adapter-base": "^0.9.27",
@@ -26,7 +31,8 @@
     "react-dom": "^18.3.1"
   },
   "overrides": {
-    "@kamino-finance/farms-sdk": "3.2.24"
+    "@kamino-finance/farms-sdk": "3.2.24",
+    "@solana/web3.js": "$@solana/web3.js"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

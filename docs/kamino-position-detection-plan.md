@@ -34,8 +34,17 @@ Positions carry `apy` (percent) shown in the Live Wallet Assets table, sourced o
 - **LSTs (JupSOL/bSOL/JitoSOL)** — on-chain stake-pool exchange-rate growth over the
   last epoch (`app/src/wallet/lstApy.ts`, via `@solana/spl-stake-pool`, searching the
   SPL + Sanctum stake-pool programs). Jupiter's public API exposes only price (no
-  APY) and Sanctum's APY endpoint returns 0, so this on-chain method is used. mSOL
-  (Marinade, different program) is not covered yet → "—".
+  APY) and Sanctum's APY endpoint returns 0, so this on-chain method is used.
+- **mSOL (Marinade)** — not an SPL stake pool, so its APY comes from Marinade's
+  public API (`api.marinade.finance/msol/apy/30d`, the canonical 30-day figure),
+  handled in `lstApy.ts` alongside the stake-pool LSTs.
+- **INF (Sanctum Infinity)** and **USDY (Ondo)** — a multi-LST pool and a
+  Treasury-backed RWA yield token, respectively; neither is a readable stake pool
+  (and Sanctum's APY endpoint returns 0), so their APY comes from **DefiLlama's**
+  yields feed (projects `sanctum-infinity` / `ondo-yield-assets`, via the
+  lightweight per-pool `chart/{id}` endpoint), handled in `lstApy.ts`. USDY is
+  recognized via the curated registry (`source: "ondo"`); its APY is applied in the
+  same phase-3 enrichment as LSTs.
 
 Every provider position should show amount + sourced APY (never invented).
 

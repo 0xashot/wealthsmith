@@ -44,6 +44,13 @@ const SOURCE_LABEL: Record<WalletPosition["source"], string> = {
   wallet: "Wallet",
   jupiter: "Jupiter",
   kamino: "Kamino",
+  jito: "Jito",
+  sanctum: "Sanctum",
+  ondo: "Ondo",
+  orca: "Orca",
+  raydium: "Raydium",
+  meteora: "Meteora",
+  hubble: "Hubble",
 };
 
 /** On-chain uiAmount → trimmed, grouped string (never a computed USD value). */

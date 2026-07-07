@@ -33,6 +33,8 @@ import {
   type WalletPosition,
 } from "./walletPosition";
 import { fetchNativeStakePositions, fetchKaminoPositions } from "./protocolPositions";
+import type { VrtInfo } from "./jitoRestaking";
+import type { SanctumLstInfo } from "./sanctumLsts";
 import {
   LIVE_WALLET_WARNING_TOKENS,
   LIVE_WALLET_WARNING_TOKEN2022,
@@ -77,7 +79,15 @@ type ReadName =
   | "native_stake"
   | "kamino"
   | "kamino_vault"
-  | "lst_apy";
+  | "jito_vault"
+  | "sanctum_lst"
+  | "lst_apy"
+  | "orca_positions"
+  | "raydium_positions"
+  | "raydium_amm"
+  | "meteora_dlmm"
+  | "meteora_damm"
+  | "hubble";
 
 /**
  * Kamino Earn Vault positions (incl. farm-staked shares) via the heavy Kamino SDK,
@@ -97,8 +107,76 @@ async function fetchLstApys(
   return mod.fetchLstApys(connection, mints);
 }
 
+/** Jito Restaking VRT → underlying map (for identifying held VRTs), lazy-loaded. */
+async function loadJitoVrtMap(connection: Connection): Promise<Map<string, VrtInfo>> {
+  const mod = await import("./jitoRestaking");
+  return mod.fetchJitoVrtMap(connection);
+}
+
+/** Sanctum LST registry (mint → symbol/name) for recognizing any Sanctum LST. */
+async function loadSanctumLstMap(): Promise<Map<string, SanctumLstInfo>> {
+  const mod = await import("./sanctumLsts");
+  return mod.fetchSanctumLstMap();
+}
+
+/** Orca Whirlpool LP positions from the wallet's candidate NFT mints (WASM math). */
+async function loadOrcaPositions(
+  connection: Connection,
+  candidateNftMints: string[]
+): Promise<WalletPosition[]> {
+  const mod = await import("./orcaWhirlpools");
+  return mod.fetchOrcaPositions(connection, candidateNftMints);
+}
+
+/** Raydium CLMM LP positions from the wallet's candidate NFT mints (WASM math). */
+async function loadRaydiumPositions(
+  connection: Connection,
+  candidateNftMints: string[]
+): Promise<WalletPosition[]> {
+  const mod = await import("./raydiumClmm");
+  return mod.fetchRaydiumPositions(connection, candidateNftMints);
+}
+
+/** Raydium classic AMM / CPMM positions from held (fungible) LP tokens — API only. */
+async function loadRaydiumAmm(
+  candidates: Array<{ mint: string; uiAmount: number }>
+): Promise<WalletPosition[]> {
+  const mod = await import("./raydiumAmm");
+  return mod.fetchRaydiumAmmPositions(candidates);
+}
+
+/** Meteora DLMM LP positions (owner-based; SDK computes bin amounts), lazy-loaded. */
+async function loadMeteoraDlmm(
+  connection: Connection,
+  ownerB58: string
+): Promise<WalletPosition[]> {
+  const mod = await import("./meteoraDlmm");
+  return mod.fetchMeteoraDlmmPositions(connection, ownerB58);
+}
+
+/** Meteora DAMM positions from held (fungible) LP tokens — on-chain pool + SDK. */
+async function loadMeteoraDamm(
+  connection: Connection,
+  candidates: Array<{ mint: string; rawAmount: string }>
+): Promise<WalletPosition[]> {
+  const mod = await import("./meteoraDamm");
+  return mod.fetchMeteoraDammPositions(connection, candidates);
+}
+
+/** Hubble USDH borrowing positions (owner-based; SDK reads adjusted debt), lazy. */
+async function loadHubbleLoans(
+  connection: Connection,
+  ownerB58: string
+): Promise<WalletPosition[]> {
+  const mod = await import("./hubble");
+  return mod.fetchHubbleLoans(connection, ownerB58);
+}
+
 /** Build a normalized position from one parsed token account, or null to skip. */
-function toTokenPosition(acc: ParsedTokenAccount): WalletPosition | null {
+function toTokenPosition(
+  acc: ParsedTokenAccount,
+  sanctumMap?: Map<string, SanctumLstInfo>
+): WalletPosition | null {
   // Defensive parsing: every step may be missing on malformed / non-parsed data.
   const info = acc?.account?.data?.parsed?.info;
   if (!info || typeof info.mint !== "string") return null;
@@ -131,6 +209,28 @@ function toTokenPosition(acc: ParsedTokenAccount): WalletPosition | null {
       apy: null,
     };
   }
+
+  // Recognized Sanctum LST (any of the ~245 in Sanctum's list) — classified as an
+  // LST so it shows its real symbol/name and picks up stake-pool APY in phase 3.
+  const sanctum = sanctumMap?.get(mint);
+  if (sanctum) {
+    return {
+      id: `mint-${mint}`,
+      source: "sanctum",
+      type: "lst",
+      symbol: sanctum.symbol,
+      name: sanctum.name,
+      mint,
+      protocol: "Sanctum",
+      amount: amt.amount,
+      uiAmount,
+      decimals,
+      detection: "recognized_lst_mint",
+      valueUsd: null,
+      apy: null,
+    };
+  }
+
   // Unknown token — display safely, never inferred as an LST/protocol asset.
   return {
     id: `mint-${mint}`,
@@ -148,11 +248,44 @@ function toTokenPosition(acc: ParsedTokenAccount): WalletPosition | null {
   };
 }
 
+/** A held Jito VRT → a "Restaked on Jito" position denominated in the underlying. */
+function toJitoRestakingPosition(acc: ParsedTokenAccount, vrt: VrtInfo): WalletPosition | null {
+  const info = acc?.account?.data?.parsed?.info;
+  if (!info || typeof info.mint !== "string") return null;
+  const amt = info.tokenAmount;
+  if (!amt || typeof amt.amount !== "string" || amt.amount === "0" || amt.uiAmount === 0) {
+    return null;
+  }
+  const vrtUi = typeof amt.uiAmount === "number" ? amt.uiAmount : undefined;
+  // VRT → underlying supported token (e.g. JitoSOL) via the vault exchange rate.
+  const underlying = vrtUi != null ? vrtUi * vrt.rate : undefined;
+  const known = lookupMint(vrt.supportedMint);
+  return {
+    id: `jito-vault-${info.mint}`,
+    source: "jito",
+    type: "protocol",
+    symbol: known?.symbol ?? shortMint(vrt.supportedMint),
+    name: "Restaked on Jito",
+    mint: info.mint,
+    icon: known?.icon,
+    protocol: "Jito Restaking",
+    amount: underlying != null ? String(underlying) : amt.amount,
+    uiAmount: underlying,
+    decimals: typeof amt.decimals === "number" ? amt.decimals : undefined,
+    side: "supplied",
+    detection: "protocol_api",
+    valueUsd: null,
+    apy: null, // restaking-reward APY has no clean read source yet → "—"
+  };
+}
+
 /** Assemble positions from whatever reads succeeded (native may be null). */
 function buildPositions(
   lamports: number | null,
   tokenAccounts: ParsedTokenAccount[],
-  extra: WalletPosition[] = []
+  extra: WalletPosition[] = [],
+  vrtMap?: Map<string, VrtInfo>,
+  sanctumMap?: Map<string, SanctumLstInfo>
 ): WalletPosition[] {
   const positions: WalletPosition[] = [];
 
@@ -177,7 +310,11 @@ function buildPositions(
   // produces duplicate rows.
   const seen = new Set<string>(positions.map((p) => p.id));
   for (const acc of tokenAccounts) {
-    const pos = toTokenPosition(acc);
+    // A held Jito VRT becomes a "Restaked on Jito" position; otherwise a token
+    // (recognized as a Sanctum LST when applicable, else known/unknown).
+    const mint = acc?.account?.data?.parsed?.info?.mint;
+    const vrt = mint && vrtMap ? vrtMap.get(mint) : undefined;
+    const pos = vrt ? toJitoRestakingPosition(acc, vrt) : toTokenPosition(acc, sanctumMap);
     if (pos && !seen.has(pos.id)) {
       seen.add(pos.id);
       positions.push(pos);
@@ -191,7 +328,11 @@ function buildPositions(
     }
   }
 
-  // Sort: native, LSTs, native stake, known tokens, Kamino/protocol, unknown.
+  return sortPositions(positions);
+}
+
+/** Sort: native, LSTs, native stake, known tokens, protocol (Kamino/Jito/Orca), unknown. */
+function sortPositions(positions: WalletPosition[]): WalletPosition[] {
   const rank = (p: WalletPosition) => {
     if (p.type === "native") return 0;
     if (p.type === "lst") return 1;
@@ -199,7 +340,7 @@ function buildPositions(
     if (p.type === "protocol") return 4;
     return p.name === "Unknown token" ? 5 : 3;
   };
-  return positions.sort((a, b) => rank(a) - rank(b));
+  return [...positions].sort((a, b) => rank(a) - rank(b));
 }
 
 /** Extract the token-account array from a getParsedTokenAccountsByOwner result. */
@@ -295,29 +436,32 @@ export function useWalletPortfolio(): WalletPortfolio {
       // independent + time-boxed, so one slow/failed read never blocks the others
       // or the already-rendered SOL. Protocol positions are best-effort: if they
       // fail they simply don't appear (logged in DEV), no user-facing error.
-      const [splRes, tok22Res, stakeRes, kaminoRes, kaminoVaultRes] = await Promise.allSettled([
-        withTimeout(
-          connection.getParsedTokenAccountsByOwner(owner, {
-            programId: new PublicKey(TOKEN_PROGRAM_ID),
-          }),
-          TOKEN_TIMEOUT_MS,
-          "spl_token"
-        ),
-        withTimeout(
-          connection.getParsedTokenAccountsByOwner(owner, {
-            programId: new PublicKey(TOKEN_2022_PROGRAM_ID),
-          }),
-          TOKEN_TIMEOUT_MS,
-          "token_2022"
-        ),
-        withTimeout(fetchNativeStakePositions(connection, owner), PROTOCOL_TIMEOUT_MS, "native_stake"),
-        withTimeout(fetchKaminoPositions(connection, owner), PROTOCOL_TIMEOUT_MS, "kamino"),
-        withTimeout(
-          fetchKaminoVaults(connection.rpcEndpoint, owner.toBase58()),
-          PROTOCOL_TIMEOUT_MS,
-          "kamino_vault"
-        ),
-      ]);
+      const [splRes, tok22Res, stakeRes, kaminoRes, kaminoVaultRes, jitoRes, sanctumRes] =
+        await Promise.allSettled([
+          withTimeout(
+            connection.getParsedTokenAccountsByOwner(owner, {
+              programId: new PublicKey(TOKEN_PROGRAM_ID),
+            }),
+            TOKEN_TIMEOUT_MS,
+            "spl_token"
+          ),
+          withTimeout(
+            connection.getParsedTokenAccountsByOwner(owner, {
+              programId: new PublicKey(TOKEN_2022_PROGRAM_ID),
+            }),
+            TOKEN_TIMEOUT_MS,
+            "token_2022"
+          ),
+          withTimeout(fetchNativeStakePositions(connection, owner), PROTOCOL_TIMEOUT_MS, "native_stake"),
+          withTimeout(fetchKaminoPositions(connection, owner), PROTOCOL_TIMEOUT_MS, "kamino"),
+          withTimeout(
+            fetchKaminoVaults(connection.rpcEndpoint, owner.toBase58()),
+            PROTOCOL_TIMEOUT_MS,
+            "kamino_vault"
+          ),
+          withTimeout(loadJitoVrtMap(connection), PROTOCOL_TIMEOUT_MS, "jito_vault"),
+          withTimeout(loadSanctumLstMap(), PROTOCOL_TIMEOUT_MS, "sanctum_lst"),
+        ]);
       if (cancelled || myReq !== reqId.current) return;
 
       const splOk = splRes.status === "fulfilled";
@@ -331,7 +475,16 @@ export function useWalletPortfolio(): WalletPortfolio {
         ...(kaminoRes.status === "fulfilled" ? kaminoRes.value : []),
         ...(kaminoVaultRes.status === "fulfilled" ? kaminoVaultRes.value : []),
       ];
-      const positions = buildPositions(lamports, tokenAccounts, protocolPositions);
+      // Held Jito VRTs + Sanctum LSTs are classified via these maps in buildPositions.
+      const vrtMap = jitoRes.status === "fulfilled" ? jitoRes.value : undefined;
+      const sanctumMap = sanctumRes.status === "fulfilled" ? sanctumRes.value : undefined;
+      const positions = buildPositions(
+        lamports,
+        tokenAccounts,
+        protocolPositions,
+        vrtMap,
+        sanctumMap
+      );
 
       // Structured dev-only diagnostics (never shown to the user).
       if (import.meta.env.DEV) {
@@ -344,6 +497,8 @@ export function useWalletPortfolio(): WalletPortfolio {
           ...(stakeRes.status !== "fulfilled" ? (["native_stake"] as const) : []),
           ...(kaminoRes.status !== "fulfilled" ? (["kamino"] as const) : []),
           ...(kaminoVaultRes.status !== "fulfilled" ? (["kamino_vault"] as const) : []),
+          ...(jitoRes.status !== "fulfilled" ? (["jito_vault"] as const) : []),
+          ...(sanctumRes.status !== "fulfilled" ? (["sanctum_lst"] as const) : []),
         ];
         // eslint-disable-next-line no-console
         console.info("[wallet-read]", {
@@ -356,6 +511,8 @@ export function useWalletPortfolio(): WalletPortfolio {
             native_stake: stakeRes.status === "fulfilled" ? "ok" : "failed",
             kamino: kaminoRes.status === "fulfilled" ? "ok" : "failed",
             kamino_vault: kaminoVaultRes.status === "fulfilled" ? "ok" : "failed",
+            jito_vault: jitoRes.status === "fulfilled" ? "ok" : "failed",
+            sanctum_lst: sanctumRes.status === "fulfilled" ? "ok" : "failed",
           },
           failed,
           errors: {
@@ -365,6 +522,8 @@ export function useWalletPortfolio(): WalletPortfolio {
             native_stake: reason(stakeRes),
             kamino: reason(kaminoRes),
             kamino_vault: reason(kaminoVaultRes),
+            jito_vault: reason(jitoRes),
+            sanctum_lst: reason(sanctumRes),
           },
           positions: positions.length,
           partial: failed.length > 0 && (nativeOk || splOk || tok22Ok),
@@ -389,34 +548,79 @@ export function useWalletPortfolio(): WalletPortfolio {
 
       setState({ status: "ready", positions, warning });
 
-      // PHASE 3 — enrich recognized LST rows (JupSOL/bSOL/JitoSOL) with on-chain
-      // stake-pool APY. Only runs when LSTs are held; best-effort; updates just the
-      // apy of those rows. Never blocks or fails the rest.
-      const lstMints = positions
-        .filter((p) => p.type === "lst" && typeof p.mint === "string")
+      // PHASE 3 — two best-effort enrichments in parallel, then one merged update:
+      //   (a) APY for yield-bearing rows (LSTs + Ondo USDY).
+      //   (b) Orca Whirlpool LP positions, derived from held NFT mints.
+      // Neither blocks the already-rendered rows; failures are silent.
+      const needsApy = (p: WalletPosition) => p.type === "lst" || p.source === "ondo";
+      const apyMints = positions
+        .filter((p) => needsApy(p) && typeof p.mint === "string")
         .map((p) => p.mint as string);
-      if (lstMints.length > 0) {
-        try {
-          const apys = await withTimeout(
-            fetchLstApys(connection, lstMints),
-            PROTOCOL_TIMEOUT_MS,
-            "lst_apy"
+      // NFT candidates for CLMM (Orca/Raydium): 0-decimal, non-zero token balances.
+      const nftMints = tokenAccounts
+        .map((a) => a?.account?.data?.parsed?.info)
+        .filter((info) => info?.tokenAmount?.decimals === 0 && info?.tokenAmount?.amount !== "0")
+        .map((info) => info!.mint as string)
+        .filter((m): m is string => typeof m === "string");
+      // Fungible LP-token candidates for Raydium AMM/CPMM: the unrecognized
+      // (unknown) fungible tokens the wallet holds, with their balances.
+      const lpCandidates = positions
+        .filter((p) => p.name === "Unknown token" && typeof p.mint === "string" && typeof p.uiAmount === "number")
+        .map((p) => ({ mint: p.mint as string, uiAmount: p.uiAmount as number, rawAmount: p.amount }));
+
+      const [apyRes, orcaRes, raydiumRes, raydiumAmmRes, meteoraRes, meteoraDammRes, hubbleRes] =
+        await Promise.allSettled([
+        apyMints.length > 0
+          ? withTimeout(fetchLstApys(connection, apyMints), PROTOCOL_TIMEOUT_MS, "lst_apy")
+          : Promise.resolve(new Map<string, number>()),
+        nftMints.length > 0
+          ? withTimeout(loadOrcaPositions(connection, nftMints), PROTOCOL_TIMEOUT_MS, "orca_positions")
+          : Promise.resolve([] as WalletPosition[]),
+        nftMints.length > 0
+          ? withTimeout(loadRaydiumPositions(connection, nftMints), PROTOCOL_TIMEOUT_MS, "raydium_positions")
+          : Promise.resolve([] as WalletPosition[]),
+        lpCandidates.length > 0
+          ? withTimeout(loadRaydiumAmm(lpCandidates), PROTOCOL_TIMEOUT_MS, "raydium_amm")
+          : Promise.resolve([] as WalletPosition[]),
+        // Meteora DLMM positions are owned by the wallet (not held tokens), so this
+        // always runs when connected.
+        withTimeout(loadMeteoraDlmm(connection, owner.toBase58()), PROTOCOL_TIMEOUT_MS, "meteora_dlmm"),
+        lpCandidates.length > 0
+          ? withTimeout(loadMeteoraDamm(connection, lpCandidates), PROTOCOL_TIMEOUT_MS, "meteora_damm")
+          : Promise.resolve([] as WalletPosition[]),
+        // Hubble USDH loans are owned by the wallet (not held tokens), so this
+        // always runs when connected.
+        withTimeout(loadHubbleLoans(connection, owner.toBase58()), PROTOCOL_TIMEOUT_MS, "hubble"),
+      ]);
+      if (cancelled || myReq !== reqId.current) return;
+
+      const apys = apyRes.status === "fulfilled" ? apyRes.value : new Map<string, number>();
+      // LP positions can REPLACE an "unknown token" row (the held LP mint resolved
+      // to a pool); Hubble loans are standalone protocol rows that consume nothing.
+      const lpPositions = [
+        ...(orcaRes.status === "fulfilled" ? orcaRes.value : []),
+        ...(raydiumRes.status === "fulfilled" ? raydiumRes.value : []),
+        ...(raydiumAmmRes.status === "fulfilled" ? raydiumAmmRes.value : []),
+        ...(meteoraRes.status === "fulfilled" ? meteoraRes.value : []),
+        ...(meteoraDammRes.status === "fulfilled" ? meteoraDammRes.value : []),
+      ];
+      const hubblePositions = hubbleRes.status === "fulfilled" ? hubbleRes.value : [];
+      const extraPositions = [...lpPositions, ...hubblePositions];
+      if (apys.size > 0 || extraPositions.length > 0) {
+        // Apply APY to yield rows.
+        let merged = positions.map((p) =>
+          needsApy(p) && p.mint && apys.has(p.mint) ? { ...p, apy: apys.get(p.mint) ?? null } : p
+        );
+        // Replace the "unknown token" NFT rows that turned out to be LP positions,
+        // then append the resolved LP + Hubble protocol rows.
+        if (extraPositions.length > 0) {
+          const consumed = new Set(lpPositions.map((p) => p.mint));
+          merged = merged.filter(
+            (p) => !(p.name === "Unknown token" && p.mint && consumed.has(p.mint))
           );
-          if (cancelled || myReq !== reqId.current) return;
-          if (apys.size > 0) {
-            setState({
-              status: "ready",
-              warning,
-              positions: positions.map((p) =>
-                p.type === "lst" && p.mint && apys.has(p.mint)
-                  ? { ...p, apy: apys.get(p.mint) ?? null }
-                  : p
-              ),
-            });
-          }
-        } catch {
-          // APY enrichment is best-effort.
+          merged = sortPositions([...merged, ...extraPositions]);
         }
+        setState({ status: "ready", positions: merged, warning });
       }
     })().catch(() => {
       // Defensive: never leave a stuck loading state.

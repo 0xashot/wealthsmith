@@ -46,14 +46,59 @@ is discovery only — still no signing, no transactions, no fund movement.
 - **Token balances are separate from protocol positions.** SPL token balances come
   from the wallet's token accounts; protocol positions (e.g. Kamino obligations,
   native Jupiter validator stake) require protocol-specific read logic.
-- **LSTs are classified as staked/yield assets only when the mint is recognized**
-  in the approved mint mapping (`app/src/wallet/walletPosition.ts` → `TOKEN_REGISTRY`:
-  JupSOL, mSOL, bSOL, JitoSOL, plus USDC/USDT/BONK). Unrecognized mints show as a
-  generic token — never inferred as an LST/protocol position.
+- **LSTs are classified as staked/yield assets when the mint is recognized** — via
+  the curated `TOKEN_REGISTRY` (`app/src/wallet/walletPosition.ts`: JupSOL, mSOL,
+  bSOL, JitoSOL, plus USDC/USDT/BONK) AND, as a fallback, via **Sanctum's LST list**
+  (`app/src/wallet/sanctumLsts.ts`, ~245 LSTs fetched from Sanctum's CDN registry).
+  A held Sanctum LST is shown with its real symbol/name (source "Sanctum") and gets
+  its APY from the stake-pool math. Mints in neither show as a generic token —
+  never inferred as an LST/protocol position.
 - **JupSOL** held in the wallet is classified as a Jupiter / JupSOL LST position.
   **Native SOL stake accounts** (SOL delegated directly to a validator) are also
   detected read-only via the Stake program (`getParsedProgramAccounts` filtered by
   the wallet's withdraw authority) and shown as "Staked SOL" with the validator.
+- **Orca Whirlpool** LP positions are detected read-only (`app/src/wallet/orcaWhirlpools.ts`):
+  a held position NFT → its Position PDA → the Position + Whirlpool accounts are
+  decoded on-chain, and Orca's core WASM (`decreaseLiquidityQuote`) converts the
+  position's liquidity into the two underlying token amounts. Shown as one row
+  (e.g. "SOL/USDC · 0.0087 SOL + 0.7048 USDC") with the pool's fee APR from Orca's
+  whirlpool list. **Position bundles** (one NFT → many positions) are expanded via
+  the bundle's position bitmap. No high-level SDK (avoids a `@solana/kit` major conflict).
+- **Raydium CLMM** LP positions (`app/src/wallet/raydiumClmm.ts`) work the same way:
+  a held position NFT → PersonalPositionState PDA → decode + the **same Orca core
+  WASM** (Raydium uses identical Uniswap-V3 math) → token amounts; symbols + fee APR
+  from Raydium's API, decimals + sqrtPrice on-chain.
+- **Raydium classic AMM / CPMM** positions (`app/src/wallet/raydiumAmm.ts`) are
+  fungible LP tokens, not NFTs: a held LP token is resolved via Raydium's
+  `pools/info/lps` API and valued as `yourLP / totalLpSupply × reserves` for each
+  side — API-only, no on-chain decode. Symbols + fee APR from the same response.
+- **Meteora DLMM** positions (`app/src/wallet/meteoraDlmm.ts`) are bin-based
+  concentrated liquidity; the position is a program account owned by the wallet
+  (not a token), so valuing it needs bin math — done via Meteora's official SDK
+  (`@meteora-ag/dlmm`, web3.js v1) `getAllLbPairPositionsByUser`, aggregated per
+  pair into one row. APY shows "—" (Meteora's DLMM API is unavailable).
+- **Meteora DAMM** positions (`app/src/wallet/meteoraDamm.ts`) are fungible LP
+  tokens, but Meteora's API has no lookup-by-LP-mint (80k+ pools), so the pool is
+  found ON-CHAIN (the Pool account stores `lp_mint` at offset 8) and valued with
+  Meteora's `@meteora-ag/dynamic-amm-sdk` (`AmmImpl`, which resolves the dynamic
+  vaults) → `yourLP / lpSupply × reserves`. Note: an npm override dedupes
+  `@solana/web3.js` (the DAMM SDK pinned an exact version) to avoid a duplicate
+  Connection/PublicKey and cross-copy `instanceof` issues.
+- **Hubble** USDH borrowing positions (`app/src/wallet/hubble.ts`) are read-only
+  CDPs: a user deposits collateral (SOL, mSOL, ETH, BTC, …) and mints USDH, an
+  interest-free stablecoin. Detected owner-based via Hubble's official
+  `@hubbleprotocol/hubble-sdk` (`getUserLoans`), shown as a "Hubble Loan" borrow
+  row — e.g. "13,752.54 USDH debt · 335.5 SOL". The SDK is used (not a raw account
+  decode) because the on-chain debt field UNDERSTATES the true debt — liquidation
+  losses are redistributed pro-rata across borrowers via the borrowing-market
+  state, and the SDK returns that redistribution-adjusted debt. APY shows "—"
+  (interest-free borrow, one-time fee, no ongoing borrow APR). USDH itself is a
+  recognized token in the registry (`source: "hubble"`; non-yield-bearing, no APY).
+- **Jito Restaking** positions are detected read-only (`app/src/wallet/jitoRestaking.ts`):
+  Jito vaults are enumerated on-chain and decoded with `@jito-foundation/vault-sdk`
+  to build a VRT-mint → underlying map; a held VRT is shown as "Restaked on Jito"
+  denominated in its underlying token (e.g. JitoSOL). Restaking-reward APY has no
+  clean read source yet → shown as "—".
 - **Kamino** lending positions are detected read-only (`app/src/wallet/protocolPositions.ts`):
   the user's obligations are read from Kamino's public REST API, and each
   deposit/borrow reserve's underlying mint is resolved **on-chain** (reserve
