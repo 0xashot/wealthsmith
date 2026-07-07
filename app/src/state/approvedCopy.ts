@@ -224,13 +224,15 @@ export const REAL_WALLET_NONE_DETECTED = "None detected in this wallet.";
 
 /** Financial Snapshot (real wallet) — two hero cards. */
 export const FS_TOTAL_VALUE_LABEL = "Total Portfolio Value";
-export const FS_TOTAL_VALUE_CAPTION = "Crypto + stablecoins, valued live.";
+export const FS_TOTAL_VALUE_CAPTION = "Crypto + Stablecoins";
 export const FS_NET_CONTRIB_LABEL = "Net Contributions";
 export const FS_NET_CONTRIB_DESC = "Net contributions need transaction history.";
+/** Shown with a sourced net-contributions estimate. */
+export const FS_NET_CONTRIB_ESTIMATE = "Estimated net deposits over the last 12 months";
 
 /** Safety Buffer (real wallet) — stablecoin reserve vs monthly expenses. */
 export const SAFETY_BUFFER_CAPTION =
-  "Stablecoin reserve covering your monthly expenses before any investment actions. Includes stablecoins you hold plus USDC supplied to lending/vaults.";
+  "Stablecoin reserve covering 1–6 months of expenses before any investment actions.";
 export const SAFETY_BUFFER_FUNDED =
   "Fully funded — your stablecoin reserve covers your target.";
 export const SAFETY_BUFFER_COVERED_LEGEND = "Covered Buffer";

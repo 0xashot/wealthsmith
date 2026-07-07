@@ -276,8 +276,8 @@ fixture value.
 Dashboard body — the same four cards in every mode (heading above each card):
   Financial Snapshot   → two hero cards:
                            • Total Portfolio Value = sourced USD total (or "—")
-                           • Net Contributions = "—" (needs transaction history)
-                         + "prices as of … · DefiLlama & Jupiter" footnote
+                           • Net Contributions = sourced ESTIMATE of net deposits
+                             over the last 12 months (or "—")
   Safety Buffer        → stablecoin reserve vs monthly expenses (× 3 months),
                          counting wallet stablecoins + stablecoin protocol
                          positions (e.g. USDC supplied to Kamino); unavailable
@@ -292,9 +292,17 @@ Dashboard body — the same four cards in every mode (heading above each card):
 Rules:
 
 - **Portfolio Value** = the **sourced** USD total (sum of priced positions from an
-  approved feed — DefiLlama → Jupiter, `tokenPrices.ts`), labeled "as of", excluding
-  unpriced positions. Falls back to "—" only when nothing is priced. Never the
-  fixture $15,500, never invented. **Net Contributions** stays "—" (no tx history).
+  approved feed — DefiLlama → Jupiter, `tokenPrices.ts`), excluding unpriced
+  positions. Falls back to "—" only when nothing is priced. Never the fixture
+  $15,500, never invented.
+- **Net Contributions** = a sourced ESTIMATE of net deposits − withdrawals over the
+  last 12 months (`contributionHistory.ts` + `useNetContributions.ts`): Helius
+  parsed tx history, counting only `TRANSFER`-type external legs (deposits +,
+  withdrawals −), valued at each transfer's historical price (DefiLlama). Internal
+  moves — staking, swaps, LP — are excluded (they don't change net contributions).
+  It is labeled an **estimate** ("Estimated net deposits over the last 12 months")
+  and falls back to "—" when there's no wallet, the RPC isn't Helius, or history
+  can't be read. Never a fabricated figure.
 - **Safety Buffer** counts ONLY recognized stablecoins (wallet USDC/USDT/USDH/DAI
   plus stablecoin-only protocol positions like supplied USDC) against the monthly
   expenses the user entered in onboarding (`savedGoal.expenses_monthly`, threaded

@@ -107,7 +107,7 @@ export default function OnboardingExperience({
     // setting up" / "connect wallet" card — the onboarding panel drives that.
     mainColumn = (
       <>
-        <PageHeader header={s.page_header} />
+        <PageHeader header={{ ...s.page_header, description: undefined }} />
         <DashboardBody />
       </>
     );

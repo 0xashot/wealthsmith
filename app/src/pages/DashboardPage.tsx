@@ -103,7 +103,7 @@ export default function DashboardPage({
 
       <div className="dashboard">
         <main className="dashboard__main">
-          <PageHeader header={s.page_header} />
+          <PageHeader header={{ ...s.page_header, description: undefined }} />
           {/* One shared Dashboard body across connected + disconnected: the same
               four cards, populated from live data where available, else safe
               unavailable states. No wallet-connected / connect-wallet card here —

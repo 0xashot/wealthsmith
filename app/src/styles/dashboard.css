@@ -435,6 +435,11 @@
   color: var(--color-text-secondary);
 }
 
+/* Hero-card heading (e.g. "Total Portfolio Value") darker than its description. */
+.hero-cards .card .metric__label {
+  color: var(--color-text-primary);
+}
+
 /* ---------- Skeleton loading placeholders ---------- */
 
 .skeleton {

@@ -14,6 +14,7 @@
  */
 import type { ReactNode } from "react";
 import { useWalletPortfolio } from "../wallet/useWalletPortfolio";
+import { useNetContributions } from "../wallet/useNetContributions";
 import {
   deriveValueBreakdown,
   deriveStableValue,
@@ -28,6 +29,7 @@ import {
   FS_TOTAL_VALUE_CAPTION,
   FS_NET_CONTRIB_LABEL,
   FS_NET_CONTRIB_DESC,
+  FS_NET_CONTRIB_ESTIMATE,
   SAFETY_BUFFER_CAPTION,
   SAFETY_BUFFER_FUNDED,
   SAFETY_BUFFER_COVERED_LEGEND,
@@ -74,6 +76,7 @@ interface Props {
 
 export default function DashboardBody({ monthlyExpenses }: Props) {
   const { status, positions, warning, pricedAsOf, loading } = useWalletPortfolio();
+  const contrib = useNetContributions();
   const value = deriveValueBreakdown(positions);
   const priced = value.totalUsd != null;
 
@@ -101,7 +104,7 @@ export default function DashboardBody({ monthlyExpenses }: Props) {
     `Recommended allocation unavailable.`;
 
   const totalCaption = priced
-    ? FS_TOTAL_VALUE_CAPTION + (value.anyUnpriced ? " Excludes unpriced positions." : "")
+    ? FS_TOTAL_VALUE_CAPTION + (value.anyUnpriced ? " · excludes unpriced positions" : "")
     : REAL_WALLET_VALUE_DESC;
 
   return (
@@ -133,8 +136,22 @@ export default function DashboardBody({ monthlyExpenses }: Props) {
           </div>
           <div className="card">
             <span className="metric__label">{FS_NET_CONTRIB_LABEL}</span>
-            <span className="hero-card__value hero-card__value--muted">—</span>
-            <span className="card__caption">{FS_NET_CONTRIB_DESC}</span>
+            {contrib.loading ? (
+              <>
+                <span className="skeleton skeleton--value" />
+                <span className="skeleton skeleton--line-short" />
+              </>
+            ) : contrib.summary ? (
+              <>
+                <span className="hero-card__value">{formatUsd(contrib.summary.netUsd)}</span>
+                <span className="card__caption">{FS_NET_CONTRIB_ESTIMATE}</span>
+              </>
+            ) : (
+              <>
+                <span className="hero-card__value hero-card__value--muted">—</span>
+                <span className="card__caption">{FS_NET_CONTRIB_DESC}</span>
+              </>
+            )}
           </div>
         </div>
       </DashSection>

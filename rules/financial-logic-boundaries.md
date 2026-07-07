@@ -807,6 +807,19 @@ Recognized protocol names
 Sourced USD price + value per position (approved feed; else "—")
 Portfolio Value = sum of priced positions (labeled "as of", excludes unpriced)
 Value-based allocation % over priced positions
+Net Contributions = sourced ESTIMATE of net deposits − withdrawals (12 mo)
+```
+
+Net Contributions estimate rules (`contributionHistory.ts`):
+
+```text
+Source: Helius parsed tx history (needs a Helius RPC) + DefiLlama historical prices.
+Count ONLY external TRANSFER legs: deposits (+), withdrawals (−); value each at its
+  transfer-time price. Drop transfers with no sourced price (mark partial).
+EXCLUDE internal moves — staking, swaps, LP — they don't change net contributions.
+Label it an ESTIMATE (can't distinguish transfers between the user's own wallets).
+Show "—" when there's no wallet, the RPC isn't Helius, or history can't be read.
+Never fabricate a contributions figure.
 ```
 
 See `patterns/wallet-connection.md` (Data Mode Separation) and
