@@ -18,7 +18,8 @@ interface LiveMetric {
 }
 
 interface Props {
-  title: string;
+  /** Optional card title. Omit when the section heading lives outside the card. */
+  title?: string;
   caption?: string;
   ariaLabel?: string;
   metrics: LiveMetric[];
@@ -27,7 +28,7 @@ interface Props {
 export default function LiveMetricGrid({ title, caption, ariaLabel, metrics }: Props) {
   return (
     <section className="card" aria-label={ariaLabel ?? title}>
-      <h2 className="card__title">{title}</h2>
+      {title && <h2 className="card__title">{title}</h2>}
       {caption && <p className="card__caption">{caption}</p>}
       <div className="snapshot__grid">
         {metrics.map((m) => (

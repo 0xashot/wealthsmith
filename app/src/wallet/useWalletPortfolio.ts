@@ -52,6 +52,8 @@ interface PortfolioState {
   warning?: string;
   /** When sourced prices were applied (ms epoch), for an "as of" label. */
   pricedAsOf?: number;
+  /** True while a read is in flight (from start until phase-3 completes/errors). */
+  loading?: boolean;
 }
 
 /** Loosely-typed parsed token account — validated defensively before use. */
@@ -466,7 +468,7 @@ export function useWalletPortfolio(): WalletPortfolio {
     let cancelled = false;
     const owner = new PublicKey(publicKey.toBase58());
     // Retry clears the previous hard error, keeps prior positions visible.
-    setState((s) => ({ status: "loading", positions: s.positions }));
+    setState((s) => ({ status: "loading", positions: s.positions, loading: true }));
 
     (async () => {
       // PHASE 1 — native SOL first. It resolves quickly, so render it immediately
@@ -484,7 +486,7 @@ export function useWalletPortfolio(): WalletPortfolio {
       if (cancelled || myReq !== reqId.current) return;
       if (nativeOk) {
         // Show SOL right away while token reads continue in the background.
-        setState({ status: "ready", positions: buildPositions(lamports, []) });
+        setState({ status: "ready", positions: buildPositions(lamports, []), loading: true });
       }
 
       // PHASE 2 — token reads + protocol reads (native stake, Kamino). All are
@@ -588,7 +590,7 @@ export function useWalletPortfolio(): WalletPortfolio {
       // Every read failed → hard error. Otherwise show what we have + a warning
       // that matches which reads failed.
       if (!nativeOk && !splOk && !tok22Ok) {
-        setState({ status: "error", positions: [], error: LIVE_WALLET_ERROR_ALL });
+        setState({ status: "error", positions: [], error: LIVE_WALLET_ERROR_ALL, loading: false });
         return;
       }
 
@@ -601,7 +603,7 @@ export function useWalletPortfolio(): WalletPortfolio {
         warning = LIVE_WALLET_WARNING_TOKEN2022;
       }
 
-      setState({ status: "ready", positions, warning });
+      setState({ status: "ready", positions, warning, loading: true });
 
       // PHASE 3 — two best-effort enrichments in parallel, then one merged update:
       //   (a) APY for yield-bearing rows (LSTs + Ondo USDY).
@@ -696,13 +698,13 @@ export function useWalletPortfolio(): WalletPortfolio {
         }
       }
 
-      if (apys.size > 0 || extraPositions.length > 0 || pricedAsOf != null) {
-        setState({ status: "ready", positions: merged, warning, pricedAsOf });
-      }
+      // Final update of the read: apply any APY/LP/price changes and clear the
+      // loading flag (always runs, even if nothing changed, so skeletons resolve).
+      setState({ status: "ready", positions: merged, warning, pricedAsOf, loading: false });
     })().catch(() => {
       // Defensive: never leave a stuck loading state.
       if (cancelled || myReq !== reqId.current) return;
-      setState({ status: "error", positions: [], error: LIVE_WALLET_ERROR_ALL });
+      setState({ status: "error", positions: [], error: LIVE_WALLET_ERROR_ALL, loading: false });
     });
 
     return () => {

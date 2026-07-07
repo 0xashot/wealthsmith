@@ -9,7 +9,7 @@
  * suggestions — those require pricing/product logic that does not exist yet, so
  * the UI shows safe "unavailable" states instead of fixture values.
  */
-import type { WalletPosition } from "./walletPosition";
+import { lookupMint, type WalletPosition } from "./walletPosition";
 
 export interface WalletSummary {
   /** Total detected positions (native SOL + non-zero token accounts). */
@@ -213,4 +213,82 @@ export function deriveValueBreakdown(positions: WalletPosition[]): ValueBreakdow
   // "Unpriced" = a real holding (has an amount) with no sourced value.
   const anyUnpriced = positions.some((p) => typeof p.uiAmount === "number" && p.valueUsd == null);
   return { totalUsd, anyUnpriced, byCategory };
+}
+
+/* ------------------------------------------------------------------ *
+ * Safety Buffer — a cautious stablecoin reserve view. Counts ONLY
+ * recognized stablecoins the wallet holds PLUS stablecoin-denominated
+ * protocol positions (e.g. USDC supplied to a Kamino vault). Volatile
+ * assets are never counted. Requires sourced prices + a monthly-expenses
+ * input; otherwise it stays unavailable (never fixture $800/$3,000).
+ * ------------------------------------------------------------------ */
+
+/** True when a mint is a recognized stablecoin (registry symbol in STABLE_SYMBOLS). */
+function isStableMint(mint: string): boolean {
+  const sym = lookupMint(mint)?.symbol;
+  return sym != null && STABLE_SYMBOLS.has(sym);
+}
+
+/**
+ * A position's stablecoin USD value, or 0 if it isn't a pure stablecoin holding:
+ *  - a recognized wallet stablecoin (USDC/USDT/USDH/DAI), or
+ *  - a protocol position whose legs are ALL recognized stablecoins with no debt
+ *    (e.g. USDC supplied to Kamino). An LP pair with a volatile leg does NOT count.
+ * Only counts when a sourced valueUsd exists.
+ */
+function stableValueOf(p: WalletPosition): number {
+  if (typeof p.valueUsd !== "number") return 0;
+  if (isStablecoin(p)) return p.valueUsd;
+  if (
+    p.type === "protocol" &&
+    p.legs &&
+    p.legs.length > 0 &&
+    p.legs.every((l) => l.side !== "debt" && isStableMint(l.mint))
+  ) {
+    return p.valueUsd;
+  }
+  return 0;
+}
+
+/** Total sourced USD across stablecoin holdings (wallet + supplied USDC, etc.). */
+export function deriveStableValue(positions: WalletPosition[]): number {
+  return positions.reduce((s, p) => s + stableValueOf(p), 0);
+}
+
+export interface SafetyBuffer {
+  /** Stablecoin reserve value (USD). */
+  stableUsd: number;
+  /** Target reserve = monthlyExpenses × targetMonths. */
+  targetUsd: number;
+  targetMonths: number;
+  /** Coverage %, capped at 100 for the bar. */
+  coveragePct: number;
+  /** Months of expenses covered by the reserve (uncapped). */
+  monthsCovered: number;
+  fullyFunded: boolean;
+}
+
+/**
+ * Derive the Safety Buffer from the stablecoin reserve and monthly expenses.
+ * Returns null when expenses aren't known (caller also gates on prices being
+ * loaded, so a 0 reserve means genuinely no stablecoins — not "not priced").
+ */
+export function deriveSafetyBuffer(
+  positions: WalletPosition[],
+  monthlyExpenses: number | undefined,
+  targetMonths = 3
+): SafetyBuffer | null {
+  if (!(typeof monthlyExpenses === "number" && monthlyExpenses > 0)) return null;
+  const stableUsd = deriveStableValue(positions);
+  const targetUsd = monthlyExpenses * targetMonths;
+  const coveragePct = targetUsd > 0 ? Math.min(100, (stableUsd / targetUsd) * 100) : 0;
+  const monthsCovered = stableUsd / monthlyExpenses;
+  return {
+    stableUsd,
+    targetUsd,
+    targetMonths,
+    coveragePct,
+    monthsCovered,
+    fullyFunded: stableUsd >= targetUsd,
+  };
 }

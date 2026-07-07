@@ -380,6 +380,111 @@
   background: var(--color-feedback-danger-background-solid);
 }
 
+.progress__fill--success {
+  background: var(--color-feedback-success-background-solid);
+}
+
+.buffer__caption--ok {
+  color: var(--color-text-secondary);
+}
+
+/* ---------- Real-wallet dashboard sections (heading above card content) ---------- */
+
+.dash-section {
+  display: grid;
+  gap: var(--spacing-stack-gap-sm);
+}
+
+.dash-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-md);
+}
+
+.dash-section__title {
+  margin: 0;
+  font: var(--typography-heading-md-font);
+  color: var(--color-text-primary);
+}
+
+.dash-section__caption {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.hero-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-card-gap-md);
+}
+
+@media (max-width: 640px) {
+  .hero-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.hero-card__value {
+  font: var(--typography-metric-primary-font);
+  color: var(--color-text-primary);
+}
+
+.hero-card__value--muted {
+  color: var(--color-text-secondary);
+}
+
+/* ---------- Skeleton loading placeholders ---------- */
+
+.skeleton {
+  border-radius: var(--radius-control-sm);
+  background: linear-gradient(
+    90deg,
+    var(--color-subdued-neutral-background-default) 25%,
+    var(--color-border-subtle) 37%,
+    var(--color-subdued-neutral-background-default) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.skeleton--value {
+  height: 2rem;
+  width: 60%;
+}
+
+.skeleton--line {
+  height: 0.75rem;
+  width: 100%;
+}
+
+.skeleton--line-short {
+  height: 0.75rem;
+  width: 45%;
+}
+
+.skeleton--bar {
+  height: var(--spacing-stack-gap-sm);
+  width: 100%;
+  border-radius: var(--radius-control-pill);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
+
 /* ---------- Charts ---------- */
 
 /* the SVG coordinate width tracks the host's rendered width (1 unit =

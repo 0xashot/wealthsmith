@@ -222,6 +222,19 @@ export const SAFETY_BUFFER_NEEDS = "Safety Buffer needs expense and stablecoin d
 export const DETECTED_FROM_WALLET = "Detected from your connected wallet.";
 export const REAL_WALLET_NONE_DETECTED = "None detected in this wallet.";
 
+/** Financial Snapshot (real wallet) — two hero cards. */
+export const FS_TOTAL_VALUE_LABEL = "Total Portfolio Value";
+export const FS_TOTAL_VALUE_CAPTION = "Crypto + stablecoins, valued live.";
+export const FS_NET_CONTRIB_LABEL = "Net Contributions";
+export const FS_NET_CONTRIB_DESC = "Net contributions need transaction history.";
+
+/** Safety Buffer (real wallet) — stablecoin reserve vs monthly expenses. */
+export const SAFETY_BUFFER_CAPTION =
+  "Stablecoin reserve covering your monthly expenses before any investment actions. Includes stablecoins you hold plus USDC supplied to lending/vaults.";
+export const SAFETY_BUFFER_FUNDED =
+  "Fully funded — your stablecoin reserve covers your target.";
+export const SAFETY_BUFFER_COVERED_LEGEND = "Covered Buffer";
+
 /** Product section titles (approved product section names — reused live). */
 export const DASH_ASSET_MIX_TITLE = "Asset Mix";
 export const DASH_ASSET_MIX_CAPTION =
@@ -242,6 +255,11 @@ export const PRICES_SOURCE_NOTE = "Live prices via DefiLlama and Jupiter.";
 export const ALLOCATION_BY_VALUE_CAPTION =
   "Allocation by USD value. Excludes positions without a sourced price.";
 export const VALUE_EXCLUDES_UNPRICED = "Excludes positions without a sourced price.";
+/** Current vs Recommended Allocation — current is live; recommended is unavailable. */
+export const ALLOCATION_CURRENT_CAPTION =
+  "Your current mix by USD value. A recommended target mix needs your plan's allocation logic.";
+export const ALLOCATION_LABEL_CRYPTO = "Crypto";
+export const ALLOCATION_LABEL_STABLES = "Stables";
 
 /** Additional live-fact / category labels (counts + on-chain balances only). */
 export const REAL_WALLET_FACT_STAKE = "Native stake";

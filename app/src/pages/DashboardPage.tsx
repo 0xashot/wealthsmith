@@ -7,9 +7,9 @@
  * rule, fixture Portfolio Value ($15,500), Safety Buffer, Projected Growth,
  * Allocation, Top Pick, and suggestions must never be presented as the connected
  * wallet's real data (rules/financial-logic-boundaries.md). Those fixtures live
- * on only in Demo Mode and the example reference fixture (dev/tests). The live
- * wallet summary comes from RealWalletSummary (useWalletPortfolio); the full live
- * asset table lives on the Portfolio page.
+ * on only in Demo Mode and the example reference fixture (dev/tests). The Dashboard
+ * body (DashboardBody, shared with the disconnected + onboarding views) renders the
+ * four cards from live wallet reads; the full live asset table lives on Portfolio.
  *
  * Ask Smith AI is available in real-wallet mode with REAL-WALLET-SAFE content
  * (realWalletSmithAi.ts): it only explains the read-only connection and why some
@@ -24,14 +24,7 @@ import { useRef, useState } from "react";
 import { dashboardState as s } from "../state/dashboardState";
 import { realWalletSmithAiContent } from "../state/realWalletSmithAi";
 import {
-  ALLOCATION_EMPTY,
   CONNECT_WALLET_LABEL,
-  DISCONNECTED_DESCRIPTION,
-  DISCONNECTED_HELPER,
-  DISCONNECTED_TITLE,
-  GROWTH_EMPTY,
-  METRIC_NOT_AVAILABLE,
-  METRIC_UNAVAILABLE,
   SUGGESTIONS_EMPTY_DESCRIPTION,
   SUGGESTIONS_EMPTY_TITLE,
   REAL_WALLET_SUGGESTIONS_TITLE,
@@ -39,8 +32,7 @@ import {
 } from "../state/approvedCopy";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
-import FinancialSnapshot from "../components/FinancialSnapshot";
-import RealWalletSummary from "../components/RealWalletSummary";
+import DashboardBody from "../components/DashboardBody";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 import EmptyStateCard from "../components/EmptyStateCard";
 
@@ -56,6 +48,8 @@ interface Props {
   /** connected only: in-app page switch + active page (undefined disables nav) */
   activePage?: string;
   onNavigate?: (id: string) => void;
+  /** User's monthly expenses (from onboarding/goal) — for the live Safety Buffer. */
+  monthlyExpenses?: number;
 }
 
 export default function DashboardPage({
@@ -66,6 +60,7 @@ export default function DashboardPage({
   onCopyAddress,
   activePage,
   onNavigate,
+  monthlyExpenses,
 }: Props) {
   const connected = mode === "connected";
   const [railMode, setRailMode] = useState<RightRailMode>("suggestions");
@@ -84,14 +79,6 @@ export default function DashboardPage({
 
   // Opens the Connect Wallet modal (App owns it).
   const connectWallet = () => onConnectWallet();
-
-  // Disconnected snapshot: wallet-derived metric becomes unavailable
-  // (approved metric-card fallback); goal-settings metrics persist.
-  const disconnectedMetrics = s.financial_snapshot.metrics.map((m) =>
-    m.source === "connected_wallet_fixture"
-      ? { ...m, value: METRIC_NOT_AVAILABLE, note: METRIC_UNAVAILABLE }
-      : m
-  );
 
   return (
     <div className="app-shell">
@@ -117,29 +104,11 @@ export default function DashboardPage({
       <div className="dashboard">
         <main className="dashboard__main">
           <PageHeader header={s.page_header} />
-
-          {connected ? (
-            // Real connected wallet: live, read-only facts + safe unavailable
-            // states. No fixture financial values are shown.
-            <RealWalletSummary />
-          ) : (
-            <>
-              <EmptyStateCard
-                title={DISCONNECTED_TITLE}
-                description={DISCONNECTED_DESCRIPTION}
-                helper={DISCONNECTED_HELPER}
-                actionLabel={CONNECT_WALLET_LABEL}
-                onAction={connectWallet}
-              />
-              <FinancialSnapshot
-                title={s.financial_snapshot.title}
-                metrics={disconnectedMetrics}
-              />
-              <EmptyStateCard title={s.safety_buffer.title} description={METRIC_UNAVAILABLE} />
-              <EmptyStateCard title={s.projected_growth.title} description={GROWTH_EMPTY} />
-              <EmptyStateCard title={s.allocation.title} description={ALLOCATION_EMPTY} />
-            </>
-          )}
+          {/* One shared Dashboard body across connected + disconnected: the same
+              four cards, populated from live data where available, else safe
+              unavailable states. No wallet-connected / connect-wallet card here —
+              the Connect Wallet CTA lives in the nav. */}
+          <DashboardBody monthlyExpenses={monthlyExpenses} />
         </main>
 
         {connected && railMode === "ask_smith_ai" ? (

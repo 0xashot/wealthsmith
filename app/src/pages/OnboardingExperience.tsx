@@ -21,23 +21,9 @@
  */
 import { dashboardState as s } from "../state/dashboardState";
 import { portfolioState as p } from "../state/portfolioState";
-import {
-  ALLOCATION_EMPTY,
-  CONNECT_WALLET_LABEL,
-  DISCONNECTED_DESCRIPTION,
-  DISCONNECTED_HELPER,
-  DISCONNECTED_TITLE,
-  GROWTH_EMPTY,
-  METRIC_NOT_AVAILABLE,
-  METRIC_UNAVAILABLE,
-  ONBOARDING_PREVIEW_TITLE,
-  ONBOARDING_PREVIEW_DESC,
-  ONBOARDING_PREVIEW_METRIC,
-} from "../state/approvedCopy";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
-import EmptyStateCard from "../components/EmptyStateCard";
-import FinancialSnapshot from "../components/FinancialSnapshot";
+import DashboardBody from "../components/DashboardBody";
 import DeploymentOverview from "../components/DeploymentOverview";
 import LiquidAssetsSection from "../components/LiquidAssetsSection";
 import StakedAssetsSection from "../components/StakedAssetsSection";
@@ -86,22 +72,8 @@ export default function OnboardingExperience({
 }: Props) {
   const connected = mode === "connected";
 
-  // Left-preview empty copy: once a wallet is connected (goal still incomplete)
-  // the preview must not use disconnected "connect a wallet" copy (the wallet
-  // pill is visible). It switches to the connected/incomplete-setup empty state.
-  const previewTitle = connected ? ONBOARDING_PREVIEW_TITLE : DISCONNECTED_TITLE;
-  const previewDesc = connected ? ONBOARDING_PREVIEW_DESC : DISCONNECTED_DESCRIPTION;
-  const metricHelper = connected ? ONBOARDING_PREVIEW_METRIC : METRIC_UNAVAILABLE;
-  const allocationHelper = connected ? ONBOARDING_PREVIEW_METRIC : ALLOCATION_EMPTY;
-
-  const previewMetrics = s.financial_snapshot.metrics.map((m) =>
-    m.source === "connected_wallet_fixture"
-      ? { ...m, value: METRIC_NOT_AVAILABLE, note: metricHelper }
-      : m
-  );
-
   // Main column: Portfolio view / read-only Goal summary during the tour, else
-  // the starter/empty preview. The sidebar (OnboardingPanel) is unchanged.
+  // the shared Dashboard body preview. The sidebar (OnboardingPanel) is unchanged.
   let mainColumn;
   if (connected && tourStage === "portfolio") {
     mainColumn = (
@@ -129,20 +101,14 @@ export default function OnboardingExperience({
       />
     );
   } else {
+    // Same Dashboard body as the connected + disconnected Dashboard, so the layout
+    // is identical across onboarding / connected / not-connected. Live data
+    // populates what it can; the rest shows safe unavailable states. No "finish
+    // setting up" / "connect wallet" card — the onboarding panel drives that.
     mainColumn = (
       <>
         <PageHeader header={s.page_header} />
-        <EmptyStateCard
-          title={previewTitle}
-          description={previewDesc}
-          helper={DISCONNECTED_HELPER}
-          actionLabel={connected ? undefined : CONNECT_WALLET_LABEL}
-          onAction={connected ? undefined : onConnectWallet}
-        />
-        <FinancialSnapshot title={s.financial_snapshot.title} metrics={previewMetrics} />
-        <EmptyStateCard title={s.safety_buffer.title} description={metricHelper} />
-        <EmptyStateCard title={s.projected_growth.title} description={GROWTH_EMPTY} />
-        <EmptyStateCard title={s.allocation.title} description={allocationHelper} />
+        <DashboardBody />
       </>
     );
   }
