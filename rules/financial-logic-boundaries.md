@@ -822,6 +822,69 @@ Show "—" when there's no wallet, the RPC isn't Helius, or history can't be rea
 Never fabricate a contributions figure.
 ```
 
+### Projected Growth (real connected wallet) — PROPOSED, pending approval
+
+> STATUS: **PROPOSED — not yet approved.** These are deterministic assumptions for a
+> real-wallet Projected Growth estimate. Per `rules/financial-logic-boundaries.md`
+> ("do not invent projection assumptions") they must be **explicitly approved**
+> before the projection is implemented. Until approved, real-wallet Projected Growth
+> stays in its unavailable state. Demo Mode keeps its own fixture projection.
+
+Deterministic product logic only — NOT AI-generated. Smith AI may explain the
+result but must never generate or alter it. It is an ESTIMATE, never a guarantee.
+
+**Proposed annual return by risk level** (from saved Goal Settings `risk_tolerance`):
+
+```text
+very_low  → 2% / year
+low       → 4% / year
+medium    → 6% / year
+high      → 8% / year
+very_high → 10% / year
+```
+
+**Proposed time-horizon → months** (from Goal Settings `timeline`):
+
+```text
+6_months      → 6
+1_year        → 12
+2_years       → 24
+5_years       → 60
+10_plus_years → 120
+not_sure_yet  → unavailable (no horizon → no projection)
+```
+
+**Inputs (all sourced, none invented):**
+
+```text
+startingValueUsd   = sum of PRICED live positions only (tokenPrices.ts). Excludes
+                     unpriced/unknown assets; never counts APY as value. If some
+                     assets are unpriced → show a partial-pricing warning.
+monthlyContribution= Goal Settings monthly_saving_goal ONLY. Do NOT infer from
+                     income − expenses. Missing → unavailable state.
+months             = horizon mapping above. not_sure_yet / missing → unavailable.
+annualReturnRate   = approved assumption for the saved risk level (above).
+```
+
+**Deterministic formula (monthly compounding):**
+
+```text
+monthlyRate = annualReturnRate / 12
+if monthlyRate > 0:
+  futureValue = startingValueUsd * (1 + monthlyRate)^months
+              + monthlyContribution * (((1 + monthlyRate)^months − 1) / monthlyRate)
+else:
+  futureValue = startingValueUsd + monthlyContribution * months
+totalContributions = monthlyContribution * months
+estimatedGrowth    = futureValue − startingValueUsd − totalContributions
+```
+
+**Card shows** (real wallet, when all inputs exist): starting value, projected value
+at horizon, total contributions, estimated growth, the risk assumption used, and a
+pricing-coverage warning if any position is unpriced. Missing inputs → the polished
+unavailable state (never fixture/demo numbers). Editing saving goal / horizon / risk
+may update the projection; it never updates Suggestions or Top Pick.
+
 See `patterns/wallet-connection.md` (Data Mode Separation) and
 `app/src/state/portfolioDataSource.ts`.
 
