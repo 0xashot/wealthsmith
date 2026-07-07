@@ -6,7 +6,7 @@
 
 **Status:** Committed to `wealthsmith-design-system` (branch `main`, ahead of `origin/main`). All code under `app/`. Related design docs: [`patterns/wallet-connection.md`](../patterns/wallet-connection.md), [`rules/wallet-and-custody-rules.md`](../rules/wallet-and-custody-rules.md), [`docs/wallet-ledger-connection-handoff.md`](./wallet-ledger-connection-handoff.md), [`docs/kamino-position-detection-plan.md`](./kamino-position-detection-plan.md).
 
-> **One rule above all:** every path here is **READ-ONLY**. Nothing signs, sends, or moves funds. No `signMessage` / `signTransaction` / `signAllTransactions` / `sendTransaction` is ever called — not on connect, not on read. See §5 and §11.
+> **One rule above all:** every path here is **READ-ONLY**. Nothing signs, sends, or moves funds. No `signMessage` / `signTransaction` / `signAllTransactions` / `sendTransaction` is ever called — not on connect, not on read. See §5 and §12.
 
 ---
 
@@ -287,22 +287,53 @@ Defined in `app/src/state/portfolioDataSource.ts` → `PortfolioDataSource = "de
 |---|---|---|
 | **Disconnected onboarding** | No wallet, not demo | Onboarding / empty states own this surface — no portfolio data source |
 | **Demo fixture mode** (`demo_fixture`) | Demo Mode active | Sample fixtures + sample Smith-AI suggestions (the `$15,500`-style demo data) |
-| **Real connected wallet** (`real_wallet`) | Real wallet connected | **Live read-only wallet facts only** + safe "unavailable" states — **no fixture values** |
+| **Real connected wallet** (`real_wallet`) | Real wallet connected | **Target:** live read-only wallet facts + safe "unavailable" states, never fixtures. **Fully realized today on the Live Wallet Assets table + wallet pill** (see prototype scope below). |
 
-Clarifications (enforced, per [`rules/financial-logic-boundaries.md`](../rules/financial-logic-boundaries.md) Demo Mode Boundary):
+**The rule** (enforced target, per [`rules/financial-logic-boundaries.md`](../rules/financial-logic-boundaries.md) Demo Mode Boundary):
 
-- Demo fixtures are **only** for Demo Mode.
-- Real wallet mode **must not** show dummy `$15,500` fixture data.
-- Real wallet mode shows only live read-only wallet facts and safe unavailable states.
+- Demo fixtures are **only** for Demo Mode; they must never render in real-wallet mode.
+- Real-wallet mode must never present fixture values as the user's holdings — every real-wallet surface is either **live** or shows an explicit **"unavailable"** state.
 - The `example_fixture` source (`examples/dashboard/dashboard-connected-wallet-state.json`) is **dev/test/storybook/reference ONLY** — never the normal real-wallet flow.
 
-> **Port note:** in the prototype the connected Dashboard/Goal/Support pages are still fixture-backed for layout; only the wallet **pill** and the **Live Wallet Assets** table are live. In production, the real-wallet surfaces must be fully live or explicitly show "unavailable" — never fixtures.
+> **Prototype scope — resolves the apparent contradiction below.** The rule above is the *target*. In the **current prototype** it is **fully realized on the Live Wallet Assets table and the wallet pill only** — those are 100% live and fixture-free. The connected **Dashboard / Goal / Support** pages are **still prototype layouts**: scaffolded with fixture-shaped content purely for visual layout, and they do **not** yet meet the rule. This is a **known, tracked prototype gap — not the intended end state.**
+>
+> So, precisely: the connected **Dashboard is not yet "live summary only"; it is "prototype layout, still partial."** Before production it must become live-summary-only (driven by `walletSummary.ts` over real `WalletPosition[]`) or show explicit "unavailable" states — never fixtures. Tracked as a production blocker (§11) and a known limitation (§12).
 
 ---
 
 ## 8. Protocol Detection Inventory
 
 Legend — **Detection kind:** `direct` = held-token balance, `lst_mint` = recognized LST mint, `api/sdk` = protocol API or SDK. **Needs:** `RPC` and/or `API`. **APY source** noted where present. Every detector is READ-ONLY, best-effort, and lazy-loaded unless it's plain token parsing.
+
+**Implementation status taxonomy** (engineering: read this column before porting each detector):
+
+- **✅ Verified manually (in-app)** — exercised end-to-end through a real connected wallet in the running UI.
+- **🧪 Verified by module test** — the detector module was run against a **real on-chain holder address** via a dev eval and returned correct amounts. This validates the detection logic **but not the full connected-wallet phase-3 pipeline or the UI rendering.**
+- **🔍 Needs real-wallet QA** — must still be exercised end-to-end with a connected wallet that actually holds the position (nearly all detectors carry this, on top of 🧪).
+- **⏸ Partial / deferred** — implemented for detection but a sub-part (e.g. an APY source) is intentionally not done.
+
+> **Important:** almost every protocol below is **🧪 module-tested, not ✅ in-app verified.** Verification during development was done by running each module against a known on-chain holder (found via `getTokenLargestAccounts` / bounded `getProgramAccounts`) — **not** by connecting a wallet that holds each position type. Real-wallet QA (🔍) across a matrix of holder wallets is a production blocker (§11). Observed amounts/APYs below are **point-in-time snapshots from when detection was tested** — they are live values read on-chain/from APIs, **never hardcoded**.
+
+### Status summary
+
+| Protocol / detector | Status | Notes |
+|---|---|---|
+| Native SOL | ✅ Verified manually (in-app) | Read via the connected dev wallet |
+| Native stake | 🧪 Module-tested · 🔍 needs real-wallet QA | Real holder: 6 accounts merged |
+| Jupiter (JupSOL) | 🧪 APY path module-tested · 🔍 needs real-wallet QA | Detection is registry-based (trivial); stake-pool APY exercised |
+| Marinade (mSOL) | 🧪 Module-tested · 🔍 needs real-wallet QA | Marinade API APY |
+| Jito (JitoSOL) | 🧪 Module-tested · 🔍 needs real-wallet QA | Real holder |
+| Jito Restaking (VRT) | 🧪 Map module-tested · 🔍 needs real-wallet QA · ⏸ reward APY deferred | VRT-holder display path unverified against a real VRT holder |
+| Sanctum (LST universe) | 🧪 Module-tested (INF) · 🔍 needs real-wallet QA | ~245-mint registry from CDN |
+| Kamino lending | 🧪 Module-tested · 🔍 needs real-wallet QA | Real obligation holder |
+| Kamino Earn vaults | 🧪 Module-tested · 🔍 needs real-wallet QA | Heaviest SDK chunk (~10 MB) |
+| Hubble (USDH loans) | 🧪 Module-tested · 🔍 needs real-wallet QA | Real borrower; deprecated protocol |
+| Meteora DLMM | 🧪 Module-tested · 🔍 needs real-wallet QA | Owner-based |
+| Meteora DAMM | 🧪 Module-tested · 🔍 needs real-wallet QA | Needs web3.js dedupe override |
+| Orca Whirlpools | 🧪 Module-tested (incl. bundles) · 🔍 needs real-wallet QA | WASM math |
+| Raydium CLMM | 🧪 Module-tested · 🔍 needs real-wallet QA | WASM math + API |
+| Raydium AMM/CPMM | 🧪 Module-tested · 🔍 needs real-wallet QA | Fungible LP + API |
+| Ondo (USDY) | 🧪 Module-tested · 🔍 needs real-wallet QA | DefiLlama APY; yield-bearing |
 
 ### Jupiter (JupSOL)
 - **Detection:** recognized LST mint (`jupSoLaHXQ…`). **Kind:** `lst_mint`. **Needs:** RPC.
@@ -316,11 +347,11 @@ Legend — **Detection kind:** `direct` = held-token balance, `lst_mint` = recog
 - **Detection:** recognized LST mint (`mSoLzYCx…`). **Kind:** `lst_mint`. **Needs:** RPC + API (APY).
 - **File:** `walletPosition.ts` + `lstApy.ts`.
 - **Output:** `type:"lst"`, `source:"wallet"`, `protocol:"Marinade"`, amount, APY.
-- **APY:** `https://api.marinade.finance/msol/apy/30d` (public, keyless). **Verified:** ~5.90%.
+- **APY:** `https://api.marinade.finance/msol/apy/30d` (public, keyless). **Observed** ≈5.90% at time of testing (live, time-varying — not hardcoded).
 - **Limitations:** APY depends on Marinade API uptime. **Test:** hold mSOL.
 
 ### Jito — JitoSOL (LST) and Jito Restaking (VRT)
-- **JitoSOL:** recognized LST mint (`J1toso1u…`), `lst_mint`, APY from on-chain stake pool. **Verified:** 65,498 JitoSOL holder.
+- **JitoSOL:** recognized LST mint (`J1toso1u…`), `lst_mint`, APY from on-chain stake pool. **Module-tested** against a real holder (≈65,498 JitoSOL at time of testing).
 - **Restaking VRT:** **Kind:** `api/sdk`. **File:** `wallet/jitoRestaking.ts` (`@jito-foundation/vault-sdk`). Enumerates Jito vaults on-chain → VRT-mint→underlying map; a held VRT becomes "Restaked on Jito" denominated in the underlying (e.g. JitoSOL) via the vault exchange rate. **Needs:** RPC.
 - **APY:** JitoSOL = stake-pool APY; **restaking-reward APY has no clean read source → `—`** (do not invent).
 - **Test:** hold JitoSOL and/or a Jito VRT.
@@ -330,36 +361,36 @@ Legend — **Detection kind:** `direct` = held-token balance, `lst_mint` = recog
 - **File:** `wallet/sanctumLsts.ts` (fetches/caches the list) + `lstApy.ts`.
 - **Source list:** `https://cdn.jsdelivr.net/gh/igneous-labs/sanctum-lst-list/...` (TOML, keyless).
 - **Output:** `type:"lst"`, `source:"sanctum"`, `protocol:"Sanctum"`, amount, APY.
-- **APY:** on-chain stake-pool math (searches SPL + Sanctum stake-pool programs). Special-cased: **INF** via DefiLlama. **Verified:** INF ~5.83%.
+- **APY:** on-chain stake-pool math (searches SPL + Sanctum stake-pool programs). Special-cased: **INF** via DefiLlama. **Observed** INF ≈5.83% APY at time of testing (live, time-varying).
 - **Limitations:** APY only for pools whose stake-pool account is found. **Test:** hold any Sanctum LST (e.g. INF).
 
 ### Kamino — Lending and Earn Vaults
 - **Lending:** **Kind:** `api/sdk`. **File:** `wallet/protocolPositions.ts`. Reads obligations from Kamino's public REST API `https://api.kamino.finance` (`/v2/kamino-market` lists all ~33 markets; then `/kamino-market/{market}/users/{owner}/obligations`), and resolves each reserve's underlying mint **on-chain** (reserve liquidity-mint offset). **Needs:** RPC + API.
 - **Earn Vaults:** **Kind:** `api/sdk`. **File:** `wallet/kaminoVaults.ts` (`@kamino-finance/klend-sdk`, takes `rpcUrl`). Detects vault shares **including farm-staked shares** (not held in-wallet as tokens). **Needs:** RPC (heavy).
-- **Output:** `source:"kamino"`, `type:"protocol"`, `side:"supplied"|"borrowed"`, amount. **Verified:** Steakhouse USDC 15,220.28 USDC @ 3.64%.
+- **Output:** `source:"kamino"`, `type:"protocol"`, `side:"supplied"|"borrowed"`, amount. **Observed** at time of testing: Steakhouse USDC ≈15,220.28 USDC at ≈3.64% APY (balance and APY are live, time-varying — not hardcoded).
 - **Limitations:** vault SDK is the heaviest chunk (~10 MB). **Test:** hold a Kamino deposit/borrow or vault position.
 
 ### Hubble (USDH loans / CDP)
 - **Detection:** owner-based loans via `@hubbleprotocol/hubble-sdk` `getUserLoans`. **Kind:** `api/sdk`. **File:** `wallet/hubble.ts`. **Needs:** RPC.
 - **What:** collateral (SOL, mSOL, ETH, BTC…) + minted USDH debt → a "Hubble Loan" borrow row, e.g. `13,752.54 USDH debt · 335.5 SOL`.
-- **Why the SDK (not raw decode):** the on-chain debt field **understates** true debt — liquidation losses are redistributed pro-rata via the borrowing-market state; the SDK returns the redistribution-adjusted debt. **Verified:** raw 12,916 → true 13,752 USDH.
+- **Why the SDK (not raw decode):** the on-chain debt field **understates** true debt — liquidation losses are redistributed pro-rata via the borrowing-market state; the SDK returns the redistribution-adjusted debt. **Module-tested** against a real borrower (at time of testing: raw field ≈12,916 → true debt ≈13,752 USDH; both live/time-varying).
 - **APY:** `—` (interest-free borrow, one-time fee, no ongoing APR). USDH the token is registered separately (`source:"hubble"`, non-yield, no APY).
 - **Limitations:** deprecated protocol (~147 active loans); SDK is heavy (~2.4 MB chunk). **Test:** module-test against a known borrower (see §Appendix).
 
 ### Meteora — DLMM and DAMM
-- **DLMM:** **Kind:** `api/sdk`, owner-based. **File:** `wallet/meteoraDlmm.ts` (`@meteora-ag/dlmm`, `getAllLbPairPositionsByUser`). Aggregates bin amounts per pair. **Verified:** SOL/USDC 0.3971 + 153.85. **APY:** `—`.
-- **DAMM:** **Kind:** `api/sdk`, held fungible LP tokens. **File:** `wallet/meteoraDamm.ts`. No API lookup-by-LP-mint (80k+ pools), so the pool is found **on-chain** (`Pool.lp_mint` @ offset 8) then valued with `@meteora-ag/dynamic-amm-sdk` (`AmmImpl`) → `yourLP / lpSupply × reserves`. **Verified:** MAGA/USDC 170.4M + 4.76M. **APY:** `—`.
+- **DLMM:** **Kind:** `api/sdk`, owner-based. **File:** `wallet/meteoraDlmm.ts` (`@meteora-ag/dlmm`, `getAllLbPairPositionsByUser`). Aggregates bin amounts per pair. **Module-tested:** SOL/USDC ≈0.3971 + ≈153.85 at time of testing. **APY:** `—`.
+- **DAMM:** **Kind:** `api/sdk`, held fungible LP tokens. **File:** `wallet/meteoraDamm.ts`. No API lookup-by-LP-mint (80k+ pools), so the pool is found **on-chain** (`Pool.lp_mint` @ offset 8) then valued with `@meteora-ag/dynamic-amm-sdk` (`AmmImpl`) → `yourLP / lpSupply × reserves`. **Module-tested:** MAGA/USDC ≈170.4M + ≈4.76M at time of testing. **APY:** `—`.
 - **Needs:** RPC. **Limitations:** DAMM requires the web3.js dedupe override (§2).
 
 ### Orca (Whirlpools — CLMM)
 - **Detection:** on-chain Position accounts (incl. position bundles) from held NFT mints; valued with `@orca-so/whirlpools-core` WASM (`decreaseLiquidityQuote`). **Kind:** `api/sdk`. **File:** `wallet/orcaWhirlpools.ts`. **Needs:** RPC + API (APR).
-- **Output:** `source:"orca"`, `type:"protocol"`, `symA/symB` amounts. **Verified:** SOL/USDC 0.0087 + 0.7048, plus a bundle SOL/$michi.
+- **Output:** `source:"orca"`, `type:"protocol"`, `symA/symB` amounts. **Module-tested:** SOL/USDC ≈0.0087 + ≈0.7048 (plus a bundle SOL/$michi) at time of testing.
 - **APY:** pool fee APR from `https://api.mainnet.orca.so/v1/whirlpool/list`.
 - **Test:** hold an Orca Whirlpool position (or a bundle).
 
 ### Raydium — CLMM and classic AMM/CPMM
-- **CLMM:** **Kind:** `api/sdk`. **File:** `wallet/raydiumClmm.ts`. On-chain `PersonalPositionState` (program `CAMMCzo5…`) + reuse Orca WASM math for amounts; pool meta from `https://api-v3.raydium.io/pools/info/ids`. **Verified:** 4 pairs.
-- **AMM/CPMM:** **Kind:** `api/sdk`, held fungible LP tokens. **File:** `wallet/raydiumAmm.ts`. Resolves LP token via `https://api-v3.raydium.io/pools/info/lps?lps=` → `yourLP / lpSupply × reserves`. **Verified:** 20,870 Old Slerf + 3.99 WSOL.
+- **CLMM:** **Kind:** `api/sdk`. **File:** `wallet/raydiumClmm.ts`. On-chain `PersonalPositionState` (program `CAMMCzo5…`) + reuse Orca WASM math for amounts; pool meta from `https://api-v3.raydium.io/pools/info/ids`. **Module-tested:** 4 pairs resolved at time of testing.
+- **AMM/CPMM:** **Kind:** `api/sdk`, held fungible LP tokens. **File:** `wallet/raydiumAmm.ts`. Resolves LP token via `https://api-v3.raydium.io/pools/info/lps?lps=` → `yourLP / lpSupply × reserves`. **Module-tested:** ≈20,870 Old Slerf + ≈3.99 WSOL at time of testing.
 - **Needs:** RPC + API. **APY:** pool APR available from the Raydium API where returned; else `—`.
 - **Test:** hold a Raydium CLMM position or a classic LP token.
 
@@ -367,14 +398,14 @@ Legend — **Detection kind:** `direct` = held-token balance, `lst_mint` = recog
 - **Detection:** recognized token mint (`A1KLoBrK…`). **Kind:** `direct`/`lst_mint`-style token. **Needs:** RPC + API (APY).
 - **File:** `walletPosition.ts` (registry, `source:"ondo"`) + `lstApy.ts`.
 - **Output:** `type:"token"`, `protocol:"Ondo"`, amount, APY.
-- **APY:** DefiLlama `https://yields.llama.fi/chart/{poolId}` (USDY pool id). **Verified:** ~3.55%. (USDY **is** yield-bearing — contrast with USDH.)
+- **APY:** DefiLlama `https://yields.llama.fi/chart/{poolId}` (USDY pool id). **Observed** ≈3.55% at time of testing (live, time-varying). (USDY **is** yield-bearing — contrast with USDH.)
 - **Test:** hold USDY.
 
 ### Native SOL & Native Stake (baseline, not a third-party protocol)
 - **Native SOL:** `getBalance` → `type:"native"`.
-- **Native stake:** `wallet/protocolPositions.ts` — `getParsedProgramAccounts` on the Stake program (`Stake111…`) filtered by the wallet's withdraw authority (offset 44); merges accounts. **Kind:** `native_stake`. **Verified:** 6 accounts merged → 30.79 SOL @ 5.24%.
+- **Native stake:** `wallet/protocolPositions.ts` — `getParsedProgramAccounts` on the Stake program (`Stake111…`) filtered by the wallet's withdraw authority (offset 44); merges accounts. **Kind:** `native_stake`. **Module-tested:** 6 accounts merged → ≈30.79 SOL at ≈5.24% APY at time of testing (live, time-varying).
 
-> **Not implemented / not detected** (do not claim support): raw perps/futures positions, lending on protocols other than Kamino, NFT valuation, non-Solana chains, USD valuation of any position. See §11.
+> **Not implemented / not detected** (do not claim support): raw perps/futures positions, lending on protocols other than Kamino, NFT valuation, non-Solana chains, USD valuation of any position. See §12.
 
 ---
 
@@ -446,21 +477,35 @@ Port these files/patterns into the production app, preserving the read-only cont
 
 ---
 
-## 11. Known Limitations
+## 11. Production Blockers Before Port
+
+These must be resolved before this ships in the real app. Each is a hard gate, not a nice-to-have.
+
+- [ ] **Dedicated production RPC.** Provision a keyed RPC (Helius / QuickNode / Alchemy / Triton) via `VITE_SOLANA_RPC_URL` that reliably serves `getParsedTokenAccountsByOwner` and `getProgramAccounts` at expected traffic. Confirm rate limits/SLA, and keep the key server-side or in a secret store — never committed. Public/default RPC is not acceptable for production (§3).
+- [ ] **Large-/complex-wallet testing.** Test wallets with many token accounts and many concurrent positions: verify pagination, the phase-2/phase-3 timeouts (§6) are appropriate under load, no UI jank, and no missed positions. Establish worst-case read latency.
+- [ ] **SDK bundle strategy.** Code-splitting is in place, but the Kamino (~10 MB) and Hubble (~2.4 MB) chunks are large (§2). Decide: lazy-load-on-demand gating, feature flags per protocol, `manualChunks` tuning, and/or moving heavy detection **server-side**. Set a bundle budget and enforce it in CI.
+- [ ] **Error monitoring / observability.** The current diagnostics are `import.meta.env.DEV`-only `console.info` (§6). Replace with real telemetry: per-protocol success/failure rates, read latencies, RPC error classes, and alerting. Users must never see a raw error; partial-read warnings must be tracked.
+- [ ] **Protocol-by-protocol QA wallets.** Assemble a matrix of test wallets, each actually **holding** one position type (native stake, each LST, Kamino lend/borrow/vault, Jito VRT, Hubble loan, Meteora DLMM/DAMM, Orca, Raydium CLMM/AMM, Ondo), and run every detector **end-to-end through the connected-wallet UI** (moving each 🧪 to ✅ in §8). Include empty-wallet and unsupported-token cases.
+- [ ] **Security review.** Audit the read-only invariant (no signing path anywhere — §5), including Ledger connect. Review the third-party SDK **supply chain** (the dependency trees are large — Hubble alone ~400 packages), pin/lock versions, and vet the external HTTP endpoints (§12 Appendix) for trust and failure handling. Confirm no secret leaks in the bundle.
+- [ ] **Data-mode completion.** Make the connected **Dashboard / Goal / Support** surfaces live (driven by real `WalletPosition[]` / `walletSummary.ts`) or show explicit "unavailable" states — remove all fixture-backed content from real-wallet mode (§7). This is the fix for the prototype gap called out in §7 and §12.
+
+---
+
+## 12. Known Limitations
 
 - **No USD valuation.** `valueUsd` is always `null` by design — no pricing source is wired.
 - **APY coverage is partial and source-gated.** Only LSTs (stake-pool math), mSOL (Marinade API), INF/USDY (DefiLlama), and some Orca/Raydium pools have APY. LP positions (Meteora, most Raydium/Orca), Jito Restaking rewards, and Hubble loans show `—`. These `—`s are **honest** and must not be backfilled with estimates.
 - **RPC-dependent.** Token/account/program reads need a dedicated RPC. On the public default, token reads and most protocol detectors return nothing (partial warning, not error).
 - **Bundle weight.** The Kamino (~10 MB) and Hubble (~2.4 MB) chunks are heavy (lazy-loaded, but large). Consider feature-flagging the heaviest detectors.
 - **Hubble is a deprecated protocol** (~147 active loans). Kept for completeness.
-- **Prototype surfaces still fixture-backed.** Only the wallet pill + Live Wallet Assets are live; connected Dashboard/Goal/Support are fixture layouts in the prototype (§7 port note).
+- **Prototype surfaces still fixture-backed.** Only the wallet pill + Live Wallet Assets are live; connected Dashboard/Goal/Support are still prototype layouts (fixture-shaped), a tracked gap that must be closed before production — see §7 (Prototype scope) and §11 (Data-mode completion).
 - **Web3.js single-copy dependency** on the override; a future SDK pinning a different web3.js version could reintroduce the duplicate-`Connection` hazard.
 - **No transaction capability at all** — deposits/withdrawals/swaps are out of scope by design (§5).
 - **Best-effort detection** — a slow/rate-limited RPC can time out an individual protocol read, silently omitting those rows.
 
 ---
 
-## 12. Appendix
+## 13. Appendix
 
 ### File map (`app/src/`)
 
