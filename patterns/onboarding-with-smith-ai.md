@@ -120,7 +120,7 @@ goal_completed = true only when all required Goal fields are saved:
   Monthly Income
   Monthly Expenses
   Contribution Frequency
-Monthly Saving Goal is optional and does not affect goal_completed.
+Monthly Contribution is required and gates goal_completed.
 ```
 
 Visibility is derived, not set manually:
@@ -1491,7 +1491,7 @@ contribution amount
 Optional depending on product scope:
 
 ```text
-monthly saving goal
+monthly contribution
 existing contribution history
 additional wallet addresses
 preferred stablecoin reserve target

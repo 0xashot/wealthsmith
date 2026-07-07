@@ -699,7 +699,7 @@ Financial Goal
 Risk Tolerance
 Income
 Expenses
-Monthly Saving Goal
+Monthly Contribution
 Contribution Frequency
 Timeline
 ```
@@ -725,7 +725,7 @@ Not allowed:
 ```text
 Immediately change recommendation cards from form fields alone.
 Assume Medium risk means a specific token allocation.
-Assume monthly saving goal should all be invested.
+Assume monthly contribution should all be invested.
 Generate a new Top Pick in the Goal form.
 ```
 
@@ -822,18 +822,17 @@ Show "—" when there's no wallet, the RPC isn't Helius, or history can't be rea
 Never fabricate a contributions figure.
 ```
 
-### Projected Growth (real connected wallet) — PROPOSED, pending approval
+### Projected Growth (real connected wallet) — APPROVED (MVP)
 
-> STATUS: **PROPOSED — not yet approved.** These are deterministic assumptions for a
-> real-wallet Projected Growth estimate. Per `rules/financial-logic-boundaries.md`
-> ("do not invent projection assumptions") they must be **explicitly approved**
-> before the projection is implemented. Until approved, real-wallet Projected Growth
-> stays in its unavailable state. Demo Mode keeps its own fixture projection.
+> STATUS: **APPROVED for MVP.** Deterministic product logic only — NOT AI-generated
+> and NOT financial advice. Smith AI may explain the result but must never generate
+> or alter it. It is an ESTIMATE, never a guarantee, and must never promise outcomes.
+> Demo Mode keeps its own fixture projection.
 
-Deterministic product logic only — NOT AI-generated. Smith AI may explain the
-result but must never generate or alter it. It is an ESTIMATE, never a guarantee.
+**Wording rule (required):** call these **"modeled annual return assumptions"** —
+never "expected returns", "predictions", "guarantees", or "advice".
 
-**Proposed annual return by risk level** (from saved Goal Settings `risk_tolerance`):
+**Modeled annual return assumptions by risk level** (saved Goal Settings `risk_tolerance`):
 
 ```text
 very_low  → 2% / year
@@ -843,7 +842,7 @@ high      → 8% / year
 very_high → 10% / year
 ```
 
-**Proposed time-horizon → months** (from Goal Settings `timeline`):
+**Time-horizon → months** (from Goal Settings `timeline`):
 
 ```text
 6_months      → 6
@@ -882,7 +881,7 @@ estimatedGrowth    = futureValue − startingValueUsd − totalContributions
 **Card shows** (real wallet, when all inputs exist): starting value, projected value
 at horizon, total contributions, estimated growth, the risk assumption used, and a
 pricing-coverage warning if any position is unpriced. Missing inputs → the polished
-unavailable state (never fixture/demo numbers). Editing saving goal / horizon / risk
+unavailable state (never fixture/demo numbers). Editing monthly contribution / horizon / risk
 may update the projection; it never updates Suggestions or Top Pick.
 
 See `patterns/wallet-connection.md` (Data Mode Separation) and

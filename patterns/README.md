@@ -314,7 +314,7 @@ Financial Goal
 Risk Tolerance
 Income
 Expenses
-Monthly Saving Goal
+Monthly Contribution
 Contribution Frequency
 Timeline
 Save Changes
@@ -326,7 +326,7 @@ Derived refresh behavior
 Important rules:
 
 - Goal page edits update structured plan state.
-- Monthly Saving Goal is optional.
+- Monthly Contribution is required.
 - Income and Expenses affect Safety Buffer and saving potential through product logic.
 - Risk Tolerance affects recommendations and projected assumptions through product logic.
 - Timeline affects Projected Growth through product logic.

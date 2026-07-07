@@ -21,8 +21,13 @@ import {
   deriveSafetyBuffer,
   formatUsd,
 } from "../wallet/walletSummary";
+import { deriveProjection } from "../wallet/projectedGrowth";
 import { dashboardState as s } from "../state/dashboardState";
+import { RISK_OPTIONS, labelFor } from "../state/goalState";
+import type { SavedGoal } from "../types/goal";
+import type { ProjectedGrowthState } from "../types/dashboard";
 import LegendMarker from "./LegendMarker";
+import ProjectedGrowthChart from "./ProjectedGrowthChart";
 import {
   REAL_WALLET_VALUE_DESC,
   FS_TOTAL_VALUE_LABEL,
@@ -34,7 +39,14 @@ import {
   SAFETY_BUFFER_FUNDED,
   SAFETY_BUFFER_COVERED_LEGEND,
   SAFETY_BUFFER_NEEDS,
-  PROJECTED_GROWTH_NEEDS,
+  PROJECTED_GROWTH_NO_PRICING,
+  PROJECTED_GROWTH_NO_CONTRIB,
+  PROJECTED_GROWTH_NO_HORIZON,
+  PROJECTED_GROWTH_NO_RISK,
+  PROJECTED_GROWTH_ESTIMATE,
+  PROJECTED_GROWTH_PARTIAL,
+  PG_LABEL_PROJECTED,
+  PG_MODELED_RETURN_PREFIX,
   ALLOCATION_NEEDS_PRICING,
   ALLOCATION_CURRENT_CAPTION,
   ALLOCATION_LABEL_CRYPTO,
@@ -70,15 +82,16 @@ function UnavailableCard({ text }: { text: string }) {
 }
 
 interface Props {
-  /** User's monthly expenses (from onboarding/goal) — for the Safety Buffer. */
-  monthlyExpenses?: number;
+  /** Saved plan (onboarding/Goal Settings) — Safety Buffer + Projected Growth. */
+  goal?: SavedGoal;
 }
 
-export default function DashboardBody({ monthlyExpenses }: Props) {
+export default function DashboardBody({ goal }: Props) {
   const { status, positions, warning, pricedAsOf, loading } = useWalletPortfolio();
   const contrib = useNetContributions();
   const value = deriveValueBreakdown(positions);
   const priced = value.totalUsd != null;
+  const monthlyExpenses = goal?.expenses_monthly;
 
   // Safety Buffer only once prices are loaded, so a 0 reserve is genuinely "no
   // stablecoins" rather than "not priced yet".
@@ -102,6 +115,53 @@ export default function DashboardBody({ monthlyExpenses }: Props) {
     `${ALLOCATION_LABEL_CRYPTO} ${formatUsd(cryptoUsd)} (${cryptoPct.toFixed(0)}%), ` +
     `${ALLOCATION_LABEL_STABLES} ${formatUsd(stableUsd)} (${stablePct.toFixed(0)}%). ` +
     `Recommended allocation unavailable.`;
+
+  // Deterministic Projected Growth — priced starting value + saved plan inputs.
+  const projection = deriveProjection({
+    startingValueUsd: value.totalUsd,
+    anyUnpriced: value.anyUnpriced,
+    monthlyContribution: goal?.monthly_saving_goal ?? null,
+    timeline: goal?.timeline,
+    riskTolerance: goal?.risk_tolerance,
+  });
+  const projectionUnavailableText =
+    projection.status === "no_pricing"
+      ? PROJECTED_GROWTH_NO_PRICING
+      : projection.status === "no_contribution"
+        ? PROJECTED_GROWTH_NO_CONTRIB
+        : projection.status === "no_horizon"
+          ? PROJECTED_GROWTH_NO_HORIZON
+          : PROJECTED_GROWTH_NO_RISK;
+
+  // Build the deterministic line-chart state (same chart component as Demo).
+  let projectionGrowth: ProjectedGrowthState | null = null;
+  if (projection.status === "ok" && goal) {
+    const p = projection.projection;
+    const modeledPct = Math.round(p.annualReturnRate * 100);
+    const riskLabel = labelFor(RISK_OPTIONS, goal.risk_tolerance);
+    const caption =
+      `${PG_MODELED_RETURN_PREFIX}: ${modeledPct}% (${riskLabel}). ` +
+      `${formatUsd(p.totalContributions)} contributed, ${formatUsd(p.estimatedGrowth)} estimated growth. ` +
+      `${PROJECTED_GROWTH_ESTIMATE}` +
+      (p.partial ? ` ${PROJECTED_GROWTH_PARTIAL}` : "");
+    projectionGrowth = {
+      title: "",
+      status: "ready",
+      display: { show_estimated_label: true, caption },
+      series: [
+        {
+          id: "projected_value",
+          label: PG_LABEL_PROJECTED,
+          type: "line",
+          points: p.points.map((pt) => ({
+            year: pt.months / 12,
+            value_usd: pt.valueUsd,
+            label: pt.label,
+          })),
+        },
+      ],
+    };
+  }
 
   const totalCaption = priced
     ? FS_TOTAL_VALUE_CAPTION + (value.anyUnpriced ? " · excludes unpriced positions" : "")
@@ -213,9 +273,26 @@ export default function DashboardBody({ monthlyExpenses }: Props) {
         )}
       </DashSection>
 
-      {/* Projected Growth — unavailable until pricing + contribution logic exist. */}
+      {/* Projected Growth — deterministic modeled estimate from priced value + plan. */}
       <DashSection title={s.projected_growth.title}>
-        <UnavailableCard text={PROJECTED_GROWTH_NEEDS} />
+        {loading ? (
+          <div className="card">
+            <div className="snapshot__grid">
+              <div className="metric">
+                <span className="skeleton skeleton--line-short" />
+                <span className="skeleton skeleton--value" />
+              </div>
+              <div className="metric">
+                <span className="skeleton skeleton--line-short" />
+                <span className="skeleton skeleton--value" />
+              </div>
+            </div>
+          </div>
+        ) : projectionGrowth ? (
+          <ProjectedGrowthChart growth={projectionGrowth} />
+        ) : (
+          <UnavailableCard text={projectionUnavailableText} />
+        )}
       </DashSection>
 
       {/* Current vs Recommended Allocation — current is live; recommended unavailable. */}

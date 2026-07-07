@@ -18,7 +18,7 @@ The Goal page should let users review and update:
 - Risk tolerance
 - Monthly income
 - Monthly expenses
-- Monthly saving goal
+- Monthly Contribution
 - Contribution frequency
 - Timeline
 
@@ -65,7 +65,7 @@ Use this pattern when:
 - User opens the Goal nav tab.
 - User reviews their current plan.
 - User turns on Edit Mode.
-- User updates financial goal, risk, income, expenses, saving goal, contribution cadence, or timeline.
+- User updates financial goal, risk, income, expenses, monthly contribution, contribution cadence, or timeline.
 - User saves changes.
 - User discards changes.
 - Smith AI links the user to update goal assumptions.
@@ -105,7 +105,7 @@ Main content:
   Finances
     Income
     Expenses
-    Monthly Saving Goal
+    Monthly Contribution
 
   Contribution and Timeline
     Contribution Frequency
@@ -235,7 +235,7 @@ Fields:
 ```text
 Income
 Expenses
-Monthly Saving Goal
+Monthly Contribution
 ```
 
 Example:
@@ -243,7 +243,7 @@ Example:
 ```text
 Income: $7,500/month
 Expenses: $2,000/month
-Monthly Saving Goal: $2,000
+Monthly Contribution: $2,000
 ```
 
 Helper copy examples:
@@ -257,18 +257,18 @@ We’ll use this to adjust your risk profile
 Rules:
 
 - Income and expenses are monthly values.
-- Monthly Saving Goal is optional.
+- Monthly Contribution is required.
 - Income and expenses affect safety buffer and saving potential.
-- Monthly Saving Goal affects contribution assumptions if product logic supports it.
+- Monthly Contribution affects contribution assumptions if product logic supports it.
 - Do not shame users based on income or expenses.
-- Do not force Monthly Saving Goal if optional.
+- Require Monthly Contribution before saving.
 - Do not imply all remaining cash should be invested.
 - Do not update Safety Buffer locally before product logic confirms the recalculation.
 
 Recommended copy update:
 
 ```text
-Monthly Saving Goal
+Monthly Contribution
 Optional
 
 We’ll use this to model your contribution plan.
@@ -504,7 +504,7 @@ Timeline
 Optional:
 
 ```text
-Monthly Saving Goal
+Monthly Contribution
 ```
 
 Rules:
@@ -522,7 +522,7 @@ Currency fields:
 ```text
 Income
 Expenses
-Monthly Saving Goal
+Monthly Contribution
 ```
 
 Rules:
@@ -546,7 +546,7 @@ Enter monthly expenses so we can calculate your safety buffer.
 ```
 
 ```text
-Monthly saving goal is optional, but it must be a positive amount if entered.
+Monthly Contribution is required and must be a positive amount.
 ```
 
 Avoid:
@@ -765,7 +765,7 @@ Rules:
 - If onboarding is active and user opens Goal, preserve onboarding state.
 - If onboarding is complete, Goal page is the primary edit surface.
 - Goal Settings option definitions (Approved Field Options) are canonical for onboarding goal fields; onboarding must use the same field IDs and option labels.
-- Completing the required Goal fields (Financial Goal, Risk Tolerance, Timeline, Income, Expenses, Contribution Frequency) sets `goal_completed = true`. Monthly Saving Goal is optional and does not affect `goal_completed`.
+- Completing the required Goal fields (Financial Goal, Risk Tolerance, Timeline, Income, Expenses, Contribution Frequency, Monthly Contribution) sets `goal_completed = true`.
 - While `goal_completed` is false, the app keeps onboarding visible (see the Onboarding Visibility Rule in `patterns/onboarding-with-smith-ai.md`).
 
 ---
@@ -978,7 +978,7 @@ Rules:
 - Do not log raw financial inputs in user-visible debugging.
 - Do not imply WealthSmith verifies income or expenses unless it does.
 - Do not show private financial fields in public/shareable contexts.
-- Treat income, expenses, and saving goal as user-sensitive.
+- Treat income, expenses, and monthly contribution as user-sensitive.
 
 ---
 
@@ -994,7 +994,7 @@ Contribution and Timeline
 Edit Mode
 Save Changes
 Discard Changes
-Monthly Saving Goal
+Monthly Contribution
 Optional
 Estimate your average monthly income
 Estimate your average monthly expenses
@@ -1023,7 +1023,7 @@ Claude Code should:
 - Save only on Save Changes.
 - Discard draft values on Discard Changes.
 - Validate required fields.
-- Treat Monthly Saving Goal as optional.
+- Treat Monthly Contribution as required.
 - Use approved option IDs.
 - Use semantic tokens.
 - Use approved form components.
@@ -1054,7 +1054,7 @@ Claude Code must not:
 
 - Make plan assumptions visible.
 - Let users edit safely.
-- Keep Monthly Saving Goal optional.
+- Require Monthly Contribution.
 - Use Save/Discard clearly.
 - Validate calmly.
 - Update derived outputs only after save.
@@ -1074,7 +1074,7 @@ Claude Code must not:
 - Do not invent projections.
 - Do not invent suggestions.
 - Do not require wallet connection just to edit plan assumptions unless product explicitly requires it.
-- Do not force optional savings goal.
+- Require Monthly Contribution.
 
 ---
 
@@ -1085,9 +1085,9 @@ This pattern is implemented correctly when:
 - Goal page shows saved plan values.
 - Edit Mode controls whether fields are editable.
 - Financial Goal and Risk Tolerance are grouped together.
-- Income, Expenses, and Monthly Saving Goal are grouped together.
+- Income, Expenses, and Monthly Contribution are grouped together.
 - Contribution Frequency and Timeline are grouped together.
-- Monthly Saving Goal is optional.
+- Monthly Contribution is required.
 - Save Changes validates and commits draft state.
 - Discard Changes restores saved state.
 - Unsaved changes are not silently lost.

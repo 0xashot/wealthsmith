@@ -522,7 +522,7 @@ Allowed:
 Explain financial goal options.
 Explain risk tolerance.
 Explain income/expenses fields.
-Explain monthly saving goal.
+Explain monthly contribution.
 Explain contribution frequency.
 Explain timeline.
 Suggest reviewing Goal settings when assumptions look outdated.
@@ -535,7 +535,7 @@ Smith AI must not:
 Silently change goal settings.
 Invent income.
 Invent expenses.
-Invent monthly saving goal.
+Invent monthly contribution.
 Invent risk level.
 Save changes without user confirmation.
 Recalculate suggestions from draft values.

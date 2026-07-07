@@ -16,7 +16,7 @@ const GOAL_SAFE_MESSAGE =
 
 const Q_AFFECT = "What do these settings affect?";
 const Q_DASHBOARD = "Why doesn’t the Dashboard update?";
-const Q_SAVING = "What is Monthly Saving Goal?";
+const Q_SAVING = "What is Monthly Contribution?";
 
 export const goalSmithAiContent: SmithAiContent = {
   panelLabel: "Smith AI panel",
@@ -26,15 +26,15 @@ export const goalSmithAiContent: SmithAiContent = {
   responses: {
     [Q_AFFECT]:
       "These settings describe your plan: goal, risk level, time horizon, " +
-      "income, expenses, contribution rhythm, and monthly saving goal. In this " +
+      "income, expenses, contribution rhythm, and monthly contribution. In this " +
       "prototype, saving changes updates this Goal page only.",
     [Q_DASHBOARD]:
       "Dashboard recalculation is out of scope for this prototype. Your " +
       "Dashboard, suggestions, Safety Buffer, and projections remain based on " +
       "the approved fixture data.",
     [Q_SAVING]:
-      "Monthly Saving Goal is the amount you plan to contribute each month. It " +
-      "is optional on this page.",
+      "Monthly Contribution is the amount you plan to invest each month. It’s a " +
+      "required plan input used to model your projection.",
   },
   fallback: GOAL_SAFE_MESSAGE,
 };

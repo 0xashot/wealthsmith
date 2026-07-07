@@ -126,12 +126,6 @@ const S18 =
   "You’ll see your Projected Growth update after each real contribution.\n" +
   "And if your income or expenses change, I’ll adjust your target automatically.";
 
-/** Item 19 — plan summary. */
-const S19 =
-  "All set — I’ve built your personalized plan based on everything you shared:\n" +
-  "• Goal: {goal}  • Horizon: {horizon}  • Risk: {risk}  • Income: {income}  • Expenses: {expenses}  • Contribution: {saving}/month\n" +
-  "You can review every detail and fine-tune it anytime.";
-
 /** Item 20 — portfolio-tour intro (quick actions rendered separately). */
 const S20 =
   "Let’s take a closer look at your portfolio — to see how your assets are currently positioned.";
@@ -234,9 +228,32 @@ export function stepLeadMessage(index: number, a: OnboardingAnswers): string {
   }
 }
 
-/** Final summary message (saving ack + plan summary + portfolio-tour intro). */
-export function summaryMessage(a: OnboardingAnswers): string {
-  return fill(S18, a) + P + fill(S19, a) + P + S20;
+/**
+ * Final summary message (contribution ack + plan summary + portfolio-tour intro),
+ * structured so the plan reads as bold-labelled bullets — the same scannable
+ * styling as the Goal tour, not a cramped inline string.
+ */
+export function summaryMessage(a: OnboardingAnswers): MessageBlock[] {
+  return [
+    { type: "p", text: fill(S18, a) },
+    {
+      type: "p",
+      text: "All set — I’ve built your personalized plan based on everything you shared:",
+    },
+    {
+      type: "bullets",
+      items: [
+        { label: "Goal", text: labelFor(FINANCIAL_GOAL_OPTIONS, a.financial_goal) },
+        { label: "Horizon", text: labelFor(TIMELINE_OPTIONS, a.timeline) },
+        { label: "Risk", text: labelFor(RISK_OPTIONS, a.risk_tolerance) },
+        { label: "Income", text: formatMoney(a.income) },
+        { label: "Expenses", text: formatMoney(a.expenses) },
+        { label: "Contribution", text: `${formatMoney(a.saving)}/month` },
+      ],
+    },
+    { type: "p", text: "You can review every detail and fine-tune it anytime." },
+    { type: "p", text: S20 },
+  ];
 }
 
 /** Goal page tour message (item 22), structured with the saved answers echoed. */

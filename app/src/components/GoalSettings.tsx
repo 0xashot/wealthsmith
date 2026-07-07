@@ -107,7 +107,7 @@ function validate(d: Draft) {
   if (inc) errs.income = inc;
   const exp = check(d.expenses, true);
   if (exp) errs.expenses = exp;
-  const sav = check(d.saving, false);
+  const sav = check(d.saving, true);
   if (sav) errs.saving = sav;
   return errs;
 }
@@ -310,7 +310,7 @@ export default function GoalSettings({
         <div className="goal-fields">
           {currencyField("income", GOAL_FIELD_INCOME, GOAL_HELPER_INCOME, savedGoal.income_monthly, false)}
           {currencyField("expenses", GOAL_FIELD_EXPENSES, GOAL_HELPER_EXPENSES, savedGoal.expenses_monthly, false)}
-          {currencyField("saving", GOAL_FIELD_SAVING, GOAL_HELPER_SAVING, savedGoal.monthly_saving_goal, true)}
+          {currencyField("saving", GOAL_FIELD_SAVING, GOAL_HELPER_SAVING, savedGoal.monthly_saving_goal, false)}
         </div>
       </section>
 

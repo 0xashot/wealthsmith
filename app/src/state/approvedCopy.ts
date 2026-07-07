@@ -216,6 +216,25 @@ export const PRICING_NOT_CONNECTED = "Pricing not connected";
 export const ALLOCATION_NEEDS_PRICING = "Value-based allocation needs pricing data.";
 export const PROJECTED_GROWTH_NEEDS =
   "Projected Growth needs pricing and contribution logic before it can be shown.";
+/* Real-wallet Projected Growth — deterministic estimate + typed unavailable states
+ * (rules/financial-logic-boundaries.md — Projected Growth). Modeled assumptions,
+ * never expected returns/predictions/guarantees/advice. */
+export const PROJECTED_GROWTH_NO_PRICING =
+  "Projected Growth needs pricing data before it can be shown.";
+export const PROJECTED_GROWTH_NO_CONTRIB =
+  "Projected Growth needs a monthly contribution before it can be shown.";
+export const PROJECTED_GROWTH_NO_HORIZON =
+  "Projected Growth needs a time horizon before it can be shown.";
+export const PROJECTED_GROWTH_NO_RISK =
+  "Projected Growth needs a risk level before it can be shown.";
+export const PROJECTED_GROWTH_ESTIMATE = "Projected Growth is an estimate, not a guarantee.";
+export const PROJECTED_GROWTH_PARTIAL =
+  "Some holdings aren’t priced yet — this projection covers only your priced assets.";
+export const PG_LABEL_STARTING = "Starting value";
+export const PG_LABEL_PROJECTED = "Projected value";
+export const PG_LABEL_CONTRIBUTIONS = "Total contributions";
+export const PG_LABEL_GROWTH = "Estimated growth";
+export const PG_MODELED_RETURN_PREFIX = "Modeled annual return";
 export const STRATEGY_STEPS_COMING =
   "Strategy Steps will appear after WealthSmith has pricing, portfolio rules, and suggestion inputs connected.";
 export const SAFETY_BUFFER_NEEDS = "Safety Buffer needs expense and stablecoin data.";
@@ -291,7 +310,7 @@ export const GOAL_FIELD_FINANCIAL_GOAL = "Financial Goal";
 export const GOAL_FIELD_RISK = "Risk Tolerance";
 export const GOAL_FIELD_INCOME = "Income";
 export const GOAL_FIELD_EXPENSES = "Expenses";
-export const GOAL_FIELD_SAVING = "Monthly Saving Goal";
+export const GOAL_FIELD_SAVING = "Monthly Contribution";
 export const GOAL_FIELD_CONTRIBUTION = "Contribution Frequency";
 export const GOAL_FIELD_TIMELINE = "Timeline";
 
@@ -479,17 +498,17 @@ export const ONBOARDING_CONTRIB_COMPANION =
   "Choose the closest option — it doesn’t set up any automatic deposits.";
 export const ONBOARDING_CONTRIB_LABEL = "Contribution Rhythm";
 
-/** Monthly Saving Goal step (optional). */
-export const ONBOARDING_SAVING_TITLE = "Do you have a monthly saving goal?";
-export const ONBOARDING_SAVING_DESC = "This one’s optional — you can skip it for now.";
-export const ONBOARDING_SAVING_HELPER = "Optional. You can add this later.";
-export const ONBOARDING_SAVING_LABEL = "Monthly Saving Goal";
+/** Monthly Contribution step (required). */
+export const ONBOARDING_SAVING_TITLE = "What’s your monthly contribution?";
+export const ONBOARDING_SAVING_DESC = "The amount you plan to invest each month.";
+export const ONBOARDING_SAVING_HELPER = "You can update this later.";
+export const ONBOARDING_SAVING_LABEL = "Monthly Contribution";
 export const ONBOARDING_SAVING_OPTIONAL = "Optional";
 export const ONBOARDING_SAVING_PLACEHOLDER = "1,000";
 export const ONBOARDING_SAVING_COMPANION =
   "It just helps WealthSmith picture your contributions; nothing is moved or invested automatically.";
-export const ONBOARDING_SAVING_ERR_INVALID =
-  "Monthly saving goal must be a positive amount if entered.";
+export const ONBOARDING_SAVING_ERR_MISSING = "Enter your monthly contribution.";
+export const ONBOARDING_SAVING_ERR_INVALID = "Enter a valid monthly contribution amount.";
 
 /** onboarding-copy.md — Field Validation Copy (Negative Amount). */
 export const ONBOARDING_ERR_POSITIVE = "Enter a positive amount.";

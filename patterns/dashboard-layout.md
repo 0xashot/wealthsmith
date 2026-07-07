@@ -282,7 +282,13 @@ Dashboard body — the same four cards in every mode (heading above each card):
                          counting wallet stablecoins + stablecoin protocol
                          positions (e.g. USDC supplied to Kamino); unavailable
                          until prices are loaded AND an expenses input exists
-  Projected Growth     → unavailable ("needs pricing and contribution logic")
+  Projected Growth     → deterministic MODELED estimate (projectedGrowth.ts): from
+                         priced starting value + saved monthly_saving_goal, horizon,
+                         and the approved modeled annual return for the saved risk
+                         level. Shows starting value, projected value at horizon,
+                         total contributions, estimated growth, the modeled return
+                         used, a partial-pricing warning, and "an estimate, not a
+                         guarantee." Missing inputs → typed unavailable state. NOT AI
   Current vs Recommended Allocation
                        → CURRENT mix is live (Crypto vs Stables, by sourced USD +
                          %); the RECOMMENDED target mix is unavailable (needs plan

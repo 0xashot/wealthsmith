@@ -30,6 +30,7 @@ import {
   REAL_WALLET_SUGGESTIONS_TITLE,
   STRATEGY_STEPS_COMING,
 } from "../state/approvedCopy";
+import type { SavedGoal } from "../types/goal";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
 import DashboardBody from "../components/DashboardBody";
@@ -48,8 +49,8 @@ interface Props {
   /** connected only: in-app page switch + active page (undefined disables nav) */
   activePage?: string;
   onNavigate?: (id: string) => void;
-  /** User's monthly expenses (from onboarding/goal) — for the live Safety Buffer. */
-  monthlyExpenses?: number;
+  /** Saved plan (onboarding/Goal Settings) — Safety Buffer + Projected Growth. */
+  goal?: SavedGoal;
 }
 
 export default function DashboardPage({
@@ -60,7 +61,7 @@ export default function DashboardPage({
   onCopyAddress,
   activePage,
   onNavigate,
-  monthlyExpenses,
+  goal,
 }: Props) {
   const connected = mode === "connected";
   const [railMode, setRailMode] = useState<RightRailMode>("suggestions");
@@ -108,7 +109,7 @@ export default function DashboardPage({
               four cards, populated from live data where available, else safe
               unavailable states. No wallet-connected / connect-wallet card here —
               the Connect Wallet CTA lives in the nav. */}
-          <DashboardBody monthlyExpenses={monthlyExpenses} />
+          <DashboardBody goal={goal} />
         </main>
 
         {connected && railMode === "ask_smith_ai" ? (

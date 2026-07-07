@@ -242,7 +242,7 @@ export default function App() {
         onConnectWallet={openConnectModal}
         onTryDemo={goDemo}
         onCopyAddress={copyWalletAddress}
-        monthlyExpenses={savedGoal.expenses_monthly}
+        goal={savedGoal}
       />
     );
   }

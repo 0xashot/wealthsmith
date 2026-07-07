@@ -679,7 +679,7 @@ Price data updated
 Goal settings saved
 Risk tolerance changed
 Income/expenses changed
-Monthly Saving Goal changed
+Monthly Contribution changed
 Contribution frequency changed
 Timeline changed
 Demo Mode entered

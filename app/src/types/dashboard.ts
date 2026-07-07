@@ -76,6 +76,8 @@ export interface SafetyBufferState {
 export interface ChartPoint {
   year: number;
   value_usd: number;
+  /** Optional x-axis label (falls back to "Year {year}"). */
+  label?: string;
 }
 
 export interface ProjectedGrowthState {

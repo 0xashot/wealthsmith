@@ -66,10 +66,11 @@ export default function ProjectedGrowthChart({ growth }: { growth: ProjectedGrow
     ".";
 
   return (
-    <section className="card" aria-label={growth.title}>
-      {/* per components/chart.md Chart Container: description directly under
-          the heading */}
-      <h2 className="card__title">{growth.title}</h2>
+    <section className="card" aria-label={growth.title || series.label}>
+      {/* per components/chart.md Chart Container: description directly under the
+          heading. Title is optional — omitted when a section heading already sits
+          above the card (real-wallet dashboard). */}
+      {growth.title && <h2 className="card__title">{growth.title}</h2>}
       <p className="card__caption">{growth.display.caption}</p>
       <div ref={hostRef} className="chart-host">
         <svg
@@ -106,7 +107,7 @@ export default function ProjectedGrowthChart({ growth }: { growth: ProjectedGrow
                 y={H - PAD.bottom + 18}
                 textAnchor="middle"
               >
-                {`Year ${p.year}`}
+                {p.label ?? `Year ${p.year}`}
               </text>
             </g>
           ))}

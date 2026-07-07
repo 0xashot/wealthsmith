@@ -63,13 +63,14 @@ import {
   ONBOARDING_SAVING_LABEL,
   ONBOARDING_SAVING_PLACEHOLDER,
   ONBOARDING_SAVING_COMPANION,
+  ONBOARDING_SAVING_ERR_MISSING,
   ONBOARDING_SAVING_ERR_INVALID,
   ONBOARDING_ERR_POSITIVE,
 } from "./approvedCopy";
 
 /**
- * Required Goal fields that gate completion. Monthly Saving Goal is optional and
- * intentionally excluded. Field IDs match Goal Settings / the connected fixture.
+ * Required Goal fields that gate completion. Field IDs match Goal Settings / the
+ * connected fixture. Monthly Contribution is required (it feeds Projected Growth).
  */
 export const REQUIRED_GOAL_FIELDS = [
   "financial_goal",
@@ -78,6 +79,7 @@ export const REQUIRED_GOAL_FIELDS = [
   "income_monthly",
   "expenses_monthly",
   "contribution_frequency",
+  "monthly_saving_goal",
 ] as const;
 
 /**
@@ -234,9 +236,9 @@ export const GOAL_SETUP_STEPS: OnboardingFieldStep[] = [
     companion: ONBOARDING_SAVING_COMPANION,
     fieldLabel: ONBOARDING_SAVING_LABEL,
     placeholder: ONBOARDING_SAVING_PLACEHOLDER,
-    optional: true,
+    requiredError: ONBOARDING_SAVING_ERR_MISSING,
     invalidError: ONBOARDING_SAVING_ERR_INVALID,
-    positiveError: ONBOARDING_SAVING_ERR_INVALID,
+    positiveError: ONBOARDING_ERR_POSITIVE,
   },
 ];
 
@@ -274,10 +276,10 @@ function amountToNumber(raw: string): number {
 }
 
 /**
- * True when all required fields are valid for completion: income and expenses
- * must be present + valid + non-negative; Monthly Saving Goal is optional (blank
- * OR valid). Choice fields always carry a valid default. (Selects are canonical
- * Goal Settings options; nothing invented.)
+ * True when all required fields are valid for completion: income, expenses, and
+ * Monthly Contribution must each be present + valid + non-negative. Choice fields
+ * always carry a valid default. (Selects are canonical Goal Settings options;
+ * nothing invented.)
  */
 export function requiredFieldsValid(a: OnboardingAnswers): boolean {
   const inc = parseOnboardingAmount(a.income);
@@ -285,14 +287,15 @@ export function requiredFieldsValid(a: OnboardingAnswers): boolean {
   const sav = parseOnboardingAmount(a.saving);
   const incOk = !inc.blank && inc.valid && !inc.negative;
   const expOk = !exp.blank && exp.valid && !exp.negative;
-  const savOk = sav.blank || (sav.valid && !sav.negative);
+  const savOk = !sav.blank && sav.valid && !sav.negative;
   return incOk && expOk && savOk;
 }
 
 /**
  * Build the local SavedGoal (same shape Goal Settings uses) from onboarding
- * answers. Blank Monthly Saving Goal is saved as null (never coerced to 0). No
- * product logic, no derived values — this only commits the collected inputs.
+ * answers. Monthly Contribution is required to complete, so on completion it is a
+ * number; a blank draft (mid-flow tour preview) is kept null, never coerced to 0.
+ * No product logic, no derived values — this only commits the collected inputs.
  */
 export function buildSavedGoal(a: OnboardingAnswers): SavedGoal {
   const sav = parseOnboardingAmount(a.saving);
