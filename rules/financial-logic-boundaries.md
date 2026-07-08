@@ -520,6 +520,48 @@ guarantee. It produces NO Suggestions and NO Top Pick. Demo Mode is unaffected
 
 ---
 
+## Composition (Donut) Allocation Boundary
+
+Applies to the Donut Allocation Chart (`components/donut-allocation-chart.md`):
+Balance Overview (Crypto vs Stables) and Crypto Assets Allocation (top assets +
+`Other`). These are COMPOSITION views (parts of a whole), distinct from the
+horizontal Current vs Recommended comparison chart above.
+
+Data comes from portfolio valuation + grouping logic and pricing.
+
+```text
+Priced value only.
+Percentages sum to 100% AFTER excluding unpriced assets.
+Center value = product-provided total (portfolio value or asset-group value).
+```
+
+The UI may render:
+
+```text
+Donut segments, center total, callouts, legend, accessible summary.
+Crypto / Stables categories, individual asset segments, and an Other group.
+```
+
+Hard rules:
+
+```text
+Do not include unpriced assets in percentages.
+Do not invent prices, percentages, categories, or the Other grouping.
+Do not compute portfolio value, allocation %, or category membership in the chart.
+```
+
+Unavailable / warning:
+
+```text
+No priced value/total -> unavailable state ("Allocation needs pricing data before it can be shown."); no fake chart.
+Unpriced/unknown assets excluded -> surface a warning (e.g. "Excludes positions without a sourced price.").
+```
+
+This chart carries NO recommendation, target, or before/after meaning, and
+produces NO Suggestions or Top Pick.
+
+---
+
 ## Suggestion Boundary
 
 Suggestions must come from Suggestion Engine output.

@@ -1,0 +1,111 @@
+{
+  "example_metadata": {
+    "name": "Portfolio - Donut Allocation Chart",
+    "path": "examples/portfolio/portfolio-donut-allocation-example.json",
+    "mode": "reference",
+    "purpose": "Fixture examples for the Donut Allocation Chart composition views (Balance Overview and Crypto Assets Allocation). Illustrative only.",
+    "fixture_type": "synthetic_reference_state",
+    "fixture_only": true,
+    "not_user_data": true,
+    "component": "components/donut-allocation-chart.md",
+    "related_examples": [
+      "examples/portfolio/portfolio-liquid-assets.json",
+      "examples/dashboard/dashboard-connected-wallet-state.json"
+    ],
+    "rules": [
+      "rules/financial-logic-boundaries.md",
+      "rules/wallet-and-custody-rules.md"
+    ],
+    "patterns": [
+      "patterns/portfolio-overview.md"
+    ],
+    "notes": [
+      "These values are synthetic reference data, NOT any user's real holdings.",
+      "Percentages sum to 100% after excluding unpriced assets.",
+      "Stablecoins use the teal Stables token (color.chart.series.4) regardless of position.",
+      "Other always uses the neutral gray token, never a chart series color."
+    ]
+  },
+  "examples": [
+    {
+      "id": "balance-overview",
+      "title": "Balance Overview",
+      "description": "Two-part composition donut: Crypto vs Stables.",
+      "totalValueUsd": 35000,
+      "centerLabel": "$35,000",
+      "showLegend": true,
+      "showCallouts": true,
+      "accessibleSummary": "Portfolio allocation: Crypto 87%, Stables 13%.",
+      "segments": [
+        {
+          "id": "crypto",
+          "label": "Crypto",
+          "valueUsd": 30450,
+          "percent": 87,
+          "colorToken": "color.chart.series.1",
+          "callout": true
+        },
+        {
+          "id": "stables",
+          "label": "Stables",
+          "valueUsd": 4550,
+          "percent": 13,
+          "colorToken": "color.chart.series.4",
+          "callout": true
+        }
+      ]
+    },
+    {
+      "id": "crypto-assets-allocation",
+      "title": "Crypto Assets Allocation",
+      "description": "Multi-part composition donut: top assets by priced value, remainder grouped into Other.",
+      "totalValueUsd": 35000,
+      "centerLabel": "$35,000",
+      "showLegend": true,
+      "showCallouts": true,
+      "accessibleSummary": "Crypto assets allocation: SOL 34%, JUP 20%, USDC 18%, BONK 12%, Other 16%.",
+      "segments": [
+        {
+          "id": "sol",
+          "label": "SOL",
+          "valueUsd": 11900,
+          "percent": 34,
+          "colorToken": "color.chart.series.1",
+          "callout": true
+        },
+        {
+          "id": "jup",
+          "label": "JUP",
+          "valueUsd": 7000,
+          "percent": 20,
+          "colorToken": "color.chart.series.2",
+          "callout": true
+        },
+        {
+          "id": "usdc",
+          "label": "USDC",
+          "valueUsd": 6300,
+          "percent": 18,
+          "colorToken": "color.chart.series.4",
+          "callout": true
+        },
+        {
+          "id": "bonk",
+          "label": "BONK",
+          "valueUsd": 4200,
+          "percent": 12,
+          "colorToken": "color.chart.series.5",
+          "callout": false
+        },
+        {
+          "id": "other",
+          "label": "Other",
+          "valueUsd": 5600,
+          "percent": 16,
+          "colorToken": "color.subdued.neutral.background.dark",
+          "callout": false
+        }
+      ]
+    }
+  ]
+}

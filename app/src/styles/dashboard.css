@@ -701,6 +701,108 @@
   text-align: right;
 }
 
+/* ---------- Donut Allocation Chart (components/donut-allocation-chart.md) ---------- */
+
+.donut {
+  position: relative;
+}
+
+.donut__plot {
+  width: 100%;
+}
+
+.donut__svg {
+  display: block;
+}
+
+.donut__track {
+  stroke: var(--color-border-subtle);
+}
+
+/* Center total matches the dashboard metric value (e.g. Net Contributions). */
+.donut__center {
+  fill: var(--color-text-primary);
+  font: var(--typography-metric-primary-font);
+}
+
+.donut__callout-label {
+  fill: var(--color-text-primary);
+  font: var(--typography-chart-label-font);
+  font-weight: 600;
+}
+
+.donut__callout-pct {
+  fill: var(--color-text-secondary);
+  font: var(--typography-chart-label-font);
+}
+
+.donut__leader {
+  stroke: var(--color-border-subtle);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 4;
+  stroke-linecap: round;
+}
+
+/* Legend overlaid on the right so the donut can center in the full card width. */
+.donut__legend {
+  position: absolute;
+  right: var(--spacing-card-gap-md);
+  top: 50%;
+  transform: translateY(-50%);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--spacing-stack-gap-sm);
+}
+
+.donut__legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-primary);
+}
+
+/* Loading skeleton — mirrors the donut layout so nothing shifts on load: the
+   circle is centered in the full-width plot; the legend keeps its overlay spot. */
+.donut__plot--skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+}
+
+.skeleton--donut {
+  width: 158px;
+  height: 158px;
+  border-radius: 50%;
+}
+
+.skeleton--dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+/* On narrow cards the legend stacks under the donut (callouts are dropped). */
+@media (max-width: 640px) {
+  .donut {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-card-gap-md);
+  }
+
+  .donut__legend {
+    position: static;
+    transform: none;
+    grid-auto-flow: column;
+    justify-content: center;
+  }
+}
+
 /* ---------- Badges (components/badge.md) ---------- */
 
 .badge {

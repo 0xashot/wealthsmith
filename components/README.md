@@ -119,6 +119,7 @@ smith-ai-typing-indicator.md
 
 ```text
 chart.md
+donut-allocation-chart.md
 table.md
 list-item.md
 suggestion-card.md
@@ -263,6 +264,27 @@ Rules:
 - Do not rely on color alone.
 - Chart markers use approved chart icons where relevant.
 
+### `donut-allocation-chart.md`
+
+Defines the composition (donut) allocation chart.
+
+Used for:
+
+```text
+Balance Overview          (Crypto vs Stables)
+Crypto Assets Allocation  (top assets + Other)
+Portfolio category / asset-class composition
+```
+
+Rules:
+
+- Composition only (parts of a whole that sum to 100%) — not comparison, trend, or projection.
+- Current vs Recommended Allocation stays a horizontal comparison chart (`chart.md`).
+- Priced value only; unpriced assets are excluded from percentages and trigger a warning.
+- Center value, visible legend labels, and an accessible summary are required.
+- Colors come from chart series tokens (Crypto = series 1, Stables = series 4/teal, Other = neutral).
+- Component renders product-provided segments; it does not calculate value, price, percent, or category.
+
 ### `global-nav.md`, `logo.md`, and `icon.md`
 
 These three components define the main asset-facing UI contract:
@@ -301,6 +323,7 @@ checkbox.md
 chip.md
 choice-chip.md
 divider.md
+donut-allocation-chart.md
 empty-state.md
 global-nav.md
 icon.md

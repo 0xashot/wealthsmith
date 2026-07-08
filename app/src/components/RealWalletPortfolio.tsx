@@ -17,31 +17,28 @@ import { useWalletPortfolio } from "../wallet/useWalletPortfolio";
 import {
   deriveRealWalletPortfolioSummary,
   deriveValueBreakdown,
+  deriveStableValue,
   formatUsd,
   groupPositionsByCategory,
   getLiquidPositions,
   getStakedPositions,
   getProtocolPositions,
 } from "../wallet/walletSummary";
-import RealWalletHeader from "./RealWalletHeader";
 import LiveMetricGrid from "./LiveMetricGrid";
+import DonutAllocationChart, { type DonutSegment } from "./DonutAllocationChart";
 import PositionsSection from "./PositionsSection";
 import LiveWalletAssets from "./LiveWalletAssets";
 import EmptyStateCard from "./EmptyStateCard";
 import {
-  REAL_WALLET_VALUE_TITLE,
-  REAL_WALLET_VALUE_DESC,
-  REAL_WALLET_FACT_ASSETS,
-  REAL_WALLET_FACT_NATIVE_SOL,
-  REAL_WALLET_FACT_TOKENS,
   REAL_WALLET_FACT_LST,
   REAL_WALLET_FACT_STAKE,
   REAL_WALLET_FACT_PROTOCOL_POSITIONS,
   REAL_WALLET_FACT_WALLET_HELD,
   REAL_WALLET_FACT_UNKNOWN,
-  PRICING_NOT_CONNECTED,
   ALLOCATION_NEEDS_PRICING,
   ALLOCATION_BY_VALUE_CAPTION,
+  ALLOCATION_LABEL_CRYPTO,
+  ALLOCATION_LABEL_STABLES,
   VALUE_EXCLUDES_UNPRICED,
   DASH_ASSET_MIX_CAPTION,
   REAL_WALLET_NONE_DETECTED,
@@ -57,13 +54,11 @@ import {
   LIVE_WALLET_ERROR_DESC,
 } from "../state/approvedCopy";
 
-function formatSol(sol: number | null): string {
-  if (sol == null) return "—";
-  return `${sol.toLocaleString(undefined, { maximumFractionDigits: 6 })} SOL`;
-}
+/** Whole-dollar USD (no cents) for the Balance Overview center value. */
+const usd0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
 export default function RealWalletPortfolio() {
-  const { status, positions, error, warning, refresh, pricedAsOf } = useWalletPortfolio();
+  const { status, positions, error, warning, refresh, loading: reading } = useWalletPortfolio();
   const loading = status === "loading" && positions.length === 0;
 
   const summary = deriveRealWalletPortfolioSummary(positions);
@@ -73,25 +68,39 @@ export default function RealWalletPortfolio() {
   const staked = getStakedPositions(positions);
   const protocol = getProtocolPositions(positions);
 
-  // Portfolio Value: sourced total when available, else honest unavailable.
-  const portfolioValueMetric =
-    value.totalUsd != null
-      ? {
-          label: REAL_WALLET_VALUE_TITLE,
-          value: formatUsd(value.totalUsd),
-          note: value.anyUnpriced ? VALUE_EXCLUDES_UNPRICED : undefined,
-        }
-      : {
-          label: REAL_WALLET_VALUE_TITLE,
-          value: PRICING_NOT_CONNECTED,
-          note: REAL_WALLET_VALUE_DESC,
-          unavailable: true,
-        };
+  // Balance Overview donut — Crypto vs Stables from sourced value only.
+  const total = value.totalUsd;
+  const stableUsd = deriveStableValue(positions);
+  const cryptoUsd = total != null ? Math.max(0, total - stableUsd) : 0;
+  const cryptoPct = total && total > 0 ? (cryptoUsd / total) * 100 : 0;
+  const stablePct = total && total > 0 ? (stableUsd / total) * 100 : 0;
+  const balanceSegments: DonutSegment[] =
+    total != null && total > 0
+      ? [
+          {
+            id: "crypto",
+            label: ALLOCATION_LABEL_CRYPTO,
+            valueUsd: cryptoUsd,
+            percent: cryptoPct,
+            colorToken: "--color-chart-series-1",
+            callout: true,
+          },
+          {
+            id: "stables",
+            label: ALLOCATION_LABEL_STABLES,
+            valueUsd: stableUsd,
+            percent: stablePct,
+            colorToken: "--color-chart-series-4",
+            callout: true,
+          },
+        ]
+      : [];
+  const balanceSummary =
+    `${PORT_BALANCE_TITLE}. ${ALLOCATION_LABEL_CRYPTO} ${cryptoPct.toFixed(0)}%, ` +
+    `${ALLOCATION_LABEL_STABLES} ${stablePct.toFixed(0)}%.`;
 
   return (
     <>
-      <RealWalletHeader status={status} warning={warning} refresh={refresh} pricedAsOf={pricedAsOf} />
-
       {loading ? (
         <section className="card empty-card" aria-label={LIVE_WALLET_LOADING}>
           <p className="empty-card__description" role="status">
@@ -102,19 +111,19 @@ export default function RealWalletPortfolio() {
         <EmptyStateCard title={LIVE_WALLET_ERROR_TITLE} description={error ?? LIVE_WALLET_ERROR_DESC} />
       ) : (
         <>
-          {/* Balance Overview — live counts + native SOL; Portfolio Value unavailable. */}
-          <LiveMetricGrid
-            title={PORT_BALANCE_TITLE}
-            caption={DETECTED_FROM_WALLET}
-            metrics={[
-              portfolioValueMetric,
-              { label: REAL_WALLET_FACT_ASSETS, value: String(summary.assetsDetected) },
-              { label: REAL_WALLET_FACT_NATIVE_SOL, value: formatSol(summary.nativeSol) },
-              { label: REAL_WALLET_FACT_TOKENS, value: String(summary.tokenCount) },
-              { label: REAL_WALLET_FACT_LST, value: String(summary.lstCount) },
-              { label: REAL_WALLET_FACT_PROTOCOL_POSITIONS, value: String(summary.protocolCount) },
-            ]}
-          />
+          {/* Balance Overview — Crypto vs Stables composition donut (priced value). */}
+          <section className="dash-section" aria-label={PORT_BALANCE_TITLE}>
+            <h2 className="dash-section__title">{PORT_BALANCE_TITLE}</h2>
+            <DonutAllocationChart
+              totalValueUsd={total}
+              centerLabel={total != null ? usd0(total) : ""}
+              segments={balanceSegments}
+              emptyState={ALLOCATION_NEEDS_PRICING}
+              warning={value.anyUnpriced ? VALUE_EXCLUDES_UNPRICED : undefined}
+              ariaSummary={balanceSummary}
+              loading={reading && total == null}
+            />
+          </section>
 
           {/* Crypto Assets Allocation — value-based % when priced; else counts. */}
           {value.byCategory.length > 0 ? (

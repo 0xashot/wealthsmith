@@ -22,11 +22,16 @@
 import { useRef, useState } from "react";
 import { portfolioState as p } from "../state/portfolioState";
 import { realWalletSmithAiContent } from "../state/realWalletSmithAi";
-import { ASK_SMITH_LABEL_PORTFOLIO } from "../state/approvedCopy";
+import {
+  ASK_SMITH_LABEL_PORTFOLIO,
+  REAL_WALLET_SUGGESTIONS_TITLE,
+  STRATEGY_STEPS_COMING,
+} from "../state/approvedCopy";
 import { dashboardState as connected } from "../state/dashboardState";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
 import RealWalletPortfolio from "../components/RealWalletPortfolio";
+import EmptyStateCard from "../components/EmptyStateCard";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 
 interface Props {
@@ -68,8 +73,10 @@ export default function PortfolioPage({
         onOpenAskSmithAi={openAskSmithAi}
       />
 
-      {/* Two-column when the Smith AI panel is open; single-column otherwise. */}
-      <div className={"dashboard" + (smithOpen ? "" : " dashboard--single")}>
+      {/* Two-column: portfolio main + right rail. The rail shows the Ask Smith AI
+          panel when open, otherwise the Smith AI Suggestions card — the same
+          placement as the Dashboard. */}
+      <div className="dashboard">
         <main className="dashboard__main">
           <PageHeader header={p.page_header} />
           {/* Real-wallet Portfolio: the product Portfolio layout (Balance
@@ -79,8 +86,18 @@ export default function PortfolioPage({
           <RealWalletPortfolio />
         </main>
 
-        {smithOpen && (
+        {smithOpen ? (
           <AskSmithAiPanel content={realWalletSmithAiContent} onClose={closeAskSmithAi} />
+        ) : (
+          <aside className="suggestion-rail" aria-label={connected.accessibility.right_rail_label}>
+            {/* Strategy Steps / Suggestion Engine has no live inputs yet — safe
+                coming-soon state, never fixture suggestions or Top Pick as the
+                user's. Same right-rail structure as the Dashboard. */}
+            <EmptyStateCard
+              title={REAL_WALLET_SUGGESTIONS_TITLE}
+              description={STRATEGY_STEPS_COMING}
+            />
+          </aside>
         )}
       </div>
     </div>

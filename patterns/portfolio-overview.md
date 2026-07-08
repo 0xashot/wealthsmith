@@ -154,6 +154,8 @@ Legend
 Callout labels
 ```
 
+Component: `components/donut-allocation-chart.md` (2-part composition donut, Crypto vs Stables).
+
 Rules:
 
 - Total portfolio value comes from portfolio valuation logic.
@@ -205,6 +207,8 @@ Center total value
 Legend
 Callout labels
 ```
+
+Component: `components/donut-allocation-chart.md` (multi-part composition donut: top assets by priced value + `Other`).
 
 Rules:
 
@@ -705,9 +709,13 @@ Rules:
 Charts used in Portfolio page:
 
 ```text
-Balance Overview donut
-Crypto Assets Allocation donut
+Balance Overview donut          -> components/donut-allocation-chart.md
+Crypto Assets Allocation donut  -> components/donut-allocation-chart.md
 ```
+
+Both are composition views (parts of a whole). They are Donut Allocation Charts, not
+comparison charts — Current vs Recommended Allocation on the Dashboard stays a horizontal
+comparison bar chart (`components/chart.md`).
 
 Rules:
 

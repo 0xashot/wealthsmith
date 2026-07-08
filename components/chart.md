@@ -423,6 +423,11 @@ Stables
 
 Use to show composition or allocation.
 
+For WealthSmith portfolio composition (Balance Overview, Crypto Assets Allocation),
+use the dedicated `components/donut-allocation-chart.md` — the approved composition
+pattern with a fixed anatomy (center value, callouts, legend). The rules below are
+the general donut guidance.
+
 Examples:
 
 ```text
