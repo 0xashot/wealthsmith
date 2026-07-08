@@ -44,8 +44,7 @@ interface Props {
   loading?: boolean;
 }
 
-const H = 220;
-const CY = 110;
+const MIN_H = 220;
 const R = 68;
 const STROKE = 22;
 /** Target visible gap between adjacent segments, on each side (px). */
@@ -59,19 +58,26 @@ const CALLOUT_MIN_W = 460;
 /** Right-side space reserved for the overlaid legend. */
 const LEGEND_RESERVE = 134;
 const LABEL_PAD = 6;
+/** Min vertical spacing between stacked (distributed) callouts. */
+const ROW_H = 40;
 
 /** Point on a circle at `deg` clockwise from the top. */
-function polar(cx: number, deg: number, r: number) {
+function polar(cx: number, cy: number, deg: number, r: number) {
   const a = ((deg - 90) * Math.PI) / 180;
-  return { x: cx + r * Math.cos(a), y: CY + r * Math.sin(a) };
+  return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
 }
 
 /** Clockwise arc path from `startDeg` to `endDeg` (degrees clockwise from top). */
-function arc(cx: number, startDeg: number, endDeg: number, r: number) {
-  const s = polar(cx, startDeg, r);
-  const e = polar(cx, endDeg, r);
+function arc(cx: number, cy: number, startDeg: number, endDeg: number, r: number) {
+  const s = polar(cx, cy, startDeg, r);
+  const e = polar(cx, cy, endDeg, r);
   const large = endDeg - startDeg > 180 ? 1 : 0;
   return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
+}
+
+/** Callout side for a segment's mid-angle: right half is 0–180° clockwise from top. */
+function isRight(mid: number) {
+  return ((mid % 360) + 360) % 360 < 180;
 }
 
 export default function DonutAllocationChart({
@@ -140,47 +146,104 @@ export default function DonutAllocationChart({
   const CX = W / 2; // donut centered in the full card width
   const showCallouts = W >= CALLOUT_MIN_W;
 
-  // Cumulative arcs, clockwise from the top.
+  // Cumulative arcs, clockwise from the top. The gap is shrunk for slices smaller
+  // than the gap so a tiny slice stays a tiny arc (never inverts into a giant arc
+  // when the gap would exceed the slice).
   let cursor = 0;
   const arcs = segments.map((seg) => {
     const sweep = (Math.max(0, seg.percent) / 100) * 360;
     const rawStart = cursor;
     const rawEnd = cursor + sweep;
     cursor = rawEnd;
+    const gap = Math.min(GAP_DEG, sweep * 0.6);
     return {
       seg,
       sweep,
-      start: rawStart + GAP_DEG / 2,
-      end: rawEnd - GAP_DEG / 2,
+      start: rawStart + gap / 2,
+      end: rawEnd - gap / 2,
       mid: rawStart + sweep / 2,
     };
   });
 
-  // Long dotted leaders: anchor onto the colored arc, run out to a label near the
-  // card edge (left edge / just before the legend). Painted behind the segments so
-  // they emerge from the color.
-  const callouts = showCallouts
-    ? arcs
-        .filter((a) => a.seg.callout && a.seg.percent >= 1)
+  const calloutSegs = showCallouts ? arcs.filter((a) => a.seg.callout && a.seg.percent >= 1) : [];
+  // 2 segments (e.g. Crypto/Stables) use a top-fanned pair; more slices distribute
+  // vertically down each side (Crypto Assets Allocation).
+  const distributed = calloutSegs.length > 2;
+  const rightCount = calloutSegs.filter((a) => isRight(a.mid)).length;
+  const sideMax = Math.max(rightCount, calloutSegs.length - rightCount);
+  const H = distributed ? Math.max(MIN_H, sideMax * ROW_H + 40) : MIN_H;
+  const CY = H / 2;
+
+  interface Callout {
+    id: string;
+    label: string;
+    pct: number;
+    right: boolean;
+    labelX: number;
+    y: number;
+    points: string;
+  }
+
+  let callouts: Callout[];
+  if (!distributed) {
+    // Pair: anchor onto the colored arc (upper-left / upper-right) and run a long
+    // dotted leader out to a label near the card edge.
+    callouts = calloutSegs.map((a) => {
+      const right = isRight(a.mid);
+      const target = right ? 40 : 320;
+      const anchorAngle = Math.min(a.end - 4, Math.max(a.start + 4, target));
+      const anchor = polar(CX, CY, anchorAngle, ANCHOR_R);
+      const labelX = right ? W - LEGEND_RESERVE : LABEL_PAD;
+      const lineEndX = right ? labelX - 8 : labelX + 8;
+      return {
+        id: a.seg.id,
+        label: a.seg.label,
+        pct: Math.round(a.seg.percent),
+        right,
+        labelX,
+        y: anchor.y,
+        points: `${anchor.x.toFixed(1)},${anchor.y.toFixed(1)} ${lineEndX.toFixed(1)},${anchor.y.toFixed(1)}`,
+      };
+    });
+  } else {
+    // Distributed: anchor each slice at its mid-angle, then stack the labels down
+    // each side without overlapping. Leaders bend from the arc to a short
+    // horizontal run into the label.
+    const buildSide = (right: boolean): Callout[] => {
+      const rows = calloutSegs
+        .filter((a) => isRight(a.mid) === right)
         .map((a) => {
-          const right = polar(CX, a.mid, R).x >= CX;
-          const target = right ? 40 : 320;
-          const anchorAngle = Math.min(a.end - 4, Math.max(a.start + 4, target));
-          const anchor = polar(CX, anchorAngle, ANCHOR_R);
-          const y = anchor.y;
-          const labelX = right ? W - LEGEND_RESERVE : LABEL_PAD;
-          const lineEndX = right ? labelX - 8 : labelX + 8;
-          return {
-            id: a.seg.id,
-            label: a.seg.label,
-            pct: Math.round(a.seg.percent),
-            right,
-            labelX,
-            y,
-            points: `${anchor.x.toFixed(1)},${y.toFixed(1)} ${lineEndX.toFixed(1)},${y.toFixed(1)}`,
-          };
+          const anchorAngle = Math.min(a.end - 3, Math.max(a.start + 3, a.mid));
+          const anchor = polar(CX, CY, anchorAngle, ANCHOR_R);
+          return { seg: a.seg, anchor, y: anchor.y };
         })
-    : [];
+        .sort((x, y) => x.anchor.y - y.anchor.y);
+      // Push down to enforce spacing, then shift up if it overflows the bottom.
+      let prev = -Infinity;
+      for (const row of rows) {
+        row.y = Math.max(row.anchor.y, prev + ROW_H);
+        prev = row.y;
+      }
+      const overflow = (rows.length ? rows[rows.length - 1].y : 0) - (H - 14);
+      if (overflow > 0) for (const row of rows) row.y -= overflow;
+      const top = rows.length ? rows[0].y : 0;
+      if (top < 16) for (const row of rows) row.y += 16 - top;
+
+      const labelX = right ? W - LEGEND_RESERVE : LABEL_PAD;
+      const lineEndX = right ? labelX - 8 : labelX + 8;
+      const bendX = right ? lineEndX - 24 : lineEndX + 24;
+      return rows.map((row) => ({
+        id: row.seg.id,
+        label: row.seg.label,
+        pct: Math.round(row.seg.percent),
+        right,
+        labelX,
+        y: row.y,
+        points: `${row.anchor.x.toFixed(1)},${row.anchor.y.toFixed(1)} ${bendX.toFixed(1)},${row.y.toFixed(1)} ${lineEndX.toFixed(1)},${row.y.toFixed(1)}`,
+      }));
+    };
+    callouts = [...buildSide(true), ...buildSide(false)];
+  }
 
   return (
     <div className="card donut-card">
@@ -208,7 +271,7 @@ export default function DonutAllocationChart({
               .map((a) => (
                 <path
                   key={a.seg.id}
-                  d={arc(CX, a.start, a.end, R)}
+                  d={arc(CX, CY, a.start, a.end, R)}
                   fill="none"
                   strokeWidth={STROKE}
                   strokeLinecap="round"

@@ -557,6 +557,39 @@ No priced value/total -> unavailable state ("Allocation needs pricing data befor
 Unpriced/unknown assets excluded -> surface a warning (e.g. "Excludes positions without a sourced price.").
 ```
 
+### Slice selection and `Other` grouping (APPROVED)
+
+For the multi-asset donut (Crypto Assets Allocation, asset-class composition),
+product logic — not the chart — selects slices:
+
+```text
+Individual slice for:
+  - the top 5 assets by priced USD value, AND
+  - any asset that is >= 5% of the priced total.
+Group the rest (small, non-top-5, < 5%) priced assets into Other.
+```
+
+Show `Other` ONLY if:
+
+```text
+there are more than 5 priced assets, OR
+the combined small assets are >= 2% of the total.
+```
+
+Do NOT show `Other` if:
+
+```text
+there are 5 or fewer priced assets, AND every asset can be shown clearly.
+```
+
+Edge cases:
+
+```text
+Unpriced asset        -> exclude from the donut; show partial-pricing warning; NEVER place in Other.
+Unknown but priced    -> include individually if large enough (top 5 or >= 5%), else group into Other.
+Other would be < 2%   -> hide Other; visible percentages are based on the displayed priced assets.
+```
+
 This chart carries NO recommendation, target, or before/after meaning, and
 produces NO Suggestions or Top Pick.
 

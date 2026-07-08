@@ -35,12 +35,17 @@ interface Props {
   pushToast: (message: string, helper?: string) => void;
   onExitDemo: () => void;
   onConnectWallet: () => void;
+  /** In-app demo page switch (Dashboard ↔ Portfolio). */
+  onNavigate?: (id: string) => void;
+  activePage?: string;
 }
 
 export default function DemoDashboardPage({
   pushToast,
   onExitDemo,
   onConnectWallet,
+  onNavigate,
+  activePage,
 }: Props) {
   const [railMode, setRailMode] = useState<RightRailMode>("suggestions");
   const askButtonRef = useRef<HTMLButtonElement>(null);
@@ -80,6 +85,8 @@ export default function DemoDashboardPage({
         askSmithAiLabel={d.accessibility.ask_smith_ai_label}
         askAvailable={d.smith_ai.available}
         askButtonRef={askButtonRef}
+        activePage={activePage}
+        onNavigate={onNavigate}
         onOpenAskSmithAi={openAskSmithAi}
       />
 

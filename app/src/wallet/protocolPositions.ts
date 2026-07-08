@@ -57,10 +57,18 @@ interface StakeEntry {
 }
 
 /**
+ * getInflationReward can hang for 60s+ and then 504 on public RPCs (observed on
+ * Helius). It shares the stake read's outer time box, so without its own cap a
+ * slow APY lookup rejects the WHOLE native_stake read and the staked-SOL
+ * positions disappear. Keep this well under the outer PROTOCOL_TIMEOUT_MS.
+ */
+const STAKE_APY_TIMEOUT_MS = 6_000;
+
+/**
  * Realized native-staking APY per stake account, from the last completed epoch's
  * on-chain inflation reward (annualized). This is the actual yield earned, sourced
  * from the chain — not an invented estimate. Best-effort: returns an empty map on
- * any failure (positions still show without APY).
+ * any failure or on its own timeout (positions still show without APY).
  */
 async function computeStakeApy(
   connection: Connection,
@@ -69,10 +77,18 @@ async function computeStakeApy(
   const apyByPubkey = new Map<string, number>();
   try {
     const epochInfo = await connection.getEpochInfo();
-    const rewards = await connection.getInflationReward(
-      entries.map((e) => new PublicKey(e.pubkey)),
-      epochInfo.epoch - 1
-    );
+    const rewards = await Promise.race([
+      connection.getInflationReward(
+        entries.map((e) => new PublicKey(e.pubkey)),
+        epochInfo.epoch - 1
+      ),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`stake APY read timed out after ${STAKE_APY_TIMEOUT_MS}ms`)),
+          STAKE_APY_TIMEOUT_MS
+        )
+      ),
+    ]);
     // Solana slot time ≈ 0.4s → epoch duration → epochs per year.
     const epochDays = (epochInfo.slotsInEpoch * 0.4) / 86400;
     const epochsPerYear = epochDays > 0 ? 365.25 / epochDays : 182;

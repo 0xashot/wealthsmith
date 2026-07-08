@@ -178,13 +178,45 @@ See `rules/financial-logic-boundaries.md` → Composition (Donut) Allocation.
 
 ### Crypto Assets Allocation rules
 
-Use individual asset segments. Recommended:
+Use individual asset segments. Token symbol must be visible in the legend/callout
+(icons alone are not identity — see `patterns/portfolio-overview.md`). Order
+segments by value **descending**, except `Other`, which is always **last**.
 
-- Show the **top 5 or 6 assets** by priced USD value.
-- Group the rest into `Other`.
-- Include `Other` only when it is needed (there are remaining assets).
-- Order segments by value **descending**, except `Other`, which is always **last**.
-- Token symbol must be visible in the legend/callout (icons alone are not identity — see `patterns/portfolio-overview.md`).
+#### Slice selection and `Other` grouping (APPROVED)
+
+Show an **individual slice** for:
+
+- the **top 5 assets** by priced USD value, and
+- **any asset that is at least 5%** of the priced total.
+
+(So an asset outside the top 5 still gets its own slice when it is ≥ 5%.)
+
+Group the **rest** (small, non-top-5, under 5%) priced assets into `Other`.
+
+Show `Other` **only if**:
+
+- there are **more than 5** priced assets, or
+- the combined small (grouped) assets are **at least 2%** of the total.
+
+Do **not** show `Other` if:
+
+- there are **5 or fewer** priced assets, and
+- every asset can be shown clearly.
+
+Edge cases:
+
+- **Unpriced asset** → exclude it from the donut, show the partial-pricing warning,
+  and never place it into `Other`.
+- **Unknown but priced asset** → include it individually if it is large enough
+  (top 5 or ≥ 5%); otherwise group it into `Other`.
+- **If `Other` would be less than 2%** → hide `Other`, and let the visible slice
+  percentages be based on the **displayed** priced assets (the tiny remainder is
+  dropped from the shown percentages).
+
+All selection, grouping, and percentages come from product logic — the chart does
+not decide which assets are "top", what counts as `Other`, or any percentage
+(see `rules/financial-logic-boundaries.md` — Composition (Donut) Allocation
+Boundary).
 
 ---
 

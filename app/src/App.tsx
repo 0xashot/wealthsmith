@@ -25,6 +25,7 @@ import GoalPage from "./pages/GoalPage";
 import SupportPage from "./pages/SupportPage";
 import OnboardingExperience from "./pages/OnboardingExperience";
 import DemoDashboardPage from "./pages/DemoDashboardPage";
+import DemoPortfolioPage from "./pages/DemoPortfolioPage";
 import ToastHost, { type ToastData } from "./components/ToastHost";
 import ConnectWalletModal from "./components/ConnectWalletModal";
 import { dashboardState } from "./state/dashboardState";
@@ -122,6 +123,11 @@ export default function App() {
       setActivePage(id);
   };
 
+  // Demo Mode page switch — only Dashboard ↔ Portfolio have demo pages.
+  const demoNavigate = (id: string) => {
+    if (id === "dashboard" || id === "portfolio") setActivePage(id);
+  };
+
   // Disconnect the REAL wallet (wallet menu / page). The transition effect handles
   // the toast + returning to the Dashboard. No fake connected state is preserved.
   const disconnectWallet = () => {
@@ -178,13 +184,23 @@ export default function App() {
 
   let page;
   if (mode === "demo") {
-    page = (
-      <DemoDashboardPage
-        pushToast={pushToast}
-        onExitDemo={exitDemo}
-        onConnectWallet={openConnectModal}
-      />
-    );
+    page =
+      activePage === "portfolio" ? (
+        <DemoPortfolioPage
+          pushToast={pushToast}
+          onExitDemo={exitDemo}
+          onConnectWallet={openConnectModal}
+          onNavigate={demoNavigate}
+        />
+      ) : (
+        <DemoDashboardPage
+          pushToast={pushToast}
+          onExitDemo={exitDemo}
+          onConnectWallet={openConnectModal}
+          onNavigate={demoNavigate}
+          activePage={activePage}
+        />
+      );
   } else if (onboardingActive) {
     page = (
       <OnboardingExperience
