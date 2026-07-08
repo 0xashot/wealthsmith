@@ -71,7 +71,9 @@ export default function ProjectedGrowthChart({ growth }: { growth: ProjectedGrow
           heading. Title is optional — omitted when a section heading already sits
           above the card (real-wallet dashboard). */}
       {growth.title && <h2 className="card__title">{growth.title}</h2>}
-      <p className="card__caption">{growth.display.caption}</p>
+      {growth.display.caption && (
+        <p className="card__caption">{growth.display.caption}</p>
+      )}
       <div ref={hostRef} className="chart-host">
         <svg
           className="chart"

@@ -32,6 +32,7 @@ import type { SavedGoal } from "../types/goal";
 import type { ProjectedGrowthState } from "../types/dashboard";
 import LegendMarker from "./LegendMarker";
 import ProjectedGrowthChart from "./ProjectedGrowthChart";
+import ProjectedGrowthInfo from "./ProjectedGrowthInfo";
 import {
   REAL_WALLET_VALUE_DESC,
   FS_TOTAL_VALUE_LABEL,
@@ -47,10 +48,7 @@ import {
   PROJECTED_GROWTH_NO_CONTRIB,
   PROJECTED_GROWTH_NO_HORIZON,
   PROJECTED_GROWTH_NO_RISK,
-  PROJECTED_GROWTH_ESTIMATE,
-  PROJECTED_GROWTH_PARTIAL,
   PG_LABEL_PROJECTED,
-  PG_MODELED_RETURN_PREFIX,
   ALLOCATION_NEEDS_PRICING,
   ALLOCATION_COMPARE_CAPTION,
   ALLOCATION_NO_RISK,
@@ -63,19 +61,29 @@ import {
   ALLOCATION_LABEL_STABLES,
 } from "../state/approvedCopy";
 
-/** A dashboard section: heading (+ optional caption) above the card content. */
+/** A dashboard section: heading (+ optional caption/title accessory) above the card. */
 function DashSection({
   title,
   caption,
+  action,
   children,
 }: {
   title: string;
   caption?: string;
+  /** Optional inline element rendered immediately to the right of the title. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="dash-section" aria-label={title}>
-      <h2 className="dash-section__title">{title}</h2>
+      {action ? (
+        <div className="dash-section__head">
+          <h2 className="dash-section__title">{title}</h2>
+          {action}
+        </div>
+      ) : (
+        <h2 className="dash-section__title">{title}</h2>
+      )}
       {caption && <p className="dash-section__caption">{caption}</p>}
       {children}
     </section>
@@ -174,20 +182,30 @@ export default function DashboardBody({ goal }: Props) {
           : PROJECTED_GROWTH_NO_RISK;
 
   // Build the deterministic line-chart state (same chart component as Demo).
+  // The prose caption is intentionally blank in real-wallet mode — its content
+  // now lives in the "How Projected Growth is calculated" info popover on the
+  // section title (projectionInfo below). Demo Mode keeps its own fixture caption.
   let projectionGrowth: ProjectedGrowthState | null = null;
+  let projectionInfo: {
+    modeledPct: number;
+    riskLabel: string;
+    totalContributions: number;
+    estimatedGrowth: number;
+    projectedValue: number;
+  } | null = null;
   if (projection.status === "ok" && goal) {
     const p = projection.projection;
-    const modeledPct = Math.round(p.annualReturnRate * 100);
-    const riskLabel = labelFor(RISK_OPTIONS, goal.risk_tolerance);
-    const caption =
-      `${PG_MODELED_RETURN_PREFIX}: ${modeledPct}% (${riskLabel}). ` +
-      `${formatUsd(p.totalContributions)} contributed, ${formatUsd(p.estimatedGrowth)} estimated growth. ` +
-      `${PROJECTED_GROWTH_ESTIMATE}` +
-      (p.partial ? ` ${PROJECTED_GROWTH_PARTIAL}` : "");
+    projectionInfo = {
+      modeledPct: Math.round(p.annualReturnRate * 100),
+      riskLabel: labelFor(RISK_OPTIONS, goal.risk_tolerance),
+      totalContributions: p.totalContributions,
+      estimatedGrowth: p.estimatedGrowth,
+      projectedValue: p.futureValue,
+    };
     projectionGrowth = {
       title: "",
       status: "ready",
-      display: { show_estimated_label: true, caption },
+      display: { show_estimated_label: true, caption: "" },
       series: [
         {
           id: "projected_value",
@@ -314,7 +332,20 @@ export default function DashboardBody({ goal }: Props) {
       </DashSection>
 
       {/* Projected Growth — deterministic modeled estimate from priced value + plan. */}
-      <DashSection title={s.projected_growth.title}>
+      <DashSection
+        title={s.projected_growth.title}
+        action={
+          projectionInfo ? (
+            <ProjectedGrowthInfo
+              modeledPct={projectionInfo.modeledPct}
+              riskLabel={projectionInfo.riskLabel}
+              totalContributions={projectionInfo.totalContributions}
+              estimatedGrowth={projectionInfo.estimatedGrowth}
+              projectedValue={projectionInfo.projectedValue}
+            />
+          ) : undefined
+        }
+      >
         {loading ? (
           <div className="card">
             <div className="snapshot__grid">

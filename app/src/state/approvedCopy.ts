@@ -235,6 +235,18 @@ export const PG_LABEL_PROJECTED = "Projected value";
 export const PG_LABEL_CONTRIBUTIONS = "Total contributions";
 export const PG_LABEL_GROWTH = "Estimated growth";
 export const PG_MODELED_RETURN_PREFIX = "Modeled annual return";
+/* Projected Growth "how it's calculated" info popover (real-wallet dashboard).
+   Values are injected from the projection result; nothing here is hardcoded. */
+export const PG_INFO_ARIA = "How Projected Growth is calculated";
+export const PG_INFO_INTRO =
+  "This projection starts with your current priced wallet value and adds your planned monthly contribution over your selected timeline.";
+export const PG_INFO_RETURN_PREFIX = "We use a";
+export const PG_INFO_RETURN_MIDDLE = "modeled annual return because your risk level is";
+export const PG_INFO_OVER = "Over this period:";
+export const PG_INFO_CONTRIB_LABEL = "Planned contributions";
+export const PG_INFO_GROWTH_LABEL = "Estimated growth";
+export const PG_INFO_VALUE_LABEL = "Projected value";
+export const PG_INFO_FOOTER = "This is a planning estimate, not a guarantee.";
 export const STRATEGY_STEPS_COMING =
   "Strategy Steps will appear after WealthSmith has pricing, portfolio rules, and suggestion inputs connected.";
 export const SAFETY_BUFFER_NEEDS = "Safety Buffer needs expense and stablecoin data.";
