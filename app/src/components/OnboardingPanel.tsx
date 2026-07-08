@@ -22,7 +22,7 @@
  * Safety Buffer, projections, allocation, or protocol decisions. No wallet
  * signature, transaction, fund movement, or secret request.
  */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import OnboardingProgress from "./OnboardingProgress";
 import OnboardingMessage from "./OnboardingMessage";
 import SmithTypingIndicator from "./SmithTypingIndicator";
@@ -117,13 +117,85 @@ function renderBlocks(blocks: MessageBlock[]) {
       <ul key={i} className="onboarding-msg-bullets">
         {block.items.map((item, j) => (
           <li key={j} className="onboarding-msg-bullets__item">
-            <strong className="onboarding-msg-bullets__label">{item.label}</strong> —{" "}
+            <strong className="onboarding-msg-bullets__label">{item.label}</strong>
+            {BULLET_DASH}
             {item.text}
           </li>
         ))}
       </ul>
     )
   );
+}
+
+/* Separators counted when a structured message is typed out, so the typewriter's
+   character count lines up 1:1 with renderBlocksPartial below. */
+const BLOCK_SEP = "\n";
+const ITEM_SEP = "\n";
+const BULLET_DASH = " — ";
+
+/** Flatten structured blocks to the plain text the typewriter reveals. */
+function blocksPlainText(blocks: MessageBlock[]): string {
+  return blocks
+    .map((b) =>
+      b.type === "p"
+        ? b.text
+        : b.items.map((it) => `${it.label}${BULLET_DASH}${it.text}`).join(ITEM_SEP)
+    )
+    .join(BLOCK_SEP);
+}
+
+/** Render structured blocks revealed up to `budget` characters (typewriter),
+ *  preserving the bold label formatting. Full budget === renderBlocks output. */
+function renderBlocksPartial(blocks: MessageBlock[], budget: number) {
+  let rem = budget;
+  const out: ReactNode[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    if (i > 0) rem -= BLOCK_SEP.length;
+    if (rem <= 0 && i > 0) break;
+    const block = blocks[i];
+    if (block.type === "p") {
+      const shown = block.text.slice(0, Math.max(0, rem));
+      rem -= block.text.length;
+      out.push(
+        <p key={i} className="chat-question">
+          {shown}
+        </p>
+      );
+    } else {
+      const lis: ReactNode[] = [];
+      for (let j = 0; j < block.items.length; j++) {
+        if (j > 0) rem -= ITEM_SEP.length;
+        if (rem <= 0) break;
+        const it = block.items[j];
+        const label = it.label.slice(0, Math.max(0, rem));
+        rem -= it.label.length;
+        let dash = "";
+        let text = "";
+        if (rem > 0) {
+          dash = BULLET_DASH.slice(0, rem);
+          rem -= BULLET_DASH.length;
+        }
+        if (rem > 0) {
+          text = it.text.slice(0, rem);
+          rem -= it.text.length;
+        }
+        lis.push(
+          <li key={j} className="onboarding-msg-bullets__item">
+            <strong className="onboarding-msg-bullets__label">{label}</strong>
+            {dash}
+            {text}
+          </li>
+        );
+      }
+      if (lis.length > 0)
+        out.push(
+          <ul key={i} className="onboarding-msg-bullets">
+            {lis}
+          </ul>
+        );
+    }
+  }
+  return out;
 }
 
 export default function OnboardingPanel({
@@ -170,13 +242,16 @@ export default function OnboardingPanel({
           ? summaryMessage(answers)
           : stepLeadMessage(stepIndex, answers);
 
-  // Structured (tour) messages render immediately as formatted content; plain
-  // string messages are typed out with the typewriter.
+  // The plan summary is typed out character-by-character even though it is
+  // structured (paragraphs + bold-labelled bullets); the tour messages render
+  // immediately. Plain string messages type out as before.
   const structured = Array.isArray(rawMessage);
-  const textMessage = structured ? "" : (rawMessage as string);
-  const typeEnabled = !reduced && !skipType && !structured;
-  const { shown: typedMessage, done: titleDone } = useTypewriter(textMessage, typeEnabled);
-  const writing = !structured && !titleDone;
+  const typewriterText = structured
+    ? blocksPlainText(rawMessage as MessageBlock[])
+    : (rawMessage as string);
+  const typeEnabled = !reduced && !skipType && (!structured || isSummary);
+  const { shown: typedMessage, done: titleDone } = useTypewriter(typewriterText, typeEnabled);
+  const writing = !titleDone;
 
   // Keep the transcript scrolled to the newest message as it types/advances.
   useLayoutEffect(() => {
@@ -396,7 +471,9 @@ export default function OnboardingPanel({
           <OnboardingMessage>
             {structured ? (
               <div className="onboarding-rich" id={QUESTION_ID}>
-                {renderBlocks(rawMessage as MessageBlock[])}
+                {isSummary
+                  ? renderBlocksPartial(rawMessage as MessageBlock[], typedMessage.length)
+                  : renderBlocks(rawMessage as MessageBlock[])}
               </div>
             ) : (
               <p className="chat-question" id={QUESTION_ID}>

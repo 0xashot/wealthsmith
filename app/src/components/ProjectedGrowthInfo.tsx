@@ -1,15 +1,13 @@
 /**
- * ProjectedGrowthInfo — an info icon + hover/focus popover that explains how the
- * real-wallet Projected Growth number is derived. All figures are injected from
- * the deterministic projection result (projectedGrowth.ts) — nothing is hardcoded
- * and no fake value is ever shown (the icon only renders when a projection exists).
+ * ProjectedGrowthInfo — the info icon + popover that explains how the real-wallet
+ * Projected Growth number is derived. All figures are injected from the
+ * deterministic projection result (projectedGrowth.ts) — nothing is hardcoded and
+ * no fake value is ever shown (the icon only renders when a projection exists).
  *
- * The popover is informational only (role="tooltip"); it is NOT a navigation
- * action and moves no funds. Wording is a planning ESTIMATE, never a guarantee,
- * prediction, "expected return", or advice.
+ * Wording is a planning ESTIMATE, never a guarantee, prediction, "expected
+ * return", or advice. Rendering/behavior is delegated to the shared InfoPopover.
  */
-import { useId, useState } from "react";
-import infoIconUrl from "../../../assets/icons/ui/info.svg";
+import InfoPopover from "./InfoPopover";
 import {
   PG_INFO_ARIA,
   PG_INFO_INTRO,
@@ -45,54 +43,28 @@ export default function ProjectedGrowthInfo({
   estimatedGrowth,
   projectedValue,
 }: Props) {
-  const [open, setOpen] = useState(false);
-  const popoverId = useId();
-
   return (
-    <div
-      className="pg-info"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") setOpen(false);
-      }}
-    >
-      <button
-        type="button"
-        className="pg-info__button"
-        aria-label={PG_INFO_ARIA}
-        aria-describedby={popoverId}
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-      >
-        <img src={infoIconUrl} alt="" width={16} height={16} aria-hidden="true" />
-      </button>
-      {open && (
-        <div role="tooltip" id={popoverId} className="pg-info__popover">
-          <p className="pg-info__text">{PG_INFO_INTRO}</p>
-          <p className="pg-info__text">
-            {PG_INFO_RETURN_PREFIX} {modeledPct}% {PG_INFO_RETURN_MIDDLE} {riskLabel}.
-          </p>
-          <p className="pg-info__text">{PG_INFO_OVER}</p>
-          <ul className="pg-info__list">
-            <li>
-              <span className="pg-info__key">{PG_INFO_CONTRIB_LABEL}:</span>{" "}
-              <span className="pg-info__value">{usd0(totalContributions)}</span>
-            </li>
-            <li>
-              <span className="pg-info__key">{PG_INFO_GROWTH_LABEL}:</span>{" "}
-              <span className="pg-info__value">{usd0(estimatedGrowth)}</span>
-            </li>
-            <li>
-              <span className="pg-info__key">{PG_INFO_VALUE_LABEL}:</span>{" "}
-              <span className="pg-info__value">{usd0(projectedValue)}</span>
-            </li>
-          </ul>
-          <p className="pg-info__text pg-info__text--muted">{PG_INFO_FOOTER}</p>
-        </div>
-      )}
-    </div>
+    <InfoPopover label={PG_INFO_ARIA}>
+      <p className="info-popover__text">{PG_INFO_INTRO}</p>
+      <p className="info-popover__text">
+        {PG_INFO_RETURN_PREFIX} {modeledPct}% {PG_INFO_RETURN_MIDDLE} {riskLabel}.
+      </p>
+      <p className="info-popover__text">{PG_INFO_OVER}</p>
+      <ul className="info-popover__list">
+        <li>
+          <span className="info-popover__key">{PG_INFO_CONTRIB_LABEL}:</span>{" "}
+          <span className="info-popover__value">{usd0(totalContributions)}</span>
+        </li>
+        <li>
+          <span className="info-popover__key">{PG_INFO_GROWTH_LABEL}:</span>{" "}
+          <span className="info-popover__value">{usd0(estimatedGrowth)}</span>
+        </li>
+        <li>
+          <span className="info-popover__key">{PG_INFO_VALUE_LABEL}:</span>{" "}
+          <span className="info-popover__value">{usd0(projectedValue)}</span>
+        </li>
+      </ul>
+      <p className="info-popover__text info-popover__text--muted">{PG_INFO_FOOTER}</p>
+    </InfoPopover>
   );
 }

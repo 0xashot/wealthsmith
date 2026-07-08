@@ -384,6 +384,18 @@
   background: var(--color-feedback-success-background-solid);
 }
 
+/* Safety Buffer bar styled like the Current vs Recommended Allocation bars
+   (chart-bar radius) and filled with Chart / Series 04. Scoped to --chart so the
+   onboarding progress bar and Demo Safety Buffer keep the pill/blue style. */
+.progress--chart,
+.progress--chart .progress__fill {
+  border-radius: var(--radius-chart-bar);
+}
+
+.progress--chart .progress__fill {
+  background: var(--color-chart-series-4);
+}
+
 .buffer__caption--ok {
   color: var(--color-text-secondary);
 }
@@ -402,13 +414,13 @@
   gap: var(--spacing-inline-gap-xs);
 }
 
-/* ---------- Projected Growth info icon + popover ---------- */
+/* ---------- Reusable info icon + popover (Projected Growth, Allocation) ------- */
 
-.pg-info {
+.info-popover {
   display: inline-flex;
 }
 
-.pg-info__button {
+.info-popover__button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -421,21 +433,21 @@
   transition: opacity 120ms ease;
 }
 
-.pg-info__button:hover,
-.pg-info__button:focus-visible {
+.info-popover__button:hover,
+.info-popover__button:focus-visible {
   opacity: 1;
 }
 
-.pg-info__button:focus-visible {
+.info-popover__button:focus-visible {
   outline: 2px solid var(--color-action-primary-background-default);
   outline-offset: 2px;
 }
 
-.pg-info__button img {
+.info-popover__button img {
   display: block;
 }
 
-.pg-info__popover {
+.info-popover__popover {
   position: absolute;
   top: calc(100% + var(--spacing-inline-gap-xs));
   left: 0;
@@ -450,18 +462,18 @@
   box-shadow: var(--shadow-card-default);
 }
 
-.pg-info__text {
+.info-popover__text {
   margin: 0;
   font: var(--typography-body-sm-font);
   color: var(--color-text-primary);
 }
 
-.pg-info__text--muted {
+.info-popover__text--muted {
   color: var(--color-text-secondary);
   font-style: italic;
 }
 
-.pg-info__list {
+.info-popover__list {
   margin: 0;
   padding-left: 1.1em;
   display: grid;
@@ -470,11 +482,11 @@
   color: var(--color-text-primary);
 }
 
-.pg-info__key {
+.info-popover__key {
   color: var(--color-text-primary);
 }
 
-.pg-info__value {
+.info-popover__value {
   font-weight: var(--typography-label-md-font-weight);
 }
 
@@ -687,31 +699,6 @@
   font: var(--typography-chart-value-font);
   color: var(--color-text-primary);
   text-align: right;
-}
-
-/* Current vs Recommended comparison: extra column for the overweight/underweight
-   delta badge. Scoped to --compare so Demo Mode's allocation chart is unchanged. */
-.allocation__groups--compare .allocation__row {
-  grid-template-columns: 7.5em minmax(0, 1fr) 4em auto;
-}
-
-.allocation__delta {
-  font: var(--typography-label-sm-font);
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-  justify-self: end;
-}
-
-.allocation__delta--over {
-  color: var(--color-feedback-warning-text-tint);
-}
-
-.allocation__delta--under {
-  color: var(--color-feedback-info-text-tint);
-}
-
-.allocation__delta--on {
-  color: var(--color-feedback-success-text-tint);
 }
 
 /* ---------- Badges (components/badge.md) ---------- */

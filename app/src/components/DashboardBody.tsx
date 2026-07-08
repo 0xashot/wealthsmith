@@ -22,10 +22,7 @@ import {
   formatUsd,
 } from "../wallet/walletSummary";
 import { deriveProjection } from "../wallet/projectedGrowth";
-import {
-  deriveRecommendedAllocation,
-  deriveAllocationDeltas,
-} from "../wallet/recommendedAllocation";
+import { deriveRecommendedAllocation } from "../wallet/recommendedAllocation";
 import { dashboardState as s } from "../state/dashboardState";
 import { RISK_OPTIONS, labelFor } from "../state/goalState";
 import type { SavedGoal } from "../types/goal";
@@ -33,6 +30,7 @@ import type { ProjectedGrowthState } from "../types/dashboard";
 import LegendMarker from "./LegendMarker";
 import ProjectedGrowthChart from "./ProjectedGrowthChart";
 import ProjectedGrowthInfo from "./ProjectedGrowthInfo";
+import InfoPopover from "./InfoPopover";
 import {
   REAL_WALLET_VALUE_DESC,
   FS_TOTAL_VALUE_LABEL,
@@ -49,17 +47,22 @@ import {
   PROJECTED_GROWTH_NO_HORIZON,
   PROJECTED_GROWTH_NO_RISK,
   PG_LABEL_PROJECTED,
+  PG_INFO_ARIA,
+  PG_INFO_UNAVAILABLE_INTRO,
+  PG_INFO_UNAVAILABLE_CONNECT,
+  PG_INFO_FOOTER,
   ALLOCATION_NEEDS_PRICING,
-  ALLOCATION_COMPARE_CAPTION,
   ALLOCATION_NO_RISK,
+  ALLOCATION_INFO_ARIA,
+  ALLOCATION_INFO_TEXT,
   ALLOCATION_GROUP_CURRENT,
   ALLOCATION_GROUP_RECOMMENDED,
-  ALLOCATION_DELTA_ON,
-  ALLOCATION_DELTA_OVER,
-  ALLOCATION_DELTA_UNDER,
   ALLOCATION_LABEL_CRYPTO,
   ALLOCATION_LABEL_STABLES,
 } from "../state/approvedCopy";
+
+/** Whole-dollar USD (no cents) — used for the Current vs Recommended rows. */
+const usd0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 
 /** A dashboard section: heading (+ optional caption/title accessory) above the card. */
 function DashSection({
@@ -115,11 +118,6 @@ export default function DashboardBody({ goal }: Props) {
   // stablecoins" rather than "not priced yet".
   const buffer = pricedAsOf != null ? deriveSafetyBuffer(positions, monthlyExpenses) : null;
   const bufferLow = buffer != null && buffer.coveragePct < 34;
-  const bufferColor = buffer?.fullyFunded
-    ? "--color-feedback-success-background-solid"
-    : bufferLow
-      ? "--color-feedback-danger-background-solid"
-      : "--color-action-primary-background-default";
 
   // Current allocation (Crypto vs Stables) from sourced value only.
   const total = value.totalUsd ?? 0;
@@ -135,33 +133,13 @@ export default function DashboardBody({ goal }: Props) {
     riskTolerance: goal?.risk_tolerance,
     totalPricedUsd: showAllocation ? total : null,
   });
-  const allocationDeltas =
-    recommended != null
-      ? deriveAllocationDeltas({
-          current: { cryptoUsd, stableUsd, cryptoPct, stablePct },
-          recommended,
-        })
-      : null;
-  /** Overweight/underweight label for a current−target percentage-point delta. */
-  const deltaLabel = (deltaPct: number): string => {
-    const pts = Math.round(deltaPct);
-    if (pts === 0) return ALLOCATION_DELTA_ON;
-    return pts > 0
-      ? `${ALLOCATION_DELTA_OVER} +${pts} pts`
-      : `${ALLOCATION_DELTA_UNDER} ${pts} pts`;
-  };
-  const deltaClass = (deltaPct: number): string => {
-    const pts = Math.round(deltaPct);
-    if (pts === 0) return "allocation__delta--on";
-    return pts > 0 ? "allocation__delta--over" : "allocation__delta--under";
-  };
   const allocationSummary =
     `${s.allocation.title}. Current mix by value: ` +
-    `${ALLOCATION_LABEL_CRYPTO} ${formatUsd(cryptoUsd)} (${cryptoPct.toFixed(0)}%), ` +
-    `${ALLOCATION_LABEL_STABLES} ${formatUsd(stableUsd)} (${stablePct.toFixed(0)}%). ` +
+    `${ALLOCATION_LABEL_CRYPTO} ${usd0(cryptoUsd)} (${cryptoPct.toFixed(0)}%), ` +
+    `${ALLOCATION_LABEL_STABLES} ${usd0(stableUsd)} (${stablePct.toFixed(0)}%). ` +
     (recommended != null
-      ? `Recommended target: ${ALLOCATION_LABEL_CRYPTO} ${formatUsd(recommended.cryptoUsd)} (${recommended.cryptoPct}%), ` +
-        `${ALLOCATION_LABEL_STABLES} ${formatUsd(recommended.stableUsd)} (${recommended.stablePct}%).`
+      ? `Recommended target: ${ALLOCATION_LABEL_CRYPTO} ${usd0(recommended.cryptoUsd)} (${recommended.cryptoPct}%), ` +
+        `${ALLOCATION_LABEL_STABLES} ${usd0(recommended.stableUsd)} (${recommended.stablePct}%).`
       : `Recommended allocation unavailable.`);
 
   // Deterministic Projected Growth — priced starting value + saved plan inputs.
@@ -295,24 +273,14 @@ export default function DashboardBody({ goal }: Props) {
               </span>
             </div>
             <div
-              className="progress"
+              className="progress progress--chart"
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(buffer.coveragePct)}
               aria-label={`Safety Buffer is ${Math.round(buffer.coveragePct)} percent covered.`}
             >
-              <div
-                className={
-                  "progress__fill" +
-                  (buffer.fullyFunded
-                    ? " progress__fill--success"
-                    : bufferLow
-                      ? " progress__fill--danger"
-                      : "")
-                }
-                style={{ width: `${buffer.coveragePct}%` }}
-              />
+              <div className="progress__fill" style={{ width: `${buffer.coveragePct}%` }} />
             </div>
             <p className={"buffer__caption" + (bufferLow ? "" : " buffer__caption--ok")}>
               {buffer.fullyFunded
@@ -321,7 +289,7 @@ export default function DashboardBody({ goal }: Props) {
             </p>
             <div className="chart-legend">
               <span className="chart-legend__item">
-                <LegendMarker variant="dot" colorToken={bufferColor} />
+                <LegendMarker variant="dot" colorToken="--color-chart-series-4" />
                 {SAFETY_BUFFER_COVERED_LEGEND}
               </span>
             </div>
@@ -343,7 +311,15 @@ export default function DashboardBody({ goal }: Props) {
               estimatedGrowth={projectionInfo.estimatedGrowth}
               projectedValue={projectionInfo.projectedValue}
             />
-          ) : undefined
+          ) : loading ? undefined : (
+            <InfoPopover label={PG_INFO_ARIA}>
+              <p className="info-popover__text">{PG_INFO_UNAVAILABLE_INTRO}</p>
+              <p className="info-popover__text">{PG_INFO_UNAVAILABLE_CONNECT}</p>
+              <p className="info-popover__text info-popover__text--muted">
+                {PG_INFO_FOOTER}
+              </p>
+            </InfoPopover>
+          )
         }
       >
         {loading ? (
@@ -367,7 +343,16 @@ export default function DashboardBody({ goal }: Props) {
       </DashSection>
 
       {/* Current vs Recommended Allocation — current is live; recommended unavailable. */}
-      <DashSection title={s.allocation.title}>
+      <DashSection
+        title={s.allocation.title}
+        action={
+          loading ? undefined : (
+            <InfoPopover label={ALLOCATION_INFO_ARIA}>
+              <p className="info-popover__text">{ALLOCATION_INFO_TEXT}</p>
+            </InfoPopover>
+          )
+        }
+      >
         {loading ? (
           <div className="card">
             <div className="skeleton skeleton--bar" />
@@ -375,11 +360,7 @@ export default function DashboardBody({ goal }: Props) {
           </div>
         ) : showAllocation ? (
           <div className="card">
-            <div
-              className="allocation__groups allocation__groups--compare"
-              role="img"
-              aria-label={allocationSummary}
-            >
+            <div className="allocation__groups" role="img" aria-label={allocationSummary}>
               {/* Current — live wallet allocation (values unchanged from before). */}
               <div className="allocation__group">
                 <span className="allocation__group-label">{ALLOCATION_GROUP_CURRENT}</span>
@@ -391,14 +372,7 @@ export default function DashboardBody({ goal }: Props) {
                       style={{ width: `${cryptoPct}%` }}
                     />
                   </div>
-                  <span className="allocation__value">
-                    {formatUsd(cryptoUsd)} · {cryptoPct.toFixed(0)}%
-                  </span>
-                  {allocationDeltas && (
-                    <span className={`allocation__delta ${deltaClass(allocationDeltas.cryptoDeltaPct)}`}>
-                      {deltaLabel(allocationDeltas.cryptoDeltaPct)}
-                    </span>
-                  )}
+                  <span className="allocation__value">{usd0(cryptoUsd)}</span>
                 </div>
                 <div className="allocation__row">
                   <span className="allocation__row-label">{ALLOCATION_LABEL_STABLES}</span>
@@ -408,14 +382,7 @@ export default function DashboardBody({ goal }: Props) {
                       style={{ width: `${stablePct}%` }}
                     />
                   </div>
-                  <span className="allocation__value">
-                    {formatUsd(stableUsd)} · {stablePct.toFixed(0)}%
-                  </span>
-                  {allocationDeltas && (
-                    <span className={`allocation__delta ${deltaClass(allocationDeltas.stableDeltaPct)}`}>
-                      {deltaLabel(allocationDeltas.stableDeltaPct)}
-                    </span>
-                  )}
+                  <span className="allocation__value">{usd0(stableUsd)}</span>
                 </div>
               </div>
 
@@ -433,9 +400,7 @@ export default function DashboardBody({ goal }: Props) {
                         style={{ width: `${recommended.cryptoPct}%` }}
                       />
                     </div>
-                    <span className="allocation__value">
-                      {formatUsd(recommended.cryptoUsd)} · {recommended.cryptoPct}%
-                    </span>
+                    <span className="allocation__value">{usd0(recommended.cryptoUsd)}</span>
                   </div>
                   <div className="allocation__row">
                     <span className="allocation__row-label">{ALLOCATION_LABEL_STABLES}</span>
@@ -445,16 +410,12 @@ export default function DashboardBody({ goal }: Props) {
                         style={{ width: `${recommended.stablePct}%` }}
                       />
                     </div>
-                    <span className="allocation__value">
-                      {formatUsd(recommended.stableUsd)} · {recommended.stablePct}%
-                    </span>
+                    <span className="allocation__value">{usd0(recommended.stableUsd)}</span>
                   </div>
                 </div>
               )}
             </div>
-            <p className="card__caption">
-              {recommended ? ALLOCATION_COMPARE_CAPTION : ALLOCATION_NO_RISK}
-            </p>
+            {!recommended && <p className="card__caption">{ALLOCATION_NO_RISK}</p>}
             <div className="chart-legend">
               <span className="chart-legend__item">
                 <LegendMarker variant="dot" colorToken="--color-chart-series-1" />

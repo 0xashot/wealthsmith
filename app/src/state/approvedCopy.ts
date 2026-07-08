@@ -247,6 +247,11 @@ export const PG_INFO_CONTRIB_LABEL = "Planned contributions";
 export const PG_INFO_GROWTH_LABEL = "Estimated growth";
 export const PG_INFO_VALUE_LABEL = "Projected value";
 export const PG_INFO_FOOTER = "This is a planning estimate, not a guarantee.";
+/* Projected Growth info popover when no projection yet (e.g. wallet not connected). */
+export const PG_INFO_UNAVAILABLE_INTRO =
+  "Projected Growth shows a planning estimate based on your wallet value, monthly contribution, timeline, and selected risk level.";
+export const PG_INFO_UNAVAILABLE_CONNECT =
+  "Connect a wallet and complete your goal setup to see your projection.";
 export const STRATEGY_STEPS_COMING =
   "Strategy Steps will appear after WealthSmith has pricing, portfolio rules, and suggestion inputs connected.";
 export const SAFETY_BUFFER_NEEDS = "Safety Buffer needs expense and stablecoin data.";
@@ -300,6 +305,11 @@ export const ALLOCATION_COMPARE_CAPTION =
   "Your live mix vs a risk-based target. Target values apply your saved risk level to your current priced holdings — a modeled target, not advice.";
 export const ALLOCATION_NO_RISK =
   "Set your risk level to see a recommended target mix.";
+/* Current vs Recommended Allocation "how it works" info popover. */
+export const ALLOCATION_INFO_ARIA =
+  "How Current vs Recommended Allocation is calculated";
+export const ALLOCATION_INFO_TEXT =
+  "Your current allocation compared with a target based on your risk level. This target uses your priced wallet assets and is for planning only, not financial advice.";
 /** Overweight / underweight labels vs the risk-based target (per bucket). */
 export const ALLOCATION_DELTA_ON = "On target";
 export const ALLOCATION_DELTA_OVER = "Overweight";
