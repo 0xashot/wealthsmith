@@ -19,6 +19,7 @@ import type {
 import { deriveBufferSuggestion } from "./bufferSuggestion";
 import { deriveRebalanceSuggestion } from "./rebalanceSuggestion";
 import { deriveStakingSuggestion } from "./stakingSuggestion";
+import { deriveStableYieldSuggestion } from "./stableYieldSuggestion";
 import { deriveOnTrackSuggestion } from "./onTrackSuggestion";
 import { selectTopPick } from "./topPick";
 import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
@@ -32,7 +33,9 @@ import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
  *   2. Buffer Override: if the buffer is NOT fully funded, return the buffer
  *      suggestion alone — no deployment/yield/rebalance, no On Track.
  *   3. If the buffer is fully funded, collect the actionable candidates in
- *      category-priority order: Rebalance, then Staking (idle SOL).
+ *      category-priority order: Rebalance, Staking (idle SOL), then Stable Yield
+ *      (excess stablecoins). Stable Yield is SUPPRESSED when Rebalance applies —
+ *      rebalancing the stable allocation takes precedence over deploying it.
  *   4. If there are no candidates, fall back to On Track ("aligned").
  * Finally, deterministic Top Pick selection (topPick.ts) marks at most one
  * eligible actionable suggestion by category priority — never the UI or AI.
@@ -59,6 +62,12 @@ export function runSuggestionEngine(
     if (rebalance) candidates.push(rebalance);
     const staking = deriveStakingSuggestion(inputs, generatedAt);
     if (staking) candidates.push(staking);
+    // Stable Yield only when Rebalance does not apply (allocation already close
+    // enough to target); Staking is unaffected (it uses SOL, not stables).
+    if (!rebalance) {
+      const stableYield = deriveStableYieldSuggestion(inputs, generatedAt);
+      if (stableYield) candidates.push(stableYield);
+    }
 
     if (candidates.length > 0) {
       suggestions.push(...candidates);

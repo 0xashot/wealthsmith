@@ -140,8 +140,21 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   APY/protocol. Engine order when funded: Rebalance, then Staking (On Track only
   when neither fires). Fixtures 9B-A…J cover Buffer Override, Top Pick ordering,
   reserve/min-size, LST/unpriced exclusion, WSOL, partial pricing, and mapping.
-- Pending — Step 9C+: stable_yield, capital_efficiency, position_optimization
-  triggers (contracts ready).
+- Step 9C (done): **stablecoin yield trigger** (`deriveStableYieldSuggestion`,
+  category `stable_yield`, "Put Stablecoins to Work"). PRODUCT RULE: approved
+  conservative stablecoin yield stays Safety-Buffer-eligible, so this does NOT
+  require stables above the buffer/allocation — it fires when the buffer is fully
+  funded, **Rebalance does not apply**, and LIQUID WALLET stablecoins (approved
+  STABLE_SYMBOLS, wallet source, priced — never protocol/yield/LP/unknown/USDY)
+  total ≥ $100. Eligible amount = the FULL liquid wallet stable value. Safety
+  Buffer accounting (`walletSummary.stableValueOf`) already counts liquid wallet
+  stables AND all-stable no-debt protocol positions (e.g. USDC on Kamino) as
+  buffer-eligible, excluding volatile-LP/debt/unpriced. Engine order when funded:
+  Rebalance → Staking → Stable Yield (Stable Yield suppressed if Rebalance
+  fired). Copy: "stablecoin/conservative yield", never "stake USDC". Fixtures
+  9C-A…J.
+- Pending — Step 9D+: capital_efficiency and position_optimization triggers
+  (contracts ready).
 
 ## Suggestion display order
 

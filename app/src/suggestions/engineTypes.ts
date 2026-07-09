@@ -71,6 +71,7 @@ export type SuggestionReasonCode =
   | "stable_excess_above_buffer"
   | "stable_yield_available"
   | "conservative_yield_candidate"
+  | "buffer_eligible_stable_yield"
   // position_optimization (contracted)
   | "low_yield_position"
   | "missing_apy_data"

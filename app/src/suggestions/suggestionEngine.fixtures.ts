@@ -109,6 +109,24 @@ function solPosition(
   };
 }
 
+/** A priced non-SOL, non-stable wallet token (has wallet data, but neither
+ *  staking nor stable_yield can fire from it) — for On Track / no-suggestion. */
+function cryptoPosition(valueUsd = 100): WalletPosition {
+  return {
+    id: "bonk",
+    source: "wallet",
+    type: "token",
+    symbol: "BONK",
+    name: "Bonk",
+    amount: "1000000",
+    uiAmount: 1_000_000,
+    decimals: 5,
+    detection: "direct_wallet_balance",
+    priceUsd: valueUsd / 1_000_000,
+    valueUsd,
+  };
+}
+
 /** An LST position (JupSOL/mSOL/…) — must NOT count as liquid SOL. */
 function lstPosition(symbol: string, uiAmount: number, price = 80): WalletPosition {
   return {
@@ -123,6 +141,29 @@ function lstPosition(symbol: string, uiAmount: number, price = 80): WalletPositi
     detection: "recognized_lst_mint",
     priceUsd: price,
     valueUsd: uiAmount * price,
+  };
+}
+
+/** A stablecoin position — liquid wallet by default; override type/source for
+ *  protocol positions, or an unrecognized symbol for the unknown-stable case. */
+function stablePosition(
+  symbol: string,
+  uiAmount: number,
+  opts: { type?: WalletPosition["type"]; source?: string; priced?: boolean; name?: string } = {}
+): WalletPosition {
+  const { type = "token", source = "wallet", priced = true, name } = opts;
+  return {
+    id: `stable-${symbol}-${uiAmount}-${type}`,
+    source: source as WalletPosition["source"],
+    type,
+    symbol,
+    name: name ?? (symbol === "USDC" ? "USD Coin" : symbol),
+    amount: String(Math.round(uiAmount * 1e6)),
+    uiAmount,
+    decimals: 6,
+    detection: "direct_wallet_balance",
+    priceUsd: priced ? 1 : null,
+    valueUsd: priced ? uiAmount : null,
   };
 }
 
@@ -187,10 +228,11 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
     );
   }
 
-  // B. Buffer fully funded → no suggestion, and NOT "missing data".
+  // B. Buffer fully funded, no positions/allocation → no suggestion, not "missing
+  //    data". (Empty positions so no stable_yield/staking fires from defaults.)
   {
     const r = runSuggestionEngine(
-      inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3) }),
+      inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), positions: [cryptoPosition()] }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -425,12 +467,14 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
     );
   }
 
-  // N. Buffer funded + allocation within threshold (delta 5%) → On Track.
+  // N. Buffer funded + allocation within threshold (delta 5%) + no deployable
+  //    assets → On Track. (Empty positions so no staking/stable_yield fires.)
   {
     const r = runSuggestionEngine(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3), // funded
         allocation: allocationFixture(15000, 62, 5),
+        positions: [cryptoPosition()],
       }),
       FIXTURE_GENERATED_AT
     );
@@ -498,13 +542,15 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
     );
   }
 
-  // R. Partial pricing + otherwise aligned → warning + On Track appears.
+  // R. Partial pricing + otherwise aligned + no deployable assets → warning +
+  //    On Track. (Empty positions so no staking/stable_yield fires.)
   {
     const r = runSuggestionEngine(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 62, 5),
         anyUnpriced: true,
+        positions: [cryptoPosition()],
       }),
       FIXTURE_GENERATED_AT
     );
@@ -575,12 +621,13 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
     );
   }
 
-  // W. Funded + On Track only → no Top Pick (informational never wins).
+  // W. Funded + On Track only (no deployable assets) → no Top Pick.
   {
     const r = runSuggestionEngine(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 62, 5),
+        positions: [cryptoPosition()],
       }),
       FIXTURE_GENERATED_AT
     );
@@ -781,6 +828,7 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
     const { card } = engineCard({
       safetyBuffer: bufferFixture(5000, 1000, 3),
       allocation: allocationFixture(15000, 62, 5),
+      positions: [cryptoPosition()],
     });
     add(
       "Me: On Track → informational card, no CTA, no Top Pick",
@@ -1190,6 +1238,217 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 9C (corrected) — stablecoin yield trigger. Eligible amount is the FULL
+ * liquid wallet stable value (approved yield stays Safety-Buffer-eligible, so
+ * it is NOT reduced by the buffer or allocation target). Funded buffer + no
+ * Rebalance + liquid wallet stables ≥ $100.
+ * ------------------------------------------------------------------ */
+export function runStableYieldFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+  const cats = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.map((s) => s.category).join(",") || "none";
+  const has = (r: ReturnType<typeof runSuggestionEngine>, c: string) =>
+    r.suggestions.some((s) => s.category === c);
+
+  const funded = () => bufferFixture(5000, 1000, 3); // funded (target $3,000)
+  const aligned = () => allocationFixture(15000, 62, 2); // no rebalance
+  const offTarget = () => allocationFixture(15000, 75, 15); // rebalance applies
+
+  // 9C-A. Underfunded buffer + liquid USDC → Buffer only.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(800, 1000, 3),
+        allocation: aligned(),
+        positions: [stablePosition("USDC", 10000)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9C-A: underfunded buffer + liquid USDC → buffer only",
+      cats(r) === "buffer" && !has(r, "stable_yield"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9C-B. Funded + no rebalance + liquid USDC ≥ $100 → stable_yield Top Pick,
+  //       amount = FULL liquid wallet stable value (no buffer subtraction).
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [stablePosition("USDC", 10000)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const sy = r.suggestions.find((s) => s.category === "stable_yield");
+    add(
+      "9C-B: funded + no rebalance + liquid USDC → stable_yield Top Pick, full amount",
+      cats(r) === "stable_yield" &&
+        sy?.is_top_pick === true &&
+        sy?.amount?.valueUsd === 10000 &&
+        !has(r, "on_track"),
+      `categories=${cats(r)} topPick=${sy?.is_top_pick} amount=${sy?.amount?.valueUsd}`
+    );
+  }
+
+  // 9C-C. Funded + Rebalance applies + liquid USDC → Rebalance only, no stable_yield.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: offTarget(),
+        positions: [stablePosition("USDC", 10000)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9C-C: funded + rebalance + liquid USDC → rebalance only, no stable_yield",
+      has(r, "rebalance") && !has(r, "stable_yield"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9C-D. Funded + Staking + Stable Yield + no Rebalance → Staking first (Top Pick), stable_yield second.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [solPosition(10), stablePosition("USDC", 10000)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const stk = r.suggestions.find((s) => s.category === "staking");
+    const sy = r.suggestions.find((s) => s.category === "stable_yield");
+    add(
+      "9C-D: staking + stable_yield → staking first/Top Pick, stable_yield second",
+      cats(r) === "staking,stable_yield" &&
+        stk?.is_top_pick === true &&
+        sy?.is_top_pick === false,
+      `categories=${cats(r)} stkTop=${stk?.is_top_pick} syTop=${sy?.is_top_pick}`
+    );
+  }
+
+  // 9C-E. Funded + liquid stable value < $100 → no stable_yield → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [stablePosition("USDC", 50)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9C-E: funded + liquid stable < $100 → no stable_yield, On Track",
+      !has(r, "stable_yield") && cats(r) === "on_track",
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9C-F. Stables held in a PROTOCOL position (not liquid wallet) → no new stable_yield.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [stablePosition("USDC", 10000, { type: "protocol", source: "kamino" })],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9C-F: stables only in protocol positions → no stable_yield",
+      !has(r, "stable_yield"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9C-G. Unknown stable-like wallet token (not in approved set) → no stable_yield.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [stablePosition("USDX", 10000)], // USDX not in STABLE_SYMBOLS
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9C-G: unknown stable-like token → no stable_yield",
+      !has(r, "stable_yield"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9C-H. Stable price/value missing → no stable_yield, no invented amount.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [stablePosition("USDC", 10000, { priced: false })],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9C-H: unpriced stable → no stable_yield",
+      !has(r, "stable_yield"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9C-I. Partial pricing + priced wallet USDC → stable_yield still emits + warning.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [stablePosition("USDC", 10000)],
+        anyUnpriced: true,
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9C-I: partial pricing + priced USDC → stable_yield + warning",
+      has(r, "stable_yield") && r.warnings.includes("partial_pricing"),
+      `categories=${cats(r)} warnings=${r.warnings.join(",")}`
+    );
+  }
+
+  // 9C-J. Mapper renders the stable_yield card safely.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [stablePosition("USDC", 10000)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = r.suggestions.find((x) => x.category === "stable_yield");
+    const card = s ? toSuggestionCard(s) : undefined;
+    add(
+      "9C-J: stable_yield card maps safely (copy, amount, review-only, non-transactional)",
+      card?.title === "Put Stablecoins to Work" &&
+        card?.description ===
+          "You have liquid stablecoins that may be eligible for conservative yield options while still supporting your Safety Buffer." &&
+        card?.impact_text.includes("Eligible stablecoins to review") === true &&
+        card?.cta.label === "Review" &&
+        card?.cta.executes_transaction === false &&
+        card?.cta.requires_wallet_signature === false &&
+        card?.cta.action === null,
+      `title="${card?.title}" impact="${card?.impact_text}" cta="${card?.cta.label}"`
+    );
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -1197,6 +1456,7 @@ export function printFixtureResults(): void {
     ...runMapperFixtureChecks(),
     ...runContractFixtureChecks(),
     ...runStakingFixtureChecks(),
+    ...runStableYieldFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

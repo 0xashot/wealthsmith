@@ -218,9 +218,9 @@ export const SUGGESTION_CAPITAL_EFFICIENCY_DESCRIPTION =
 export const SUGGESTION_STAKING_TITLE = "Put Idle SOL to Work";
 export const SUGGESTION_STAKING_DESCRIPTION =
   "You have liquid SOL that may be eligible for staking or liquid staking.";
-export const SUGGESTION_STABLE_YIELD_TITLE = "Put Excess Stablecoins to Work";
+export const SUGGESTION_STABLE_YIELD_TITLE = "Put Stablecoins to Work";
 export const SUGGESTION_STABLE_YIELD_DESCRIPTION =
-  "You have stablecoins above your Safety Buffer that may be eligible for conservative yield options.";
+  "You have liquid stablecoins that may be eligible for conservative yield options while still supporting your Safety Buffer.";
 export const SUGGESTION_POSITION_OPTIMIZATION_TITLE = "Review Existing Yield Positions";
 export const SUGGESTION_POSITION_OPTIMIZATION_DESCRIPTION =
   "Some existing positions may need review based on yield, concentration, or missing data.";

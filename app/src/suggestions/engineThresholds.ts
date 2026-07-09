@@ -41,6 +41,12 @@ export const SOL_FEE_RESERVE = 0.1;
 export const MIN_STAKING_SUGGESTION_USD = 50;
 
 /**
+ * Minimum eligible stablecoin value (above the Safety Buffer AND the target
+ * stable allocation) before an excess-stablecoin yield suggestion appears.
+ */
+export const MIN_STABLE_YIELD_SUGGESTION_USD = 100;
+
+/**
  * Honest status for guardrails whose inputs do not exist in the app yet.
  * Cost, liquidity, and slippage require quote/route infrastructure that this
  * prototype does not have — so the engine reports those guardrails as
