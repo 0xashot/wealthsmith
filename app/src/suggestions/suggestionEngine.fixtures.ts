@@ -1915,6 +1915,117 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 9F — full-engine QA: the realistic maximum-candidate scenarios,
+ * verifying complete ordering, Top Pick, and card count (noise review).
+ * ------------------------------------------------------------------ */
+export function runFullQaFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+  const cats = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.map((s) => s.category).join(",") || "none";
+  const topPickCat = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.find((s) => s.is_top_pick)?.category ?? "none";
+  const tpCount = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.filter((s) => s.is_top_pick).length;
+
+  // Everything eligible: a funded buffer + idle crypto + idle SOL + liquid
+  // stables + a flagged deployed position.
+  const everything = [
+    cryptoPosition(5000), // capital_efficiency
+    solPosition(10), // staking
+    stablePosition("USDC", 10000), // stable_yield (when no rebalance)
+    yieldPosition(5000, null), // position_optimization (missing APY)
+  ];
+
+  // QA-1. No Rebalance → capEff, staking, stable_yield, position_optimization
+  //       (4 cards), capEff Top Pick, engine order preserved.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(5000, 1000, 3),
+        allocation: allocationFixture(15000, 62, 2), // no rebalance
+        positions: everything,
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9F-1: no rebalance, all fire → 4 cards in order, capital_efficiency Top Pick",
+      cats(r) === "capital_efficiency,staking,stable_yield,position_optimization" &&
+        topPickCat(r) === "capital_efficiency" &&
+        tpCount(r) === 1 &&
+        r.suggestions.length === 4,
+      `order=${cats(r)} topPick=${topPickCat(r)} tpCount=${tpCount(r)}`
+    );
+  }
+
+  // QA-2. Rebalance present → rebalance, capEff, staking, position_optimization
+  //       (stable_yield suppressed), 4 cards, rebalance Top Pick.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(5000, 1000, 3),
+        allocation: allocationFixture(15000, 75, 15), // rebalance applies
+        positions: everything,
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9F-2: rebalance present → rebalance,capEff,staking,posOpt (no stable_yield), rebalance Top Pick",
+      cats(r) === "rebalance,capital_efficiency,staking,position_optimization" &&
+        topPickCat(r) === "rebalance" &&
+        tpCount(r) === 1 &&
+        r.suggestions.length === 4,
+      `order=${cats(r)} topPick=${topPickCat(r)}`
+    );
+  }
+
+  // QA-3. Underfunded buffer overrides EVERYTHING (all else eligible) → buffer only.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(800, 1000, 3), // underfunded
+        allocation: allocationFixture(15000, 75, 15),
+        positions: everything,
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9F-3: underfunded buffer overrides all → buffer only, buffer Top Pick",
+      cats(r) === "buffer" && topPickCat(r) === "buffer",
+      `categories=${cats(r)}`
+    );
+  }
+
+  // QA-4. Realistic maximum card count never exceeds 4 actionable cards.
+  {
+    const noReb = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(5000, 1000, 3),
+        allocation: allocationFixture(15000, 62, 2),
+        positions: everything,
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const withReb = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(5000, 1000, 3),
+        allocation: allocationFixture(15000, 75, 15),
+        positions: everything,
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9F-4: max card count ≤ 4 (buffer/on_track are exclusive)",
+      noReb.suggestions.length <= 4 && withReb.suggestions.length <= 4,
+      `noRebalance=${noReb.suggestions.length} withRebalance=${withReb.suggestions.length}`
+    );
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -1925,6 +2036,7 @@ export function printFixtureResults(): void {
     ...runStableYieldFixtureChecks(),
     ...runPositionOptimizationFixtureChecks(),
     ...runCapitalEfficiencyFixtureChecks(),
+    ...runFullQaFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
