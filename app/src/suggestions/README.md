@@ -1,8 +1,8 @@
 # Suggestion Engine (MVP)
 
 Deterministic product logic that decides what recommendation exists for the
-user's REAL wallet state. As of Step 3 the engine implements the **Safety
-Buffer rule only** (Top Up Safety Buffer); Rebalance, On Track, Top Pick
+user's REAL wallet state. As of Step 4 the engine implements two rules —
+**Top Up Safety Buffer** and **Rebalance** (bucket-level); On Track, Top Pick
 selection, and the UI card mapper are still pending. Nothing here is imported
 by app UI code yet — no cards render from the engine.
 
@@ -38,8 +38,17 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   sized to the shortfall; shortfall under the $50 minimum → disabled
   suggestion with a failed `min_trade_size` guardrail. Consumes the derived
   risk-based target; never defines buffer months.
-- `engine.ts` — `runSuggestionEngine(inputs, generatedAt?)`: runs the buffer
-  rule (Step 3 scope), adds the `partial_pricing` warning, and reports
+- `rebalanceSuggestion.ts` — the bucket-level Rebalance rule
+  (`deriveRebalanceSuggestion`): only when the Safety Buffer is FULLY FUNDED and
+  the crypto allocation deviates from its risk-based target by ≥ ±10%. Crypto
+  overweight → move crypto→stables (amount = total × |delta|); crypto
+  underweight → move stables→crypto, capped at the stablecoins ABOVE the buffer
+  target (never the buffer itself); no excess → no suggestion. Bucket-level
+  only — no token selection, no "sell/buy" language. Below-$50 amounts →
+  disabled with a failed `min_trade_size` guardrail.
+- `engine.ts` — `runSuggestionEngine(inputs, generatedAt?)`: runs the Safety
+  Buffer rule first, then Rebalance ONLY when the buffer is fully funded
+  (Buffer Override). Adds the `partial_pricing` warning and reports
   `missing_data` when required inputs are absent. All output leaves with
   `is_top_pick: false` until Top Pick Logic exists.
 - `suggestionEngine.fixtures.ts` — executable fixture scenarios A–F (no test
@@ -70,10 +79,12 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
 - Step 3 (done): **Top Up Safety Buffer** rule + input adapter + engine shell
   + executable fixtures. All engine actions are review-only or disabled —
   never a transaction.
-- Pending: **Rebalance**, **On Track**, the UI card copy mapper, and
-  **Top Pick** — Buffer Override first (buffer not satisfied → only buffer
-  suggestions, buffer Top Pick), category priority, then
-  impact → urgency → efficiency ranking.
+- Step 4 (done): **Rebalance** rule (bucket-level Crypto ↔ Stables). Token-level
+  sell/buy selection is NOT implemented. The Safety Buffer blocks Rebalance
+  until fully funded. Still no Top Pick, no UI cards, no transactions.
+- Pending: **On Track**, the UI card copy mapper, and **Top Pick** — Buffer
+  Override first (buffer not satisfied → only buffer suggestions, buffer Top
+  Pick), category priority, then impact → urgency → efficiency ranking.
 
 ## Safety invariants
 

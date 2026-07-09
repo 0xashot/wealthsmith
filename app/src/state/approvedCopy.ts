@@ -202,6 +202,11 @@ export const REAL_WALLET_VALUE_DESC =
 export const SUGGESTION_BUFFER_TITLE = "Top Up Your Safety Buffer";
 export const SUGGESTION_BUFFER_DESCRIPTION =
   "Increase your stablecoin reserve. Your Safety Buffer is below target.";
+export const SUGGESTION_REBALANCE_TITLE = "Rebalance Your Allocation";
+export const SUGGESTION_REBALANCE_OVERWEIGHT_DESCRIPTION =
+  "Your crypto allocation is above your target. Review whether you want to move part of it toward stablecoins.";
+export const SUGGESTION_REBALANCE_UNDERWEIGHT_DESCRIPTION =
+  "Your crypto allocation is below your target. Review whether you want to move excess stablecoins toward crypto exposure.";
 export const SUGGESTIONS_UNAVAILABLE =
   "Strategy Steps need wallet value, goal settings, and Safety Buffer data before they can be shown.";
 export const SUGGESTIONS_PARTIAL_PRICING =
@@ -209,6 +214,11 @@ export const SUGGESTIONS_PARTIAL_PRICING =
 export const SUGGESTION_COPY: Record<string, string> = {
   "suggestion.buffer.title": SUGGESTION_BUFFER_TITLE,
   "suggestion.buffer.description": SUGGESTION_BUFFER_DESCRIPTION,
+  "suggestion.rebalance.title": SUGGESTION_REBALANCE_TITLE,
+  "suggestion.rebalance.crypto_overweight.description":
+    SUGGESTION_REBALANCE_OVERWEIGHT_DESCRIPTION,
+  "suggestion.rebalance.crypto_underweight.description":
+    SUGGESTION_REBALANCE_UNDERWEIGHT_DESCRIPTION,
 };
 
 /** Suggestions: safe coming-soon state (Suggestion Engine has no live inputs yet). */
