@@ -1,9 +1,10 @@
 /**
  * DemoPortfolioPage — Demo Mode Portfolio (sample data only, never a real
- * wallet's holdings). Reuses the same product Portfolio components as the
- * connected page — the Balance Overview + Crypto Assets Allocation donuts and a
- * Liquid Assets table — driven by the approved demo holdings (demoWalletPositions:
- * SOL $5,500 / BONK $1,200 / USDC $800).
+ * wallet's holdings). Mirrors the connected Portfolio structure — the Balance
+ * Overview + Crypto Assets Allocation donuts, then the Asset Deployment Overview
+ * section (Liquid Assets / Staked Assets / Yield Strategies) — driven by the
+ * approved demo holdings (demoWalletPositions: SOL $5,500 / BONK $1,200 /
+ * USDC $800; all liquid, so the earning categories show their empty states).
  *
  * Non-custodial / MVP-safe: no wallet pill, no wallet adapter, no signature, no
  * transaction, no fund movement. Demo suggestions/Top Pick are sample only.
@@ -13,14 +14,26 @@ import { demoDashboardState as d } from "../state/demoDashboardState";
 import { demoSmithAiContent } from "../state/demoSmithAi";
 import { demoWalletPositions } from "../state/demoWalletPositions";
 import { portfolioState as p } from "../state/portfolioState";
-import { getLiquidPositions } from "../wallet/walletSummary";
-import { PORT_LIQUID_TITLE, PROTOCOL_OPENED_TOAST } from "../state/approvedCopy";
+import {
+  getLiquidPositions,
+  getStakedPositions,
+  getProtocolPositions,
+} from "../wallet/walletSummary";
+import {
+  PORT_DEPLOYMENT_TITLE,
+  PORT_STAKED_TITLE,
+  PORT_STAKED_CAPTION,
+  PORT_YIELD_TITLE,
+  PORT_YIELD_CAPTION,
+  PROTOCOL_OPENED_TOAST,
+} from "../state/approvedCopy";
 import type { SuggestionCardState } from "../types/dashboard";
 import GlobalNav from "../components/GlobalNav";
 import DemoBanner from "../components/DemoBanner";
 import PageHeader from "../components/PageHeader";
 import PortfolioAllocationDonuts from "../components/PortfolioAllocationDonuts";
-import PositionsSection from "../components/PositionsSection";
+import LiquidAssetsCard from "../components/LiquidAssetsCard";
+import EarningAssetsCard from "../components/EarningAssetsCard";
 import SuggestionRail from "../components/SuggestionRail";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 
@@ -52,6 +65,8 @@ export default function DemoPortfolioPage({
   };
 
   const liquid = getLiquidPositions(demoWalletPositions);
+  const staked = getStakedPositions(demoWalletPositions);
+  const protocol = getProtocolPositions(demoWalletPositions);
 
   return (
     <div className="app-shell">
@@ -75,12 +90,27 @@ export default function DemoPortfolioPage({
           {/* Composition donuts (Balance Overview + Crypto Assets Allocation) from
               the sample demo holdings. */}
           <PortfolioAllocationDonuts positions={demoWalletPositions} />
-          <PositionsSection
-            title={PORT_LIQUID_TITLE}
-            positions={liquid}
-            columns={["asset", "amount", "value"]}
-            emptyText=""
-          />
+
+          {/* Asset Deployment Overview — same category tables as the connected
+              Portfolio, from the sample holdings. */}
+          <section className="dash-section" aria-label={PORT_DEPLOYMENT_TITLE}>
+            <h2 className="dash-section__title">{PORT_DEPLOYMENT_TITLE}</h2>
+            <LiquidAssetsCard positions={liquid} />
+            <EarningAssetsCard
+              title={PORT_STAKED_TITLE}
+              caption={PORT_STAKED_CAPTION}
+              valueHeader="USD Value"
+              positions={staked}
+              onManageOpen={onExternalHandoff}
+            />
+            <EarningAssetsCard
+              title={PORT_YIELD_TITLE}
+              caption={PORT_YIELD_CAPTION}
+              valueHeader="Value"
+              positions={protocol}
+              onManageOpen={onExternalHandoff}
+            />
+          </section>
         </main>
 
         {railMode === "ask_smith_ai" ? (

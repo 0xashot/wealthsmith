@@ -3195,3 +3195,30 @@
   outline: none;
   box-shadow: var(--shadow-control-focus);
 }
+
+/* Est. Earnings — sourced value × sourced APY, per year (e.g. "+$219/yr"). */
+.deploy-table__earnings {
+  font: var(--typography-label-md-font);
+  color: var(--color-feedback-success-text-tint);
+  white-space: nowrap;
+}
+
+/* Table header band — subtle grey behind the column titles, rounded at the
+   corners; titles share the cell padding so they align with the content. */
+.portfolio-table thead .portfolio-table__header {
+  background: var(--color-subdued-neutral-background-default);
+  border-bottom: none;
+}
+
+.portfolio-table thead .portfolio-table__header:first-child {
+  border-radius: var(--radius-surface-sm) 0 0 var(--radius-surface-sm);
+}
+
+.portfolio-table thead .portfolio-table__header:last-child {
+  border-radius: 0 var(--radius-surface-sm) var(--radius-surface-sm) 0;
+}
+
+/* No divider under the last row — the card padding closes the table. */
+.portfolio-table tbody tr:last-child .portfolio-table__cell {
+  border-bottom: none;
+}

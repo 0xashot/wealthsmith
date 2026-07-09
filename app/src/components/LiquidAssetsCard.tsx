@@ -12,7 +12,7 @@
  */
 import { useId, useState } from "react";
 import type { WalletPosition } from "../wallet/walletPosition";
-import { SOL_MINT } from "../wallet/tokenPrices";
+import { usd0, formatAmount, explorerUrl } from "./deployTable";
 import { resolveTokenIcon } from "../state/iconRegistry";
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
 import {
@@ -24,24 +24,6 @@ import {
 
 const ROWS_PER_PAGE_OPTIONS = [5, 10, 25];
 const DEFAULT_ROWS_PER_PAGE = 5;
-
-/** Whole-dollar USD, e.g. "$22,800". */
-const usd0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
-
-/** On-chain amount + symbol, e.g. "154.2 SOL". */
-function formatAmount(p: WalletPosition): string {
-  const amount =
-    p.uiAmount != null
-      ? p.uiAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })
-      : p.amount;
-  return `${amount} ${p.symbol}`;
-}
-
-/** Solscan token address page for the row's mint (native SOL → wrapped-SOL mint). */
-function explorerUrl(p: WalletPosition): string | undefined {
-  const mint = p.type === "native" ? SOL_MINT : p.mint;
-  return mint ? `https://solscan.io/token/${mint}` : undefined;
-}
 
 function TrendIcon({ dir }: { dir: "up" | "down" | "flat" }) {
   return (
@@ -137,16 +119,16 @@ export default function LiquidAssetsCard({ positions }: Props) {
             <table className="portfolio-table" aria-labelledby={headingId}>
               <thead>
                 <tr>
-                  <th scope="col" className="portfolio-table__header">
+                  <th scope="col" className="portfolio-table__cell portfolio-table__header">
                     Asset
                   </th>
-                  <th scope="col" className="portfolio-table__header portfolio-table__cell--right">
+                  <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">
                     Amount
                   </th>
-                  <th scope="col" className="portfolio-table__header portfolio-table__cell--right">
+                  <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">
                     USD Value
                   </th>
-                  <th scope="col" className="portfolio-table__header portfolio-table__cell--right">
+                  <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">
                     24h Change
                   </th>
                 </tr>

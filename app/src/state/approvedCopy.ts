@@ -284,7 +284,10 @@ export const PORT_LIQUID_TITLE = "Liquid Assets";
 export const PORT_LIQUID_CAPTION =
   "Assets sitting in connected wallet, not earning passive income.";
 export const PORT_STAKED_TITLE = "Staked Assets";
+export const PORT_STAKED_CAPTION = "Earning yield via trusted staking protocols.";
 export const PORT_YIELD_TITLE = "Yield Strategies";
+export const PORT_YIELD_CAPTION =
+  "Assets deployed in yield-generating strategies and vaults.";
 export const DETECTED_ASSETS_TITLE = "Detected Wallet Assets";
 
 /* Sourced pricing (tokenPrices.ts — DefiLlama primary, Jupiter fallback). USD

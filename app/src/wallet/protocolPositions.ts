@@ -27,6 +27,21 @@ import { lookupMint, shortMint, type WalletPosition } from "./walletPosition";
 export const STAKE_PROGRAM_ID = "Stake11111111111111111111111111111111111111";
 const STAKE_WITHDRAWER_OFFSET = 44;
 
+/**
+ * Known validators the app recognizes by vote account, so native stake delegated
+ * to them shows the operator's real name (and a real Manage destination) instead
+ * of the generic "Native Stake" fallback. Sourced from the validator's on-chain
+ * node identity (verified: this vote account's identity is JUPiTER…1h4b, Jupiter's
+ * validator). Only add entries that are verified; unknown validators stay generic.
+ */
+const KNOWN_VALIDATORS: Record<string, { name: string; manageUrl: string }> = {
+  // Jupiter's validator (vote account "Catzo…Diqb", node identity "JUPiTER…1h4b").
+  CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb: {
+    name: "Jupiter",
+    manageUrl: "https://jup.ag",
+  },
+};
+
 /** Kamino K-Lend. Public REST API + on-chain reserve reads (no key, read-only). */
 export const KAMINO_API_BASE = "https://api.kamino.finance";
 /** The reserve account's liquidity mint pubkey sits at byte offset 128. */
@@ -160,10 +175,16 @@ export async function fetchNativeStakePositions(
     amount: String(g.stakeLamports),
     uiAmount: g.stakeLamports / 1e9,
     decimals: 9,
-    protocol: g.voter ? `Validator ${shortMint(g.voter)}` : "Native Stake",
+    // Recognized validator → the operator's name ("Jupiter"); otherwise generic.
+    protocol: (g.voter && KNOWN_VALIDATORS[g.voter]?.name) ?? "Native Stake",
     detection: "native_stake",
     valueUsd: null,
     apy: g.apy,
+    // Review-only handoff: a recognized validator's app page, else the validator's
+    // explorer page (the vote account is the sourced on-chain destination).
+    manageUrl: g.voter
+      ? (KNOWN_VALIDATORS[g.voter]?.manageUrl ?? `https://solscan.io/account/${g.voter}`)
+      : undefined,
   }));
 }
 

@@ -85,6 +85,14 @@ export interface WalletPosition {
   apy?: number | null;
   /** For protocol positions: whether it's supplied (collateral) or borrowed. */
   side?: "supplied" | "borrowed";
+  /**
+   * Review-only external Manage destination sourced at DETECTION time (e.g. a
+   * native stake position → its validator's block-explorer page). Opens in a new
+   * tab only — never a transaction or signature. Absent when there is no
+   * position-specific destination (the UI may fall back to the approved protocol
+   * app page, or show no Manage link at all — never an invented URL).
+   */
+  manageUrl?: string;
 }
 
 /** SPL Token programs (constants — @solana/spl-token is not a dependency). */

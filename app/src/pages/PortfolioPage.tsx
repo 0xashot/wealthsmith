@@ -42,6 +42,7 @@ interface Props {
 }
 
 export default function PortfolioPage({
+  pushToast,
   onNavigate,
   onDisconnect,
   onCopyAddress,
@@ -83,7 +84,7 @@ export default function PortfolioPage({
               Overview, Crypto Assets Allocation, Deployment, Liquid, Staked, Yield)
               populated from live read-only positions, plus the detailed detected-
               assets table. No fixture values. */}
-          <RealWalletPortfolio />
+          <RealWalletPortfolio pushToast={pushToast} />
         </main>
 
         {smithOpen ? (
