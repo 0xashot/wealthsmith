@@ -109,6 +109,8 @@ export type GuardrailCode =
   | "buffer_protection"
   | "pricing_available"
   | "allocation_delta"
+  // capital_efficiency: idle assets clear the value/share thresholds.
+  | "idle_asset_threshold"
   // staking: a small SOL balance is kept back for network fees.
   | "sol_fee_reserve"
   // position_optimization: which review conditions were evaluated.

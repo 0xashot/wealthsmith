@@ -1699,6 +1699,222 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 9E — capital efficiency / idle assets trigger.
+ * cryptoPosition() builds a priced liquid wallet BONK token = eligible idle
+ * asset. Total priced value is 15,000, so the 2% share threshold is $300.
+ * ------------------------------------------------------------------ */
+export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+  const cats = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.map((s) => s.category).join(",") || "none";
+  const has = (r: ReturnType<typeof runSuggestionEngine>, c: string) =>
+    r.suggestions.some((s) => s.category === c);
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2); // no rebalance
+  const offTarget = () => allocationFixture(15000, 75, 15); // rebalance applies
+
+  // 9E-A. Underfunded buffer + eligible idle token → Buffer only.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(800, 1000, 3),
+        allocation: aligned(),
+        positions: [cryptoPosition(5000)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9E-A: underfunded buffer + idle token → buffer only",
+      cats(r) === "buffer" && !has(r, "capital_efficiency"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9E-B. Funded + no higher candidate + idle token ≥ $100 and ≥ 2% → Top Pick.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(5000)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = r.suggestions.find((x) => x.category === "capital_efficiency");
+    add(
+      "9E-B: funded + idle token → capital_efficiency Top Pick, full amount",
+      cats(r) === "capital_efficiency" &&
+        s?.is_top_pick === true &&
+        s?.amount?.valueUsd === 5000,
+      `categories=${cats(r)} topPick=${s?.is_top_pick} amount=${s?.amount?.valueUsd}`
+    );
+  }
+
+  // 9E-C. Funded + Rebalance applies + idle token → Rebalance first (Top Pick), capital_efficiency second.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [cryptoPosition(5000)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const reb = r.suggestions.find((s) => s.category === "rebalance");
+    add(
+      "9E-C: rebalance + idle token → rebalance first/Top Pick, capital_efficiency second",
+      cats(r) === "rebalance,capital_efficiency" && reb?.is_top_pick === true,
+      `categories=${cats(r)} rebTop=${reb?.is_top_pick}`
+    );
+  }
+
+  // 9E-D. Funded + Capital Efficiency + Staking + Stable Yield, no Rebalance → engine order, capEff Top Pick.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [cryptoPosition(5000), solPosition(10), stablePosition("USDC", 10000)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const ce = r.suggestions.find((s) => s.category === "capital_efficiency");
+    add(
+      "9E-D: capEff + staking + stable_yield → engine order, capital_efficiency Top Pick",
+      cats(r) === "capital_efficiency,staking,stable_yield" && ce?.is_top_pick === true,
+      `categories=${cats(r)} ceTop=${ce?.is_top_pick}`
+    );
+  }
+
+  // 9E-E. Idle token value < $100 → no capital_efficiency → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(50)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9E-E: idle token < $100 → no capital_efficiency, On Track",
+      !has(r, "capital_efficiency") && cats(r) === "on_track",
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9E-F. Idle token ≥ $100 but < 2% of portfolio ($200 / 15,000 = 1.3%) → no capital_efficiency.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(200)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9E-F: idle token below 2% share → no capital_efficiency, On Track",
+      !has(r, "capital_efficiency") && cats(r) === "on_track",
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9E-G. Only liquid SOL → no capital_efficiency (staking may apply).
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9E-G: only liquid SOL → no capital_efficiency",
+      !has(r, "capital_efficiency"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9E-H. Only liquid wallet stablecoins → no capital_efficiency (stable_yield may apply).
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9E-H: only stablecoins → no capital_efficiency",
+      !has(r, "capital_efficiency"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9E-I. Only deployed positions → no capital_efficiency (position_optimization may apply).
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9E-I: only deployed positions → no capital_efficiency",
+      !has(r, "capital_efficiency"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9E-J. Unpriced idle token → no capital_efficiency, no invented amount.
+  {
+    const unpriced: WalletPosition = {
+      id: "unpriced-bonk",
+      source: "wallet",
+      type: "token",
+      symbol: "BONK",
+      name: "Bonk",
+      amount: "1000000",
+      uiAmount: 1_000_000,
+      decimals: 5,
+      detection: "direct_wallet_balance",
+      priceUsd: null,
+      valueUsd: null,
+    };
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [unpriced] }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9E-J: unpriced idle token → no capital_efficiency",
+      !has(r, "capital_efficiency"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9E-K. Partial pricing + priced idle token → capital_efficiency + warning.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [cryptoPosition(5000)],
+        anyUnpriced: true,
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9E-K: partial pricing + priced idle token → capital_efficiency + warning",
+      has(r, "capital_efficiency") && r.warnings.includes("partial_pricing"),
+      `categories=${cats(r)} warnings=${r.warnings.join(",")}`
+    );
+  }
+
+  // 9E-L. Mapper renders the capital_efficiency card safely.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(5000)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = r.suggestions.find((x) => x.category === "capital_efficiency");
+    const card = s ? toSuggestionCard(s) : undefined;
+    add(
+      "9E-L: capital_efficiency card maps safely (copy, amount, review-only, non-transactional)",
+      card?.title === "Review Idle Assets" &&
+        card?.description === "Some assets may not be contributing to your current plan." &&
+        card?.impact_text.includes("Idle assets to review") === true &&
+        card?.cta.label === "Review" &&
+        card?.cta.executes_transaction === false &&
+        card?.cta.requires_wallet_signature === false &&
+        card?.cta.action === null,
+      `title="${card?.title}" impact="${card?.impact_text}" cta="${card?.cta.label}"`
+    );
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -1708,6 +1924,7 @@ export function printFixtureResults(): void {
     ...runStakingFixtureChecks(),
     ...runStableYieldFixtureChecks(),
     ...runPositionOptimizationFixtureChecks(),
+    ...runCapitalEfficiencyFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

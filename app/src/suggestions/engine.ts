@@ -18,6 +18,7 @@ import type {
 } from "./engineTypes";
 import { deriveBufferSuggestion } from "./bufferSuggestion";
 import { deriveRebalanceSuggestion } from "./rebalanceSuggestion";
+import { deriveCapitalEfficiencySuggestion } from "./capitalEfficiencySuggestion";
 import { deriveStakingSuggestion } from "./stakingSuggestion";
 import { deriveStableYieldSuggestion } from "./stableYieldSuggestion";
 import { derivePositionOptimizationSuggestion } from "./positionOptimizationSuggestion";
@@ -34,10 +35,10 @@ import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
  *   2. Buffer Override: if the buffer is NOT fully funded, return the buffer
  *      suggestion alone — no deployment/yield/rebalance, no On Track.
  *   3. If the buffer is fully funded, collect the actionable candidates in
- *      category-priority order: Rebalance, Staking (idle SOL), Stable Yield
- *      (excess stablecoins), then Position Optimization (review of existing
- *      deployed positions). Stable Yield is SUPPRESSED when Rebalance applies;
- *      Position Optimization may coexist with any of them.
+ *      category-priority order: Rebalance, Capital Efficiency (idle assets),
+ *      Staking (idle SOL), Stable Yield (excess stablecoins), then Position
+ *      Optimization (review of deployed positions). Stable Yield is SUPPRESSED
+ *      when Rebalance applies; the others may coexist.
  *   4. If there are no candidates, fall back to On Track ("aligned").
  * Finally, deterministic Top Pick selection (topPick.ts) marks at most one
  * eligible actionable suggestion by category priority — never the UI or AI.
@@ -62,6 +63,9 @@ export function runSuggestionEngine(
     const candidates: EngineSuggestion[] = [];
     const rebalance = deriveRebalanceSuggestion(inputs, generatedAt);
     if (rebalance) candidates.push(rebalance);
+    // Capital Efficiency ranks above Staking/Stable Yield; may coexist with all.
+    const capitalEfficiency = deriveCapitalEfficiencySuggestion(inputs, generatedAt);
+    if (capitalEfficiency) candidates.push(capitalEfficiency);
     const staking = deriveStakingSuggestion(inputs, generatedAt);
     if (staking) candidates.push(staking);
     // Stable Yield only when Rebalance does not apply (allocation already close

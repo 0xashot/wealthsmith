@@ -163,8 +163,19 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   card per position, never names a replacement protocol or calls a position bad.
   Lowest-priority actionable candidate; may coexist with Rebalance/Staking/Stable
   Yield. Fixtures 9D-A…K.
-- Pending — Step 9E+: capital_efficiency trigger (contract ready);
-  duplicate_exposure reason code remains contracted but not emitted.
+- Step 9E (done): **capital efficiency / idle assets trigger**
+  (`deriveCapitalEfficiencySuggestion`, category `capital_efficiency`, "Review
+  Idle Assets"). Flags meaningful LIQUID WALLET crypto NOT covered by other rules
+  — priced wallet tokens excluding SOL/WSOL (staking), stablecoins (stable
+  yield), and LST/stake/protocol (position optimization) and unknown tokens.
+  Aggregate eligible value must clear BOTH ≥ $100 and ≥ 2% of the priced
+  portfolio. One aggregated suggestion; never names/sells/swaps an asset. Ranks
+  **above** Staking/Stable Yield, **below** Rebalance; funded-buffer engine order
+  is now Rebalance → Capital Efficiency → Staking → Stable Yield → Position
+  Optimization → On Track. Fixtures 9E-A…L.
+
+All six MVP+ suggestion categories are now implemented. `duplicate_exposure`
+remains contracted but not emitted (pending duplicate-position detection).
 
 ## Suggestion display order
 

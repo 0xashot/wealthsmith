@@ -46,6 +46,12 @@ export const MIN_STAKING_SUGGESTION_USD = 50;
  */
 export const MIN_STABLE_YIELD_SUGGESTION_USD = 100;
 
+/* Capital efficiency (idle liquid wallet crypto not covered by other rules). */
+/** Aggregate idle-asset value below this is too small to flag. */
+export const MIN_CAPITAL_EFFICIENCY_SUGGESTION_USD = 100;
+/** Idle assets below this share of the priced portfolio are not flagged. */
+export const CAPITAL_EFFICIENCY_PORTFOLIO_SHARE_THRESHOLD = 0.02;
+
 /* Position optimization (review of existing staked/yield/protocol positions). */
 /** A deployed position below this value is too small to flag for review. */
 export const MIN_POSITION_REVIEW_USD = 100;
