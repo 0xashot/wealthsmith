@@ -18,6 +18,8 @@ import {
   getStakedPositions,
   getProtocolPositions,
 } from "../wallet/walletSummary";
+import { useRailSuggestions, type RailSuggestions } from "../suggestions/useRailSuggestions";
+import type { SavedGoal } from "../types/goal";
 import PortfolioAllocationDonuts from "./PortfolioAllocationDonuts";
 import LiquidAssetsCard from "./LiquidAssetsCard";
 import EarningAssetsCard from "./EarningAssetsCard";
@@ -37,11 +39,19 @@ import {
 interface Props {
   /** Approved toast for the review-only Manage handoffs (navigation only). */
   pushToast?: (message: string, helper?: string) => void;
+  /** Saved plan — drives the shared real-wallet Suggestion Engine rail. */
+  goal?: SavedGoal;
+  /** Receive engine suggestions for the Portfolio right rail (same as Dashboard). */
+  onSuggestions?: (data: RailSuggestions) => void;
 }
 
-export default function RealWalletPortfolio({ pushToast }: Props) {
-  const { status, positions, error, loading: reading } = useWalletPortfolio();
+export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: Props) {
+  const { status, positions, error, pricedAsOf, loading: reading } = useWalletPortfolio();
   const loading = status === "loading" && positions.length === 0;
+
+  // SAME shared hook + engine the Dashboard uses — no Portfolio-specific
+  // suggestion logic. It reuses THIS component's single wallet read.
+  useRailSuggestions({ positions, pricedAsOf, goal, loading, onSuggestions });
 
   const liquid = getLiquidPositions(positions);
   const staked = getStakedPositions(positions);

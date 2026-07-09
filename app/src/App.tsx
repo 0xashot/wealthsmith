@@ -225,6 +225,7 @@ export default function App() {
         onNavigate={navigate}
         onDisconnect={disconnectWallet}
         onCopyAddress={copyWalletAddress}
+        savedGoal={savedGoal}
       />
     );
   } else if (mode === "connected" && activePage === "goal") {

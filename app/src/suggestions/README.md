@@ -109,19 +109,23 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   then impact → urgency → efficiency → id).
 - Step 7A (done): **UI card mapper** (`toSuggestionCard`). Maps only — it does
   not generate, rank, select Top Pick, or sort; it preserves engine order.
-- Step 7B (done): **wired into the real-wallet Dashboard rail**. `DashboardBody`
-  (which owns the single wallet read) builds inputs via the adapter, runs
-  `runSuggestionEngine`, maps with `toSuggestionCards`, and lifts the result to
-  `DashboardPage`, which renders it in `SuggestionRail` in ENGINE ORDER (no
-  re-sort, no Top Pick reselection). The placeholder is replaced only when the
-  engine can run; otherwise a polished unavailable state. Partial-pricing
-  warning shows as a soft notice above the cards. CTAs are review-only and
-  non-transactional. `SuggestionCard` now renders `status: "disabled"` as a
-  non-actionable (dimmed, disabled-button + reason) card. **Demo Mode is
-  untouched — it still renders its own fixtures.**
-- Pending — Portfolio rail wiring: `PortfolioPage` does not receive `savedGoal`
-  yet, so the real-wallet Portfolio rail is not wired. TODO: thread `savedGoal`
-  into `PortfolioPage` and reuse the same engine + mapper there.
+- Step 7B (done): **wired into the real-wallet Dashboard rail**. The placeholder
+  is replaced only when the engine can run; otherwise a polished unavailable
+  state. Partial-pricing warning shows as a soft notice above the cards. CTAs
+  are review-only and non-transactional. `SuggestionCard` renders
+  `status: "disabled"` as a non-actionable (dimmed, disabled-button + reason)
+  card.
+- Step 7C (done): **Portfolio wired to the SAME rail**. Both pages now use the
+  shared `useRailSuggestions` hook (derive inputs → `runSuggestionEngine` →
+  `toSuggestionCards` + signature-gated lift) and the shared
+  `RealWalletSuggestionsRail` renderer, so Dashboard and Portfolio show
+  identical suggestions (title, amount, Top Pick, disabled state, notice, order)
+  for the same wallet + saved goal. No Portfolio-specific suggestion logic,
+  ranking, Top Pick, or ordering. `savedGoal` is threaded App → PortfolioPage →
+  RealWalletPortfolio; each page reuses its own single wallet read (no extra
+  read for suggestions). The **Smith AI chatbot is out of scope** — only the
+  right-side suggestions rail is wired. **Demo Mode remains fixture-based and
+  untouched.**
 
 ## Suggestion display order
 

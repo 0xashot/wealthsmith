@@ -22,16 +22,14 @@
 import { useRef, useState } from "react";
 import { portfolioState as p } from "../state/portfolioState";
 import { realWalletSmithAiContent } from "../state/realWalletSmithAi";
-import {
-  ASK_SMITH_LABEL_PORTFOLIO,
-  REAL_WALLET_SUGGESTIONS_TITLE,
-  STRATEGY_STEPS_COMING,
-} from "../state/approvedCopy";
+import { ASK_SMITH_LABEL_PORTFOLIO } from "../state/approvedCopy";
 import { dashboardState as connected } from "../state/dashboardState";
+import type { SavedGoal } from "../types/goal";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
 import RealWalletPortfolio from "../components/RealWalletPortfolio";
-import EmptyStateCard from "../components/EmptyStateCard";
+import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
+import type { RailSuggestions } from "../suggestions/useRailSuggestions";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 
 interface Props {
@@ -39,6 +37,8 @@ interface Props {
   onNavigate: (id: string) => void;
   onDisconnect: () => void;
   onCopyAddress: (address: string) => void;
+  /** Saved plan — drives the same real-wallet Suggestion Engine rail as Dashboard. */
+  savedGoal?: SavedGoal;
 }
 
 export default function PortfolioPage({
@@ -46,8 +46,12 @@ export default function PortfolioPage({
   onNavigate,
   onDisconnect,
   onCopyAddress,
+  savedGoal,
 }: Props) {
   const [smithOpen, setSmithOpen] = useState(false);
+  // Engine suggestions lifted from RealWalletPortfolio (which owns the single
+  // Portfolio wallet read) — same shared rail the Dashboard uses.
+  const [rail, setRail] = useState<RailSuggestions | null>(null);
   const askButtonRef = useRef<HTMLButtonElement>(null);
 
   const openAskSmithAi = () => setSmithOpen(true);
@@ -84,21 +88,18 @@ export default function PortfolioPage({
               Overview, Crypto Assets Allocation, Deployment, Liquid, Staked, Yield)
               populated from live read-only positions, plus the detailed detected-
               assets table. No fixture values. */}
-          <RealWalletPortfolio pushToast={pushToast} />
+          <RealWalletPortfolio
+            pushToast={pushToast}
+            goal={savedGoal}
+            onSuggestions={setRail}
+          />
         </main>
 
         {smithOpen ? (
           <AskSmithAiPanel content={realWalletSmithAiContent} onClose={closeAskSmithAi} />
         ) : (
-          <aside className="suggestion-rail" aria-label={connected.accessibility.right_rail_label}>
-            {/* Strategy Steps / Suggestion Engine has no live inputs yet — safe
-                coming-soon state, never fixture suggestions or Top Pick as the
-                user's. Same right-rail structure as the Dashboard. */}
-            <EmptyStateCard
-              title={REAL_WALLET_SUGGESTIONS_TITLE}
-              description={STRATEGY_STEPS_COMING}
-            />
-          </aside>
+          // Same shared real-wallet Suggestion Engine rail as the Dashboard.
+          <RealWalletSuggestionsRail rail={rail} railLabel={connected.accessibility.right_rail_label} />
         )}
       </div>
     </div>
