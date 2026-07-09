@@ -686,6 +686,14 @@ Rules:
 - Dust tokens below minimum should be ignored.
 - Top Pick must never bypass guardrails.
 
+APPROVED MVP note (guardrail data availability): cost, liquidity, and slippage
+guardrails are NOT evaluated in the Suggestion Engine MVP because no
+quote/route infrastructure exists in the prototype. They must be reported with
+guardrail status `not_evaluated` — never invented, never silently treated as
+passed. Guardrails evaluable in MVP: minimum trade size, buffer protection,
+pricing availability, allocation delta. Cost/liquidity/slippage evaluation
+activates only when quote/route data exists.
+
 ---
 
 ## Output Contract

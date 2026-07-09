@@ -278,10 +278,14 @@ Dashboard body — the same four cards in every mode (heading above each card):
                            • Total Portfolio Value = sourced USD total (or "—")
                            • Net Contributions = sourced ESTIMATE of net deposits
                              over the last 12 months (or "—")
-  Safety Buffer        → stablecoin reserve vs monthly expenses (× 3 months),
-                         counting wallet stablecoins + stablecoin protocol
-                         positions (e.g. USDC supplied to Kamino); unavailable
-                         until prices are loaded AND an expenses input exists
+  Safety Buffer        → stablecoin reserve vs monthly expenses × the RISK-BASED
+                         target months (approved mapping in
+                         rules/financial-logic-boundaries.md: very_low/low → 6,
+                         medium → 3, high/very_high → 1), counting wallet
+                         stablecoins + stablecoin protocol positions (e.g. USDC
+                         supplied to Kamino); unavailable until prices are
+                         loaded AND an expenses input AND a saved risk level
+                         exist (no silent 3-month default)
   Projected Growth     → deterministic MODELED estimate (projectedGrowth.ts): from
                          priced starting value + saved monthly_saving_goal, horizon,
                          and the approved modeled annual return for the saved risk

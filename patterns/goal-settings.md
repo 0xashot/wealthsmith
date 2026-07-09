@@ -361,6 +361,12 @@ high
 very_high
 ```
 
+Risk tolerance drives deterministic product logic elsewhere: the recommended
+allocation target and the RISK-BASED Safety Buffer target months (approved
+mapping in rules/financial-logic-boundaries.md — very_low/low → 6 months,
+medium → 3, high/very_high → 1). Changing risk tolerance therefore updates the
+Dashboard Safety Buffer target.
+
 ### Contribution Frequency
 
 Approved MVP options:

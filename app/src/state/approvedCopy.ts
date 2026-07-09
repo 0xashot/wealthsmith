@@ -254,7 +254,10 @@ export const PG_INFO_UNAVAILABLE_CONNECT =
   "Connect a wallet and complete your goal setup to see your projection.";
 export const STRATEGY_STEPS_COMING =
   "Strategy Steps will appear after WealthSmith has pricing, portfolio rules, and suggestion inputs connected.";
-export const SAFETY_BUFFER_NEEDS = "Safety Buffer needs expense and stablecoin data.";
+/** Approved buffer empty-state copy (patterns/dashboard-layout.md) — the target
+ * is risk-based, so risk tolerance is a required input alongside expenses. */
+export const SAFETY_BUFFER_NEEDS =
+  "Add your monthly expenses and risk tolerance to see your safety buffer target.";
 export const DETECTED_FROM_WALLET = "Detected from your connected wallet.";
 export const REAL_WALLET_NONE_DETECTED = "None detected in this wallet.";
 

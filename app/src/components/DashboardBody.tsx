@@ -23,6 +23,7 @@ import {
 } from "../wallet/walletSummary";
 import { deriveProjection } from "../wallet/projectedGrowth";
 import { deriveRecommendedAllocation } from "../wallet/recommendedAllocation";
+import { getSafetyBufferTargetMonths } from "../wallet/safetyBufferTarget";
 import { dashboardState as s } from "../state/dashboardState";
 import { RISK_OPTIONS, labelFor } from "../state/goalState";
 import type { SavedGoal } from "../types/goal";
@@ -115,8 +116,14 @@ export default function DashboardBody({ goal }: Props) {
   const monthlyExpenses = goal?.expenses_monthly;
 
   // Safety Buffer only once prices are loaded, so a 0 reserve is genuinely "no
-  // stablecoins" rather than "not priced yet".
-  const buffer = pricedAsOf != null ? deriveSafetyBuffer(positions, monthlyExpenses) : null;
+  // stablecoins" rather than "not priced yet". The target months are RISK-BASED
+  // (approved mapping in safetyBufferTarget.ts) — a missing/unknown risk level
+  // yields null and the card shows its unavailable state, never a silent 3.
+  const bufferTargetMonths = getSafetyBufferTargetMonths(goal?.risk_tolerance);
+  const buffer =
+    pricedAsOf != null
+      ? deriveSafetyBuffer(positions, monthlyExpenses, bufferTargetMonths)
+      : null;
   const bufferLow = buffer != null && buffer.coveragePct < 34;
 
   // Current allocation (Crypto vs Stables) from sourced value only.

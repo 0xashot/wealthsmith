@@ -388,6 +388,43 @@ Assume staked or locked stablecoins count as buffer
 Assume stablecoins are risk-free
 ```
 
+### Safety Buffer target (APPROVED — risk-based)
+
+The Safety Buffer target is RISK-BASED deterministic product logic, owned by
+the Safety Buffer derivation (`app/src/wallet/safetyBufferTarget.ts` +
+`walletSummary.ts` — deriveSafetyBuffer), per the approved buffer copy: "Add
+your monthly expenses and risk tolerance to see your safety buffer target."
+
+Approved MVP mapping (saved Goal Settings `risk_tolerance` → target months of
+monthly expenses):
+
+```text
+very_low:  6 months
+low:       6 months
+medium:    3 months
+high:      1 month
+very_high: 1 month
+```
+
+Reasoning: lower-risk users hold a larger stablecoin safety buffer; medium risk
+uses the standard 3-month buffer; higher-risk users may use a smaller minimum
+buffer.
+
+Unavailable states (no invented values):
+
+```text
+No saved risk level / unknown risk → buffer target unavailable (no silent 3).
+No monthly expenses                → buffer unavailable.
+No pricing loaded                  → buffer unavailable.
+```
+
+For Suggestion Engine MVP, the Safety Buffer target must come from this
+existing approved risk-based logic. The engine must not create its own
+buffer-month rule: it consumes the derived targetMonths / targetUsd /
+stableUsd / shortfallUsd (plus the riskTolerance they were derived from) via
+its input contract (`app/src/suggestions/engineInputs.ts`), and no fixed
+buffer-month constant exists in the engine.
+
 ---
 
 ## Projected Growth Boundary
@@ -515,8 +552,14 @@ No priced value / total 0 → allocation unavailable (needs pricing).
 ```
 
 This target is a MODELED reference mix, not advice, not a prediction, not a
-guarantee. It produces NO Suggestions and NO Top Pick. Demo Mode is unaffected
-(Demo uses its own fixture `recommended_allocation`).
+guarantee. Recommended allocation BY ITSELF does not generate a suggestion in
+the UI, and the allocation chart produces NO Suggestions and NO Top Pick. The
+deterministic Suggestion Engine MAY consume the allocation deltas above as
+input for a Rebalance suggestion (rules/suggestion-engine-rules.md); that is
+engine logic, never chart/UI logic. MVP Rebalance is BUCKET-LEVEL (reduce /
+increase crypto exposure) — token-level sell/buy selection requires a later
+approved token-selection rule. Demo Mode is unaffected (Demo uses its own
+fixture `recommended_allocation`).
 
 ---
 

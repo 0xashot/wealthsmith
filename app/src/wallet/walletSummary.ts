@@ -270,15 +270,20 @@ export interface SafetyBuffer {
 
 /**
  * Derive the Safety Buffer from the stablecoin reserve and monthly expenses.
- * Returns null when expenses aren't known (caller also gates on prices being
- * loaded, so a 0 reserve means genuinely no stablecoins — not "not priced").
+ * `targetMonths` is the APPROVED risk-based target from
+ * getSafetyBufferTargetMonths (safetyBufferTarget.ts) — there is deliberately
+ * NO default: a missing risk level must surface as the unavailable state,
+ * never as a silent 3-month assumption. Returns null when expenses or the
+ * target aren't known (caller also gates on prices being loaded, so a 0
+ * reserve means genuinely no stablecoins — not "not priced").
  */
 export function deriveSafetyBuffer(
   positions: WalletPosition[],
   monthlyExpenses: number | undefined,
-  targetMonths = 3
+  targetMonths: number | null
 ): SafetyBuffer | null {
   if (!(typeof monthlyExpenses === "number" && monthlyExpenses > 0)) return null;
+  if (!(typeof targetMonths === "number" && targetMonths > 0)) return null;
   const stableUsd = deriveStableValue(positions);
   const targetUsd = monthlyExpenses * targetMonths;
   const coveragePct = targetUsd > 0 ? Math.min(100, (stableUsd / targetUsd) * 100) : 0;

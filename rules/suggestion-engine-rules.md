@@ -133,6 +133,23 @@ Rules:
 - UI must not invent new suggestion types.
 - Smith AI must not invent new suggestion types.
 
+APPROVED MVP scope (Suggestion Engine MVP, contracts in
+`app/src/suggestions/`): the first implemented suggestions are
+Top Up Safety Buffer, Rebalance, and On Track.
+
+- Safety Buffer target must come from the existing approved RISK-BASED Safety
+  Buffer logic (approved mapping in rules/financial-logic-boundaries.md:
+  very_low/low → 6 months, medium → 3, high/very_high → 1; implemented in
+  app/src/wallet/safetyBufferTarget.ts). The engine consumes the derived
+  target (targetMonths, targetUsd, shortfallUsd, riskTolerance) from its
+  inputs; it must not create its own buffer-month rule and exports no fixed
+  buffer-month constant.
+- MVP Rebalance is BUCKET-LEVEL ("Reduce crypto exposure" / "Increase crypto
+  exposure"). It does not select a specific sell/buy token; `sell_token` /
+  `buy_token` are not required for MVP rebalance. Token-level selection
+  requires a later approved token-selection rule (the copy system's fallback
+  title path covers token-less rebalance).
+
 ---
 
 ## Suggestion Categories
