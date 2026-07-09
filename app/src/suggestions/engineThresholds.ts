@@ -46,6 +46,16 @@ export const MIN_STAKING_SUGGESTION_USD = 50;
  */
 export const MIN_STABLE_YIELD_SUGGESTION_USD = 100;
 
+/* Position optimization (review of existing staked/yield/protocol positions). */
+/** A deployed position below this value is too small to flag for review. */
+export const MIN_POSITION_REVIEW_USD = 100;
+/** Sourced APY below this percent (e.g. < 1%) is low enough to review. */
+export const MIN_REVIEW_APY = 1;
+/** Concentration review only matters for positions at/above this value. */
+export const MIN_CONCENTRATION_REVIEW_USD = 1000;
+/** A single position at/above this share of the priced portfolio is reviewed. */
+export const POSITION_CONCENTRATION_THRESHOLD = 0.5;
+
 /**
  * Honest status for guardrails whose inputs do not exist in the app yet.
  * Cost, liquidity, and slippage require quote/route infrastructure that this

@@ -111,6 +111,10 @@ export type GuardrailCode =
   | "allocation_delta"
   // staking: a small SOL balance is kept back for network fees.
   | "sol_fee_reserve"
+  // position_optimization: which review conditions were evaluated.
+  | "position_value_threshold"
+  | "apy_data_review"
+  | "concentration_review"
   // deferred until a deterministic platform-selection rule exists.
   | "protocol_selection"
   | "cost_available"

@@ -153,8 +153,18 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   Rebalance → Staking → Stable Yield (Stable Yield suppressed if Rebalance
   fired). Copy: "stablecoin/conservative yield", never "stake USDC". Fixtures
   9C-A…J.
-- Pending — Step 9D+: capital_efficiency and position_optimization triggers
-  (contracts ready).
+- Step 9D (done): **position-optimization review trigger**
+  (`derivePositionOptimizationSuggestion`, category `position_optimization`,
+  "Review Existing Yield Positions"). Reviews only EXISTING DEPLOYED positions
+  (LST / native stake / protocol, priced) that meet a deterministic condition —
+  missing sourced APY (≥ $100), low sourced APY (< 1%, ≥ $100), or
+  over-concentration (≥ $1,000 AND ≥ 50% of the priced portfolio). Returns ONE
+  aggregated suggestion (flagged total value, unique reason codes) — never one
+  card per position, never names a replacement protocol or calls a position bad.
+  Lowest-priority actionable candidate; may coexist with Rebalance/Staking/Stable
+  Yield. Fixtures 9D-A…K.
+- Pending — Step 9E+: capital_efficiency trigger (contract ready);
+  duplicate_exposure reason code remains contracted but not emitted.
 
 ## Suggestion display order
 

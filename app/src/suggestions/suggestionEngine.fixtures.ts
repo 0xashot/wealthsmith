@@ -167,6 +167,30 @@ function stablePosition(
   };
 }
 
+/** A deployed (protocol/LST/stake) yield position for position-optimization
+ *  review — apy null = missing APY; low apy = low yield; big value = concentration. */
+function yieldPosition(
+  valueUsd: number,
+  apy: number | null,
+  opts: { type?: WalletPosition["type"]; source?: string; symbol?: string; priced?: boolean } = {}
+): WalletPosition {
+  const { type = "protocol", source = "kamino", symbol = "USDC", priced = true } = opts;
+  return {
+    id: `yield-${symbol}-${valueUsd}-${type}`,
+    source: source as WalletPosition["source"],
+    type,
+    symbol,
+    name: symbol,
+    amount: "1",
+    uiAmount: 1,
+    decimals: 6,
+    detection: "protocol_api",
+    priceUsd: priced ? valueUsd : null,
+    valueUsd: priced ? valueUsd : null,
+    apy,
+  };
+}
+
 interface FixtureArgs {
   safetyBuffer: SafetyBuffer | null;
   anyUnpriced?: boolean;
@@ -1449,6 +1473,232 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 9D — existing position-optimization review trigger.
+ * ------------------------------------------------------------------ */
+export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+  const cats = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.map((s) => s.category).join(",") || "none";
+  const has = (r: ReturnType<typeof runSuggestionEngine>, c: string) =>
+    r.suggestions.some((s) => s.category === c);
+  const posOpt = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.find((s) => s.category === "position_optimization");
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2); // no rebalance
+  const offTarget = () => allocationFixture(15000, 75, 15); // rebalance applies
+
+  // 9D-A. Underfunded buffer + flagged yield position → Buffer only.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(800, 1000, 3),
+        allocation: aligned(),
+        positions: [yieldPosition(5000, null)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9D-A: underfunded buffer + flagged position → buffer only",
+      cats(r) === "buffer" && !has(r, "position_optimization"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9D-B. Funded + no higher candidate + deployed position missing APY ≥ $100 → Top Pick.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [yieldPosition(5000, null)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = posOpt(r);
+    add(
+      "9D-B: funded + missing-APY position → position_optimization Top Pick",
+      cats(r) === "position_optimization" &&
+        s?.is_top_pick === true &&
+        s?.reason_codes.includes("missing_apy_data") === true &&
+        s?.amount?.valueUsd === 5000,
+      `categories=${cats(r)} topPick=${s?.is_top_pick} reasons=${s?.reason_codes.join(",")}`
+    );
+  }
+
+  // 9D-C. Funded + deployed position APY < 1% and ≥ $100 → low_yield_position.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [yieldPosition(5000, 0.5)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9D-C: funded + low APY position → low_yield_position",
+      posOpt(r)?.reason_codes.includes("low_yield_position") === true,
+      `reasons=${posOpt(r)?.reason_codes.join(",")}`
+    );
+  }
+
+  // 9D-D. Funded + healthy position (APY ≥ 1%, not concentrated) → no position_optimization → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [yieldPosition(2000, 5)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9D-D: funded + healthy position → no position_optimization, On Track",
+      !has(r, "position_optimization") && cats(r) === "on_track",
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9D-E. Funded + concentrated position (≥ 50% of portfolio, ≥ $1,000) → concentration_risk.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [yieldPosition(8000, 5)], // 8000 / 15000 = 53%, healthy APY
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9D-E: funded + concentrated position → concentration_risk",
+      posOpt(r)?.reason_codes.includes("concentration_risk") === true &&
+        posOpt(r)?.reason_codes.includes("low_yield_position") === false,
+      `reasons=${posOpt(r)?.reason_codes.join(",")}`
+    );
+  }
+
+  // 9D-F. Flagged deployed position below $100 → no position_optimization.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [yieldPosition(50, null)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9D-F: deployed position < $100 → no position_optimization, On Track",
+      !has(r, "position_optimization") && cats(r) === "on_track",
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9D-G. Liquid wallet token with missing APY → not a deployed position → none.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [cryptoPosition(5000)], // type token, wallet — not deployed
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9D-G: liquid wallet token → no position_optimization",
+      !has(r, "position_optimization"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9D-H. Unpriced deployed position → no position_optimization, no invented amount.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [yieldPosition(5000, null, { priced: false })],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9D-H: unpriced deployed position → no position_optimization",
+      !has(r, "position_optimization"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9D-I. Rebalance + flagged position → Rebalance first (Top Pick), position_optimization second.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: offTarget(),
+        positions: [yieldPosition(5000, null)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const reb = r.suggestions.find((s) => s.category === "rebalance");
+    add(
+      "9D-I: rebalance + flagged position → rebalance first/Top Pick, position_opt second",
+      cats(r) === "rebalance,position_optimization" &&
+        reb?.is_top_pick === true &&
+        posOpt(r)?.is_top_pick === false,
+      `categories=${cats(r)} rebTop=${reb?.is_top_pick}`
+    );
+  }
+
+  // 9D-J. Staking + Stable Yield + Position Optimization, no Rebalance → engine order, Staking Top Pick.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [solPosition(10), stablePosition("USDC", 10000), yieldPosition(5000, null)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const stk = r.suggestions.find((s) => s.category === "staking");
+    add(
+      "9D-J: staking + stable_yield + position_opt → engine order, staking Top Pick",
+      cats(r) === "staking,stable_yield,position_optimization" && stk?.is_top_pick === true,
+      `categories=${cats(r)} stkTop=${stk?.is_top_pick}`
+    );
+  }
+
+  // 9D-K. Mapper renders the position_optimization card safely.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: aligned(),
+        positions: [yieldPosition(5000, null)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = posOpt(r);
+    const card = s ? toSuggestionCard(s) : undefined;
+    add(
+      "9D-K: position_optimization card maps safely (copy, amount, review-only, non-transactional)",
+      card?.title === "Review Existing Yield Positions" &&
+        card?.description ===
+          "Some existing positions may need review based on yield, concentration, or missing data." &&
+        card?.impact_text.includes("Positions to review") === true &&
+        card?.cta.label === "Review" &&
+        card?.cta.executes_transaction === false &&
+        card?.cta.requires_wallet_signature === false &&
+        card?.cta.action === null,
+      `title="${card?.title}" impact="${card?.impact_text}" cta="${card?.cta.label}"`
+    );
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -1457,6 +1707,7 @@ export function printFixtureResults(): void {
     ...runContractFixtureChecks(),
     ...runStakingFixtureChecks(),
     ...runStableYieldFixtureChecks(),
+    ...runPositionOptimizationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
