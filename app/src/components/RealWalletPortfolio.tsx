@@ -15,26 +15,19 @@
  */
 import { useWalletPortfolio } from "../wallet/useWalletPortfolio";
 import {
-  groupPositionsByCategory,
   getLiquidPositions,
   getStakedPositions,
   getProtocolPositions,
 } from "../wallet/walletSummary";
-import LiveMetricGrid from "./LiveMetricGrid";
 import PortfolioAllocationDonuts from "./PortfolioAllocationDonuts";
 import PositionsSection from "./PositionsSection";
+import LiquidAssetsCard from "./LiquidAssetsCard";
 import LiveWalletAssets from "./LiveWalletAssets";
 import EmptyStateCard from "./EmptyStateCard";
 import {
-  REAL_WALLET_FACT_LST,
-  REAL_WALLET_FACT_STAKE,
-  REAL_WALLET_FACT_PROTOCOL_POSITIONS,
-  REAL_WALLET_FACT_WALLET_HELD,
-  REAL_WALLET_FACT_UNKNOWN,
   REAL_WALLET_NONE_DETECTED,
   DETECTED_FROM_WALLET,
   PORT_DEPLOYMENT_TITLE,
-  PORT_LIQUID_TITLE,
   PORT_STAKED_TITLE,
   PORT_YIELD_TITLE,
   LIVE_WALLET_LOADING,
@@ -46,7 +39,6 @@ export default function RealWalletPortfolio() {
   const { status, positions, error, warning, refresh, loading: reading } = useWalletPortfolio();
   const loading = status === "loading" && positions.length === 0;
 
-  const g = groupPositionsByCategory(positions);
   const liquid = getLiquidPositions(positions);
   const staked = getStakedPositions(positions);
   const protocol = getProtocolPositions(positions);
@@ -66,27 +58,14 @@ export default function RealWalletPortfolio() {
           {/* Balance Overview + Crypto Assets Allocation composition donuts. */}
           <PortfolioAllocationDonuts positions={positions} loading={reading} />
 
-          {/* Assets Deployment Overview — how detected assets are deployed (counts). */}
-          <LiveMetricGrid
-            title={PORT_DEPLOYMENT_TITLE}
-            caption={DETECTED_FROM_WALLET}
-            metrics={[
-              { label: REAL_WALLET_FACT_WALLET_HELD, value: String(liquid.length) },
-              { label: REAL_WALLET_FACT_LST, value: String(g.lst.length) },
-              { label: REAL_WALLET_FACT_STAKE, value: String(g.stake.length) },
-              { label: REAL_WALLET_FACT_PROTOCOL_POSITIONS, value: String(g.protocol.length) },
-              { label: REAL_WALLET_FACT_UNKNOWN, value: String(g.unknown.length) },
-            ]}
-          />
-
-          {/* Liquid Assets — native + wallet-held tokens (incl. stables). */}
-          <PositionsSection
-            title={PORT_LIQUID_TITLE}
-            caption={DETECTED_FROM_WALLET}
-            positions={liquid}
-            columns={["asset", "amount", "value", "type", "source"]}
-            emptyText={REAL_WALLET_NONE_DETECTED}
-          />
+          {/* Asset Deployment Overview — the category tables (Liquid / Staked /
+              Yield Strategies) under one section heading. Liquid uses the new
+              table card (total + Asset/Amount/USD Value/24h Change); Staked and
+              Yield keep the previous tables until their redesigns land. */}
+          <section className="dash-section" aria-label={PORT_DEPLOYMENT_TITLE}>
+            <h2 className="dash-section__title">{PORT_DEPLOYMENT_TITLE}</h2>
+            <LiquidAssetsCard positions={liquid} />
+          </section>
 
           {/* Staked Assets — recognized LSTs + native stake; APY sourced or "—". */}
           <PositionsSection

@@ -57,6 +57,12 @@ export interface WalletPosition {
    */
   priceUsd?: number | null;
   /**
+   * 24h price change in PERCENT (e.g. 2.1 = +2.1%), sourced from an APPROVED feed
+   * only (Jupiter price v3 — see tokenPrices.ts). Never invented. Undefined/null
+   * when no sourced figure is available (the row then shows "—").
+   */
+  change24hPct?: number | null;
+  /**
    * USD value of the holding, set ONLY when sourced prices exist. For a plain
    * asset that's priceUsd × uiAmount; for a composite protocol/LP position it's the
    * sum of its `legs` (debt legs subtract). Stays null when any input is unpriced —

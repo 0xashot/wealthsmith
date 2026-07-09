@@ -3075,3 +3075,123 @@
     transition: none;
   }
 }
+
+/* ---------- Asset Deployment Overview (Liquid / Staked / Yield tables) ---------- */
+
+/* Category total under the card title — metric-primary, like the mock's $22,800. */
+.deploy-card__total {
+  margin: 4px 0 0;
+  font: var(--typography-metric-primary-font);
+  letter-spacing: var(--typography-metric-primary-letter-spacing);
+  color: var(--color-text-primary);
+}
+
+/* Asset symbol → block-explorer link (opens the token address page). */
+.deploy-table__asset-link {
+  font: var(--typography-label-md-font);
+  color: var(--color-action-link-default);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: 4px;
+}
+
+.deploy-table__asset-link:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+/* 24h change — sourced sign decides the trend color + icon. */
+.trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: var(--typography-label-md-font);
+  white-space: nowrap;
+}
+
+.trend--up {
+  color: var(--color-feedback-success-text-tint);
+}
+
+.trend--down {
+  color: var(--color-feedback-danger-text-tint);
+}
+
+.trend--flat {
+  color: var(--color-text-secondary);
+}
+
+.trend__icon {
+  flex: none;
+}
+
+/* Pagination bar (shown only when the table has more than 5 rows). */
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: var(--color-surface-card);
+  border-radius: var(--radius-surface-sm);
+}
+
+.table-pagination__size {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.table-pagination__select {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+  background: var(--color-surface-canvas);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+.table-pagination__select:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.table-pagination__pages {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.table-pagination__button {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.table-pagination__button:hover:not(:disabled) {
+  background: var(--color-border-subtle);
+}
+
+.table-pagination__button--current {
+  background: var(--color-surface-canvas);
+  border: 1px solid var(--color-border-strong);
+}
+
+.table-pagination__button:disabled {
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+
+.table-pagination__button:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}

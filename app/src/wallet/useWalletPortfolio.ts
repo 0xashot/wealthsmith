@@ -180,10 +180,10 @@ async function loadHubbleLoans(
 /** Canonical wrapped-SOL mint — prices native SOL and native stake. */
 const SOL_MINT = "So11111111111111111111111111111111111111112";
 
-/** Sourced USD prices (DefiLlama → Jupiter fallback) for detected mints, lazy. */
+/** Sourced USD prices + 24h change (DefiLlama / Jupiter) for detected mints, lazy. */
 async function loadTokenPrices(
   mints: string[]
-): Promise<Map<string, { priceUsd: number }>> {
+): Promise<Map<string, { priceUsd: number; change24hPct?: number }>> {
   const mod = await import("./tokenPrices");
   return mod.fetchTokenPrices(mints);
 }
@@ -207,13 +207,19 @@ function priceMintFor(p: WalletPosition): string | undefined {
  */
 function applyPrice(
   p: WalletPosition,
-  prices: Map<string, { priceUsd: number }>
+  prices: Map<string, { priceUsd: number; change24hPct?: number }>
 ): WalletPosition {
   const mint = priceMintFor(p);
   if (mint) {
     const pi = prices.get(mint);
     if (pi && typeof p.uiAmount === "number") {
-      return { ...p, priceUsd: pi.priceUsd, valueUsd: pi.priceUsd * p.uiAmount };
+      return {
+        ...p,
+        priceUsd: pi.priceUsd,
+        valueUsd: pi.priceUsd * p.uiAmount,
+        // 24h change rides along only when the feed sourced one (else "—").
+        change24hPct: pi.change24hPct ?? null,
+      };
     }
     return p;
   }
@@ -690,7 +696,7 @@ export function useWalletPortfolio(): WalletPortfolio {
           loadTokenPrices(priceMints),
           PROTOCOL_TIMEOUT_MS,
           "token_prices"
-        ).catch(() => new Map<string, { priceUsd: number }>());
+        ).catch(() => new Map<string, { priceUsd: number; change24hPct?: number }>());
         if (cancelled || myReq !== reqId.current) return;
         if (prices.size > 0) {
           merged = merged.map((p) => applyPrice(p, prices));

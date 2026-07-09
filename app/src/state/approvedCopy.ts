@@ -279,8 +279,10 @@ export const DASH_ASSET_MIX_CAPTION =
   "Breakdown of detected assets by category. Value-based allocation needs pricing data.";
 export const PORT_BALANCE_TITLE = "Balance Overview";
 export const PORT_ALLOCATION_TITLE = "Crypto Assets Allocation";
-export const PORT_DEPLOYMENT_TITLE = "Assets Deployment Overview";
+export const PORT_DEPLOYMENT_TITLE = "Asset Deployment Overview";
 export const PORT_LIQUID_TITLE = "Liquid Assets";
+export const PORT_LIQUID_CAPTION =
+  "Assets sitting in connected wallet, not earning passive income.";
 export const PORT_STAKED_TITLE = "Staked Assets";
 export const PORT_YIELD_TITLE = "Yield Strategies";
 export const DETECTED_ASSETS_TITLE = "Detected Wallet Assets";
