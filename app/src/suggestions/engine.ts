@@ -18,17 +18,21 @@ import type {
 } from "./engineTypes";
 import { deriveBufferSuggestion } from "./bufferSuggestion";
 import { deriveRebalanceSuggestion } from "./rebalanceSuggestion";
+import { deriveOnTrackSuggestion } from "./onTrackSuggestion";
 import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
 
 /**
  * Run the engine over an input snapshot. `generatedAt` defaults to now but can
  * be pinned (fixtures/tests) so the whole result is reproducible.
  *
- * Step 4 scope: Safety Buffer + Rebalance rules. SAFETY BUFFER COMES FIRST —
- * while the buffer is underfunded, only the buffer suggestion may appear
- * (Buffer Override); the Rebalance rule itself also gates on a fully funded
- * buffer, so this ordering is belt-and-suspenders. On Track and Top Pick are
- * later steps; every suggestion still leaves with is_top_pick=false.
+ * Step 5 scope — MVP ordering (SAFETY BUFFER COMES FIRST):
+ *   1. Build the Safety Buffer suggestion.
+ *   2. Buffer Override: if the buffer is NOT fully funded, return the buffer
+ *      suggestion alone — no Rebalance, no On Track.
+ *   3. If the buffer is fully funded, try Rebalance; if it fires, return it.
+ *   4. If no Rebalance, try On Track (informational "aligned" state).
+ * Top Pick is a later step; every suggestion still leaves with
+ * is_top_pick=false.
  */
 export function runSuggestionEngine(
   inputs: SuggestionEngineInputs,
@@ -43,19 +47,24 @@ export function runSuggestionEngine(
   const buffer = deriveBufferSuggestion(inputs, generatedAt);
   if (buffer) suggestions.push(buffer);
 
-  // 2) Buffer Override: if the buffer is not fully funded, no other suggestion
-  //    may appear — return the buffer suggestion (if any) alone.
+  // 2) Buffer Override: an underfunded buffer suppresses every other rule.
   const bufferSatisfied = inputs.safetyBuffer?.fullyFunded === true;
   if (bufferSatisfied) {
+    // 3) Rebalance takes precedence over On Track.
     const rebalance = deriveRebalanceSuggestion(inputs, generatedAt);
-    if (rebalance) suggestions.push(rebalance);
+    if (rebalance) {
+      suggestions.push(rebalance);
+    } else {
+      // 4) Otherwise the portfolio is aligned → informational On Track.
+      const onTrack = deriveOnTrackSuggestion(inputs, generatedAt);
+      if (onTrack) suggestions.push(onTrack);
+    }
   }
 
   // Honest unavailability: required inputs missing (no wallet data, no
   // pricing, or no derived Safety Buffer) → "missing_data". A fully funded,
-  // in-target portfolio with complete inputs is NOT unavailable — it is simply
-  // an empty suggestion list (On Track becomes its own suggestion in a later
-  // step).
+  // in-target portfolio with complete inputs is NOT unavailable — it produces
+  // the On Track state above.
   const missingRequired =
     !inputs.dataQuality.hasWalletData ||
     !inputs.dataQuality.hasPricing ||

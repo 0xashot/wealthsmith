@@ -382,6 +382,111 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
     );
   }
 
+  // N. Buffer funded + allocation within threshold (delta 5%) → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(5000, 1000, 3), // funded
+        allocation: allocationFixture(15000, 62, 5),
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = r.suggestions[0];
+    add(
+      "N: funded + delta 5% → On Track (informational)",
+      r.suggestions.length === 1 &&
+        s?.category === "on_track" &&
+        s?.reason_codes.includes("portfolio_aligned") === true &&
+        s?.is_actionable === false &&
+        s?.is_top_pick === false &&
+        s?.amount === undefined,
+      `category=${s?.category} actionable=${s?.is_actionable} top_pick=${s?.is_top_pick}`
+    );
+  }
+
+  // O. Buffer NOT funded + allocation within threshold → buffer only, no On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(800, 1000, 3), // underfunded
+        allocation: allocationFixture(15000, 62, 5),
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "O: buffer not funded + aligned → buffer only, no On Track",
+      r.suggestions.length === 1 &&
+        r.suggestions[0]?.category === "buffer" &&
+        !r.suggestions.some((s) => s.category === "on_track"),
+      `categories=${r.suggestions.map((s) => s.category).join(",")}`
+    );
+  }
+
+  // P. Buffer funded + rebalance threshold met (delta 15%) → Rebalance only.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(5000, 1000, 3),
+        allocation: allocationFixture(15000, 75, 15),
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "P: funded + delta 15% → rebalance only, no On Track",
+      r.suggestions.length === 1 &&
+        r.suggestions[0]?.category === "rebalance" &&
+        !r.suggestions.some((s) => s.category === "on_track"),
+      `categories=${r.suggestions.map((s) => s.category).join(",")}`
+    );
+  }
+
+  // Q. Missing allocation (buffer funded) → no On Track, no missing_data
+  //    (the Safety Buffer input is present, so nothing required is missing).
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: null }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "Q: missing allocation → no On Track, unavailable_reason undefined",
+      !r.suggestions.some((s) => s.category === "on_track") &&
+        r.unavailable_reason === undefined,
+      `suggestions=${r.suggestions.length} unavailable=${r.unavailable_reason}`
+    );
+  }
+
+  // R. Partial pricing + otherwise aligned → warning + On Track appears.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(5000, 1000, 3),
+        allocation: allocationFixture(15000, 62, 5),
+        anyUnpriced: true,
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "R: partial pricing + aligned → warning + On Track",
+      r.warnings.includes("partial_pricing") &&
+        r.suggestions.some((s) => s.category === "on_track"),
+      `warnings=${r.warnings.join(",")} categories=${r.suggestions.map((s) => s.category).join(",")}`
+    );
+  }
+
+  // S. Missing Safety Buffer → no On Track + unavailable_reason missing_data.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: null, allocation: allocationFixture(15000, 62, 5) }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "S: missing safety buffer → no On Track, missing_data",
+      !r.suggestions.some((s) => s.category === "on_track") &&
+        r.unavailable_reason === "missing_data",
+      `suggestions=${r.suggestions.length} unavailable=${r.unavailable_reason}`
+    );
+  }
+
   return checks;
 }
 

@@ -207,6 +207,9 @@ export const SUGGESTION_REBALANCE_OVERWEIGHT_DESCRIPTION =
   "Your crypto allocation is above your target. Review whether you want to move part of it toward stablecoins.";
 export const SUGGESTION_REBALANCE_UNDERWEIGHT_DESCRIPTION =
   "Your crypto allocation is below your target. Review whether you want to move excess stablecoins toward crypto exposure.";
+export const SUGGESTION_ON_TRACK_TITLE = "Your Plan Is On Track";
+export const SUGGESTION_ON_TRACK_DESCRIPTION =
+  "Your Safety Buffer is funded and your allocation is close to your target.";
 export const SUGGESTIONS_UNAVAILABLE =
   "Strategy Steps need wallet value, goal settings, and Safety Buffer data before they can be shown.";
 export const SUGGESTIONS_PARTIAL_PRICING =
@@ -219,6 +222,8 @@ export const SUGGESTION_COPY: Record<string, string> = {
     SUGGESTION_REBALANCE_OVERWEIGHT_DESCRIPTION,
   "suggestion.rebalance.crypto_underweight.description":
     SUGGESTION_REBALANCE_UNDERWEIGHT_DESCRIPTION,
+  "suggestion.on_track.title": SUGGESTION_ON_TRACK_TITLE,
+  "suggestion.on_track.description": SUGGESTION_ON_TRACK_DESCRIPTION,
 };
 
 /** Suggestions: safe coming-soon state (Suggestion Engine has no live inputs yet). */
