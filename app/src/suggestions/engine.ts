@@ -19,6 +19,7 @@ import type {
 import { deriveBufferSuggestion } from "./bufferSuggestion";
 import { deriveRebalanceSuggestion } from "./rebalanceSuggestion";
 import { deriveOnTrackSuggestion } from "./onTrackSuggestion";
+import { selectTopPick } from "./topPick";
 import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
 
 /**
@@ -31,8 +32,8 @@ import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
  *      suggestion alone — no Rebalance, no On Track.
  *   3. If the buffer is fully funded, try Rebalance; if it fires, return it.
  *   4. If no Rebalance, try On Track (informational "aligned" state).
- * Top Pick is a later step; every suggestion still leaves with
- * is_top_pick=false.
+ * Finally, deterministic Top Pick selection (topPick.ts) marks at most one
+ * eligible actionable suggestion — never the UI or AI.
  */
 export function runSuggestionEngine(
   inputs: SuggestionEngineInputs,
@@ -70,12 +71,15 @@ export function runSuggestionEngine(
     !inputs.dataQuality.hasPricing ||
     inputs.safetyBuffer == null;
 
+  // Deterministic Top Pick: mark at most one eligible actionable suggestion.
+  const ranked = selectTopPick(suggestions);
+
   return {
     engine_version: SUGGESTION_ENGINE_VERSION,
     generated_at: generatedAt,
-    suggestions,
+    suggestions: ranked,
     warnings,
     unavailable_reason:
-      suggestions.length === 0 && missingRequired ? "missing_data" : undefined,
+      ranked.length === 0 && missingRequired ? "missing_data" : undefined,
   };
 }

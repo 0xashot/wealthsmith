@@ -98,6 +98,10 @@ interface Props {
 
 export default function SuggestionCard({ card, onExternalHandoff, onReview }: Props) {
   const isLocked = card.status === "locked";
+  // A below-minimum engine suggestion maps to status "disabled": render it the
+  // same non-actionable way as a locked card (dimmed, disabled button, reason
+  // text) so it never looks executable.
+  const nonActionable = isLocked || card.status === "disabled";
   const isTopPick = card.is_top_pick === true;
   // Connected uses "eligible"; demo uses "eligible_for_demo_handoff" — both
   // are review-only external handoffs. Locked cards never reach here.
@@ -110,7 +114,7 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview }: Pr
   const className = [
     "suggestion-card",
     isTopPick && "suggestion-card--top-pick",
-    isLocked && "suggestion-card--locked",
+    nonActionable && "suggestion-card--locked",
   ]
     .filter(Boolean)
     .join(" ");
@@ -137,7 +141,7 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview }: Pr
       <p className="suggestion-card__description">{card.description}</p>
       <p className="suggestion-card__impact">{card.impact_text}</p>
 
-      {isLocked && card.disabled_reason_text && (
+      {nonActionable && card.disabled_reason_text && (
         <p className="suggestion-card__locked-reason">{card.disabled_reason_text}</p>
       )}
 
@@ -148,7 +152,7 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview }: Pr
         </p>
       )}
 
-      {isLocked ? (
+      {nonActionable ? (
         <button type="button" className="suggestion-card__cta" disabled>
           {card.cta.label}
         </button>
@@ -164,7 +168,8 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview }: Pr
           <span>{card.cta.label}</span>
           <ButtonIcon src={externalLinkUrl} />
         </a>
-      ) : (
+      ) : card.cta.label ? (
+        // Informational cards (On Track) have an empty CTA label → no button.
         <button
           type="button"
           className="suggestion-card__cta"
@@ -172,7 +177,7 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview }: Pr
         >
           {card.cta.label}
         </button>
-      )}
+      ) : null}
     </article>
   );
 }

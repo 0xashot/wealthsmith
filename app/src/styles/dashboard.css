@@ -868,6 +868,16 @@
   gap: var(--spacing-card-gap-md);
 }
 
+/* Soft partial-pricing notice above the suggestion cards. */
+.suggestion-rail__notice {
+  margin: 0 0 var(--spacing-card-gap-md);
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+  background: var(--color-subdued-neutral-background-default);
+  border-radius: var(--radius-surface-sm);
+}
+
 /* ---------- Suggestion cards (components/suggestion-card.md) ---------- */
 
 .suggestion-card {

@@ -28,12 +28,16 @@ import {
   SUGGESTIONS_EMPTY_DESCRIPTION,
   SUGGESTIONS_EMPTY_TITLE,
   REAL_WALLET_SUGGESTIONS_TITLE,
-  STRATEGY_STEPS_COMING,
+  SUGGESTIONS_RAIL_DESC,
+  SUGGESTIONS_LOADING,
+  SUGGESTIONS_UNAVAILABLE,
 } from "../state/approvedCopy";
 import type { SavedGoal } from "../types/goal";
+import type { RightRailState, SuggestionCardState } from "../types/dashboard";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
-import DashboardBody from "../components/DashboardBody";
+import DashboardBody, { type RailSuggestions } from "../components/DashboardBody";
+import SuggestionRail from "../components/SuggestionRail";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 import EmptyStateCard from "../components/EmptyStateCard";
 
@@ -65,12 +69,26 @@ export default function DashboardPage({
 }: Props) {
   const connected = mode === "connected";
   const [railMode, setRailMode] = useState<RightRailMode>("suggestions");
+  // Real-wallet Suggestion Engine output, lifted from DashboardBody (which owns
+  // the single wallet read). The rail RENDERS this; it never runs the engine.
+  const [rail, setRail] = useState<RailSuggestions | null>(null);
   const askButtonRef = useRef<HTMLButtonElement>(null);
 
   const openAskSmithAi = () => setRailMode("ask_smith_ai");
   const closeAskSmithAi = () => {
     setRailMode("suggestions");
     askButtonRef.current?.focus();
+  };
+
+  // "Review" on a real-wallet suggestion is read-only: scroll to the related
+  // Dashboard section. No execution, no signature, no completion, no Top Pick
+  // change (only Safety Buffer has an anchored section today).
+  const onReviewSuggestion = (card: SuggestionCardState) => {
+    if (card.category === "safety_buffer") {
+      const el = document.getElementById("safety-buffer");
+      el?.scrollIntoView({ block: "nearest" });
+      el?.focus?.();
+    }
   };
 
   // The disconnect toast + return-to-Dashboard is owned by App (fires once for
@@ -109,19 +127,42 @@ export default function DashboardPage({
               four cards, populated from live data where available, else safe
               unavailable states. No wallet-connected / connect-wallet card here —
               the Connect Wallet CTA lives in the nav. */}
-          <DashboardBody goal={goal} />
+          <DashboardBody goal={goal} onSuggestions={connected ? setRail : undefined} />
         </main>
 
         {connected && railMode === "ask_smith_ai" ? (
           <AskSmithAiPanel content={realWalletSmithAiContent} onClose={closeAskSmithAi} />
-        ) : connected ? (
+        ) : connected && rail?.loading ? (
+          // Wallet read in progress — neutral pending, not the unavailable copy.
           <aside className="suggestion-rail" aria-label={s.accessibility.right_rail_label}>
-            {/* Strategy Steps / Suggestion Engine has no live inputs yet — safe
-                coming-soon state, never fixture suggestions or Top Pick as the
-                user's. Same right-rail structure as Demo Mode. */}
+            <EmptyStateCard title={REAL_WALLET_SUGGESTIONS_TITLE} description={SUGGESTIONS_LOADING} />
+          </aside>
+        ) : connected && rail && rail.available ? (
+          // Deterministic engine output, rendered in ENGINE ORDER (no re-sort,
+          // no Top Pick reselection here). Never demo fixtures.
+          <SuggestionRail
+            rail={
+              {
+                title: REAL_WALLET_SUGGESTIONS_TITLE,
+                description: SUGGESTIONS_RAIL_DESC,
+                state: { status: "active" },
+                summary: {
+                  suggestions_count: rail.cards.length,
+                  top_pick_id: rail.cards.find((c) => c.is_top_pick)?.id ?? "",
+                },
+                cards: rail.cards,
+              } satisfies RightRailState
+            }
+            railLabel={s.accessibility.right_rail_label}
+            notice={rail.notice}
+            onReview={onReviewSuggestion}
+          />
+        ) : connected ? (
+          // Connected but required inputs missing (no priced value / goal data).
+          <aside className="suggestion-rail" aria-label={s.accessibility.right_rail_label}>
             <EmptyStateCard
               title={REAL_WALLET_SUGGESTIONS_TITLE}
-              description={STRATEGY_STEPS_COMING}
+              description={SUGGESTIONS_UNAVAILABLE}
             />
           </aside>
         ) : (

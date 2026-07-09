@@ -1,10 +1,12 @@
 # Suggestion Engine (MVP)
 
 Deterministic product logic that decides what recommendation exists for the
-user's REAL wallet state. As of Step 5 the engine implements three MVP states —
+user's REAL wallet state. As of Step 7A the engine implements three MVP states —
 **Top Up Safety Buffer**, **Rebalance** (bucket-level), and **On Track**
-(informational); Top Pick selection and the UI card mapper are still pending.
-Nothing here is imported by app UI code yet — no cards render from the engine.
+(informational) — plus **deterministic Top Pick selection** and a **UI card
+mapper** (engine output → card shape). The mapper is not yet wired into the
+Dashboard (Step 7B); nothing here is imported by app UI code yet — no cards
+render from the engine.
 
 ## Layer responsibilities (hard rules)
 
@@ -50,11 +52,24 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   (`deriveOnTrackSuggestion`): appears only when the buffer is fully funded AND
   the crypto allocation is within the ±10% threshold, i.e. neither actionable
   rule fires. No CTA, no amount, `is_actionable: false`, and never a Top Pick.
+- `topPick.ts` — deterministic Top Pick selector (`selectTopPick`). Pure, no
+  input mutation; returns new suggestion objects with `is_top_pick` recomputed.
+  Eligible = actionable + `review_only` + not `on_track`. Ranks by category
+  (Buffer > Rebalance), then impact ↓, urgency ↓, efficiency ↓ (null = 0), then
+  id ↑. Marks exactly one winner, or none when no eligible candidate exists.
+- `toSuggestionCard.ts` — deterministic mapper `EngineSuggestion →
+  SuggestionCardState` (`toSuggestionCard`, `toSuggestionCards`). Reads
+  title/description from `SUGGESTION_COPY` by key (missing key → safe fallback,
+  never invented); preserves `is_top_pick` exactly; PRESERVES INPUT ORDER (a
+  plain map — no sort, no Top-Pick reordering); CTA is always non-transactional.
+  `warningsToNotice` maps `partial_pricing` → the approved notice string (the
+  rail decides whether to show it in Step 7B). Imports the card TYPE only — no
+  UI components, no demo fixtures.
 - `engine.ts` — `runSuggestionEngine(inputs, generatedAt?)` ordering: Safety
   Buffer first; if underfunded, buffer suggestion ONLY (Buffer Override); if
-  funded, Rebalance if it fires, else On Track. Adds the `partial_pricing`
-  warning and reports `missing_data` when required inputs are absent. All
-  output leaves with `is_top_pick: false` until Top Pick Logic exists.
+  funded, Rebalance if it fires, else On Track — then `selectTopPick` marks at
+  most one. Adds the `partial_pricing` warning and reports `missing_data` when
+  required inputs are absent.
 - `suggestionEngine.fixtures.ts` — executable fixture scenarios A–F (no test
   framework in this app); run with
   `npx esbuild src/suggestions/suggestionEngine.fixtures.ts --bundle --format=esm --platform=node --outfile=/tmp/fixtures.mjs && node -e "import('/tmp/fixtures.mjs').then(m => m.printFixtureResults())"`.
@@ -87,11 +102,52 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   sell/buy selection is NOT implemented. The Safety Buffer blocks Rebalance
   until fully funded. Still no Top Pick, no UI cards, no transactions.
 - Step 5 (done): **On Track** informational state — appears only when Buffer and
-  Rebalance do not trigger. Not actionable, not a Top Pick, no CTA. Still no
-  Top Pick selection, no UI mapping.
-- Pending: the UI card copy mapper, and **Top Pick** — Buffer Override first
-  (buffer not satisfied → only buffer suggestions, buffer Top Pick), category
-  priority, then impact → urgency → efficiency ranking.
+  Rebalance do not trigger. Not actionable, not a Top Pick, no CTA.
+- Step 6 (done): **Top Pick selection** (`selectTopPick`) — deterministic, not
+  chosen by UI or AI. On Track and disabled suggestions are never Top Pick;
+  exactly one actionable suggestion is marked when eligible (Buffer > Rebalance,
+  then impact → urgency → efficiency → id).
+- Step 7A (done): **UI card mapper** (`toSuggestionCard`). Maps only — it does
+  not generate, rank, select Top Pick, or sort; it preserves engine order.
+- Step 7B (done): **wired into the real-wallet Dashboard rail**. `DashboardBody`
+  (which owns the single wallet read) builds inputs via the adapter, runs
+  `runSuggestionEngine`, maps with `toSuggestionCards`, and lifts the result to
+  `DashboardPage`, which renders it in `SuggestionRail` in ENGINE ORDER (no
+  re-sort, no Top Pick reselection). The placeholder is replaced only when the
+  engine can run; otherwise a polished unavailable state. Partial-pricing
+  warning shows as a soft notice above the cards. CTAs are review-only and
+  non-transactional. `SuggestionCard` now renders `status: "disabled"` as a
+  non-actionable (dimmed, disabled-button + reason) card. **Demo Mode is
+  untouched — it still renders its own fixtures.**
+- Pending — Portfolio rail wiring: `PortfolioPage` does not receive `savedGoal`
+  yet, so the real-wallet Portfolio rail is not wired. TODO: thread `savedGoal`
+  into `PortfolioPage` and reuse the same engine + mapper there.
+
+## Suggestion display order
+
+The **engine owns display order**; the UI renders the array as given and must
+NOT re-sort. The mapper is a plain `map` that preserves input order, and Top
+Pick selection marks importance without changing order.
+
+MVP display order:
+
+```text
+1. Safety Buffer
+2. Rebalance
+3. On Track   (informational — only when no actionable MVP suggestion exists)
+```
+
+Future category order (when more suggestion types ship):
+
+```text
+1. Safety Buffer
+2. Rebalance
+3. Capital Efficiency / idle assets
+4. Yield / protocol optimization
+5. On Track / informational
+```
+
+Demo Mode keeps its own fixture order and is unaffected by the engine/mapper.
 
 ## Safety invariants
 

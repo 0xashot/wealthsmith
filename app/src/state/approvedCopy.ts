@@ -211,9 +211,12 @@ export const SUGGESTION_ON_TRACK_TITLE = "Your Plan Is On Track";
 export const SUGGESTION_ON_TRACK_DESCRIPTION =
   "Your Safety Buffer is funded and your allocation is close to your target.";
 export const SUGGESTIONS_UNAVAILABLE =
-  "Strategy Steps need wallet value, goal settings, and Safety Buffer data before they can be shown.";
+  "Strategy Steps need wallet value, goal settings, Safety Buffer, and allocation data before they can be shown.";
 export const SUGGESTIONS_PARTIAL_PRICING =
   "Some assets are not priced yet, so suggestions may be incomplete.";
+/** Real-wallet suggestion rail: header sub-copy + loading state. */
+export const SUGGESTIONS_RAIL_DESC = "Based on your live wallet and saved plan.";
+export const SUGGESTIONS_LOADING = "Preparing your suggestions…";
 export const SUGGESTION_COPY: Record<string, string> = {
   "suggestion.buffer.title": SUGGESTION_BUFFER_TITLE,
   "suggestion.buffer.description": SUGGESTION_BUFFER_DESCRIPTION,

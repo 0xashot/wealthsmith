@@ -11,6 +11,8 @@ import type { RightRailState, SuggestionCardState } from "../types/dashboard";
 interface Props {
   rail: RightRailState;
   railLabel: string;
+  /** Optional soft notice above the cards (e.g. partial-pricing warning). */
+  notice?: string;
   onExternalHandoff?: (card: SuggestionCardState) => void;
   onReview?: (card: SuggestionCardState) => void;
 }
@@ -18,6 +20,7 @@ interface Props {
 export default function SuggestionRail({
   rail,
   railLabel,
+  notice,
   onExternalHandoff,
   onReview,
 }: Props) {
@@ -27,6 +30,11 @@ export default function SuggestionRail({
         <h2 className="suggestion-rail__title">{rail.title}</h2>
         <p className="suggestion-rail__description">{rail.description}</p>
       </div>
+      {notice && (
+        <p className="suggestion-rail__notice" role="status">
+          {notice}
+        </p>
+      )}
       <div className="suggestion-rail__cards">
         {rail.cards.map((card) => (
           <SuggestionCard

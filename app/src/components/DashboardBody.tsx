@@ -12,7 +12,7 @@
  * shows a polished unavailable state IN THE SAME CARD. No fixture values, no
  * invented USD/APY/allocation. READ-ONLY: nothing is signed, sent, or moved.
  */
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useWalletPortfolio } from "../wallet/useWalletPortfolio";
 import { useNetContributions } from "../wallet/useNetContributions";
 import {
@@ -22,8 +22,15 @@ import {
   formatUsd,
 } from "../wallet/walletSummary";
 import { deriveProjection } from "../wallet/projectedGrowth";
-import { deriveRecommendedAllocation } from "../wallet/recommendedAllocation";
+import {
+  deriveRecommendedAllocation,
+  deriveAllocationDeltas,
+} from "../wallet/recommendedAllocation";
 import { getSafetyBufferTargetMonths } from "../wallet/safetyBufferTarget";
+import { buildSuggestionEngineInputs } from "../suggestions/engineInputAdapter";
+import { runSuggestionEngine } from "../suggestions/engine";
+import { toSuggestionCards, warningsToNotice } from "../suggestions/toSuggestionCard";
+import type { SuggestionCardState } from "../types/dashboard";
 import { dashboardState as s } from "../state/dashboardState";
 import { RISK_OPTIONS, labelFor } from "../state/goalState";
 import type { SavedGoal } from "../types/goal";
@@ -103,12 +110,31 @@ function UnavailableCard({ text }: { text: string }) {
   );
 }
 
+/**
+ * Real-wallet Suggestion Engine output lifted to the page for the right rail.
+ * DashboardBody owns the single wallet read, so it computes the engine result
+ * here (from already-derived data) and reports it upward — avoiding a second
+ * read. The rail (DashboardPage) renders it; it never re-runs the engine.
+ */
+export interface RailSuggestions {
+  /** Engine cards in ENGINE ORDER — the rail must not re-sort. */
+  cards: SuggestionCardState[];
+  /** Partial-pricing notice, when the engine warned. */
+  notice?: string;
+  /** True when the engine produced at least one card. */
+  available: boolean;
+  /** True while the live wallet read is still in progress. */
+  loading: boolean;
+}
+
 interface Props {
   /** Saved plan (onboarding/Goal Settings) — Safety Buffer + Projected Growth. */
   goal?: SavedGoal;
+  /** Real-wallet only: receive engine suggestions for the right rail. */
+  onSuggestions?: (data: RailSuggestions) => void;
 }
 
-export default function DashboardBody({ goal }: Props) {
+export default function DashboardBody({ goal, onSuggestions }: Props) {
   const { status, positions, warning, pricedAsOf, loading } = useWalletPortfolio();
   const contrib = useNetContributions();
   const value = deriveValueBreakdown(positions);
@@ -148,6 +174,79 @@ export default function DashboardBody({ goal }: Props) {
       ? `Recommended target: ${ALLOCATION_LABEL_CRYPTO} ${usd0(recommended.cryptoUsd)} (${recommended.cryptoPct}%), ` +
         `${ALLOCATION_LABEL_STABLES} ${usd0(recommended.stableUsd)} (${recommended.stablePct}%).`
       : `Recommended allocation unavailable.`);
+
+  // Deterministic Suggestion Engine (real wallet). All inputs are ALREADY
+  // derived above (positions, priced value, risk-based Safety Buffer, current +
+  // recommended allocation) — the engine recalculates nothing. Bucket-level
+  // allocation input is built only when priced value AND a recommended target
+  // exist. `generatedAt` uses pricedAsOf so the result is stable across renders.
+  const deltas =
+    showAllocation && recommended
+      ? deriveAllocationDeltas({
+          current: { cryptoUsd, stableUsd, cryptoPct, stablePct },
+          recommended,
+        })
+      : null;
+  const allocationInput =
+    showAllocation && recommended && deltas
+      ? {
+          currentCryptoPct: cryptoPct,
+          currentStablesPct: stablePct,
+          currentCryptoUsd: cryptoUsd,
+          currentStablesUsd: stableUsd,
+          recommendedCryptoPct: recommended.cryptoPct,
+          recommendedStablesPct: recommended.stablePct,
+          cryptoDeltaPct: deltas.cryptoDeltaPct,
+          stablesDeltaPct: deltas.stableDeltaPct,
+        }
+      : null;
+  const engineResult = runSuggestionEngine(
+    buildSuggestionEngineInputs({
+      positions,
+      pricedAsOf,
+      savedGoal: goal ?? null,
+      value: { totalUsd: value.totalUsd, anyUnpriced: value.anyUnpriced },
+      safetyBuffer: buffer,
+      allocation: allocationInput,
+    }),
+    pricedAsOf ?? 0
+  );
+  const suggestionCards = toSuggestionCards(engineResult.suggestions);
+  const suggestionNotice = warningsToNotice(engineResult.warnings);
+
+  // Lift the rail payload to the page, but only when its meaningful content
+  // changes (signature-gated) so the parent setState never loops. The signature
+  // includes every value-bearing DISPLAY field so a value-only change (e.g. the
+  // suggested amount in impact_text) can never leave the rail stale.
+  const railSignature = JSON.stringify({
+    cards: suggestionCards.map((c) => ({
+      id: c.id,
+      title: c.title,
+      description: c.description,
+      impact_text: c.impact_text,
+      is_top_pick: c.is_top_pick,
+      status: c.status,
+      actionability: c.actionability,
+      disabled_reason_text: c.disabled_reason_text ?? "",
+      cta: `${c.cta.label}`,
+    })),
+    notice: suggestionNotice ?? "",
+    loading,
+  });
+  const lastRailSignature = useRef<string | null>(null);
+  useEffect(() => {
+    if (!onSuggestions) return;
+    if (railSignature === lastRailSignature.current) return;
+    lastRailSignature.current = railSignature;
+    onSuggestions({
+      cards: suggestionCards,
+      notice: suggestionNotice,
+      available: suggestionCards.length > 0,
+      loading: loading === true,
+    });
+    // Signature gates the update; card objects are intentionally omitted from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [railSignature, onSuggestions]);
 
   // Deterministic Projected Growth — priced starting value + saved plan inputs.
   const projection = deriveProjection({
