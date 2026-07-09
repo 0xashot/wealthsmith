@@ -196,6 +196,21 @@ export const REAL_WALLET_VALUE_TITLE = "Portfolio Value";
 export const REAL_WALLET_VALUE_DESC =
   "Portfolio value needs pricing data before it can be shown.";
 
+/* Suggestion Engine copy (content/suggestion-card-copy.md) — approved template
+ * strings resolved from the engine's title_key / description_key. The engine
+ * emits KEYS only; this map is for the card copy mapper (later step). */
+export const SUGGESTION_BUFFER_TITLE = "Top Up Your Safety Buffer";
+export const SUGGESTION_BUFFER_DESCRIPTION =
+  "Increase your stablecoin reserve. Your Safety Buffer is below target.";
+export const SUGGESTIONS_UNAVAILABLE =
+  "Strategy Steps need wallet value, goal settings, and Safety Buffer data before they can be shown.";
+export const SUGGESTIONS_PARTIAL_PRICING =
+  "Some assets are not priced yet, so suggestions may be incomplete.";
+export const SUGGESTION_COPY: Record<string, string> = {
+  "suggestion.buffer.title": SUGGESTION_BUFFER_TITLE,
+  "suggestion.buffer.description": SUGGESTION_BUFFER_DESCRIPTION,
+};
+
 /** Suggestions: safe coming-soon state (Suggestion Engine has no live inputs yet). */
 export const REAL_WALLET_SUGGESTIONS_TITLE = "Smith AI Suggestions";
 export const REAL_WALLET_SUGGESTIONS_DESC =

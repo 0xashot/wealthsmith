@@ -1,9 +1,10 @@
 # Suggestion Engine (MVP)
 
 Deterministic product logic that decides what recommendation exists for the
-user's REAL wallet state. This directory is the engine's home; as of Step 2 it
-contains **contracts only** — no suggestion logic runs yet, and nothing here is
-imported by the app.
+user's REAL wallet state. As of Step 3 the engine implements the **Safety
+Buffer rule only** (Top Up Safety Buffer); Rebalance, On Track, Top Pick
+selection, and the UI card mapper are still pending. Nothing here is imported
+by app UI code yet — no cards render from the engine.
 
 ## Layer responsibilities (hard rules)
 
@@ -29,6 +30,21 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   Safety Buffer, allocation + deltas, SavedGoal). Adapter comes later.
 - `engineThresholds.ts` — approved MVP constants (engine version, min
   suggestion size, rebalance delta). Deliberately NO buffer-month constant.
+- `engineInputAdapter.ts` — deterministic adapter from live app data
+  (positions, value breakdown, derived risk-based Safety Buffer, SavedGoal) to
+  `SuggestionEngineInputs`. Real-wallet data only, never demo fixtures.
+- `bufferSuggestion.ts` — the Top Up Safety Buffer rule
+  (`deriveBufferSuggestion`): underfunded buffer → review-only suggestion
+  sized to the shortfall; shortfall under the $50 minimum → disabled
+  suggestion with a failed `min_trade_size` guardrail. Consumes the derived
+  risk-based target; never defines buffer months.
+- `engine.ts` — `runSuggestionEngine(inputs, generatedAt?)`: runs the buffer
+  rule (Step 3 scope), adds the `partial_pricing` warning, and reports
+  `missing_data` when required inputs are absent. All output leaves with
+  `is_top_pick: false` until Top Pick Logic exists.
+- `suggestionEngine.fixtures.ts` — executable fixture scenarios A–F (no test
+  framework in this app); run with
+  `npx esbuild src/suggestions/suggestionEngine.fixtures.ts --bundle --format=esm --platform=node --outfile=/tmp/fixtures.mjs && node -e "import('/tmp/fixtures.mjs').then(m => m.printFixtureResults())"`.
 
 ## Approved MVP decisions (recorded Step 2)
 
@@ -50,12 +66,14 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
 
 ## MVP scope and step plan
 
-- Step 2 (this): contracts/types/thresholds/docs only.
-- Step 3+: engine rules for **Top Up Safety Buffer**, **Rebalance**,
-  **On Track**; then the input adapter and copy mapper.
-- **Top Pick after core suggestions** — Buffer Override first (buffer not
-  satisfied → only buffer suggestions, buffer Top Pick), category priority,
-  then impact → urgency → efficiency ranking.
+- Step 2 (done): contracts/types/thresholds/docs.
+- Step 3 (done): **Top Up Safety Buffer** rule + input adapter + engine shell
+  + executable fixtures. All engine actions are review-only or disabled —
+  never a transaction.
+- Pending: **Rebalance**, **On Track**, the UI card copy mapper, and
+  **Top Pick** — Buffer Override first (buffer not satisfied → only buffer
+  suggestions, buffer Top Pick), category priority, then
+  impact → urgency → efficiency ranking.
 
 ## Safety invariants
 

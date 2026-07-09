@@ -276,7 +276,8 @@ export default function DashboardBody({ goal }: Props) {
                 {Math.round(buffer.coveragePct)}% covered
               </span>
               <span className="buffer__secondary">
-                {buffer.monthsCovered.toFixed(1)}/{buffer.targetMonths} months
+                {buffer.monthsCovered.toFixed(1)}/{buffer.targetMonths}{" "}
+                {buffer.targetMonths === 1 ? "month" : "months"}
               </span>
             </div>
             <div
