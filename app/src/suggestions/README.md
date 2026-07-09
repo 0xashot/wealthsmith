@@ -1,12 +1,13 @@
 # Suggestion Engine (MVP)
 
 Deterministic product logic that decides what recommendation exists for the
-user's REAL wallet state. As of Step 7A the engine implements three MVP states —
-**Top Up Safety Buffer**, **Rebalance** (bucket-level), and **On Track**
-(informational) — plus **deterministic Top Pick selection** and a **UI card
-mapper** (engine output → card shape). The mapper is not yet wired into the
-Dashboard (Step 7B); nothing here is imported by app UI code yet — no cards
-render from the engine.
+user's REAL wallet state. The MVP is live: three states — **Top Up Safety
+Buffer**, **Rebalance** (bucket-level), and **On Track** — plus **Top Pick
+selection**, the **UI card mapper**, and the shared real-wallet Suggestions rail
+on both the **Dashboard and Portfolio**. Step 9A additionally **contracts** four
+future categories (capital_efficiency, staking, stable_yield,
+position_optimization) — types, ordering, mapper, and copy only, with **no
+trigger logic yet**.
 
 ## Layer responsibilities (hard rules)
 
@@ -126,6 +127,21 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   read for suggestions). The **Smith AI chatbot is out of scope** — only the
   right-side suggestions rail is wired. **Demo Mode remains fixture-based and
   untouched.**
+- Step 9A (done): **contracts for the full category set** — added
+  capital_efficiency / staking / stable_yield / position_optimization to the
+  category + reason-code unions, the `CATEGORY_PRIORITY` map, Top Pick
+  eligibility, the mapper (category/type maps + safe fallback), and placeholder
+  copy keys.
+- Step 9B (done): **idle-SOL staking trigger** (`deriveStakingSuggestion`,
+  category `staking`). Fires only when the Safety Buffer is fully funded and the
+  wallet holds TRULY LIQUID SOL (exact `SOL`/`WSOL`, native/token, wallet
+  source, priced) whose amount above a 0.1 SOL fee reserve is worth ≥ $50 —
+  never LSTs, native stake, or protocol SOL, never the full balance, no invented
+  APY/protocol. Engine order when funded: Rebalance, then Staking (On Track only
+  when neither fires). Fixtures 9B-A…J cover Buffer Override, Top Pick ordering,
+  reserve/min-size, LST/unpriced exclusion, WSOL, partial pricing, and mapping.
+- Pending — Step 9C+: stable_yield, capital_efficiency, position_optimization
+  triggers (contracts ready).
 
 ## Suggestion display order
 
@@ -133,23 +149,30 @@ The **engine owns display order**; the UI renders the array as given and must
 NOT re-sort. The mapper is a plain `map` that preserves input order, and Top
 Pick selection marks importance without changing order.
 
-MVP display order:
+**Full category priority** (single source of truth: `CATEGORY_PRIORITY` in
+`topPick.ts`) — drives Top Pick and the intended engine display order:
 
 ```text
-1. Safety Buffer
-2. Rebalance
-3. On Track   (informational — only when no actionable MVP suggestion exists)
+1. Safety Buffer          (buffer)                  — implemented, highest override
+2. Rebalance              (rebalance)               — implemented
+3. Capital Efficiency     (capital_efficiency)      — CONTRACTED (Step 9A, no trigger yet)
+4. Staking                (staking)                 — CONTRACTED
+5. Stable Yield           (stable_yield)            — CONTRACTED
+6. Position Optimization  (position_optimization)   — CONTRACTED
+7. On Track               (on_track, priority 99)   — implemented, informational, last, never Top Pick
 ```
 
-Future category order (when more suggestion types ship):
+Hard rules that survive the expansion: Safety Buffer is the highest-priority
+override (underfunded buffer → no deployment/yield suggestions); Rebalance stays
+above capital-efficiency/yield; On Track is last and appears only when no
+actionable/useful suggestion exists; the UI renders engine order and never
+sorts; Top Pick is a badge, not a sorting rule.
 
-```text
-1. Safety Buffer
-2. Rebalance
-3. Capital Efficiency / idle assets
-4. Yield / protocol optimization
-5. On Track / informational
-```
+Status (Step 9A): the four future categories exist in the CONTRACTS ONLY —
+`SuggestionCategory`/reason-code unions, `CATEGORY_PRIORITY`, Top Pick
+eligibility, the mapper (category/type maps + copy keys), and copy strings. **No
+trigger logic emits them yet** (`engine.ts` still runs only Buffer/Rebalance/On
+Track); triggers arrive in Step 9B+. AI/chatbot never generates suggestions.
 
 Demo Mode keeps its own fixture order and is unaffected by the engine/mapper.
 

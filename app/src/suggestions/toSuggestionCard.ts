@@ -41,10 +41,18 @@ function copy(key: string): string {
   return value;
 }
 
-/** Engine category → the card's `category` string (drives the generic icon). */
+/**
+ * Engine category → the card's `category` string (drives the generic icon).
+ * The trailing four are CONTRACTED (Step 9A) so the mapper stays total if a
+ * future rule emits them; no rule does yet.
+ */
 const CARD_CATEGORY: Record<SuggestionCategory, string> = {
   buffer: "safety_buffer",
   rebalance: "allocation",
+  capital_efficiency: "capital_efficiency",
+  staking: "staked_assets",
+  stable_yield: "yield_opportunity",
+  position_optimization: "portfolio_health",
   on_track: "portfolio_health",
 };
 
@@ -52,6 +60,10 @@ const CARD_CATEGORY: Record<SuggestionCategory, string> = {
 const CARD_TYPE: Record<SuggestionCategory, string> = {
   buffer: "fund_safety_buffer",
   rebalance: "rebalance_to_plan",
+  capital_efficiency: "review_idle_assets",
+  staking: "stake_idle_sol",
+  stable_yield: "deploy_idle_stablecoins",
+  position_optimization: "review_yield_strategy",
   on_track: "on_track",
 };
 

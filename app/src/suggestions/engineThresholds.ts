@@ -32,6 +32,15 @@ export const MIN_SUGGESTION_AMOUNT_USD = 50;
 export const REBALANCE_DELTA_THRESHOLD_PCT = 10;
 
 /**
+ * Staking (idle SOL) — always leave a small SOL reserve for network fees; never
+ * suggest staking the full balance. `eligibleSol = max(liquidSol − reserve, 0)`.
+ */
+export const SOL_FEE_RESERVE = 0.1;
+
+/** Minimum eligible SOL value before an idle-SOL staking suggestion appears. */
+export const MIN_STAKING_SUGGESTION_USD = 50;
+
+/**
  * Honest status for guardrails whose inputs do not exist in the app yet.
  * Cost, liquidity, and slippage require quote/route infrastructure that this
  * prototype does not have — so the engine reports those guardrails as

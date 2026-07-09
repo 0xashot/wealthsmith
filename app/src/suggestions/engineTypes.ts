@@ -24,24 +24,59 @@
 
 /**
  * MVP categories. `buffer` and `rebalance` map to the top-pick category
- * priority hierarchy (Buffer Actions > Rebalance); `on_track` is informational
- * and never Top Pick.
+ * priority hierarchy (Buffer Actions > Rebalance > …); `on_track` is
+ * informational and never Top Pick.
+ *
+ * IMPLEMENTED (MVP): buffer, rebalance, on_track.
+ * CONTRACTED (Step 9A — types + ordering only, NO trigger logic yet):
+ * capital_efficiency, staking, stable_yield, position_optimization. See
+ * CATEGORY_PRIORITY (topPick.ts) for the full ordering.
  */
-export type SuggestionCategory = "buffer" | "rebalance" | "on_track";
+export type SuggestionCategory =
+  | "buffer"
+  | "rebalance"
+  | "capital_efficiency"
+  | "staking"
+  | "stable_yield"
+  | "position_optimization"
+  | "on_track";
 
 /**
  * Machine-readable reason codes (rules/suggestion-engine-rules.md — Reason
  * Codes). These are the ONLY reasons the engine may emit; UI/Smith AI must not
  * create new ones. Copy templates and Smith AI explanations key off these.
+ *
+ * The trailing groups are CONTRACTED for future categories (Step 9A) — declared
+ * so future rules can emit them, but no rule produces them yet.
  */
 export type SuggestionReasonCode =
+  // Implemented (MVP)
   | "buffer_low"
   | "crypto_overweight"
   | "crypto_underweight"
   | "portfolio_aligned"
   | "missing_data"
   | "below_min_size"
-  | "partial_pricing";
+  | "partial_pricing"
+  // capital_efficiency (contracted)
+  | "idle_assets"
+  | "idle_crypto"
+  | "idle_stables"
+  | "excess_cash_like_assets"
+  // staking (contracted)
+  | "idle_sol"
+  | "sol_not_staked"
+  | "liquid_sol_available"
+  // stable_yield (contracted)
+  | "stable_excess_above_buffer"
+  | "stable_yield_available"
+  | "conservative_yield_candidate"
+  // position_optimization (contracted)
+  | "low_yield_position"
+  | "missing_apy_data"
+  | "duplicate_exposure"
+  | "concentration_risk"
+  | "unsupported_protocol_review";
 
 /**
  * What the suggestion offers the user in MVP.
@@ -73,6 +108,10 @@ export type GuardrailCode =
   | "buffer_protection"
   | "pricing_available"
   | "allocation_delta"
+  // staking: a small SOL balance is kept back for network fees.
+  | "sol_fee_reserve"
+  // deferred until a deterministic platform-selection rule exists.
+  | "protocol_selection"
   | "cost_available"
   | "liquidity_available"
   | "slippage_available";

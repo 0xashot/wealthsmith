@@ -18,6 +18,7 @@ import type {
 } from "./engineTypes";
 import { deriveBufferSuggestion } from "./bufferSuggestion";
 import { deriveRebalanceSuggestion } from "./rebalanceSuggestion";
+import { deriveStakingSuggestion } from "./stakingSuggestion";
 import { deriveOnTrackSuggestion } from "./onTrackSuggestion";
 import { selectTopPick } from "./topPick";
 import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
@@ -26,14 +27,15 @@ import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
  * Run the engine over an input snapshot. `generatedAt` defaults to now but can
  * be pinned (fixtures/tests) so the whole result is reproducible.
  *
- * Step 5 scope — MVP ordering (SAFETY BUFFER COMES FIRST):
+ * Ordering (SAFETY BUFFER COMES FIRST):
  *   1. Build the Safety Buffer suggestion.
  *   2. Buffer Override: if the buffer is NOT fully funded, return the buffer
- *      suggestion alone — no Rebalance, no On Track.
- *   3. If the buffer is fully funded, try Rebalance; if it fires, return it.
- *   4. If no Rebalance, try On Track (informational "aligned" state).
+ *      suggestion alone — no deployment/yield/rebalance, no On Track.
+ *   3. If the buffer is fully funded, collect the actionable candidates in
+ *      category-priority order: Rebalance, then Staking (idle SOL).
+ *   4. If there are no candidates, fall back to On Track ("aligned").
  * Finally, deterministic Top Pick selection (topPick.ts) marks at most one
- * eligible actionable suggestion — never the UI or AI.
+ * eligible actionable suggestion by category priority — never the UI or AI.
  */
 export function runSuggestionEngine(
   inputs: SuggestionEngineInputs,
@@ -51,12 +53,17 @@ export function runSuggestionEngine(
   // 2) Buffer Override: an underfunded buffer suppresses every other rule.
   const bufferSatisfied = inputs.safetyBuffer?.fullyFunded === true;
   if (bufferSatisfied) {
-    // 3) Rebalance takes precedence over On Track.
+    // 3) Actionable candidates in engine (category-priority) order.
+    const candidates: EngineSuggestion[] = [];
     const rebalance = deriveRebalanceSuggestion(inputs, generatedAt);
-    if (rebalance) {
-      suggestions.push(rebalance);
+    if (rebalance) candidates.push(rebalance);
+    const staking = deriveStakingSuggestion(inputs, generatedAt);
+    if (staking) candidates.push(staking);
+
+    if (candidates.length > 0) {
+      suggestions.push(...candidates);
     } else {
-      // 4) Otherwise the portfolio is aligned → informational On Track.
+      // 4) Nothing actionable → informational On Track.
       const onTrack = deriveOnTrackSuggestion(inputs, generatedAt);
       if (onTrack) suggestions.push(onTrack);
     }

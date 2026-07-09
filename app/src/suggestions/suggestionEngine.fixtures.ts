@@ -88,12 +88,51 @@ function allocationFixture(totalUsd: number, currentCryptoPct: number, cryptoDel
   };
 }
 
+/** A liquid wallet SOL/WSOL position (or an unpriced one when priced=false). */
+function solPosition(
+  uiAmount: number,
+  opts: { symbol?: string; type?: "native" | "token"; source?: string; price?: number; priced?: boolean } = {}
+): WalletPosition {
+  const { symbol = "SOL", type = "native", source = "wallet", price = 75, priced = true } = opts;
+  return {
+    id: `sol-${symbol}-${uiAmount}`,
+    source: source as WalletPosition["source"],
+    type,
+    symbol,
+    name: "Solana",
+    amount: String(Math.round(uiAmount * 1e9)),
+    uiAmount,
+    decimals: 9,
+    detection: "direct_wallet_balance",
+    priceUsd: priced ? price : null,
+    valueUsd: priced ? uiAmount * price : null,
+  };
+}
+
+/** An LST position (JupSOL/mSOL/…) — must NOT count as liquid SOL. */
+function lstPosition(symbol: string, uiAmount: number, price = 80): WalletPosition {
+  return {
+    id: `lst-${symbol}`,
+    source: "sanctum",
+    type: "lst",
+    symbol,
+    name: symbol,
+    amount: String(Math.round(uiAmount * 1e9)),
+    uiAmount,
+    decimals: 9,
+    detection: "recognized_lst_mint",
+    priceUsd: price,
+    valueUsd: uiAmount * price,
+  };
+}
+
 interface FixtureArgs {
   safetyBuffer: SafetyBuffer | null;
   anyUnpriced?: boolean;
   goal?: SavedGoal;
   totalUsd?: number;
   allocation?: ReturnType<typeof allocationFixture> | null;
+  positions?: WalletPosition[];
 }
 
 function inputsFor({
@@ -102,9 +141,10 @@ function inputsFor({
   goal = goalFixture,
   totalUsd = 15000,
   allocation = null,
+  positions = positionsFixture,
 }: FixtureArgs) {
   return buildSuggestionEngineInputs({
-    positions: positionsFixture,
+    positions,
     pricedAsOf: FIXTURE_GENERATED_AT,
     savedGoal: goal,
     value: { totalUsd, anyUnpriced },
@@ -833,9 +873,331 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 9A — contract checks for the CONTRACTED future categories
+ * (capital_efficiency / staking / stable_yield / position_optimization).
+ * Types + ordering + mapper fallback only; NO trigger logic.
+ * ------------------------------------------------------------------ */
+const CONTRACT_CATEGORIES = [
+  "capital_efficiency",
+  "staking",
+  "stable_yield",
+  "position_optimization",
+] as const;
+
+/** A minimal actionable suggestion for a contracted category, real copy keys. */
+function catCandidate(
+  category: EngineSuggestion["category"],
+  overrides: Partial<EngineSuggestion> = {}
+): EngineSuggestion {
+  return {
+    id: category,
+    category,
+    reason_codes: [],
+    title_key: `suggestion.${category}.title`,
+    description_key: `suggestion.${category}.description`,
+    action_kind: "review_only",
+    is_actionable: true,
+    is_top_pick: false,
+    scores: { impact: 0.5, urgency: 0.5, efficiency: null },
+    guardrails: [],
+    engine_version: "fixture",
+    timestamp: FIXTURE_GENERATED_AT,
+    ...overrides,
+  };
+}
+
+export function runContractFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  // A. New categories typecheck + map to a valid, resolved-copy card.
+  {
+    const cards = CONTRACT_CATEGORIES.map((c) => toSuggestionCard(catCandidate(c)));
+    const allResolved = cards.every((c) => c.title && c.title !== "Suggestion unavailable");
+    add(
+      "9A-A: new categories map with resolved (non-fallback) copy",
+      cards.length === 4 && allResolved,
+      `titles=${cards.map((c) => c.title).join(" | ")}`
+    );
+  }
+
+  // B. Top Pick can select staking once buffer/rebalance are absent.
+  {
+    const ranked = selectTopPick([catCandidate("staking")]);
+    const winner = ranked.find((s) => s.is_top_pick);
+    add(
+      "9A-B: staking becomes Top Pick when it is the only candidate",
+      winner?.category === "staking",
+      `winner=${winner?.category}`
+    );
+  }
+
+  // C. Buffer beats every new category.
+  {
+    const ranked = selectTopPick([
+      catCandidate("capital_efficiency"),
+      catCandidate("staking"),
+      catCandidate("stable_yield"),
+      catCandidate("position_optimization"),
+      makeCandidate("top_up_buffer", "buffer", 0.2, 0.2),
+    ]);
+    add(
+      "9A-C: buffer beats all new categories",
+      ranked.find((s) => s.is_top_pick)?.category === "buffer",
+      `winner=${ranked.find((s) => s.is_top_pick)?.category}`
+    );
+  }
+
+  // D. Rebalance beats staking / stable_yield / capital_efficiency.
+  {
+    const ranked = selectTopPick([
+      catCandidate("staking"),
+      catCandidate("stable_yield"),
+      catCandidate("capital_efficiency"),
+      makeCandidate("rebalance_to_plan", "rebalance", 0.2, 0.2),
+    ]);
+    add(
+      "9A-D: rebalance beats new lower-priority categories",
+      ranked.find((s) => s.is_top_pick)?.category === "rebalance",
+      `winner=${ranked.find((s) => s.is_top_pick)?.category}`
+    );
+  }
+
+  // E. On Track is still never Top Pick (even alongside new categories).
+  {
+    const onTrack = catCandidate("on_track", { action_kind: "informational", is_actionable: false });
+    const ranked = selectTopPick([onTrack]);
+    add(
+      "9A-E: on_track never Top Pick",
+      ranked.every((s) => !s.is_top_pick),
+      `topPickCount=${ranked.filter((s) => s.is_top_pick).length}`
+    );
+  }
+
+  // F. Mapper safely maps every new category (valid card, category/type set).
+  {
+    const ok = CONTRACT_CATEGORIES.every((c) => {
+      const card = toSuggestionCard(catCandidate(c));
+      return card.id === c && card.type !== "" && card.category !== "";
+    });
+    add("9A-F: mapper maps every new category to a valid card", ok, `categories=${CONTRACT_CATEGORIES.join(",")}`);
+  }
+
+  // G. New-category cards are non-transactional.
+  {
+    const ok = CONTRACT_CATEGORIES.every((c) => {
+      const { cta } = toSuggestionCard(catCandidate(c));
+      return (
+        cta.executes_transaction === false &&
+        cta.requires_wallet_signature === false &&
+        cta.completion_on_click === false &&
+        cta.action === null
+      );
+    });
+    add("9A-G: new-category cards are non-transactional", ok, "all safety booleans false, action null");
+  }
+
+  // H. UI order preserved when new categories are passed in engine order.
+  {
+    const list: EngineSuggestion[] = [
+      makeCandidate("top_up_buffer", "buffer", 0.5, 0.5),
+      makeCandidate("rebalance_to_plan", "rebalance", 0.5, 0.5),
+      catCandidate("capital_efficiency"),
+      catCandidate("staking"),
+      catCandidate("stable_yield"),
+      catCandidate("position_optimization"),
+      catCandidate("on_track", { action_kind: "informational", is_actionable: false }),
+    ];
+    const ids = toSuggestionCards(list).map((c) => c.id);
+    const expected =
+      "top_up_buffer,rebalance_to_plan,capital_efficiency,staking,stable_yield,position_optimization,on_track";
+    add("9A-H: mapper preserves full-category engine order", ids.join(",") === expected, `order=${ids.join(",")}`);
+  }
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 9B — idle SOL staking trigger.
+ * ------------------------------------------------------------------ */
+export function runStakingFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+  const cats = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.map((s) => s.category).join(",") || "none";
+  const has = (r: ReturnType<typeof runSuggestionEngine>, c: string) =>
+    r.suggestions.some((s) => s.category === c);
+
+  const fundedBuffer = () => bufferFixture(5000, 1000, 3); // funded, zero excess
+  const aligned = () => allocationFixture(15000, 62, 5); // delta 5% → no rebalance
+  const offTarget = () => allocationFixture(15000, 75, 15); // delta 15% → rebalance
+
+  // 9B-A. Underfunded buffer + idle SOL → Buffer only, no staking.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [solPosition(10)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9B-A: underfunded buffer + idle SOL → buffer only, no staking",
+      cats(r) === "buffer" && !has(r, "staking"),
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9B-B. Funded + aligned (no rebalance) + eligible SOL → Staking Top Pick, no On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(10)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const staking = r.suggestions.find((s) => s.category === "staking");
+    add(
+      "9B-B: funded + no rebalance + eligible SOL → staking Top Pick, no On Track",
+      cats(r) === "staking" &&
+        staking?.is_top_pick === true &&
+        !has(r, "on_track") &&
+        staking?.amount?.valueUsd === 9.9 * 75,
+      `categories=${cats(r)} topPick=${staking?.is_top_pick} amount=${staking?.amount?.valueUsd}`
+    );
+  }
+
+  // 9B-C. Funded + rebalance + eligible SOL → Rebalance first (Top Pick), Staking second.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: fundedBuffer(), allocation: offTarget(), positions: [solPosition(10)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const reb = r.suggestions.find((s) => s.category === "rebalance");
+    const stk = r.suggestions.find((s) => s.category === "staking");
+    add(
+      "9B-C: funded + rebalance + SOL → rebalance first/Top Pick, staking second",
+      cats(r) === "rebalance,staking" &&
+        reb?.is_top_pick === true &&
+        stk?.is_top_pick === false,
+      `categories=${cats(r)} rebTop=${reb?.is_top_pick} stkTop=${stk?.is_top_pick}`
+    );
+  }
+
+  // 9B-D. Funded + only the reserve (0.1 SOL) → no staking; aligned → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(0.1)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9B-D: funded + only 0.1 SOL → no staking, On Track",
+      !has(r, "staking") && cats(r) === "on_track",
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9B-E. Funded + eligible SOL worth < $50 → no staking; aligned → On Track.
+  {
+    // 0.5 SOL @ $75 → eligible 0.4 SOL = $30 < $50
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(0.5)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9B-E: funded + eligible value < $50 → no staking, On Track",
+      !has(r, "staking") && cats(r) === "on_track",
+      `categories=${cats(r)}`
+    );
+  }
+
+  // 9B-F. Only LSTs (JupSOL/mSOL), no liquid SOL → no staking.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: fundedBuffer(),
+        allocation: aligned(),
+        positions: [lstPosition("JupSOL", 100), lstPosition("mSOL", 50)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9B-F: only LSTs, no liquid SOL → no staking", !has(r, "staking"), `categories=${cats(r)}`);
+  }
+
+  // 9B-G. SOL present but unpriced → no staking, no invented amount.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: fundedBuffer(),
+        allocation: aligned(),
+        positions: [solPosition(10, { priced: false })],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9B-G: SOL unpriced → no staking", !has(r, "staking"), `categories=${cats(r)}`);
+  }
+
+  // 9B-H. Liquid priced WSOL (token) → counts as liquid SOL → staking emitted.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: fundedBuffer(),
+        allocation: aligned(),
+        positions: [solPosition(10, { symbol: "WSOL", type: "token" })],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9B-H: liquid priced WSOL → staking emitted", has(r, "staking"), `categories=${cats(r)}`);
+  }
+
+  // 9B-I. Partial pricing + priced SOL → staking still emits + partial_pricing warning.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: fundedBuffer(),
+        allocation: aligned(),
+        positions: [solPosition(10)],
+        anyUnpriced: true,
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9B-I: partial pricing + priced SOL → staking + warning",
+      has(r, "staking") && r.warnings.includes("partial_pricing"),
+      `categories=${cats(r)} warnings=${r.warnings.join(",")}`
+    );
+  }
+
+  // 9B-J. Mapper renders the staking card safely.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(10)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = r.suggestions.find((x) => x.category === "staking");
+    const card = s ? toSuggestionCard(s) : undefined;
+    add(
+      "9B-J: staking card maps safely (copy, amount, review-only, non-transactional)",
+      card?.title === "Put Idle SOL to Work" &&
+        card?.description === "You have liquid SOL that may be eligible for staking or liquid staking." &&
+        card?.impact_text.includes("Eligible SOL to review") === true &&
+        card?.cta.label === "Review" &&
+        card?.cta.executes_transaction === false &&
+        card?.cta.requires_wallet_signature === false &&
+        card?.cta.action === null,
+      `title="${card?.title}" impact="${card?.impact_text}" cta="${card?.cta.label}"`
+    );
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
-  const checks = [...runSuggestionEngineFixtureChecks(), ...runMapperFixtureChecks()];
+  const checks = [
+    ...runSuggestionEngineFixtureChecks(),
+    ...runMapperFixtureChecks(),
+    ...runContractFixtureChecks(),
+    ...runStakingFixtureChecks(),
+  ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
     console.log(`${c.pass ? "PASS" : "FAIL"}  ${c.name}  (${c.detail})`);

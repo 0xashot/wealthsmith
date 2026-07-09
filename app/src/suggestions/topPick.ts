@@ -19,11 +19,23 @@
  */
 import type { EngineSuggestion, SuggestionCategory } from "./engineTypes";
 
-/** Category priority (lower = higher priority). on_track is not a candidate. */
-const CATEGORY_PRIORITY: Record<SuggestionCategory, number> = {
+/**
+ * Full engine-side category priority (lower = higher priority). This is the
+ * single source of ordering for both Top Pick selection and the intended engine
+ * display order. Safety Buffer is the highest-priority override; On Track is
+ * last and is never a Top Pick candidate.
+ *
+ * The categories past `rebalance` are CONTRACTED (Step 9A) — no rule emits them
+ * yet. The UI must NOT import this map to sort; it renders engine order.
+ */
+export const CATEGORY_PRIORITY: Record<SuggestionCategory, number> = {
   buffer: 1,
   rebalance: 2,
-  on_track: Number.POSITIVE_INFINITY,
+  capital_efficiency: 3,
+  staking: 4,
+  stable_yield: 5,
+  position_optimization: 6,
+  on_track: 99,
 };
 
 function isEligible(s: EngineSuggestion): boolean {

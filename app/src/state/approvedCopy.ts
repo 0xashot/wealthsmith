@@ -210,6 +210,20 @@ export const SUGGESTION_REBALANCE_UNDERWEIGHT_DESCRIPTION =
 export const SUGGESTION_ON_TRACK_TITLE = "Your Plan Is On Track";
 export const SUGGESTION_ON_TRACK_DESCRIPTION =
   "Your Safety Buffer is funded and your allocation is close to your target.";
+/* Contracted copy for future suggestion categories (Step 9A — no trigger logic
+ * yet). Non-advisory, non-promissory, non-transactional. */
+export const SUGGESTION_CAPITAL_EFFICIENCY_TITLE = "Review Idle Assets";
+export const SUGGESTION_CAPITAL_EFFICIENCY_DESCRIPTION =
+  "Some assets may not be contributing to your current plan.";
+export const SUGGESTION_STAKING_TITLE = "Put Idle SOL to Work";
+export const SUGGESTION_STAKING_DESCRIPTION =
+  "You have liquid SOL that may be eligible for staking or liquid staking.";
+export const SUGGESTION_STABLE_YIELD_TITLE = "Put Excess Stablecoins to Work";
+export const SUGGESTION_STABLE_YIELD_DESCRIPTION =
+  "You have stablecoins above your Safety Buffer that may be eligible for conservative yield options.";
+export const SUGGESTION_POSITION_OPTIMIZATION_TITLE = "Review Existing Yield Positions";
+export const SUGGESTION_POSITION_OPTIMIZATION_DESCRIPTION =
+  "Some existing positions may need review based on yield, concentration, or missing data.";
 export const SUGGESTIONS_UNAVAILABLE =
   "Strategy Steps need wallet value, goal settings, Safety Buffer, and allocation data before they can be shown.";
 export const SUGGESTIONS_PARTIAL_PRICING =
@@ -227,6 +241,16 @@ export const SUGGESTION_COPY: Record<string, string> = {
     SUGGESTION_REBALANCE_UNDERWEIGHT_DESCRIPTION,
   "suggestion.on_track.title": SUGGESTION_ON_TRACK_TITLE,
   "suggestion.on_track.description": SUGGESTION_ON_TRACK_DESCRIPTION,
+  // Contracted (Step 9A) — future categories, no trigger logic yet.
+  "suggestion.capital_efficiency.title": SUGGESTION_CAPITAL_EFFICIENCY_TITLE,
+  "suggestion.capital_efficiency.description": SUGGESTION_CAPITAL_EFFICIENCY_DESCRIPTION,
+  "suggestion.staking.title": SUGGESTION_STAKING_TITLE,
+  "suggestion.staking.description": SUGGESTION_STAKING_DESCRIPTION,
+  "suggestion.stable_yield.title": SUGGESTION_STABLE_YIELD_TITLE,
+  "suggestion.stable_yield.description": SUGGESTION_STABLE_YIELD_DESCRIPTION,
+  "suggestion.position_optimization.title": SUGGESTION_POSITION_OPTIMIZATION_TITLE,
+  "suggestion.position_optimization.description":
+    SUGGESTION_POSITION_OPTIMIZATION_DESCRIPTION,
 };
 
 /** Smith AI Suggestions rail title + the Ask Smith AI explainer for when/how
