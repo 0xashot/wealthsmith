@@ -24,6 +24,13 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
+import {
+  buildReviewDetails,
+  usdMetric,
+  pctMetric,
+  metric,
+} from "./suggestionReviewDetails";
+import type { ReviewAsset } from "./engineTypes";
 
 /** Stable suggestion ID. */
 export const CAPITAL_EFFICIENCY_SUGGESTION_ID = "capital_efficiency_idle_assets";
@@ -68,9 +75,8 @@ export function deriveCapitalEfficiencySuggestion(
   const totalPricedUsd = inputs.value.totalUsd;
   if (totalPricedUsd == null || totalPricedUsd <= 0) return null;
 
-  const eligibleIdleValueUsd = inputs.positions
-    .filter(isEligibleIdleAsset)
-    .reduce((s, p) => s + (p.valueUsd as number), 0);
+  const eligible = inputs.positions.filter(isEligibleIdleAsset);
+  const eligibleIdleValueUsd = eligible.reduce((s, p) => s + (p.valueUsd as number), 0);
   if (eligibleIdleValueUsd < MIN_CAPITAL_EFFICIENCY_SUGGESTION_USD) return null;
 
   const idleShare = eligibleIdleValueUsd / totalPricedUsd;
@@ -86,6 +92,37 @@ export function deriveCapitalEfficiencySuggestion(
     { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
   ];
+
+  const involvedAssets: ReviewAsset[] = eligible.map((p) => ({
+    symbol: p.symbol,
+    name: p.name,
+    valueUsd: p.valueUsd as number,
+    amount: p.uiAmount as number,
+    role: "idle_asset",
+  }));
+  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
+  const reviewDetails = buildReviewDetails({
+    category: "capital_efficiency",
+    actionKind: "review_only",
+    guardrails,
+    protocolSelection,
+    metrics: [
+      usdMetric("Idle assets to review", eligibleIdleValueUsd),
+      metric("Idle asset count", eligible.length, "count"),
+      pctMetric("Portfolio share", Math.round(idleShare * 1000) / 10),
+    ],
+    involvedAssets,
+    calculations: [
+      {
+        label: "Idle assets vs portfolio",
+        formula: "idle value ÷ portfolio value",
+        currentValue: eligibleIdleValueUsd,
+        targetValue: totalPricedUsd,
+        threshold: Math.round(CAPITAL_EFFICIENCY_PORTFOLIO_SHARE_THRESHOLD * 1000) / 10,
+        unit: "USD",
+      },
+    ],
+  });
 
   return {
     id: CAPITAL_EFFICIENCY_SUGGESTION_ID,
@@ -105,7 +142,8 @@ export function deriveCapitalEfficiencySuggestion(
     },
 
     // Broad "review idle assets" — proposes no specific protocol.
-    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
+    protocolSelection,
+    reviewDetails,
 
     scores: {
       impact: Math.min(eligibleIdleValueUsd / totalPricedUsd, 1),

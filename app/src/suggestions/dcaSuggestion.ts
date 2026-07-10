@@ -23,6 +23,7 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
+import { buildReviewDetails, usdMetric, pctMetric } from "./suggestionReviewDetails";
 
 /** Stable suggestion ID. */
 export const DCA_SUGGESTION_ID = "dca_core_exposure";
@@ -87,6 +88,31 @@ export function deriveDcaSuggestion(
     { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
   ];
 
+  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
+  const reviewDetails = buildReviewDetails({
+    category: "dca",
+    actionKind: "review_only",
+    guardrails,
+    protocolSelection,
+    metrics: [
+      usdMetric("Planned monthly contribution", plannedContribution),
+      usdMetric("Crypto target gap", targetCryptoGapUsd),
+      usdMetric("Suggested contribution to review", suggestedDcaUsd),
+      pctMetric("Crypto underweight", Math.round(underweightFraction * 1000) / 10),
+    ],
+    involvedAssets: [{ symbol: "Crypto", role: "target_bucket" }],
+    calculations: [
+      {
+        label: "Suggested contribution",
+        formula: "min(monthly contribution, crypto target gap)",
+        currentValue: plannedContribution,
+        targetValue: targetCryptoGapUsd,
+        difference: suggestedDcaUsd,
+        unit: "USD",
+      },
+    ],
+  });
+
   return {
     id: DCA_SUGGESTION_ID,
     category: "dca",
@@ -112,7 +138,8 @@ export function deriveDcaSuggestion(
 
     // Contribution-funded gradual entry — no protocol involved (token_selection
     // remains not_evaluated via its guardrail).
-    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
+    protocolSelection,
+    reviewDetails,
 
     scores: {
       impact: Math.min(suggestedDcaUsd / totalPricedUsd, 1),

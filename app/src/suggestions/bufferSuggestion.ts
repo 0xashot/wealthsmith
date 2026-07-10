@@ -21,6 +21,7 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
+import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
 
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
 export const BUFFER_SUGGESTION_ID = "top_up_buffer";
@@ -73,6 +74,31 @@ export function deriveBufferSuggestion(
     { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
   ];
 
+  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
+  const reviewDetails = buildReviewDetails({
+    category: "buffer",
+    actionKind: belowMin ? "disabled" : "review_only",
+    guardrails,
+    protocolSelection,
+    metrics: [
+      usdMetric("Stablecoin reserve", sb.stableUsd),
+      usdMetric("Safety Buffer target", sb.targetUsd),
+      usdMetric("Amount to review", sb.shortfallUsd),
+      metric("Months covered", Math.round(sb.monthsCovered * 10) / 10, "months", "months"),
+      metric("Target months", sb.targetMonths, "months", "months"),
+    ],
+    calculations: [
+      {
+        label: "Safety Buffer shortfall",
+        formula: "target − reserve",
+        currentValue: sb.stableUsd,
+        targetValue: sb.targetUsd,
+        difference: sb.shortfallUsd,
+        unit: "USD",
+      },
+    ],
+  });
+
   return {
     id: BUFFER_SUGGESTION_ID,
     category: "buffer",
@@ -95,7 +121,8 @@ export function deriveBufferSuggestion(
     // Topping up the buffer is a stablecoin reserve move — no yield protocol is
     // chosen here (a later "deploy buffer into stable yield" step could change
     // this to not_evaluated).
-    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
+    protocolSelection,
+    reviewDetails,
 
     // The risk-based target consumed as-is — never altered by the engine.
     post_buffer_months: sb.targetMonths,

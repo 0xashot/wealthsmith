@@ -187,6 +187,34 @@ protocol", "highest APY", or "safest vault".
 - *LP / vault:* supported pair/assets · APY range · impermanent-loss exposure ·
   TVL · withdrawal behavior · pool risk · fee/reward structure · liquidity depth.
 
+## Review details (Step 10A — data model only)
+
+Each suggestion carries an optional structured `reviewDetails`
+([`SuggestionReviewDetails`](./engineTypes.ts)) that explains *why* it fired and
+*what* was measured — the data a future **Review drawer (Step 10B)** will render.
+**Step 10A adds DATA ONLY: no drawer UI, no visible change, cards stay simple.**
+
+`reviewDetails` is **engine-owned** and built deterministically by each rule via
+[`buildReviewDetails`](./suggestionReviewDetails.ts). It has:
+
+- `summary` — approved `title` / `reason` / `categoryLabel` (never AI-generated).
+- `metrics` — only values backed by engine inputs (allocations, amounts, counts).
+- `involvedAssets` / `involvedPositions` — real detected assets/positions and
+  their role; never unknown/unpriced assets, never invented protocol/APY data.
+- `calculations` — simple user-facing formulas (current vs target vs threshold).
+- `guardrailSummary` — guardrails grouped into **user-facing labels** (Checked /
+  Not evaluated yet / Not applicable). Raw codes (`cost_available`,
+  `protocol_selection`, …) are NEVER exposed; cost/liquidity/slippage stay "Not
+  evaluated yet"; protocol selection follows the model.
+- `limitations` — what WealthSmith has *not* done (route cost / liquidity /
+  slippage not evaluated, protocol not selected, review-only). On Track gets none.
+- `safetyNotes` — review-only / no transaction / no signature / will not move
+  funds for you. On Track uses informational notes only.
+
+The card mapper (`toSuggestionCard`) does **not** read `reviewDetails`, so cards
+are unchanged and never leak it. Nothing here adds transactions, signatures,
+protocol selection, or invented APY/TVL/risk/liquidity/slippage/route/cost data.
+
 ## MVP scope and step plan
 
 - Step 2 (done): contracts/types/thresholds/docs.
@@ -311,6 +339,16 @@ protocol", "highest APY", or "safest vault".
   protocol, invents APY/TVL/risk/audit/lockup, adds a transaction/signature/
   handoff, or exposes selection on cards. See **Protocol / platform selection**
   above for the data required first. Fixtures 9J-A…I.
+
+- Step 10A (done): **structured review details (data model only)**. Added
+  `SuggestionReviewDetails` + [`suggestionReviewDetails.ts`](./suggestionReviewDetails.ts)
+  and populated `reviewDetails` deterministically in all 9 rules (summary,
+  metrics, involved assets/positions, calculations, grouped guardrail summary,
+  limitations, safety notes). No drawer UI, no visible change, cards unchanged
+  and never expose it; no transactions/signatures/protocol selection; nothing
+  invents APY/TVL/risk/liquidity/slippage/route/cost. Guardrails are shown as
+  user-facing labels, never raw codes. See **Review details** above. Unblocks the
+  Step 10B Review drawer. Fixtures 10A-A…M.
 
 All suggestion categories are implemented. `duplicate_exposure` remains
 contracted but not emitted (pending duplicate-position detection).

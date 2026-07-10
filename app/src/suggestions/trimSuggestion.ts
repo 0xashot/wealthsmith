@@ -35,6 +35,13 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
+import {
+  buildReviewDetails,
+  usdMetric,
+  pctMetric,
+  metric,
+} from "./suggestionReviewDetails";
+import type { ReviewAsset } from "./engineTypes";
 
 /** Stable suggestion ID. */
 export const TRIM_SUGGESTION_ID = "trim_long_tail_assets";
@@ -140,6 +147,42 @@ export function deriveTrimSuggestion(
     { code: "token_selection", status: GUARDRAIL_STATUS_NOT_EVALUATED },
   ];
 
+  const triggers: string[] = [];
+  if (hasLongTail) triggers.push("aggregate long-tail exposure");
+  if (hasConcentration) triggers.push("single-token concentration");
+  if (reasons.has("small_position_cleanup")) triggers.push("small-position cleanup");
+  const involvedAssets: ReviewAsset[] = eligible.map((p) => ({
+    symbol: p.symbol,
+    name: p.name,
+    valueUsd: p.valueUsd as number,
+    amount: p.uiAmount as number,
+    role: "long_tail_asset",
+  }));
+  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
+  const reviewDetails = buildReviewDetails({
+    category: "trim",
+    actionKind: "review_only",
+    guardrails,
+    protocolSelection,
+    reason: `Flagged for review: ${triggers.join(", ")}.`,
+    metrics: [
+      usdMetric("Long-tail assets to review", flaggedTrimValueUsd),
+      metric("Token count", eligible.length, "count"),
+      pctMetric("Portfolio share", Math.round((flaggedTrimValueUsd / totalPricedUsd) * 1000) / 10),
+    ],
+    involvedAssets,
+    calculations: [
+      {
+        label: "Long-tail exposure vs portfolio",
+        formula: "long-tail value ÷ portfolio value",
+        currentValue: flaggedTrimValueUsd,
+        targetValue: totalPricedUsd,
+        threshold: Math.round(TRIM_PORTFOLIO_SHARE_THRESHOLD * 1000) / 10,
+        unit: "USD",
+      },
+    ],
+  });
+
   return {
     id: TRIM_SUGGESTION_ID,
     category: "trim",
@@ -158,7 +201,8 @@ export function deriveTrimSuggestion(
     },
 
     // Long-tail review — proposes no protocol (token selection is also deferred).
-    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
+    protocolSelection,
+    reviewDetails,
 
     scores: {
       impact: Math.min(flaggedTrimValueUsd / totalPricedUsd, 1),

@@ -250,6 +250,124 @@ export interface ProtocolSelection {
 }
 
 /**
+ * Structured Suggestion Review Details (Step 10A — data model only; NO drawer
+ * UI yet). Deterministic explanation of WHY a suggestion fired, WHICH assets/
+ * positions are involved, WHAT was measured, WHICH guardrails were (and were
+ * not) evaluated, and WHAT WealthSmith will not do. Every string is approved /
+ * templated — never AI-generated, never invents APY/TVL/risk/liquidity/
+ * slippage/route/protocol data. The card mapper does NOT surface this.
+ */
+export type ReviewMetricKind =
+  | "allocation_pct"
+  | "amount_usd"
+  | "count"
+  | "months"
+  | "token_amount"
+  | "percent";
+
+export interface ReviewMetric {
+  label: string;
+  value: string | number;
+  unit?: string;
+  kind: ReviewMetricKind;
+}
+
+export type ReviewAssetRole =
+  | "source_asset"
+  | "target_bucket"
+  | "idle_asset"
+  | "long_tail_asset"
+  | "stablecoin"
+  | "liquid_sol"
+  | "buffer_asset"
+  | "dca_source";
+
+export interface ReviewAsset {
+  symbol: string;
+  name?: string;
+  valueUsd?: number;
+  amount?: number;
+  role: ReviewAssetRole;
+}
+
+export type ReviewPositionRole =
+  | "yield_position"
+  | "staked_position"
+  | "concentrated_position"
+  | "missing_apy_position"
+  | "low_yield_position";
+
+export interface ReviewPosition {
+  protocol?: string;
+  symbol?: string;
+  valueUsd?: number;
+  /** Sourced APY only; null means "not reported" — never an invented number. */
+  apy?: number | null;
+  role: ReviewPositionRole;
+  reason?: string;
+}
+
+export interface ReviewCalculation {
+  label: string;
+  /** Short human formula (e.g. "target − current"). Not a computed value. */
+  formula?: string;
+  currentValue?: number;
+  targetValue?: number;
+  difference?: number;
+  threshold?: number;
+  unit?: string;
+}
+
+/** Guardrails grouped into drawer-ready, user-facing labels (never raw codes). */
+export interface ReviewGuardrailSummary {
+  checked: string[];
+  notEvaluated: string[];
+  notApplicable: string[];
+}
+
+export type ReviewLimitationKind =
+  | "cost_not_evaluated"
+  | "liquidity_not_evaluated"
+  | "slippage_not_evaluated"
+  | "protocol_not_selected"
+  | "review_only";
+
+export interface ReviewLimitation {
+  kind: ReviewLimitationKind;
+  text: string;
+}
+
+export type ReviewSafetyNoteKind =
+  | "review_only"
+  | "no_transaction"
+  | "no_signature"
+  | "no_auto_move"
+  | "informational"
+  | "no_action";
+
+export interface ReviewSafetyNote {
+  kind: ReviewSafetyNoteKind;
+  text: string;
+}
+
+export interface ReviewSummary {
+  title: string;
+  reason: string;
+  categoryLabel: string;
+}
+
+export interface SuggestionReviewDetails {
+  summary: ReviewSummary;
+  metrics: ReviewMetric[];
+  involvedAssets: ReviewAsset[];
+  involvedPositions: ReviewPosition[];
+  calculations: ReviewCalculation[];
+  guardrailSummary: ReviewGuardrailSummary;
+  limitations: ReviewLimitation[];
+  safetyNotes: ReviewSafetyNote[];
+}
+
+/**
  * Canonical engine suggestion. Copy is referenced by KEY (title_key /
  * description_key into the approved suggestion copy system —
  * content/suggestion-card-copy.md); the engine never emits freeform copy, and
@@ -292,6 +410,11 @@ export interface EngineSuggestion {
    * `not_applicable` (protocol choice irrelevant to that suggestion).
    */
   protocolSelection?: ProtocolSelection;
+  /**
+   * Structured review details (Step 10A). Optional and ENGINE-INTERNAL — the
+   * card mapper never surfaces it; the Review drawer (Step 10B) will render it.
+   */
+  reviewDetails?: SuggestionReviewDetails;
 
   engine_version: string;
   /** Input-snapshot time (ms epoch) — supports stale detection on refresh. */

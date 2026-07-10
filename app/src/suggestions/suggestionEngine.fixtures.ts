@@ -2715,6 +2715,162 @@ export function runProtocolSelectionFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 10A — structured Suggestion Review Details.
+ * ------------------------------------------------------------------ */
+export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const dcaUnder = (points: number) => allocationFixture(15000, 60 - points, -points);
+  const smallTokens = [nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), nonCoreToken("DDD", 40)];
+
+  const runs: Record<string, ReturnType<typeof runSuggestionEngine>> = {
+    buffer: runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    rebalance: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    capital_efficiency: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
+    trim: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
+    staking: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
+    stable_yield: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
+    dca: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    position_optimization: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
+    on_track: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+  };
+  const find = (c: string) => runs[c].suggestions.find((s) => s.category === c);
+  const rd = (c: string) => find(c)?.reviewDetails;
+  const metricLabels = (c: string) => (rd(c)?.metrics ?? []).map((m) => m.label);
+  const allReviewDetails = Object.keys(runs).map((c) => rd(c)).filter((x): x is NonNullable<typeof x> => x != null);
+
+  // 10A-A. Every emitted category carries reviewDetails.
+  {
+    const cats = ["buffer", "rebalance", "capital_efficiency", "trim", "staking", "stable_yield", "dca", "position_optimization", "on_track"];
+    const missing = cats.filter((c) => rd(c) == null);
+    add("10A-A: every emitted category has reviewDetails", missing.length === 0, `missing=${missing.join(",") || "none"}`);
+  }
+  // 10A-B. Rebalance details: allocation, target, amount, from/to, buffer protection.
+  {
+    const d = rd("rebalance");
+    const labels = metricLabels("rebalance");
+    const roles = (d?.involvedAssets ?? []).map((a) => a.role);
+    const ok =
+      labels.includes("Current crypto allocation") &&
+      labels.includes("Target crypto allocation") &&
+      labels.includes("Suggested review amount") &&
+      roles.includes("source_asset") && roles.includes("target_bucket") &&
+      (d?.guardrailSummary.checked ?? []).includes("Safety Buffer protection");
+    add("10A-B: rebalance details include allocation/target/amount/from-to/buffer protection", ok, `roles=${roles.join(",")}`);
+  }
+  // 10A-C. Buffer details: target, stable value, shortfall, months covered, target months.
+  {
+    const labels = metricLabels("buffer");
+    const ok = ["Stablecoin reserve", "Safety Buffer target", "Amount to review", "Months covered", "Target months"].every((l) => labels.includes(l));
+    add("10A-C: buffer details include target/stable/shortfall/months/target months", ok, `labels=${labels.join(" | ")}`);
+  }
+  // 10A-D. Staking details: reserve, eligible SOL, eligible value, protocol not evaluated.
+  {
+    const d = rd("staking");
+    const labels = metricLabels("staking");
+    const ok =
+      labels.includes("SOL reserve kept") &&
+      labels.includes("Eligible SOL to review") &&
+      labels.includes("Eligible value to review") &&
+      (d?.guardrailSummary.notEvaluated ?? []).includes("Protocol selection");
+    add("10A-D: staking details include reserve/eligible SOL/value + protocol not evaluated", ok, `notEval=${d?.guardrailSummary.notEvaluated.join(",")}`);
+  }
+  // 10A-E. Stable Yield details: liquid stable value, buffer-support note, protocol not evaluated.
+  {
+    const d = rd("stable_yield");
+    const ok =
+      metricLabels("stable_yield").includes("Liquid stablecoins to review") &&
+      (d?.summary.reason ?? "").includes("Safety Buffer") &&
+      (d?.guardrailSummary.notEvaluated ?? []).includes("Protocol selection");
+    add("10A-E: stable_yield details include liquid value/buffer note/protocol not evaluated", ok, `reason="${d?.summary.reason}"`);
+  }
+  // 10A-F. DCA details: contribution, gap, suggested amount, no token selected.
+  {
+    const d = rd("dca");
+    const labels = metricLabels("dca");
+    const ok =
+      labels.includes("Planned monthly contribution") &&
+      labels.includes("Crypto target gap") &&
+      labels.includes("Suggested contribution to review") &&
+      (d?.guardrailSummary.notEvaluated ?? []).includes("Token selection");
+    add("10A-F: dca details include contribution/gap/suggested + no token selected", ok, `notEval=${d?.guardrailSummary.notEvaluated.join(",")}`);
+  }
+  // 10A-G. Trim details: trigger reason; never claims liquidity was evaluated.
+  {
+    const d = rd("trim");
+    const gs = d?.guardrailSummary;
+    const ok =
+      (d?.summary.reason ?? "").startsWith("Flagged for review:") &&
+      (gs?.notEvaluated ?? []).includes("Liquidity depth") &&
+      !(gs?.checked ?? []).includes("Liquidity depth");
+    add("10A-G: trim details include trigger reason and never claim liquidity evaluated", ok, `reason="${d?.summary.reason}"`);
+  }
+  // 10A-H. Position Optimization: flagged value, triggered reasons, no replacement protocol.
+  {
+    const d = rd("position_optimization");
+    const ok =
+      metricLabels("position_optimization").includes("Positions to review") &&
+      (d?.summary.reason ?? "").startsWith("Flagged for review:") &&
+      (d?.involvedPositions.length ?? 0) > 0 &&
+      (d?.guardrailSummary.notApplicable ?? []).includes("Protocol selection");
+    add("10A-H: position_optimization details include flagged value/reasons + no replacement protocol", ok, `notApplicable=${d?.guardrailSummary.notApplicable.join(",")}`);
+  }
+  // 10A-I. On Track is informational: no transaction/safety-action language, no limitations.
+  {
+    const d = rd("on_track");
+    const kinds = (d?.safetyNotes ?? []).map((n) => n.kind);
+    const text = JSON.stringify(d?.safetyNotes ?? []).toLowerCase();
+    const ok =
+      (d?.limitations.length ?? 1) === 0 &&
+      kinds.every((k) => k === "informational" || k === "no_action") &&
+      !/transaction|signature|stake|swap/.test(text);
+    add("10A-I: on_track details are informational with no action language", ok, `kinds=${kinds.join(",")} lims=${d?.limitations.length}`);
+  }
+  // 10A-J. No reviewDetails contains forbidden language.
+  {
+    const forbidden = ["guaranteed", "optimal", "best", "you should", "we will move", "we will stake", "we will buy", "automatic", "risk-free", "sell", "buy", "swap", "execute", "bad", "unsafe", "highest apy", "safest protocol"];
+    const json = JSON.stringify(allReviewDetails).toLowerCase();
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("10A-J: reviewDetails contain no forbidden language", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 10A-K. No raw internal guardrail codes leak into reviewDetails.
+  {
+    const codes = ["cost_available", "liquidity_available", "slippage_available", "protocol_selection", "min_trade_size", "buffer_protection", "pricing_available", "allocation_delta", "idle_asset_threshold", "token_scope", "contribution_available", "allocation_gap", "token_selection", "sol_fee_reserve", "position_value_threshold", "apy_data_review", "concentration_review"];
+    const json = JSON.stringify(allReviewDetails);
+    const leaks = codes.filter((c) => json.includes(c));
+    add("10A-K: reviewDetails expose no raw guardrail codes", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 10A-L. Mapped cards are unchanged and never expose reviewDetails.
+  {
+    const cards = Object.values(runs).flatMap((r) => r.suggestions).map(toSuggestionCard);
+    const json = JSON.stringify(cards);
+    const leaks = /reviewDetails|involvedAssets|involvedPositions|guardrailSummary|safetyNotes|limitations|calculations/i.test(json);
+    const shapeOk = cards.every((c) => typeof c.id === "string" && typeof c.title === "string" && c.cta != null);
+    add("10A-L: mapped cards unchanged and do not expose reviewDetails", !leaks && shapeOk, `leaks=${leaks} shapeOk=${shapeOk}`);
+  }
+  // 10A-M. Nothing invents APY/TVL/liquidity/slippage/route/cost/protocol in reviewDetails.
+  {
+    const anyChecked = allReviewDetails.some((d) =>
+      ["Route cost", "Liquidity depth", "Slippage"].some((l) => d.guardrailSummary.checked.includes(l))
+    );
+    const anyApyTvlMetric = allReviewDetails.some((d) =>
+      d.metrics.some((m) => /\bAPY\b|\bTVL\b/i.test(m.label))
+    );
+    add(
+      "10A-M: no invented APY/TVL/liquidity/slippage/route/cost/protocol in reviewDetails",
+      !anyChecked && !anyApyTvlMetric,
+      `execChecked=${anyChecked} apyTvlMetric=${anyApyTvlMetric}`
+    );
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -2730,6 +2886,7 @@ export function printFixtureResults(): void {
     ...runFullQaFixtureChecks(),
     ...runGuardrailFixtureChecks(),
     ...runProtocolSelectionFixtureChecks(),
+    ...runReviewDetailsFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

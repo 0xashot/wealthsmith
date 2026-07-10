@@ -22,6 +22,7 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notEvaluatedProtocolSelection } from "./protocolSelection";
+import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
 
 /** Stable suggestion ID. */
 export const STAKING_SUGGESTION_ID = "staking_idle_sol";
@@ -84,6 +85,38 @@ export function deriveStakingSuggestion(
     { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
   ];
 
+  const protocolSelection = notEvaluatedProtocolSelection([
+    "missing_apy_data",
+    "missing_tvl_data",
+    "missing_risk_data",
+    "missing_lockup_data",
+  ]);
+  const reviewDetails = buildReviewDetails({
+    category: "staking",
+    actionKind: "review_only",
+    guardrails,
+    protocolSelection,
+    metrics: [
+      metric("Liquid SOL", Math.round(totalLiquidSol * 10000) / 10000, "token_amount", "SOL"),
+      metric("SOL reserve kept", SOL_FEE_RESERVE, "token_amount", "SOL"),
+      metric("Eligible SOL to review", Math.round(eligibleSol * 10000) / 10000, "token_amount", "SOL"),
+      usdMetric("Eligible value to review", eligibleValueUsd),
+    ],
+    involvedAssets: [
+      { symbol: "SOL", valueUsd: eligibleValueUsd, amount: eligibleSol, role: "liquid_sol" },
+    ],
+    calculations: [
+      {
+        label: "Eligible SOL",
+        formula: "liquid SOL − fee reserve",
+        currentValue: totalLiquidSol,
+        threshold: SOL_FEE_RESERVE,
+        difference: eligibleSol,
+        unit: "SOL",
+      },
+    ],
+  });
+
   return {
     id: STAKING_SUGGESTION_ID,
     category: "staking",
@@ -105,12 +138,8 @@ export function deriveStakingSuggestion(
 
     // A staking protocol WILL be chosen once real data exists (APY/TVL/risk/
     // withdrawal); no data source yet, so selection stays not_evaluated.
-    protocolSelection: notEvaluatedProtocolSelection([
-      "missing_apy_data",
-      "missing_tvl_data",
-      "missing_risk_data",
-      "missing_lockup_data",
-    ]),
+    protocolSelection,
+    reviewDetails,
 
     scores: {
       // Useful but lower priority than buffer/rebalance (category rank handles

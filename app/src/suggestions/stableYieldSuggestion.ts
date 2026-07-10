@@ -31,6 +31,8 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notEvaluatedProtocolSelection } from "./protocolSelection";
+import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
+import type { ReviewAsset } from "./engineTypes";
 
 /** Stable suggestion ID. */
 export const STABLE_YIELD_SUGGESTION_ID = "stable_yield_wallet_stables";
@@ -72,9 +74,8 @@ export function deriveStableYieldSuggestion(
   if (totalPricedUsd == null || totalPricedUsd <= 0) return null;
 
   // Eligible = full liquid wallet stable value (no buffer/allocation subtraction).
-  const liquidEligibleStableUsd = inputs.positions
-    .filter(isLiquidWalletStable)
-    .reduce((s, p) => s + (p.valueUsd as number), 0);
+  const eligibleStables = inputs.positions.filter(isLiquidWalletStable);
+  const liquidEligibleStableUsd = eligibleStables.reduce((s, p) => s + (p.valueUsd as number), 0);
   if (liquidEligibleStableUsd < MIN_STABLE_YIELD_SUGGESTION_USD) return null;
 
   const guardrails: SuggestionGuardrail[] = [
@@ -87,6 +88,43 @@ export function deriveStableYieldSuggestion(
     { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
   ];
+
+  const involvedAssets: ReviewAsset[] = eligibleStables.map((p) => ({
+    symbol: p.symbol,
+    name: p.name,
+    valueUsd: p.valueUsd as number,
+    amount: p.uiAmount as number,
+    role: "stablecoin",
+  }));
+  const protocolSelection = notEvaluatedProtocolSelection([
+    "missing_apy_data",
+    "missing_tvl_data",
+    "missing_risk_data",
+    "missing_liquidity_data",
+    "missing_lockup_data",
+  ]);
+  const reviewDetails = buildReviewDetails({
+    category: "stable_yield",
+    actionKind: "review_only",
+    guardrails,
+    protocolSelection,
+    reason:
+      "You have liquid stablecoins that may be eligible for conservative yield review while still supporting your Safety Buffer.",
+    metrics: [
+      usdMetric("Liquid stablecoins to review", liquidEligibleStableUsd),
+      metric("Stablecoin count", eligibleStables.length, "count"),
+    ],
+    involvedAssets,
+    calculations: [
+      {
+        label: "Eligible stablecoins",
+        formula: "liquid wallet stablecoins",
+        currentValue: liquidEligibleStableUsd,
+        threshold: MIN_STABLE_YIELD_SUGGESTION_USD,
+        unit: "USD",
+      },
+    ],
+  });
 
   return {
     id: STABLE_YIELD_SUGGESTION_ID,
@@ -112,13 +150,8 @@ export function deriveStableYieldSuggestion(
 
     // A yield protocol WILL be chosen once real data exists (APY/TVL/risk/
     // liquidity/withdrawal); no data source yet, so selection stays not_evaluated.
-    protocolSelection: notEvaluatedProtocolSelection([
-      "missing_apy_data",
-      "missing_tvl_data",
-      "missing_risk_data",
-      "missing_liquidity_data",
-      "missing_lockup_data",
-    ]),
+    protocolSelection,
+    reviewDetails,
 
     scores: {
       impact: Math.min(liquidEligibleStableUsd / totalPricedUsd, 1),

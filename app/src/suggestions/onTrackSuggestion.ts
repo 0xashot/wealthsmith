@@ -20,6 +20,7 @@ import {
   REBALANCE_DELTA_THRESHOLD_PCT,
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
+import { buildReviewDetails, pctMetric, metric } from "./suggestionReviewDetails";
 
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
 export const ON_TRACK_SUGGESTION_ID = "on_track";
@@ -62,6 +63,31 @@ export function deriveOnTrackSuggestion(
     { code: "slippage_available", status: "not_applicable" },
   ];
 
+  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
+  const reviewDetails = buildReviewDetails({
+    category: "on_track",
+    actionKind: "informational",
+    guardrails,
+    protocolSelection,
+    metrics: [
+      pctMetric("Current crypto allocation", alloc.currentCryptoPct),
+      pctMetric("Target crypto allocation", alloc.recommendedCryptoPct),
+      pctMetric("Allocation delta", alloc.cryptoDeltaPct),
+      metric("Buffer target months", sb.targetMonths, "months", "months"),
+    ],
+    calculations: [
+      {
+        label: "Allocation within target",
+        formula: "|current − target| < threshold",
+        currentValue: alloc.currentCryptoPct,
+        targetValue: alloc.recommendedCryptoPct,
+        difference: alloc.cryptoDeltaPct,
+        threshold: REBALANCE_DELTA_THRESHOLD_PCT,
+        unit: "%",
+      },
+    ],
+  });
+
   return {
     id: ON_TRACK_SUGGESTION_ID,
     category: "on_track",
@@ -79,7 +105,8 @@ export function deriveOnTrackSuggestion(
     post_buffer_months: sb.targetMonths,
 
     // Informational — proposes no action, so protocol selection does not apply.
-    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
+    protocolSelection,
+    reviewDetails,
 
     scores: {
       impact: 0,

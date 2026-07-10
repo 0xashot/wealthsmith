@@ -20,6 +20,8 @@ import type {
   EngineSuggestion,
   SuggestionGuardrail,
   SuggestionReasonCode,
+  ReviewPosition,
+  ReviewPositionRole,
 } from "./engineTypes";
 import {
   SUGGESTION_ENGINE_VERSION,
@@ -30,6 +32,7 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
+import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
 
 /** Stable suggestion ID. */
 export const POSITION_OPTIMIZATION_SUGGESTION_ID = "position_optimization_review";
@@ -60,30 +63,50 @@ export function derivePositionOptimizationSuggestion(
   if (totalPricedUsd == null || totalPricedUsd <= 0) return null;
 
   const reasons = new Set<SuggestionReasonCode>();
+  const flaggedPositions: ReviewPosition[] = [];
   let totalFlaggedValueUsd = 0;
 
   for (const p of inputs.positions) {
     if (!isDeployedPosition(p)) continue;
     const v = p.valueUsd as number;
     let flagged = false;
+    let role: ReviewPositionRole | null = null;
+    const posReasons: string[] = [];
 
     // A. Missing sourced APY on a meaningful deployed position.
     if (v >= MIN_POSITION_REVIEW_USD && p.apy == null) {
       reasons.add("missing_apy_data");
       flagged = true;
+      role = role ?? "missing_apy_position";
+      posReasons.push("missing APY data");
     }
     // B. Low sourced APY.
     if (v >= MIN_POSITION_REVIEW_USD && typeof p.apy === "number" && p.apy < MIN_REVIEW_APY) {
       reasons.add("low_yield_position");
       flagged = true;
+      role = role ?? "low_yield_position";
+      posReasons.push("low reported APY");
     }
     // C. Over-concentration of a single deployed position.
     if (v >= MIN_CONCENTRATION_REVIEW_USD && v / totalPricedUsd >= POSITION_CONCENTRATION_THRESHOLD) {
       reasons.add("concentration_risk");
       flagged = true;
+      role = role ?? "concentrated_position";
+      posReasons.push("position concentration");
     }
 
-    if (flagged) totalFlaggedValueUsd += v;
+    if (flagged) {
+      totalFlaggedValueUsd += v;
+      flaggedPositions.push({
+        // Detected position data only — never an invented protocol/APY.
+        protocol: p.name,
+        symbol: p.symbol,
+        valueUsd: v,
+        apy: p.apy ?? null,
+        role: role as ReviewPositionRole,
+        reason: posReasons.join(", "),
+      });
+    }
   }
 
   if (reasons.size === 0) return null;
@@ -112,6 +135,34 @@ export function derivePositionOptimizationSuggestion(
     { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
   ];
 
+  const triggers: string[] = [];
+  if (reasons.has("missing_apy_data")) triggers.push("missing APY data");
+  if (reasons.has("low_yield_position")) triggers.push("low reported APY");
+  if (hasConcentration) triggers.push("position concentration");
+  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
+  const reviewDetails = buildReviewDetails({
+    category: "position_optimization",
+    actionKind: "review_only",
+    guardrails,
+    protocolSelection,
+    reason: `Flagged for review: ${triggers.join(", ")}.`,
+    metrics: [
+      usdMetric("Positions to review", totalFlaggedValueUsd),
+      metric("Flagged position count", flaggedPositions.length, "count"),
+    ],
+    involvedPositions: flaggedPositions,
+    calculations: [
+      {
+        label: "Flagged positions vs portfolio",
+        formula: "flagged value ÷ portfolio value",
+        currentValue: totalFlaggedValueUsd,
+        targetValue: totalPricedUsd,
+        threshold: Math.round(POSITION_CONCENTRATION_THRESHOLD * 1000) / 10,
+        unit: "USD",
+      },
+    ],
+  });
+
   return {
     id: POSITION_OPTIMIZATION_SUGGESTION_ID,
     category: "position_optimization",
@@ -132,7 +183,8 @@ export function derivePositionOptimizationSuggestion(
     // This card only REVIEWS existing positions — it proposes no new protocol,
     // so protocol selection does not apply. (If it ever proposes an alternative
     // protocol, switch to not_evaluated/selected with real data.)
-    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
+    protocolSelection,
+    reviewDetails,
 
     scores: {
       impact: Math.min(totalFlaggedValueUsd / totalPricedUsd, 1),

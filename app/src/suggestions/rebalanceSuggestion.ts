@@ -25,6 +25,7 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
+import { buildReviewDetails, usdMetric, pctMetric } from "./suggestionReviewDetails";
 
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
 export const REBALANCE_SUGGESTION_ID = "rebalance_to_plan";
@@ -96,6 +97,43 @@ export function deriveRebalanceSuggestion(
     { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
   ];
 
+  const currentStablesPct = alloc.currentStablesPct ?? 100 - alloc.currentCryptoPct;
+  const recommendedStablesPct =
+    alloc.recommendedStablesPct ?? 100 - alloc.recommendedCryptoPct;
+  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
+  const reviewDetails = buildReviewDetails({
+    category: "rebalance",
+    actionKind: belowMin ? "disabled" : "review_only",
+    guardrails,
+    protocolSelection,
+    reason: overweight
+      ? "Your crypto allocation is above your target."
+      : "Your crypto allocation is below your target.",
+    metrics: [
+      pctMetric("Current crypto allocation", alloc.currentCryptoPct),
+      pctMetric("Target crypto allocation", alloc.recommendedCryptoPct),
+      pctMetric("Current stablecoin allocation", currentStablesPct),
+      pctMetric("Target stablecoin allocation", recommendedStablesPct),
+      pctMetric("Allocation delta", delta),
+      usdMetric("Suggested review amount", amountUsd),
+    ],
+    involvedAssets: [
+      { symbol: overweight ? "Crypto" : "Stablecoins", role: "source_asset" },
+      { symbol: overweight ? "Stablecoins" : "Crypto", role: "target_bucket" },
+    ],
+    calculations: [
+      {
+        label: "Allocation drift",
+        formula: "current − target",
+        currentValue: alloc.currentCryptoPct,
+        targetValue: alloc.recommendedCryptoPct,
+        difference: delta,
+        threshold: REBALANCE_DELTA_THRESHOLD_PCT,
+        unit: "%",
+      },
+    ],
+  });
+
   return {
     id: REBALANCE_SUGGESTION_ID,
     category: "rebalance",
@@ -126,7 +164,8 @@ export function deriveRebalanceSuggestion(
 
     // Bucket-level rebalance — no protocol involved (token/cost/liquidity/
     // slippage stay not_evaluated via their guardrails).
-    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
+    protocolSelection,
+    reviewDetails,
 
     scores: {
       impact: ratio * 0.9,
