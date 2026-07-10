@@ -299,6 +299,8 @@ export type ReviewPositionRole =
 
 export interface ReviewPosition {
   protocol?: string;
+  /** Detected position/vault display name (e.g. "Steakhouse USDC"). Never invented. */
+  name?: string;
   symbol?: string;
   valueUsd?: number;
   /** Sourced APY only; null means "not reported" — never an invented number. */

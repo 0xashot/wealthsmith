@@ -37,6 +37,24 @@ import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails
 /** Stable suggestion ID. */
 export const POSITION_OPTIMIZATION_SUGGESTION_ID = "position_optimization_review";
 
+/** Detected source → display protocol label (display only, never invented). */
+const SOURCE_LABELS: Record<string, string> = {
+  jupiter: "Jupiter",
+  kamino: "Kamino",
+  jito: "Jito",
+  sanctum: "Sanctum",
+  ondo: "Ondo",
+  orca: "Orca",
+  raydium: "Raydium",
+  meteora: "Meteora",
+  hubble: "Hubble",
+};
+
+/** Best available protocol label from DETECTED data only (never invented). */
+function positionProtocolLabel(p: WalletPosition): string | undefined {
+  return p.protocol ?? (p.source !== "wallet" ? SOURCE_LABELS[p.source] : undefined);
+}
+
 /** An existing DEPLOYED position (LST / native stake / protocol), priced. */
 function isDeployedPosition(p: WalletPosition): boolean {
   return (
@@ -92,14 +110,15 @@ export function derivePositionOptimizationSuggestion(
       reasons.add("concentration_risk");
       flagged = true;
       role = role ?? "concentrated_position";
-      posReasons.push("position concentration");
+      posReasons.push(`position concentration (${Math.round((v / totalPricedUsd) * 100)}% of portfolio)`);
     }
 
     if (flagged) {
       totalFlaggedValueUsd += v;
       flaggedPositions.push({
         // Detected position data only — never an invented protocol/APY.
-        protocol: p.name,
+        protocol: positionProtocolLabel(p),
+        name: p.name,
         symbol: p.symbol,
         valueUsd: v,
         apy: p.apy ?? null,

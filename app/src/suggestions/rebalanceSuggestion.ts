@@ -100,6 +100,11 @@ export function deriveRebalanceSuggestion(
   const currentStablesPct = alloc.currentStablesPct ?? 100 - alloc.currentCryptoPct;
   const recommendedStablesPct =
     alloc.recommendedStablesPct ?? 100 - alloc.recommendedCryptoPct;
+  // Sourced bucket values (may be null) so the source/target buckets show real $.
+  const sourceValueUsd = overweight ? alloc.currentCryptoUsd : alloc.currentStablesUsd;
+  const targetValueUsd = overweight ? alloc.currentStablesUsd : alloc.currentCryptoUsd;
+  // Underweight moves ONLY stables above the buffer target (buffer stays whole).
+  const stablesAboveBufferUsd = Math.max(0, sb.stableUsd - sb.targetUsd);
   const protocolSelection = notApplicableProtocolSelection("selection_not_required");
   const reviewDetails = buildReviewDetails({
     category: "rebalance",
@@ -118,8 +123,16 @@ export function deriveRebalanceSuggestion(
       usdMetric("Suggested review amount", amountUsd),
     ],
     involvedAssets: [
-      { symbol: overweight ? "Crypto" : "Stablecoins", role: "source_asset" },
-      { symbol: overweight ? "Stablecoins" : "Crypto", role: "target_bucket" },
+      {
+        symbol: overweight ? "Crypto" : "Stablecoins",
+        role: "source_asset",
+        ...(typeof sourceValueUsd === "number" ? { valueUsd: sourceValueUsd } : {}),
+      },
+      {
+        symbol: overweight ? "Stablecoins" : "Crypto",
+        role: "target_bucket",
+        ...(typeof targetValueUsd === "number" ? { valueUsd: targetValueUsd } : {}),
+      },
     ],
     calculations: [
       {
@@ -131,6 +144,20 @@ export function deriveRebalanceSuggestion(
         threshold: REBALANCE_DELTA_THRESHOLD_PCT,
         unit: "%",
       },
+      // Make "Safety Buffer protected" concrete: an underweight move only draws
+      // from stables held ABOVE the buffer target; the buffer itself is untouched.
+      ...(!overweight
+        ? [
+            {
+              label: "Safety Buffer protected",
+              formula: "only stables above the buffer target are used",
+              currentValue: sb.stableUsd,
+              targetValue: sb.targetUsd,
+              difference: stablesAboveBufferUsd,
+              unit: "USD",
+            },
+          ]
+        : []),
     ],
   });
 

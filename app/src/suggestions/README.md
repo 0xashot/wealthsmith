@@ -370,6 +370,16 @@ Mode uses `SuggestionRail` directly and is untouched.
   and Dashboard + Portfolio behave identically. Demo Mode (which renders
   `SuggestionRail` directly) is untouched. Fixtures 10B-A…F.
 
+- Step 10C (done): **asset/position-specific detail refinement**. Rebalance
+  source/target buckets now carry concrete USD values and (when underweight) a
+  "Safety Buffer protected" calculation showing only stables above the buffer
+  target are used. Position Optimization surfaces the detected protocol label
+  (`protocol`/source) separately from the vault name and asset, with the
+  concentration reason spelled out ("… % of portfolio"). Stable Yield shows the
+  funded Safety Buffer reserve. All from detected data only — no invented
+  APY/TVL/risk/liquidity, no sell/buy/swap language, no raw codes. Fixtures
+  10C-A…E.
+
 All suggestion categories are implemented. `duplicate_exposure` remains
 contracted but not emitted (pending duplicate-position detection).
 

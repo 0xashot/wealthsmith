@@ -113,6 +113,8 @@ export function deriveStableYieldSuggestion(
     metrics: [
       usdMetric("Liquid stablecoins to review", liquidEligibleStableUsd),
       metric("Stablecoin count", eligibleStables.length, "count"),
+      // Concrete evidence the buffer stays funded (target already covered).
+      usdMetric("Safety Buffer reserve", sb.stableUsd),
     ],
     involvedAssets,
     calculations: [

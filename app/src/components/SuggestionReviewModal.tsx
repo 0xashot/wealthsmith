@@ -214,21 +214,29 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
             <section className="review-modal__section" aria-label="Involved positions">
               <h3 className="review-modal__section-title">Involved positions</h3>
               <ul className="review-modal__list">
-                {involvedPositions.map((p, i) => (
-                  <li key={`${p.symbol ?? "pos"}-${i}`} className="review-modal__row">
-                    <span className="review-modal__row-main">
-                      <span className="review-modal__row-symbol">
-                        {p.protocol ?? p.symbol ?? "Position"}
+                {involvedPositions.map((p, i) => {
+                  const main = p.protocol ?? p.name ?? p.symbol ?? "Position";
+                  const asset =
+                    p.name && p.name !== main
+                      ? p.name
+                      : p.symbol && p.symbol !== main
+                        ? p.symbol
+                        : undefined;
+                  return (
+                    <li key={`${p.symbol ?? "pos"}-${i}`} className="review-modal__row">
+                      <span className="review-modal__row-main">
+                        <span className="review-modal__row-symbol">{main}</span>
+                        {asset && <span className="review-modal__row-sub">{asset}</span>}
+                        {p.reason && <span className="review-modal__row-sub">{p.reason}</span>}
                       </span>
-                      {p.reason && <span className="review-modal__row-sub">{p.reason}</span>}
-                    </span>
-                    <span className="review-modal__row-meta">
-                      {typeof p.apy === "number" && <span>{num1(p.apy)}% APY</span>}
-                      {typeof p.valueUsd === "number" && <span>{usd(p.valueUsd)}</span>}
-                      <span className="review-modal__tag">{POSITION_ROLE_LABELS[p.role]}</span>
-                    </span>
-                  </li>
-                ))}
+                      <span className="review-modal__row-meta">
+                        {typeof p.apy === "number" && <span>{num1(p.apy)}% APY</span>}
+                        {typeof p.valueUsd === "number" && <span>{usd(p.valueUsd)}</span>}
+                        <span className="review-modal__tag">{POSITION_ROLE_LABELS[p.role]}</span>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           )}

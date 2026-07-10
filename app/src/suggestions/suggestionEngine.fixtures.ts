@@ -2944,6 +2944,75 @@ export function runReviewModalFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 10C — asset/position-specific review-detail refinements.
+ * ------------------------------------------------------------------ */
+export function runReviewRefinementFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const rd = (r: ReturnType<typeof runSuggestionEngine>, c: string) =>
+    r.suggestions.find((s) => s.category === c)?.reviewDetails;
+
+  const rebalanceOver = runSuggestionEngine(
+    inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }),
+    FIXTURE_GENERATED_AT
+  );
+  const rebalanceUnder = runSuggestionEngine(
+    inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 20, -40), positions: [cryptoPosition(100)] }),
+    FIXTURE_GENERATED_AT
+  );
+  const posOptConc = runSuggestionEngine(
+    inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), totalUsd: 5000, allocation: allocationFixture(5000, 62, 2), positions: [yieldPosition(5000, 3)] }),
+    FIXTURE_GENERATED_AT
+  );
+  const stableYield = runSuggestionEngine(
+    inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [stablePosition("USDC", 10000)] }),
+    FIXTURE_GENERATED_AT
+  );
+
+  // 10C-A. Rebalance source/target buckets carry concrete USD values.
+  {
+    const assets = rd(rebalanceOver, "rebalance")?.involvedAssets ?? [];
+    const ok =
+      assets.length === 2 &&
+      assets.every((a) => typeof a.valueUsd === "number") &&
+      assets.some((a) => a.role === "source_asset") &&
+      assets.some((a) => a.role === "target_bucket");
+    add("10C-A: rebalance buckets show source/target with concrete USD", ok, assets.map((a) => `${a.role}:${a.valueUsd}`).join(" "));
+  }
+  // 10C-B. Position Optimization shows a protocol label + concentration share.
+  {
+    const p0 = rd(posOptConc, "position_optimization")?.involvedPositions[0];
+    const ok = !!p0 && typeof p0.protocol === "string" && p0.protocol.length > 0 && /% of portfolio/.test(p0.reason ?? "");
+    add("10C-B: position optimization shows protocol + concentration share", ok, `protocol=${p0?.protocol} reason="${p0?.reason}"`);
+  }
+  // 10C-C. Stable Yield surfaces the funded Safety Buffer reserve as a metric.
+  {
+    const metrics = rd(stableYield, "stable_yield")?.metrics ?? [];
+    add("10C-C: stable yield shows Safety Buffer reserve metric", metrics.some((m) => m.label === "Safety Buffer reserve"), metrics.map((m) => m.label).join(" | "));
+  }
+  // 10C-D. Refined details still leak no raw codes and no forbidden language.
+  {
+    const all = [rd(rebalanceOver, "rebalance"), rd(rebalanceUnder, "rebalance"), rd(posOptConc, "position_optimization"), rd(stableYield, "stable_yield")];
+    const json = JSON.stringify(all);
+    const codes = ["cost_available", "liquidity_available", "slippage_available", "protocol_selection", "min_trade_size", "buffer_protection", "allocation_delta", "position_value_threshold", "concentration_review", "apy_data_review"];
+    const forbidden = ["guaranteed", "optimal", "best", "you should", "we will move", "we will stake", "we will buy", "automatic", "risk-free", "sell", "buy", "swap", "execute", "bad", "unsafe", "highest apy", "safest protocol"];
+    const codeLeaks = codes.filter((c) => json.includes(c));
+    const wordHits = forbidden.filter((w) => json.toLowerCase().includes(w));
+    add("10C-D: refined details leak no codes and no forbidden language", codeLeaks.length === 0 && wordHits.length === 0, `codes=${codeLeaks.join(",") || "none"} words=${wordHits.join(",") || "none"}`);
+  }
+  // 10C-E. Underweight rebalance shows a concrete "Safety Buffer protected" calc.
+  {
+    const calcs = rd(rebalanceUnder, "rebalance")?.calculations ?? [];
+    const bufferCalc = calcs.find((c) => c.label === "Safety Buffer protected");
+    add("10C-E: underweight rebalance shows Safety Buffer protected calc", !!bufferCalc && typeof bufferCalc.difference === "number", `difference=${bufferCalc?.difference}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -2961,6 +3030,7 @@ export function printFixtureResults(): void {
     ...runProtocolSelectionFixtureChecks(),
     ...runReviewDetailsFixtureChecks(),
     ...runReviewModalFixtureChecks(),
+    ...runReviewRefinementFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
