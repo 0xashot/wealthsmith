@@ -29,6 +29,12 @@ import {
   notApplicableGuardrail,
   ensureExecutionGuardrails,
 } from "./guardrails";
+import {
+  notEvaluatedProtocolSelection,
+  notApplicableProtocolSelection,
+  unavailableProtocolSelection,
+  selectedProtocolSelection,
+} from "./protocolSelection";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -2574,6 +2580,141 @@ export function runGuardrailFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 9J — protocol / platform selection contracts.
+ * ------------------------------------------------------------------ */
+export function runProtocolSelectionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const dcaUnder = (points: number) => allocationFixture(15000, 60 - points, -points);
+  const smallTokens = [nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), nonCoreToken("DDD", 40)];
+
+  const runs: Record<string, ReturnType<typeof runSuggestionEngine>> = {
+    buffer: runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    rebalance: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    capital_efficiency: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
+    trim: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
+    staking: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
+    stable_yield: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
+    dca: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    position_optimization: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
+    on_track: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+  };
+  const find = (r: ReturnType<typeof runSuggestionEngine>, c: string) => r.suggestions.find((s) => s.category === c);
+  const gStatus = (s: EngineSuggestion | undefined, code: string) => s?.guardrails.find((g) => g.code === code)?.status;
+  const noProtocol = (s: EngineSuggestion | undefined) =>
+    s?.protocolSelection?.selectedProtocolId == null && s?.protocolSelection?.selectedProtocolName == null;
+
+  // 9J-A. Staking selection is not_evaluated with no protocol named.
+  {
+    const s = find(runs.staking, "staking");
+    add(
+      "9J-A: staking protocolSelection = not_evaluated, no selected protocol",
+      s?.protocolSelection?.status === "not_evaluated" && noProtocol(s),
+      `status=${s?.protocolSelection?.status} reasons=${s?.protocolSelection?.reasons.join(",")}`
+    );
+  }
+  // 9J-B. Stable Yield selection is not_evaluated with no protocol named.
+  {
+    const s = find(runs.stable_yield, "stable_yield");
+    add(
+      "9J-B: stable_yield protocolSelection = not_evaluated, no selected protocol",
+      s?.protocolSelection?.status === "not_evaluated" && noProtocol(s),
+      `status=${s?.protocolSelection?.status} reasons=${s?.protocolSelection?.reasons.join(",")}`
+    );
+  }
+  // 9J-C. Position Optimization (review-only) selection is not_applicable.
+  {
+    const s = find(runs.position_optimization, "position_optimization");
+    add(
+      "9J-C: position_optimization protocolSelection = not_applicable, no selected protocol",
+      s?.protocolSelection?.status === "not_applicable" && noProtocol(s),
+      `status=${s?.protocolSelection?.status}`
+    );
+  }
+  // 9J-D. Capital Efficiency / Trim / DCA / Rebalance invent no protocol selection.
+  {
+    const cats = ["capital_efficiency", "trim", "dca", "rebalance"];
+    const results = cats.map((c) => {
+      const s = find(runs[c], c);
+      return { c, ok: s?.protocolSelection?.status === "not_applicable" && noProtocol(s) };
+    });
+    add(
+      "9J-D: capital_efficiency/trim/dca/rebalance invent no protocol selection",
+      results.every((x) => x.ok),
+      results.map((x) => `${x.c}:${x.ok ? "ok" : "BAD"}`).join(" ")
+    );
+  }
+  // 9J-E. No suggestion names a protocol unless status === "selected".
+  {
+    const all = Object.values(runs).flatMap((r) => r.suggestions);
+    const bad = all.filter(
+      (s) =>
+        s.protocolSelection != null &&
+        s.protocolSelection.status !== "selected" &&
+        (s.protocolSelection.selectedProtocolName != null || s.protocolSelection.selectedProtocolId != null)
+    );
+    add("9J-E: no suggestion names a protocol unless status === selected", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 9J-F. Mapped cards expose no raw protocol-selection metadata.
+  {
+    const cards = Object.values(runs).flatMap((r) => r.suggestions).map(toSuggestionCard);
+    const json = JSON.stringify(cards);
+    const leaks = /protocolSelection|selectedProtocol|protocol_selection|selection_not_required|missing_apy_data|missing_tvl_data|not_evaluated/i.test(json);
+    add("9J-F: mapped cards expose no protocol-selection metadata", !leaks, `leaks=${leaks}`);
+  }
+  // 9J-G. protocol_selection guardrail is not_evaluated for staking/stable_yield.
+  {
+    const st = gStatus(find(runs.staking, "staking"), "protocol_selection");
+    const sy = gStatus(find(runs.stable_yield, "stable_yield"), "protocol_selection");
+    add(
+      "9J-G: protocol_selection guardrail is not_evaluated for staking/stable_yield",
+      st === "not_evaluated" && sy === "not_evaluated",
+      `staking=${st} stable_yield=${sy}`
+    );
+  }
+  // 9J-H. protocol_selection guardrail is not_applicable where selection is irrelevant.
+  {
+    const cats = ["buffer", "rebalance", "capital_efficiency", "trim", "dca", "position_optimization", "on_track"];
+    const results = cats.map((c) => ({ c, ok: gStatus(find(runs[c], c), "protocol_selection") === "not_applicable" }));
+    add(
+      "9J-H: protocol_selection guardrail is not_applicable where selection is irrelevant",
+      results.every((x) => x.ok),
+      results.map((x) => `${x.c}:${x.ok ? "ok" : "BAD"}`).join(" ")
+    );
+  }
+  // 9J-I. Helpers enforce the name-only-when-selected invariant (guards the
+  // reserved `selected` path; README documents the data required before it).
+  {
+    const ne = notEvaluatedProtocolSelection(["missing_apy_data"]);
+    const na = notApplicableProtocolSelection();
+    const un = unavailableProtocolSelection(["no_eligible_protocol"]);
+    const sel = selectedProtocolSelection({
+      protocolId: "example",
+      protocolName: "Example",
+      strategyType: "staking",
+      evaluatedAt: "2026-01-01T00:00:00Z",
+      dataSources: ["example_source"],
+    });
+    add(
+      "9J-I: helpers enforce name-only-when-selected invariant",
+      ne.selectedProtocolName == null &&
+        na.selectedProtocolName == null &&
+        un.selectedProtocolName == null &&
+        na.reasons[0] === "selection_not_required" &&
+        sel.status === "selected" &&
+        sel.selectedProtocolName === "Example",
+      `ne=${ne.status} na=${na.status} un=${un.status} sel=${sel.status}`
+    );
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -2588,6 +2729,7 @@ export function printFixtureResults(): void {
     ...runTrimFixtureChecks(),
     ...runFullQaFixtureChecks(),
     ...runGuardrailFixtureChecks(),
+    ...runProtocolSelectionFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

@@ -19,6 +19,7 @@ import {
   SUGGESTION_ENGINE_VERSION,
   REBALANCE_DELTA_THRESHOLD_PCT,
 } from "./engineThresholds";
+import { notApplicableProtocolSelection } from "./protocolSelection";
 
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
 export const ON_TRACK_SUGGESTION_ID = "on_track";
@@ -76,6 +77,9 @@ export function deriveOnTrackSuggestion(
     // No amount / from / to — On Track proposes no move.
     delta_percent: alloc.cryptoDeltaPct,
     post_buffer_months: sb.targetMonths,
+
+    // Informational — proposes no action, so protocol selection does not apply.
+    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
 
     scores: {
       impact: 0,

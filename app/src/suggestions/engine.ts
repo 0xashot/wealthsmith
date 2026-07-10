@@ -27,6 +27,7 @@ import { derivePositionOptimizationSuggestion } from "./positionOptimizationSugg
 import { deriveOnTrackSuggestion } from "./onTrackSuggestion";
 import { selectTopPick } from "./topPick";
 import { ensureExecutionGuardrails } from "./guardrails";
+import { reconcileProtocolGuardrail } from "./protocolSelection";
 import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
 
 /**
@@ -112,10 +113,15 @@ export function runSuggestionEngine(
 
   // Guarantee every suggestion carries the market-execution guardrails
   // (cost/liquidity/slippage) — appended as not_evaluated if a rule omitted
-  // them. Honest coverage; never upgrades a status to passed.
+  // them — and a `protocol_selection` guardrail whose status mirrors the
+  // suggestion's protocolSelection model (absent → not_applicable). Honest
+  // coverage; never upgrades a status to passed.
   const withGuardrails = ranked.map((s) => ({
     ...s,
-    guardrails: ensureExecutionGuardrails(s.guardrails),
+    guardrails: reconcileProtocolGuardrail(
+      ensureExecutionGuardrails(s.guardrails),
+      s.protocolSelection
+    ),
   }));
 
   return {

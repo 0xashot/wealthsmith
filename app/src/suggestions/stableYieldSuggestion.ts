@@ -30,6 +30,7 @@ import {
   MIN_STABLE_YIELD_SUGGESTION_USD,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
+import { notEvaluatedProtocolSelection } from "./protocolSelection";
 
 /** Stable suggestion ID. */
 export const STABLE_YIELD_SUGGESTION_ID = "stable_yield_wallet_stables";
@@ -81,7 +82,7 @@ export function deriveStableYieldSuggestion(
     // Approved stable yield stays buffer-eligible → the buffer is protected.
     { code: "buffer_protection", status: "passed" },
     { code: "min_trade_size", status: "passed" },
-    { code: "protocol_selection", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    // protocol_selection guardrail is derived centrally from protocolSelection.
     { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
@@ -108,6 +109,16 @@ export function deriveStableYieldSuggestion(
       label: "Eligible stablecoins to review",
     },
     from: { bucket: "stables" },
+
+    // A yield protocol WILL be chosen once real data exists (APY/TVL/risk/
+    // liquidity/withdrawal); no data source yet, so selection stays not_evaluated.
+    protocolSelection: notEvaluatedProtocolSelection([
+      "missing_apy_data",
+      "missing_tvl_data",
+      "missing_risk_data",
+      "missing_liquidity_data",
+      "missing_lockup_data",
+    ]),
 
     scores: {
       impact: Math.min(liquidEligibleStableUsd / totalPricedUsd, 1),

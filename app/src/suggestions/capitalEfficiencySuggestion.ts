@@ -23,6 +23,7 @@ import {
   CAPITAL_EFFICIENCY_PORTFOLIO_SHARE_THRESHOLD,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
+import { notApplicableProtocolSelection } from "./protocolSelection";
 
 /** Stable suggestion ID. */
 export const CAPITAL_EFFICIENCY_SUGGESTION_ID = "capital_efficiency_idle_assets";
@@ -80,7 +81,7 @@ export function deriveCapitalEfficiencySuggestion(
     { code: "buffer_protection", status: "passed" },
     { code: "idle_asset_threshold", status: "passed" },
     { code: "min_trade_size", status: "passed" },
-    { code: "protocol_selection", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    // protocol_selection guardrail is derived centrally from protocolSelection.
     { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
@@ -102,6 +103,9 @@ export function deriveCapitalEfficiencySuggestion(
       valueUsd: eligibleIdleValueUsd,
       label: "Idle assets to review",
     },
+
+    // Broad "review idle assets" — proposes no specific protocol.
+    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
 
     scores: {
       impact: Math.min(eligibleIdleValueUsd / totalPricedUsd, 1),

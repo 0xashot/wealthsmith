@@ -34,6 +34,7 @@ import {
   TRIM_SMALL_POSITION_MAX_USD,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
+import { notApplicableProtocolSelection } from "./protocolSelection";
 
 /** Stable suggestion ID. */
 export const TRIM_SUGGESTION_ID = "trim_long_tail_assets";
@@ -155,6 +156,9 @@ export function deriveTrimSuggestion(
       valueUsd: flaggedTrimValueUsd,
       label: "Long-tail assets to review",
     },
+
+    // Long-tail review — proposes no protocol (token selection is also deferred).
+    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
 
     scores: {
       impact: Math.min(flaggedTrimValueUsd / totalPricedUsd, 1),

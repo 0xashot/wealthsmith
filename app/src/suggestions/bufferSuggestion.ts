@@ -20,6 +20,7 @@ import {
   MIN_SUGGESTION_AMOUNT_USD,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
+import { notApplicableProtocolSelection } from "./protocolSelection";
 
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
 export const BUFFER_SUGGESTION_ID = "top_up_buffer";
@@ -90,6 +91,11 @@ export function deriveBufferSuggestion(
       label: "Buffer shortfall",
     },
     to: { bucket: "stables" },
+
+    // Topping up the buffer is a stablecoin reserve move — no yield protocol is
+    // chosen here (a later "deploy buffer into stable yield" step could change
+    // this to not_evaluated).
+    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
 
     // The risk-based target consumed as-is — never altered by the engine.
     post_buffer_months: sb.targetMonths,

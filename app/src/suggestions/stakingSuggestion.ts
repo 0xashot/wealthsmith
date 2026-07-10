@@ -21,6 +21,7 @@ import {
   MIN_STAKING_SUGGESTION_USD,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
+import { notEvaluatedProtocolSelection } from "./protocolSelection";
 
 /** Stable suggestion ID. */
 export const STAKING_SUGGESTION_ID = "staking_idle_sol";
@@ -77,8 +78,7 @@ export function deriveStakingSuggestion(
     { code: "buffer_protection", status: "passed" },
     { code: "sol_fee_reserve", status: "passed" },
     { code: "min_trade_size", status: "passed" },
-    // Deferred until a deterministic platform-selection rule exists.
-    { code: "protocol_selection", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    // protocol_selection guardrail is derived centrally from protocolSelection.
     { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
@@ -102,6 +102,15 @@ export function deriveStakingSuggestion(
     },
     // Token side of the review (no protocol chosen — that's a later step).
     from: { symbol: "SOL", bucket: "crypto" },
+
+    // A staking protocol WILL be chosen once real data exists (APY/TVL/risk/
+    // withdrawal); no data source yet, so selection stays not_evaluated.
+    protocolSelection: notEvaluatedProtocolSelection([
+      "missing_apy_data",
+      "missing_tvl_data",
+      "missing_risk_data",
+      "missing_lockup_data",
+    ]),
 
     scores: {
       // Useful but lower priority than buffer/rebalance (category rank handles

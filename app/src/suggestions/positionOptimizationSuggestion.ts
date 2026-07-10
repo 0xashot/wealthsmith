@@ -29,6 +29,7 @@ import {
   POSITION_CONCENTRATION_THRESHOLD,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
+import { notApplicableProtocolSelection } from "./protocolSelection";
 
 /** Stable suggestion ID. */
 export const POSITION_OPTIMIZATION_SUGGESTION_ID = "position_optimization_review";
@@ -105,7 +106,7 @@ export function derivePositionOptimizationSuggestion(
     { code: "position_value_threshold", status: "passed" },
     { code: "apy_data_review", status: hasApyReview ? "passed" : GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "concentration_review", status: hasConcentration ? "passed" : GUARDRAIL_STATUS_NOT_EVALUATED },
-    { code: "protocol_selection", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    // protocol_selection guardrail is derived centrally from protocolSelection.
     { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
@@ -127,6 +128,11 @@ export function derivePositionOptimizationSuggestion(
       valueUsd: totalFlaggedValueUsd,
       label: "Positions to review",
     },
+
+    // This card only REVIEWS existing positions — it proposes no new protocol,
+    // so protocol selection does not apply. (If it ever proposes an alternative
+    // protocol, switch to not_evaluated/selected with real data.)
+    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
 
     scores: {
       impact: Math.min(totalFlaggedValueUsd / totalPricedUsd, 1),

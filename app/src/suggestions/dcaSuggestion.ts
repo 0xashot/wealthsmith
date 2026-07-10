@@ -22,6 +22,7 @@ import {
   DCA_MIN_CRYPTO_UNDERWEIGHT_PCT,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
+import { notApplicableProtocolSelection } from "./protocolSelection";
 
 /** Stable suggestion ID. */
 export const DCA_SUGGESTION_ID = "dca_core_exposure";
@@ -108,6 +109,10 @@ export function deriveDcaSuggestion(
     },
     // Generic bucket target only — no token is chosen.
     to: { bucket: "crypto" },
+
+    // Contribution-funded gradual entry — no protocol involved (token_selection
+    // remains not_evaluated via its guardrail).
+    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
 
     scores: {
       impact: Math.min(suggestedDcaUsd / totalPricedUsd, 1),

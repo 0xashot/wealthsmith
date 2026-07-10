@@ -24,6 +24,7 @@ import {
   REBALANCE_DELTA_THRESHOLD_PCT,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
+import { notApplicableProtocolSelection } from "./protocolSelection";
 
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
 export const REBALANCE_SUGGESTION_ID = "rebalance_to_plan";
@@ -122,6 +123,10 @@ export function deriveRebalanceSuggestion(
     to: { bucket: overweight ? "stables" : "crypto" },
 
     delta_percent: delta,
+
+    // Bucket-level rebalance — no protocol involved (token/cost/liquidity/
+    // slippage stay not_evaluated via their guardrails).
+    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
 
     scores: {
       impact: ratio * 0.9,

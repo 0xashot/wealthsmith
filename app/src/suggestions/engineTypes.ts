@@ -187,6 +187,72 @@ export interface SuggestionAssetRef {
 }
 
 /**
+ * Protocol / platform selection (Step 9J — CONTRACTS ONLY). Structured metadata
+ * describing whether a suggestion has (or could ever have) a specific protocol
+ * chosen to carry it out. Real selection stays `not_evaluated` until reliable,
+ * deterministic data sources exist (APY, TVL, risk, liquidity, lockup, fees,
+ * route). The engine NEVER invents a protocol, APY, TVL, risk score, audit
+ * status, or lockup timing.
+ *
+ *  - not_evaluated:  selection is RELEVANT but no data source exists yet (e.g.
+ *                    staking / stable yield — a protocol WILL be chosen once
+ *                    real data is wired in).
+ *  - not_applicable: selection does not apply to this suggestion at all (e.g. a
+ *                    "review your existing positions / idle assets" card
+ *                    proposes no new protocol).
+ *  - unavailable:    selection was attempted but no eligible protocol / required
+ *                    data was found. RESERVED — not emitted yet.
+ *  - selected:       a protocol was deterministically chosen from real data.
+ *                    RESERVED — not emitted yet.
+ */
+export type ProtocolSelectionStatus =
+  | "not_evaluated"
+  | "not_applicable"
+  | "unavailable"
+  | "selected";
+
+/** Machine-readable reasons for a protocol-selection status (never display copy). */
+export type ProtocolSelectionReason =
+  | "missing_apy_data"
+  | "missing_tvl_data"
+  | "missing_risk_data"
+  | "missing_liquidity_data"
+  | "missing_lockup_data"
+  | "unsupported_asset"
+  | "no_eligible_protocol"
+  | "selection_not_required"
+  | "deterministic_selection_available";
+
+/** Strategy family a selected protocol would implement. */
+export type ProtocolStrategyType =
+  | "staking"
+  | "liquid_staking"
+  | "lending"
+  | "vault"
+  | "lp"
+  | "review";
+
+/**
+ * Protocol/platform selection record attached to a suggestion. INVARIANT:
+ * `selectedProtocolId` / `selectedProtocolName` are present ONLY when
+ * `status === "selected"` — the constructors in `protocolSelection.ts` enforce
+ * this, and no rule sets `selected` until real data-backed selection exists.
+ */
+export interface ProtocolSelection {
+  status: ProtocolSelectionStatus;
+  /** Present ONLY when status === "selected". */
+  selectedProtocolId?: string;
+  /** Present ONLY when status === "selected". */
+  selectedProtocolName?: string;
+  selectedStrategyType?: ProtocolStrategyType;
+  reasons: ProtocolSelectionReason[];
+  /** ISO timestamp of a real evaluation (only when data was actually consulted). */
+  evaluatedAt?: string;
+  /** Identifiers of the data sources consulted (only when actually consulted). */
+  dataSources?: string[];
+}
+
+/**
  * Canonical engine suggestion. Copy is referenced by KEY (title_key /
  * description_key into the approved suggestion copy system —
  * content/suggestion-card-copy.md); the engine never emits freeform copy, and
@@ -223,6 +289,12 @@ export interface EngineSuggestion {
 
   scores: SuggestionScore;
   guardrails: SuggestionGuardrail[];
+  /**
+   * Protocol/platform selection metadata (Step 9J). Optional and
+   * ENGINE-INTERNAL — the card mapper never surfaces it. Absent is treated as
+   * `not_applicable` (protocol choice irrelevant to that suggestion).
+   */
+  protocolSelection?: ProtocolSelection;
 
   engine_version: string;
   /** Input-snapshot time (ms epoch) — supports stale detection on refresh. */

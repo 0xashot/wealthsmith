@@ -134,6 +134,59 @@ Raw guardrail codes/statuses are **engine-internal**: the card mapper
 (`toSuggestionCard`) drops the `guardrails` field entirely, so cards never
 surface `cost_available`, `not_evaluated`, etc.
 
+## Protocol / platform selection (Step 9J)
+
+Every suggestion carries an optional `protocolSelection` ([`ProtocolSelection`](./engineTypes.ts))
+describing whether a specific protocol/platform has — or could ever have — been
+chosen to carry it out. Constructors live in
+[`protocolSelection.ts`](./protocolSelection.ts). **No protocol is ever chosen
+yet**: this prototype has no reliable protocol data source, so selection is only
+`not_evaluated` or `not_applicable`.
+
+| Status | Meaning | Emitted today? |
+| --- | --- | --- |
+| `not_evaluated` | Selection is RELEVANT but no data source exists yet — a protocol *will* be chosen later. | Yes (staking, stable_yield) |
+| `not_applicable` | Selection does not apply to this suggestion at all (review-only / bucket-level / informational). | Yes (all other categories) |
+| `unavailable` | Selection attempted, no eligible protocol / required data found. | **No — reserved** |
+| `selected` | A protocol was deterministically chosen from real data. | **No — reserved** |
+
+`selectedProtocolId` / `selectedProtocolName` are present **only** when
+`status === "selected"`; the constructors enforce this and no rule sets
+`selected`. The `selected` and `unavailable` paths exist in the contract only.
+
+**By category:**
+
+- `not_evaluated` (a protocol will eventually be chosen): **staking**
+  (reasons: missing apy/tvl/risk/lockup data), **stable_yield** (reasons:
+  missing apy/tvl/risk/liquidity/lockup data).
+- `not_applicable` (`selection_not_required`): **buffer**, **rebalance**,
+  **capital_efficiency**, **trim**, **dca**, **position_optimization**
+  (review-only — proposes no new protocol), **on_track** (informational).
+
+**Guardrail link (single source of truth):** the `protocol_selection` guardrail
+is derived centrally in `engine.ts` via `reconcileProtocolGuardrail`, mirroring
+the model — `not_evaluated → not_evaluated`, `not_applicable → not_applicable`,
+`unavailable → warning`, `selected → passed`. Category rules set the
+`protocolSelection` model and never hand-set this guardrail, so the two can't
+drift. It is never `passed` without a real `selected` selection.
+
+**Not on cards:** the mapper drops `protocolSelection` (and all guardrails), so
+cards keep saying "Put Idle SOL to Work" / "Put Stablecoins to Work" / "Review
+Existing Yield Positions" — never "use Kamino/Jupiter/Marinade/Jito", "best
+protocol", "highest APY", or "safest vault".
+
+**Data required before `selected` is allowed** (until then selection stays
+`not_evaluated`; nothing below is ever invented):
+
+- *Staking / liquid staking:* eligible asset · APY · TVL / liquidity ·
+  withdrawal (unstake) behavior · validator or LST risk metadata · fees ·
+  supported wallet/action route · protocol availability.
+- *Stable yield:* stable-asset support · APY · TVL · utilization · risk score ·
+  audit / security data · withdrawal lockup · deposit/withdraw fees · historical
+  reliability (if available).
+- *LP / vault:* supported pair/assets · APY range · impermanent-loss exposure ·
+  TVL · withdrawal behavior · pool risk · fee/reward structure · liquidity depth.
+
 ## MVP scope and step plan
 
 - Step 2 (done): contracts/types/thresholds/docs.
@@ -246,6 +299,18 @@ surface `cost_available`, `not_evaluated`, etc.
   `not_applicable`. No execution guardrail is ever `passed` (no quote data), Top
   Pick ranking is unchanged, and the card mapper still hides all raw codes. See
   **Guardrail model** above for what unlocks these later. Fixtures 9I-A…G.
+
+- Step 9J (done): **protocol / platform selection contracts**. Added the
+  `ProtocolSelection` model + [`protocolSelection.ts`](./protocolSelection.ts)
+  constructors and an optional `protocolSelection` on every suggestion. Staking
+  and Stable Yield are `not_evaluated` (a protocol will be chosen once real
+  APY/TVL/risk/liquidity/lockup data exists); every other category is
+  `not_applicable`. `engine.ts` derives the `protocol_selection` guardrail
+  centrally from the model (`reconcileProtocolGuardrail`). **No protocol is
+  selected yet** — `selected`/`unavailable` are reserved; no rule names a
+  protocol, invents APY/TVL/risk/audit/lockup, adds a transaction/signature/
+  handoff, or exposes selection on cards. See **Protocol / platform selection**
+  above for the data required first. Fixtures 9J-A…I.
 
 All suggestion categories are implemented. `duplicate_exposure` remains
 contracted but not emitted (pending duplicate-position detection).
