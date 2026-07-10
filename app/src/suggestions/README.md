@@ -87,11 +87,52 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
    "Increase crypto exposure". No `sell_token`/`buy_token` in MVP — token-level
    selection requires a later approved token-selection rule. (The copy system's
    fallback title path already covers token-less rebalance.)
-3. **Missing guardrail data is honest**: cost, liquidity, and slippage have no
-   data source in this prototype (no quote/route infrastructure), so those
-   guardrails are reported as `not_evaluated` — never invented, never silently
-   passed. Evaluable today: min trade size, buffer protection, pricing
-   availability, allocation delta.
+3. **Missing guardrail data is honest** (see the guardrail model below): cost,
+   liquidity, and slippage have no data source in this prototype (no quote/route
+   infrastructure), so those guardrails are reported as `not_evaluated` — never
+   invented, never silently passed.
+
+## Guardrail model (Step 9I)
+
+Every suggestion carries a list of `SuggestionGuardrail` (`{ code, status, message? }`).
+Statuses are standardized and, critically, **honest** — a status is only `passed`
+when the engine actually has the data to check it. Constructors live in
+[`guardrails.ts`](./guardrails.ts) so every rule emits the same shape.
+
+| Status | Meaning |
+| --- | --- |
+| `passed` | Evaluated against real data and satisfied. |
+| `failed` | Evaluated and violated (e.g. below `min_trade_size`). Suggestion is disabled. |
+| `warning` | Evaluated with a non-blocking concern. |
+| `not_evaluated` | The check is relevant but **no data source exists yet** — the honest state for the market-execution guardrails today. |
+| `not_applicable` | The check does not apply to this suggestion at all (e.g. informational On Track proposes no action). |
+
+**Evaluated today** (real inputs): `min_trade_size`, `buffer_protection`,
+`pricing_available`, `allocation_delta`, plus each category's own threshold
+codes (`idle_asset_threshold`, `token_scope`, `contribution_available`,
+`allocation_gap`, `sol_fee_reserve`, `position_value_threshold`,
+`apy_data_review`, `concentration_review`, …).
+
+**Execution guardrails — `not_evaluated` today** (`cost_available`,
+`liquidity_available`, `slippage_available`): these depend on quote/route data
+the app does not have. `engine.ts` calls `ensureExecutionGuardrails` after Top
+Pick selection so **every** suggestion carries all three; any a rule omitted are
+appended as `not_evaluated`. On Track instead marks them `not_applicable`
+(it proposes no action). These are the ONLY guardrails a rule may leave for the
+helper to fill — nothing here ever becomes `passed` until real data is wired in.
+
+**What data unlocks them later:** a swap/route quote (e.g. Jupiter) provides the
+expected **cost** (fees + price impact), on-chain **liquidity** depth for the
+route, and the resulting **slippage** vs. a reference price. Only then may the
+engine emit `passed`/`failed`/`warning` for `cost_available` /
+`liquidity_available` / `slippage_available`, feed a real `efficiency` score,
+and let those guardrails influence Top Pick ranking. Until then Top Pick ranks
+on category priority → impact → urgency → (null efficiency) → id, unaffected by
+the `not_evaluated` execution guardrails.
+
+Raw guardrail codes/statuses are **engine-internal**: the card mapper
+(`toSuggestionCard`) drops the `guardrails` field entirely, so cards never
+surface `cost_available`, `not_evaluated`, etc.
 
 ## MVP scope and step plan
 
@@ -195,6 +236,16 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   Staking → Stable Yield → DCA → Position Optimization → On Track. Trim and
   Capital Efficiency answer different questions and MAY both fire (neither
   suppresses the other). Fixtures 9H-A…N. Realistic max rail count is now 5.
+
+- Step 9I (done): **cost / liquidity guardrail standardization**. Added the
+  `not_applicable` status and a shared [`guardrails.ts`](./guardrails.ts) helper
+  (`passed`/`failed`/`warning`/`notEvaluated`/`notApplicable` constructors +
+  `ensureExecutionGuardrails`). `engine.ts` now guarantees every suggestion
+  carries `cost_available`/`liquidity_available`/`slippage_available` (appended
+  as `not_evaluated` when a rule omits them); On Track marks them
+  `not_applicable`. No execution guardrail is ever `passed` (no quote data), Top
+  Pick ranking is unchanged, and the card mapper still hides all raw codes. See
+  **Guardrail model** above for what unlocks these later. Fixtures 9I-A…G.
 
 All suggestion categories are implemented. `duplicate_exposure` remains
 contracted but not emitted (pending duplicate-position detection).

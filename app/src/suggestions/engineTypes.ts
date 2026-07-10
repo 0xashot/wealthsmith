@@ -108,7 +108,14 @@ export type SuggestionActionKind = "review_only" | "informational" | "disabled";
  * slippage — no quote/route infrastructure). Never invented, never silently
  * treated as passed.
  */
-export type GuardrailStatus = "passed" | "failed" | "not_evaluated";
+export type GuardrailStatus =
+  | "passed"
+  | "failed"
+  | "warning"
+  | "not_evaluated"
+  // The guardrail does not apply to this suggestion (e.g. an informational
+  // On Track card proposes no action, so execution guardrails don't apply).
+  | "not_applicable";
 
 /**
  * MVP guardrails (top-pick-rules.md — Guardrails). Evaluable today:

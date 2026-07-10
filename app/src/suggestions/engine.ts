@@ -26,6 +26,7 @@ import { deriveDcaSuggestion } from "./dcaSuggestion";
 import { derivePositionOptimizationSuggestion } from "./positionOptimizationSuggestion";
 import { deriveOnTrackSuggestion } from "./onTrackSuggestion";
 import { selectTopPick } from "./topPick";
+import { ensureExecutionGuardrails } from "./guardrails";
 import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
 
 /**
@@ -109,10 +110,18 @@ export function runSuggestionEngine(
   // Deterministic Top Pick: mark at most one eligible actionable suggestion.
   const ranked = selectTopPick(suggestions);
 
+  // Guarantee every suggestion carries the market-execution guardrails
+  // (cost/liquidity/slippage) — appended as not_evaluated if a rule omitted
+  // them. Honest coverage; never upgrades a status to passed.
+  const withGuardrails = ranked.map((s) => ({
+    ...s,
+    guardrails: ensureExecutionGuardrails(s.guardrails),
+  }));
+
   return {
     engine_version: SUGGESTION_ENGINE_VERSION,
     generated_at: generatedAt,
-    suggestions: ranked,
+    suggestions: withGuardrails,
     warnings,
     unavailable_reason:
       ranked.length === 0 && missingRequired ? "missing_data" : undefined,

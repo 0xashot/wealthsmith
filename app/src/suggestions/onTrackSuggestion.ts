@@ -18,7 +18,6 @@ import type { EngineSuggestion, SuggestionGuardrail } from "./engineTypes";
 import {
   SUGGESTION_ENGINE_VERSION,
   REBALANCE_DELTA_THRESHOLD_PCT,
-  GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
@@ -51,13 +50,15 @@ export function deriveOnTrackSuggestion(
   // Within the rebalance threshold — i.e. the rebalance rule would not fire.
   if (Math.abs(alloc.cryptoDeltaPct) >= REBALANCE_DELTA_THRESHOLD_PCT) return null;
 
+  // On Track proposes no action, so the market-execution guardrails do not
+  // apply (never fake "passed", and not merely "not_evaluated" either).
   const guardrails: SuggestionGuardrail[] = [
     { code: "pricing_available", status: "passed" },
     { code: "buffer_protection", status: "passed" },
     { code: "allocation_delta", status: "passed" },
-    { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
-    { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
-    { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    { code: "cost_available", status: "not_applicable" },
+    { code: "liquidity_available", status: "not_applicable" },
+    { code: "slippage_available", status: "not_applicable" },
   ];
 
   return {

@@ -21,6 +21,14 @@ import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
 import { selectTopPick } from "./topPick";
 import { toSuggestionCard, toSuggestionCards } from "./toSuggestionCard";
+import {
+  passedGuardrail,
+  failedGuardrail,
+  warningGuardrail,
+  notEvaluatedGuardrail,
+  notApplicableGuardrail,
+  ensureExecutionGuardrails,
+} from "./guardrails";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -2443,6 +2451,129 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 9I — guardrail standardization + honesty.
+ * ------------------------------------------------------------------ */
+const EXEC_CODES = ["cost_available", "liquidity_available", "slippage_available"] as const;
+
+export function runGuardrailFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const dcaUnder = (points: number) => allocationFixture(15000, 60 - points, -points);
+  const smallTokens = [nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), nonCoreToken("DDD", 40)];
+
+  // One run that isolates each actionable category.
+  const runs: Record<string, ReturnType<typeof runSuggestionEngine>> = {
+    buffer: runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    rebalance: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    capital_efficiency: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
+    trim: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
+    staking: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
+    stable_yield: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
+    dca: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    position_optimization: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
+  };
+  const find = (r: ReturnType<typeof runSuggestionEngine>, c: string) => r.suggestions.find((s) => s.category === c);
+  const execStatuses = (s: { guardrails: { code: string; status: string }[] } | undefined) =>
+    EXEC_CODES.map((code) => s?.guardrails.find((g) => g.code === code)?.status);
+
+  // 9I-A. Every actionable category carries all three execution guardrails as not_evaluated.
+  {
+    const results = Object.entries(runs).map(([cat, r]) => {
+      const st = execStatuses(find(r, cat));
+      return { cat, ok: st.length === 3 && st.every((x) => x === "not_evaluated") };
+    });
+    add(
+      "9I-A: every actionable category has cost/liquidity/slippage = not_evaluated",
+      results.every((x) => x.ok),
+      results.map((x) => `${x.cat}:${x.ok ? "ok" : "MISSING"}`).join(" ")
+    );
+  }
+
+  // 9I-B. On Track's execution guardrails are not_applicable (not fake pass/fail).
+  {
+    const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
+    const st = execStatuses(find(r, "on_track"));
+    add(
+      "9I-B: On Track execution guardrails are not_applicable",
+      st.length === 3 && st.every((x) => x === "not_applicable"),
+      `statuses=${st.join(",")}`
+    );
+  }
+
+  // 9I-C. No suggestion marks any execution guardrail as passed.
+  {
+    const allSuggestions = [
+      ...Object.values(runs).flatMap((r) => r.suggestions),
+      ...runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT).suggestions,
+    ];
+    const anyPassed = allSuggestions.some((s) =>
+      s.guardrails.some((g) => (EXEC_CODES as readonly string[]).includes(g.code) && g.status === "passed")
+    );
+    add("9I-C: no execution guardrail is ever 'passed' (no real quote data)", !anyPassed, `anyPassed=${anyPassed}`);
+  }
+
+  // 9I-D. Top Pick still works with not_evaluated execution guardrails.
+  {
+    const s = runs.buffer.suggestions[0];
+    const execAllNotEval = execStatuses(s).every((x) => x === "not_evaluated");
+    add(
+      "9I-D: Top Pick works with not_evaluated execution guardrails",
+      s?.is_top_pick === true && execAllNotEval,
+      `topPick=${s?.is_top_pick} execNotEval=${execAllNotEval}`
+    );
+  }
+
+  // 9I-E. Mapped card exposes no raw guardrail codes/statuses.
+  {
+    const card = toSuggestionCard(runs.buffer.suggestions[0]);
+    const json = JSON.stringify(card);
+    const leaks = /cost_available|liquidity_available|slippage_available|not_evaluated|guardrail/i.test(json);
+    add("9I-E: mapped card exposes no raw guardrail codes", !leaks, `leaks=${leaks}`);
+  }
+
+  // 9I-F. Every mapped card is non-transactional.
+  {
+    const allOk = Object.values(runs).flatMap((r) => r.suggestions).map(toSuggestionCard).every(
+      (c) =>
+        c.cta.action === null &&
+        c.cta.executes_transaction === false &&
+        c.cta.requires_wallet_signature === false &&
+        c.cta.completion_on_click === false
+    );
+    add("9I-F: all mapped cards are non-transactional", allOk, `allOk=${allOk}`);
+  }
+
+  // 9I-G. Guardrail helpers produce the expected status objects.
+  {
+    const p = passedGuardrail("min_trade_size");
+    const f = failedGuardrail("min_trade_size", "below min");
+    const w = warningGuardrail("liquidity_available", "thin");
+    const ne = notEvaluatedGuardrail("cost_available");
+    const na = notApplicableGuardrail("cost_available");
+    const ensuredEmpty = ensureExecutionGuardrails([]);
+    const ensuredKeep = ensureExecutionGuardrails([notApplicableGuardrail("cost_available")]);
+    const keepCost = ensuredKeep.find((g) => g.code === "cost_available");
+    add(
+      "9I-G: guardrail helpers produce expected objects",
+      p.status === "passed" &&
+        f.status === "failed" && f.message === "below min" &&
+        w.status === "warning" &&
+        ne.status === "not_evaluated" &&
+        na.status === "not_applicable" &&
+        ensuredEmpty.length === 3 && ensuredEmpty.every((g) => g.status === "not_evaluated") &&
+        ensuredKeep.length === 3 && keepCost?.status === "not_applicable",
+      `ensuredEmpty=${ensuredEmpty.length} keepCost=${keepCost?.status}`
+    );
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -2456,6 +2587,7 @@ export function printFixtureResults(): void {
     ...runDcaFixtureChecks(),
     ...runTrimFixtureChecks(),
     ...runFullQaFixtureChecks(),
+    ...runGuardrailFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
