@@ -43,8 +43,7 @@ function copy(key: string): string {
 
 /**
  * Engine category → the card's `category` string (drives the generic icon).
- * The trailing four are CONTRACTED (Step 9A) so the mapper stays total if a
- * future rule emits them; no rule does yet.
+ * Total over every emitted category.
  */
 const CARD_CATEGORY: Record<SuggestionCategory, string> = {
   buffer: "safety_buffer",

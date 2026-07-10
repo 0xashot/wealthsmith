@@ -14,7 +14,8 @@
  * guessed value. Demo fixtures are NEVER adapted into these inputs; Demo Mode
  * has its own sample suggestions (rules/demo-mode-rules.md).
  *
- * An input adapter (app state → SuggestionEngineInputs) is a later step.
+ * The input adapter (app state → SuggestionEngineInputs) is
+ * `buildSuggestionEngineInputs` in engineInputAdapter.ts.
  */
 import type { WalletPosition } from "../wallet/walletPosition";
 import type { SafetyBuffer } from "../wallet/walletSummary";

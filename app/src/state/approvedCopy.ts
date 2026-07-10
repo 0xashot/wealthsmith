@@ -210,8 +210,8 @@ export const SUGGESTION_REBALANCE_UNDERWEIGHT_DESCRIPTION =
 export const SUGGESTION_ON_TRACK_TITLE = "Your Plan Is On Track";
 export const SUGGESTION_ON_TRACK_DESCRIPTION =
   "Your Safety Buffer is funded and your allocation is close to your target.";
-/* Contracted copy for future suggestion categories (Step 9A — no trigger logic
- * yet). Non-advisory, non-promissory, non-transactional. */
+/* Copy for the full suggestion category set. Non-advisory, non-promissory,
+ * non-transactional. */
 export const SUGGESTION_CAPITAL_EFFICIENCY_TITLE = "Review Idle Assets";
 export const SUGGESTION_CAPITAL_EFFICIENCY_DESCRIPTION =
   "Some assets may not be contributing to your current plan.";

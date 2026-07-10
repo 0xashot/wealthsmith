@@ -25,8 +25,8 @@ import type { EngineSuggestion, SuggestionCategory } from "./engineTypes";
  * display order. Safety Buffer is the highest-priority override; On Track is
  * last and is never a Top Pick candidate.
  *
- * The categories past `rebalance` are CONTRACTED (Step 9A) — no rule emits them
- * yet. The UI must NOT import this map to sort; it renders engine order.
+ * Every category here is emitted by a rule. The UI must NOT import this map to
+ * sort; it renders engine order.
  */
 export const CATEGORY_PRIORITY: Record<SuggestionCategory, number> = {
   buffer: 1,

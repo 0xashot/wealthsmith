@@ -17,19 +17,16 @@
  * No AI creates, ranks, or modifies suggestions. Smith AI may EXPLAIN engine
  * output later, using reason codes — it never generates suggestions.
  *
- * MVP scope (implemented in later steps): Top Up Safety Buffer, Rebalance
- * (bucket-level), On Track. Top Pick selection (top-pick-rules.md) comes after
- * the core suggestions and only ever marks `is_top_pick` on engine output.
+ * Implemented scope: Top Up Safety Buffer, Rebalance (bucket-level), Capital
+ * Efficiency, Trim, Staking, Stable Yield, DCA, Position Optimization, and the
+ * On Track state. Top Pick selection (top-pick-rules.md) runs after the core
+ * suggestions and only ever marks `is_top_pick` on engine output.
  */
 
 /**
- * MVP categories. `buffer` and `rebalance` map to the top-pick category
- * priority hierarchy (Buffer Actions > Rebalance > …); `on_track` is
- * informational and never Top Pick.
- *
- * IMPLEMENTED (MVP): buffer, rebalance, on_track.
- * CONTRACTED (Step 9A — types + ordering only, NO trigger logic yet):
- * capital_efficiency, staking, stable_yield, position_optimization. See
+ * Suggestion categories. All are IMPLEMENTED with trigger logic (Steps 3–9H);
+ * `buffer` and `rebalance` head the top-pick priority hierarchy (Buffer Actions
+ * > Rebalance > …) and `on_track` is informational and never Top Pick. See
  * CATEGORY_PRIORITY (topPick.ts) for the full ordering.
  */
 export type SuggestionCategory =
@@ -48,8 +45,8 @@ export type SuggestionCategory =
  * Codes). These are the ONLY reasons the engine may emit; UI/Smith AI must not
  * create new ones. Copy templates and Smith AI explanations key off these.
  *
- * The trailing groups are CONTRACTED for future categories (Step 9A) — declared
- * so future rules can emit them, but no rule produces them yet.
+ * All groups are emitted by their category rules EXCEPT `duplicate_exposure`,
+ * which remains contracted (declared for a future duplicate-position check).
  */
 export type SuggestionReasonCode =
   // Implemented (MVP)
