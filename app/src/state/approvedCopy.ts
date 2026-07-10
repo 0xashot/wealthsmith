@@ -224,6 +224,12 @@ export const SUGGESTION_STABLE_YIELD_DESCRIPTION =
 export const SUGGESTION_POSITION_OPTIMIZATION_TITLE = "Review Existing Yield Positions";
 export const SUGGESTION_POSITION_OPTIMIZATION_DESCRIPTION =
   "Some existing positions may need review based on yield, concentration, or missing data.";
+export const SUGGESTION_DCA_TITLE = "Review a DCA Plan";
+export const SUGGESTION_DCA_DESCRIPTION =
+  "Your crypto allocation is below target. You may be able to use future contributions to build exposure gradually.";
+export const SUGGESTION_TRIM_TITLE = "Review Long-Tail Assets";
+export const SUGGESTION_TRIM_DESCRIPTION =
+  "Some non-core wallet assets may deserve review because they make up a meaningful part of your portfolio.";
 export const SUGGESTIONS_UNAVAILABLE =
   "Strategy Steps need wallet value, goal settings, Safety Buffer, and allocation data before they can be shown.";
 export const SUGGESTIONS_PARTIAL_PRICING =
@@ -251,6 +257,10 @@ export const SUGGESTION_COPY: Record<string, string> = {
   "suggestion.position_optimization.title": SUGGESTION_POSITION_OPTIMIZATION_TITLE,
   "suggestion.position_optimization.description":
     SUGGESTION_POSITION_OPTIMIZATION_DESCRIPTION,
+  "suggestion.dca.title": SUGGESTION_DCA_TITLE,
+  "suggestion.dca.description": SUGGESTION_DCA_DESCRIPTION,
+  "suggestion.trim.title": SUGGESTION_TRIM_TITLE,
+  "suggestion.trim.description": SUGGESTION_TRIM_DESCRIPTION,
 };
 
 /** Smith AI Suggestions rail title + the Ask Smith AI explainer for when/how

@@ -32,9 +32,11 @@ export const CATEGORY_PRIORITY: Record<SuggestionCategory, number> = {
   buffer: 1,
   rebalance: 2,
   capital_efficiency: 3,
-  staking: 4,
-  stable_yield: 5,
-  position_optimization: 6,
+  trim: 4,
+  staking: 5,
+  stable_yield: 6,
+  dca: 7,
+  position_optimization: 8,
   on_track: 99,
 };
 

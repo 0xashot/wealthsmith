@@ -174,8 +174,30 @@ Source of truth: `rules/suggestion-engine-rules.md`, `rules/top-pick-rules.md`,
   is now Rebalance → Capital Efficiency → Staking → Stable Yield → Position
   Optimization → On Track. Fixtures 9E-A…L.
 
-All six MVP+ suggestion categories are now implemented. `duplicate_exposure`
-remains contracted but not emitted (pending duplicate-position detection).
+- Step 9G (done): **DCA trigger** (`deriveDcaSuggestion`, category `dca`,
+  "Review a DCA Plan"). Fires when the buffer is funded, **Rebalance does not
+  apply**, crypto is modestly under target (≥ 2 points, below the Rebalance
+  threshold), and a planned monthly contribution ≥ $50 exists. Amount =
+  min(monthly contribution, crypto target gap), ≥ $50 — **contribution-funded
+  only** (never Safety Buffer/wallet/protocol stables) and **no token chosen**
+  (generic `crypto` bucket). Category priority 6 (position_optimization → 7);
+  funded-buffer order: Rebalance → Capital Efficiency → Staking → Stable Yield →
+  DCA → Position Optimization → On Track. Fixtures 9G-A…L.
+
+- Step 9H (done): **Trim Long-Tail trigger** (`deriveTrimSuggestion`, category
+  `trim`, "Review Long-Tail Assets"). Flags NON-CORE liquid wallet tokens (an
+  explicit `CORE_TOKEN_SYMBOLS` allowlist = SOL/WSOL + stablecoins; excludes
+  LST/stake/protocol/unknown) that hit any of: aggregate long-tail ≥ $100 AND
+  ≥ 5% of portfolio; a single non-core token ≥ 10%; or ≥ 3 small (≤ $50) tokens
+  combining ≥ $100. One aggregated review suggestion — never sell/swap, never
+  "bad/unsafe", never asserts illiquidity (`liquidity_not_evaluated`). Category
+  priority 4; funded-buffer order: Rebalance → Capital Efficiency → Trim →
+  Staking → Stable Yield → DCA → Position Optimization → On Track. Trim and
+  Capital Efficiency answer different questions and MAY both fire (neither
+  suppresses the other). Fixtures 9H-A…N. Realistic max rail count is now 5.
+
+All suggestion categories are implemented. `duplicate_exposure` remains
+contracted but not emitted (pending duplicate-position detection).
 
 ## Suggestion display order
 

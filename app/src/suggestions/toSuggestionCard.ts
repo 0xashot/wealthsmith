@@ -50,8 +50,10 @@ const CARD_CATEGORY: Record<SuggestionCategory, string> = {
   buffer: "safety_buffer",
   rebalance: "allocation",
   capital_efficiency: "capital_efficiency",
+  trim: "portfolio_health",
   staking: "staked_assets",
   stable_yield: "yield_opportunity",
+  dca: "contribution_plan",
   position_optimization: "portfolio_health",
   on_track: "portfolio_health",
 };
@@ -61,8 +63,10 @@ const CARD_TYPE: Record<SuggestionCategory, string> = {
   buffer: "fund_safety_buffer",
   rebalance: "rebalance_to_plan",
   capital_efficiency: "review_idle_assets",
+  trim: "trim_long_tail",
   staking: "stake_idle_sol",
   stable_yield: "deploy_idle_stablecoins",
+  dca: "dca_buy",
   position_optimization: "review_yield_strategy",
   on_track: "on_track",
 };

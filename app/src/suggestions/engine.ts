@@ -19,8 +19,10 @@ import type {
 import { deriveBufferSuggestion } from "./bufferSuggestion";
 import { deriveRebalanceSuggestion } from "./rebalanceSuggestion";
 import { deriveCapitalEfficiencySuggestion } from "./capitalEfficiencySuggestion";
+import { deriveTrimSuggestion } from "./trimSuggestion";
 import { deriveStakingSuggestion } from "./stakingSuggestion";
 import { deriveStableYieldSuggestion } from "./stableYieldSuggestion";
+import { deriveDcaSuggestion } from "./dcaSuggestion";
 import { derivePositionOptimizationSuggestion } from "./positionOptimizationSuggestion";
 import { deriveOnTrackSuggestion } from "./onTrackSuggestion";
 import { selectTopPick } from "./topPick";
@@ -36,9 +38,10 @@ import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
  *      suggestion alone — no deployment/yield/rebalance, no On Track.
  *   3. If the buffer is fully funded, collect the actionable candidates in
  *      category-priority order: Rebalance, Capital Efficiency (idle assets),
- *      Staking (idle SOL), Stable Yield (excess stablecoins), then Position
- *      Optimization (review of deployed positions). Stable Yield is SUPPRESSED
- *      when Rebalance applies; the others may coexist.
+ *      Trim (non-core long-tail review), Staking (idle SOL), Stable Yield
+ *      (excess stablecoins), DCA (contribution-funded gradual entry), then
+ *      Position Optimization (review of deployed positions). Stable Yield and
+ *      DCA are SUPPRESSED when Rebalance applies; the others may coexist.
  *   4. If there are no candidates, fall back to On Track ("aligned").
  * Finally, deterministic Top Pick selection (topPick.ts) marks at most one
  * eligible actionable suggestion by category priority — never the UI or AI.
@@ -66,13 +69,19 @@ export function runSuggestionEngine(
     // Capital Efficiency ranks above Staking/Stable Yield; may coexist with all.
     const capitalEfficiency = deriveCapitalEfficiencySuggestion(inputs, generatedAt);
     if (capitalEfficiency) candidates.push(capitalEfficiency);
+    // Trim (non-core long-tail review) — separate intent from Capital Efficiency;
+    // both may fire and neither suppresses the other.
+    const trim = deriveTrimSuggestion(inputs, generatedAt);
+    if (trim) candidates.push(trim);
     const staking = deriveStakingSuggestion(inputs, generatedAt);
     if (staking) candidates.push(staking);
-    // Stable Yield only when Rebalance does not apply (allocation already close
-    // enough to target); Staking is unaffected (it uses SOL, not stables).
+    // Stable Yield and DCA only when Rebalance does not apply (allocation
+    // already close enough to target); Staking is unaffected (SOL, not stables).
     if (!rebalance) {
       const stableYield = deriveStableYieldSuggestion(inputs, generatedAt);
       if (stableYield) candidates.push(stableYield);
+      const dca = deriveDcaSuggestion(inputs, generatedAt);
+      if (dca) candidates.push(dca);
     }
     // Position Optimization is the lowest-priority actionable candidate and may
     // coexist with any of the above (it reviews already-deployed positions).

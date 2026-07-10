@@ -46,6 +46,24 @@ export const MIN_STAKING_SUGGESTION_USD = 50;
  */
 export const MIN_STABLE_YIELD_SUGGESTION_USD = 100;
 
+/* DCA (contribution-funded gradual entry toward the crypto target). */
+/** Minimum DCA amount, contribution, and target-gap before a DCA review appears. */
+export const MIN_DCA_SUGGESTION_USD = 50;
+/** Minimum crypto underweight (as a fraction, 0.02 = 2 percentage points). */
+export const DCA_MIN_CRYPTO_UNDERWEIGHT_PCT = 0.02;
+
+/* Trim (review of non-core long-tail liquid wallet tokens). */
+/** Aggregate/flagged trim value below this is too small to flag. */
+export const MIN_TRIM_SUGGESTION_USD = 100;
+/** Aggregate non-core exposure below this share of the portfolio is not flagged. */
+export const TRIM_PORTFOLIO_SHARE_THRESHOLD = 0.05;
+/** A single non-core token at/above this share of the portfolio warrants review. */
+export const TRIM_SINGLE_TOKEN_CONCENTRATION_THRESHOLD = 0.1;
+/** This many small non-core tokens can trigger a cleanup review. */
+export const TRIM_SMALL_POSITION_COUNT_THRESHOLD = 3;
+/** A non-core token at/below this value counts as a "small" position. */
+export const TRIM_SMALL_POSITION_MAX_USD = 50;
+
 /* Capital efficiency (idle liquid wallet crypto not covered by other rules). */
 /** Aggregate idle-asset value below this is too small to flag. */
 export const MIN_CAPITAL_EFFICIENCY_SUGGESTION_USD = 100;

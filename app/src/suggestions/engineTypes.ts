@@ -36,8 +36,10 @@ export type SuggestionCategory =
   | "buffer"
   | "rebalance"
   | "capital_efficiency"
+  | "trim"
   | "staking"
   | "stable_yield"
+  | "dca"
   | "position_optimization"
   | "on_track";
 
@@ -72,6 +74,16 @@ export type SuggestionReasonCode =
   | "stable_yield_available"
   | "conservative_yield_candidate"
   | "buffer_eligible_stable_yield"
+  // dca (contribution-funded gradual entry)
+  | "crypto_underweight_for_dca"
+  | "planned_contribution_available"
+  | "gradual_entry_candidate"
+  // trim (long-tail / non-core liquid token review)
+  | "long_tail_exposure"
+  | "non_core_token_exposure"
+  | "token_concentration_review"
+  | "small_position_cleanup"
+  | "liquidity_not_evaluated"
   // position_optimization (contracted)
   | "low_yield_position"
   | "missing_apy_data"
@@ -111,6 +123,12 @@ export type GuardrailCode =
   | "allocation_delta"
   // capital_efficiency: idle assets clear the value/share thresholds.
   | "idle_asset_threshold"
+  // trim: which non-core token scope / concentration checks were evaluated.
+  | "token_scope"
+  // dca: a planned contribution exists and there is an allocation gap to close.
+  | "contribution_available"
+  | "allocation_gap"
+  | "token_selection"
   // staking: a small SOL balance is kept back for network fees.
   | "sol_fee_reserve"
   // position_optimization: which review conditions were evaluated.

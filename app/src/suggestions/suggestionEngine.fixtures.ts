@@ -127,6 +127,23 @@ function cryptoPosition(valueUsd = 100): WalletPosition {
   };
 }
 
+/** A distinct priced non-core liquid wallet token (for trim/capital-efficiency). */
+function nonCoreToken(symbol: string, valueUsd: number): WalletPosition {
+  return {
+    id: `tok-${symbol}`,
+    source: "wallet",
+    type: "token",
+    symbol,
+    name: symbol,
+    amount: "1",
+    uiAmount: valueUsd,
+    decimals: 6,
+    detection: "direct_wallet_balance",
+    priceUsd: 1,
+    valueUsd,
+  };
+}
+
 /** An LST position (JupSOL/mSOL/…) — must NOT count as liquid SOL. */
 function lstPosition(symbol: string, uiAmount: number, price = 80): WalletPosition {
   return {
@@ -1737,7 +1754,8 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-B. Funded + no higher candidate + idle token ≥ $100 and ≥ 2% → Top Pick.
   {
     const r = runSuggestionEngine(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(5000)] }),
+      // $400 = 2.67% share → Capital Efficiency only (below Trim's 5% threshold).
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }),
       FIXTURE_GENERATED_AT
     );
     const s = r.suggestions.find((x) => x.category === "capital_efficiency");
@@ -1745,7 +1763,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
       "9E-B: funded + idle token → capital_efficiency Top Pick, full amount",
       cats(r) === "capital_efficiency" &&
         s?.is_top_pick === true &&
-        s?.amount?.valueUsd === 5000,
+        s?.amount?.valueUsd === 400,
       `categories=${cats(r)} topPick=${s?.is_top_pick} amount=${s?.amount?.valueUsd}`
     );
   }
@@ -1753,7 +1771,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-C. Funded + Rebalance applies + idle token → Rebalance first (Top Pick), capital_efficiency second.
   {
     const r = runSuggestionEngine(
-      inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [cryptoPosition(5000)] }),
+      inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [cryptoPosition(400)] }),
       FIXTURE_GENERATED_AT
     );
     const reb = r.suggestions.find((s) => s.category === "rebalance");
@@ -1770,7 +1788,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
-        positions: [cryptoPosition(5000), solPosition(10), stablePosition("USDC", 10000)],
+        positions: [cryptoPosition(400), solPosition(10), stablePosition("USDC", 10000)],
       }),
       FIXTURE_GENERATED_AT
     );
@@ -1951,11 +1969,11 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
       FIXTURE_GENERATED_AT
     );
     add(
-      "9F-1: no rebalance, all fire → 4 cards in order, capital_efficiency Top Pick",
-      cats(r) === "capital_efficiency,staking,stable_yield,position_optimization" &&
+      "9F-1: no rebalance, all fire → 5 cards in order, capital_efficiency Top Pick",
+      cats(r) === "capital_efficiency,trim,staking,stable_yield,position_optimization" &&
         topPickCat(r) === "capital_efficiency" &&
         tpCount(r) === 1 &&
-        r.suggestions.length === 4,
+        r.suggestions.length === 5,
       `order=${cats(r)} topPick=${topPickCat(r)} tpCount=${tpCount(r)}`
     );
   }
@@ -1972,11 +1990,11 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
       FIXTURE_GENERATED_AT
     );
     add(
-      "9F-2: rebalance present → rebalance,capEff,staking,posOpt (no stable_yield), rebalance Top Pick",
-      cats(r) === "rebalance,capital_efficiency,staking,position_optimization" &&
+      "9F-2: rebalance present → rebalance,capEff,trim,staking,posOpt (no stable_yield), rebalance Top Pick",
+      cats(r) === "rebalance,capital_efficiency,trim,staking,position_optimization" &&
         topPickCat(r) === "rebalance" &&
         tpCount(r) === 1 &&
-        r.suggestions.length === 4,
+        r.suggestions.length === 5,
       `order=${cats(r)} topPick=${topPickCat(r)}`
     );
   }
@@ -2017,10 +2035,409 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
       FIXTURE_GENERATED_AT
     );
     add(
-      "9F-4: max card count ≤ 4 (buffer/on_track are exclusive)",
-      noReb.suggestions.length <= 4 && withReb.suggestions.length <= 4,
+      "9F-4: max card count ≤ 5 (buffer/on_track are exclusive; stable_yield/dca gated by rebalance)",
+      noReb.suggestions.length <= 5 && withReb.suggestions.length <= 5,
       `noRebalance=${noReb.suggestions.length} withRebalance=${withReb.suggestions.length}`
     );
+  }
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 9G — DCA (contribution-funded gradual entry) trigger.
+ * dcaUnder(delta) builds an allocation where crypto is `delta` points under
+ * target (delta 3 → current 57% / target 60% at 15,000 = $450 gap).
+ * goalFixture.monthly_saving_goal is $2,000.
+ * ------------------------------------------------------------------ */
+export function runDcaFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+  const cats = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.map((s) => s.category).join(",") || "none";
+  const has = (r: ReturnType<typeof runSuggestionEngine>, c: string) =>
+    r.suggestions.some((s) => s.category === c);
+  const dca = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.find((s) => s.category === "dca");
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  // Crypto `points` under target at 15,000 total (delta = -points).
+  const dcaUnder = (points: number) => allocationFixture(15000, 60 - points, -points);
+  const offTarget = () => allocationFixture(15000, 75, 15); // rebalance applies
+  const noContribGoal = { ...goalFixture, monthly_saving_goal: null };
+  const smallContribGoal = { ...goalFixture, monthly_saving_goal: 30 };
+
+  // 9G-A. Underfunded buffer + DCA conditions otherwise true → Buffer only.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(800, 1000, 3),
+        allocation: dcaUnder(3),
+        positions: [cryptoPosition(100)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9G-A: underfunded buffer → buffer only, no dca", cats(r) === "buffer" && !has(r, "dca"), `categories=${cats(r)}`);
+  }
+
+  // 9G-B. Funded + Rebalance applies + contribution → Rebalance, no DCA.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [cryptoPosition(100)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9G-B: rebalance applies → rebalance, no dca", has(r, "rebalance") && !has(r, "dca"), `categories=${cats(r)}`);
+  }
+
+  // 9G-C. Funded + crypto 3pts under target + contribution ≥ $50 + no higher → DCA Top Pick.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = dca(r);
+    add(
+      "9G-C: funded + 3pt underweight + contribution → dca Top Pick",
+      cats(r) === "dca" && s?.is_top_pick === true && s?.amount?.valueUsd === 450,
+      `categories=${cats(r)} topPick=${s?.is_top_pick} amount=${s?.amount?.valueUsd}`
+    );
+  }
+
+  // 9G-D. Crypto at/above target → no DCA → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 60, 0), positions: [cryptoPosition(100)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9G-D: crypto at target → no dca, On Track", !has(r, "dca") && cats(r) === "on_track", `categories=${cats(r)}`);
+  }
+
+  // 9G-E. Underweight below 2 points → no DCA → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(1), positions: [cryptoPosition(100)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9G-E: underweight < 2pt → no dca, On Track", !has(r, "dca") && cats(r) === "on_track", `categories=${cats(r)}`);
+  }
+
+  // 9G-F. Monthly contribution missing → no DCA → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)], goal: noContribGoal }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9G-F: no contribution → no dca, On Track", !has(r, "dca") && cats(r) === "on_track", `categories=${cats(r)}`);
+  }
+
+  // 9G-G. Monthly contribution below $50 → no DCA → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)], goal: smallContribGoal }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9G-G: contribution < $50 → no dca, On Track", !has(r, "dca") && cats(r) === "on_track", `categories=${cats(r)}`);
+  }
+
+  // 9G-H. Target crypto gap below $50 (small portfolio, 2pt gap = $40) → no DCA → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: bufferFixture(2000, 300, 3),
+        totalUsd: 2000,
+        allocation: allocationFixture(2000, 58, -2), // gap = 2000*0.60 − 2000*0.58 = 40
+        positions: [cryptoPosition(50)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9G-H: target gap < $50 → no dca, On Track", !has(r, "dca") && cats(r) === "on_track", `categories=${cats(r)}`);
+  }
+
+  // 9G-I. capEff + staking + stable_yield + DCA, no rebalance → engine order, capEff Top Pick.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: dcaUnder(3),
+        positions: [cryptoPosition(400), solPosition(10), stablePosition("USDC", 10000)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    const ce = r.suggestions.find((s) => s.category === "capital_efficiency");
+    add(
+      "9G-I: capEff + staking + stable_yield + dca → engine order, capital_efficiency Top Pick",
+      cats(r) === "capital_efficiency,staking,stable_yield,dca" && ce?.is_top_pick === true,
+      `categories=${cats(r)} ceTop=${ce?.is_top_pick}`
+    );
+  }
+
+  // 9G-J. DCA + Position Optimization, no higher candidates → DCA first (Top Pick), posOpt second.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: dcaUnder(3),
+        positions: [cryptoPosition(100), yieldPosition(5000, null)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9G-J: dca + position_optimization → dca first/Top Pick, posOpt second",
+      cats(r) === "dca,position_optimization" && dca(r)?.is_top_pick === true,
+      `categories=${cats(r)} dcaTop=${dca(r)?.is_top_pick}`
+    );
+  }
+
+  // 9G-K. Mapper renders the DCA card safely.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = dca(r);
+    const card = s ? toSuggestionCard(s) : undefined;
+    add(
+      "9G-K: dca card maps safely (copy, amount, review-only, non-transactional)",
+      card?.title === "Review a DCA Plan" &&
+        card?.description ===
+          "Your crypto allocation is below target. You may be able to use future contributions to build exposure gradually." &&
+        card?.impact_text.includes("Contribution to review") === true &&
+        card?.cta.label === "Review" &&
+        card?.cta.executes_transaction === false &&
+        card?.cta.action === null,
+      `title="${card?.title}" impact="${card?.impact_text}"`
+    );
+  }
+
+  // 9G-L. DCA output names no specific token (only the generic crypto bucket).
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = dca(r);
+    const noToken = s ? !/\b(SOL|WSOL|BTC|ETH|BONK|JUP|WIF)\b/.test(JSON.stringify(s)) : false;
+    add(
+      "9G-L: dca chooses no specific token (generic crypto bucket only)",
+      noToken && s?.to?.bucket === "crypto" && s?.to?.symbol === undefined,
+      `noToken=${noToken} toBucket=${s?.to?.bucket}`
+    );
+  }
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 9H — trim (non-core long-tail token review) trigger.
+ * Note: trim rule A (≥ 5% aggregate) necessarily co-triggers Capital
+ * Efficiency (≥ 2%), so a trim-ONLY scenario uses the small-position path
+ * (aggregate < 2%, so no Capital Efficiency).
+ * ------------------------------------------------------------------ */
+export function runTrimFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+  const cats = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.map((s) => s.category).join(",") || "none";
+  const has = (r: ReturnType<typeof runSuggestionEngine>, c: string) =>
+    r.suggestions.some((s) => s.category === c);
+  const trim = (r: ReturnType<typeof runSuggestionEngine>) =>
+    r.suggestions.find((s) => s.category === "trim");
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2); // no rebalance
+  const offTarget = () => allocationFixture(15000, 75, 15); // rebalance applies
+  // Four small non-core tokens ($40 each = $160): aggregate 1.07% (< 2% → no
+  // Capital Efficiency), triggers trim small-position cleanup only.
+  const smallTokens = [
+    nonCoreToken("AAA", 40),
+    nonCoreToken("BBB", 40),
+    nonCoreToken("CCC", 40),
+    nonCoreToken("DDD", 40),
+  ];
+
+  // 9H-A. Underfunded buffer + trim conditions otherwise true → Buffer only.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9H-A: underfunded buffer → buffer only, no trim", cats(r) === "buffer" && !has(r, "trim"), `categories=${cats(r)}`);
+  }
+
+  // 9H-B. Funded + trim fires as the ONLY candidate (no Capital Efficiency) → Trim Top Pick.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = trim(r);
+    add(
+      "9H-B: funded + non-core exposure, no capEff → trim Top Pick",
+      cats(r) === "trim" && s?.is_top_pick === true && s?.amount?.valueUsd === 160,
+      `categories=${cats(r)} topPick=${s?.is_top_pick} amount=${s?.amount?.valueUsd}`
+    );
+  }
+
+  // 9H-C. Funded + Rebalance applies + trim conditions → Rebalance first/Top Pick, Trim later.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [nonCoreToken("BONK", 5000)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const reb = r.suggestions.find((s) => s.category === "rebalance");
+    add(
+      "9H-C: rebalance + trim → rebalance first/Top Pick, trim present",
+      r.suggestions[0]?.category === "rebalance" && reb?.is_top_pick === true && has(r, "trim"),
+      `categories=${cats(r)} rebTop=${reb?.is_top_pick}`
+    );
+  }
+
+  // 9H-D. Funded + Capital Efficiency and Trim both fire → capEff first/Top Pick, trim second.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const ce = r.suggestions.find((s) => s.category === "capital_efficiency");
+    add(
+      "9H-D: capEff + trim → capital_efficiency first/Top Pick, trim second",
+      cats(r) === "capital_efficiency,trim" && ce?.is_top_pick === true && trim(r)?.is_top_pick === false,
+      `categories=${cats(r)} ceTop=${ce?.is_top_pick}`
+    );
+  }
+
+  // 9H-E. Single non-core token ≥ 10% of portfolio → token_concentration_review.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 2000)] }), // 13.3%
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9H-E: single token ≥ 10% → trim with token_concentration_review",
+      trim(r)?.reason_codes.includes("token_concentration_review") === true,
+      `reasons=${trim(r)?.reason_codes.join(",")}`
+    );
+  }
+
+  // 9H-F. 3+ small non-core tokens (≤ $50, combined ≥ $100) → small_position_cleanup.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9H-F: 3+ small tokens → trim with small_position_cleanup",
+      trim(r)?.reason_codes.includes("small_position_cleanup") === true &&
+        trim(r)?.reason_codes.includes("liquidity_not_evaluated") === true,
+      `reasons=${trim(r)?.reason_codes.join(",")}`
+    );
+  }
+
+  // 9H-G. Non-core token < $100 and < 5%, no concentration/cleanup → no Trim → On Track.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 80)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9H-G: small non-core exposure → no trim, On Track", !has(r, "trim") && cats(r) === "on_track", `categories=${cats(r)}`);
+  }
+
+  // 9H-H. Only SOL/WSOL → no Trim (SOL/WSOL are core).
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9H-H: only SOL → no trim", !has(r, "trim"), `categories=${cats(r)}`);
+  }
+
+  // 9H-I. Only stablecoins → no Trim (stables are core).
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9H-I: only stablecoins → no trim", !has(r, "trim"), `categories=${cats(r)}`);
+  }
+
+  // 9H-J. Only deployed positions → no Trim (not liquid wallet tokens).
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9H-J: only deployed positions → no trim", !has(r, "trim"), `categories=${cats(r)}`);
+  }
+
+  // 9H-K. Unpriced non-core token → no Trim, no invented amount.
+  {
+    const unpriced: WalletPosition = {
+      id: "unpriced-bonk",
+      source: "wallet",
+      type: "token",
+      symbol: "BONK",
+      name: "Bonk",
+      amount: "1",
+      uiAmount: 5000,
+      decimals: 6,
+      detection: "direct_wallet_balance",
+      priceUsd: null,
+      valueUsd: null,
+    };
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [unpriced] }),
+      FIXTURE_GENERATED_AT
+    );
+    add("9H-K: unpriced non-core token → no trim", !has(r, "trim"), `categories=${cats(r)}`);
+  }
+
+  // 9H-L. Partial pricing + priced non-core token → Trim + warning.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)], anyUnpriced: true }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "9H-L: partial pricing + priced non-core token → trim + warning",
+      has(r, "trim") && r.warnings.includes("partial_pricing"),
+      `categories=${cats(r)} warnings=${r.warnings.join(",")}`
+    );
+  }
+
+  // 9H-M. Mapper renders the trim card safely.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = trim(r);
+    const card = s ? toSuggestionCard(s) : undefined;
+    add(
+      "9H-M: trim card maps safely (copy, amount, review-only, non-transactional)",
+      card?.title === "Review Long-Tail Assets" &&
+        card?.description ===
+          "Some non-core wallet assets may deserve review because they make up a meaningful part of your portfolio." &&
+        card?.impact_text.includes("Long-tail assets to review") === true &&
+        card?.cta.label === "Review" &&
+        card?.cta.executes_transaction === false &&
+        card?.cta.action === null,
+      `title="${card?.title}" impact="${card?.impact_text}"`
+    );
+  }
+
+  // 9H-N. Trim output/copy contains no sell/buy/swap/bad/unsafe/illiquid-as-fact.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)] }),
+      FIXTURE_GENERATED_AT
+    );
+    const s = trim(r);
+    const card = s ? toSuggestionCard(s) : undefined;
+    const text = `${card?.title} ${card?.description} ${card?.impact_text}`;
+    const clean = !/\b(sell|buy|swap|bad|unsafe|illiquid)\b/i.test(text);
+    add("9H-N: trim copy avoids sell/buy/swap/bad/unsafe/illiquid", clean, `clean=${clean}`);
   }
 
   return checks;
@@ -2036,6 +2453,8 @@ export function printFixtureResults(): void {
     ...runStableYieldFixtureChecks(),
     ...runPositionOptimizationFixtureChecks(),
     ...runCapitalEfficiencyFixtureChecks(),
+    ...runDcaFixtureChecks(),
+    ...runTrimFixtureChecks(),
     ...runFullQaFixtureChecks(),
   ];
   for (const c of checks) {
