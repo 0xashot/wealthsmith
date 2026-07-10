@@ -13,8 +13,10 @@
  * exists (the Dashboard's Safety Buffer card); it never executes, signs, or
  * completes anything.
  */
+import { useState } from "react";
 import SuggestionRail from "./SuggestionRail";
 import EmptyStateCard from "./EmptyStateCard";
+import SuggestionReviewModal from "./SuggestionReviewModal";
 import type { RailSuggestions } from "../suggestions/useRailSuggestions";
 import type { RightRailState, SuggestionCardState } from "../types/dashboard";
 import {
@@ -29,16 +31,27 @@ interface Props {
   railLabel: string;
 }
 
-/** Read-only "Review": scroll to the related section if it's on this page. */
-function onReviewSuggestion(card: SuggestionCardState) {
-  if (card.category === "safety_buffer") {
-    const el = document.getElementById("safety-buffer");
-    el?.scrollIntoView({ block: "nearest" });
-    el?.focus?.();
-  }
-}
-
 export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
+  // Which suggestion's Review modal is open (by stable engine id). Read-only —
+  // opening the modal never transacts, signs, or hands off to a protocol.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Read-only "Review": open the details modal when the engine produced details
+  // for this suggestion (all Step 10A suggestions do).
+  const onReviewSuggestion = (card: SuggestionCardState) => {
+    if (rail?.reviewDetailsById[card.id]) setSelectedId(card.id);
+  };
+
+  const selectedDetails = selectedId ? rail?.reviewDetailsById[selectedId] : undefined;
+  const selectedCard = selectedId ? rail?.cards.find((c) => c.id === selectedId) : undefined;
+  const reviewModal = selectedDetails ? (
+    <SuggestionReviewModal
+      details={selectedDetails}
+      isTopPick={selectedCard?.is_top_pick === true}
+      onClose={() => setSelectedId(null)}
+    />
+  ) : null;
+
   if (rail?.loading) {
     return (
       <aside className="suggestion-rail" aria-label={railLabel}>
@@ -59,12 +72,15 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
       cards: rail.cards,
     };
     return (
-      <SuggestionRail
-        rail={railState}
-        railLabel={railLabel}
-        notice={rail.notice}
-        onReview={onReviewSuggestion}
-      />
+      <>
+        <SuggestionRail
+          rail={railState}
+          railLabel={railLabel}
+          notice={rail.notice}
+          onReview={onReviewSuggestion}
+        />
+        {reviewModal}
+      </>
     );
   }
 

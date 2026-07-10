@@ -2871,6 +2871,79 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 10B — Review Details modal (data-path checks; DOM verified in-browser).
+ * ------------------------------------------------------------------ */
+export function runReviewModalFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const run = runSuggestionEngine(
+    inputsFor({
+      safetyBuffer: bufferFixture(5000, 1000, 3),
+      allocation: allocationFixture(15000, 75, 15),
+      positions: [cryptoPosition(100)],
+    }),
+    FIXTURE_GENERATED_AT
+  );
+  // Reproduce exactly what the rail hook builds: id → reviewDetails.
+  const reviewDetailsById: Record<string, NonNullable<EngineSuggestion["reviewDetails"]>> = {};
+  for (const s of run.suggestions) if (s.reviewDetails) reviewDetailsById[s.id] = s.reviewDetails;
+  const cards = toSuggestionCards(run.suggestions);
+  const rebalance = run.suggestions.find((s) => s.category === "rebalance");
+  const rd = rebalance?.reviewDetails;
+
+  // 10B-A. Every card id maps to review details.
+  {
+    const missing = cards.filter((c) => reviewDetailsById[c.id] == null).map((c) => c.id);
+    add("10B-A: rail maps every card id to reviewDetails", missing.length === 0, `missing=${missing.join(",") || "none"}`);
+  }
+  // 10B-B. Rebalance modal has all renderable sections populated.
+  {
+    const ok =
+      !!rd &&
+      rd.summary.title.length > 0 &&
+      rd.metrics.length > 0 &&
+      (rd.guardrailSummary.checked.length + rd.guardrailSummary.notEvaluated.length + rd.guardrailSummary.notApplicable.length) > 0 &&
+      rd.limitations.length > 0 &&
+      rd.safetyNotes.length > 0;
+    add("10B-B: rebalance modal renders summary/metrics/guardrails/limitations/safety", ok, `metrics=${rd?.metrics.length} lims=${rd?.limitations.length} notes=${rd?.safetyNotes.length}`);
+  }
+  // 10B-C. Modal data exposes no raw guardrail codes.
+  {
+    const codes = ["cost_available", "liquidity_available", "slippage_available", "protocol_selection", "min_trade_size", "buffer_protection", "pricing_available", "allocation_delta"];
+    const json = JSON.stringify(rd);
+    const leaks = codes.filter((c) => json.includes(c));
+    add("10B-C: modal data exposes no raw guardrail codes", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 10B-D. Modal data contains no forbidden language.
+  {
+    const forbidden = ["guaranteed", "optimal", "best", "you should", "we will move", "we will stake", "we will buy", "automatic", "risk-free", "sell", "buy", "swap", "execute", "bad", "unsafe", "highest apy", "safest protocol"];
+    const json = JSON.stringify(rd).toLowerCase();
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("10B-D: modal data contains no forbidden language", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 10B-E. The card CTA behind the modal stays non-transactional.
+  {
+    const c = cards.find((x) => x.id === rebalance?.id);
+    const ok =
+      !!c &&
+      c.cta.action === null &&
+      c.cta.executes_transaction === false &&
+      c.cta.requires_wallet_signature === false &&
+      c.cta.completion_on_click === false;
+    add("10B-E: review CTA remains non-transactional", ok, `action=${c?.cta.action}`);
+  }
+  // 10B-F. Real-wallet review data never carries demo ids (isolation).
+  {
+    const demoIds = Object.keys(reviewDetailsById).filter((id) => id.startsWith("demo_"));
+    add("10B-F: real-wallet review data has no demo ids", demoIds.length === 0, `demoIds=${demoIds.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -2887,6 +2960,7 @@ export function printFixtureResults(): void {
     ...runGuardrailFixtureChecks(),
     ...runProtocolSelectionFixtureChecks(),
     ...runReviewDetailsFixtureChecks(),
+    ...runReviewModalFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

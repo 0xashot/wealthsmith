@@ -1944,6 +1944,218 @@
   }
 }
 
+/* ---------- Suggestion Review modal (Step 10B) ----------
+ * Read-only modal that renders engine-owned reviewDetails. Reuses the shared
+ * .modal / .modal-scrim pattern; wider, with an internally scrolling body. */
+.review-modal {
+  width: min(100%, 42rem);
+  max-height: min(85vh, 48rem);
+  gap: var(--spacing-stack-gap-md);
+  overflow: hidden;
+}
+
+.review-modal__heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-xs);
+}
+
+.review-modal__category {
+  margin: 0;
+  font: var(--typography-label-sm-font);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.review-modal__badge {
+  margin-top: var(--spacing-inline-gap-xs);
+}
+
+.review-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-lg);
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--spacing-inline-gap-sm);
+}
+
+.review-modal__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-sm);
+}
+
+.review-modal__section-title {
+  margin: 0;
+  font: var(--typography-heading-sm-font);
+  color: var(--color-text-primary);
+}
+
+.review-modal__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-inline-gap-md);
+  margin: 0;
+}
+
+.review-modal__metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-xs);
+}
+
+.review-modal__metric-label {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.review-modal__metric-value {
+  margin: 0;
+  font: var(--typography-heading-sm-font);
+  color: var(--color-text-primary);
+}
+
+.review-modal__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.review-modal__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-md);
+  padding: var(--spacing-inline-gap-sm) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.review-modal__row:last-child {
+  border-bottom: none;
+}
+
+.review-modal__row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-modal__row-symbol {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.review-modal__row-sub {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.review-modal__row-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--spacing-inline-gap-sm);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.review-modal__tag {
+  padding: 2px var(--spacing-inline-gap-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control-sm);
+  font: var(--typography-label-sm-font);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.review-modal__calc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.review-modal__calc-label {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.review-modal__calc-formula {
+  font: var(--typography-body-sm-font);
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
+.review-modal__calc-values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-inline-gap-md);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.review-modal__guardrails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-sm);
+}
+
+.review-modal__guardrail-title {
+  margin: 0 0 var(--spacing-inline-gap-xs);
+  font: var(--typography-label-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.review-modal__chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.review-modal__chip {
+  padding: 2px var(--spacing-inline-gap-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control-sm);
+  font: var(--typography-label-sm-font);
+  color: var(--color-text-primary);
+}
+
+.review-modal__bullets,
+.review-modal__safety-notes {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-xs);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.review-modal__safety {
+  padding: var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-sm);
+}
+
+@media (max-width: 640px) {
+  .review-modal {
+    width: 100%;
+    max-height: 92vh;
+  }
+
+  .review-modal__metrics {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- Goal Settings (patterns/goal-settings.md) ---------- */
 
 /* Prototype-boundary note (Decision C): calm, always visible on the Goal page. */

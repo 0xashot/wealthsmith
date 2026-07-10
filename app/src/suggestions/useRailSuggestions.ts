@@ -21,6 +21,7 @@ import { useEffect, useRef } from "react";
 import type { WalletPosition } from "../wallet/walletPosition";
 import type { SavedGoal } from "../types/goal";
 import type { SuggestionCardState } from "../types/dashboard";
+import type { SuggestionReviewDetails } from "./engineTypes";
 import {
   deriveValueBreakdown,
   deriveStableValue,
@@ -38,6 +39,11 @@ import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 /** Engine cards + partial-pricing notice for the right rail (engine order). */
 export interface RailSuggestionsData {
   cards: SuggestionCardState[];
+  /**
+   * Structured Review Details keyed by suggestion id (Step 10A/10B). The Review
+   * modal renders these; cards themselves never carry them. Engine-owned.
+   */
+  reviewDetailsById: Record<string, SuggestionReviewDetails>;
   notice?: string;
   /** True when the engine produced at least one card. */
   available: boolean;
@@ -112,8 +118,15 @@ export function deriveRailSuggestions(args: {
     pricedAsOf ?? 0
   );
   const cards = toSuggestionCards(engineResult.suggestions);
+  // Engine-owned review details, keyed by the SAME stable suggestion id the
+  // cards use, so the rail can open the Review modal without re-running anything.
+  const reviewDetailsById: Record<string, SuggestionReviewDetails> = {};
+  for (const s of engineResult.suggestions) {
+    if (s.reviewDetails) reviewDetailsById[s.id] = s.reviewDetails;
+  }
   return {
     cards,
+    reviewDetailsById,
     notice: warningsToNotice(engineResult.warnings),
     available: cards.length > 0,
   };
@@ -132,7 +145,11 @@ export function useRailSuggestions(args: {
   onSuggestions?: (data: RailSuggestions) => void;
 }): void {
   const { positions, pricedAsOf, goal, loading, onSuggestions } = args;
-  const { cards, notice, available } = deriveRailSuggestions({ positions, pricedAsOf, goal });
+  const { cards, reviewDetailsById, notice, available } = deriveRailSuggestions({
+    positions,
+    pricedAsOf,
+    goal,
+  });
 
   const signature = JSON.stringify({
     cards: cards.map((c) => ({
@@ -146,6 +163,9 @@ export function useRailSuggestions(args: {
       disabled_reason_text: c.disabled_reason_text ?? "",
       cta: c.cta.label,
     })),
+    // Include review details so a details-only change (same card display) still
+    // lifts a fresh payload for the modal. The rail has ≤5 cards, so this stays small.
+    reviewDetailsById,
     notice: notice ?? "",
     loading,
   });
@@ -154,7 +174,7 @@ export function useRailSuggestions(args: {
     if (!onSuggestions) return;
     if (signature === lastSignature.current) return;
     lastSignature.current = signature;
-    onSuggestions({ cards, notice, available, loading });
+    onSuggestions({ cards, reviewDetailsById, notice, available, loading });
     // Signature gates the update; card objects are intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, onSuggestions]);

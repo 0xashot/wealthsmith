@@ -215,6 +215,18 @@ The card mapper (`toSuggestionCard`) does **not** read `reviewDetails`, so cards
 are unchanged and never leak it. Nothing here adds transactions, signatures,
 protocol selection, or invented APY/TVL/risk/liquidity/slippage/route/cost data.
 
+**Step 10B renders this in a modal.** `useRailSuggestions` also returns
+`reviewDetailsById` (keyed by the same stable suggestion id as the cards). The
+shared [`RealWalletSuggestionsRail`](../components/RealWalletSuggestionsRail.tsx)
+owns the open state, and clicking **Review** on a real-wallet card opens
+[`SuggestionReviewModal`](../components/SuggestionReviewModal.tsx), which renders
+the sections above (summary, metrics, involved assets/positions, calculations,
+grouped guardrails, limitations, safety notes). The modal is **read-only**: no
+transaction, signature, fund movement, protocol handoff, or AI — it only renders
+engine-owned data, with guardrails shown as friendly labels (never raw codes).
+Dashboard and Portfolio share the exact same behavior via this one rail. Demo
+Mode uses `SuggestionRail` directly and is untouched.
+
 ## MVP scope and step plan
 
 - Step 2 (done): contracts/types/thresholds/docs.
@@ -348,7 +360,15 @@ protocol selection, or invented APY/TVL/risk/liquidity/slippage/route/cost data.
   and never expose it; no transactions/signatures/protocol selection; nothing
   invents APY/TVL/risk/liquidity/slippage/route/cost. Guardrails are shown as
   user-facing labels, never raw codes. See **Review details** above. Unblocks the
-  Step 10B Review drawer. Fixtures 10A-A…M.
+  Step 10B Review modal. Fixtures 10A-A…M.
+
+- Step 10B (done): **Review Details modal**. `useRailSuggestions` now also returns
+  `reviewDetailsById`; the shared `RealWalletSuggestionsRail` opens
+  [`SuggestionReviewModal`](../components/SuggestionReviewModal.tsx) when Review is
+  clicked on a real-wallet card. Read-only (no transaction/signature/handoff/AI),
+  renders engine-owned details with grouped guardrail labels (never raw codes),
+  and Dashboard + Portfolio behave identically. Demo Mode (which renders
+  `SuggestionRail` directly) is untouched. Fixtures 10B-A…F.
 
 All suggestion categories are implemented. `duplicate_exposure` remains
 contracted but not emitted (pending duplicate-position detection).
