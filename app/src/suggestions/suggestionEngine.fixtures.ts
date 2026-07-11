@@ -3013,6 +3013,97 @@ export function runReviewRefinementFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Final smoke test — deterministic SIMULATED wallet states (A–F).
+ * These use clearly-named fixture helpers only (dev/test path); they never
+ * touch the live real-wallet rendering path and are never shown as real values.
+ * ------------------------------------------------------------------ */
+export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const dcaUnder = (pts: number) => allocationFixture(15000, 60 - pts, -pts);
+  const cats = (r: ReturnType<typeof runSuggestionEngine>) => r.suggestions.map((s) => s.category).join(",");
+  const topPickCat = (r: ReturnType<typeof runSuggestionEngine>) => r.suggestions.find((s) => s.is_top_pick)?.category;
+  const topPickCount = (r: ReturnType<typeof runSuggestionEngine>) => r.suggestions.filter((s) => s.is_top_pick).length;
+
+  // A. Buffer underfunded → Safety Buffer only, Top Pick, modal-openable.
+  {
+    const r = runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
+    add(
+      "SMOKE-A: buffer underfunded → buffer only, Top Pick, modal-openable",
+      cats(r) === "buffer" && topPickCat(r) === "buffer" && r.suggestions[0]?.reviewDetails != null,
+      `categories=${cats(r)} top=${topPickCat(r)}`
+    );
+  }
+  // B. Rebalance + Position Optimization → rebalance first & Top Pick.
+  {
+    const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT);
+    const reb = r.suggestions.find((s) => s.category === "rebalance");
+    const po = r.suggestions.find((s) => s.category === "position_optimization");
+    add(
+      "SMOKE-B: rebalance first & Top Pick, position optimization later, both modal-openable",
+      cats(r) === "rebalance,position_optimization" &&
+        topPickCat(r) === "rebalance" &&
+        (reb?.reviewDetails?.involvedAssets.length ?? 0) > 0 &&
+        (po?.reviewDetails?.involvedPositions.length ?? 0) > 0,
+      `categories=${cats(r)} top=${topPickCat(r)}`
+    );
+  }
+  // C. Six categories fire → engine order preserved, capEff Top Pick, no UI sorting.
+  {
+    const r = runSuggestionEngine(
+      inputsFor({
+        safetyBuffer: funded(),
+        allocation: dcaUnder(3),
+        positions: [cryptoPosition(400), nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), solPosition(10), stablePosition("USDC", 10000), yieldPosition(3000, null)],
+      }),
+      FIXTURE_GENERATED_AT
+    );
+    add(
+      "SMOKE-C: six categories in engine order, capEff Top Pick, one Top Pick, all modal-openable",
+      cats(r) === "capital_efficiency,trim,staking,stable_yield,dca,position_optimization" &&
+        topPickCat(r) === "capital_efficiency" &&
+        topPickCount(r) === 1 &&
+        r.suggestions.every((s) => s.reviewDetails != null),
+      `categories=${cats(r)} top=${topPickCat(r)} tpCount=${topPickCount(r)}`
+    );
+  }
+  // D. On Track only → no Top Pick, no CTA (no modal).
+  {
+    const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
+    const card = toSuggestionCard(r.suggestions[0]);
+    add(
+      "SMOKE-D: On Track only, no Top Pick, no CTA (no modal)",
+      cats(r) === "on_track" && topPickCount(r) === 0 && card.cta.label === "" && card.cta.action === null,
+      `categories=${cats(r)} tp=${topPickCount(r)} cta="${card.cta.label}"`
+    );
+  }
+  // E. Partial pricing → warning appears and calculable suggestions still render.
+  {
+    const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), anyUnpriced: true, positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT);
+    add(
+      "SMOKE-E: partial pricing → partial_pricing warning + suggestions still render",
+      r.warnings.includes("partial_pricing") && r.suggestions.length > 0,
+      `warnings=${r.warnings.join(",")} count=${r.suggestions.length}`
+    );
+  }
+  // F. Missing data → unavailable state, no suggestions (no demo fallback).
+  {
+    const r = runSuggestionEngine(inputsFor({ safetyBuffer: null, positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
+    add(
+      "SMOKE-F: missing data → unavailable_reason=missing_data, no suggestions",
+      r.suggestions.length === 0 && r.unavailable_reason === "missing_data",
+      `count=${r.suggestions.length} reason=${r.unavailable_reason}`
+    );
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -3031,6 +3122,7 @@ export function printFixtureResults(): void {
     ...runReviewDetailsFixtureChecks(),
     ...runReviewModalFixtureChecks(),
     ...runReviewRefinementFixtureChecks(),
+    ...runFinalSmokeFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
