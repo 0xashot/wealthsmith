@@ -518,12 +518,29 @@ Mode uses `SuggestionRail` directly and is untouched.
   **12J** real data-adapter mapping for the first narrow case (SOL liquid
   staking). Fixtures 12I-A…T.
 
+- Step 12J (done): **real-data mapping for SOL liquid staking (internal dry-run
+  only)**. Added `protocolSolLiquidStakingData.ts` (exact verified mints for all
+  five LST candidates + source mapping + `buildSolLiquidStakingMarketDataFrom
+  ExistingSources` + `runSolLiquidStakingInternalDryRun`) and
+  `protocolSolLiquidStakingData.md`; added the one **verified** DefiLlama pool
+  UUID (Sanctum/INF, from `lstApy.ts`) to `DEFILLAMA_POOL_MAPPINGS`. **APY is
+  mapped** to existing real helpers (on-chain stake pools / Marinade / DefiLlama)
+  and **TVL is mapped for Sanctum only**; withdrawal/fees/riskScore remain
+  **missing** (no fabricated values — network-free, dependency-injected). The
+  internal dry-run correctly returns `insufficient_data` today. **Selection stays
+  disabled:** `SOL_LIQUID_STAKING_SELECTION_ENABLED = false`, live suggestions
+  `not_evaluated`, no `selectedProtocolId/Name`, module not imported by any
+  live/engine/UI file, no transaction/signature/swap path,
+  `PROTOCOL_SELECTION_IMPLEMENTED`/`SHOW_IN_UI`/`ALLOW_TRANSACTIONS` all false.
+  Next: **12K** real-data dry-run hardening / risk-registry sourcing. Fixtures
+  12J-A…V.
+
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
 is a QA-proven-but-DISABLED pipeline behind default-off feature flags (registry +
 adapters + eligibility + route guardrails + scoring + QA-only narrow-case
-selection + production-readiness plan); production selection remains not evaluated
-/ not implemented.
+selection + production-readiness plan + first-case real-data mapping); production
+selection remains not evaluated / not implemented.
 
 ## Suggestion display order
 

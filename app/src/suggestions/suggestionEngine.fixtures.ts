@@ -99,6 +99,15 @@ import {
   isProtocolSelectionProductionReady,
 } from "./protocolSelectionFeatureFlags";
 import type { ProtocolSelectionReadinessGate } from "./protocolSelectionFeatureFlags";
+import {
+  SOL_LIQUID_STAKING_DATA_MAPPING_IMPLEMENTED,
+  SOL_LIQUID_STAKING_SELECTION_ENABLED,
+  SOL_LIQUID_STAKING_CANDIDATE_IDS,
+  SOL_LIQUID_STAKING_MAPPINGS,
+  buildSolLiquidStakingMarketDataFromExistingSources,
+  buildSolLiquidStakingInternalDryRunInput,
+  runSolLiquidStakingInternalDryRun,
+} from "./protocolSolLiquidStakingData";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -3433,18 +3442,22 @@ export function runProtocolAdapterFixtureChecks(): FixtureCheck[] {
       r.auditStatus === "unknown" && r.safetyBufferEligible === undefined && r.withdrawalClass === "unknown",
       `audit=${r.auditStatus} bufferEligible=${r.safetyBufferEligible} withdrawal=${r.withdrawalClass}`);
   }
-  // 12D-D. DefiLlama mapping never fuzzy-matches; unverified → undefined.
+  // 12D-D. DefiLlama mapping never fuzzy-matches; unverified stay undefined and
+  // every present mapping is an exact verified pool UUID (not a name guess).
   {
     const noFuzzy = resolveDefiLlamaMapping("jupiter", "SOL") === undefined && resolveDefiLlamaMapping("kamino", "USDC") === undefined;
-    add("12D-D: DefiLlama adapter does not fuzzy-match uncertain pools", noFuzzy && Object.keys(DEFILLAMA_POOL_MAPPINGS).length === 0, `mappings=${Object.keys(DEFILLAMA_POOL_MAPPINGS).length}`);
+    const allExact = Object.values(DEFILLAMA_POOL_MAPPINGS).every((m) => typeof m.poolId === "string" && m.poolId.length >= 8);
+    add("12D-D: DefiLlama adapter does not fuzzy-match; only exact verified pool IDs", noFuzzy && allExact, `count=${Object.keys(DEFILLAMA_POOL_MAPPINGS).length} allExact=${allExact}`);
   }
   // 12D-E. Adapter failure/missing returns status error/missing and never throws.
   {
     const miss = defiLlamaMissingResult("jupiter", "no mapping");
     const err = defiLlamaErrorResult("jupiter", new Error("boom"));
+    // supportedProtocolIds are exactly the verified mappings — no fuzzy auto-coverage.
+    const onlyVerified = defiLlamaAdapter.supportedProtocolIds.every((id) => id in DEFILLAMA_POOL_MAPPINGS);
     add("12D-E: adapter failures return status error/missing (no throw into engine)",
-      miss.status === "missing" && err.status === "error" && defiLlamaAdapter.supportedProtocolIds.length === 0,
-      `miss=${miss.status} err=${err.status} autoFetch=${defiLlamaAdapter.supportedProtocolIds.length}`);
+      miss.status === "missing" && err.status === "error" && onlyVerified,
+      `miss=${miss.status} err=${err.status} supported=${defiLlamaAdapter.supportedProtocolIds.join(",")}`);
   }
   // 12D-F. Jupiter quote adapter is contract-only (no tx, quote unavailable).
   {
@@ -4129,6 +4142,125 @@ export function runProtocolReadinessFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12J — real-data MAPPING for SOL liquid staking (internal dry-run only).
+ * Network-free (no injected values → all missing). NOT wired into the engine.
+ * ------------------------------------------------------------------ */
+export function runSolLiquidStakingMappingFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+
+  const market = buildSolLiquidStakingMarketDataFromExistingSources();
+  const EXACT_MINTS: Record<string, string> = {
+    jupiter: "jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v",
+    marinade: "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",
+    jito: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn",
+    blazestake: "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1",
+    sanctum: "5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm",
+  };
+
+  // 12J-A / 12J-B. Mapping implemented ≠ selection enabled.
+  add("12J-A: SOL_LIQUID_STAKING_SELECTION_ENABLED is false", SOL_LIQUID_STAKING_SELECTION_ENABLED === false, `flag=${SOL_LIQUID_STAKING_SELECTION_ENABLED}`);
+  add("12J-B: SOL_LIQUID_STAKING_DATA_MAPPING_IMPLEMENTED is true", SOL_LIQUID_STAKING_DATA_MAPPING_IMPLEMENTED === true, `flag=${SOL_LIQUID_STAKING_DATA_MAPPING_IMPLEMENTED}`);
+  // 12J-C. All candidate IDs exist in the protocol registry.
+  {
+    const missing = SOL_LIQUID_STAKING_CANDIDATE_IDS.filter((id) => getProtocolCandidateById(id) == null);
+    add("12J-C: all SOL LST candidate IDs exist in registry", missing.length === 0, `missing=${missing.join(",") || "none"}`);
+  }
+  // 12J-D. Exact mint mappings use known app registry/detection mints.
+  {
+    const bad = SOL_LIQUID_STAKING_MAPPINGS.filter((m) => m.lstMint !== EXACT_MINTS[m.protocolId]);
+    add("12J-D: mappings use exact known mints", bad.length === 0, `bad=${bad.map((b) => b.protocolId).join(",") || "none"}`);
+  }
+  // 12J-E. No fuzzy name matching (mints are base58 addresses, not the symbol).
+  {
+    const base58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+    const ok = SOL_LIQUID_STAKING_MAPPINGS.every((m) => m.lstMint != null && base58.test(m.lstMint) && m.lstMint !== m.lstSymbol);
+    add("12J-E: no mapping uses fuzzy name matching (exact mints)", ok, `ok=${ok}`);
+  }
+  // 12J-F. Missing APY stays absent and marked missing.
+  {
+    const m = market.jupiter;
+    add("12J-F: missing APY absent + marked missing", m.apy === undefined && m.missingFields.includes("apy"), `apy=${m.apy}`);
+  }
+  // 12J-G. Missing TVL stays absent and marked missing.
+  {
+    const m = market.jupiter;
+    add("12J-G: missing TVL absent + marked missing", m.tvlUsd === undefined && m.missingFields.includes("tvl"), `tvl=${m.tvlUsd}`);
+  }
+  // 12J-H. Missing withdrawal stays absent and marked missing.
+  {
+    const m = market.jupiter;
+    add("12J-H: missing withdrawal absent + marked missing", m.withdrawalTimeHours === undefined && m.missingFields.includes("withdrawal_behavior"), `withdrawal=${m.withdrawalTimeHours}`);
+  }
+  // 12J-I. Missing fees stay absent and marked missing.
+  {
+    const m = market.jupiter;
+    add("12J-I: missing fees absent + marked missing", m.fees === undefined && m.missingFields.includes("fees"), `fees=${m.fees}`);
+  }
+  // 12J-J. riskScore remains absent (no approved methodology yet).
+  {
+    const anyScore = SOL_LIQUID_STAKING_CANDIDATE_IDS.some((id) => getProtocolRiskData(id).riskScore !== undefined);
+    add("12J-J: riskScore remains absent unless sourced", !anyScore, `anyScore=${anyScore}`);
+  }
+  // 12J-K. Dry-run input has candidateProtocolIds but no selected protocol.
+  {
+    const input = buildSolLiquidStakingInternalDryRunInput();
+    const noSelected = !("selectedProtocolId" in input) && !("selectedProtocolName" in input);
+    add("12J-K: dry-run input has candidates but no selected protocol", input.candidateProtocolIds.length === 5 && noSelected, `ids=${input.candidateProtocolIds.length}`);
+  }
+  // 12J-L. Dry-run returns insufficient_data without failing.
+  {
+    const r = runSolLiquidStakingInternalDryRun({ checkedAt: "t" });
+    add("12J-L: dry-run returns insufficient_data without failing", (r.qaResult.status === "insufficient_data" || r.qaResult.status === "no_eligible_candidates") && r.anyFullyEligible === false && r.qaOnly === true, `status=${r.qaResult.status} eligible=${r.anyFullyEligible}`);
+  }
+  // 12J-M. Dry-run does not mutate live ProtocolSelection.
+  {
+    runSolLiquidStakingInternalDryRun({ checkedAt: "t" });
+    const fresh = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT).suggestions.find((s) => s.category === "staking");
+    add("12J-M: dry-run does not mutate live ProtocolSelection", fresh?.protocolSelection?.status === "not_evaluated" && fresh?.protocolSelection?.selectedProtocolId === undefined, `status=${fresh?.protocolSelection?.status}`);
+  }
+  // 12J-N. Live staking protocolSelection.status remains not_evaluated.
+  add("12J-N: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12J-O. No live suggestion has selectedProtocolId/Name.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12J-O: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12J-P. Cards/modal do not expose dry-run data or protocol recommendations.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "dataAvailability", "qaResult", "anyFullyEligible", "JupSOL", "5oVNBeEEQvYi"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12J-P: cards/modal never expose dry-run data or recommendations", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12J-Q / R / S. Flags at safe defaults.
+  add("12J-Q: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12J-R: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12J-S: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12J-U. Selection stays disabled (doc mirrors this).
+  add("12J-U: SOL liquid-staking selection stays disabled", SOL_LIQUID_STAKING_SELECTION_ENABLED === false && PROTOCOL_SELECTION_IMPLEMENTED === false, `enabled=${SOL_LIQUID_STAKING_SELECTION_ENABLED}`);
+  // 12J-V. No forbidden copy in the mapping/module output.
+  {
+    const json = (JSON.stringify(SOL_LIQUID_STAKING_MAPPINGS) + JSON.stringify(market)).toLowerCase();
+    const forbidden = ["recommended", "best", "safest", "optimal", "guaranteed", "risk-free"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12J-V: no forbidden copy in mapping output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -4156,6 +4288,7 @@ export function printFixtureResults(): void {
     ...runProtocolScoringFixtureChecks(),
     ...runProtocolSelectionQaFixtureChecks(),
     ...runProtocolReadinessFixtureChecks(),
+    ...runSolLiquidStakingMappingFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

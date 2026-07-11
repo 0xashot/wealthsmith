@@ -193,3 +193,27 @@ Before real selection can advance past `qa_only` (see
 
 Until these are closed and every readiness gate passes, current live data remains
 `insufficient_data` and no user-facing recommendation is enabled.
+
+---
+
+## 12J — SOL liquid-staking data mapping status
+
+The first narrow case now has verified mappings (`protocolSolLiquidStakingData.ts`,
+`protocolSolLiquidStakingData.md`):
+
+- **Mapped (exact mints for all 5 candidates):** JupSOL/mSOL/JitoSOL/bSOL/INF —
+  copied from existing source, no fuzzy matching.
+- **APY: mapped** to existing real helpers (on-chain SPL stake pool for
+  JupSOL/bSOL/JitoSOL, Marinade API for mSOL, DefiLlama for INF). Values are
+  fetched by a caller and injected — never fabricated in the mapping module.
+- **TVL: mapped for sanctum only** via a verified DefiLlama pool UUID (now in
+  `DEFILLAMA_POOL_MAPPINGS`); the other four remain `missing` (no verified pool
+  UUID in the codebase — none guessed).
+- **Still missing:** TVL for 4/5 candidates, `riskScore` (all), withdrawal
+  behavior (all), fees (all).
+- **Why this still does not enable UI recommendations:** the internal dry-run
+  returns `insufficient_data` (no injected values, no TVL/risk/withdrawal), and
+  `PROTOCOL_SELECTION_IMPLEMENTED` / `SHOW_IN_UI` stay false. The mapping module is
+  not imported by any live/engine/UI file.
+- **Next real-data blockers:** verified DefiLlama TVL pools for the remaining 4,
+  a `riskScore` methodology + curated scores, and sourced withdrawal/fee data.

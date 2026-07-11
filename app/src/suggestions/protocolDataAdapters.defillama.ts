@@ -24,8 +24,11 @@ export const DEFILLAMA_POOL_MAPPINGS: Record<
   string,
   { assetSymbol: string; poolId: string; note: string }
 > = {
-  // e.g. blazestake: { assetSymbol: "SOL", poolId: "<verified-uuid>", note: "bSOL stake pool" }
-  // None verified yet — do NOT add unverified/fuzzy mappings.
+  // Verified from existing app source (wallet/lstApy.ts DEFILLAMA_POOL[INF_MINT]) —
+  // exact pool UUID, not fuzzy. Sanctum's INF LST APY/TVL.
+  sanctum: { assetSymbol: "SOL", poolId: "3075a746-bdd1-4aac-bcd5-b035abee2622", note: "Sanctum INF (SOL LST) — verified in lstApy.ts" },
+  // Others (JupSOL/mSOL/bSOL/JitoSOL) have no verified DefiLlama pool UUID in the
+  // codebase (their APY comes from on-chain/Marinade) — do NOT guess pool IDs.
 };
 
 /** Exact mapping lookup (protocolId + asset). No fuzzy matching. */
