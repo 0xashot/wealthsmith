@@ -93,6 +93,16 @@ export const MAX_WITHDRAWAL_HOURS_FOR_GENERAL_YIELD = 168;
 export const MIN_LIQUIDITY_USD = 100_000;
 export const MAX_PRICE_IMPACT_PCT = 0.5;
 
+/*
+ * Protocol SCORING saturation points (Step 12G) — deterministic 0–100 component
+ * scores for RANKING eligible candidates (not selection, not advice). APY is
+ * capped so extreme yield can't dominate risk. Used only by the pure scoring
+ * helpers; the Suggestion Engine never consumes these.
+ */
+export const MAX_APY_FOR_SCORE = 15;
+export const TARGET_TVL_FOR_FULL_SCORE_USD = 100_000_000;
+export const TARGET_LIQUIDITY_FOR_FULL_SCORE_USD = 5_000_000;
+
 /* Duplicate exposure (multiple deployed positions sharing an underlying group). */
 /** A deployed position below this value is ignored as dust when grouping. */
 export const MIN_DUPLICATE_EXPOSURE_POSITION_USD = 50;

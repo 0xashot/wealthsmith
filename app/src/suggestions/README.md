@@ -471,10 +471,26 @@ Mode uses `SuggestionRail` directly and is untouched.
   **12G** deterministic scoring and **12H** narrow-case selection QA. Fixtures
   12F-A…S.
 
+- Step 12G (done): **deterministic protocol scoring model (ranking only — NO
+  selection)**. Added `protocolScoring.ts` (`scoreProtocolCandidate` +
+  `rankProtocolCandidates` + `compareCandidateScores`, 0–100 component scores,
+  fixed per-strategy weights each totaling 100) and
+  `protocolScoringMethodology.md`. Scores **only fully eligible** candidates;
+  **missing data never scores** (→ `insufficient_data`, never a default/0); APY
+  is capped and risk outweighs yield; **LP scoring disabled** until impermanent
+  loss is modeled. **Ranking is not selection:** `selectionMade` is always
+  `false`, no `selectedProtocolId/Name`, no ranking/scores in the UI. Pure helper
+  — **not wired** into any suggestion/card/modal/Top Pick; suggestions unchanged,
+  `protocolSelection.status` + `protocol_selection` guardrail stay
+  `not_evaluated`, `PROTOCOL_SELECTION_IMPLEMENTED` stays `false`. Real selection
+  still blocked until **12H** narrow-case QA, validated real data adapters, and an
+  explicit product decision to expose a selected protocol. Fixtures 12G-A…V.
+
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
 remains contract + candidate-registry + read-only-adapter + eligibility-gate +
-read-only-route-guardrail foundation only (not evaluated / not implemented).
+read-only-route-guardrail + deterministic-scoring foundation only (not evaluated
+/ not implemented).
 
 ## Suggestion display order
 

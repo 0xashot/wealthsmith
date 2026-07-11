@@ -131,6 +131,31 @@ quote adapter (`getReadOnlyJupiterQuote`) and a route-guardrail evaluator
 suggestion guardrails remain `not_evaluated`.
 
 **Why this still does not enable selection:** a route quote answers "can this
-move be routed and at what price impact?", not "which protocol is best". Even a
+move be routed and at what price impact?", not "which protocol is right". Even a
 `passed` route guardrail is one input; selection still needs 12G deterministic
 scoring and 12H narrow-case QA, with `PROTOCOL_SELECTION_IMPLEMENTED = false`.
+
+---
+
+## Scoring data requirements (Step 12G)
+
+`protocolScoring.ts` ranks ONLY fully eligible candidates and never selects. Each
+input below must be present from a real source; anything missing keeps the
+candidate `insufficient_data` (never scored, never defaulted to 0):
+
+| Requirement | Needed for | Notes |
+| --- | --- | --- |
+| eligibility result = `eligible` | scoring at all | runs before scoring |
+| APY | yieldScore | capped at `MAX_APY_FOR_SCORE` |
+| TVL | tvlScore | saturates toward `TARGET_TVL_FOR_FULL_SCORE_USD` |
+| riskScore | riskScore | **curated (12E)** — absent today |
+| withdrawal behavior | withdrawalScore | hours; buffer vs general thresholds |
+| fees (when applicable) | costScore | missing fees never assumed zero |
+| liquidity (route context) | liquidityScore | ≥ `MIN_LIQUIDITY_USD` |
+| quote / price impact (route context) | costScore | ≤ `MAX_PRICE_IMPACT_PCT` |
+| freshness (`updatedAt`) | trust | per record |
+| source attribution (`dataSources`/`sources`) | audit | per record |
+
+**Until these fields are populated from real sources, candidates remain
+`insufficient_data`** — scoring produces no ranking today, and selection stays
+disabled.
