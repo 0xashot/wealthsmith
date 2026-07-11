@@ -29,10 +29,13 @@ import {
   MIN_REVIEW_APY,
   MIN_CONCENTRATION_REVIEW_USD,
   POSITION_CONCENTRATION_THRESHOLD,
+  DUPLICATE_EXPOSURE_PORTFOLIO_SHARE_THRESHOLD,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
 import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
+import { findDuplicateExposureGroups } from "./duplicateExposure";
+import type { ReviewCalculation } from "./engineTypes";
 
 /** Stable suggestion ID. */
 export const POSITION_OPTIMIZATION_SUGGESTION_ID = "position_optimization_review";
@@ -81,66 +84,93 @@ export function derivePositionOptimizationSuggestion(
   if (totalPricedUsd == null || totalPricedUsd <= 0) return null;
 
   const reasons = new Set<SuggestionReasonCode>();
-  const flaggedPositions: ReviewPosition[] = [];
-  let totalFlaggedValueUsd = 0;
+
+  // Flagged positions keyed by a STABLE per-position key so a position touched by
+  // several review reasons is counted ONCE (value + roles/reasons merged).
+  interface FlaggedEntry {
+    p: WalletPosition;
+    v: number;
+    role: ReviewPositionRole;
+    reasons: string[];
+  }
+  const flaggedMap = new Map<string, FlaggedEntry>();
+  const posKey = (p: WalletPosition) =>
+    p.id || [p.source, p.protocol ?? "", p.symbol ?? "", p.mint ?? ""].join("|");
+  const addFlag = (
+    p: WalletPosition,
+    v: number,
+    role: ReviewPositionRole,
+    reasonText: string
+  ) => {
+    const key = posKey(p);
+    const existing = flaggedMap.get(key);
+    if (existing) {
+      if (!existing.reasons.includes(reasonText)) existing.reasons.push(reasonText);
+    } else {
+      flaggedMap.set(key, { p, v, role, reasons: [reasonText] });
+    }
+  };
 
   for (const p of inputs.positions) {
     if (!isDeployedPosition(p)) continue;
     const v = p.valueUsd as number;
-    let flagged = false;
-    let role: ReviewPositionRole | null = null;
-    const posReasons: string[] = [];
-
     // A. Missing sourced APY on a meaningful deployed position.
     if (v >= MIN_POSITION_REVIEW_USD && p.apy == null) {
       reasons.add("missing_apy_data");
-      flagged = true;
-      role = role ?? "missing_apy_position";
-      posReasons.push("missing APY data");
+      addFlag(p, v, "missing_apy_position", "missing APY data");
     }
     // B. Low sourced APY.
     if (v >= MIN_POSITION_REVIEW_USD && typeof p.apy === "number" && p.apy < MIN_REVIEW_APY) {
       reasons.add("low_yield_position");
-      flagged = true;
-      role = role ?? "low_yield_position";
-      posReasons.push("low reported APY");
+      addFlag(p, v, "low_yield_position", "low reported APY");
     }
     // C. Over-concentration of a single deployed position.
     if (v >= MIN_CONCENTRATION_REVIEW_USD && v / totalPricedUsd >= POSITION_CONCENTRATION_THRESHOLD) {
       reasons.add("concentration_risk");
-      flagged = true;
-      role = role ?? "concentrated_position";
-      posReasons.push(`position concentration (${Math.round((v / totalPricedUsd) * 100)}% of portfolio)`);
+      addFlag(p, v, "concentrated_position", `position concentration (${Math.round((v / totalPricedUsd) * 100)}% of portfolio)`);
     }
+  }
 
-    if (flagged) {
-      totalFlaggedValueUsd += v;
-      flaggedPositions.push({
-        // Detected position data only — never an invented protocol/APY.
-        protocol: positionProtocolLabel(p),
-        name: p.name,
-        symbol: p.symbol,
-        valueUsd: v,
-        apy: p.apy ?? null,
-        role: role as ReviewPositionRole,
-        reason: posReasons.join(", "),
-      });
+  // D. Duplicate exposure — multiple deployed positions sharing an underlying
+  // group (SOL / stablecoin / same token). Positions already flagged above are
+  // de-duplicated by the map (value never double-counted).
+  const duplicateGroups = findDuplicateExposureGroups(inputs.positions, totalPricedUsd);
+  for (const g of duplicateGroups) {
+    reasons.add("duplicate_exposure");
+    for (const p of g.positions) {
+      addFlag(p, p.valueUsd as number, "duplicate_exposure_position", `similar underlying exposure (${g.label})`);
     }
   }
 
   if (reasons.size === 0) return null;
+
+  const flagged = [...flaggedMap.values()];
+  const totalFlaggedValueUsd = flagged.reduce((s, e) => s + e.v, 0);
   if (totalFlaggedValueUsd < MIN_POSITION_REVIEW_USD) return null;
+
+  const flaggedPositions: ReviewPosition[] = flagged.map((e) => ({
+    // Detected position data only — never an invented protocol/APY.
+    protocol: positionProtocolLabel(e.p),
+    name: e.p.name,
+    symbol: e.p.symbol,
+    valueUsd: e.v,
+    apy: e.p.apy ?? null,
+    role: e.role,
+    reason: e.reasons.join(", "),
+  }));
 
   // Deterministic reason-code order.
   const reasonOrder: SuggestionReasonCode[] = [
     "missing_apy_data",
     "low_yield_position",
     "concentration_risk",
+    "duplicate_exposure",
   ];
   const reason_codes = reasonOrder.filter((c) => reasons.has(c));
 
   const hasApyReview = reasons.has("missing_apy_data") || reasons.has("low_yield_position");
   const hasConcentration = reasons.has("concentration_risk");
+  const hasDuplicate = reasons.has("duplicate_exposure");
 
   const guardrails: SuggestionGuardrail[] = [
     { code: "pricing_available", status: "passed" },
@@ -148,6 +178,8 @@ export function derivePositionOptimizationSuggestion(
     { code: "position_value_threshold", status: "passed" },
     { code: "apy_data_review", status: hasApyReview ? "passed" : GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "concentration_review", status: hasConcentration ? "passed" : GUARDRAIL_STATUS_NOT_EVALUATED },
+    // Passed only when positions were deterministically grouped (duplicate fired).
+    { code: "exposure_grouping", status: hasDuplicate ? "passed" : GUARDRAIL_STATUS_NOT_EVALUATED },
     // protocol_selection guardrail is derived centrally from protocolSelection.
     { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
@@ -158,28 +190,52 @@ export function derivePositionOptimizationSuggestion(
   if (reasons.has("missing_apy_data")) triggers.push("missing APY data");
   if (reasons.has("low_yield_position")) triggers.push("low reported APY");
   if (hasConcentration) triggers.push("position concentration");
+  if (hasDuplicate) triggers.push("similar underlying exposure");
+
+  // Duplicate-exposure metrics + per-group calculations (only when it fired).
+  const duplicatePositionCount = duplicateGroups.reduce((s, g) => s + g.positions.length, 0);
+  const duplicateCombinedUsd = duplicateGroups.reduce((s, g) => s + g.combinedUsd, 0);
+  const metrics = [
+    usdMetric("Positions to review", totalFlaggedValueUsd),
+    metric("Flagged position count", flaggedPositions.length, "count"),
+    ...(hasDuplicate
+      ? [
+          metric("Positions with similar exposure", duplicatePositionCount, "count"),
+          usdMetric("Similar-exposure value", duplicateCombinedUsd),
+        ]
+      : []),
+  ];
+  const calculations: ReviewCalculation[] = [
+    {
+      label: "Flagged positions vs portfolio",
+      formula: "flagged value ÷ portfolio value",
+      currentValue: totalFlaggedValueUsd,
+      targetValue: totalPricedUsd,
+      threshold: Math.round(POSITION_CONCENTRATION_THRESHOLD * 1000) / 10,
+      unit: "USD",
+    },
+    ...duplicateGroups.map((g) => ({
+      label: `${g.label} — ${g.positions.length} positions`,
+      formula: "combined value ÷ portfolio value",
+      currentValue: g.combinedUsd,
+      targetValue: totalPricedUsd,
+      threshold: Math.round(DUPLICATE_EXPOSURE_PORTFOLIO_SHARE_THRESHOLD * 1000) / 10,
+      unit: "USD",
+    })),
+  ];
+
   const protocolSelection = notApplicableProtocolSelection("selection_not_required");
   const reviewDetails = buildReviewDetails({
     category: "position_optimization",
     actionKind: "review_only",
     guardrails,
     protocolSelection,
-    reason: `Flagged for review: ${triggers.join(", ")}.`,
-    metrics: [
-      usdMetric("Positions to review", totalFlaggedValueUsd),
-      metric("Flagged position count", flaggedPositions.length, "count"),
-    ],
+    reason: hasDuplicate
+      ? `Flagged for review: ${triggers.join(", ")}. These positions appear to share similar underlying exposure, so they may be worth reviewing together.`
+      : `Flagged for review: ${triggers.join(", ")}.`,
+    metrics,
     involvedPositions: flaggedPositions,
-    calculations: [
-      {
-        label: "Flagged positions vs portfolio",
-        formula: "flagged value ÷ portfolio value",
-        currentValue: totalFlaggedValueUsd,
-        targetValue: totalPricedUsd,
-        threshold: Math.round(POSITION_CONCENTRATION_THRESHOLD * 1000) / 10,
-        unit: "USD",
-      },
-    ],
+    calculations,
   });
 
   return {

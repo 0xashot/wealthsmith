@@ -58,6 +58,7 @@ const GUARDRAIL_LABELS: Record<GuardrailCode, string> = {
   position_value_threshold: "Position value threshold",
   apy_data_review: "Yield (APY) data",
   concentration_review: "Concentration review",
+  exposure_grouping: "Exposure grouping",
   protocol_selection: "Protocol selection",
   cost_available: "Route cost",
   liquidity_available: "Liquidity depth",

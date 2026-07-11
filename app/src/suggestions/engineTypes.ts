@@ -45,8 +45,8 @@ export type SuggestionCategory =
  * Codes). These are the ONLY reasons the engine may emit; UI/Smith AI must not
  * create new ones. Copy templates and Smith AI explanations key off these.
  *
- * All groups are emitted by their category rules EXCEPT `duplicate_exposure`,
- * which remains contracted (declared for a future duplicate-position check).
+ * All reason codes are emitted by their category rules (including
+ * `duplicate_exposure` — Position Optimization, Step 12A).
  */
 export type SuggestionReasonCode =
   // Implemented (MVP)
@@ -139,6 +139,9 @@ export type GuardrailCode =
   | "position_value_threshold"
   | "apy_data_review"
   | "concentration_review"
+  // position_optimization: deployed positions were deterministically grouped by
+  // underlying exposure (for duplicate-exposure review).
+  | "exposure_grouping"
   // deferred until a deterministic platform-selection rule exists.
   | "protocol_selection"
   | "cost_available"
@@ -295,7 +298,8 @@ export type ReviewPositionRole =
   | "staked_position"
   | "concentrated_position"
   | "missing_apy_position"
-  | "low_yield_position";
+  | "low_yield_position"
+  | "duplicate_exposure_position";
 
 export interface ReviewPosition {
   protocol?: string;

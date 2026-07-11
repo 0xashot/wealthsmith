@@ -80,6 +80,14 @@ export const MIN_CONCENTRATION_REVIEW_USD = 1000;
 /** A single position at/above this share of the priced portfolio is reviewed. */
 export const POSITION_CONCENTRATION_THRESHOLD = 0.5;
 
+/* Duplicate exposure (multiple deployed positions sharing an underlying group). */
+/** A deployed position below this value is ignored as dust when grouping. */
+export const MIN_DUPLICATE_EXPOSURE_POSITION_USD = 50;
+/** A duplicate group's combined value below this is too small to flag. */
+export const MIN_DUPLICATE_EXPOSURE_GROUP_USD = 250;
+/** A duplicate group below this share of the priced portfolio is not flagged. */
+export const DUPLICATE_EXPOSURE_PORTFOLIO_SHARE_THRESHOLD = 0.05;
+
 /**
  * Honest status for guardrails whose inputs do not exist in the app yet.
  * Cost, liquidity, and slippage require quote/route infrastructure that this

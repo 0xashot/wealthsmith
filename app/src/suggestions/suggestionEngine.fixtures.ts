@@ -3104,6 +3104,139 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12A — duplicate_exposure inside Position Optimization.
+ * ------------------------------------------------------------------ */
+export function runDuplicateExposureFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const run = (positions: WalletPosition[], total: number) =>
+    runSuggestionEngine(
+      inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), totalUsd: total, allocation: allocationFixture(total, 62, 2), positions }),
+      FIXTURE_GENERATED_AT
+    );
+  const cats = (r: ReturnType<typeof runSuggestionEngine>) => r.suggestions.map((s) => s.category).join(",");
+  const posOpt = (r: ReturnType<typeof runSuggestionEngine>) => r.suggestions.find((s) => s.category === "position_optimization");
+  const hasReason = (r: ReturnType<typeof runSuggestionEngine>, code: string) =>
+    r.suggestions.some((s) => (s.reason_codes as string[]).includes(code));
+  const lst = (symbol: string, valueUsd: number, apy: number | null = 5) => yieldPosition(valueUsd, apy, { type: "lst", symbol });
+  const stake = (valueUsd: number, apy: number | null = 5) => yieldPosition(valueUsd, apy, { type: "stake", symbol: "SOL" });
+  const stableProto = (symbol: string, valueUsd: number) => yieldPosition(valueUsd, 5, { type: "protocol", symbol, source: "kamino" });
+
+  // 12A-A. Two SOL LSTs above thresholds → duplicate_exposure.
+  {
+    const r = run([lst("JupSOL", 200), lst("mSOL", 200)], 5000);
+    add("12A-A: two SOL LSTs → position_optimization with duplicate_exposure",
+      cats(r).includes("position_optimization") && hasReason(r, "duplicate_exposure"),
+      `categories=${cats(r)} reasons=${posOpt(r)?.reason_codes.join(",")}`);
+  }
+  // 12A-B. JupSOL + mSOL + native stake → one card, grouped as SOL exposure.
+  {
+    const r = run([lst("JupSOL", 200), lst("mSOL", 200), stake(200)], 5000);
+    const d = posOpt(r);
+    const solCalc = d?.reviewDetails?.calculations.some((c) => c.label.startsWith("SOL exposure"));
+    add("12A-B: JupSOL + mSOL + native stake → one card, 3 positions, SOL exposure group",
+      r.suggestions.filter((s) => s.category === "position_optimization").length === 1 &&
+        hasReason(r, "duplicate_exposure") &&
+        (d?.reviewDetails?.involvedPositions.length ?? 0) === 3 &&
+        solCalc === true,
+      `count=${d?.reviewDetails?.involvedPositions.length} solCalc=${solCalc}`);
+  }
+  // 12A-C. Two deployed stable positions → duplicate_exposure, Stablecoin exposure.
+  {
+    const r = run([stableProto("USDC", 200), stableProto("USDT", 200)], 5000);
+    const d = posOpt(r);
+    const stableCalc = d?.reviewDetails?.calculations.some((c) => c.label.startsWith("Stablecoin exposure"));
+    add("12A-C: two deployed stable positions → duplicate_exposure (Stablecoin exposure)",
+      hasReason(r, "duplicate_exposure") && stableCalc === true,
+      `reasons=${d?.reason_codes.join(",")} stableCalc=${stableCalc}`);
+  }
+  // 12A-D. Only one deployed position → no duplicate; no other reason → On Track.
+  {
+    const r = run([lst("JupSOL", 200)], 5000);
+    add("12A-D: one deployed position → no duplicate, On Track", cats(r) === "on_track" && !hasReason(r, "duplicate_exposure"), `categories=${cats(r)}`);
+  }
+  // 12A-E. Combined below $250 → no duplicate.
+  {
+    const r = run([lst("JupSOL", 100), lst("mSOL", 100)], 5000);
+    add("12A-E: duplicate group < $250 → no duplicate_exposure", !hasReason(r, "duplicate_exposure"), `categories=${cats(r)}`);
+  }
+  // 12A-F. Share below 5% → no duplicate.
+  {
+    const r = run([lst("JupSOL", 200), lst("mSOL", 200)], 20000);
+    add("12A-F: duplicate group < 5% share → no duplicate_exposure", !hasReason(r, "duplicate_exposure"), `categories=${cats(r)}`);
+  }
+  // 12A-G. One candidate below $50 is ignored → no duplicate (only one remains).
+  {
+    const r = run([lst("JupSOL", 300), lst("mSOL", 40)], 5000);
+    add("12A-G: sub-$50 duplicate candidate ignored → no duplicate_exposure", !hasReason(r, "duplicate_exposure"), `categories=${cats(r)}`);
+  }
+  // 12A-H. Unpriced duplicate-like positions → no duplicate, no invented value.
+  {
+    const r = run([yieldPosition(200, 5, { type: "lst", symbol: "JupSOL", priced: false }), yieldPosition(200, 5, { type: "lst", symbol: "mSOL", priced: false })], 5000);
+    add("12A-H: unpriced duplicate-like positions → no duplicate_exposure", !hasReason(r, "duplicate_exposure"), `categories=${cats(r)}`);
+  }
+  // 12A-I. Liquid wallet SOL + USDC only → no duplicate, no position_optimization.
+  {
+    const r = run([solPosition(5), stablePosition("USDC", 5000)], 10000);
+    add("12A-I: liquid SOL + USDC only → no duplicate, no position_optimization",
+      !hasReason(r, "duplicate_exposure") && !hasReason(r, "position_optimization") && !cats(r).includes("position_optimization"),
+      `categories=${cats(r)}`);
+  }
+  // 12A-J. Duplicate + concentration on same group → both reasons, value deduped.
+  {
+    const r = run([lst("JupSOL", 1200), lst("mSOL", 200)], 2000);
+    const d = posOpt(r);
+    add("12A-J: duplicate + concentration → both reasons, flagged value deduped ($1,400)",
+      hasReason(r, "concentration_risk") && hasReason(r, "duplicate_exposure") && Math.round(d?.amount?.valueUsd ?? 0) === 1400,
+      `reasons=${d?.reason_codes.join(",")} flagged=${d?.amount?.valueUsd}`);
+  }
+  // 12A-K. Duplicate + missing_apy → both reasons, no double-counting ($600).
+  {
+    const r = run([lst("JupSOL", 300, null), lst("mSOL", 300)], 5000);
+    const d = posOpt(r);
+    add("12A-K: duplicate + missing_apy → both reasons, flagged value deduped ($600)",
+      hasReason(r, "missing_apy_data") && hasReason(r, "duplicate_exposure") && Math.round(d?.amount?.valueUsd ?? 0) === 600,
+      `reasons=${d?.reason_codes.join(",")} flagged=${d?.amount?.valueUsd}`);
+  }
+  // 12A-L. Review details include group label, count, combined value, positions.
+  {
+    const r = run([lst("JupSOL", 300), lst("mSOL", 300), stake(300)], 5000);
+    const d = posOpt(r)?.reviewDetails;
+    const labels = (d?.metrics ?? []).map((m) => m.label);
+    add("12A-L: review details include duplicate group label/count/value/positions",
+      (d?.calculations ?? []).some((c) => c.label.startsWith("SOL exposure")) &&
+        labels.includes("Positions with similar exposure") &&
+        labels.includes("Similar-exposure value") &&
+        (d?.involvedPositions.length ?? 0) === 3,
+      `labels=${labels.join(" | ")}`);
+  }
+  // 12A-M. Mapped card + review details contain no sell/buy/swap/bad/unsafe language.
+  {
+    const r = run([lst("JupSOL", 1200), lst("mSOL", 300)], 2500);
+    const s = posOpt(r);
+    const json = (JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails)).toLowerCase();
+    const hits = ["sell", "buy", "swap", "unwind", "\\bbad\\b", "unsafe"].filter((w) => new RegExp(w).test(json));
+    add("12A-M: card + review details use no sell/buy/swap/bad/unsafe language", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12A-N. No raw internal guardrail/exposure codes leak into card/review details.
+  {
+    const r = run([lst("JupSOL", 300), lst("mSOL", 300)], 5000);
+    const s = posOpt(r);
+    // Raw guardrail codes and exposure GROUP KEYS must be mapped to friendly
+    // labels, never surfaced. (ReviewPosition.role is structural display metadata
+    // rendered via a label map — like every other role — so it is not a "code".)
+    const json = JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails?.guardrailSummary) + JSON.stringify(s?.reviewDetails?.calculations) + JSON.stringify(s?.reviewDetails?.metrics);
+    const codes = ["exposure_grouping", "concentration_review", "SOL_EXPOSURE", "STABLE_EXPOSURE", "TOKEN:"];
+    const leaks = codes.filter((c) => json.includes(c));
+    add("12A-N: no raw guardrail/exposure codes leak to card/modal", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -3123,6 +3256,7 @@ export function printFixtureResults(): void {
     ...runReviewModalFixtureChecks(),
     ...runReviewRefinementFixtureChecks(),
     ...runFinalSmokeFixtureChecks(),
+    ...runDuplicateExposureFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

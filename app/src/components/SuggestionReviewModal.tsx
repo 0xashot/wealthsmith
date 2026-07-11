@@ -45,6 +45,7 @@ const POSITION_ROLE_LABELS: Record<ReviewPositionRole, string> = {
   concentrated_position: "Concentrated position",
   missing_apy_position: "Missing APY data",
   low_yield_position: "Low reported APY",
+  duplicate_exposure_position: "Similar exposure",
 };
 
 /** Whole-dollar USD, e.g. "$8,176". No fake precision. */

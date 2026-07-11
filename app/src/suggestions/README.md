@@ -388,8 +388,22 @@ Mode uses `SuggestionRail` directly and is untouched.
   (the separate app-shell mobile scaling is out of scope). Accessibility
   unchanged. No new fixtures (data unchanged); all 158 still pass.
 
-All suggestion categories are implemented. `duplicate_exposure` remains
-contracted but not emitted (pending duplicate-position detection).
+- Step 12A (done): **duplicate_exposure inside Position Optimization**. The
+  Position Optimization rule now also flags when multiple deployed positions
+  share an underlying exposure group (SOL / stablecoin / same token), via
+  [`duplicateExposure.ts`](./duplicateExposure.ts) (`getUnderlyingExposureGroup`
+  + `findDuplicateExposureGroups`). It stays ONE aggregated `position_optimization`
+  card (no new category, priority, or card type); a position touched by several
+  reasons is counted once (flagged-value de-duplication). Thresholds:
+  per-position ≥ $50, group ≥ $250, group share ≥ 5%. Grouping uses detected
+  fields only (type/symbol/mint/legs), never vague names, and returns null when
+  uncertain; liquid wallet SOL/stables are excluded (handled by Staking / Stable
+  Yield). Review-only — never bad/unsafe, never sell/swap/unwind. Guardrail
+  `exposure_grouping` is `passed` when grouping fired, else `not_evaluated`.
+  Fixtures 12A-A…N.
+
+All suggestion categories and reason codes are implemented. Every documented
+suggestion path — including `duplicate_exposure` — now emits.
 
 ## Suggestion display order
 
