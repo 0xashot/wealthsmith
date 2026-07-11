@@ -16,6 +16,15 @@ body,
   margin: 0;
   padding: 0;
   min-height: 100%;
+  /* Never let content force the page wider than the viewport. The real
+     overflow fixes live in dashboard.css (responsive grid columns, wrapping
+     nav, min-width:0 on shrinkable children); this is the safety layer. */
+  width: 100%;
+  max-width: 100%;
+}
+
+html {
+  overflow-x: clip;
 }
 
 body {
