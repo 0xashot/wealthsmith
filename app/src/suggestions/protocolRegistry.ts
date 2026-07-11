@@ -248,42 +248,14 @@ export function getProtocolCandidatesForSelection(
 }
 
 /* ------------------------------------------------------------------ *
- * Adapter interface CONTRACTS (Step 12C) — declarations only. These describe
- * the shape a FUTURE market-data / risk layer would produce. They are NOT
- * implemented, NOT wired into any suggestion, and NOT used to select or score
- * anything today. No value here is ever invented.
+ * Adapter interface CONTRACTS — the market/risk/selection-input shapes now live
+ * in protocolMarketData.ts (enriched in Step 12D). Re-exported here for
+ * continuity. They are NOT implemented into any selection and NOT wired into the
+ * Suggestion Engine; no value is ever invented.
  * ------------------------------------------------------------------ */
 
-export interface ProtocolMarketData {
-  protocolId: string;
-  strategyType: ProtocolStrategyType;
-  assetSymbol: string;
-  apy?: number;
-  tvlUsd?: number;
-  liquidityUsd?: number;
-  withdrawalTimeHours?: number;
-  fees?: {
-    depositBps?: number;
-    withdrawBps?: number;
-    performanceBps?: number;
-  };
-  dataSources: string[];
-  updatedAt: string;
-}
-
-export interface ProtocolRiskData {
-  protocolId: string;
-  riskScore?: number;
-  auditStatus?: "audited" | "partially_audited" | "unknown";
-  safetyBufferEligible?: boolean;
-  notes?: string;
-  lastReviewedAt?: string;
-}
-
-export interface ProtocolSelectionInput {
-  candidateProtocolIds: string[];
-  assetSymbol: string;
-  strategyType: ProtocolStrategyType;
-  marketDataByProtocolId: Record<string, ProtocolMarketData>;
-  riskDataByProtocolId: Record<string, ProtocolRiskData>;
-}
+export type {
+  ProtocolMarketData,
+  ProtocolRiskData,
+  ProtocolSelectionInput,
+} from "./protocolMarketData";

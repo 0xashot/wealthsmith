@@ -41,3 +41,30 @@ UI. See `protocolSelectionAudit.md` (Step 12B) for the readiness conclusion and
 
 Until (1)–(4) exist and pass QA, protocol selection stays `not_evaluated`. The
 candidate registry is metadata only and is **not** a recommendation.
+
+---
+
+## Step 12D — read-only adapters now in the codebase
+
+**12D adds data collection/normalization only. It does NOT implement protocol
+selection.** These are a service layer — the Suggestion Engine never imports or
+calls them, and running one never changes a suggestion. `confidence` +
+`missingFields` record exactly what is known; nothing is invented.
+
+| File | Provides | Missing / status | Confidence |
+| --- | --- | --- | --- |
+| `protocolMarketData.ts` | Normalized `ProtocolMarketData` / `ProtocolRiskData` / `ProtocolQuoteData` / `ProtocolSelectionInput` types + `missingMarketData()` (no fake zeros) | — (contracts + constructors) | n/a |
+| `protocolRiskRegistry.ts` | Curated static notes, `auditStatus`/`withdrawalClass` = "unknown" | **No `riskScore`** (deferred to 12E), `safetyBufferEligible` absent | `partial` |
+| `protocolDataAdapters.ts` | `ProtocolDataAdapter` contract + `buildProtocolSelectionInput` (sync, network-free merge) | Selects/scores nothing | n/a |
+| `protocolDataAdapters.defillama.ts` | Read-only pool APY/TVL **only via VERIFIED exact mappings** | Mapping table is **empty** (none verified) → returns `missing`; no fuzzy matching | `missing` today |
+| `protocolDataAdapters.kamino.ts` | Stub returning `partial` + reason | Existing Kamino APY/TVL is per-HELD-vault only; a vault-catalog + candidate-market adapter is still needed | `partial` |
+| `protocolDataAdapters.jupiter.ts` | `getReadOnlyQuoteEstimate` **contract-only** | `quoteAvailable: false`; no route/slippage/cost; **never builds/sends a tx or requests a signature** | `missing` today |
+
+**Known mapping limitations:** DefiLlama pool UUIDs are volatile and must be
+verified per candidate before use — an empty mapping table is the honest state,
+not a blocker. Kamino market data is position-scoped, not candidate-scoped.
+
+**Why still not enough for selection:** no verified market data yet (empty
+DefiLlama mappings, Kamino stub), no risk score (12E), no eligibility/route
+guardrail data, and no scoring model. `PROTOCOL_SELECTION_IMPLEMENTED` stays
+`false`.

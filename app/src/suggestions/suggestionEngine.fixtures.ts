@@ -43,6 +43,17 @@ import {
   getProtocolCandidatesForAsset,
   getProtocolCandidatesForSelection,
 } from "./protocolRegistry";
+import { missingMarketData } from "./protocolMarketData";
+import { getProtocolRiskData } from "./protocolRiskRegistry";
+import { buildProtocolSelectionInput } from "./protocolDataAdapters";
+import {
+  DEFILLAMA_POOL_MAPPINGS,
+  resolveDefiLlamaMapping,
+  defiLlamaMissingResult,
+  defiLlamaErrorResult,
+  defiLlamaAdapter,
+} from "./protocolDataAdapters.defillama";
+import { getReadOnlyQuoteEstimate, JUPITER_QUOTE_ADAPTER_IMPLEMENTED } from "./protocolDataAdapters.jupiter";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -3338,6 +3349,115 @@ export function runProtocolRegistryFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12D — read-only protocol data adapters (collection only, NO selection).
+ * All checks are network-free (mocks/stubs). Adapters are NOT wired into the
+ * engine, so suggestions are unchanged.
+ * ------------------------------------------------------------------ */
+export function runProtocolAdapterFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const candidateIds = ["jupiter", "marinade", "jito", "blazestake", "sanctum"];
+
+  // 12D-A. Missing market data uses NO zero-placeholders; unknown fields absent.
+  {
+    const md = missingMarketData("jupiter", "liquid_staking", "SOL");
+    const ok =
+      md.apy === undefined && md.tvlUsd === undefined && md.liquidityUsd === undefined &&
+      md.withdrawalTimeHours === undefined && md.fees === undefined &&
+      md.confidence === "missing" && md.missingFields.length > 0;
+    add("12D-A: ProtocolMarketData uses no fake-zero values for unknown fields", ok, `apy=${md.apy} tvl=${md.tvlUsd} confidence=${md.confidence}`);
+  }
+  // 12D-B. Risk registry contains NO made-up riskScore.
+  {
+    const anyScore = [...candidateIds, "kamino"].some((id) => getProtocolRiskData(id).riskScore !== undefined);
+    add("12D-B: risk registry contains no invented riskScore", !anyScore, `anyScore=${anyScore}`);
+  }
+  // 12D-C. Unknown audit/safety/withdrawal fields remain unknown/absent.
+  {
+    const r = getProtocolRiskData("jupiter");
+    add("12D-C: unknown audit/safety/withdrawal fields stay unknown/absent",
+      r.auditStatus === "unknown" && r.safetyBufferEligible === undefined && r.withdrawalClass === "unknown",
+      `audit=${r.auditStatus} bufferEligible=${r.safetyBufferEligible} withdrawal=${r.withdrawalClass}`);
+  }
+  // 12D-D. DefiLlama mapping never fuzzy-matches; unverified → undefined.
+  {
+    const noFuzzy = resolveDefiLlamaMapping("jupiter", "SOL") === undefined && resolveDefiLlamaMapping("kamino", "USDC") === undefined;
+    add("12D-D: DefiLlama adapter does not fuzzy-match uncertain pools", noFuzzy && Object.keys(DEFILLAMA_POOL_MAPPINGS).length === 0, `mappings=${Object.keys(DEFILLAMA_POOL_MAPPINGS).length}`);
+  }
+  // 12D-E. Adapter failure/missing returns status error/missing and never throws.
+  {
+    const miss = defiLlamaMissingResult("jupiter", "no mapping");
+    const err = defiLlamaErrorResult("jupiter", new Error("boom"));
+    add("12D-E: adapter failures return status error/missing (no throw into engine)",
+      miss.status === "missing" && err.status === "error" && defiLlamaAdapter.supportedProtocolIds.length === 0,
+      `miss=${miss.status} err=${err.status} autoFetch=${defiLlamaAdapter.supportedProtocolIds.length}`);
+  }
+  // 12D-F. Jupiter quote adapter is contract-only (no tx, quote unavailable).
+  {
+    const q = getReadOnlyQuoteEstimate({ assetSymbol: "SOL" });
+    const noTxKeys = !("transaction" in q) && !("signature" in q) && !("swap" in q);
+    add("12D-F: Jupiter quote adapter is contract-only (no tx, quoteAvailable false)",
+      q.quoteAvailable === false && q.source === "jupiter" && JUPITER_QUOTE_ADAPTER_IMPLEMENTED === false && noTxKeys,
+      `quoteAvailable=${q.quoteAvailable} implemented=${JUPITER_QUOTE_ADAPTER_IMPLEMENTED}`);
+  }
+  // 12D-G. Aggregator returns candidate market/risk data but NO selected protocol.
+  {
+    const input = buildProtocolSelectionInput({ candidateProtocolIds: candidateIds, assetSymbol: "SOL", strategyType: "liquid_staking" });
+    const hasAll = candidateIds.every((id) => input.marketDataByProtocolId[id] != null && input.riskDataByProtocolId[id] != null);
+    const noSelected = !("selectedProtocolId" in input) && !("selectedProtocolName" in input) && !("score" in input) && !("winner" in input);
+    add("12D-G: buildProtocolSelectionInput returns market/risk data but selects nothing", hasAll && noSelected, `hasAll=${hasAll} noSelected=${noSelected}`);
+  }
+  // 12D-H. Selection remains not implemented.
+  {
+    add("12D-H: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  }
+  // 12D-I. staking/stable_yield protocolSelection.status remains not_evaluated.
+  {
+    add("12D-I: staking/stable_yield protocolSelection.status remains not_evaluated",
+      staking?.protocolSelection?.status === "not_evaluated" && stable?.protocolSelection?.status === "not_evaluated",
+      `staking=${staking?.protocolSelection?.status} stable=${stable?.protocolSelection?.status}`);
+  }
+  // 12D-J. protocol_selection guardrail remains not_evaluated.
+  {
+    const g = (s: typeof staking) => s?.guardrails.find((x) => x.code === "protocol_selection")?.status;
+    add("12D-J: protocol_selection guardrail remains not_evaluated", g(staking) === "not_evaluated" && g(stable) === "not_evaluated", `staking=${g(staking)} stable=${g(stable)}`);
+  }
+  // 12D-K. Cards/modal do not display APY/TVL/risk data or candidate names as recommendations.
+  {
+    const names = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "Kamino", "Orca", "Raydium", "Meteora"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = names.filter((n) => json.includes(n));
+    add("12D-K: cards/modal never display candidate names or market data as recommendations", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12D-L. No suggestion has selectedProtocolId/Name.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12D-L: no suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12D-M. Network-unavailable: aggregator is synchronous/network-free → missing data.
+  {
+    const input = buildProtocolSelectionInput({ candidateProtocolIds: ["jupiter"], assetSymbol: "SOL", strategyType: "liquid_staking" });
+    add("12D-M: fixtures pass network-free (aggregator returns missing without fetching)", input.marketDataByProtocolId.jupiter?.confidence === "missing", `confidence=${input.marketDataByProtocolId.jupiter?.confidence}`);
+  }
+  // 12D-N. Explicit "selection not implemented" marker (README + protocolDataSources.md reference it).
+  {
+    add("12D-N: explicit not-implemented marker present", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -3359,6 +3479,7 @@ export function printFixtureResults(): void {
     ...runFinalSmokeFixtureChecks(),
     ...runDuplicateExposureFixtureChecks(),
     ...runProtocolRegistryFixtureChecks(),
+    ...runProtocolAdapterFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

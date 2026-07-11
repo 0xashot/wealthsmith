@@ -418,9 +418,28 @@ Mode uses `SuggestionRail` directly and is untouched.
   adapters + risk registry + quote/route guardrails + a deterministic scoring
   model + QA with mock & mainnet simulation. Fixtures 12C-A…L.
 
+- Step 12D (done): **read-only protocol market-data adapters (collection only —
+  NO selection)**. Added `protocolMarketData.ts` (normalized market/risk/quote/
+  input contracts + honest `missingMarketData` with no fake zeros),
+  `protocolRiskRegistry.ts` (curated static skeleton — **no `riskScore`**, audit/
+  withdrawal = "unknown"), `protocolDataAdapters.ts` (`ProtocolDataAdapter`
+  contract + synchronous network-free `buildProtocolSelectionInput`),
+  `protocolDataAdapters.defillama.ts` (read-only, verified-mapping-only — empty
+  table, no fuzzy matching), `protocolDataAdapters.kamino.ts` (stub — existing
+  APY is per-held-vault only), and `protocolDataAdapters.jupiter.ts` (contract-
+  only quote; **never builds/sends a tx or requests a signature**). This is a
+  SERVICE LAYER — the Suggestion Engine never imports or calls it, so
+  suggestions/cards/modal/Demo are unchanged. No protocol is selected or scored;
+  `PROTOCOL_SELECTION_IMPLEMENTED` stays `false`, `protocolSelection.status` and
+  the `protocol_selection` guardrail stay `not_evaluated`, and no
+  `selectedProtocolId/Name` is ever set. Real selection is still blocked until:
+  **12E** risk methodology, **12F** eligibility/guardrails, **12G** scoring, and
+  **12H** narrow-case selection QA (mock + mainnet). Fixtures 12D-A…N.
+
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
-remains contract + candidate-registry only (not evaluated).
+remains contract + candidate-registry + read-only-adapter foundation only (not
+evaluated / not implemented).
 
 ## Suggestion display order
 
