@@ -22,6 +22,7 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notEvaluatedProtocolSelection } from "./protocolSelection";
+import { getProtocolCandidatesForSelection } from "./protocolRegistry";
 import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
 
 /** Stable suggestion ID. */
@@ -85,12 +86,13 @@ export function deriveStakingSuggestion(
     { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
   ];
 
-  const protocolSelection = notEvaluatedProtocolSelection([
-    "missing_apy_data",
-    "missing_tvl_data",
-    "missing_risk_data",
-    "missing_lockup_data",
-  ]);
+  // Static candidate protocols (Step 12C) — metadata only, NOT a recommendation;
+  // status stays not_evaluated and no protocol is named.
+  const candidateProtocolIds = getProtocolCandidatesForSelection("liquid_staking", "SOL").map((c) => c.id);
+  const protocolSelection = notEvaluatedProtocolSelection(
+    ["missing_apy_data", "missing_tvl_data", "missing_risk_data", "missing_lockup_data"],
+    candidateProtocolIds
+  );
   const reviewDetails = buildReviewDetails({
     category: "staking",
     actionKind: "review_only",

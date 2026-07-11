@@ -402,8 +402,25 @@ Mode uses `SuggestionRail` directly and is untouched.
   `exposure_grouping` is `passed` when grouping fired, else `not_evaluated`.
   Fixtures 12A-A…N.
 
+- Step 12C (done): **static protocol registry + data-source matrix (foundation
+  only — NO selection)**. Added [`protocolRegistry.ts`](./protocolRegistry.ts)
+  (curated candidate protocols with static facts only, query helpers, and
+  unimplemented adapter interface contracts `ProtocolMarketData` /
+  `ProtocolRiskData` / `ProtocolSelectionInput`) and
+  [`protocolDataSources.md`](./protocolDataSources.md). Staking and Stable Yield
+  now attach `candidateProtocolIds` (registry-order metadata, **not** a
+  recommendation). **No protocol is selected or recommended:**
+  `protocolSelection.status` stays `not_evaluated` for staking/stable_yield, the
+  `protocol_selection` guardrail stays `not_evaluated`, `selectedProtocolId/Name`
+  are never set, candidates are never ranked/scored, and no protocol name is
+  surfaced in cards or the modal (`PROTOCOL_SELECTION_IMPLEMENTED === false`).
+  Real selection still requires: candidate registry (done) + market-data
+  adapters + risk registry + quote/route guardrails + a deterministic scoring
+  model + QA with mock & mainnet simulation. Fixtures 12C-A…L.
+
 All suggestion categories and reason codes are implemented. Every documented
-suggestion path — including `duplicate_exposure` — now emits.
+suggestion path — including `duplicate_exposure` — now emits. Protocol selection
+remains contract + candidate-registry only (not evaluated).
 
 ## Suggestion display order
 

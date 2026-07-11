@@ -31,6 +31,7 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notEvaluatedProtocolSelection } from "./protocolSelection";
+import { getProtocolCandidatesForStrategy } from "./protocolRegistry";
 import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
 import type { ReviewAsset } from "./engineTypes";
 
@@ -96,13 +97,22 @@ export function deriveStableYieldSuggestion(
     amount: p.uiAmount as number,
     role: "stablecoin",
   }));
-  const protocolSelection = notEvaluatedProtocolSelection([
-    "missing_apy_data",
-    "missing_tvl_data",
-    "missing_risk_data",
-    "missing_liquidity_data",
-    "missing_lockup_data",
-  ]);
+  // Static stable-yield candidates supporting the eligible stable assets (Step
+  // 12C) — metadata only, NOT a recommendation; status stays not_evaluated.
+  const stableSymbols = [...new Set(eligibleStables.map((p) => p.symbol.toUpperCase()))];
+  const candidateProtocolIds = getProtocolCandidatesForStrategy("lending")
+    .filter((c) => c.supportedAssets.some((a) => stableSymbols.includes(a)))
+    .map((c) => c.id);
+  const protocolSelection = notEvaluatedProtocolSelection(
+    [
+      "missing_apy_data",
+      "missing_tvl_data",
+      "missing_risk_data",
+      "missing_liquidity_data",
+      "missing_lockup_data",
+    ],
+    candidateProtocolIds
+  );
   const reviewDetails = buildReviewDetails({
     category: "stable_yield",
     actionKind: "review_only",

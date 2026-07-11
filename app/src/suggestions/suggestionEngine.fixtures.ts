@@ -35,6 +35,14 @@ import {
   unavailableProtocolSelection,
   selectedProtocolSelection,
 } from "./protocolSelection";
+import {
+  PROTOCOL_REGISTRY,
+  PROTOCOL_SELECTION_IMPLEMENTED,
+  getProtocolCandidateById,
+  getProtocolCandidatesForStrategy,
+  getProtocolCandidatesForAsset,
+  getProtocolCandidatesForSelection,
+} from "./protocolRegistry";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -3237,6 +3245,99 @@ export function runDuplicateExposureFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12C — static protocol registry + candidate metadata (NO selection).
+ * ------------------------------------------------------------------ */
+export function runProtocolRegistryFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+
+  // 12C-A. Registry has the SOL liquid-staking candidate IDs.
+  {
+    const ids = getProtocolCandidatesForStrategy("liquid_staking").map((c) => c.id);
+    const expected = ["jupiter", "marinade", "jito", "blazestake", "sanctum"];
+    add("12C-A: registry contains SOL liquid-staking candidate IDs", expected.every((e) => ids.includes(e)), `ids=${ids.join(",")}`);
+  }
+  // 12C-B. Kamino is a stable-yield candidate for USDC.
+  {
+    const ids = getProtocolCandidatesForSelection("lending", "USDC").map((c) => c.id);
+    add("12C-B: Kamino is a stable-yield (lending) candidate for USDC", ids.includes("kamino"), `ids=${ids.join(",")}`);
+  }
+  // 12C-C. Registry entries carry NO dynamic value fields (apy/tvl/risk/fee/lockup/liquidity/score/rank/selected).
+  {
+    const allowed = new Set(["id", "name", "chain", "strategyTypes", "supportedAssets", "supportedMints", "manageUrl", "status", "notes", "dataAdaptersNeeded"]);
+    const badKeys = PROTOCOL_REGISTRY.flatMap((e) => Object.keys(e).filter((k) => !allowed.has(k)));
+    add("12C-C: registry entries contain no apy/tvl/risk/fee/lockup/liquidity/score/rank/selected fields", badKeys.length === 0, `badKeys=${badKeys.join(",") || "none"}`);
+  }
+  // 12C-D. getProtocolCandidatesForStrategy returns static registry order (no scoring/sorting).
+  {
+    const got = getProtocolCandidatesForStrategy("liquid_staking").map((c) => c.id);
+    const registryOrder = PROTOCOL_REGISTRY.filter((p) => p.strategyTypes.includes("liquid_staking")).map((c) => c.id);
+    add("12C-D: candidates returned in static registry order (not scored)", JSON.stringify(got) === JSON.stringify(registryOrder), `got=${got.join(",")}`);
+  }
+  // 12C-E. getProtocolCandidatesForAsset("SOL","liquid_staking") returns the SOL staking candidates.
+  {
+    const ids = getProtocolCandidatesForAsset("SOL", "liquid_staking").map((c) => c.id);
+    add("12C-E: getProtocolCandidatesForAsset(SOL, liquid_staking) returns SOL staking candidates", ids.length === 5 && ids.includes("jupiter") && ids.includes("sanctum"), `ids=${ids.join(",")}`);
+  }
+  // 12C-F. Staking suggestion carries candidateProtocolIds but status stays not_evaluated.
+  {
+    const ps = staking?.protocolSelection;
+    add("12C-F: staking has candidateProtocolIds + protocolSelection.status not_evaluated",
+      (ps?.candidateProtocolIds?.length ?? 0) > 0 && ps?.status === "not_evaluated",
+      `status=${ps?.status} candidates=${ps?.candidateProtocolIds?.join(",")}`);
+  }
+  // 12C-G. Stable Yield suggestion carries candidateProtocolIds but status stays not_evaluated.
+  {
+    const ps = stable?.protocolSelection;
+    add("12C-G: stable_yield has candidateProtocolIds + status not_evaluated",
+      (ps?.candidateProtocolIds?.length ?? 0) > 0 && ps?.candidateProtocolIds?.includes("kamino") === true && ps?.status === "not_evaluated",
+      `status=${ps?.status} candidates=${ps?.candidateProtocolIds?.join(",")}`);
+  }
+  // 12C-H. No suggestion names a selected protocol.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12C-H: no suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12C-I. protocol_selection guardrail remains not_evaluated for staking/stable_yield.
+  {
+    const g = (s: typeof staking, code: string) => s?.guardrails.find((x) => x.code === code)?.status;
+    add("12C-I: protocol_selection guardrail is not_evaluated for staking/stable_yield",
+      g(staking, "protocol_selection") === "not_evaluated" && g(stable, "protocol_selection") === "not_evaluated",
+      `staking=${g(staking, "protocol_selection")} stable=${g(stable, "protocol_selection")}`);
+  }
+  // 12C-J. Cards + review details do NOT expose candidate protocol names as recommendations.
+  {
+    const names = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "Kamino", "Orca", "Raydium", "Meteora"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = (scan(staking) + scan(stable));
+    const leaks = names.filter((n) => json.includes(n));
+    add("12C-J: staking/stable_yield cards + modal never expose candidate protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12C-K. Adapter contracts exist but nothing is selected; registry stays candidate-only.
+  {
+    const allCandidateOnly = PROTOCOL_REGISTRY.every((e) => e.status === "candidate_only");
+    add("12C-K: protocol selection NOT implemented; registry is candidate-only",
+      PROTOCOL_SELECTION_IMPLEMENTED === false && allCandidateOnly && getProtocolCandidateById("jupiter")?.status === "candidate_only",
+      `implemented=${PROTOCOL_SELECTION_IMPLEMENTED} candidateOnly=${allCandidateOnly}`);
+  }
+  // 12C-L. Explicit "selection not implemented yet" marker (docs reference it).
+  {
+    add("12C-L: PROTOCOL_SELECTION_IMPLEMENTED marker is false (selection not implemented)", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -3257,6 +3358,7 @@ export function printFixtureResults(): void {
     ...runReviewRefinementFixtureChecks(),
     ...runFinalSmokeFixtureChecks(),
     ...runDuplicateExposureFixtureChecks(),
+    ...runProtocolRegistryFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

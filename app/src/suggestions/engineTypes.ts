@@ -246,6 +246,13 @@ export interface ProtocolSelection {
   selectedProtocolName?: string;
   selectedStrategyType?: ProtocolStrategyType;
   reasons: ProtocolSelectionReason[];
+  /**
+   * Static protocol-registry candidate IDs (Step 12C). METADATA ONLY — a
+   * candidate list is NOT a recommendation and NOT a selection: it is never
+   * ranked/scored, never surfaced in the UI, and only present while `status`
+   * is `not_evaluated`. Real selection sets `selectedProtocolId/Name` instead.
+   */
+  candidateProtocolIds?: string[];
   /** ISO timestamp of a real evaluation (only when data was actually consulted). */
   evaluatedAt?: string;
   /** Identifiers of the data sources consulted (only when actually consulted). */

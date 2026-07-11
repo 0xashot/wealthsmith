@@ -18,11 +18,23 @@ import type {
   SuggestionGuardrail,
 } from "./engineTypes";
 
-/** Selection is relevant but no data source exists yet (e.g. staking / stable yield). */
+/**
+ * Selection is relevant but no data source exists yet (e.g. staking / stable
+ * yield). `candidateProtocolIds` are OPTIONAL static-registry candidates (Step
+ * 12C) — metadata only, never a recommendation; status stays `not_evaluated`
+ * and no protocol is ever named.
+ */
 export function notEvaluatedProtocolSelection(
-  reasons: ProtocolSelectionReason[]
+  reasons: ProtocolSelectionReason[],
+  candidateProtocolIds?: string[]
 ): ProtocolSelection {
-  return { status: "not_evaluated", reasons };
+  return {
+    status: "not_evaluated",
+    reasons,
+    ...(candidateProtocolIds && candidateProtocolIds.length > 0
+      ? { candidateProtocolIds }
+      : {}),
+  };
 }
 
 /** Selection does not apply to this suggestion (e.g. review-only cards). */
