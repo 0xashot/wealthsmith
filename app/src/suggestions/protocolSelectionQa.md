@@ -52,3 +52,16 @@ All of the following must be true first:
 8. legal / compliance review if needed.
 
 Until then, protocol selection stays `not_evaluated` and disabled.
+
+## Relationship to the rollout plan (Step 12I)
+
+- QA selection is **Stage 1 (`qa_only`)** in the rollout ladder
+  (`protocolSelectionFeatureFlags.ts`): `disabled → qa_only → internal_dry_run →
+  internal_ui_preview → limited_beta → production`.
+- **A QA-selected result is NOT a production selected result.** It exists only in
+  test utilities (`qaOnly: true`) and is never written to `ProtocolSelection`,
+  never shown in the UI, and never a recommendation.
+- Reaching production requires the full readiness checklist
+  (`protocolSelectionProductionReadiness.md`) plus a feature-flag flip and an
+  explicit product decision. `isProtocolSelectionProductionReady()` returns
+  `false` today.

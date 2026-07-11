@@ -89,6 +89,16 @@ import {
   SOL_LIQUID_STAKING_QA_MARKET,
   SOL_LIQUID_STAKING_QA_RISK,
 } from "./protocolSelectionQa";
+import {
+  PROTOCOL_SELECTION_QA_ONLY,
+  PROTOCOL_SELECTION_SHOW_IN_UI,
+  PROTOCOL_SELECTION_ALLOW_LIVE_DATA,
+  PROTOCOL_SELECTION_ALLOW_TRANSACTIONS,
+  PROTOCOL_SELECTION_ROLLOUT_STAGES,
+  getProtocolSelectionReadinessChecklist,
+  isProtocolSelectionProductionReady,
+} from "./protocolSelectionFeatureFlags";
+import type { ProtocolSelectionReadinessGate } from "./protocolSelectionFeatureFlags";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -4033,6 +4043,92 @@ export function runProtocolSelectionQaFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12I — production-readiness checklist + feature-flag plan (planning only).
+ * ------------------------------------------------------------------ */
+export function runProtocolReadinessFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const checklist = getProtocolSelectionReadinessChecklist();
+
+  // 12I-A…E. Feature flags at safe defaults.
+  add("12I-A: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12I-B: PROTOCOL_SELECTION_QA_ONLY is true", PROTOCOL_SELECTION_QA_ONLY === true, `flag=${PROTOCOL_SELECTION_QA_ONLY}`);
+  add("12I-C: PROTOCOL_SELECTION_SHOW_IN_UI is false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12I-D: PROTOCOL_SELECTION_ALLOW_LIVE_DATA is false", PROTOCOL_SELECTION_ALLOW_LIVE_DATA === false, `flag=${PROTOCOL_SELECTION_ALLOW_LIVE_DATA}`);
+  add("12I-E: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS is false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12I-F. Not production ready.
+  add("12I-F: isProtocolSelectionProductionReady() returns false", isProtocolSelectionProductionReady() === false, `ready=${isProtocolSelectionProductionReady()}`);
+  // 12I-G. Checklist includes all required gates.
+  {
+    const required: ProtocolSelectionReadinessGate[] = ["market_data", "risk_registry", "eligibility", "route_liquidity_cost", "scoring", "qa", "product_copy_compliance", "feature_flag", "fallback_behavior"];
+    const gates = checklist.map((c) => c.gate);
+    const missing = required.filter((g) => !gates.includes(g));
+    add("12I-G: readiness checklist includes all required gates", missing.length === 0, `missing=${missing.join(",") || "none"}`);
+  }
+  // 12I-H. No check claims production readiness (some gate is not passed + not ready).
+  {
+    const notAllPassed = checklist.some((c) => c.status !== "passed");
+    add("12I-H: checklist does not claim production readiness", notAllPassed && isProtocolSelectionProductionReady() === false, `notAllPassed=${notAllPassed}`);
+  }
+  // 12I-I. Rollout stages ordered disabled→qa_only→…→production.
+  {
+    const expected = ["disabled", "qa_only", "internal_dry_run", "internal_ui_preview", "limited_beta", "production"];
+    add("12I-I: rollout stages are ordered disabled → … → production", JSON.stringify([...PROTOCOL_SELECTION_ROLLOUT_STAGES]) === JSON.stringify(expected), `stages=${PROTOCOL_SELECTION_ROLLOUT_STAGES.join(",")}`);
+  }
+  // 12I-J. Live staking/stable protocolSelection.status remains not_evaluated.
+  add("12I-J: staking/stable_yield protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status}`);
+  // 12I-K. Live suggestions carry no selectedProtocolId/Name.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12I-K: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12I-L. protocol_selection guardrail remains not_evaluated.
+  {
+    const g = (s: typeof staking) => s?.guardrails.find((x) => x.code === "protocol_selection")?.status;
+    add("12I-L: protocol_selection guardrail remains not_evaluated", g(staking) === "not_evaluated" && g(stable) === "not_evaluated", `staking=${g(staking)}`);
+  }
+  // 12I-M. Cards/modal show no selected protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "Kamino", "selectedProtocolId", "selectedProtocolName"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12I-M: cards/modal show no selected protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12I-N. QA can still select fixture-only candidate; live selection stays disabled.
+  {
+    const qa = runProtocolSelectionQa({ input: buildSolLiquidStakingQaInput(), checkedAt: "t" });
+    add("12I-N: QA selects fixture candidate; live selection stays disabled", qa.status === "selected" && qa.qaOnly === true && PROTOCOL_SELECTION_IMPLEMENTED === false && staking?.protocolSelection?.status === "not_evaluated", `qa=${qa.selectedProtocolId} implemented=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  }
+  // 12I-P. Production-readiness posture: QA-only, not production (doc mirrors this).
+  add("12I-P: QA selection is not production selection", PROTOCOL_SELECTION_QA_ONLY === true && isProtocolSelectionProductionReady() === false && PROTOCOL_SELECTION_SHOW_IN_UI === false, `qaOnly=${PROTOCOL_SELECTION_QA_ONLY}`);
+  // 12I-Q. Fallback-to-not_evaluated gate is present.
+  add("12I-Q: readiness checklist includes fallback-to-not_evaluated gate", checklist.some((c) => c.gate === "fallback_behavior" && /not_evaluated/i.test(c.notes)), "fallback_behavior present");
+  // 12I-R. Product/copy/compliance gate is present.
+  add("12I-R: readiness checklist includes product/copy/compliance gate", checklist.some((c) => c.gate === "product_copy_compliance"), "product_copy_compliance present");
+  // 12I-S. Production remains disabled (README mirrors this).
+  add("12I-S: production remains disabled", PROTOCOL_SELECTION_IMPLEMENTED === false && PROTOCOL_SELECTION_ALLOW_LIVE_DATA === false, `implemented=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  // 12I-T. No forbidden copy in the flags/checklist output.
+  {
+    const json = JSON.stringify(checklist).toLowerCase();
+    const forbidden = ["best", "safest", "guaranteed", "risk-free", "optimal"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12I-T: no forbidden copy in flags/checklist output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -4059,6 +4155,7 @@ export function printFixtureResults(): void {
     ...runRouteGuardrailFixtureChecks(),
     ...runProtocolScoringFixtureChecks(),
     ...runProtocolSelectionQaFixtureChecks(),
+    ...runProtocolReadinessFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

@@ -173,3 +173,23 @@ disabled.
   `protocolSelection.status = not_evaluated`, and
   `PROTOCOL_SELECTION_IMPLEMENTED = false`. The QA result is `qaOnly` and never
   reaches cards/modals.
+
+---
+
+## Production-readiness gaps (Step 12I)
+
+Before real selection can advance past `qa_only` (see
+`protocolSelectionProductionReadiness.md`), these gaps must close:
+
+- Real **DefiLlama pool mappings are empty** (no verified candidate→pool links).
+- The **Kamino candidate-market adapter is stubbed** (per-held-vault only).
+- The **Jupiter live quote is disabled** (`JUPITER_LIVE_QUOTE_IMPLEMENTED = false`).
+- **`riskScore` is absent** (no approved 12E methodology yet).
+- **Withdrawal behavior** is `unknown` for all candidates.
+- **Fee data** is unknown / not itemized.
+- **Liquidity data** is mostly absent.
+- A **real-data dry-run** (Stage 2) is not implemented.
+- The **feature flag is not enabled** (all flags default OFF).
+
+Until these are closed and every readiness gate passes, current live data remains
+`insufficient_data` and no user-facing recommendation is enabled.

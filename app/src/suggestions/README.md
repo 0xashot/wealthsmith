@@ -501,11 +501,29 @@ Mode uses `SuggestionRail` directly and is untouched.
   = false`. Next: **12I** feature-flagged production-readiness decision (real
   adapters + product/UI/legal review). Fixtures 12H-A…T.
 
+- Step 12I (done): **production-readiness checklist + feature-flag plan (planning
+  only — enables nothing)**. Added `protocolSelectionFeatureFlags.ts`
+  (`PROTOCOL_SELECTION_QA_ONLY=true`, `PROTOCOL_SELECTION_SHOW_IN_UI=false`,
+  `PROTOCOL_SELECTION_ALLOW_LIVE_DATA=false`,
+  `PROTOCOL_SELECTION_ALLOW_TRANSACTIONS=false`, re-exporting the single-source
+  `PROTOCOL_SELECTION_IMPLEMENTED=false`; a 9-gate readiness checklist +
+  `isProtocolSelectionProductionReady()` → `false`; and the rollout ladder
+  `disabled → qa_only → internal_dry_run → internal_ui_preview → limited_beta →
+  production`) and `protocolSelectionProductionReadiness.md`. **Production
+  selection stays disabled:** live staking/stable_yield remain `not_evaluated`,
+  no `selectedProtocolId/Name`, `protocol_selection` guardrail `not_evaluated`,
+  no UI recommendation; the flags module is not imported by any live/engine/UI
+  file, and there is no transaction/signature/swap path. QA can still select a
+  fixture-only candidate (Stage 1) — that is not a production selection. Next:
+  **12J** real data-adapter mapping for the first narrow case (SOL liquid
+  staking). Fixtures 12I-A…T.
+
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
-is a QA-proven-but-DISABLED pipeline (registry + adapters + eligibility + route
-guardrails + scoring + QA-only narrow-case selection); production selection
-remains not evaluated / not implemented.
+is a QA-proven-but-DISABLED pipeline behind default-off feature flags (registry +
+adapters + eligibility + route guardrails + scoring + QA-only narrow-case
+selection + production-readiness plan); production selection remains not evaluated
+/ not implemented.
 
 ## Suggestion display order
 
