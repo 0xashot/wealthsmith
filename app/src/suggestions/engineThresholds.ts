@@ -80,6 +80,19 @@ export const MIN_CONCENTRATION_REVIEW_USD = 1000;
 /** A single position at/above this share of the priced portfolio is reviewed. */
 export const POSITION_CONCENTRATION_THRESHOLD = 0.5;
 
+/*
+ * Protocol ELIGIBILITY gates (Step 12E) — deterministic thresholds that decide
+ * whether a candidate protocol is "eligible to evaluate", NOT which to pick and
+ * NOT a score. Missing data never passes (→ insufficient_data). Used only by the
+ * pure eligibility helpers; the Suggestion Engine never consumes these.
+ */
+export const MIN_PROTOCOL_TVL_USD = 1_000_000;
+export const MIN_PROTOCOL_RISK_SCORE = 7;
+export const MAX_WITHDRAWAL_HOURS_FOR_SAFETY_BUFFER = 24;
+export const MAX_WITHDRAWAL_HOURS_FOR_GENERAL_YIELD = 168;
+export const MIN_LIQUIDITY_USD = 100_000;
+export const MAX_PRICE_IMPACT_PCT = 0.5;
+
 /* Duplicate exposure (multiple deployed positions sharing an underlying group). */
 /** A deployed position below this value is ignored as dust when grouping. */
 export const MIN_DUPLICATE_EXPOSURE_POSITION_USD = 50;

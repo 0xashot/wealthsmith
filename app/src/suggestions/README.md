@@ -436,10 +436,27 @@ Mode uses `SuggestionRail` directly and is untouched.
   **12E** risk methodology, **12F** eligibility/guardrails, **12G** scoring, and
   **12H** narrow-case selection QA (mock + mainnet). Fixtures 12D-A…N.
 
+- Step 12E (done): **protocol risk & eligibility methodology (gates only — NO
+  selection)**. Added `protocolEligibility.ts` (`evaluateProtocolEligibility` +
+  `evaluateProtocolSelectionEligibility` returning `eligible` /
+  `ineligible` / `insufficient_data`), eligibility thresholds in
+  engineThresholds.ts, and `protocolRiskMethodology.md`. **Missing data never
+  passes** — it yields `insufficient_data` (never `eligible`); only present data
+  that violates a gate is `ineligible`. Eligibility answers "eligible to
+  *evaluate*", never "which to use": no ranking, no score-as-advice, no
+  selection. `riskScore` stays **absent** until the methodology is approved, so
+  score-dependent eligibility is `insufficient_data` today. Pure helper —
+  **not wired** into any suggestion/card/modal/Top Pick; suggestions unchanged,
+  `PROTOCOL_SELECTION_IMPLEMENTED` stays `false`, `protocolSelection.status` and
+  the `protocol_selection` guardrail stay `not_evaluated`, no `selectedProtocolId/
+  Name`. Real selection still blocked until **12F** quote/liquidity/cost
+  guardrails, **12G** deterministic scoring, **12H** narrow-case selection QA.
+  Fixtures 12E-A…T.
+
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
-remains contract + candidate-registry + read-only-adapter foundation only (not
-evaluated / not implemented).
+remains contract + candidate-registry + read-only-adapter + eligibility-gate
+foundation only (not evaluated / not implemented).
 
 ## Suggestion display order
 

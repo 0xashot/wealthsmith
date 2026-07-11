@@ -68,3 +68,28 @@ not a blocker. Kamino market data is position-scoped, not candidate-scoped.
 DefiLlama mappings, Kamino stub), no risk score (12E), no eligibility/route
 guardrail data, and no scoring model. `PROTOCOL_SELECTION_IMPLEMENTED` stays
 `false`.
+
+---
+
+## Eligibility data required before selection (Step 12E)
+
+`evaluateProtocolEligibility` (see protocolRiskMethodology.md) gates a candidate
+to "eligible to evaluate". Each input below must be **present and pass** — a
+missing value yields `insufficient_data`, never `eligible`:
+
+| Input | Source (future) | Gate |
+| --- | --- | --- |
+| TVL | DefiLlama `/pools` (verified mapping) | `≥ MIN_PROTOCOL_TVL_USD` ($1M) |
+| APY | on-chain / DefiLlama / SDK | must be present |
+| riskScore | **curated (12E methodology)** — absent today | `≥ MIN_PROTOCOL_RISK_SCORE` (7) |
+| auditStatus | published audits (curated) | not `unknown` |
+| withdrawal behavior | protocol docs (hours or class) | known; `≤ 24h` buffer / `≤ 168h` general |
+| Safety-Buffer eligibility | curated | required `true` in buffer context |
+| liquidity | DefiLlama / on-chain (route context) | `≥ MIN_LIQUIDITY_USD` ($100k) |
+| route / quote | Jupiter quote (12F) | required when `requiresRoute` |
+| fees | protocol / SDK | known for net-yield comparison |
+| source freshness (`updatedAt`) | each adapter | recorded per record |
+| `lastReviewedAt` (curated risk) | manual review cadence | recorded per entry |
+
+Eligibility is separate from selection: even a fully `eligible` set of
+candidates is NOT chosen among until 12F/12G/12H land.

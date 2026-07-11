@@ -54,6 +54,12 @@ import {
   defiLlamaAdapter,
 } from "./protocolDataAdapters.defillama";
 import { getReadOnlyQuoteEstimate, JUPITER_QUOTE_ADAPTER_IMPLEMENTED } from "./protocolDataAdapters.jupiter";
+import {
+  ELIGIBILITY_IMPLIES_RECOMMENDATION,
+  evaluateProtocolEligibility,
+  evaluateProtocolSelectionEligibility,
+} from "./protocolEligibility";
+import type { ProtocolMarketData, ProtocolRiskData } from "./protocolMarketData";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -3458,6 +3464,141 @@ export function runProtocolAdapterFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12E — protocol risk & eligibility methodology (gates only, NO selection).
+ * ------------------------------------------------------------------ */
+export function runProtocolEligibilityFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+
+  const mkMarket = (o: Partial<ProtocolMarketData>): ProtocolMarketData => ({
+    protocolId: "jupiter", strategyType: "liquid_staking", assetSymbol: "SOL",
+    dataSources: ["test"], updatedAt: "t", confidence: "available", missingFields: [], ...o,
+  });
+  const mkRisk = (o: Partial<ProtocolRiskData>): ProtocolRiskData => ({
+    protocolId: "jupiter", notes: [], sources: [], confidence: "available", missingFields: [], ...o,
+  });
+  const ev = (
+    market: ProtocolMarketData | undefined,
+    risk: ProtocolRiskData | undefined,
+    ctx?: { countsTowardSafetyBuffer?: boolean; requiresRoute?: boolean },
+    strategy: "liquid_staking" | "lp" = "liquid_staking",
+    candidateId = "jupiter"
+  ) =>
+    evaluateProtocolEligibility({
+      candidate: getProtocolCandidateById(candidateId), marketData: market, riskData: risk,
+      assetSymbol: "SOL", strategyType: strategy, context: ctx, checkedAt: "t",
+    });
+  const fullMarket = mkMarket({ apy: 5, tvlUsd: 2_000_000, withdrawalTimeHours: 1, fees: { depositBps: 0 } });
+  const fullRisk = mkRisk({ riskScore: 8, auditStatus: "audited", withdrawalClass: "instant" });
+
+  // 12E-A. Missing market data → insufficient_data.
+  add("12E-A: missing market data → insufficient_data", ev(undefined, fullRisk).status === "insufficient_data", `status=${ev(undefined, fullRisk).status}`);
+  // 12E-B. Missing risk data → insufficient_data.
+  add("12E-B: missing risk data → insufficient_data", ev(fullMarket, undefined).status === "insufficient_data", `status=${ev(fullMarket, undefined).status}`);
+  // 12E-C. Missing TVL → insufficient_data (not eligible).
+  {
+    const r = ev(mkMarket({ apy: 5, withdrawalTimeHours: 1, fees: {} }), fullRisk);
+    add("12E-C: missing TVL → insufficient_data (not eligible)", r.status === "insufficient_data" && r.reasons.includes("missing_tvl"), `status=${r.status}`);
+  }
+  // 12E-D. TVL below $1M → ineligible.
+  {
+    const r = ev(mkMarket({ apy: 5, tvlUsd: 500_000, withdrawalTimeHours: 1, fees: {} }), fullRisk);
+    add("12E-D: TVL below $1M → ineligible", r.status === "ineligible" && r.reasons.includes("tvl_below_minimum"), `status=${r.status}`);
+  }
+  // 12E-E. Missing riskScore → insufficient_data.
+  {
+    const r = ev(fullMarket, mkRisk({ auditStatus: "audited", withdrawalClass: "instant" }));
+    add("12E-E: missing riskScore → insufficient_data", r.status === "insufficient_data" && r.reasons.includes("risk_score_missing"), `status=${r.status}`);
+  }
+  // 12E-F. Risk score below 7 → ineligible.
+  {
+    const r = ev(fullMarket, mkRisk({ riskScore: 5, auditStatus: "audited", withdrawalClass: "instant" }));
+    add("12E-F: risk score below 7 → ineligible", r.status === "ineligible" && r.reasons.includes("risk_score_below_minimum"), `status=${r.status}`);
+  }
+  // 12E-G. Unknown auditStatus → insufficient_data (documented rule).
+  {
+    const r = ev(fullMarket, mkRisk({ riskScore: 8, auditStatus: "unknown", withdrawalClass: "instant" }));
+    add("12E-G: unknown auditStatus → insufficient_data", r.status === "insufficient_data" && r.reasons.includes("audit_status_unknown"), `status=${r.status}`);
+  }
+  // 12E-H. Withdrawal above safety-buffer max → ineligible (buffer context).
+  {
+    const r = ev(mkMarket({ apy: 5, tvlUsd: 2_000_000, withdrawalTimeHours: 48, fees: {} }), mkRisk({ riskScore: 8, auditStatus: "audited", withdrawalClass: "delayed", safetyBufferEligible: true }), { countsTowardSafetyBuffer: true });
+    add("12E-H: withdrawal > 24h → ineligible in safety-buffer context", r.status === "ineligible" && r.reasons.includes("withdrawal_too_long"), `status=${r.status}`);
+  }
+  // 12E-I. Withdrawal above general-yield max → ineligible.
+  {
+    const r = ev(mkMarket({ apy: 5, tvlUsd: 2_000_000, withdrawalTimeHours: 200, fees: {} }), fullRisk);
+    add("12E-I: withdrawal > 168h → ineligible in general-yield context", r.status === "ineligible" && r.reasons.includes("withdrawal_too_long"), `status=${r.status}`);
+  }
+  // 12E-J. Missing safetyBufferEligible when countsTowardSafetyBuffer → insufficient_data.
+  {
+    const r = ev(mkMarket({ apy: 5, tvlUsd: 2_000_000, withdrawalTimeHours: 1, fees: {} }), mkRisk({ riskScore: 8, auditStatus: "audited", withdrawalClass: "instant" }), { countsTowardSafetyBuffer: true });
+    add("12E-J: missing safetyBufferEligible (buffer context) → insufficient_data", r.status === "insufficient_data" && r.reasons.includes("missing_safety_buffer_eligibility"), `status=${r.status}`);
+  }
+  // 12E-K. LP/vault without IL modeling → insufficient_data.
+  {
+    const r = ev(undefined, undefined, {}, "lp", "orca");
+    add("12E-K: LP/vault (no IL model) → insufficient_data", r.status === "insufficient_data", `status=${r.status} reasons=${r.reasons.join(",")}`);
+  }
+  // 12E-L. Eligible only when all required fields present and pass thresholds.
+  {
+    const r = ev(fullMarket, fullRisk);
+    add("12E-L: full data + passing thresholds → eligible", r.status === "eligible" && r.reasons.length === 0, `status=${r.status} reasons=${r.reasons.join(",")}`);
+  }
+  // 12E-M. Aggregator returns results per candidate, no selected protocol.
+  {
+    const input = buildProtocolSelectionInput({ candidateProtocolIds: ["jupiter", "marinade"], assetSymbol: "SOL", strategyType: "liquid_staking" });
+    const results = evaluateProtocolSelectionEligibility(input);
+    const noSelected = results.every((r) => !("selectedProtocolId" in r) && !("selectedProtocolName" in r) && !("score" in r) && !("rank" in r));
+    add("12E-M: evaluateProtocolSelectionEligibility returns results, selects nothing", results.length === 2 && results.every((r) => r.status === "insufficient_data") && noSelected, `n=${results.length}`);
+  }
+  // 12E-N. No sorting/ranking/scoring/selecting — order preserved, no score/rank keys.
+  {
+    const input = buildProtocolSelectionInput({ candidateProtocolIds: ["jupiter", "marinade", "jito"], assetSymbol: "SOL", strategyType: "liquid_staking" });
+    const results = evaluateProtocolSelectionEligibility(input);
+    const orderPreserved = results.map((r) => r.protocolId).join(",") === "jupiter,marinade,jito";
+    const noScoreKeys = results.every((r) => Object.keys(r).every((k) => !/score|rank|selected|winner/i.test(k)));
+    add("12E-N: no function sorts/ranks/scores/selects", orderPreserved && noScoreKeys, `order=${results.map((r) => r.protocolId).join(",")}`);
+  }
+  // 12E-O. Selection remains not implemented.
+  add("12E-O: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  // 12E-P. staking/stable_yield protocolSelection.status remains not_evaluated.
+  add("12E-P: staking/stable_yield protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status} stable=${stable?.protocolSelection?.status}`);
+  // 12E-Q. protocol_selection guardrail remains not_evaluated.
+  {
+    const g = (s: typeof staking) => s?.guardrails.find((x) => x.code === "protocol_selection")?.status;
+    add("12E-Q: protocol_selection guardrail remains not_evaluated", g(staking) === "not_evaluated" && g(stable) === "not_evaluated", `staking=${g(staking)} stable=${g(stable)}`);
+  }
+  // 12E-R. Cards/modal do not expose eligibility results or protocol names.
+  {
+    // "eligible" alone is legitimate approved copy ("may be eligible for review");
+    // scan for distinctive eligibility-RESULT tokens + candidate names instead.
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "Kamino", "ineligible", "insufficient_data", "riskScore", "eligibilityStatus", "protocolEligibility"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((n) => json.includes(n));
+    add("12E-R: cards/modal never expose eligibility results or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12E-S. Risk registry contains no made-up riskScore.
+  {
+    const anyScore = ["jupiter", "marinade", "jito", "blazestake", "sanctum", "kamino"].some((id) => getProtocolRiskData(id).riskScore !== undefined);
+    add("12E-S: risk registry contains no invented riskScore", !anyScore, `anyScore=${anyScore}`);
+  }
+  // 12E-T. Eligibility is explicitly NOT a recommendation.
+  add("12E-T: eligibility is not a recommendation (marker + methodology doc)", ELIGIBILITY_IMPLIES_RECOMMENDATION === false, `flag=${ELIGIBILITY_IMPLIES_RECOMMENDATION}`);
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -3480,6 +3621,7 @@ export function printFixtureResults(): void {
     ...runDuplicateExposureFixtureChecks(),
     ...runProtocolRegistryFixtureChecks(),
     ...runProtocolAdapterFixtureChecks(),
+    ...runProtocolEligibilityFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
