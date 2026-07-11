@@ -93,3 +93,44 @@ missing value yields `insufficient_data`, never `eligible`:
 
 Eligibility is separate from selection: even a fully `eligible` set of
 candidates is NOT chosen among until 12F/12G/12H land.
+
+---
+
+## Step 12F — read-only route / cost / liquidity guardrails
+
+**Step 12F adds data collection + guardrail evaluation only. It does NOT
+implement protocol selection or execution.** New utilities: a read-only Jupiter
+quote adapter (`getReadOnlyJupiterQuote`) and a route-guardrail evaluator
+(`evaluateRouteGuardrails`). Neither is wired into the Suggestion Engine.
+
+**Quote-only boundary — Jupiter adapter:**
+
+- **No** swap, **no** swap/execution endpoint, **no** wallet/publicKey, **no**
+  signature, **no** `sendTransaction`/`signTransaction`/`signAllTransactions`/
+  `signMessage`, **no** transaction payload. It only issues a read-only GET quote.
+- Live network is **disabled** behind `JUPITER_LIVE_QUOTE_IMPLEMENTED = false`;
+  the adapter hits the network only when a test injects `fetchImpl`. Failures and
+  network-unavailable resolve to `error`/`missing` results and never throw.
+- `JUPITER_QUOTE_BUILDS_TRANSACTIONS = false`.
+
+**What data MAY become available (from a real quote):**
+
+- `quoteAvailable` (route exists), `priceImpactPct` (normalized to percent),
+  `outAmountAtomic`, route source; possibly `estimatedNetworkFeeUsd` **only if a
+  source provides it** (a bare quote does not).
+
+**What remains missing:**
+
+- true protocol **liquidity** depth, **risk**, **withdrawal behavior**, action
+  **eligibility**, **transaction simulation**, and execution success/failure —
+  none of which a quote provides. These stay `missing`/`not_evaluated`.
+
+**Future guardrail mapping (documented, NOT wired):**
+`cost_available` ← quote route + fee/network estimate · `liquidity_available` ←
+`liquidityUsd` or reliable proxy · `slippage_available` ← `priceImpactPct`. Live
+suggestion guardrails remain `not_evaluated`.
+
+**Why this still does not enable selection:** a route quote answers "can this
+move be routed and at what price impact?", not "which protocol is best". Even a
+`passed` route guardrail is one input; selection still needs 12G deterministic
+scoring and 12H narrow-case QA, with `PROTOCOL_SELECTION_IMPLEMENTED = false`.

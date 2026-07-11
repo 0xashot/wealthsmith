@@ -60,6 +60,18 @@ import {
   evaluateProtocolSelectionEligibility,
 } from "./protocolEligibility";
 import type { ProtocolMarketData, ProtocolRiskData } from "./protocolMarketData";
+import * as jupiterQuoteModule from "./protocolDataAdapters.jupiter";
+import {
+  JUPITER_LIVE_QUOTE_IMPLEMENTED,
+  JUPITER_QUOTE_BUILDS_TRANSACTIONS,
+  validateRouteQuoteRequest,
+  notImplementedQuoteResult,
+  jupiterQuoteErrorResult,
+  parseJupiterQuote,
+  getReadOnlyJupiterQuote,
+} from "./protocolDataAdapters.jupiter";
+import { evaluateRouteGuardrails } from "./protocolRouteGuardrails";
+import type { RouteQuoteRequest } from "./routeCostTypes";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -3599,6 +3611,131 @@ export function runProtocolEligibilityFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12F — read-only route / cost / liquidity guardrails (utilities only).
+ * Network-free (no fetchImpl injected → no network). NOT wired into the engine.
+ * ------------------------------------------------------------------ */
+export function runRouteGuardrailFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+
+  const req: RouteQuoteRequest = { inputMint: "SoLmint", outputMint: "USDCmint", amountAtomic: "1000000000" };
+  const okQuote = parseJupiterQuote(req, { outAmount: "999", priceImpactPct: "0.001" }); // 0.1%
+  const highQuote = parseJupiterQuote(req, { outAmount: "999", priceImpactPct: "0.01" }); // 1%
+  const noPiQuote = parseJupiterQuote(req, { outAmount: "999" });
+
+  // 12F-A. Missing mint/amount → missing/invalid, not a fake quote.
+  {
+    const noMint = validateRouteQuoteRequest({ inputMint: "", outputMint: "o", amountAtomic: "100" });
+    const noAmt = validateRouteQuoteRequest({ inputMint: "i", outputMint: "o", amountAtomic: "" });
+    const ok = Boolean(
+      noMint?.quoteAvailable === false && noMint?.missingFields.includes("token_mint") &&
+      noAmt?.missingFields.includes("amount") && noMint?.outAmountAtomic === undefined
+    );
+    add("12F-A: missing mint/amount → missing result (not a fake quote)", ok, `mint=${noMint?.missingFields.join(",")} amt=${noAmt?.missingFields.join(",")}`);
+  }
+  // 12F-B. Network/error returns error/missing, never throws.
+  {
+    const err = jupiterQuoteErrorResult(req, new Error("net down"));
+    const missing = notImplementedQuoteResult(req);
+    add("12F-B: adapter error/network-unavailable → error/missing (no throw)",
+      err.quoteAvailable === false && err.confidence === "unreliable" && (err.errors?.length ?? 0) > 0 && missing.confidence === "missing",
+      `err=${err.confidence} missing=${missing.confidence}`);
+  }
+  // 12F-C. Quote without priceImpactPct → insufficient_data.
+  {
+    const r = evaluateRouteGuardrails({ quote: noPiQuote });
+    add("12F-C: quote without priceImpactPct → insufficient_data", r.status === "insufficient_data" && r.reasons.includes("price_impact_missing"), `status=${r.status}`);
+  }
+  // 12F-D. priceImpactPct above MAX → failed.
+  {
+    const r = evaluateRouteGuardrails({ quote: highQuote });
+    add("12F-D: priceImpactPct above MAX → failed", r.status === "failed" && r.reasons.includes("price_impact_too_high"), `status=${r.status} pi=${highQuote.priceImpactPct}`);
+  }
+  // 12F-E. priceImpactPct within threshold + required fields → passed.
+  {
+    const r = evaluateRouteGuardrails({ quote: okQuote });
+    add("12F-E: priceImpact within threshold → passed", r.status === "passed" && r.reasons.length === 0, `status=${r.status} pi=${okQuote.priceImpactPct}`);
+  }
+  // 12F-F. Missing liquidity with requiresLiquidity → insufficient_data.
+  {
+    const r = evaluateRouteGuardrails({ quote: okQuote, requiresLiquidity: true });
+    add("12F-F: requiresLiquidity + missing liquidity → insufficient_data", r.status === "insufficient_data" && r.reasons.includes("liquidity_missing"), `status=${r.status}`);
+  }
+  // 12F-G. liquidity below MIN → failed.
+  {
+    const r = evaluateRouteGuardrails({ quote: okQuote, requiresLiquidity: true, liquidityUsd: 50_000 });
+    add("12F-G: liquidity below MIN → failed", r.status === "failed" && r.reasons.includes("liquidity_below_minimum"), `status=${r.status}`);
+  }
+  // 12F-H. All quote/liquidity fields present and passing → passed.
+  {
+    const r = evaluateRouteGuardrails({ quote: okQuote, requiresLiquidity: true, liquidityUsd: 200_000 });
+    add("12F-H: all present + passing → passed", r.status === "passed" && r.reasons.length === 0, `status=${r.status}`);
+  }
+  // 12F-I. Quote adapter never builds/returns transactions.
+  {
+    const noTxKeys = !("transaction" in okQuote) && !("swapTransaction" in okQuote) && !("tx" in okQuote);
+    add("12F-I: quote adapter does not build/return transactions", JUPITER_QUOTE_BUILDS_TRANSACTIONS === false && noTxKeys, `buildsTx=${JUPITER_QUOTE_BUILDS_TRANSACTIONS}`);
+  }
+  // 12F-J. Quote request needs no wallet/publicKey/signature.
+  {
+    const noWallet = !("publicKey" in req) && !("wallet" in req) && !("signer" in req);
+    add("12F-J: quote request needs no wallet/publicKey/signature", noWallet && typeof getReadOnlyJupiterQuote === "function", `keys=${Object.keys(req).join(",")}`);
+  }
+  // 12F-K. Jupiter quote module exports no sign/sendTransaction functions.
+  {
+    const bad = Object.keys(jupiterQuoteModule).filter((k) => /sendTransaction|signTransaction|signAllTransactions|signMessage/i.test(k));
+    add("12F-K: no sendTransaction/signTransaction/signAllTransactions/signMessage export", bad.length === 0, `bad=${bad.join(",") || "none"}`);
+  }
+  // 12F-L. Route guardrails are utility-only — live suggestions carry no route-derived passed guardrail.
+  {
+    const anyRoutePassed = [staking, stable].some((s) =>
+      (s?.guardrails ?? []).some((g) => (g.code === "cost_available" || g.code === "liquidity_available" || g.code === "slippage_available") && g.status === "passed")
+    );
+    add("12F-L: route guardrails not wired into live suggestions", typeof evaluateRouteGuardrails === "function" && !anyRoutePassed, `anyRoutePassed=${anyRoutePassed}`);
+  }
+  // 12F-M. cost/liquidity/slippage remain not_evaluated in live suggestions.
+  {
+    const g = (s: typeof staking, code: string) => s?.guardrails.find((x) => x.code === code)?.status;
+    const ok = ["cost_available", "liquidity_available", "slippage_available"].every(
+      (c) => g(staking, c) === "not_evaluated" && g(stable, c) === "not_evaluated"
+    );
+    add("12F-M: cost/liquidity/slippage remain not_evaluated in live suggestions", ok, `ok=${ok}`);
+  }
+  // 12F-N. staking/stable protocolSelection.status remains not_evaluated.
+  add("12F-N: staking/stable_yield protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status}`);
+  // 12F-O. Selection remains not implemented.
+  add("12F-O: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  // 12F-P. No selectedProtocolId/Name anywhere.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12F-P: no suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12F-Q. Cards/modal expose no quote/route/liquidity data.
+  {
+    const tokens = ["priceImpact", "quoteAvailable", "liquidityUsd", "routeSource", "outAmount", "price_impact"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12F-Q: cards/modal never expose quote/route/liquidity data", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12F-R. Fixtures run network-free (live quote disabled; no fetch used).
+  add("12F-R: route fixtures run network-free (live quote disabled)", JUPITER_LIVE_QUOTE_IMPLEMENTED === false && notImplementedQuoteResult(req).confidence === "missing", `live=${JUPITER_LIVE_QUOTE_IMPLEMENTED}`);
+  // 12F-S. Explicit no-selection / no-execution markers (docs reference them).
+  add("12F-S: no selection + no transaction markers present", PROTOCOL_SELECTION_IMPLEMENTED === false && JUPITER_QUOTE_BUILDS_TRANSACTIONS === false, `selection=${PROTOCOL_SELECTION_IMPLEMENTED} buildsTx=${JUPITER_QUOTE_BUILDS_TRANSACTIONS}`);
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -3622,6 +3759,7 @@ export function printFixtureResults(): void {
     ...runProtocolRegistryFixtureChecks(),
     ...runProtocolAdapterFixtureChecks(),
     ...runProtocolEligibilityFixtureChecks(),
+    ...runRouteGuardrailFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

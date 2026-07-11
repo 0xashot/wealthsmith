@@ -453,10 +453,28 @@ Mode uses `SuggestionRail` directly and is untouched.
   guardrails, **12G** deterministic scoring, **12H** narrow-case selection QA.
   Fixtures 12E-A…T.
 
+- Step 12F (done): **read-only route / cost / liquidity guardrails (utilities
+  only — NO selection, NO execution)**. Added `routeCostTypes.ts`
+  (`RouteQuoteRequest`/`RouteQuoteResult`), a read-only Jupiter quote adapter
+  (`getReadOnlyJupiterQuote` + `parseJupiterQuote`/`validateRouteQuoteRequest`/
+  error+missing constructors + `normalizeRouteQuoteToMarketDataRoute`), and
+  `protocolRouteGuardrails.ts` (`evaluateRouteGuardrails` →
+  `passed`/`failed`/`insufficient_data`; missing data never passes). **Quote-only
+  boundary:** no swap/execution endpoint, no wallet/publicKey, **no
+  `sendTransaction`/`signTransaction`/`signAllTransactions`/`signMessage`**, no
+  transaction payload; live network disabled behind
+  `JUPITER_LIVE_QUOTE_IMPLEMENTED = false` (tests inject `fetchImpl`; failures →
+  error/missing, never throw). **Not wired** into any suggestion/card/modal/Top
+  Pick — `cost_available`/`liquidity_available`/`slippage_available` and
+  `protocol_selection` stay `not_evaluated`, `PROTOCOL_SELECTION_IMPLEMENTED`
+  stays `false`, no `selectedProtocolId/Name`. Real selection still blocked until
+  **12G** deterministic scoring and **12H** narrow-case selection QA. Fixtures
+  12F-A…S.
+
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
-remains contract + candidate-registry + read-only-adapter + eligibility-gate
-foundation only (not evaluated / not implemented).
+remains contract + candidate-registry + read-only-adapter + eligibility-gate +
+read-only-route-guardrail foundation only (not evaluated / not implemented).
 
 ## Suggestion display order
 
