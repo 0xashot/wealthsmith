@@ -125,10 +125,20 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
 
   const { summary, metrics, involvedAssets, involvedPositions, calculations, guardrailSummary, limitations, safetyNotes } = details;
 
-  const guardrailGroups: { title: string; items: string[] }[] = [
-    { title: "Checked", items: guardrailSummary.checked },
-    { title: "Not evaluated yet", items: guardrailSummary.notEvaluated },
-    { title: "Not applicable", items: guardrailSummary.notApplicable },
+  const guardrailGroups: {
+    title: string;
+    tone: "checked" | "pending" | "na";
+    hint?: string;
+    items: string[];
+  }[] = [
+    { title: "Checked", tone: "checked" as const, items: guardrailSummary.checked },
+    {
+      title: "Not evaluated yet",
+      tone: "pending" as const,
+      hint: "These need market data WealthSmith doesn't have yet — they are not failures.",
+      items: guardrailSummary.notEvaluated,
+    },
+    { title: "Not applicable", tone: "na" as const, items: guardrailSummary.notApplicable },
   ].filter((g) => g.items.length > 0);
 
   return (
@@ -145,15 +155,13 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
       >
         <div className="modal__header">
           <div className="review-modal__heading">
-            <p className="review-modal__category">{summary.categoryLabel}</p>
+            <div className="review-modal__eyebrow">
+              <p className="review-modal__category">{summary.categoryLabel}</p>
+              {isTopPick && <Badge label="Top Pick" tone="info" />}
+            </div>
             <h2 id={titleId} className="modal__title">
               {summary.title}
             </h2>
-            {isTopPick && (
-              <span className="review-modal__badge">
-                <Badge label="Top Pick" tone="info" />
-              </span>
-            )}
           </div>
           <button
             ref={closeRef}
@@ -274,8 +282,12 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
               <h3 className="review-modal__section-title">Guardrails</h3>
               <div className="review-modal__guardrails">
                 {guardrailGroups.map((g) => (
-                  <div key={g.title} className="review-modal__guardrail-group">
+                  <div
+                    key={g.title}
+                    className={`review-modal__guardrail-group review-modal__guardrail-group--${g.tone}`}
+                  >
                     <p className="review-modal__guardrail-title">{g.title}</p>
+                    {g.hint && <p className="review-modal__guardrail-hint">{g.hint}</p>}
                     <ul className="review-modal__chips">
                       {g.items.map((item) => (
                         <li key={item} className="review-modal__chip">

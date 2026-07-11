@@ -1960,16 +1960,19 @@
   gap: var(--spacing-inline-gap-xs);
 }
 
+.review-modal__eyebrow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-inline-gap-sm);
+}
+
 .review-modal__category {
   margin: 0;
   font: var(--typography-label-sm-font);
   color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-
-.review-modal__badge {
-  margin-top: var(--spacing-inline-gap-xs);
 }
 
 .review-modal__body {
@@ -2004,10 +2007,14 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-inline-gap-xs);
+  padding: var(--spacing-inline-gap-md);
+  background: var(--color-surface-canvas);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-sm);
 }
 
 .review-modal__metric-label {
-  font: var(--typography-body-sm-font);
+  font: var(--typography-label-sm-font);
   color: var(--color-text-secondary);
 }
 
@@ -2015,6 +2022,7 @@
   margin: 0;
   font: var(--typography-heading-sm-font);
   color: var(--color-text-primary);
+  overflow-wrap: anywhere;
 }
 
 .review-modal__list {
@@ -2102,18 +2110,52 @@
 .review-modal__guardrails {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-stack-gap-sm);
+  gap: var(--spacing-inline-gap-md);
+}
+
+.review-modal__guardrail-group {
+  padding: var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-sm);
+}
+
+.review-modal__guardrail-group--checked {
+  background: var(--color-feedback-success-background-tint);
+  border-color: transparent;
+}
+
+.review-modal__guardrail-group--pending {
+  background: var(--color-feedback-info-background-tint);
+  border-color: transparent;
+}
+
+.review-modal__guardrail-group--na {
+  background: var(--color-surface-canvas);
 }
 
 .review-modal__guardrail-title {
-  margin: 0 0 var(--spacing-inline-gap-xs);
-  font: var(--typography-label-sm-font);
+  margin: 0;
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.review-modal__guardrail-group--checked .review-modal__guardrail-title {
+  color: var(--color-feedback-success-text-tint);
+}
+
+.review-modal__guardrail-group--pending .review-modal__guardrail-title {
+  color: var(--color-feedback-info-text-tint);
+}
+
+.review-modal__guardrail-hint {
+  margin: var(--spacing-inline-gap-xs) 0 0;
+  font: var(--typography-body-sm-font);
   color: var(--color-text-secondary);
 }
 
 .review-modal__chips {
   list-style: none;
-  margin: 0;
+  margin: var(--spacing-inline-gap-sm) 0 0;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
@@ -2124,12 +2166,17 @@
   padding: 2px var(--spacing-inline-gap-sm);
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-control-sm);
+  background: var(--color-surface-card);
   font: var(--typography-label-sm-font);
   color: var(--color-text-primary);
 }
 
-.review-modal__bullets,
-.review-modal__safety-notes {
+.review-modal__guardrail-group--checked .review-modal__chip::before {
+  content: "✓ ";
+  color: var(--color-feedback-success-text-tint);
+}
+
+.review-modal__bullets {
   margin: 0;
   padding-left: 1.1rem;
   display: flex;
@@ -2141,8 +2188,36 @@
 
 .review-modal__safety {
   padding: var(--spacing-inline-gap-md);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid transparent;
   border-radius: var(--radius-surface-sm);
+  background: var(--color-feedback-success-background-tint);
+}
+
+.review-modal__safety .review-modal__section-title {
+  color: var(--color-feedback-success-text-tint);
+}
+
+.review-modal__safety-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-xs);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-primary);
+}
+
+.review-modal__safety-notes li {
+  display: flex;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.review-modal__safety-notes li::before {
+  content: "✓";
+  flex-shrink: 0;
+  color: var(--color-feedback-success-text-tint);
+  font-weight: 700;
 }
 
 @media (max-width: 640px) {

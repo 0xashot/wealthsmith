@@ -380,6 +380,14 @@ Mode uses `SuggestionRail` directly and is untouched.
   APY/TVL/risk/liquidity, no sell/buy/swap language, no raw codes. Fixtures
   10C-A…E.
 
+- Step 10D (done): **Review modal UX polish** (presentation only — no engine or
+  reviewDetails changes). Header eyebrow (category + Top Pick badge) over the
+  title; metrics as compact cards; guardrails grouped into tinted Checked (✓) /
+  Not evaluated yet (with an honesty hint: "…not failures") / Not applicable;
+  calm ✓ safety box; single-column metrics + internal scroll on narrow widths
+  (the separate app-shell mobile scaling is out of scope). Accessibility
+  unchanged. No new fixtures (data unchanged); all 158 still pass.
+
 All suggestion categories are implemented. `duplicate_exposure` remains
 contracted but not emitted (pending duplicate-position detection).
 
