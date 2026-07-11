@@ -64,3 +64,22 @@ correct and expected.
 
 Until then, production selection stays disabled and no user-facing recommendation
 exists.
+
+## Dry-run hardening (Step 12K)
+
+`protocolSolLiquidStakingDryRun.ts` adds a hardened internal dry-run with three
+modes — `fixture` (fixture-only mechanics), `injected` (network-free, tests
+inject real-like data), and `live_opt_in` (strong opt-in; without
+`allowLiveData` it returns `live_data_disabled`; a dev caller sources real APY via
+existing read-only helpers and injects them). It emits a per-candidate report
+(APY/TVL/withdrawal/fee/risk status + eligibility + missing fields + sources),
+never throws (failures → `source_error`), is `qaOnly` with `selectionEnabled =
+false`, and exposes no production `selectedProtocolId`.
+
+- **APY can be populated** for all five via injection from existing helpers.
+- **TVL can be populated** for Sanctum only (verified DefiLlama pool).
+- **Current blockers:** `riskScore` (`not_assigned`, see
+  `protocolSolLiquidStakingRiskSources.md`), withdrawal, fees, and TVL for 4/5.
+- **Current dry-run result: `insufficient_data`** — correct, since risk/withdrawal
+  are missing. **Selection remains disabled**; the dry-run is not imported by any
+  live/engine/UI file and has no transaction path.

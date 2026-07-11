@@ -217,3 +217,24 @@ The first narrow case now has verified mappings (`protocolSolLiquidStakingData.t
   not imported by any live/engine/UI file.
 - **Next real-data blockers:** verified DefiLlama TVL pools for the remaining 4,
   a `riskScore` methodology + curated scores, and sourced withdrawal/fee data.
+
+---
+
+## 12K — SOL liquid-staking dry-run + risk sourcing status
+
+`protocolSolLiquidStakingDryRun.ts` (dev-only) reports real-data coverage per
+candidate; `protocolSolLiquidStakingRiskSources.md` tracks risk sourcing.
+
+| Candidate | APY | TVL | riskScore | withdrawal | fees |
+| --- | --- | --- | --- | --- | --- |
+| jupiter | mappable (on-chain) | missing | not_assigned | missing | missing |
+| marinade | mappable (Marinade API) | missing | not_assigned | missing | missing |
+| jito | mappable (on-chain) | missing | not_assigned | missing | missing |
+| blazestake | mappable (on-chain) | missing | not_assigned | missing | missing |
+| sanctum | mappable (DefiLlama) | mappable (verified pool) | not_assigned | missing | missing |
+
+Data remains **insufficient for production selection**: `riskScore` is
+`not_assigned` for all, withdrawal/fees are missing, and TVL is verified for only
+1/5. The dry-run returns `insufficient_data`. `PROTOCOL_SELECTION_IMPLEMENTED` /
+`SHOW_IN_UI` / `ALLOW_TRANSACTIONS` stay false; `PROTOCOL_SELECTION_ALLOW_LIVE_DATA`
+remains false globally (dry-run live mode is a per-call opt-in only).

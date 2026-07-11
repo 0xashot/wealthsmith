@@ -535,12 +535,29 @@ Mode uses `SuggestionRail` directly and is untouched.
   Next: **12K** real-data dry-run hardening / risk-registry sourcing. Fixtures
   12J-A…V.
 
+- Step 12K (done): **SOL liquid-staking dry-run hardening + risk-registry
+  sourcing (dev-only)**. Added `protocolSolLiquidStakingDryRun.ts`
+  (`runSolLiquidStakingDryRun` with `fixture` / `injected` / `live_opt_in` modes —
+  network-free, dependency-injected; `live_opt_in` without `allowLiveData` →
+  `live_data_disabled`; per-candidate report; never throws → `source_error`;
+  `qaOnly` + `selectionEnabled = false`; no top-level `selectedProtocolId`) and
+  `protocolSolLiquidStakingRiskSources.md`. Recorded SOL-LST risk sourcing in
+  `protocolRiskRegistry.ts` (`lastReviewedAt` + notes) — **`riskScore` stays
+  `not_assigned`**, audit/withdrawal `unknown`, nothing invented. Current dry-run
+  result is **`insufficient_data`** (risk/withdrawal/most-TVL missing) — correct.
+  **Selection stays disabled:** module not imported by any live/engine/UI file, no
+  transaction/signature/swap path, live suggestions `not_evaluated`, no
+  `selectedProtocolId/Name`, `PROTOCOL_SELECTION_IMPLEMENTED`/`SHOW_IN_UI`/
+  `ALLOW_TRANSACTIONS` all false, `ALLOW_LIVE_DATA` false globally. Next: **12L**
+  verified TVL/withdrawal source completion or Stage-2 dry-run report. Fixtures
+  12K-A…Z.
+
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
 is a QA-proven-but-DISABLED pipeline behind default-off feature flags (registry +
 adapters + eligibility + route guardrails + scoring + QA-only narrow-case
-selection + production-readiness plan + first-case real-data mapping); production
-selection remains not evaluated / not implemented.
+selection + production-readiness plan + first-case real-data mapping + hardened
+internal dry-run); production selection remains not evaluated / not implemented.
 
 ## Suggestion display order
 
