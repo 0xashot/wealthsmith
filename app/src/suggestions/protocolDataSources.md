@@ -238,3 +238,19 @@ Data remains **insufficient for production selection**: `riskScore` is
 1/5. The dry-run returns `insufficient_data`. `PROTOCOL_SELECTION_IMPLEMENTED` /
 `SHOW_IN_UI` / `ALLOW_TRANSACTIONS` stay false; `PROTOCOL_SELECTION_ALLOW_LIVE_DATA`
 remains false globally (dry-run live mode is a per-call opt-in only).
+
+---
+
+## 12L — verified source completion
+
+`protocolSolLiquidStakingSources.ts` centralizes source-backed status; the full
+matrix is in `protocolSolLiquidStakingSourceChecklist.md`.
+
+- **Newly verified:** mint + APY *sources* for all five (code-backed); TVL source
+  for Sanctum/INF (verified DefiLlama pool).
+- **Still missing:** verified DefiLlama TVL pools for JupSOL/mSOL/JitoSOL/bSOL
+  (none guessed); withdrawal, fees, audit for all; **`riskScore` not assigned** for
+  all; live APY *values* (fetched + injected, not fabricated).
+- **Why production selection remains disabled:** a verified *source* is not a
+  *value*, and eligibility still needs `riskScore` + TVL + withdrawal; the dry-run
+  stays `insufficient_data` and all flags stay false.

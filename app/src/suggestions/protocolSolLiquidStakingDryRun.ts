@@ -26,6 +26,8 @@ import {
   getSolLiquidStakingMapping,
 } from "./protocolSolLiquidStakingData";
 import { SOL_LIQUID_STAKING_QA_MARKET, SOL_LIQUID_STAKING_QA_RISK } from "./protocolSelectionQa";
+import { getSolLiquidStakingSourceRecords } from "./protocolSolLiquidStakingSources";
+import type { SolLiquidStakingSourceCategory, SolLiquidStakingSourceStatus } from "./protocolSolLiquidStakingSources";
 
 /** This module is dry-run only; it can never enable production selection or UI. */
 export const SOL_LIQUID_STAKING_DRY_RUN_ONLY = true;
@@ -47,6 +49,8 @@ export interface SolLiquidStakingDryRunCandidateReport {
   eligibilityStatus: ProtocolEligibilityStatus;
   missingFields: string[];
   sources: string[];
+  /** Source-verification status per category (Step 12L). Internal report only. */
+  sourceStatusByCategory?: Partial<Record<SolLiquidStakingSourceCategory, SolLiquidStakingSourceStatus>>;
 }
 
 export interface SolLiquidStakingDryRunResult {
@@ -147,6 +151,9 @@ export function runSolLiquidStakingDryRun(options: SolLiquidStakingDryRunOptions
       if (eligibility.status === "eligible") anyFullyEligible = true;
 
       const sources = [...new Set([...(m?.dataSources ?? []), ...(r?.sources ?? []), ...(mapping ? [mapping.apySource ?? "", mapping.tvlSource ?? ""].filter(Boolean) : [])])];
+      const sourceStatusByCategory = Object.fromEntries(
+        getSolLiquidStakingSourceRecords(id).map((rec) => [rec.category, rec.status])
+      ) as SolLiquidStakingDryRunCandidateReport["sourceStatusByCategory"];
 
       return {
         protocolId: id,
@@ -159,6 +166,7 @@ export function runSolLiquidStakingDryRun(options: SolLiquidStakingDryRunOptions
         eligibilityStatus: eligibility.status,
         missingFields: m && r ? reportMissingFields(m, r) : ["missing_market_data"],
         sources,
+        sourceStatusByCategory,
       };
     });
 

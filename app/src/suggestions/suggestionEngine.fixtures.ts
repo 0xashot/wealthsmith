@@ -114,6 +114,11 @@ import {
   SOL_LIQUID_STAKING_DRY_RUN_CAN_SELECT_PRODUCTION,
   runSolLiquidStakingDryRun,
 } from "./protocolSolLiquidStakingDryRun";
+import {
+  SOL_LIQUID_STAKING_SOURCE_RECORDS,
+  getSolLiquidStakingSourceRecords,
+  getSolLiquidStakingSourceStatus,
+} from "./protocolSolLiquidStakingSources";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -4371,6 +4376,108 @@ export function runSolLiquidStakingDryRunFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12L — verified source completion for SOL liquid staking (metadata only).
+ * ------------------------------------------------------------------ */
+export function runSolLiquidStakingSourceFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+  const market = buildSolLiquidStakingMarketDataFromExistingSources();
+  const dryRun = runSolLiquidStakingDryRun({ mode: "injected", checkedAt: "t" });
+
+  // 12L-A. Source metadata for all five candidates.
+  {
+    const ok = ids.every((id) => getSolLiquidStakingSourceRecords(id).length === 9);
+    add("12L-A: source metadata exists for all five candidates", ok, `ok=${ok}`);
+  }
+  // 12L-B. Every record has lastReviewedAt.
+  add("12L-B: every source record has lastReviewedAt", SOL_LIQUID_STAKING_SOURCE_RECORDS.every((r) => typeof r.lastReviewedAt === "string" && r.lastReviewedAt.length > 0), `n=${SOL_LIQUID_STAKING_SOURCE_RECORDS.length}`);
+  // 12L-C. Every verified record has a sourceName or sourceUrl.
+  {
+    const verified = SOL_LIQUID_STAKING_SOURCE_RECORDS.filter((r) => r.status === "verified");
+    const ok = verified.every((r) => (r.sourceName ?? r.sourceUrl) != null);
+    add("12L-C: every verified source record has sourceName/sourceUrl", ok, `verified=${verified.length}`);
+  }
+  // 12L-D. TVL mappings exact only (verified for sanctum, missing for others).
+  {
+    const allExact = Object.values(DEFILLAMA_POOL_MAPPINGS).every((m) => typeof m.poolId === "string" && m.poolId.length >= 8);
+    const sanctumVerified = getSolLiquidStakingSourceStatus("sanctum", "tvl") === "verified";
+    add("12L-D: TVL mappings are exact only", allExact && sanctumVerified, `allExact=${allExact} sanctumTvl=${getSolLiquidStakingSourceStatus("sanctum", "tvl")}`);
+  }
+  // 12L-E. No DefiLlama fuzzy matching.
+  add("12L-E: no DefiLlama fuzzy matching", resolveDefiLlamaMapping("jupiter", "SOL") === undefined && resolveDefiLlamaMapping("kamino", "USDC") === undefined, "jupiter/kamino unmapped");
+  // 12L-F. Unverified TVL remains missing (value + source).
+  {
+    const ok = getSolLiquidStakingSourceStatus("jupiter", "tvl") === "missing" && market.jupiter.tvlUsd === undefined;
+    add("12L-F: unverified TVL remains missing", ok, `jupiterTvlSource=${getSolLiquidStakingSourceStatus("jupiter", "tvl")}`);
+  }
+  // 12L-G. APY source verified only when backed by existing code.
+  {
+    const ok = ids.every((id) => getSolLiquidStakingSourceStatus(id, "apy") === "verified" && getSolLiquidStakingSourceRecords(id).find((r) => r.category === "apy")?.sourceName != null);
+    add("12L-G: APY source verified only when code-backed", ok, `ok=${ok}`);
+  }
+  // 12L-H. Verified APY SOURCE does not create an APY VALUE.
+  add("12L-H: missing APY source does not create APY value", market.jupiter.apy === undefined, `apy=${market.jupiter.apy}`);
+  // 12L-I. withdrawalTimeHours absent unless directly sourced.
+  add("12L-I: withdrawalTimeHours absent unless sourced", market.jupiter.withdrawalTimeHours === undefined && getSolLiquidStakingSourceStatus("jupiter", "withdrawal") === "missing", `wd=${market.jupiter.withdrawalTimeHours}`);
+  // 12L-J. Fees absent unless directly sourced.
+  add("12L-J: fees absent unless sourced", market.jupiter.fees === undefined && getSolLiquidStakingSourceStatus("jupiter", "fees") === "missing", `fees=${market.jupiter.fees}`);
+  // 12L-K. riskScore absent for all five.
+  add("12L-K: riskScore remains absent for all five", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "no riskScore");
+  // 12L-L. auditStatus remains unknown.
+  add("12L-L: auditStatus remains unknown unless sourced", ids.every((id) => getProtocolRiskData(id).auditStatus === "unknown" && getSolLiquidStakingSourceStatus(id, "audit") === "missing"), "audit unknown");
+  // 12L-M. Source metadata does not make any candidate eligible by itself.
+  {
+    const anyEligible = dryRun.candidateReports.some((r) => r.eligibilityStatus === "eligible");
+    add("12L-M: source metadata does not create eligibility", dryRun.anyFullyEligible === false && !anyEligible, `anyEligible=${anyEligible}`);
+  }
+  // 12L-N. Dry-run includes source status but still insufficient_data.
+  {
+    const hasSourceStatus = dryRun.candidateReports.every((r) => r.sourceStatusByCategory != null && r.sourceStatusByCategory.apy === "verified");
+    add("12L-N: dry-run includes source status but stays insufficient_data", hasSourceStatus && dryRun.status === "insufficient_data", `status=${dryRun.status}`);
+  }
+  // 12L-O. Live staking protocolSelection.status remains not_evaluated.
+  add("12L-O: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12L-P. No live suggestion has selectedProtocolId/Name.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12L-P: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12L-Q. Cards/modal do not expose source metadata or protocol recommendations.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "sourceStatusByCategory", "lastReviewedAt", "SolLiquidStakingSource", "JupSOL"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12L-Q: cards/modal never expose source metadata or recommendations", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12L-R/S/T. Flags at safe defaults.
+  add("12L-R: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12L-S: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12L-T: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12L-V. Selection stays disabled (checklist doc mirrors this).
+  add("12L-V: SOL liquid-staking selection stays disabled", SOL_LIQUID_STAKING_SELECTION_ENABLED === false && PROTOCOL_SELECTION_IMPLEMENTED === false, `enabled=${SOL_LIQUID_STAKING_SELECTION_ENABLED}`);
+  // 12L-W. No forbidden investment claims in source metadata.
+  {
+    const json = JSON.stringify(SOL_LIQUID_STAKING_SOURCE_RECORDS).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12L-W: no forbidden investment claims in source metadata", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -4400,6 +4507,7 @@ export function printFixtureResults(): void {
     ...runProtocolReadinessFixtureChecks(),
     ...runSolLiquidStakingMappingFixtureChecks(),
     ...runSolLiquidStakingDryRunFixtureChecks(),
+    ...runSolLiquidStakingSourceFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

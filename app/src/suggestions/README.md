@@ -552,12 +552,28 @@ Mode uses `SuggestionRail` directly and is untouched.
   verified TVL/withdrawal source completion or Stage-2 dry-run report. Fixtures
   12K-A…Z.
 
+- Step 12L (done): **verified source completion + risk evidence for SOL liquid
+  staking (metadata only)**. Added `protocolSolLiquidStakingSources.ts`
+  (`SolLiquidStakingSourceRecord` per candidate×category + status helpers) and
+  `protocolSolLiquidStakingSourceChecklist.md`; enriched the dry-run report with
+  `sourceStatusByCategory` (internal only). **Verified:** exact mints + APY
+  *sources* (code-backed) for all five, and the TVL source for Sanctum/INF
+  (verified DefiLlama pool). **Still missing (not guessed/invented):** DefiLlama
+  TVL pools for the other four, withdrawal, fees, audit — and **`riskScore` stays
+  `not_assigned`** for all. A verified source is not a value: eligibility still
+  fails and the dry-run stays `insufficient_data`. Source metadata never creates
+  eligibility, is not imported by any live/engine/UI file, and has no transaction
+  path. Live suggestions `not_evaluated`, no `selectedProtocolId/Name`, all
+  selection flags false. Next: **12M** Stage-2 real-data dry-run report / risk
+  methodology completion. Fixtures 12L-A…W.
+
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
 is a QA-proven-but-DISABLED pipeline behind default-off feature flags (registry +
 adapters + eligibility + route guardrails + scoring + QA-only narrow-case
 selection + production-readiness plan + first-case real-data mapping + hardened
-internal dry-run); production selection remains not evaluated / not implemented.
+internal dry-run + verified source completion); production selection remains not
+evaluated / not implemented.
 
 ## Suggestion display order
 

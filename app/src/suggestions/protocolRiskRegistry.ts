@@ -33,11 +33,11 @@ interface RiskRegistryEntry {
  * stay absent/unknown pending the approved methodology + direct sources.
  */
 const RISK_ENTRIES: Record<string, RiskRegistryEntry> = {
-  jupiter: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["SOL liquid staking (JupSOL). riskScore not assigned; auditStatus/withdrawalClass not yet directly sourced (12K)."], sources: [], lastReviewedAt: "2026-07-11" },
-  marinade: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["SOL liquid staking (mSOL). riskScore not assigned; auditStatus/withdrawalClass not yet directly sourced (12K)."], sources: [], lastReviewedAt: "2026-07-11" },
-  jito: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["SOL liquid staking (JitoSOL). riskScore not assigned; auditStatus/withdrawalClass not yet directly sourced (12K)."], sources: [], lastReviewedAt: "2026-07-11" },
-  blazestake: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["SOL liquid staking (bSOL). riskScore not assigned; auditStatus/withdrawalClass not yet directly sourced (12K)."], sources: [], lastReviewedAt: "2026-07-11" },
-  sanctum: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["Multi-LST ecosystem (INF). riskScore not assigned; auditStatus/withdrawalClass not yet directly sourced (12K)."], sources: [], lastReviewedAt: "2026-07-11" },
+  jupiter: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["SOL liquid staking (JupSOL). riskScore not assigned; auditStatus/withdrawalClass not yet directly sourced — see protocolSolLiquidStakingSourceChecklist.md (12K–12L)."], sources: [], lastReviewedAt: "2026-07-11" },
+  marinade: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["SOL liquid staking (mSOL). riskScore not assigned; auditStatus/withdrawalClass not yet directly sourced — see protocolSolLiquidStakingSourceChecklist.md (12K–12L)."], sources: [], lastReviewedAt: "2026-07-11" },
+  jito: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["SOL liquid staking (JitoSOL). riskScore not assigned; auditStatus/withdrawalClass not yet directly sourced — see protocolSolLiquidStakingSourceChecklist.md (12K–12L)."], sources: [], lastReviewedAt: "2026-07-11" },
+  blazestake: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["SOL liquid staking (bSOL). riskScore not assigned; auditStatus/withdrawalClass not yet directly sourced — see protocolSolLiquidStakingSourceChecklist.md (12K–12L)."], sources: [], lastReviewedAt: "2026-07-11" },
+  sanctum: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["Multi-LST ecosystem (INF). riskScore not assigned; auditStatus/withdrawalClass not yet directly sourced — see protocolSolLiquidStakingSourceChecklist.md (12K–12L)."], sources: [], lastReviewedAt: "2026-07-11" },
   kamino: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["Stablecoin lending/vaults."], sources: [] },
   orca: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["DEX / LP — future scope."], sources: [] },
   raydium: { auditStatus: "unknown", withdrawalClass: "unknown", notes: ["DEX / LP — future scope."], sources: [] },

@@ -40,3 +40,11 @@ Statuses: `sourced` · `partially_sourced` · `missing` · `not_assigned`.
 - Fee schedules (deposit/withdraw/performance/management) → `fees`.
 
 Until these exist, the internal dry-run correctly returns `insufficient_data`.
+
+## 12L update
+
+Source-status tracking now lives in `protocolSolLiquidStakingSources.ts` and
+`protocolSolLiquidStakingSourceChecklist.md`. Confirmed this review: **mint + APY
+sources verified** for all five; **TVL verified for Sanctum/INF only**; audit,
+withdrawal, fees still `missing`; **`riskScore` still `not_assigned`** for all.
+No value was invented and production selection stays disabled.

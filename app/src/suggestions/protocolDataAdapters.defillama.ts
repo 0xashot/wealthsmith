@@ -29,6 +29,7 @@ export const DEFILLAMA_POOL_MAPPINGS: Record<
   sanctum: { assetSymbol: "SOL", poolId: "3075a746-bdd1-4aac-bcd5-b035abee2622", note: "Sanctum INF (SOL LST) — verified in lstApy.ts" },
   // Others (JupSOL/mSOL/bSOL/JitoSOL) have no verified DefiLlama pool UUID in the
   // codebase (their APY comes from on-chain/Marinade) — do NOT guess pool IDs.
+  // TVL for those 4 stays missing (see protocolSolLiquidStakingSourceChecklist.md).
 };
 
 /** Exact mapping lookup (protocolId + asset). No fuzzy matching. */

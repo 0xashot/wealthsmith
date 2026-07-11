@@ -83,3 +83,19 @@ false`, and exposes no production `selectedProtocolId`.
 - **Current dry-run result: `insufficient_data`** — correct, since risk/withdrawal
   are missing. **Selection remains disabled**; the dry-run is not imported by any
   live/engine/UI file and has no transaction path.
+
+## Source completion (Step 12L)
+
+`protocolSolLiquidStakingSources.ts` + `protocolSolLiquidStakingSourceChecklist.md`
+record source-backed status per candidate:
+
+- **Mint + APY sources: verified** for all five (mints from app source; APY helpers
+  in `lstApy.ts`). Verified *source* ≠ *value* — APY is injected by a dev caller.
+- **TVL: verified for Sanctum/INF only** (verified DefiLlama pool); the other four
+  stay `missing` (no verified pool UUID — none guessed).
+- **Withdrawal / fees / audit: missing** (not sourced; never assumed).
+- **RiskScore: not assigned** for all (awaits methodology + evidence).
+- Dry-run reports now carry `sourceStatusByCategory` (internal only) but still
+  return `insufficient_data` because required VALUES are absent.
+- Remaining blockers: verified TVL pools for 4/5, a `riskScore` methodology +
+  curated scores, and sourced withdrawal/fee data.
