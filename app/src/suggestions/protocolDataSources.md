@@ -254,3 +254,25 @@ matrix is in `protocolSolLiquidStakingSourceChecklist.md`.
 - **Why production selection remains disabled:** a verified *source* is not a
   *value*, and eligibility still needs `riskScore` + TVL + withdrawal; the dry-run
   stays `insufficient_data` and all flags stay false.
+
+---
+
+## 12M — Stage-2 real-data dry-run report
+
+`protocolSolLiquidStakingStage2DryRun.ts` injects the real values we can source
+today and runs the full pipeline, reporting per-candidate data coverage. Current
+coverage:
+
+- **APY source coverage:** verified (code-backed) for all five; values injected.
+- **TVL:** verified for Sanctum / INF only (the other four stay missing — none
+  guessed).
+- **Withdrawal:** missing for all five.
+- **Fees:** missing for all five.
+- **Audit:** unknown for all five.
+- **RiskScore:** absent (`not_assigned`) for all five.
+
+Result: `candidatesEligible = 0`, `insufficient_data` — correct and expected.
+Complete injected data for one candidate can make it `eligible` in the report, but
+`canSelectForProduction` stays `false`. **Production remains disabled:**
+`PROTOCOL_SELECTION_IMPLEMENTED` / `SHOW_IN_UI` / `ALLOW_TRANSACTIONS` false, and
+the module is not imported by any live/engine/UI file.

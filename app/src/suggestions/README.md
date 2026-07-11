@@ -566,14 +566,33 @@ Mode uses `SuggestionRail` directly and is untouched.
   path. Live suggestions `not_evaluated`, no `selectedProtocolId/Name`, all
   selection flags false. Next: **12M** Stage-2 real-data dry-run report / risk
   methodology completion. Fixtures 12L-A…W.
+- Step 12M (done): **Stage-2 real-data dry-run REPORT for SOL liquid staking
+  (internal, no UI, no production selection)**. Added
+  `protocolSolLiquidStakingStage2DryRun.ts` +
+  `protocolSolLiquidStakingStage2DryRun.md`: `buildSolLiquidStakingStage2DryRunReport`
+  injects the real values we can source today and runs the full pipeline
+  (eligibility → ranking only when eligibility allows), reporting per-candidate
+  **data coverage** (`available`/`partial`/`missing`/`blocked`) + a summary +
+  blockers. A live-opt-in helper
+  (`buildSolLiquidStakingStage2DryRunFromLiveSources`) is a dependency-injected
+  stub: it requires `allowLiveData === true` (else a `blocked` /
+  `live_data_disabled` report) and catches provider errors into `source_error`
+  blockers — never fetches, never throws, no wallet/`publicKey`/signing. **Current
+  result stays `insufficient_data`** (APY-only → 5 with APY, 0 eligible; +Sanctum
+  TVL → still 0 eligible; withdrawal/fees/riskScore missing). Complete injected
+  data for one candidate makes IT `eligible` in the report while
+  `canSelectForProduction` stays `false`. Not imported by any live/engine/UI file;
+  no top-level `selectedProtocolId/Name`; live suggestions `not_evaluated`; all
+  selection flags false. Fixtures 12M-A…AF (+32). Next: **12N** final handoff /
+  go-no-go checklist.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
 is a QA-proven-but-DISABLED pipeline behind default-off feature flags (registry +
 adapters + eligibility + route guardrails + scoring + QA-only narrow-case
 selection + production-readiness plan + first-case real-data mapping + hardened
-internal dry-run + verified source completion); production selection remains not
-evaluated / not implemented.
+internal dry-run + verified source completion + Stage-2 real-data dry-run report);
+production selection remains not evaluated / not implemented.
 
 ## Suggestion display order
 

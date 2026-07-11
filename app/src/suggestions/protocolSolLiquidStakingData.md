@@ -99,3 +99,22 @@ record source-backed status per candidate:
   return `insufficient_data` because required VALUES are absent.
 - Remaining blockers: verified TVL pools for 4/5, a `riskScore` methodology +
   curated scores, and sourced withdrawal/fee data.
+
+## Stage-2 dry-run report (Step 12M)
+
+`protocolSolLiquidStakingStage2DryRun.ts` builds an internal, dependency-injected
+Stage-2 report: inject the real values we can currently source, then run the full
+pipeline (eligibility → ranking only when eligibility allows) and report per-
+candidate **data coverage** (`available` / `partial` / `missing` / `blocked`).
+
+- **Current expected result remains `insufficient_data`.** With no injection,
+  `candidatesEligible = 0`; APY-only → `candidatesWithApy = 5` but still
+  `candidatesEligible = 0`; APY + verified Sanctum TVL → `candidatesWithTvl = 1`,
+  still `candidatesEligible = 0` (risk/withdrawal/fees missing).
+- Complete injected data for one candidate makes THAT candidate `eligible` in the
+  report, but `canSelectForProduction` stays `false`.
+- The live-opt-in helper requires `allowLiveData === true`; otherwise it returns a
+  `blocked` report (`live_data_disabled`). Provider errors surface as
+  `source_error` blockers — never thrown into the engine.
+- Not production selection: `qaOnly`, no top-level `selectedProtocolId/Name`, not
+  imported by any live/engine/UI file. See `protocolSolLiquidStakingStage2DryRun.md`.

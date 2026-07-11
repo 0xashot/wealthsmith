@@ -119,6 +119,15 @@ import {
   getSolLiquidStakingSourceRecords,
   getSolLiquidStakingSourceStatus,
 } from "./protocolSolLiquidStakingSources";
+import {
+  SOL_LIQUID_STAKING_STAGE_2_DRY_RUN_ONLY,
+  SOL_LIQUID_STAKING_STAGE_2_SHOWS_UI,
+  SOL_LIQUID_STAKING_STAGE_2_CAN_SELECT_PRODUCTION,
+  SOL_LIQUID_STAKING_STAGE_2_USES_TRANSACTIONS,
+  buildSolLiquidStakingStage2DryRunReport,
+  buildSolLiquidStakingStage2DryRunFromLiveSources,
+} from "./protocolSolLiquidStakingStage2DryRun";
+import type { ProtocolRiskData as Stage2ProtocolRiskData } from "./protocolMarketData";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -4478,6 +4487,205 @@ export function runSolLiquidStakingSourceFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12M — Stage-2 real-data dry-run REPORT for SOL liquid staking.
+ * Internal-only report; NOT production selection, no UI, no live behavior change.
+ * ------------------------------------------------------------------ */
+export function runSolLiquidStakingStage2FixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+
+  const allApy = { jupiter: 8.2, marinade: 7.5, jito: 8.8, blazestake: 7.0, sanctum: 9.5 };
+
+  // No injected data → all-missing coverage.
+  const noData = buildSolLiquidStakingStage2DryRunReport({ fetchedAt: "t" });
+  // APY only for all five.
+  const apyOnly = buildSolLiquidStakingStage2DryRunReport({ apyByProtocolId: allApy, fetchedAt: "t" });
+  // APY for all five + verified Sanctum TVL only.
+  const apyPlusSanctumTvl = buildSolLiquidStakingStage2DryRunReport({
+    apyByProtocolId: allApy,
+    tvlByProtocolId: { sanctum: 900_000_000 },
+    fetchedAt: "t",
+  });
+
+  // Complete data for ONE candidate (sanctum) — everything eligibility needs.
+  const completeMarket = buildSolLiquidStakingMarketDataFromExistingSources({
+    apyByProtocolId: { sanctum: 9.0 },
+    tvlByProtocolId: { sanctum: 900_000_000 },
+    updatedAt: "t",
+  });
+  completeMarket.sanctum = { ...completeMarket.sanctum, withdrawalTimeHours: 12, fees: { depositBps: 0, withdrawBps: 0 }, confidence: "available", missingFields: [] };
+  const completeRiskBase: Record<string, Stage2ProtocolRiskData> = Object.fromEntries(
+    [...SOL_LIQUID_STAKING_CANDIDATE_IDS].map((id) => [id, getProtocolRiskData(id)])
+  );
+  const eligibleRisk = (over: Partial<Stage2ProtocolRiskData>): Stage2ProtocolRiskData => ({
+    protocolId: "sanctum",
+    riskScore: 8,
+    auditStatus: "audited",
+    withdrawalClass: "same_day",
+    notes: ["fixture-only stage-2 test data"],
+    sources: ["stage2_test_fixture"],
+    confidence: "available",
+    missingFields: [],
+    ...over,
+  });
+  const completeRisk = { ...completeRiskBase, sanctum: eligibleRisk({}) };
+  const completeReport = buildSolLiquidStakingStage2DryRunReport({
+    marketDataByProtocolId: completeMarket,
+    riskDataByProtocolId: completeRisk,
+    fetchedAt: "t",
+  });
+  const completeSanctum = completeReport.candidateReports.find((r) => r.protocolId === "sanctum");
+
+  // 12M-A…D. Stage-2 scoping constants.
+  add("12M-A: SOL_LIQUID_STAKING_STAGE_2_DRY_RUN_ONLY is true", SOL_LIQUID_STAKING_STAGE_2_DRY_RUN_ONLY === true, `flag=${SOL_LIQUID_STAKING_STAGE_2_DRY_RUN_ONLY}`);
+  add("12M-B: SOL_LIQUID_STAKING_STAGE_2_SHOWS_UI is false", SOL_LIQUID_STAKING_STAGE_2_SHOWS_UI === false, `flag=${SOL_LIQUID_STAKING_STAGE_2_SHOWS_UI}`);
+  add("12M-C: SOL_LIQUID_STAKING_STAGE_2_CAN_SELECT_PRODUCTION is false", SOL_LIQUID_STAKING_STAGE_2_CAN_SELECT_PRODUCTION === false, `flag=${SOL_LIQUID_STAKING_STAGE_2_CAN_SELECT_PRODUCTION}`);
+  add("12M-D: SOL_LIQUID_STAKING_STAGE_2_USES_TRANSACTIONS is false", SOL_LIQUID_STAKING_STAGE_2_USES_TRANSACTIONS === false, `flag=${SOL_LIQUID_STAKING_STAGE_2_USES_TRANSACTIONS}`);
+
+  // 12M-E…H. Report invariants.
+  add("12M-E: report has qaOnly true", noData.qaOnly === true, `qaOnly=${noData.qaOnly}`);
+  add("12M-F: report has productionSelectionEnabled false", noData.productionSelectionEnabled === false, `v=${noData.productionSelectionEnabled}`);
+  add("12M-G: report has showInUi false", noData.showInUi === false, `v=${noData.showInUi}`);
+  add("12M-H: report has canSelectForProduction false", noData.canSelectForProduction === false && completeReport.canSelectForProduction === false, `v=${completeReport.canSelectForProduction}`);
+  // 12M-I. No top-level selectedProtocolId/selectedProtocolName.
+  {
+    const noSel = !("selectedProtocolId" in noData) && !("selectedProtocolName" in noData) && !("selectedProtocolId" in completeReport) && !("selectedProtocolName" in completeReport);
+    add("12M-I: report has no top-level selectedProtocolId/Name", noSel, `noData=${"selectedProtocolId" in noData} complete=${"selectedProtocolId" in completeReport}`);
+  }
+
+  // 12M-J. No-injected-data report → not eligible, not scored.
+  add("12M-J: no-injected-data report anyFullyEligible/anyScored false", noData.anyFullyEligible === false && noData.anyScored === false && noData.summary.candidatesEligible === 0, `elig=${noData.summary.candidatesEligible}`);
+  // 12M-K. No-injected-data report fakes nothing.
+  {
+    const zeroed = noData.summary.candidatesWithApy === 0 && noData.summary.candidatesWithTvl === 0 && noData.summary.candidatesWithWithdrawal === 0 && noData.summary.candidatesWithFees === 0 && noData.summary.candidatesWithRiskScore === 0;
+    add("12M-K: no-injected-data report fakes no APY/TVL/withdrawal/fees/riskScore", zeroed, `apy=${noData.summary.candidatesWithApy} tvl=${noData.summary.candidatesWithTvl}`);
+  }
+  // 12M-L. APY-only report → some APY, zero eligible.
+  add("12M-L: APY-only report candidatesWithApy>0 but candidatesEligible=0", apyOnly.summary.candidatesWithApy > 0 && apyOnly.summary.candidatesEligible === 0, `apy=${apyOnly.summary.candidatesWithApy} elig=${apyOnly.summary.candidatesEligible}`);
+  // 12M-M. APY + Sanctum TVL → still zero eligible (risk/withdrawal/fees missing).
+  {
+    const sanctum = apyPlusSanctumTvl.candidateReports.find((r) => r.protocolId === "sanctum");
+    const ok = apyPlusSanctumTvl.summary.candidatesWithTvl === 1 && apyPlusSanctumTvl.summary.candidatesEligible === 0 && sanctum?.eligibilityStatus !== "eligible";
+    add("12M-M: APY + Sanctum TVL still candidatesEligible=0", ok, `tvl=${apyPlusSanctumTvl.summary.candidatesWithTvl} elig=${apyPlusSanctumTvl.summary.candidatesEligible}`);
+  }
+  // 12M-N. Complete data for one candidate → that candidate eligible, but no production selection.
+  add("12M-N: complete data makes one candidate eligible; canSelectForProduction false", completeSanctum?.eligibilityStatus === "eligible" && completeReport.summary.candidatesEligible === 1 && completeReport.canSelectForProduction === false, `sanctum=${completeSanctum?.eligibilityStatus} elig=${completeReport.summary.candidatesEligible}`);
+  // 12M-O. Complete-data report may score internally but creates no production selection.
+  {
+    const scoredInternally = completeSanctum?.scoringStatus === "scored" && completeReport.anyScored === true;
+    const noProductionSel = !("selectedProtocolId" in completeReport) && completeReport.productionSelectionEnabled === false && completeReport.canSelectForProduction === false;
+    add("12M-O: complete-data report scores internally but no production selection", scoredInternally && noProductionSel, `scored=${completeSanctum?.scoringStatus} anyScored=${completeReport.anyScored}`);
+  }
+  // 12M-P. Missing values are absent, not zero.
+  {
+    const jup = apyOnly.candidateReports.find((r) => r.protocolId === "jupiter");
+    const ok = jup?.tvl.status === "missing" && jup?.tvl.valueUsd === undefined && noData.candidateReports.every((r) => r.apy.value === undefined && r.tvl.valueUsd === undefined && r.risk.riskScore === undefined);
+    add("12M-P: missing values absent, not zero", ok, `jupTvl=${jup?.tvl.valueUsd}`);
+  }
+  // 12M-Q. Unknown audit status does not pass eligibility.
+  {
+    const unknownAuditMarket = { ...completeMarket };
+    const unknownAuditRisk = { ...completeRiskBase, sanctum: eligibleRisk({ auditStatus: "unknown" }) };
+    const rep = buildSolLiquidStakingStage2DryRunReport({ marketDataByProtocolId: unknownAuditMarket, riskDataByProtocolId: unknownAuditRisk, fetchedAt: "t" });
+    const sanctum = rep.candidateReports.find((r) => r.protocolId === "sanctum");
+    add("12M-Q: unknown audit status does not pass eligibility", sanctum?.eligibilityStatus !== "eligible" && rep.summary.candidatesEligible === 0, `sanctum=${sanctum?.eligibilityStatus}`);
+  }
+  // 12M-R. Missing riskScore blocks eligibility.
+  {
+    const noRisk = { ...completeRiskBase, sanctum: eligibleRisk({ riskScore: undefined }) };
+    const rep = buildSolLiquidStakingStage2DryRunReport({ marketDataByProtocolId: completeMarket, riskDataByProtocolId: noRisk, fetchedAt: "t" });
+    const sanctum = rep.candidateReports.find((r) => r.protocolId === "sanctum");
+    add("12M-R: missing riskScore blocks eligibility", sanctum?.eligibilityStatus !== "eligible" && sanctum?.eligibilityReasons.includes("risk_score_missing") === true, `sanctum=${sanctum?.eligibilityStatus}`);
+  }
+  // 12M-S. Missing withdrawal blocks eligibility.
+  {
+    const noWdMarket = { ...completeMarket, sanctum: { ...completeMarket.sanctum, withdrawalTimeHours: undefined } };
+    const noWdRisk = { ...completeRiskBase, sanctum: eligibleRisk({ withdrawalClass: "unknown" }) };
+    const rep = buildSolLiquidStakingStage2DryRunReport({ marketDataByProtocolId: noWdMarket, riskDataByProtocolId: noWdRisk, fetchedAt: "t" });
+    const sanctum = rep.candidateReports.find((r) => r.protocolId === "sanctum");
+    add("12M-S: missing withdrawal blocks eligibility", sanctum?.eligibilityStatus !== "eligible" && sanctum?.eligibilityReasons.includes("missing_withdrawal_behavior") === true, `sanctum=${sanctum?.eligibilityStatus}`);
+  }
+  // 12M-T. Missing fees block eligibility/scoring where required.
+  {
+    const noFeeMarket = { ...completeMarket, sanctum: { ...completeMarket.sanctum, fees: undefined } };
+    const rep = buildSolLiquidStakingStage2DryRunReport({ marketDataByProtocolId: noFeeMarket, riskDataByProtocolId: completeRisk, fetchedAt: "t" });
+    const sanctum = rep.candidateReports.find((r) => r.protocolId === "sanctum");
+    add("12M-T: missing fees block eligibility/scoring", sanctum?.eligibilityStatus !== "eligible" && sanctum?.eligibilityReasons.includes("fees_unknown") === true, `sanctum=${sanctum?.eligibilityStatus}`);
+  }
+  // 12M-U. Live-opt-in harness without allowLiveData → blocked / live_data_disabled.
+  {
+    const rep = buildSolLiquidStakingStage2DryRunFromLiveSources({});
+    const allBlocked = rep.candidateReports.every((r) => r.apy.status === "blocked" && r.tvl.status === "blocked" && r.risk.status === "blocked");
+    add("12M-U: live-opt-in without allowLiveData → blocked/live_data_disabled", rep.blockers.includes("live_data_disabled") && allBlocked && rep.summary.candidatesEligible === 0, `blockers=${rep.blockers.join(",")}`);
+  }
+  // 12M-V. Live-opt-in harness errors return a report with blockers, not a thrown error.
+  {
+    let threw = false;
+    let rep: ReturnType<typeof buildSolLiquidStakingStage2DryRunFromLiveSources> | undefined;
+    try {
+      rep = buildSolLiquidStakingStage2DryRunFromLiveSources({ allowLiveData: true, liveDataProvider: () => { throw new Error("boom"); } });
+    } catch {
+      threw = true;
+    }
+    add("12M-V: live-opt-in errors return blockers, not thrown", !threw && rep?.blockers.includes("source_error") === true, `threw=${threw} blockers=${rep?.blockers.join(",")}`);
+  }
+  // 12M-W. Stage-2 report shape never leaks into live suggestion derivation output.
+  {
+    const tokens = ["stage_2_real_data_dry_run", "candidateReports", "canSelectForProduction", "productionSelectionEnabled", "candidatesEligible"];
+    const scan = (s: typeof staking) => JSON.stringify(s) + JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12M-W: stage-2 report shape not present in live suggestion output", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12M-X. Live staking protocolSelection.status remains not_evaluated.
+  add("12M-X: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12M-Y. No live suggestion has selectedProtocolId/Name.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12M-Y: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12M-Z. Cards/modal do not expose Stage-2 report or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "stage_2_real_data_dry_run", "candidateReports"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12M-Z: cards/modal never expose Stage-2 report or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12M-AA/AB/AC. Global selection flags at safe defaults.
+  add("12M-AA: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12M-AB: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12M-AC: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12M-AD. No transaction/signature/swap path in Stage-2 report output.
+  {
+    const json = (JSON.stringify(completeReport) + JSON.stringify(noData) + JSON.stringify(apyOnly)).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap", "deposit", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("12M-AD: no transaction/signature/swap path in Stage-2 output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12M-AE. Stage-2 report marks not-production-selection (doc mirrors this).
+  add("12M-AE: Stage-2 report marks not production selection", completeReport.canSelectForProduction === false && completeReport.productionSelectionEnabled === false && completeReport.qaOnly === true, `canSelect=${completeReport.canSelectForProduction}`);
+  // 12M-AF. No forbidden investment claims in Stage-2 report (existing forbidden-copy list).
+  {
+    const json = (JSON.stringify(completeReport) + JSON.stringify(noData) + JSON.stringify(apyOnly) + JSON.stringify(apyPlusSanctumTvl)).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12M-AF: no forbidden investment claims in Stage-2 report", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -4508,6 +4716,7 @@ export function printFixtureResults(): void {
     ...runSolLiquidStakingMappingFixtureChecks(),
     ...runSolLiquidStakingDryRunFixtureChecks(),
     ...runSolLiquidStakingSourceFixtureChecks(),
+    ...runSolLiquidStakingStage2FixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
