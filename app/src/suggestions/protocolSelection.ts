@@ -47,6 +47,10 @@ export function unavailableProtocolSelection(
  * once a reliable, data-backed selection rule exists. Requires an id, name,
  * strategy, evaluation time, and the data sources consulted; it never invents
  * them. This is the ONLY path that may set selectedProtocolId/Name.
+ *
+ * NOT SAFE TO USE YET — see the Step 12B audit (`protocolSelectionAudit.md`):
+ * the app has per-held-position data but no candidate catalog, TVL, withdrawal,
+ * risk, fee, liquidity, or route data. Keep selection `not_evaluated`.
  */
 export function selectedProtocolSelection(args: {
   protocolId: string;
