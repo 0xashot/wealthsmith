@@ -486,11 +486,26 @@ Mode uses `SuggestionRail` directly and is untouched.
   still blocked until **12H** narrow-case QA, validated real data adapters, and an
   explicit product decision to expose a selected protocol. Fixtures 12G-A…V.
 
+- Step 12H (done): **QA-only protocol selection — SOL liquid staking**. Added
+  `protocolSelectionQa.ts` (`runProtocolSelectionQa` + fixture-only mock data for
+  the five SOL LST candidates) and `protocolSelectionQa.md`. Proves that, given
+  complete mock/mainnet-simulated data, the pipeline (eligibility → scoring →
+  ranking) deterministically identifies **one** selected candidate (risk-weighted
+  — the highest-APY candidate does not automatically win; below-threshold /
+  withdrawal-too-long candidates are ineligible). **QA-only:** `qaOnly: true`,
+  every other strategy/asset is `disabled`, the result is never written to
+  `ProtocolSelection` or shown in the UI, and the utility is not imported by any
+  live/engine/UI file. No transactions/signatures/swaps. Live staking/stable_yield
+  keep `protocolSelection.status = not_evaluated`, no `selectedProtocolId/Name`,
+  `protocol_selection` guardrail `not_evaluated`, `PROTOCOL_SELECTION_IMPLEMENTED
+  = false`. Next: **12I** feature-flagged production-readiness decision (real
+  adapters + product/UI/legal review). Fixtures 12H-A…T.
+
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
-remains contract + candidate-registry + read-only-adapter + eligibility-gate +
-read-only-route-guardrail + deterministic-scoring foundation only (not evaluated
-/ not implemented).
+is a QA-proven-but-DISABLED pipeline (registry + adapters + eligibility + route
+guardrails + scoring + QA-only narrow-case selection); production selection
+remains not evaluated / not implemented.
 
 ## Suggestion display order
 

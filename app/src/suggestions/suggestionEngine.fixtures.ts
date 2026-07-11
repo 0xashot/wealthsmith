@@ -83,6 +83,12 @@ import {
 import type { ProtocolCandidateScore, ProtocolScoreBreakdown, ProtocolScoringStrategy } from "./protocolScoring";
 import type { ProtocolEligibilityResult } from "./protocolEligibility";
 import type { ProtocolSelectionInput } from "./protocolMarketData";
+import {
+  runProtocolSelectionQa,
+  buildSolLiquidStakingQaInput,
+  SOL_LIQUID_STAKING_QA_MARKET,
+  SOL_LIQUID_STAKING_QA_RISK,
+} from "./protocolSelectionQa";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -3900,6 +3906,133 @@ export function runProtocolScoringFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12H — QA-only protocol selection (SOL liquid staking). QA UTILITY ONLY —
+ * never wired into the engine; production selection stays disabled.
+ * ------------------------------------------------------------------ */
+export function runProtocolSelectionQaFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+
+  const cloneMarket = () => Object.fromEntries(Object.entries(SOL_LIQUID_STAKING_QA_MARKET).map(([k, v]) => [k, { ...v }]));
+  const cloneRisk = () => Object.fromEntries(Object.entries(SOL_LIQUID_STAKING_QA_RISK).map(([k, v]) => [k, { ...v }]));
+  const run = (input: ProtocolSelectionInput) => runProtocolSelectionQa({ input, checkedAt: "t" });
+  const completeResult = run(buildSolLiquidStakingQaInput());
+
+  // 12H-A. Disabled for unsupported strategy (stable_yield/lending).
+  {
+    const r = run({ ...buildSolLiquidStakingQaInput(), strategyType: "lending" });
+    add("12H-A: QA disabled for unsupported strategy (stable yield)", r.status === "disabled" && r.selectionMade === false && r.reasons.includes("unsupported_strategy"), `status=${r.status}`);
+  }
+  // 12H-B. Disabled for unsupported asset (BONK).
+  {
+    const r = run({ ...buildSolLiquidStakingQaInput(), assetSymbol: "BONK" });
+    add("12H-B: QA disabled for unsupported asset (BONK)", r.status === "disabled" && r.selectionMade === false && r.reasons.includes("unsupported_asset"), `status=${r.status}`);
+  }
+  // 12H-C. Incomplete market data (all missing APY) → not selected.
+  {
+    const m = cloneMarket();
+    for (const id of Object.keys(m)) delete (m[id] as { apy?: number }).apy;
+    const r = run(buildSolLiquidStakingQaInput(m));
+    add("12H-C: incomplete market data → not selected", (r.status === "insufficient_data" || r.status === "no_eligible_candidates") && r.selectionMade === false && r.selectedProtocolId === undefined, `status=${r.status}`);
+  }
+  // 12H-D. Missing riskScore (all) → not selected.
+  {
+    const risk = cloneRisk();
+    for (const id of Object.keys(risk)) delete (risk[id] as { riskScore?: number }).riskScore;
+    const r = run(buildSolLiquidStakingQaInput(undefined, risk));
+    add("12H-D: missing riskScore → not selected", (r.status === "insufficient_data" || r.status === "no_eligible_candidates") && r.selectionMade === false, `status=${r.status} reasons=${r.reasons.join(",")}`);
+  }
+  // 12H-E. Complete data but all fail eligibility (all TVL below min) → no_eligible_candidates.
+  {
+    const m = cloneMarket();
+    for (const id of Object.keys(m)) m[id].tvlUsd = 500_000;
+    const r = run(buildSolLiquidStakingQaInput(m));
+    add("12H-E: complete data but all ineligible → no_eligible_candidates", r.status === "no_eligible_candidates" && r.selectionMade === false, `status=${r.status}`);
+  }
+  // 12H-F. Complete passing data → selected, one protocol, selectionMade true, qaOnly true.
+  {
+    const r = completeResult;
+    add("12H-F: complete passing data → selected (qaOnly)", r.status === "selected" && typeof r.selectedProtocolId === "string" && r.selectionMade === true && r.qaOnly === true, `selected=${r.selectedProtocolId}`);
+  }
+  // 12H-G. Selected protocol is the first ranked.
+  add("12H-G: selectedProtocolId === rankedProtocolIds[0]", completeResult.selectedProtocolId === completeResult.rankedProtocolIds[0], `selected=${completeResult.selectedProtocolId} ranked0=${completeResult.rankedProtocolIds[0]}`);
+  // 12H-H. Deterministic across repeated runs.
+  {
+    const a = run(buildSolLiquidStakingQaInput()).selectedProtocolId;
+    const b = run(buildSolLiquidStakingQaInput()).selectedProtocolId;
+    add("12H-H: selection is deterministic across runs", a === b && a === completeResult.selectedProtocolId, `a=${a} b=${b}`);
+  }
+  // 12H-I. Higher APY / lower risk does not automatically win.
+  {
+    const winnerApy = SOL_LIQUID_STAKING_QA_MARKET[completeResult.selectedProtocolId ?? ""].apy;
+    const maxApy = Math.max(...Object.values(SOL_LIQUID_STAKING_QA_MARKET).map((m) => m.apy ?? 0));
+    add("12H-I: highest-APY candidate is not automatically selected (risk-weighted)", completeResult.selectedProtocolId === "marinade" && (winnerApy ?? 0) < maxApy, `winner=${completeResult.selectedProtocolId} winnerApy=${winnerApy} maxApy=${maxApy}`);
+  }
+  // 12H-J. Below-TVL candidate cannot be selected even with high APY.
+  {
+    const m = cloneMarket();
+    m.sanctum.tvlUsd = 500_000;
+    m.sanctum.apy = 25;
+    const r = run(buildSolLiquidStakingQaInput(m));
+    const sanctumElig = r.eligibilityResults.find((e) => e.protocolId === "sanctum");
+    add("12H-J: below-TVL candidate not selected even with high APY", r.selectedProtocolId !== "sanctum" && sanctumElig?.status === "ineligible", `selected=${r.selectedProtocolId} sanctum=${sanctumElig?.status}`);
+  }
+  // 12H-K. Withdrawal-too-long candidate cannot be selected.
+  {
+    const m = cloneMarket();
+    m.jito.withdrawalTimeHours = 200;
+    const r = run(buildSolLiquidStakingQaInput(m));
+    const jitoElig = r.eligibilityResults.find((e) => e.protocolId === "jito");
+    add("12H-K: withdrawal-too-long candidate not selected", r.selectedProtocolId !== "jito" && jitoElig?.status === "ineligible", `selected=${r.selectedProtocolId} jito=${jitoElig?.status}`);
+  }
+  // 12H-L. LP/vault cannot be selected in 12H.
+  {
+    const r = run({ ...buildSolLiquidStakingQaInput(), strategyType: "vault" });
+    add("12H-L: LP/vault cannot be selected (disabled)", r.status === "disabled" && r.selectionMade === false, `status=${r.status}`);
+  }
+  // 12H-M. QA never mutates the live ProtocolSelection object.
+  {
+    run(buildSolLiquidStakingQaInput()); // running QA must not affect live suggestions
+    const freshStaking = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT).suggestions.find((s) => s.category === "staking");
+    add("12H-M: QA does not mutate live ProtocolSelection", freshStaking?.protocolSelection?.status === "not_evaluated" && freshStaking?.protocolSelection?.selectedProtocolId === undefined, `status=${freshStaking?.protocolSelection?.status}`);
+  }
+  // 12H-N. Production selection remains not implemented.
+  add("12H-N: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  // 12H-O. No live suggestion has selectedProtocolId/Name.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12H-O: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12H-P. Cards/modal do not show the QA-selected protocol or ranking.
+  {
+    const tokens = ["marinade", "Marinade", "selectedProtocolId", "rankedProtocolIds", "selectionMade", "qaOnly", "candidateScores"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12H-P: cards/modal never show QA-selected protocol or ranking", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12H-S. Fixture data is labeled fixture-only / not live / not recommendation.
+  {
+    const marketLabeled = SOL_LIQUID_STAKING_QA_MARKET.jupiter.dataSources.includes("qa_fixture");
+    const riskLabeled = SOL_LIQUID_STAKING_QA_RISK.jupiter.notes.some((n) => /fixture-only/i.test(n) && /not a recommendation/i.test(n));
+    add("12H-S: QA fixture data is clearly labeled fixture-only / not a recommendation", marketLabeled && riskLabeled, `market=${marketLabeled} risk=${riskLabeled}`);
+  }
+  // 12H-T. QA result is explicitly qaOnly (not production selection).
+  add("12H-T: QA selection is qaOnly (not production selection)", completeResult.qaOnly === true && PROTOCOL_SELECTION_IMPLEMENTED === false, `qaOnly=${completeResult.qaOnly}`);
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -3925,6 +4058,7 @@ export function printFixtureResults(): void {
     ...runProtocolEligibilityFixtureChecks(),
     ...runRouteGuardrailFixtureChecks(),
     ...runProtocolScoringFixtureChecks(),
+    ...runProtocolSelectionQaFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

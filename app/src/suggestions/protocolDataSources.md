@@ -159,3 +159,17 @@ candidate `insufficient_data` (never scored, never defaulted to 0):
 **Until these fields are populated from real sources, candidates remain
 `insufficient_data`** — scoring produces no ranking today, and selection stays
 disabled.
+
+---
+
+## 12H QA-only selection status
+
+- **QA can select** a deterministic winner for SOL liquid staking **from complete
+  FIXTURE/mainnet-simulated data** (`protocolSelectionQa.ts`, see
+  `protocolSelectionQa.md`).
+- **Production cannot select**: real adapters do not yet provide complete
+  market/risk/route data. Current live data remains `insufficient_data`.
+- **No user-facing recommendation is enabled.** Live suggestions keep
+  `protocolSelection.status = not_evaluated`, and
+  `PROTOCOL_SELECTION_IMPLEMENTED = false`. The QA result is `qaOnly` and never
+  reaches cards/modals.
