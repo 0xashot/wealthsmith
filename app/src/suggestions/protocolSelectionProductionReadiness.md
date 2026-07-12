@@ -89,3 +89,15 @@ APY, TVL, risk, withdrawal, fee, and liquidity/route data before it can advance.
 No transactions, no deposits, no swaps, no wallet signatures, no automatic
 movement of funds, no custody, and no AI-generated protocol choices — in this
 step or as a consequence of enabling selection later.
+
+## G. Machine-checkable go/no-go (Step 12N)
+
+These gates are now enforced as code in `protocolSelectionGoNoGo.ts`
+(`getProtocolSelectionGoNoGo()`), the single machine-checkable checklist for
+production readiness. **Current `productionReady = false`** — mechanism gates
+(eligibility, scoring, fallback, transaction boundary, QA) pass, but data/review
+gates (tvl_mapping, risk_methodology, risk_scores, audit_status, withdrawal_data,
+fee_data, stage_2_dry_run, product_copy_compliance, ui_readiness) are blocked.
+`isProtocolSelectionGo()` returns `false`. **The go/no-go must pass before any
+selection flag (`PROTOCOL_SELECTION_IMPLEMENTED` / `SHOW_IN_UI` /
+`ALLOW_TRANSACTIONS`) may change.** See `protocolSelectionGoNoGo.md`.

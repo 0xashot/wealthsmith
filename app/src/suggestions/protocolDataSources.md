@@ -276,3 +276,18 @@ Complete injected data for one candidate can make it `eligible` in the report, b
 `canSelectForProduction` stays `false`. **Production remains disabled:**
 `PROTOCOL_SELECTION_IMPLEMENTED` / `SHOW_IN_UI` / `ALLOW_TRANSACTIONS` false, and
 the module is not imported by any live/engine/UI file.
+
+---
+
+## 12N — go/no-go checklist
+
+`protocolSelectionGoNoGo.ts` (`getProtocolSelectionGoNoGo()`) adds the final
+machine-checkable production-readiness checklist across 17 gates. **Current
+`productionReady = false`.** Blocking data gaps (the authoritative source-status
+picture): TVL verified for Sanctum/INF only (four missing, none guessed), riskScore
+unassigned + methodology unapproved, audit status unknown, withdrawal + fee data
+missing, and no complete real-data Stage-2 dry-run; product/copy/compliance and UI
+review are also outstanding. Mechanism gates (eligibility, scoring, fallback,
+transaction boundary, QA) pass. **No production enablement:** the checklist selects
+nothing, exposes no selected-protocol id/name, is not imported by any
+live/engine/UI file, and all selection flags stay false.

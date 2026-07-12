@@ -585,14 +585,35 @@ Mode uses `SuggestionRail` directly and is untouched.
   no top-level `selectedProtocolId/Name`; live suggestions `not_evaluated`; all
   selection flags false. Fixtures 12M-A…AF (+32). Next: **12N** final handoff /
   go-no-go checklist.
+- Step 12N (done): **final go/no-go checklist for protocol-selection production
+  readiness (checklist only)**. Added `protocolSelectionGoNoGo.ts` +
+  `protocolSelectionGoNoGo.md`: `getProtocolSelectionGoNoGo()` reports 17 gates
+  (feature_flags, market_data, tvl_mapping, risk_methodology, risk_scores,
+  audit_status, withdrawal_data, fee_data, route_liquidity_cost, eligibility,
+  scoring, stage_2_dry_run, qa_regression, product_copy_compliance,
+  fallback_behavior, transaction_boundary, ui_readiness) with stable,
+  evidence-backed blocker IDs. **`productionReady` is the literal `false`**
+  (`canShowInUi`/`canSelectProtocol`/`canUseTransactions` all false; no
+  selected-protocol id/name; no recommendation field). Helpers:
+  `getProtocolSelectionBlockingReasons()`, `isProtocolSelectionGo()` → false,
+  `assertProtocolSelectionCannotRunInProduction()` → true. Mechanism gates
+  (eligibility, scoring, fallback, transaction boundary, QA) pass; data/review
+  gates (TVL 1/5, riskScore/audit/withdrawal/fees, real-data dry-run, copy/
+  compliance, UI) are blocked. Not imported by any live/engine/UI file; live
+  suggestions `not_evaluated`; all selection flags false. **Protocol-selection
+  safe foundation is complete and remains disabled.** Fixtures 12N-A…AK (+35).
+  Next action: pause and reassess, or separately continue data sourcing (verified
+  TVL pools, riskScore methodology + scores, withdrawal/fee/audit sourcing) —
+  the go/no-go must pass before any flag changes.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
 is a QA-proven-but-DISABLED pipeline behind default-off feature flags (registry +
 adapters + eligibility + route guardrails + scoring + QA-only narrow-case
 selection + production-readiness plan + first-case real-data mapping + hardened
-internal dry-run + verified source completion + Stage-2 real-data dry-run report);
-production selection remains not evaluated / not implemented.
+internal dry-run + verified source completion + Stage-2 real-data dry-run report +
+machine-checkable go/no-go checklist); production selection remains not evaluated /
+not implemented, and the go/no-go reports `productionReady = false`.
 
 ## Suggestion display order
 
