@@ -15,6 +15,10 @@
  * guessed audit date, launch date, TVL, fee, timing, or incident. Absence of a
  * sourced review is never treated as a clean record.
  * `PROTOCOL_RISK_RUBRIC_APPROVED = false`, `productionReady = false`.
+ *
+ * Step 12S adds a read-only completion workflow
+ * (`protocolSolLiquidStakingEvidenceCompletion.ts`) that reviews these drafts
+ * toward `gathered` for one candidate — it never mutates the drafts below.
  */
 import type { ProtocolRiskRubricDimensionId } from "./protocolRiskRubric";
 

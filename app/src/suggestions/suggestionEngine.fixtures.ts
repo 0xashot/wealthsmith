@@ -177,6 +177,16 @@ import {
   evaluateProtocolRiskApprovalGate,
   canAssignRiskScoreToProtocol,
 } from "./protocolRiskApprovalDecision";
+import {
+  PROTOCOL_EVIDENCE_COMPLETION_EXISTS,
+  PROTOCOL_EVIDENCE_COMPLETION_APPROVES_RUBRIC,
+  PROTOCOL_EVIDENCE_COMPLETION_ASSIGNS_SCORES,
+  PROTOCOL_EVIDENCE_COMPLETION_AFFECTS_PRODUCTION,
+  PROTOCOL_EVIDENCE_COMPLETION_TARGET_PROTOCOL_ID,
+  PROTOCOL_EVIDENCE_COMPLETION_TARGET_SYMBOL,
+  runEvidenceCompletionForCandidate,
+  runSanctumEvidenceCompletionGateCheck,
+} from "./protocolSolLiquidStakingEvidenceCompletion";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -5285,6 +5295,101 @@ export function runProtocolRiskApprovalDecisionFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12S — evidence completion harness for one candidate (Sanctum/INF).
+ * Reviews evidence toward gathered; approves nothing, assigns no score.
+ * ------------------------------------------------------------------ */
+export function runSolLiquidStakingEvidenceCompletionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+
+  const completion = runEvidenceCompletionForCandidate("sanctum");
+  const gateCheck = runSanctumEvidenceCompletionGateCheck();
+  const gng = getProtocolSelectionGoNoGo("t");
+  const gateStatus = (gate: ProtocolSelectionGoNoGoGate) => gng.checks.find((c) => c.gate === gate)?.status;
+
+  // 12S-A…E. Completion scoping constants + target.
+  add("12S-A: PROTOCOL_EVIDENCE_COMPLETION_EXISTS is true", PROTOCOL_EVIDENCE_COMPLETION_EXISTS === true, `flag=${PROTOCOL_EVIDENCE_COMPLETION_EXISTS}`);
+  add("12S-B: PROTOCOL_EVIDENCE_COMPLETION_APPROVES_RUBRIC is false", PROTOCOL_EVIDENCE_COMPLETION_APPROVES_RUBRIC === false, `flag=${PROTOCOL_EVIDENCE_COMPLETION_APPROVES_RUBRIC}`);
+  add("12S-C: PROTOCOL_EVIDENCE_COMPLETION_ASSIGNS_SCORES is false", PROTOCOL_EVIDENCE_COMPLETION_ASSIGNS_SCORES === false, `flag=${PROTOCOL_EVIDENCE_COMPLETION_ASSIGNS_SCORES}`);
+  add("12S-D: PROTOCOL_EVIDENCE_COMPLETION_AFFECTS_PRODUCTION is false", PROTOCOL_EVIDENCE_COMPLETION_AFFECTS_PRODUCTION === false, `flag=${PROTOCOL_EVIDENCE_COMPLETION_AFFECTS_PRODUCTION}`);
+  add("12S-E: target protocol is sanctum / INF", PROTOCOL_EVIDENCE_COMPLETION_TARGET_PROTOCOL_ID === "sanctum" && PROTOCOL_EVIDENCE_COMPLETION_TARGET_SYMBOL === "INF", `id=${PROTOCOL_EVIDENCE_COMPLETION_TARGET_PROTOCOL_ID}`);
+
+  // 12S-F…I. Completion result invariants.
+  add("12S-F: runEvidenceCompletionForCandidate(sanctum) returns protocolId sanctum", completion.protocolId === "sanctum" && completion.lstSymbol === "INF", `id=${completion.protocolId}`);
+  add("12S-G: completion result has scoreAssigned false", completion.scoreAssigned === false, `v=${completion.scoreAssigned}`);
+  add("12S-H: completion result has approvedForScoring false", completion.approvedForScoring === false, `v=${completion.approvedForScoring}`);
+  add("12S-I: completion result has productionAffected false", completion.productionAffected === false, `v=${completion.productionAffected}`);
+  // 12S-J. Partial TVL evidence alone does not mark all dimensions gathered.
+  {
+    const tvl = completion.dimensionResults.find((r) => r.dimensionId === "tvl_adoption");
+    const ok = completion.dimensionsGathered.length < 6 && completion.readyForReview === false && tvl?.nextStatus !== "gathered";
+    add("12S-J: partial TVL evidence alone does not mark all dimensions gathered", ok, `gathered=${completion.dimensionsGathered.length} tvl=${tvl?.nextStatus}`);
+  }
+  // 12S-K. Sanctum is not approved_for_scoring.
+  add("12S-K: Sanctum is not approved_for_scoring", gateCheck.candidateGateAfter.status !== "approved_for_scoring", `status=${gateCheck.candidateGateAfter.status}`);
+  // 12S-L. canAssignScore remains false.
+  add("12S-L: canAssignScore remains false", gateCheck.canAssignScore === false, `v=${gateCheck.canAssignScore}`);
+  // 12S-M. Gate-after not approved_for_scoring (and unchanged vs before).
+  add("12S-M: candidateGateAfter not approved_for_scoring", gateCheck.candidateGateAfter.status !== "approved_for_scoring" && gateCheck.candidateGateAfter.scoreAssignmentAllowed === false, `after=${gateCheck.candidateGateAfter.status}`);
+  // 12S-N/O. No riskScore assigned.
+  add("12S-N: no riskScore is assigned", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "none");
+  add("12S-O: riskScore remains absent for all five", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "absent");
+  // 12S-P/Q/R. Approval flags false.
+  add("12S-P: PROTOCOL_RISK_RUBRIC_APPROVED remains false", PROTOCOL_RISK_RUBRIC_APPROVED === false, `flag=${PROTOCOL_RISK_RUBRIC_APPROVED}`);
+  add("12S-Q: PROTOCOL_RISK_APPROVAL_DECISION_APPROVED remains false", PROTOCOL_RISK_APPROVAL_DECISION_APPROVED === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_APPROVED}`);
+  add("12S-R: canAssignProtocolRiskScores() remains false", canAssignProtocolRiskScores() === false, `v=${canAssignProtocolRiskScores()}`);
+  // 12S-S. productionReady remains false.
+  add("12S-S: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 12S-T. risk_scores gate remains not_started or blocked.
+  add("12S-T: risk_scores gate remains not_started or blocked", gateStatus("risk_scores") === "not_started" || gateStatus("risk_scores") === "blocked", `status=${gateStatus("risk_scores")}`);
+  // 12S-U. Live staking protocolSelection.status remains not_evaluated.
+  add("12S-U: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12S-V. No live suggestion has selectedProtocolId/Name.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12S-V: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12S-W. Cards/modal do not expose evidence-completion data or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "dimensionResults", "readyForReview", "EvidenceCompletion", "canMarkGathered"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12S-W: cards/modal never expose evidence-completion data or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12S-X/Y/Z. Flags at safe defaults.
+  add("12S-X: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12S-Y: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12S-Z: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12S-AA. No transaction/signature/swap path in completion output.
+  {
+    const json = (JSON.stringify(completion) + JSON.stringify(gateCheck)).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("12S-AA: no transaction/signature/swap path in completion output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12S-AD. No forbidden investment claims in completion output (existing forbidden-copy list).
+  {
+    const json = (JSON.stringify(completion) + JSON.stringify(gateCheck)).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12S-AD: no forbidden investment claims in completion output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -5321,6 +5426,7 @@ export function printFixtureResults(): void {
     ...runProtocolRiskRubricFixtureChecks(),
     ...runSolLiquidStakingEvidenceFixtureChecks(),
     ...runProtocolRiskApprovalDecisionFixtureChecks(),
+    ...runSolLiquidStakingEvidenceCompletionFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

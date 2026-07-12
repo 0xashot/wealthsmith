@@ -60,3 +60,13 @@ promoted to `verified` with exact evidence (e.g. a confirmed DefiLlama pool UUID
 an official unstake-timing doc, a fee schedule, an audit firm + report link) in a
 later, explicit, human-reviewed step. Until then production status stays `missing`
 / `not_assigned` and `productionReady = false`.
+
+## 12S evidence completion (Sanctum / INF)
+
+The evidence-completion harness (`protocolSolLiquidStakingEvidenceCompletion.ts`)
+reviews Sanctum/INF's rubric evidence toward `gathered`. Current result: **0/6
+gathered.** Sanctum's TVL evidence stays **`partial`** — a single verified TVL
+source does not complete the `tvl_adoption` dimension while adoption/freshness
+requirements and unresolved questions remain. **Partial evidence remains partial
+unless all rubric requirements for the dimension are satisfied.** No score is
+assigned and no source is promoted into production metadata.

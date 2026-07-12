@@ -359,3 +359,19 @@ dimensions not `gathered`; Sanctum's `partial` TVL does not qualify).
 **No approval submitted, no scores assigned.** The go/no-go risk_methodology blocker
 now names the unsubmitted decision, but `productionReady` stays `false` and all
 risk gates are unchanged. The gate is not imported by any live/engine/UI file.
+
+---
+
+## 12S — evidence completion harness (one candidate)
+
+`protocolSolLiquidStakingEvidenceCompletion.ts` +
+`protocolSolLiquidStakingEvidenceCompletion.md` add a pure, read-only
+evidence-completion workflow for one candidate (Sanctum/INF). It reviews each
+rubric dimension's sources and reports the status each *would* have — a dimension
+reaches `gathered` only when every required source is `verified` with no unresolved
+questions. Current result: **0/6 gathered** (TVL stays `partial`, the rest
+`needs_review`), `readyForReview = false`, `approvedForScoring = false`,
+`scoreAssigned = false`. The score-assignment gate is unchanged (Sanctum `blocked`,
+`canAssignScore = false`). **No production enablement:** it mutates no drafts and no
+production metadata, `productionReady` stays `false`, and it is not imported by any
+live/engine/UI file.

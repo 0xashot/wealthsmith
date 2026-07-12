@@ -110,3 +110,14 @@ The rubric approval decision is `not_submitted`, so **no candidate is
 `approved_for_scoring`** and **no score is assigned** (all six evidence dimensions
 are not `gathered` for any candidate; Sanctum's `partial` TVL does not qualify).
 `riskScore` stays absent; production selection stays disabled.
+
+## 12S update
+
+A one-candidate evidence-completion workflow now exists
+(`protocolSolLiquidStakingEvidenceCompletion.ts`, target Sanctum/INF). Running it
+today reviews all six dimensions and gathers **0/6**: `tvl_adoption` stays
+`partial` (verified TVL alone is insufficient — adoption/freshness questions
+remain), and the other five stay `needs_review` (no verified source).
+`readyForReview = false`, `approvedForScoring = false`, `scoreAssigned = false`; the
+score-assignment gate is unchanged (`blocked`). **No candidate approved for
+scoring, no score assigned.** See `protocolSolLiquidStakingEvidenceCompletion.md`.

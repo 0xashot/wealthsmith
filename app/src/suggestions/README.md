@@ -680,6 +680,24 @@ Mode uses `SuggestionRail` directly and is untouched.
   live/engine/UI file; live suggestions `not_evaluated`; all selection flags false.
   Fixtures 12R-A…AG (+31). Next: **12S** evidence completion or reviewer approval
   process.
+- Step 12S (done): **evidence completion harness for one candidate (Sanctum/INF —
+  no approval, no score)**. Added `protocolSolLiquidStakingEvidenceCompletion.ts` +
+  `protocolSolLiquidStakingEvidenceCompletion.md`: a pure, read-only workflow that
+  reviews one candidate's rubric evidence toward `gathered`. Constants
+  `PROTOCOL_EVIDENCE_COMPLETION_EXISTS = true`, `..._APPROVES_RUBRIC`/
+  `..._ASSIGNS_SCORES`/`..._AFFECTS_PRODUCTION = false`, target `sanctum`/`INF`.
+  `runEvidenceCompletionForCandidate("sanctum")` reviews all six dimensions;
+  `runSanctumEvidenceCompletionGateCheck()` shows the score-assignment gate before/
+  after. A dimension reaches `gathered` only when every required source is
+  `verified` with no unresolved questions. **Current result: 0/6 gathered** — TVL
+  stays `partial` (verified TVL alone is insufficient), the rest `needs_review`;
+  `readyForReview`/`approvedForScoring`/`scoreAssigned`/`productionAffected` all
+  false. Mutates no base drafts and no production metadata; Sanctum gate unchanged
+  (`blocked`, `canAssignScore` false). `ready_for_review` ≠ `approved_for_scoring`.
+  Not imported by any live/engine/UI file; live suggestions `not_evaluated`; all
+  selection flags false; `productionReady` stays `false`. Fixtures 12S-A…AD (+28).
+  Next: gather actual verified sources across all six dimensions, or pause for the
+  human rubric-approval review.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -688,9 +706,9 @@ adapters + eligibility + route guardrails + scoring + QA-only narrow-case
 selection + production-readiness plan + first-case real-data mapping + hardened
 internal dry-run + verified source completion + Stage-2 real-data dry-run report +
 machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubric +
-risk evidence drafts + reviewer approval decision gate); production selection
-remains not evaluated / not implemented, and the go/no-go reports `productionReady =
-false`.
+risk evidence drafts + reviewer approval decision gate + one-candidate evidence
+completion harness); production selection remains not evaluated / not implemented,
+and the go/no-go reports `productionReady = false`.
 
 ## Suggestion display order
 
