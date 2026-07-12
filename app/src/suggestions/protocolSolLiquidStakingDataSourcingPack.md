@@ -152,6 +152,16 @@ dimensions have no decision. **Gather decisions are non-production:** they mutat
 base evidence drafts and promote no production metadata (`DEFILLAMA_POOL_MAPPINGS` /
 `ProtocolMarketData` untouched), and no `riskScore` is assigned.
 
+## JitoSOL evidence package (Step 12X)
+
+`protocolSolLiquidStakingJitoEvidenceConfirmations.ts` adds source-backed reviewer
+confirmations for JitoSOL's five remaining dimensions (audit/maturity/withdrawal-fee/
+operational/incident), from official Jito docs/FAQs/security/blog sources. Combined
+with fresh 12V TVL/APY, **JitoSOL reaches `ready_for_review` (6/6 gathered)** — but
+**still not production metadata:** nothing is promoted to `DEFILLAMA_POOL_MAPPINGS` /
+`ProtocolMarketData`, `auditStatus`/`withdrawalTimeHours`/fees stay unset, no base
+draft is mutated, and no `riskScore` is assigned. JitoSOL is not `approved_for_scoring`.
+
 ## Rules honored
 
 - No pool UUID, APY, TVL, withdrawal time, fee, audit status, or riskScore is

@@ -228,6 +228,17 @@ import {
   evaluateCandidateReadinessFromGatherDecisions,
 } from "./protocolSolLiquidStakingEvidenceGatherDecisions";
 import {
+  PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_EXIST,
+  PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_APPROVE_RUBRIC,
+  PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_ASSIGN_SCORES,
+  PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_AFFECT_PRODUCTION,
+  PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_ENABLE_SELECTION,
+  PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_UPDATE_METADATA,
+  PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_MUTATE_EVIDENCE,
+  JITOSOL_EVIDENCE_CONFIRMATIONS,
+  getJitoEvidenceConfirmationsByDimension,
+} from "./protocolSolLiquidStakingJitoEvidenceConfirmations";
+import {
   PROTOCOL_REAL_VALUE_CONFIRMATIONS_EXIST,
   PROTOCOL_REAL_VALUE_CONFIRMATIONS_APPROVE_RUBRIC,
   PROTOCOL_REAL_VALUE_CONFIRMATIONS_ASSIGN_SCORES,
@@ -5902,7 +5913,6 @@ export function runSolLiquidStakingGatherDecisionFixtureChecks(): FixtureCheck[]
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
-  const four = ["jupiter", "marinade", "jito", "blazestake"];
 
   const FRESH_AS_OF = "2026-07-12T06:00:00Z";
   const STALE_AS_OF = "2026-08-01T00:00:00Z";
@@ -5926,12 +5936,14 @@ export function runSolLiquidStakingGatherDecisionFixtureChecks(): FixtureCheck[]
   add("12W-K: gather decisions include tvl_adoption gathered for bSOL", decisionFor("blazestake")?.status === "gathered", `status=${decisionFor("blazestake")?.status}`);
   // 12W-L. INF tvl_adoption needs_review / not gathered.
   add("12W-L: INF tvl_adoption is needs_review or not gathered", decisionFor("sanctum")?.status === "needs_review", `status=${decisionFor("sanctum")?.status}`);
-  // 12W-M…Q. No decisions for other dimensions.
-  add("12W-M: no gather decision exists for audit_security", getGatherDecisionsByDimension("audit_security").length === 0, `n=${getGatherDecisionsByDimension("audit_security").length}`);
-  add("12W-N: no gather decision exists for maturity", getGatherDecisionsByDimension("maturity").length === 0, `n=${getGatherDecisionsByDimension("maturity").length}`);
-  add("12W-O: no gather decision exists for withdrawal_fee_transparency", getGatherDecisionsByDimension("withdrawal_fee_transparency").length === 0, `n=${getGatherDecisionsByDimension("withdrawal_fee_transparency").length}`);
-  add("12W-P: no gather decision exists for operational_dependency_risk", getGatherDecisionsByDimension("operational_dependency_risk").length === 0, `n=${getGatherDecisionsByDimension("operational_dependency_risk").length}`);
-  add("12W-Q: no gather decision exists for incident_history", getGatherDecisionsByDimension("incident_history").length === 0, `n=${getGatherDecisionsByDimension("incident_history").length}`);
+  // 12W-M…Q. Non-tvl_adoption dimensions have decisions ONLY for jito (12X); no
+  // other candidate advanced beyond tvl_adoption in the 12W baseline.
+  const nonJitoOnly = (dim: Parameters<typeof getGatherDecisionsByDimension>[0]) => getGatherDecisionsByDimension(dim).every((d) => d.protocolId === "jito");
+  add("12W-M: no non-jito gather decision for audit_security", nonJitoOnly("audit_security"), `nonJito=${getGatherDecisionsByDimension("audit_security").filter((d) => d.protocolId !== "jito").length}`);
+  add("12W-N: no non-jito gather decision for maturity", nonJitoOnly("maturity"), `nonJito=${getGatherDecisionsByDimension("maturity").filter((d) => d.protocolId !== "jito").length}`);
+  add("12W-O: no non-jito gather decision for withdrawal_fee_transparency", nonJitoOnly("withdrawal_fee_transparency"), `nonJito=${getGatherDecisionsByDimension("withdrawal_fee_transparency").filter((d) => d.protocolId !== "jito").length}`);
+  add("12W-P: no non-jito gather decision for operational_dependency_risk", nonJitoOnly("operational_dependency_risk"), `nonJito=${getGatherDecisionsByDimension("operational_dependency_risk").filter((d) => d.protocolId !== "jito").length}`);
+  add("12W-Q: no non-jito gather decision for incident_history", nonJitoOnly("incident_history"), `nonJito=${getGatherDecisionsByDimension("incident_history").filter((d) => d.protocolId !== "jito").length}`);
   // 12W-R…U. Fresh effective gathered for the four.
   for (const [id, sym, code] of [["jupiter", "JupSOL", "R"], ["marinade", "mSOL", "S"], ["jito", "JitoSOL", "T"], ["blazestake", "bSOL", "U"]] as const) {
     const evalFresh = evaluateCandidateReadinessFromGatherDecisions(id, FRESH_AS_OF);
@@ -5950,13 +5962,15 @@ export function runSolLiquidStakingGatherDecisionFixtureChecks(): FixtureCheck[]
   }
   // 12W-X. candidateReadyForReview false.
   add("12W-X: jupiter candidateReadyForReview is false", evaluateCandidateReadinessFromGatherDecisions("jupiter", FRESH_AS_OF).candidateReadyForReview === false, `ready=${evaluateCandidateReadinessFromGatherDecisions("jupiter", FRESH_AS_OF).candidateReadyForReview}`);
-  // 12W-Y. Four have 1 gathered + 5 missing (fresh).
+  // 12W-Y. The three still-TVL-only candidates have 1 gathered + 5 missing (fresh).
+  // JitoSOL advanced to 6/6 in Step 12X and is covered by the 12X checks.
   {
-    const ok = four.every((id) => {
+    const tvlOnly = ["jupiter", "marinade", "blazestake"];
+    const ok = tvlOnly.every((id) => {
       const e = evaluateCandidateReadinessFromGatherDecisions(id, FRESH_AS_OF);
       return e.gatheredDimensions.length === 1 && e.missingDimensions.length === 5;
     });
-    add("12W-Y: four candidates have 1 gathered + 5 missing when fresh", ok, `ok=${ok}`);
+    add("12W-Y: JupSOL/mSOL/bSOL have 1 gathered + 5 missing when fresh", ok, `ok=${ok}`);
   }
   // 12W-Z. INF 0 gathered + 6 missing.
   {
@@ -6042,6 +6056,154 @@ export function runSolLiquidStakingGatherDecisionFixtureChecks(): FixtureCheck[]
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12X — JitoSOL remaining evidence gathering + ready_for_review milestone.
+ * Source-backed; no production, no draft mutation, no score, no approval.
+ * ------------------------------------------------------------------ */
+export function runJitoSolEvidenceReadinessFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+
+  const FRESH_AS_OF = "2026-07-12T06:00:00Z";
+  const STALE_AS_OF = "2026-08-01T00:00:00Z";
+  const confs = JITOSOL_EVIDENCE_CONFIRMATIONS;
+  const jitoDecisionFor = (dim: Parameters<typeof getGatherDecisionsByDimension>[0]) =>
+    getGatherDecisionsByDimension(dim).find((d) => d.protocolId === "jito");
+  const gng = getProtocolSelectionGoNoGo("t");
+
+  // 12X-A…G. Scoping constants.
+  add("12X-A: PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_EXIST is true", PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_EXIST === true, `flag=${PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_EXIST}`);
+  add("12X-B: PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_APPROVE_RUBRIC is false", PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_APPROVE_RUBRIC === false, `flag=${PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_APPROVE_RUBRIC}`);
+  add("12X-C: PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_ASSIGN_SCORES is false", PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_ASSIGN_SCORES === false, `flag=${PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_ASSIGN_SCORES}`);
+  add("12X-D: PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_AFFECT_PRODUCTION is false", PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_AFFECT_PRODUCTION === false, `flag=${PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_AFFECT_PRODUCTION}`);
+  add("12X-E: PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_ENABLE_SELECTION is false", PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_ENABLE_SELECTION === false, `flag=${PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_ENABLE_SELECTION}`);
+  add("12X-F: PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_UPDATE_METADATA is false", PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_UPDATE_METADATA === false, `flag=${PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_UPDATE_METADATA}`);
+  add("12X-G: PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_MUTATE_EVIDENCE is false", PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_MUTATE_EVIDENCE === false, `flag=${PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_MUTATE_EVIDENCE}`);
+
+  // 12X-H…L. Confirmations cover the five dimensions.
+  add("12X-H: confirmations cover audit_security", getJitoEvidenceConfirmationsByDimension("audit_security").length > 0, `n=${getJitoEvidenceConfirmationsByDimension("audit_security").length}`);
+  add("12X-I: confirmations cover maturity", getJitoEvidenceConfirmationsByDimension("maturity").length > 0, `n=${getJitoEvidenceConfirmationsByDimension("maturity").length}`);
+  add("12X-J: confirmations cover withdrawal_fee_transparency", getJitoEvidenceConfirmationsByDimension("withdrawal_fee_transparency").length > 0, `n=${getJitoEvidenceConfirmationsByDimension("withdrawal_fee_transparency").length}`);
+  add("12X-K: confirmations cover operational_dependency_risk", getJitoEvidenceConfirmationsByDimension("operational_dependency_risk").length > 0, `n=${getJitoEvidenceConfirmationsByDimension("operational_dependency_risk").length}`);
+  add("12X-L: confirmations cover incident_history", getJitoEvidenceConfirmationsByDimension("incident_history").length > 0, `n=${getJitoEvidenceConfirmationsByDimension("incident_history").length}`);
+  // 12X-M…Q. Attribution + safety flags on every confirmation.
+  add("12X-M: every confirmation has reviewer and reviewerRole", confs.every((c) => c.reviewer.length > 0 && c.reviewerRole.length > 0), `ok=${confs.every((c) => c.reviewer.length > 0)}`);
+  add("12X-N: every confirmation has confirmedAsOf", confs.every((c) => c.confirmedAsOf.length > 0), `ok=${confs.every((c) => c.confirmedAsOf.length > 0)}`);
+  add("12X-O: every confirmation has scoreAssigned false", confs.every((c) => c.scoreAssigned === false), "ok");
+  add("12X-P: every confirmation has productionMetadataUpdated false", confs.every((c) => c.productionMetadataUpdated === false), "ok");
+  add("12X-Q: every confirmation has evidenceDraftMutated false", confs.every((c) => c.evidenceDraftMutated === false), "ok");
+  // 12X-R/S. Incident-history caveats.
+  {
+    const inc = confs.find((c) => c.category === "incident_history");
+    add("12X-R: manual incident-history confirmation says it is not a clean-history claim", inc?.confirmedValue.toLowerCase().includes("not a clean-history claim") === true, `has=${inc?.confirmedValue.toLowerCase().includes("not a clean-history claim")}`);
+    add("12X-S: manual incident-history confirmation says recheck before production", inc?.notes.some((n) => n.toLowerCase().includes("recheck before production")) === true, `has=${inc?.notes.some((n) => n.toLowerCase().includes("recheck before production"))}`);
+  }
+  // 12X-T…X. Gather decisions gathered for the five JitoSOL dimensions.
+  add("12X-T: gather decisions include audit_security gathered for JitoSOL", jitoDecisionFor("audit_security")?.status === "gathered", `status=${jitoDecisionFor("audit_security")?.status}`);
+  add("12X-U: gather decisions include maturity gathered for JitoSOL", jitoDecisionFor("maturity")?.status === "gathered", `status=${jitoDecisionFor("maturity")?.status}`);
+  add("12X-V: gather decisions include withdrawal_fee_transparency gathered for JitoSOL", jitoDecisionFor("withdrawal_fee_transparency")?.status === "gathered", `status=${jitoDecisionFor("withdrawal_fee_transparency")?.status}`);
+  add("12X-W: gather decisions include operational_dependency_risk gathered for JitoSOL", jitoDecisionFor("operational_dependency_risk")?.status === "gathered", `status=${jitoDecisionFor("operational_dependency_risk")?.status}`);
+  add("12X-X: gather decisions include incident_history gathered for JitoSOL", jitoDecisionFor("incident_history")?.status === "gathered", `status=${jitoDecisionFor("incident_history")?.status}`);
+  // 12X-Y/Z/AA. Fresh readiness.
+  {
+    const e = evaluateCandidateReadinessFromGatherDecisions("jito", FRESH_AS_OF);
+    add("12X-Y: fresh JitoSOL has 6 gathered dimensions", e.gatheredDimensions.length === 6, `gathered=${e.gatheredDimensions.length}`);
+    add("12X-Z: fresh JitoSOL has 0 missing dimensions", e.missingDimensions.length === 0, `missing=${e.missingDimensions.length}`);
+    add("12X-AA: fresh JitoSOL candidateReadyForReview is true", e.candidateReadyForReview === true, `ready=${e.candidateReadyForReview}`);
+  }
+  // 12X-AB. Stale → not ready.
+  {
+    const e = evaluateCandidateReadinessFromGatherDecisions("jito", STALE_AS_OF);
+    add("12X-AB: stale JitoSOL candidateReadyForReview is false", e.candidateReadyForReview === false, `ready=${e.candidateReadyForReview} gathered=${e.gatheredDimensions.length}`);
+  }
+  // 12X-AC…AF. Gate wrapper for jito.
+  {
+    const g = evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions("jito", FRESH_AS_OF);
+    add("12X-AC: jito gate status is ready_for_review (fresh)", g.status === "ready_for_review", `status=${g.status}`);
+    add("12X-AD: jito gate scoreAssignmentAllowed is false", g.scoreAssignmentAllowed === false, `v=${g.scoreAssignmentAllowed}`);
+    add("12X-AE: jito gate scoreAssigned is false", g.scoreAssigned === false, `v=${g.scoreAssigned}`);
+    add("12X-AF: jito gate is not approved_for_scoring", g.status !== "approved_for_scoring", `status=${g.status}`);
+  }
+  // 12X-AG. No OTHER candidate is ready_for_review.
+  {
+    const others = ids.filter((id) => id !== "jito");
+    const bad = others.filter((id) => evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions(id, FRESH_AS_OF).status === "ready_for_review");
+    add("12X-AG: no other candidate is ready_for_review", bad.length === 0, `bad=${bad.join(",") || "none"}`);
+  }
+  // 12X-AH. No candidate approved_for_scoring.
+  {
+    const bad = ids.filter((id) => evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions(id, FRESH_AS_OF).status === "approved_for_scoring");
+    add("12X-AH: no candidate is approved_for_scoring", bad.length === 0, `bad=${bad.join(",") || "none"}`);
+  }
+  // 12X-AI. Base evidence drafts not mutated.
+  {
+    const before = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    evaluateCandidateReadinessFromGatherDecisions("jito", FRESH_AS_OF);
+    const after = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    add("12X-AI: base evidence drafts are not mutated", before === after, `unchanged=${before === after}`);
+  }
+  // 12X-AJ. No production metadata updated (auditStatus/withdrawal/fees unchanged).
+  {
+    const market = buildSolLiquidStakingMarketDataFromExistingSources();
+    const ok = getProtocolRiskData("jito").auditStatus === "unknown" && market.jito.withdrawalTimeHours === undefined && market.jito.fees === undefined;
+    add("12X-AJ: no production metadata is updated", ok, `audit=${getProtocolRiskData("jito").auditStatus} wd=${market.jito.withdrawalTimeHours} fees=${market.jito.fees}`);
+  }
+  // 12X-AK/AL. No riskScore.
+  add("12X-AK: no riskScore is assigned anywhere", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "none");
+  add("12X-AL: riskScore remains absent for all five", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "absent");
+  // 12X-AM/AN/AO. Approval flags false.
+  add("12X-AM: PROTOCOL_RISK_RUBRIC_APPROVED remains false", PROTOCOL_RISK_RUBRIC_APPROVED === false, `flag=${PROTOCOL_RISK_RUBRIC_APPROVED}`);
+  add("12X-AN: PROTOCOL_RISK_APPROVAL_DECISION_APPROVED remains false", PROTOCOL_RISK_APPROVAL_DECISION_APPROVED === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_APPROVED}`);
+  add("12X-AO: canAssignProtocolRiskScores() remains false", canAssignProtocolRiskScores() === false, `v=${canAssignProtocolRiskScores()}`);
+  // 12X-AP. productionReady remains false.
+  add("12X-AP: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 12X-AQ. Live staking not_evaluated.
+  add("12X-AQ: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12X-AR. No live suggestion has selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12X-AR: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12X-AS. Cards/modal do not expose JitoSOL readiness or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "ready_for_review", "gatheredDimensions", "JitoEvidence", "candidateReadyForReview"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12X-AS: cards/modal never expose JitoSOL readiness or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12X-AT/AU/AV. Flags at safe defaults.
+  add("12X-AT: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12X-AU: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12X-AV: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12X-AW. No transaction/signature/swap path in confirmation output.
+  {
+    const json = JSON.stringify(confs).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("12X-AW: no transaction/signature/swap path in JitoSOL evidence output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12X-BA. No forbidden investment claims in confirmation output.
+  {
+    const json = JSON.stringify(confs).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12X-BA: no forbidden investment claims in JitoSOL evidence output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -6083,6 +6245,7 @@ export function printFixtureResults(): void {
     ...runSolLiquidStakingSourceValueConfirmationFixtureChecks(),
     ...runSolLiquidStakingRealValueFixtureChecks(),
     ...runSolLiquidStakingGatherDecisionFixtureChecks(),
+    ...runJitoSolEvidenceReadinessFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

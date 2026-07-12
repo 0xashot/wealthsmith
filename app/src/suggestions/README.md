@@ -786,6 +786,28 @@ Mode uses `SuggestionRail` directly and is untouched.
   `productionReady` stays `false`. Fixtures 12W-A…BA (+50). Next: confirm + gather
   the remaining dimensions (withdrawal/fees/audit/operational/incident) and the
   human rubric-approval review.
+- Step 12X (done): **JitoSOL remaining evidence gathering + `ready_for_review`
+  milestone (source-backed; no score, no approval, no production)**. Added
+  `protocolSolLiquidStakingJitoEvidenceConfirmations.ts` +
+  `protocolSolLiquidStakingJitoEvidenceConfirmations.md`: 11 source-backed reviewer
+  confirmations (reviewer Ashot Gyulzatyan, founder) from official Jito
+  docs/FAQs/security/blog for the five remaining dimensions — audit_security (SPL
+  Stake Pool audits: Quantstamp/Neodyme/Kudelski), maturity (blog production
+  history), withdrawal_fee_transparency (unstake mechanics + ~48h + 0.1% + 4% mgmt
+  fee), operational_dependency_risk (DAO manager + StakeNet + addresses),
+  incident_history (completed manual review, explicitly not a clean-history claim,
+  recheck before beta/production). Constants
+  `PROTOCOL_JITOSOL_EVIDENCE_CONFIRMATIONS_EXIST = true` + six `false` guards +
+  target `jito`/`JitoSOL`. Added five JitoSOL `gathered` decisions to the 12W
+  ledger. **With fresh TVL/APY, JitoSOL = 6/6 gathered → `candidateReadyForReview =
+  true`; gate status `ready_for_review`** — the first candidate — but
+  **`approved_for_scoring = false`**, `scoreAssignmentAllowed = false`, **no
+  `riskScore` assigned**; stale TVL/APY drops it to 5/6. No other candidate
+  advances; base drafts unmutated; no production metadata (auditStatus/withdrawal/
+  fees unchanged). Not imported by any live/engine/UI file; live suggestions
+  `not_evaluated`; all selection flags false; `productionReady` stays `false`.
+  Fixtures 12X-A…BA (+50, and 12W-M…Q/Y reworded). Next: **12Y** human rubric
+  approval + riskScore assignment mechanism.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -796,9 +818,9 @@ internal dry-run + verified source completion + Stage-2 real-data dry-run report
 machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubric +
 risk evidence drafts + reviewer approval decision gate + one-candidate evidence
 completion harness + source-verification intake + source-value confirmation intake +
-real value-confirmation ledger + evidence gather-decision ledger); production
-selection remains not evaluated / not implemented, and the go/no-go reports
-`productionReady = false`.
+real value-confirmation ledger + evidence gather-decision ledger + JitoSOL
+ready-for-review evidence package); production selection remains not evaluated / not
+implemented, and the go/no-go reports `productionReady = false`.
 
 ## Suggestion display order
 

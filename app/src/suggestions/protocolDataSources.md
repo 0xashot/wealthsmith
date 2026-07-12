@@ -444,3 +444,19 @@ four with `tvl_adoption` gathered but status `blocked` (5 missing),
 mutated, no metadata written, no `riskScore` assigned; no candidate is
 `ready_for_review` or `approved_for_scoring`, and `productionReady` stays `false`.
 Not imported by any live/engine/UI file.
+
+---
+
+## 12X — JitoSOL remaining evidence + ready_for_review milestone
+
+`protocolSolLiquidStakingJitoEvidenceConfirmations.ts` +
+`protocolSolLiquidStakingJitoEvidenceConfirmations.md` add source-backed reviewer
+confirmations for JitoSOL's five remaining dimensions (audit/maturity/withdrawal-fee/
+operational/incident) from official Jito sources, plus gather decisions in the 12W
+ledger. **With fresh TVL/APY, JitoSOL reaches `ready_for_review` (6/6 gathered)** —
+the first candidate to do so — while **`approved_for_scoring = false`** (rubric
+unapproved), **no `riskScore` assigned**, and no other candidate advances. Stale
+TVL/APY drops JitoSOL to 5/6; the incident review must be rechecked before
+beta/production. **No production enablement:** no base draft mutated, no production
+metadata written (`auditStatus`/`withdrawalTimeHours`/fees unchanged),
+`productionReady` stays `false`. Not imported by any live/engine/UI file.

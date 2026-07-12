@@ -179,3 +179,16 @@ dimensions (audit/maturity/withdrawal-fee/operational/incident) have no gather
 decision and stay incomplete, so **no candidate is `ready_for_review`** (four have
 1/6 gathered, INF 0/6). Decisions mutate no base drafts and no production metadata,
 and no `riskScore` is assigned.
+
+## 12X update
+
+**JitoSOL** now has all six rubric dimensions gathered from source-backed reviewer
+confirmations (`protocolSolLiquidStakingJitoEvidenceConfirmations.ts`):
+`audit_security` (SPL Stake Pool audits — Quantstamp/Neodyme/Kudelski), `maturity`
+(official blog production history), `withdrawal_fee_transparency` (unstake
+mechanics/timing/fees), `operational_dependency_risk` (DAO manager + StakeNet), and
+`incident_history` (completed manual review, explicitly not a clean-history claim).
+While TVL/APY values are fresh, **JitoSOL `ready_for_review = true`** but
+**`approved_for_scoring = false`** (rubric unapproved), **no `riskScore` assigned**,
+and **no protocol is selected**. Other candidates are unchanged. Stale TVL/APY
+returns JitoSOL to 5/6. Recheck incident history before beta/production.

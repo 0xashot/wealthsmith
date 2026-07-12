@@ -117,10 +117,38 @@ function gatheredTvlDecision(protocolId: string, lstSymbol: string): ProtocolEvi
   };
 }
 
+/** A JitoSOL `gathered` decision for a non-TVL dimension (source-backed, 12X). */
+function jitoGatheredDecision(
+  dimensionId: ProtocolRiskRubricDimensionId,
+  basedOnCategories: string[],
+  basedOnSourceNames: string[]
+): ProtocolEvidenceGatherDecision {
+  // Source-backed reviewer confirmations from official docs → manual_review.
+  const sourceKinds: ProtocolEvidenceGatherDecisionSourceKind[] = ["manual_review"];
+  return {
+    protocolId: "jito",
+    lstSymbol: "JitoSOL",
+    dimensionId,
+    status: "gathered",
+    decidedAt: DECIDED_AT,
+    reviewer: REVIEWER,
+    reviewerRole: REVIEWER_ROLE,
+    sourceKinds,
+    basedOnCategories,
+    basedOnSourceNames,
+    reasons: ["Source-backed JitoSOL evidence confirmations exist (see protocolSolLiquidStakingJitoEvidenceConfirmations.ts)."],
+    unresolvedQuestions: dimensionId === "incident_history" ? ["Recheck incident history before beta/production."] : [],
+    productionMetadataUpdated: false,
+    evidenceDraftMutated: false,
+    scoreAssigned: false,
+  };
+}
+
 /**
- * The gather-decision ledger. Only `tvl_adoption` decisions exist (from the 12V
- * real-value ledger). INF is `needs_review` (no exact real values confirmed). The
- * other five dimensions have NO decision and remain incomplete.
+ * The gather-decision ledger. `tvl_adoption` decisions come from the 12V
+ * real-value ledger (INF `needs_review`). JitoSOL additionally has its remaining
+ * five dimensions `gathered` from source-backed confirmations (12X). All other
+ * candidates' non-TVL dimensions have NO decision and remain incomplete.
  */
 export const SOL_LST_EVIDENCE_GATHER_DECISIONS: readonly ProtocolEvidenceGatherDecision[] = [
   gatheredTvlDecision("jupiter", "JupSOL"),
@@ -144,6 +172,21 @@ export const SOL_LST_EVIDENCE_GATHER_DECISIONS: readonly ProtocolEvidenceGatherD
     evidenceDraftMutated: false,
     scoreAssigned: false,
   },
+  // Step 12X — JitoSOL remaining five dimensions gathered from source-backed
+  // reviewer confirmations (protocolSolLiquidStakingJitoEvidenceConfirmations.ts).
+  jitoGatheredDecision("audit_security", ["audit_security"], ["JitoSOL Security Overview", "JitoSOL Deployed Programs"]),
+  jitoGatheredDecision("maturity", ["maturity"], ["Jito Request for Stake Pool Validators"]),
+  jitoGatheredDecision(
+    "withdrawal_fee_transparency",
+    ["withdrawal_mechanics", "withdrawal_time", "fees"],
+    ["JitoSOL Unstaking Overview", "JitoSOL General FAQs"]
+  ),
+  jitoGatheredDecision(
+    "operational_dependency_risk",
+    ["operational_dependency"],
+    ["JitoSOL Security Overview", "JitoSOL Automated Management via Stakenet", "JitoSOL Technical FAQs"]
+  ),
+  jitoGatheredDecision("incident_history", ["incident_history"], ["JitoSOL official incident-history manual review"]),
 ];
 
 export function getSolLstEvidenceGatherDecisions(protocolId?: string): ProtocolEvidenceGatherDecision[] {

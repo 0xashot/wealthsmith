@@ -132,3 +132,19 @@ Before recording a dimension as `gathered` (in the non-production ledger):
 Current: `tvl_adoption` gathered for JupSOL/mSOL/JitoSOL/bSOL (fresh), INF
 `needs_review`; the other five dimensions have no decision. Stale values revert a
 dimension to not-gathered. See `protocolSolLiquidStakingEvidenceGatherDecisions.md`.
+
+## 12X JitoSOL readiness checklist
+
+JitoSOL now has all six dimensions gathered from source-backed confirmations:
+
+- [x] audit_security — SPL Stake Pool audits (Quantstamp/Neodyme/Kudelski), deployed programs;
+- [x] maturity — official blog production history;
+- [x] withdrawal_fee_transparency — unstake mechanics + ~48h + 0.1% + 4% mgmt fee;
+- [x] operational_dependency_risk — DAO manager + StakeNet + addresses;
+- [x] incident_history — completed manual review (not a clean-history claim);
+- [x] tvl_adoption — fresh 12V TVL/APY/APY-30d.
+
+**Stale TVL/APY must be re-confirmed** (JitoSOL drops to 5/6 when stale). The
+**incident review must be rechecked before beta and before production.** JitoSOL is
+`ready_for_review` but **not** `approved_for_scoring`; no `riskScore` is assigned.
+See `protocolSolLiquidStakingJitoEvidenceConfirmations.md`.
