@@ -48,3 +48,14 @@ Source-status tracking now lives in `protocolSolLiquidStakingSources.ts` and
 sources verified** for all five; **TVL verified for Sanctum/INF only**; audit,
 withdrawal, fees still `missing`; **`riskScore` still `not_assigned`** for all.
 No value was invented and production selection stays disabled.
+
+## 12O update
+
+A proposal registry (`protocolSolLiquidStakingSourceCandidates.ts`) now drafts the
+**risk evidence requirements** (`SOL_LIQUID_STAKING_RISK_EVIDENCE_REQUIREMENTS`)
+for a future `riskScore`: audit/security history + scope; time in production and
+TVL/adoption history; withdrawal and fee transparency; operational risk (admin-key/
+upgrade authority, oracle/dependency); and incident history. This is
+evidence-gathering ONLY — **no `riskScore` is assigned in 12O**, `auditStatus`
+stays `unknown`, and the risk rubric approval is deferred to **12P**. Production
+selection stays disabled (`productionReady = false`).

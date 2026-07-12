@@ -1,0 +1,107 @@
+# SOL Liquid-Staking Data Sourcing Pack (Step 12O)
+
+**Sourcing plan only. Production selection remains disabled.** This pack answers:
+*"what exact external or codebase sources do we need to close the current go/no-go
+blockers?"* It proposes WHERE to source each missing field — it assigns no value,
+verifies nothing on its own, and changes no production metadata.
+`PROTOCOL_SELECTION_IMPLEMENTED = false`, `getProtocolSelectionGoNoGo()`
+still returns `productionReady = false`.
+
+Source-candidate proposals live in `protocolSolLiquidStakingSourceCandidates.ts`
+(statuses: `proposed` · `verified` · `rejected` · `needs_review`). Verified
+production status stays in `protocolSolLiquidStakingSources.ts`.
+
+## Per-candidate source status
+
+Statuses: `verified` · `partially_verified` · `missing` · `not_assigned` ·
+`not_applicable`.
+
+### Jupiter / JupSOL
+| Field | Status | Source / plan |
+| --- | --- | --- |
+| Mint | verified | TOKEN_REGISTRY (`jupSoLaHXQ…`) |
+| APY | verified | on-chain SPL stake-pool exchange rate (lstApy.ts) |
+| TVL | missing | needs_review: exact DefiLlama pool UUID (project + JupSOL) |
+| Withdrawal | missing | proposed: official Jupiter staking/unstake docs |
+| Fee schedule | missing | proposed: official Jupiter fee docs |
+| Audit / security | missing (unknown) | proposed: official security page + audit report |
+| RiskScore | not_assigned | evidence-gathering only (rubric pending, 12P) |
+| Liquidity / route | not_applicable | liquid-staking stake needs no swap route |
+| **Eligibility blocker** | | TVL, withdrawal, fees, audit, riskScore, live APY value |
+
+### Marinade / mSOL
+| Field | Status | Source / plan |
+| --- | --- | --- |
+| Mint | verified | TOKEN_REGISTRY / lstApy.ts (`mSoLzYCx…`) |
+| APY | verified | Marinade API (lstApy.ts `fetchMarinadeMsolApy`) |
+| TVL | missing | needs_review: exact DefiLlama pool UUID (project + mSOL) |
+| Withdrawal | missing | proposed: official Marinade unstake docs (delayed vs instant-unstake) |
+| Fee schedule | missing | proposed: official Marinade fee docs |
+| Audit / security | missing (unknown) | proposed: official security page + audit report |
+| RiskScore | not_assigned | evidence-gathering only (rubric pending, 12P) |
+| Liquidity / route | not_applicable | liquid-staking stake needs no swap route |
+| **Eligibility blocker** | | TVL, withdrawal, fees, audit, riskScore, live APY value |
+
+### Jito / JitoSOL
+| Field | Status | Source / plan |
+| --- | --- | --- |
+| Mint | verified | TOKEN_REGISTRY (`J1toso1u…`) |
+| APY | verified | on-chain SPL stake-pool exchange rate (lstApy.ts) |
+| TVL | missing | needs_review: exact DefiLlama pool UUID (project + JitoSOL) |
+| Withdrawal | missing | proposed: official Jito staking/unstake docs |
+| Fee schedule | missing | proposed: official Jito fee docs |
+| Audit / security | missing (unknown) | proposed: official security page + audit report |
+| RiskScore | not_assigned | evidence-gathering only (rubric pending, 12P) |
+| Liquidity / route | not_applicable | liquid-staking stake needs no swap route |
+| **Eligibility blocker** | | TVL, withdrawal, fees, audit, riskScore, live APY value |
+
+### BlazeStake / bSOL
+| Field | Status | Source / plan |
+| --- | --- | --- |
+| Mint | verified | TOKEN_REGISTRY (`bSo13r4T…`) |
+| APY | verified | on-chain SPL stake-pool exchange rate (lstApy.ts) |
+| TVL | missing | needs_review: exact DefiLlama pool UUID (project + bSOL) |
+| Withdrawal | missing | proposed: official BlazeStake staking/unstake docs |
+| Fee schedule | missing | proposed: official BlazeStake fee docs |
+| Audit / security | missing (unknown) | proposed: official security page + audit report |
+| RiskScore | not_assigned | evidence-gathering only (rubric pending, 12P) |
+| Liquidity / route | not_applicable | liquid-staking stake needs no swap route |
+| **Eligibility blocker** | | TVL, withdrawal, fees, audit, riskScore, live APY value |
+
+### Sanctum / INF
+| Field | Status | Source / plan |
+| --- | --- | --- |
+| Mint | verified | lstApy.ts INF_MINT (`5oVNBeEE…`) |
+| APY | verified | DefiLlama (INF pool) |
+| TVL | verified | DefiLlama pool `3075a746-bdd1-4aac-bcd5-b035abee2622` |
+| Withdrawal | missing | proposed: official Sanctum unstake docs |
+| Fee schedule | missing | proposed: official Sanctum fee docs |
+| Audit / security | missing (unknown) | proposed: official security page + audit report |
+| RiskScore | not_assigned | evidence-gathering only (rubric pending, 12P) |
+| Liquidity / route | not_applicable | liquid-staking stake needs no swap route |
+| **Eligibility blocker** | | withdrawal, fees, audit, riskScore, live APY value |
+
+## Sourcing workflow
+
+`proposed / needs_review → verified → production metadata → dry-run → go/no-go`.
+A source candidate never advances itself: promotion to `verified` and any write to
+`protocolSolLiquidStakingSources.ts` / `DEFILLAMA_POOL_MAPPINGS` /
+`ProtocolMarketData` / `ProtocolRiskData` requires a later, explicit,
+human-reviewed step with exact evidence.
+
+## RiskScore evidence requirements (no score assigned)
+
+Per `SOL_LIQUID_STAKING_RISK_EVIDENCE_REQUIREMENTS` and
+`protocolRiskMethodology.md`, a future `riskScore` must be built from: audit/
+security history + scope; time in production and TVL/adoption history; withdrawal
+and fee transparency; operational risk (admin-key/upgrade authority, oracle/
+dependency); and incident history. **`riskScore` stays absent in 12O.**
+
+## Rules honored
+
+- No pool UUID, APY, TVL, withdrawal time, fee, audit status, or riskScore is
+  invented; missing stays missing; unknown stays unknown.
+- Proposed TVL sources are NOT added to `DEFILLAMA_POOL_MAPPINGS`.
+- Swap-route liquidity is kept separate from protocol withdrawal.
+- Fees are never assumed zero and never inferred from APY.
+- **Production selection remains disabled; `productionReady = false`.**

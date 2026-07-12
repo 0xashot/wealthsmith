@@ -32,6 +32,12 @@ export interface SolLiquidStakingSourceRecord {
   sourceType?: "codebase" | "official_docs" | "public_api" | "manual_review";
   lastReviewedAt: string;
   notes: string[];
+  /**
+   * A PROPOSED source candidate exists for this category (Step 12O). This is a
+   * cross-link only — it does NOT change `status` and never populates a value.
+   * See protocolSolLiquidStakingSourceCandidates.ts.
+   */
+  hasProposedSourceCandidate?: boolean;
 }
 
 const REVIEWED = "2026-07-11";
@@ -68,11 +74,11 @@ function buildRecords(protocolId: string): SolLiquidStakingSourceRecord[] {
     rec("apy", "verified", { ...APY_SOURCE[protocolId], notes: ["APY helper exists in code (values fetched + injected — never fabricated)."] }),
     rec("tvl", isSanctum ? "verified" : "missing", isSanctum
       ? { sourceName: "DefiLlama pool 3075a746-bdd1-4aac-bcd5-b035abee2622", sourceType: "public_api", notes: ["Verified pool UUID (from lstApy.ts)."] }
-      : { notes: ["No verified DefiLlama pool UUID in the codebase; not guessed."] }),
-    rec("withdrawal", "missing", { notes: ["Unstake/withdrawal timing not sourced. NOTE: swap liquidity is NOT protocol withdrawal."] }),
-    rec("fees", "missing", { notes: ["Fee schedule not sourced; never assumed zero, never inferred from APY."] }),
-    rec("audit", "missing", { notes: ["Audit status not directly sourced yet."] }),
-    rec("risk_score", "missing", { notes: ["riskScore not assigned pending an approved methodology + evidence."] }),
+      : { notes: ["No verified DefiLlama pool UUID in the codebase; not guessed. A proposed source candidate (needs_review) exists — see protocolSolLiquidStakingSourceCandidates.ts (12O)."], hasProposedSourceCandidate: true }),
+    rec("withdrawal", "missing", { notes: ["Unstake/withdrawal timing not sourced. NOTE: swap liquidity is NOT protocol withdrawal. Proposed source candidate exists (12O)."], hasProposedSourceCandidate: true }),
+    rec("fees", "missing", { notes: ["Fee schedule not sourced; never assumed zero, never inferred from APY. Proposed source candidate exists (12O)."], hasProposedSourceCandidate: true }),
+    rec("audit", "missing", { notes: ["Audit status not directly sourced yet. Proposed source candidate exists (12O)."], hasProposedSourceCandidate: true }),
+    rec("risk_score", "missing", { notes: ["riskScore not assigned pending an approved methodology + evidence. Evidence-gathering source candidate exists (12O)."], hasProposedSourceCandidate: true }),
     rec("liquidity", "missing", { notes: ["Protocol liquidity depth not sourced."] }),
     rec("route", "not_applicable", { notes: ["Liquid-staking deposit does not require a swap route."] }),
   ];

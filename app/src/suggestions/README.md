@@ -605,6 +605,23 @@ Mode uses `SuggestionRail` directly and is untouched.
   Next action: pause and reassess, or separately continue data sourcing (verified
   TVL pools, riskScore methodology + scores, withdrawal/fee/audit sourcing) —
   the go/no-go must pass before any flag changes.
+- Step 12O (done): **SOL liquid-staking data sourcing pack (proposals only — data
+  sourcing, not production selection)**. Added
+  `protocolSolLiquidStakingSourceCandidates.ts` +
+  `protocolSolLiquidStakingDataSourcingPack.md`: a PROPOSAL registry (25
+  candidates across tvl/withdrawal/fees/audit/risk_score × five candidates) naming
+  the exact sources needed to close each go/no-go blocker, with statuses
+  `proposed`/`verified`/`rejected`/`needs_review`. TVL for the four missing LSTs →
+  `needs_review` (exact DefiLlama UUID to confirm; **not** added to
+  `DEFILLAMA_POOL_MAPPINGS`); withdrawal/fees/audit → `proposed` (official docs);
+  riskScore → evidence requirements drafted, **no score assigned**. A proposal
+  never changes production data: `proposedValue` is review text only, and
+  `ProtocolMarketData`/`ProtocolRiskData`/source statuses are unchanged (source
+  records only gain a `hasProposedSourceCandidate` cross-link). `getProtocolSelectionGoNoGo().productionReady`
+  stays `false`; tvl_mapping/risk_scores/audit/withdrawal/fees gates unchanged.
+  Not imported by any live/engine/UI file; live suggestions `not_evaluated`; all
+  selection flags false. Fixtures 12O-B…Z (+24). Next: **12P** risk rubric
+  approval pack.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -612,8 +629,9 @@ is a QA-proven-but-DISABLED pipeline behind default-off feature flags (registry 
 adapters + eligibility + route guardrails + scoring + QA-only narrow-case
 selection + production-readiness plan + first-case real-data mapping + hardened
 internal dry-run + verified source completion + Stage-2 real-data dry-run report +
-machine-checkable go/no-go checklist); production selection remains not evaluated /
-not implemented, and the go/no-go reports `productionReady = false`.
+machine-checkable go/no-go checklist + data sourcing pack); production selection
+remains not evaluated / not implemented, and the go/no-go reports `productionReady
+= false`.
 
 ## Suggestion display order
 

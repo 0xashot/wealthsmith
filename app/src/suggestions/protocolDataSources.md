@@ -291,3 +291,24 @@ review are also outstanding. Mechanism gates (eligibility, scoring, fallback,
 transaction boundary, QA) pass. **No production enablement:** the checklist selects
 nothing, exposes no selected-protocol id/name, is not imported by any
 live/engine/UI file, and all selection flags stay false.
+
+---
+
+## 12O — data sourcing pack (proposals)
+
+`protocolSolLiquidStakingSourceCandidates.ts` +
+`protocolSolLiquidStakingDataSourcingPack.md` add a PROPOSAL registry naming the
+exact sources needed to close the go/no-go blockers (25 candidates across
+tvl/withdrawal/fees/audit/risk_score for the five candidates). **Source-candidate
+workflow:** `proposed / needs_review → verified → production metadata → dry-run →
+go/no-go`. A proposal never changes production data on its own:
+
+- TVL for JupSOL/mSOL/JitoSOL/bSOL → `needs_review` (exact DefiLlama UUID to
+  confirm); **not** added to `DEFILLAMA_POOL_MAPPINGS`; production TVL stays missing.
+- Withdrawal / fees / audit → `proposed` (official docs to consult); no value,
+  timing, or audit status assigned; never assumed instant/zero.
+- RiskScore → evidence requirements drafted only; **no score assigned**.
+
+Production remains disabled: `PROTOCOL_SELECTION_IMPLEMENTED` / `SHOW_IN_UI` /
+`ALLOW_TRANSACTIONS` false and `getProtocolSelectionGoNoGo().productionReady =
+false` (tvl_mapping/risk_scores/audit/withdrawal/fees gates unchanged).
