@@ -719,6 +719,28 @@ Mode uses `SuggestionRail` directly and is untouched.
   `not_evaluated`; all selection flags false; `productionReady` stays `false`.
   Fixtures 12T-A…AM (+36). Next: **12U** map verified sources to
   evidence-completion decisions, or conduct the human rubric-approval review.
+- Step 12U (done): **source-value confirmation intake for SOL liquid staking (no
+  production, no draft mutation, no score)**. Added
+  `protocolSolLiquidStakingSourceValueConfirmation.ts` +
+  `protocolSolLiquidStakingSourceValueConfirmation.md`: records reviewer-confirmed
+  VALUES read from 12T-verified sources. `confirmSourceValue()` returns `confirmed`
+  only when the source is verified, `confirmedValue` is present (unless type
+  `none`), an as-of timestamp exists for TVL/APY, and reviewer + reviewerRole are
+  supplied; else `insufficient`/`needs_review`. Constants
+  `PROTOCOL_SOURCE_VALUE_CONFIRMATION_EXISTS = true`, `..._APPROVES_RUBRIC`/
+  `..._ASSIGNS_SCORES`/`..._AFFECTS_PRODUCTION`/`..._ENABLES_SELECTION`/
+  `..._UPDATES_METADATA = false`. Helpers: `getExampleSourceValueConfirmations()`
+  (QA-ONLY `QA_ONLY_NOT_LIVE` placeholders), `getSourceValueConfirmationResults()`,
+  `summarizeSourceValueConfirmations()`, `getConfirmed/NeedsReview/
+  InsufficientSourceValues()`, plus `mapConfirmedValuesToEvidenceCompletion()`
+  (added to the evidence-completion module, non-mutating). A dimension is gatherable
+  only when ALL its required values are confirmed — a TVL-only confirmation never
+  gathers `tvl_adoption`; no candidate is `ready_for_review` and
+  `approvedForScoring` stays false. **No production metadata written, no evidence
+  draft mutated, no `riskScore` assigned.** Not imported by any live/engine/UI file;
+  live suggestions `not_evaluated`; all selection flags false; `productionReady`
+  stays `false`. Fixtures 12U-A…AP (+39). Next: **12V** evidence-dimension gathering
+  decision, or the human rubric-approval package.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -728,8 +750,9 @@ selection + production-readiness plan + first-case real-data mapping + hardened
 internal dry-run + verified source completion + Stage-2 real-data dry-run report +
 machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubric +
 risk evidence drafts + reviewer approval decision gate + one-candidate evidence
-completion harness + source-verification intake); production selection remains not
-evaluated / not implemented, and the go/no-go reports `productionReady = false`.
+completion harness + source-verification intake + source-value confirmation intake);
+production selection remains not evaluated / not implemented, and the go/no-go
+reports `productionReady = false`.
 
 ## Suggestion display order
 

@@ -198,6 +198,21 @@ import {
   summarizeSolLiquidStakingSourceVerification,
   mapVerifiedSourcesToEvidenceDimensions,
 } from "./protocolSolLiquidStakingSourceVerification";
+import {
+  PROTOCOL_SOURCE_VALUE_CONFIRMATION_EXISTS,
+  PROTOCOL_SOURCE_VALUE_CONFIRMATION_APPROVES_RUBRIC,
+  PROTOCOL_SOURCE_VALUE_CONFIRMATION_ASSIGNS_SCORES,
+  PROTOCOL_SOURCE_VALUE_CONFIRMATION_AFFECTS_PRODUCTION,
+  PROTOCOL_SOURCE_VALUE_CONFIRMATION_ENABLES_SELECTION,
+  PROTOCOL_SOURCE_VALUE_CONFIRMATION_UPDATES_METADATA,
+  QA_ONLY_VALUE_PLACEHOLDER,
+  confirmSourceValue,
+  getExampleSourceValueConfirmations,
+  getSourceValueConfirmationResults,
+  summarizeSourceValueConfirmations,
+  type ProtocolSourceValueConfirmationInput,
+} from "./protocolSolLiquidStakingSourceValueConfirmation";
+import { mapConfirmedValuesToEvidenceCompletion } from "./protocolSolLiquidStakingEvidenceCompletion";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -5541,6 +5556,164 @@ export function runSolLiquidStakingSourceVerificationFixtureChecks(): FixtureChe
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12U — SOL liquid-staking source-value confirmation intake.
+ * Records reviewer-confirmed values; no production, no draft mutation, no score.
+ * ------------------------------------------------------------------ */
+export function runSolLiquidStakingSourceValueConfirmationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+
+  const examples = getExampleSourceValueConfirmations();
+  const exampleResults = getSourceValueConfirmationResults(examples);
+  const summary = summarizeSourceValueConfirmations(exampleResults);
+  const gng = getProtocolSelectionGoNoGo("t");
+
+  // Deterministic sources for building precise inputs.
+  const infTvlSource = getSolLiquidStakingSourceVerificationResults("sanctum").find((r) => r.category === "tvl" && r.status === "verified");
+  const validInput: ProtocolSourceValueConfirmationInput = {
+    protocolId: "sanctum",
+    lstSymbol: "INF",
+    category: "tvl",
+    sourceName: infTvlSource?.sourceName ?? "DefiLlama INF pool (codebase-verified)",
+    ...(infTvlSource?.sourceUrl ? { sourceUrl: infTvlSource.sourceUrl } : {}),
+    sourceType: "codebase",
+    confirmedValueType: "number_usd",
+    confirmedValue: QA_ONLY_VALUE_PLACEHOLDER,
+    confirmedAsOf: "2026-07-12T00:00:00Z",
+    reviewer: "qa-example",
+    reviewerRole: "risk",
+    notes: ["QA-ONLY test input."],
+  };
+
+  // 12U-A…F. Confirmation scoping constants.
+  add("12U-A: PROTOCOL_SOURCE_VALUE_CONFIRMATION_EXISTS is true", PROTOCOL_SOURCE_VALUE_CONFIRMATION_EXISTS === true, `flag=${PROTOCOL_SOURCE_VALUE_CONFIRMATION_EXISTS}`);
+  add("12U-B: PROTOCOL_SOURCE_VALUE_CONFIRMATION_APPROVES_RUBRIC is false", PROTOCOL_SOURCE_VALUE_CONFIRMATION_APPROVES_RUBRIC === false, `flag=${PROTOCOL_SOURCE_VALUE_CONFIRMATION_APPROVES_RUBRIC}`);
+  add("12U-C: PROTOCOL_SOURCE_VALUE_CONFIRMATION_ASSIGNS_SCORES is false", PROTOCOL_SOURCE_VALUE_CONFIRMATION_ASSIGNS_SCORES === false, `flag=${PROTOCOL_SOURCE_VALUE_CONFIRMATION_ASSIGNS_SCORES}`);
+  add("12U-D: PROTOCOL_SOURCE_VALUE_CONFIRMATION_AFFECTS_PRODUCTION is false", PROTOCOL_SOURCE_VALUE_CONFIRMATION_AFFECTS_PRODUCTION === false, `flag=${PROTOCOL_SOURCE_VALUE_CONFIRMATION_AFFECTS_PRODUCTION}`);
+  add("12U-E: PROTOCOL_SOURCE_VALUE_CONFIRMATION_ENABLES_SELECTION is false", PROTOCOL_SOURCE_VALUE_CONFIRMATION_ENABLES_SELECTION === false, `flag=${PROTOCOL_SOURCE_VALUE_CONFIRMATION_ENABLES_SELECTION}`);
+  add("12U-F: PROTOCOL_SOURCE_VALUE_CONFIRMATION_UPDATES_METADATA is false", PROTOCOL_SOURCE_VALUE_CONFIRMATION_UPDATES_METADATA === false, `flag=${PROTOCOL_SOURCE_VALUE_CONFIRMATION_UPDATES_METADATA}`);
+
+  // 12U-G. Confirms only when all criteria met.
+  add("12U-G: confirmSourceValue confirms only when all criteria met", confirmSourceValue(validInput).status === "confirmed", `status=${confirmSourceValue(validInput).status}`);
+  // 12U-H. Missing confirmedValue → insufficient.
+  {
+    const { confirmedValue: _v, ...rest } = validInput;
+    const r = confirmSourceValue({ ...rest, notes: validInput.notes });
+    add("12U-H: missing confirmedValue returns insufficient", r.status === "insufficient", `status=${r.status}`);
+  }
+  // 12U-I. Missing confirmedAsOf for TVL → insufficient.
+  {
+    const { confirmedAsOf: _a, ...rest } = validInput;
+    const r = confirmSourceValue({ ...rest, notes: validInput.notes });
+    add("12U-I: missing confirmedAsOf for TVL/APY returns insufficient", r.status === "insufficient", `status=${r.status}`);
+  }
+  // 12U-J. Missing reviewer → needs_review.
+  {
+    const { reviewer: _r, ...rest } = validInput;
+    const r = confirmSourceValue({ ...rest, notes: validInput.notes });
+    add("12U-J: missing reviewer returns needs_review", r.status === "needs_review", `status=${r.status}`);
+  }
+  // 12U-K. Unverified source → needs_review.
+  {
+    const r = confirmSourceValue({ ...validInput, sourceName: "Unlisted blog", sourceUrl: "https://example.invalid/x", sourceType: "manual_review" });
+    add("12U-K: unverified source returns needs_review", r.status === "needs_review", `status=${r.status}`);
+  }
+  // 12U-L/M/N. Results never set forbidden flags.
+  add("12U-L: results never set productionMetadataUpdated true", exampleResults.every((r) => r.productionMetadataUpdated === false), `ok=${exampleResults.every((r) => r.productionMetadataUpdated === false)}`);
+  add("12U-M: results never set evidenceDraftMutated true", exampleResults.every((r) => r.evidenceDraftMutated === false), `ok=${exampleResults.every((r) => r.evidenceDraftMutated === false)}`);
+  add("12U-N: results never set scoreAssigned true", exampleResults.every((r) => r.scoreAssigned === false), `ok=${exampleResults.every((r) => r.scoreAssigned === false)}`);
+  // 12U-O/P/Q. Summary counts.
+  add("12U-O: summary.productionMetadataUpdatedCount is 0", summary.productionMetadataUpdatedCount === 0, `v=${summary.productionMetadataUpdatedCount}`);
+  add("12U-P: summary.evidenceDraftMutatedCount is 0", summary.evidenceDraftMutatedCount === 0, `v=${summary.evidenceDraftMutatedCount}`);
+  add("12U-Q: summary.scoreAssignedCount is 0", summary.scoreAssignedCount === 0, `v=${summary.scoreAssignedCount}`);
+  // 12U-R. Examples are QA-only / non-production.
+  {
+    const allQa = examples.every((e) => e.confirmedValue == null || e.confirmedValue === QA_ONLY_VALUE_PLACEHOLDER) && examples.every((e) => e.notes.some((n) => n.includes("QA-ONLY")));
+    add("12U-R: example confirmations are QA-only / non-production", allQa, `allQa=${allQa}`);
+  }
+  // 12U-S. map does not mutate evidence drafts.
+  {
+    const before = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    mapConfirmedValuesToEvidenceCompletion("sanctum", exampleResults);
+    const after = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    add("12U-S: mapConfirmedValuesToEvidenceCompletion does not mutate evidence drafts", before === after, `unchanged=${before === after}`);
+  }
+  // 12U-T. TVL-only confirmation does not gather tvl_adoption.
+  {
+    const map = mapConfirmedValuesToEvidenceCompletion("sanctum", exampleResults);
+    add("12U-T: TVL-only confirmation does not gather tvl_adoption", !map.canMarkDimensionsGathered.includes("tvl_adoption"), `gatherable=${map.canMarkDimensionsGathered.join(",") || "none"}`);
+  }
+  // 12U-U. Partial confirmations → candidateReadyForReview false.
+  {
+    const map = mapConfirmedValuesToEvidenceCompletion("sanctum", exampleResults);
+    add("12U-U: partial confirmations do not make candidateReadyForReview true", map.candidateReadyForReview === false, `ready=${map.candidateReadyForReview}`);
+  }
+  // 12U-V/W/X. Map result flags false.
+  {
+    const map = mapConfirmedValuesToEvidenceCompletion("sanctum", exampleResults);
+    add("12U-V: map.approvedForScoring is false", map.approvedForScoring === false, `v=${map.approvedForScoring}`);
+    add("12U-W: map.scoreAssigned is false", map.scoreAssigned === false, `v=${map.scoreAssigned}`);
+    add("12U-X: map.productionAffected is false", map.productionAffected === false, `v=${map.productionAffected}`);
+  }
+  // 12U-Y. No evidence draft has scoreAssigned true.
+  add("12U-Y: no evidence draft has scoreAssigned true", getSolLiquidStakingEvidenceDrafts().every((d) => d.scoreAssigned === false), "ok");
+  // 12U-Z/AA. No riskScore assigned.
+  add("12U-Z: no riskScore is assigned anywhere", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "none");
+  add("12U-AA: riskScore remains absent for all five", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "absent");
+  // 12U-AB/AC/AD. Approval flags false.
+  add("12U-AB: PROTOCOL_RISK_RUBRIC_APPROVED remains false", PROTOCOL_RISK_RUBRIC_APPROVED === false, `flag=${PROTOCOL_RISK_RUBRIC_APPROVED}`);
+  add("12U-AC: PROTOCOL_RISK_APPROVAL_DECISION_APPROVED remains false", PROTOCOL_RISK_APPROVAL_DECISION_APPROVED === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_APPROVED}`);
+  add("12U-AD: canAssignProtocolRiskScores() remains false", canAssignProtocolRiskScores() === false, `v=${canAssignProtocolRiskScores()}`);
+  // 12U-AE. productionReady remains false.
+  add("12U-AE: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 12U-AF. Live staking protocolSelection.status remains not_evaluated.
+  add("12U-AF: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12U-AG. No live suggestion has selectedProtocolId/Name.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12U-AG: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12U-AH. Cards/modal do not expose value-confirmation data or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "confirmedValue", "confirmedAsOf", "ValueConfirmation", "QA_ONLY_NOT_LIVE"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12U-AH: cards/modal never expose value-confirmation data or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12U-AI/AJ/AK. Flags at safe defaults.
+  add("12U-AI: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12U-AJ: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12U-AK: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12U-AL. No transaction/signature/swap path in confirmation output.
+  {
+    const json = (JSON.stringify(exampleResults) + JSON.stringify(summary) + JSON.stringify(mapConfirmedValuesToEvidenceCompletion("sanctum", exampleResults))).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("12U-AL: no transaction/signature/swap path in confirmation output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12U-AP. No forbidden investment claims in confirmation output (existing forbidden-copy list).
+  {
+    const json = (JSON.stringify(exampleResults) + JSON.stringify(examples)).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12U-AP: no forbidden investment claims in confirmation output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -5579,6 +5752,7 @@ export function printFixtureResults(): void {
     ...runProtocolRiskApprovalDecisionFixtureChecks(),
     ...runSolLiquidStakingEvidenceCompletionFixtureChecks(),
     ...runSolLiquidStakingSourceVerificationFixtureChecks(),
+    ...runSolLiquidStakingSourceValueConfirmationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

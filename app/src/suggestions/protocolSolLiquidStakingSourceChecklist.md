@@ -86,3 +86,19 @@ classifies reviewer-supplied source links at the SOURCE level:
 Source-level `verified` is NOT production metadata: TVL pools are **not** added to
 `DEFILLAMA_POOL_MAPPINGS`, `auditStatus` stays `unknown`, and no withdrawal/fee
 value is assigned. Production statuses in the table above are unchanged.
+
+## 12U value-confirmation checklist
+
+Before a reviewer-confirmed value counts (per source, per dimension):
+
+- [ ] source is `verified` at the source level (12T);
+- [ ] the exact value is copied from that source (`confirmedValue`);
+- [ ] an as-of timestamp is supplied for time-sensitive values (TVL/APY);
+- [ ] a reviewer + reviewerRole are supplied;
+- [ ] the dimension's unresolved questions are closed;
+- [ ] **still no production metadata** is written, and no evidence draft is
+      mutated.
+
+A dimension is gatherable only when ALL its required values are confirmed; partial
+confirmation stays incomplete. See
+`protocolSolLiquidStakingSourceValueConfirmation.md`.

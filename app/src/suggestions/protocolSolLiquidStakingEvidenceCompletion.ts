@@ -26,6 +26,10 @@ import {
   canAssignRiskScoreToProtocol,
   type ProtocolRiskCandidateScoreAssignmentGate,
 } from "./protocolRiskApprovalDecision";
+import type {
+  ProtocolSourceValueConfirmationResult,
+  ProtocolSourceValueCategory,
+} from "./protocolSolLiquidStakingSourceValueConfirmation";
 
 /** The harness exists (this step) but approves nothing and scores nothing. */
 export const PROTOCOL_EVIDENCE_COMPLETION_EXISTS = true;
@@ -231,5 +235,104 @@ export function runSanctumEvidenceCompletionGateCheck(): SanctumEvidenceCompleti
     candidateGateBefore,
     candidateGateAfter,
     canAssignScore: false,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 12U — map reviewer-confirmed values (12U) to evidence completion.
+ * Non-mutating; a dimension is only gatherable when ALL its required values are
+ * confirmed. It never mutates drafts, approves scoring, or assigns a score.
+ * ------------------------------------------------------------------ */
+
+/** Confirmation category → rubric dimension it supports. */
+const VALUE_CATEGORY_TO_DIMENSION: Record<ProtocolSourceValueCategory, ProtocolRiskRubricDimensionId> = {
+  tvl: "tvl_adoption",
+  apy: "tvl_adoption",
+  withdrawal_time: "withdrawal_fee_transparency",
+  withdrawal_mechanics: "withdrawal_fee_transparency",
+  fees: "withdrawal_fee_transparency",
+  audit_scope: "audit_security",
+  audit_date: "audit_security",
+  audit_firm: "audit_security",
+  operational_dependency: "operational_dependency_risk",
+  incident_history: "incident_history",
+};
+
+/**
+ * The confirmed-value categories a dimension needs before it could be gathered.
+ * `maturity` has no confirmable value category, so it can never be gathered from
+ * value confirmations alone (empty list → never gatherable). `tvl_adoption`
+ * requires BOTH a TVL value and an APY/freshness confirmation, so a TVL-only
+ * confirmation never gathers it.
+ */
+const DIMENSION_REQUIRED_VALUE_CATEGORIES: Record<ProtocolRiskRubricDimensionId, ProtocolSourceValueCategory[]> = {
+  audit_security: ["audit_firm", "audit_scope", "audit_date"],
+  maturity: [],
+  tvl_adoption: ["tvl", "apy"],
+  withdrawal_fee_transparency: ["withdrawal_time", "withdrawal_mechanics", "fees"],
+  operational_dependency_risk: ["operational_dependency"],
+  incident_history: ["incident_history"],
+};
+
+const ALL_DIMENSIONS: readonly ProtocolRiskRubricDimensionId[] = [
+  "audit_security",
+  "maturity",
+  "tvl_adoption",
+  "withdrawal_fee_transparency",
+  "operational_dependency_risk",
+  "incident_history",
+];
+
+export interface ConfirmedValuesToEvidenceMap {
+  protocolId: string;
+  lstSymbol: string;
+  dimensionsWithConfirmedValues: ProtocolRiskRubricDimensionId[];
+  dimensionsStillIncomplete: ProtocolRiskRubricDimensionId[];
+  canMarkDimensionsGathered: ProtocolRiskRubricDimensionId[];
+  candidateReadyForReview: boolean;
+  approvedForScoring: false;
+  scoreAssigned: false;
+  productionAffected: false;
+}
+
+/**
+ * Non-mutating cross-reference from reviewer-confirmed values (12U) to evidence
+ * dimensions. A dimension is `canMarkDimensionsGathered` only when EVERY required
+ * confirmation category has a `confirmed` result for this protocol. Partial
+ * confirmation is never enough. Never mutates drafts, approves scoring, assigns a
+ * score, or affects production.
+ */
+export function mapConfirmedValuesToEvidenceCompletion(
+  protocolId: string,
+  confirmations: ProtocolSourceValueConfirmationResult[]
+): ConfirmedValuesToEvidenceMap {
+  const lstSymbol = getSolLiquidStakingEvidenceDrafts(protocolId)[0]?.lstSymbol ?? protocolId;
+  // Read-only: touch drafts to make the non-mutation contract explicit.
+  void getSolLiquidStakingEvidenceDrafts(protocolId);
+
+  const confirmedForProtocol = confirmations.filter((c) => c.protocolId === protocolId && c.status === "confirmed");
+  const confirmedCategories = new Set(confirmedForProtocol.map((c) => c.category));
+
+  const dimsWithConfirmed = new Set<ProtocolRiskRubricDimensionId>();
+  for (const c of confirmedForProtocol) dimsWithConfirmed.add(VALUE_CATEGORY_TO_DIMENSION[c.category]);
+
+  const canMarkDimensionsGathered = ALL_DIMENSIONS.filter((dim) => {
+    const required = DIMENSION_REQUIRED_VALUE_CATEGORIES[dim];
+    return required.length > 0 && required.every((cat) => confirmedCategories.has(cat));
+  });
+
+  const dimensionsWithConfirmedValues = ALL_DIMENSIONS.filter((d) => dimsWithConfirmed.has(d));
+  const dimensionsStillIncomplete = ALL_DIMENSIONS.filter((d) => !canMarkDimensionsGathered.includes(d));
+
+  return {
+    protocolId,
+    lstSymbol,
+    dimensionsWithConfirmedValues,
+    dimensionsStillIncomplete,
+    canMarkDimensionsGathered,
+    candidateReadyForReview: canMarkDimensionsGathered.length === ALL_DIMENSIONS.length,
+    approvedForScoring: false,
+    scoreAssigned: false,
+    productionAffected: false,
   };
 }

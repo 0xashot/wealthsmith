@@ -124,6 +124,15 @@ audit/operational docs URLs) are now classified at the SOURCE level in
 `DEFILLAMA_POOL_MAPPINGS`; `auditStatus` stays `unknown`; no withdrawal/fee value
 and no `riskScore` is assigned. See `protocolSolLiquidStakingSourceVerification.md`.
 
+## Source value confirmation (Step 12U)
+
+`protocolSolLiquidStakingSourceValueConfirmation.ts` records reviewer-confirmed
+VALUES read from 12T-verified sources (with reviewer + as-of). **Source
+verification (link exists) versus value confirmation (a reviewer read a value):**
+both are non-production. A confirmed value is still **not promoted to production
+metadata** — nothing is written to `DEFILLAMA_POOL_MAPPINGS`/`ProtocolMarketData`/
+`ProtocolRiskData`, no evidence draft is mutated, and no `riskScore` is assigned.
+
 ## Rules honored
 
 - No pool UUID, APY, TVL, withdrawal time, fee, audit status, or riskScore is

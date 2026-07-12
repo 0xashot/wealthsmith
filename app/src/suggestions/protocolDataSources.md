@@ -394,3 +394,20 @@ production metadata, `auditStatus` stays `unknown`, no `withdrawalTimeHours`/fee
 (`mapVerifiedSourcesToEvidenceDimensions` never marks a dimension `gathered`), and
 `getProtocolSelectionGoNoGo().productionReady = false`. Not imported by any
 live/engine/UI file.
+
+---
+
+## 12U — source-value confirmation intake
+
+`protocolSolLiquidStakingSourceValueConfirmation.ts` +
+`protocolSolLiquidStakingSourceValueConfirmation.md` add a reviewer value-
+confirmation layer: a reviewer records the exact value read from a 12T-verified
+source (`confirmed`/`needs_review`/`insufficient`/`rejected`/`stale`), with reviewer
++ role and an as-of timestamp for TVL/APY. Example confirmations are QA-ONLY
+(`QA_ONLY_NOT_LIVE` placeholder), never live values. **No production enablement:**
+`productionMetadataUpdated`/`evidenceDraftMutated`/`scoreAssigned` are always false;
+`mapConfirmedValuesToEvidenceCompletion()` marks a dimension gatherable only when
+ALL its required values are confirmed (partial is never enough), so no candidate is
+`ready_for_review` and `approvedForScoring` stays false.
+`getProtocolSelectionGoNoGo().productionReady = false`. Not imported by any
+live/engine/UI file.

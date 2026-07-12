@@ -134,3 +134,15 @@ existence only — no production value, no `auditStatus`, no `withdrawalTimeHour
 no fees, and no `riskScore` are assigned. Incident history stays `needs_review` for
 all five. `mapVerifiedSourcesToEvidenceDimensions()` never marks a dimension
 `gathered`. `riskScore` stays absent; production selection stays disabled.
+
+## 12U update
+
+A source-VALUE confirmation intake now exists
+(`protocolSolLiquidStakingSourceValueConfirmation.ts`): reviewer-confirmed values
+can be recorded **only from 12T-verified sources**, with reviewer + role and (for
+TVL/APY) an as-of timestamp; anything short is `needs_review`/`insufficient`.
+Confirmation writes no production metadata, mutates no evidence draft, and assigns
+no `riskScore`. `mapConfirmedValuesToEvidenceCompletion()` marks a dimension
+gatherable only when ALL its required values are confirmed — so **no candidate is
+`ready_for_review` by default** and none is `approved_for_scoring` (rubric still
+unapproved). `riskScore` stays absent; production selection stays disabled.
