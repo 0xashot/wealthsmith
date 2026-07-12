@@ -640,6 +640,25 @@ Mode uses `SuggestionRail` directly and is untouched.
   Not imported by any live/engine/UI file; live suggestions `not_evaluated`; all
   selection flags false. Fixtures 12P-A…AD (+28). Next: **12Q** evidence gathering
   and sourced risk metadata.
+- Step 12Q (done): **SOL liquid-staking risk evidence drafts (gathering only — no
+  score, no approval)**. Added `protocolSolLiquidStakingEvidenceDrafts.ts` +
+  `protocolSolLiquidStakingEvidenceDrafts.md` + `protocolRiskEvidenceReview.md`: 30
+  reviewable evidence drafts (5 candidates × 6 rubric dimensions), each with
+  `evidenceStatus` (`gathered`/`partial`/`missing`/`needs_review`/`not_reviewed`),
+  cited `sources[]`, `evidenceSummary`, `unresolvedQuestions[]`, `reviewerNotes[]`,
+  and `scoreAssigned: false` (no `score` field). Constants
+  `PROTOCOL_RISK_EVIDENCE_DRAFTS_EXIST = true`, `..._APPROVED`/`..._ASSIGN_SCORES`/
+  `..._AFFECT_PRODUCTION = false`. Helpers: `getSolLiquidStakingEvidenceDrafts()`,
+  `getSolLiquidStakingEvidenceDraft()`, `getEvidenceDraftsByStatus()`,
+  `getMissingEvidenceDraftsForProtocol()`, `summarizeEvidenceCoverage()`. Coverage:
+  **0 gathered, 1 partial** (Sanctum/INF TVL, from the verified DefiLlama pool),
+  **29 needs_review, scoreAssignedCount 0**. Nothing invented — only
+  codebase-verifiable sources cited; **no `riskScore` assigned**, rubric still
+  unapproved, and no production metadata changed. `productionReady` stays `false`;
+  risk_scores/audit/withdrawal/fees gates unchanged. Not imported by any
+  live/engine/UI file; live suggestions `not_evaluated`; all selection flags false.
+  Fixtures 12Q-A…AC (+27). Next: **12R** reviewer approval / score-assignment
+  decision.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -647,9 +666,9 @@ is a QA-proven-but-DISABLED pipeline behind default-off feature flags (registry 
 adapters + eligibility + route guardrails + scoring + QA-only narrow-case
 selection + production-readiness plan + first-case real-data mapping + hardened
 internal dry-run + verified source completion + Stage-2 real-data dry-run report +
-machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubric);
-production selection remains not evaluated / not implemented, and the go/no-go
-reports `productionReady = false`.
+machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubric +
+risk evidence drafts); production selection remains not evaluated / not implemented,
+and the go/no-go reports `productionReady = false`.
 
 ## Suggestion display order
 

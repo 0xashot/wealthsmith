@@ -80,3 +80,15 @@ still required for every candidate (JupSOL, mSOL, JitoSOL, bSOL, INF):
 No dimension is `sufficient` for any candidate yet, so
 `getMissingRiskEvidenceForProtocol()` returns all six for each. `riskScore` stays
 absent; production selection stays disabled.
+
+## 12Q update
+
+Reviewable **evidence drafts** now exist in
+`protocolSolLiquidStakingEvidenceDrafts.ts` (+
+`protocolSolLiquidStakingEvidenceDrafts.md`) — 30 drafts (5 candidates × 6
+dimensions). Coverage: **0 gathered, 1 partial** (Sanctum/INF `tvl_adoption`, from
+the verified DefiLlama pool), **29 needs_review**, **scoreAssignedCount 0**. No
+official audit/maturity/withdrawal-fee/operational/incident source is verified yet;
+each carries unresolved questions. **No `riskScore` is assigned**, the rubric is
+still not approved, `auditStatus` stays `unknown`, and no production metadata
+changed. See `protocolRiskEvidenceReview.md` for the review workflow.

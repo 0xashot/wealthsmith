@@ -328,3 +328,18 @@ keep `score` absent + `scoreAssigned:false`, `auditStatus` stays `unknown`, and 
 production metadata changes. `getProtocolSelectionGoNoGo().productionReady` stays
 `false` (the risk_methodology blocker now names the draft rubric; risk_scores stays
 not_started). Rubric is not imported by any live/engine/UI file.
+
+---
+
+## 12Q — risk evidence drafts (gathering only)
+
+`protocolSolLiquidStakingEvidenceDrafts.ts` + `protocolSolLiquidStakingEvidenceDrafts.md`
++ `protocolRiskEvidenceReview.md` add 30 reviewable evidence drafts (5 candidates ×
+6 rubric dimensions). Coverage: **0 gathered, 1 partial** (Sanctum/INF `tvl_adoption`
+from the verified DefiLlama pool), **29 needs_review**, `scoreAssignedCount = 0`.
+Only codebase-verifiable sources are cited; nothing is invented (no guessed audit
+dates, launch dates, TVL, fees, timing, incidents, or URLs). **No `riskScore` is
+assigned**, the rubric stays unapproved, and **no production metadata changes**
+(auditStatus `unknown`, no `withdrawalTimeHours`/fees, no TVL promotion).
+`getProtocolSelectionGoNoGo().productionReady = false`; risk_scores/audit/
+withdrawal/fees gates unchanged. Drafts are not imported by any live/engine/UI file.

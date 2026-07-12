@@ -97,6 +97,18 @@ security history + scope; time in production and TVL/adoption history; withdrawa
 and fee transparency; operational risk (admin-key/upgrade authority, oracle/
 dependency); and incident history. **`riskScore` stays absent in 12O.**
 
+## Evidence drafts (Step 12Q)
+
+Reviewable evidence drafts for the risk rubric now exist in
+`protocolSolLiquidStakingEvidenceDrafts.ts` (+
+`protocolSolLiquidStakingEvidenceDrafts.md`): 30 drafts (5 candidates × 6
+dimensions), status `gathered`/`partial`/`missing`/`needs_review`/`not_reviewed`.
+Current coverage: 1 partial (Sanctum/INF TVL), 29 needs_review, 0 gathered,
+`scoreAssignedCount = 0`. These are evidence drafts only — **the proposed sources
+here are still not production metadata**, no `riskScore` is assigned, and nothing is
+promoted into `protocolSolLiquidStakingSources.ts` / `DEFILLAMA_POOL_MAPPINGS` /
+`ProtocolRiskData`. Production selection stays disabled.
+
 ## Rules honored
 
 - No pool UUID, APY, TVL, withdrawal time, fee, audit status, or riskScore is
