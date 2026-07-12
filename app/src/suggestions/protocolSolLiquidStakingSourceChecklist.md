@@ -102,3 +102,18 @@ Before a reviewer-confirmed value counts (per source, per dimension):
 A dimension is gatherable only when ALL its required values are confirmed; partial
 confirmation stays incomplete. See
 `protocolSolLiquidStakingSourceValueConfirmation.md`.
+
+## 12V real-value ledger checklist
+
+A reviewer-confirmed real value (non-production ledger) must carry:
+
+- [ ] source (verified, with pool id for DefiLlama);
+- [ ] the exact value copied from the source;
+- [ ] an as-of timestamp;
+- [ ] reviewer + reviewerRole;
+- [ ] a freshness status (`confirmed` within 24h for TVL/APY, else `stale`).
+
+**Stale values cannot support evidence gathering** and must be re-confirmed. TVL/APY
+confirmations support only `tvl_adoption`, and only when fresh. Confirmed
+JupSOL/mSOL/JitoSOL/bSOL TVL/APY are recorded; INF stays absent/needs_review (no
+exact value supplied). See `protocolSolLiquidStakingRealValueConfirmations.md`.

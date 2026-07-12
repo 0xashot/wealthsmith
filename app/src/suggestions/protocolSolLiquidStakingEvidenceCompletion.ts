@@ -30,6 +30,10 @@ import type {
   ProtocolSourceValueConfirmationResult,
   ProtocolSourceValueCategory,
 } from "./protocolSolLiquidStakingSourceValueConfirmation";
+import {
+  validateRealValueConfirmation,
+  type ProtocolRealValueConfirmation,
+} from "./protocolSolLiquidStakingRealValueConfirmations";
 
 /** The harness exists (this step) but approves nothing and scores nothing. */
 export const PROTOCOL_EVIDENCE_COMPLETION_EXISTS = true;
@@ -331,6 +335,79 @@ export function mapConfirmedValuesToEvidenceCompletion(
     dimensionsStillIncomplete,
     canMarkDimensionsGathered,
     candidateReadyForReview: canMarkDimensionsGathered.length === ALL_DIMENSIONS.length,
+    approvedForScoring: false,
+    scoreAssigned: false,
+    productionAffected: false,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 12V — map reviewer-confirmed REAL values (ledger) to evidence completion.
+ * Non-mutating; tvl_adoption is gatherable only when tvl + apy + apy_30d_average
+ * are all CONFIRMED and FRESH. Never mutates drafts, approves scoring, or scores.
+ * ------------------------------------------------------------------ */
+
+export interface RealValuesToEvidenceMap {
+  protocolId: string;
+  lstSymbol: string;
+  confirmedCategories: string[];
+  staleCategories: string[];
+  missingCategories: string[];
+  dimensionsWithConfirmedValues: ProtocolRiskRubricDimensionId[];
+  dimensionsStillIncomplete: ProtocolRiskRubricDimensionId[];
+  gatherableDimensions: ProtocolRiskRubricDimensionId[];
+  candidateReadyForReview: boolean;
+  approvedForScoring: false;
+  scoreAssigned: false;
+  productionAffected: false;
+}
+
+/** The real-value categories tvl_adoption needs (all confirmed + fresh). */
+const TVL_ADOPTION_REQUIRED_CATEGORIES = ["tvl", "apy", "apy_30d_average"] as const;
+
+/**
+ * Non-mutating map from reviewer-confirmed REAL values (12V ledger) to evidence
+ * dimensions. `tvl_adoption` is the ONLY dimension these values can support, and
+ * only when tvl + apy + apy_30d_average are all `confirmed` (fresh at `asOf`).
+ * TVL/APY never support audit/maturity/withdrawal/operational/incident. Never
+ * mutates drafts, approves scoring, assigns a score, or affects production.
+ */
+export function mapRealValuesToEvidenceCompletion(
+  protocolId: string,
+  confirmations: ProtocolRealValueConfirmation[],
+  asOf?: string
+): RealValuesToEvidenceMap {
+  const forProtocol = confirmations.filter((c) => c.protocolId === protocolId);
+  const lstSymbol = forProtocol[0]?.lstSymbol ?? getSolLiquidStakingEvidenceDrafts(protocolId)[0]?.lstSymbol ?? protocolId;
+  // Read-only: touch drafts to make the non-mutation contract explicit.
+  void getSolLiquidStakingEvidenceDrafts(protocolId);
+
+  const confirmedCategories: string[] = [];
+  const staleCategories: string[] = [];
+  for (const c of forProtocol) {
+    const status = validateRealValueConfirmation(c, asOf);
+    if (status === "confirmed") confirmedCategories.push(c.category);
+    else if (status === "stale") staleCategories.push(c.category);
+  }
+  const missingCategories = TVL_ADOPTION_REQUIRED_CATEGORIES.filter((cat) => !confirmedCategories.includes(cat));
+
+  // tvl_adoption gatherable only when all three required real values are confirmed+fresh.
+  const tvlAdoptionGatherable = TVL_ADOPTION_REQUIRED_CATEGORIES.every((cat) => confirmedCategories.includes(cat));
+  const gatherableDimensions: ProtocolRiskRubricDimensionId[] = tvlAdoptionGatherable ? ["tvl_adoption"] : [];
+  const dimensionsWithConfirmedValues: ProtocolRiskRubricDimensionId[] = confirmedCategories.length > 0 ? ["tvl_adoption"] : [];
+
+  const dimensionsStillIncomplete = ALL_DIMENSIONS.filter((d) => !gatherableDimensions.includes(d));
+
+  return {
+    protocolId,
+    lstSymbol,
+    confirmedCategories,
+    staleCategories,
+    missingCategories: [...missingCategories],
+    dimensionsWithConfirmedValues,
+    dimensionsStillIncomplete,
+    gatherableDimensions,
+    candidateReadyForReview: gatherableDimensions.length === ALL_DIMENSIONS.length,
     approvedForScoring: false,
     scoreAssigned: false,
     productionAffected: false,

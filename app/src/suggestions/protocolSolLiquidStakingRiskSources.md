@@ -146,3 +146,24 @@ no `riskScore`. `mapConfirmedValuesToEvidenceCompletion()` marks a dimension
 gatherable only when ALL its required values are confirmed — so **no candidate is
 `ready_for_review` by default** and none is `approved_for_scoring` (rubric still
 unapproved). `riskScore` stays absent; production selection stays disabled.
+
+## 12V update
+
+A non-production real-value confirmation ledger now exists
+(`protocolSolLiquidStakingRealValueConfirmations.ts`) with reviewer-confirmed
+DefiLlama TVL/APY/APY-30d values (reviewer: Ashot Gyulzatyan, founder; as-of
+2026-07-12):
+
+| Candidate | TVL (USD) | APY (%) | APY 30d (%) |
+| --- | --- | --- | --- |
+| jupiter (JupSOL) | 409,170,000 | 5.67 | 5.60 |
+| marinade (mSOL) | 184,840,000 | 4.75 | 5.87 |
+| jito (JitoSOL) | 767,950,000 | 5.36 | 5.45 |
+| blazestake (bSOL) | 69,750,000 | 5.27 | 5.32 |
+| sanctum (INF) | needs_review / absent (no exact value supplied) | — | — |
+
+Fresh TVL+APY+APY-30d support `tvl_adoption` only; the other five dimensions stay
+incomplete, so **no candidate is `ready_for_review`**. Values are non-production
+(no metadata written, no draft mutated, no `riskScore` assigned) and expire after
+24h (then `stale`). INF real value stays `needs_review`/absent unless an exact
+value is supplied.

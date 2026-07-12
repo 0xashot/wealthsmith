@@ -411,3 +411,19 @@ ALL its required values are confirmed (partial is never enough), so no candidate
 `ready_for_review` and `approvedForScoring` stays false.
 `getProtocolSelectionGoNoGo().productionReady = false`. Not imported by any
 live/engine/UI file.
+
+---
+
+## 12V — real value-confirmation ledger
+
+`protocolSolLiquidStakingRealValueConfirmations.ts` +
+`protocolSolLiquidStakingRealValueConfirmations.md` add a non-production ledger of
+reviewer-confirmed DefiLlama TVL/APY/APY-30d values for JupSOL/mSOL/JitoSOL/bSOL
+(reviewer: Ashot Gyulzatyan, founder; as-of 2026-07-12). INF stays absent (no exact
+value supplied; not invented). Time-sensitive values are fresh for 24h then
+`stale`; `mapRealValuesToEvidenceCompletion()` treats fresh TVL+APY+APY-30d as
+support for `tvl_adoption` only. **No production enablement:** no metadata written
+(not `DEFILLAMA_POOL_MAPPINGS`/`ProtocolMarketData`), no evidence draft mutated, no
+`riskScore` assigned; the other five dimensions stay incomplete so no candidate is
+`ready_for_review`, and `approvedForScoring`/`productionReady` stay false. Not
+imported by any live/engine/UI file.

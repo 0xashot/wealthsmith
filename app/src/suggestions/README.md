@@ -741,6 +741,26 @@ Mode uses `SuggestionRail` directly and is untouched.
   live suggestions `not_evaluated`; all selection flags false; `productionReady`
   stays `false`. Fixtures 12U-A…AP (+39). Next: **12V** evidence-dimension gathering
   decision, or the human rubric-approval package.
+- Step 12V (done): **real value-confirmation ledger for SOL liquid staking
+  (non-production; no score, no draft mutation, no production metadata)**. Added
+  `protocolSolLiquidStakingRealValueConfirmations.ts` +
+  `protocolSolLiquidStakingRealValueConfirmations.md`: a non-production ledger of
+  reviewer-confirmed DefiLlama TVL/APY/APY-30d values for JupSOL/mSOL/JitoSOL/bSOL
+  (reviewer Ashot Gyulzatyan, founder; as-of 2026-07-12); INF absent (no exact value
+  supplied, not invented). Constants `PROTOCOL_REAL_VALUE_CONFIRMATIONS_EXIST =
+  true`, `..._APPROVE_RUBRIC`/`..._ASSIGN_SCORES`/`..._AFFECT_PRODUCTION`/
+  `..._ENABLE_SELECTION`/`..._UPDATE_METADATA`/`..._MUTATE_EVIDENCE = false`, plus
+  `TIME_SENSITIVE_VALUE_MAX_AGE_HOURS = 24` / `STATIC_DOC_VALUE_MAX_AGE_DAYS = 90`.
+  Helpers: `getSolLstRealValueConfirmations()`, `getConfirmedRealValues()`,
+  `getStaleRealValues()`, `isRealValueFresh()`, `validateRealValueConfirmation()`,
+  `summarizeSolLstRealValueConfirmations()`, plus non-mutating
+  `mapRealValuesToEvidenceCompletion()`. Fresh TVL+APY+APY-30d support only
+  `tvl_adoption`; stale values (past 24h) support nothing; the other five dimensions
+  stay incomplete so **no candidate is `ready_for_review`**. **No production metadata
+  written, no evidence draft mutated, no `riskScore` assigned.** Not imported by any
+  live/engine/UI file; live suggestions `not_evaluated`; all selection flags false;
+  `productionReady` stays `false`. Fixtures 12V-A…AX (+47). Next: **12W**
+  gather-decision ledger for `tvl_adoption` and the remaining dimensions.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -750,9 +770,9 @@ selection + production-readiness plan + first-case real-data mapping + hardened
 internal dry-run + verified source completion + Stage-2 real-data dry-run report +
 machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubric +
 risk evidence drafts + reviewer approval decision gate + one-candidate evidence
-completion harness + source-verification intake + source-value confirmation intake);
-production selection remains not evaluated / not implemented, and the go/no-go
-reports `productionReady = false`.
+completion harness + source-verification intake + source-value confirmation intake +
+real value-confirmation ledger); production selection remains not evaluated / not
+implemented, and the go/no-go reports `productionReady = false`.
 
 ## Suggestion display order
 

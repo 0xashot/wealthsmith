@@ -133,6 +133,16 @@ both are non-production. A confirmed value is still **not promoted to production
 metadata** — nothing is written to `DEFILLAMA_POOL_MAPPINGS`/`ProtocolMarketData`/
 `ProtocolRiskData`, no evidence draft is mutated, and no `riskScore` is assigned.
 
+## Real value confirmation ledger (Step 12V)
+
+`protocolSolLiquidStakingRealValueConfirmations.ts` stores reviewer-confirmed
+DefiLlama TVL/APY/APY-30d values for JupSOL/mSOL/JitoSOL/bSOL (reviewer: Ashot
+Gyulzatyan, founder; as-of 2026-07-12) in a **non-production confirmation ledger**.
+INF stays absent (no exact value supplied; not invented). Values expire after 24h
+(then `stale`) and support only `tvl_adoption` when fresh. **No promotion to
+production metadata:** nothing is written to `DEFILLAMA_POOL_MAPPINGS` /
+`ProtocolMarketData`, no evidence draft is mutated, and no `riskScore` is assigned.
+
 ## Rules honored
 
 - No pool UUID, APY, TVL, withdrawal time, fee, audit status, or riskScore is

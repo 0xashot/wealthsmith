@@ -212,7 +212,22 @@ import {
   summarizeSourceValueConfirmations,
   type ProtocolSourceValueConfirmationInput,
 } from "./protocolSolLiquidStakingSourceValueConfirmation";
-import { mapConfirmedValuesToEvidenceCompletion } from "./protocolSolLiquidStakingEvidenceCompletion";
+import { mapConfirmedValuesToEvidenceCompletion, mapRealValuesToEvidenceCompletion } from "./protocolSolLiquidStakingEvidenceCompletion";
+import {
+  PROTOCOL_REAL_VALUE_CONFIRMATIONS_EXIST,
+  PROTOCOL_REAL_VALUE_CONFIRMATIONS_APPROVE_RUBRIC,
+  PROTOCOL_REAL_VALUE_CONFIRMATIONS_ASSIGN_SCORES,
+  PROTOCOL_REAL_VALUE_CONFIRMATIONS_AFFECT_PRODUCTION,
+  PROTOCOL_REAL_VALUE_CONFIRMATIONS_ENABLE_SELECTION,
+  PROTOCOL_REAL_VALUE_CONFIRMATIONS_UPDATE_METADATA,
+  PROTOCOL_REAL_VALUE_CONFIRMATIONS_MUTATE_EVIDENCE,
+  SOL_LST_REAL_VALUE_CONFIRMATIONS,
+  TIME_SENSITIVE_REAL_VALUE_CATEGORIES,
+  getSolLstRealValueConfirmations,
+  getConfirmedRealValues,
+  summarizeSolLstRealValueConfirmations,
+  validateRealValueConfirmation,
+} from "./protocolSolLiquidStakingRealValueConfirmations";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -5714,6 +5729,149 @@ export function runSolLiquidStakingSourceValueConfirmationFixtureChecks(): Fixtu
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12V — SOL liquid-staking real value-confirmation ledger.
+ * Reviewer-confirmed TVL/APY; no production, no draft mutation, no score.
+ * ------------------------------------------------------------------ */
+export function runSolLiquidStakingRealValueFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+
+  // Deterministic evaluation timestamps relative to confirmedAsOf 2026-07-12T00:00:00Z.
+  const FRESH_AS_OF = "2026-07-12T06:00:00Z"; // +6h → within 24h
+  const STALE_AS_OF = "2026-08-01T00:00:00Z"; // +20 days → beyond 24h
+
+  const all = SOL_LST_REAL_VALUE_CONFIRMATIONS;
+  const summaryFresh = summarizeSolLstRealValueConfirmations(FRESH_AS_OF);
+  const gng = getProtocolSelectionGoNoGo("t");
+  const catsFor = (id: string) => new Set(getSolLstRealValueConfirmations(id).map((c) => c.category));
+
+  // 12V-A…G. Ledger scoping constants.
+  add("12V-A: PROTOCOL_REAL_VALUE_CONFIRMATIONS_EXIST is true", PROTOCOL_REAL_VALUE_CONFIRMATIONS_EXIST === true, `flag=${PROTOCOL_REAL_VALUE_CONFIRMATIONS_EXIST}`);
+  add("12V-B: PROTOCOL_REAL_VALUE_CONFIRMATIONS_APPROVE_RUBRIC is false", PROTOCOL_REAL_VALUE_CONFIRMATIONS_APPROVE_RUBRIC === false, `flag=${PROTOCOL_REAL_VALUE_CONFIRMATIONS_APPROVE_RUBRIC}`);
+  add("12V-C: PROTOCOL_REAL_VALUE_CONFIRMATIONS_ASSIGN_SCORES is false", PROTOCOL_REAL_VALUE_CONFIRMATIONS_ASSIGN_SCORES === false, `flag=${PROTOCOL_REAL_VALUE_CONFIRMATIONS_ASSIGN_SCORES}`);
+  add("12V-D: PROTOCOL_REAL_VALUE_CONFIRMATIONS_AFFECT_PRODUCTION is false", PROTOCOL_REAL_VALUE_CONFIRMATIONS_AFFECT_PRODUCTION === false, `flag=${PROTOCOL_REAL_VALUE_CONFIRMATIONS_AFFECT_PRODUCTION}`);
+  add("12V-E: PROTOCOL_REAL_VALUE_CONFIRMATIONS_ENABLE_SELECTION is false", PROTOCOL_REAL_VALUE_CONFIRMATIONS_ENABLE_SELECTION === false, `flag=${PROTOCOL_REAL_VALUE_CONFIRMATIONS_ENABLE_SELECTION}`);
+  add("12V-F: PROTOCOL_REAL_VALUE_CONFIRMATIONS_UPDATE_METADATA is false", PROTOCOL_REAL_VALUE_CONFIRMATIONS_UPDATE_METADATA === false, `flag=${PROTOCOL_REAL_VALUE_CONFIRMATIONS_UPDATE_METADATA}`);
+  add("12V-G: PROTOCOL_REAL_VALUE_CONFIRMATIONS_MUTATE_EVIDENCE is false", PROTOCOL_REAL_VALUE_CONFIRMATIONS_MUTATE_EVIDENCE === false, `flag=${PROTOCOL_REAL_VALUE_CONFIRMATIONS_MUTATE_EVIDENCE}`);
+
+  // 12V-H…K. Each of the four LSTs has TVL/APY/APY-30d.
+  const needed = ["tvl", "apy", "apy_30d_average"];
+  add("12V-H: confirmations include JupSOL TVL/APY/APY 30d", needed.every((c) => catsFor("jupiter").has(c as never)), `cats=${[...catsFor("jupiter")].join(",")}`);
+  add("12V-I: confirmations include mSOL TVL/APY/APY 30d", needed.every((c) => catsFor("marinade").has(c as never)), `cats=${[...catsFor("marinade")].join(",")}`);
+  add("12V-J: confirmations include JitoSOL TVL/APY/APY 30d", needed.every((c) => catsFor("jito").has(c as never)), `cats=${[...catsFor("jito")].join(",")}`);
+  add("12V-K: confirmations include bSOL TVL/APY/APY 30d", needed.every((c) => catsFor("blazestake").has(c as never)), `cats=${[...catsFor("blazestake")].join(",")}`);
+  // 12V-L. INF absent / needs_review (no invented value).
+  add("12V-L: INF remains needs_review or absent for real TVL/APY", getSolLstRealValueConfirmations("sanctum").length === 0 && getConfirmedRealValues("sanctum", undefined, FRESH_AS_OF).length === 0, `sanctumRows=${getSolLstRealValueConfirmations("sanctum").length}`);
+  // 12V-M/N. Every confirmation has reviewer/role/as-of.
+  add("12V-M: every confirmation has reviewer and reviewerRole", all.every((c) => c.reviewer.length > 0 && c.reviewerRole.length > 0), `ok=${all.every((c) => c.reviewer.length > 0)}`);
+  add("12V-N: every confirmation has confirmedAsOf", all.every((c) => c.confirmedAsOf.length > 0), `ok=${all.every((c) => c.confirmedAsOf.length > 0)}`);
+  // 12V-O. TVL/APY/APY-30d are time-sensitive.
+  add("12V-O: every TVL/APY/APY 30d confirmation is time-sensitive", all.every((c) => TIME_SENSITIVE_REAL_VALUE_CATEGORIES.has(c.category)), "all time-sensitive");
+  // 12V-P. Fresh → confirmed.
+  add("12V-P: fresh TVL/APY confirmations validate as confirmed", all.every((c) => validateRealValueConfirmation(c, FRESH_AS_OF) === "confirmed"), `ok=${all.every((c) => validateRealValueConfirmation(c, FRESH_AS_OF) === "confirmed")}`);
+  // 12V-Q. Stale.
+  add("12V-Q: a stale TVL/APY confirmation validates as stale", validateRealValueConfirmation(all[0], STALE_AS_OF) === "stale", `status=${validateRealValueConfirmation(all[0], STALE_AS_OF)}`);
+  // 12V-R. Missing confirmedValue → insufficient.
+  add("12V-R: missing confirmedValue validates as insufficient", validateRealValueConfirmation({ ...all[0], confirmedValue: "" }, FRESH_AS_OF) === "insufficient", `status=${validateRealValueConfirmation({ ...all[0], confirmedValue: "" }, FRESH_AS_OF)}`);
+  // 12V-S. Missing reviewer → needs_review.
+  add("12V-S: missing reviewer validates as needs_review", validateRealValueConfirmation({ ...all[0], reviewer: "" }, FRESH_AS_OF) === "needs_review", `status=${validateRealValueConfirmation({ ...all[0], reviewer: "" }, FRESH_AS_OF)}`);
+  // 12V-T/U/V. Summary counts.
+  add("12V-T: summary.productionMetadataUpdatedCount is 0", summaryFresh.productionMetadataUpdatedCount === 0, `v=${summaryFresh.productionMetadataUpdatedCount}`);
+  add("12V-U: summary.evidenceDraftMutatedCount is 0", summaryFresh.evidenceDraftMutatedCount === 0, `v=${summaryFresh.evidenceDraftMutatedCount}`);
+  add("12V-V: summary.scoreAssignedCount is 0", summaryFresh.scoreAssignedCount === 0, `v=${summaryFresh.scoreAssignedCount}`);
+  // 12V-W. map does not mutate evidence drafts.
+  {
+    const before = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    mapRealValuesToEvidenceCompletion("jupiter", [...all], FRESH_AS_OF);
+    const after = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    add("12V-W: mapRealValuesToEvidenceCompletion does not mutate evidence drafts", before === after, `unchanged=${before === after}`);
+  }
+  // 12V-X. TVL/APY support tvl_adoption only when fresh.
+  {
+    const fresh = mapRealValuesToEvidenceCompletion("jupiter", [...all], FRESH_AS_OF);
+    const stale = mapRealValuesToEvidenceCompletion("jupiter", [...all], STALE_AS_OF);
+    const ok = fresh.gatherableDimensions.includes("tvl_adoption") && !stale.gatherableDimensions.includes("tvl_adoption");
+    add("12V-X: TVL/APY support tvl_adoption only when fresh", ok, `fresh=${fresh.gatherableDimensions.join(",") || "none"} stale=${stale.gatherableDimensions.join(",") || "none"}`);
+  }
+  // 12V-Y…AB. TVL/APY never support other dimensions.
+  {
+    const fresh = mapRealValuesToEvidenceCompletion("jupiter", [...all], FRESH_AS_OF);
+    add("12V-Y: TVL/APY do not support audit_security", !fresh.gatherableDimensions.includes("audit_security"), `gatherable=${fresh.gatherableDimensions.join(",")}`);
+    add("12V-Z: TVL/APY do not support withdrawal_fee_transparency", !fresh.gatherableDimensions.includes("withdrawal_fee_transparency"), `gatherable=${fresh.gatherableDimensions.join(",")}`);
+    add("12V-AA: TVL/APY do not support operational_dependency_risk", !fresh.gatherableDimensions.includes("operational_dependency_risk"), `gatherable=${fresh.gatherableDimensions.join(",")}`);
+    add("12V-AB: TVL/APY do not support incident_history", !fresh.gatherableDimensions.includes("incident_history"), `gatherable=${fresh.gatherableDimensions.join(",")}`);
+  }
+  // 12V-AC. No candidateReadyForReview with only TVL/APY.
+  {
+    const fresh = mapRealValuesToEvidenceCompletion("jupiter", [...all], FRESH_AS_OF);
+    add("12V-AC: no candidateReadyForReview with only TVL/APY confirmations", fresh.candidateReadyForReview === false, `ready=${fresh.candidateReadyForReview}`);
+  }
+  // 12V-AD/AE/AF. Map result flags false.
+  {
+    const fresh = mapRealValuesToEvidenceCompletion("jupiter", [...all], FRESH_AS_OF);
+    add("12V-AD: map.approvedForScoring is false", fresh.approvedForScoring === false, `v=${fresh.approvedForScoring}`);
+    add("12V-AE: map.scoreAssigned is false", fresh.scoreAssigned === false, `v=${fresh.scoreAssigned}`);
+    add("12V-AF: map.productionAffected is false", fresh.productionAffected === false, `v=${fresh.productionAffected}`);
+  }
+  // 12V-AG. No evidence draft has scoreAssigned true.
+  add("12V-AG: no evidence draft has scoreAssigned true", getSolLiquidStakingEvidenceDrafts().every((d) => d.scoreAssigned === false), "ok");
+  // 12V-AH/AI. No riskScore assigned.
+  add("12V-AH: no riskScore is assigned anywhere", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "none");
+  add("12V-AI: riskScore remains absent for all five", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "absent");
+  // 12V-AJ/AK/AL. Approval flags false.
+  add("12V-AJ: PROTOCOL_RISK_RUBRIC_APPROVED remains false", PROTOCOL_RISK_RUBRIC_APPROVED === false, `flag=${PROTOCOL_RISK_RUBRIC_APPROVED}`);
+  add("12V-AK: PROTOCOL_RISK_APPROVAL_DECISION_APPROVED remains false", PROTOCOL_RISK_APPROVAL_DECISION_APPROVED === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_APPROVED}`);
+  add("12V-AL: canAssignProtocolRiskScores() remains false", canAssignProtocolRiskScores() === false, `v=${canAssignProtocolRiskScores()}`);
+  // 12V-AM. productionReady remains false.
+  add("12V-AM: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 12V-AN. Live staking not_evaluated.
+  add("12V-AN: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12V-AO. No live suggestion has selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12V-AO: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12V-AP. Cards/modal do not expose real-value confirmations or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "409170000", "confirmedAsOf", "RealValueConfirmation", "defillama"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12V-AP: cards/modal never expose real-value confirmations or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12V-AQ/AR/AS. Flags at safe defaults.
+  add("12V-AQ: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12V-AR: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12V-AS: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12V-AT. No transaction/signature/swap path in ledger output.
+  {
+    const json = (JSON.stringify(all) + JSON.stringify(summaryFresh) + JSON.stringify(mapRealValuesToEvidenceCompletion("jupiter", [...all], FRESH_AS_OF))).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("12V-AT: no transaction/signature/swap path in ledger output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12V-AX. No forbidden investment claims in ledger output (existing forbidden-copy list).
+  {
+    const json = JSON.stringify(all).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12V-AX: no forbidden investment claims in ledger output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -5753,6 +5911,7 @@ export function printFixtureResults(): void {
     ...runSolLiquidStakingEvidenceCompletionFixtureChecks(),
     ...runSolLiquidStakingSourceVerificationFixtureChecks(),
     ...runSolLiquidStakingSourceValueConfirmationFixtureChecks(),
+    ...runSolLiquidStakingRealValueFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
