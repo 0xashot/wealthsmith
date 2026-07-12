@@ -119,3 +119,37 @@ export function getInternalOnlySolLstSelectorPreviewExample(): SolLstSelectorPre
     primaryActionLabel: "Preview disabled",
   });
 }
+
+/**
+ * INTERNAL-ONLY future SELECTED-state copy example (Step 13C), for visual review on
+ * the dev-only route. It names JitoSOL only as an INTERNAL_PREVIEW_NOT_LIVE example
+ * — it claims no production readiness, uses no QA score, includes no
+ * `selectedProtocolId`, and offers no transaction action. Not imported by any live
+ * user flow (Dashboard / Portfolio / modal).
+ */
+export function getInternalOnlySolLstSelectedPreviewExample(): SolLstSelectorPreviewResult {
+  return previewShell("preview_available", {
+    eyebrow: `Internal preview · Not live (${INTERNAL_PREVIEW_NOT_LIVE})`,
+    title: "Put Idle SOL to Work",
+    description:
+      "WealthSmith can show one liquid staking protocol to review once source, risk, and go/no-go gates are approved.",
+    suggestedProtocolLabel: "Suggested protocol to review",
+    selectedProtocolName: "Jito",
+    selectedLstSymbol: "JitoSOL",
+    eligibleAmountLabel: "Example: 10 SOL idle",
+    whySelected: [
+      "Meets the future TVL/adoption evidence requirement.",
+      "Withdrawal mechanics and fee information are recorded for review.",
+      "Security and operational evidence are recorded for review.",
+      "Risk scoring and production approval are still disabled.",
+    ],
+    blockers: ["Production go/no-go has not passed.", "Selector preview is not live."],
+    safetyNotes: [
+      "WealthSmith does not move funds for you.",
+      "You choose whether to continue externally.",
+      "This preview is not shown to users.",
+    ],
+    primaryActionLabel: "Open official protocol page",
+    secondaryActionLabel: "View evidence",
+  });
+}

@@ -896,6 +896,26 @@ Mode uses `SuggestionRail` directly and is untouched.
   all selection flags false; `productionReady` stays `false`. Fixtures 13B-A…AI (+33).
   Next: **human approval / source re-verification**, or mounting the preview behind a
   dev-only route.
+- Step 13C (done): **dev-only mounted preview route for the exact SOL staking
+  recommendation (unreachable in production/normal dev)**. Added
+  `app/src/components/internal/internalPreviewFlags.ts` (route flags +
+  `isInternalSolLstPreviewRouteEnabled()` — true only under `import.meta.env.DEV` +
+  `VITE_INTERNAL_SOL_LST_PREVIEW="true"`), `InternalPreviewGate.tsx`,
+  `SolLstSelectorPreview.tsx` (disabled-button preview component), and
+  `solLstSelectorPreview.css` (scoped under `.internal-sol-lst-preview`), plus
+  `protocolSolLiquidStakingSelectorPreviewRoute.md`. Added
+  `getInternalOnlySolLstSelectedPreviewExample()` (future selected-state copy;
+  JitoSOL only as `INTERNAL_PREVIEW_NOT_LIVE`, no `selectedProtocolId`, no QA score,
+  disabled actions, "WealthSmith does not move funds for you."). `App.tsx` gains a
+  dev-only guarded branch (wrapping `MainApp`) rendering the preview ONLY at
+  `/internal/sol-lst-preview` when the dev flag is set — every normal/production flow
+  is unchanged. Route flags all false/dev-gated by default;
+  `isInternalSolLstPreviewRouteEnabled()` false by default. Preview absent from
+  Dashboard/Portfolio/Card/modal/engine output; live suggestions `not_evaluated`; all
+  selection/selector flags false; `productionReady` stays `false`. Run:
+  `VITE_INTERNAL_SOL_LST_PREVIEW=true npm run dev` → `/internal/sol-lst-preview`.
+  Fixtures 13C-A…AJ (+34). Next: **human approval / source re-verification** before
+  any real enablement.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -909,8 +929,8 @@ completion harness + source-verification intake + source-value confirmation inta
 real value-confirmation ledger + evidence gather-decision ledger + JitoSOL
 ready-for-review evidence package + gated riskScore assignment mechanism + staged
 JitoSOL production metadata + hard-disabled selector shell + internal UI preview
-shell); production selection remains not evaluated / not implemented, and the go/no-go
-reports `productionReady = false`.
+shell + dev-only preview route); production selection remains not evaluated / not
+implemented, and the go/no-go reports `productionReady = false`.
 
 ## Suggestion display order
 

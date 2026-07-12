@@ -527,3 +527,20 @@ for you."); the internal example shows future copy tagged `INTERNAL_PREVIEW_NOT_
 with no selected protocol, no QA score, and no production-readiness claim. **No
 production enablement:** no live suggestions updated, no transactions, no UI mounted;
 `productionReady` stays `false`. Not imported by any live/engine/UI file.
+
+---
+
+## 13C — dev-only mounted preview route
+
+`app/src/components/internal/` (`internalPreviewFlags.ts`, `InternalPreviewGate.tsx`,
+`SolLstSelectorPreview.tsx`, `solLstSelectorPreview.css`) +
+`protocolSolLiquidStakingSelectorPreviewRoute.md` add a **dev-only** route
+(`/internal/sol-lst-preview`) so a reviewer can visually verify the future exact SOL
+staking recommendation UI. `App.tsx` gains a dev-only guarded branch that renders the
+preview ONLY when `import.meta.env.DEV && VITE_INTERNAL_SOL_LST_PREVIEW === "true"`
+and the exact path matches — every normal/production flow renders `MainApp`
+unchanged. The selected-state example shows JitoSOL only as `INTERNAL_PREVIEW_NOT_LIVE`
+with disabled buttons. **No production enablement:** not in Dashboard/Portfolio/modal,
+no live-suggestion update, no selection, no transactions; all selection/selector
+flags false; `productionReady` stays `false`. Run:
+`VITE_INTERNAL_SOL_LST_PREVIEW=true npm run dev`.

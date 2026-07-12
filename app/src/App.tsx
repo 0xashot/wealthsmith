@@ -40,12 +40,46 @@ import {
   ONBOARDING_FINISH_TOAST,
   ONBOARDING_FINISH_HELPER,
 } from "./state/approvedCopy";
+import {
+  isInternalSolLstPreviewRouteEnabled,
+  INTERNAL_SOL_LST_PREVIEW_ROUTE_PATH,
+} from "./components/internal/internalPreviewFlags";
+import InternalPreviewGate from "./components/internal/InternalPreviewGate";
+import SolLstSelectorPreview from "./components/internal/SolLstSelectorPreview";
+import {
+  getDefaultSolLstSelectorPreview,
+  getInternalOnlySolLstSelectedPreviewExample,
+} from "./suggestions/protocolSolLiquidStakingSelectorPreview";
 import "./styles/dashboard.css";
 
 export type AppMode = "connected" | "demo" | "disconnected";
 export type ConnectedPage = "dashboard" | "portfolio" | "goal" | "support";
 
+/**
+ * DEV-ONLY guarded preview route. Reachable ONLY in a local dev build with
+ * VITE_INTERNAL_SOL_LST_PREVIEW="true" AND the exact internal path. In every normal
+ * flow (production, plain `npm run dev`, any other path) this is false and the app
+ * renders exactly as before. It calls no hooks, so it wraps MainApp cleanly.
+ */
 export default function App() {
+  if (
+    isInternalSolLstPreviewRouteEnabled() &&
+    typeof window !== "undefined" &&
+    window.location.pathname === INTERNAL_SOL_LST_PREVIEW_ROUTE_PATH
+  ) {
+    return (
+      <InternalPreviewGate fallback={<MainApp />}>
+        <main style={{ minHeight: "100vh", padding: "24px 0" }}>
+          <SolLstSelectorPreview preview={getDefaultSolLstSelectorPreview()} />
+          <SolLstSelectorPreview preview={getInternalOnlySolLstSelectedPreviewExample()} />
+        </main>
+      </InternalPreviewGate>
+    );
+  }
+  return <MainApp />;
+}
+
+function MainApp() {
   // Real wallet-adapter state drives connected/disconnected. No signing, no reads.
   const { connected, publicKey, disconnect } = useWallet();
   const walletConnected = connected && !!publicKey;

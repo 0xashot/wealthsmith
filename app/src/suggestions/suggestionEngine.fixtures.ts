@@ -266,7 +266,19 @@ import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLES_TRANSACTIONS,
   getDefaultSolLstSelectorPreview,
   getInternalOnlySolLstSelectorPreviewExample,
+  getInternalOnlySolLstSelectedPreviewExample,
+  INTERNAL_PREVIEW_NOT_LIVE,
 } from "./protocolSolLiquidStakingSelectorPreview";
+import {
+  INTERNAL_SOL_LST_PREVIEW_ROUTE_EXISTS,
+  INTERNAL_SOL_LST_PREVIEW_ROUTE_ENABLED_BY_DEFAULT,
+  INTERNAL_SOL_LST_PREVIEW_REQUIRES_DEV_MODE,
+  INTERNAL_SOL_LST_PREVIEW_ROUTE_PATH,
+  INTERNAL_SOL_LST_PREVIEW_UPDATES_LIVE_SUGGESTIONS,
+  INTERNAL_SOL_LST_PREVIEW_ENABLES_SELECTION,
+  INTERNAL_SOL_LST_PREVIEW_ENABLES_TRANSACTIONS,
+  isInternalSolLstPreviewRouteEnabled,
+} from "../components/internal/internalPreviewFlags";
 import {
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC,
@@ -6814,6 +6826,109 @@ export function runSolLstSelectorPreviewFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 13C — dev-only mounted preview route for exact SOL staking recommendation.
+ * Route hard-disabled by default; never in live user flows.
+ * ------------------------------------------------------------------ */
+export function runSolLstSelectorPreviewRouteFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+
+  const selectedExample = getInternalOnlySolLstSelectedPreviewExample();
+  const gng = getProtocolSelectionGoNoGo("t");
+
+  // 13C-A…H. Route flags.
+  add("13C-A: INTERNAL_SOL_LST_PREVIEW_ROUTE_EXISTS is true", INTERNAL_SOL_LST_PREVIEW_ROUTE_EXISTS === true, `flag=${INTERNAL_SOL_LST_PREVIEW_ROUTE_EXISTS}`);
+  add("13C-B: INTERNAL_SOL_LST_PREVIEW_ROUTE_ENABLED_BY_DEFAULT is false", INTERNAL_SOL_LST_PREVIEW_ROUTE_ENABLED_BY_DEFAULT === false, `flag=${INTERNAL_SOL_LST_PREVIEW_ROUTE_ENABLED_BY_DEFAULT}`);
+  add("13C-C: INTERNAL_SOL_LST_PREVIEW_REQUIRES_DEV_MODE is true", INTERNAL_SOL_LST_PREVIEW_REQUIRES_DEV_MODE === true, `flag=${INTERNAL_SOL_LST_PREVIEW_REQUIRES_DEV_MODE}`);
+  add("13C-D: INTERNAL_SOL_LST_PREVIEW_UPDATES_LIVE_SUGGESTIONS is false", INTERNAL_SOL_LST_PREVIEW_UPDATES_LIVE_SUGGESTIONS === false, `flag=${INTERNAL_SOL_LST_PREVIEW_UPDATES_LIVE_SUGGESTIONS}`);
+  add("13C-E: INTERNAL_SOL_LST_PREVIEW_ENABLES_SELECTION is false", INTERNAL_SOL_LST_PREVIEW_ENABLES_SELECTION === false, `flag=${INTERNAL_SOL_LST_PREVIEW_ENABLES_SELECTION}`);
+  add("13C-F: INTERNAL_SOL_LST_PREVIEW_ENABLES_TRANSACTIONS is false", INTERNAL_SOL_LST_PREVIEW_ENABLES_TRANSACTIONS === false, `flag=${INTERNAL_SOL_LST_PREVIEW_ENABLES_TRANSACTIONS}`);
+  add("13C-G: preview route path is /internal/sol-lst-preview", INTERNAL_SOL_LST_PREVIEW_ROUTE_PATH === "/internal/sol-lst-preview", `path=${INTERNAL_SOL_LST_PREVIEW_ROUTE_PATH}`);
+  add("13C-H: isInternalSolLstPreviewRouteEnabled() is false by default", isInternalSolLstPreviewRouteEnabled() === false, `v=${isInternalSolLstPreviewRouteEnabled()}`);
+
+  // 13C-I…N. Selected preview example.
+  add("13C-I: selected preview example includes INTERNAL_PREVIEW_NOT_LIVE", JSON.stringify(selectedExample).includes(INTERNAL_PREVIEW_NOT_LIVE), `has=${JSON.stringify(selectedExample).includes(INTERNAL_PREVIEW_NOT_LIVE)}`);
+  add("13C-J: selected preview example may show JitoSOL only in internal preview output", selectedExample.copy.selectedProtocolName === "Jito" && selectedExample.copy.selectedLstSymbol === "JitoSOL" && selectedExample.internalOnly === true, `name=${selectedExample.copy.selectedProtocolName}`);
+  add("13C-K: selected preview example has no selectedProtocolId", !JSON.stringify(selectedExample).includes("selectedProtocolId"), `clean=${!JSON.stringify(selectedExample).includes("selectedProtocolId")}`);
+  {
+    const j = JSON.stringify(selectedExample).toLowerCase();
+    add("13C-L: selected preview example does not use QA-only score", !j.includes("7.75") && !j.includes("qa_only_not_production"), `clean=${!j.includes("7.75")}`);
+  }
+  add("13C-M: selected preview example has transactionsEnabled false", selectedExample.transactionsEnabled === false, `v=${selectedExample.transactionsEnabled}`);
+  add("13C-N: selected preview safety notes include the no-move-funds line", selectedExample.copy.safetyNotes.includes("WealthSmith does not move funds for you."), `notes=${selectedExample.copy.safetyNotes.length}`);
+
+  // 13C-O…U. Preview shape/copy not present in live suggestion-derivation output
+  // (proxy for "preview component not imported by Dashboard/Portfolio/Card/Modal/
+  // stakingSuggestion/engine/toSuggestionCard"; import graph is grep-verified too).
+  {
+    const previewTokens = ["INTERNAL_PREVIEW_NOT_LIVE", "Suggested protocol to review", "internal-sol-lst-preview", "Open official protocol page", "SolLstSelectorPreview"];
+    const stakingJson = JSON.stringify(staking);
+    const engineJson = JSON.stringify(stakingRun) + JSON.stringify(stableRun);
+    const cardJson = JSON.stringify(toSuggestionCard(staking!)) + JSON.stringify(toSuggestionCard(stable!));
+    const modalJson = JSON.stringify(staking?.reviewDetails) + JSON.stringify(stable?.reviewDetails);
+    const clean = (j: string) => previewTokens.every((t) => !j.includes(t));
+    add("13C-O: preview not present in Dashboard-facing suggestion output", clean(engineJson), "no preview");
+    add("13C-P: preview not present in Portfolio-facing suggestion output", clean(engineJson), "no preview");
+    add("13C-Q: preview not present in SuggestionCard output", clean(cardJson), "no preview");
+    add("13C-R: preview not present in Review-modal output", clean(modalJson), "no preview");
+    add("13C-S: preview not present in stakingSuggestion output", clean(stakingJson), "no preview");
+    add("13C-T: preview not present in engine output", clean(engineJson), "no preview");
+    add("13C-U: preview not present in toSuggestionCard output", clean(cardJson), "no preview");
+  }
+
+  // 13C-V. Live staking not_evaluated.
+  add("13C-V: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 13C-W. No live suggestion has selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("13C-W: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 13C-X. Cards/modal do not expose internal preview copy on normal flows.
+  {
+    const tokens = ["INTERNAL_PREVIEW_NOT_LIVE", "Suggested protocol to review", "Open official protocol page", "selectedProtocolName", "selectedLstSymbol"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("13C-X: cards/modal do not expose internal preview copy on normal flows", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 13C-Y/Z/AA. Selection flags.
+  add("13C-Y: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("13C-Z: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("13C-AA: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 13C-AB/AC/AD. Selector flags.
+  add("13C-AB: PROTOCOL_SOL_LST_SELECTOR_ENABLED remains false", PROTOCOL_SOL_LST_SELECTOR_ENABLED === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_ENABLED}`);
+  add("13C-AC: PROTOCOL_SOL_LST_SELECTOR_SHOWS_UI remains false", PROTOCOL_SOL_LST_SELECTOR_SHOWS_UI === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_SHOWS_UI}`);
+  add("13C-AD: PROTOCOL_SOL_LST_SELECTOR_UPDATES_LIVE_SUGGESTIONS remains false", PROTOCOL_SOL_LST_SELECTOR_UPDATES_LIVE_SUGGESTIONS === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_UPDATES_LIVE_SUGGESTIONS}`);
+  // 13C-AE. productionReady remains false.
+  add("13C-AE: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 13C-AF. No transaction/signature/swap path in preview output.
+  {
+    const json = JSON.stringify(selectedExample).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("13C-AF: no transaction/signature/swap path in preview output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 13C-AJ. No forbidden investment claims in preview output.
+  {
+    const json = JSON.stringify(selectedExample).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("13C-AJ: no forbidden investment claims in preview output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -6860,6 +6975,7 @@ export function printFixtureResults(): void {
     ...runSolLstProductionMetadataFixtureChecks(),
     ...runSolLstSelectorShellFixtureChecks(),
     ...runSolLstSelectorPreviewFixtureChecks(),
+    ...runSolLstSelectorPreviewRouteFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

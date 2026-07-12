@@ -50,3 +50,14 @@ protocol. It uses no QA score and claims no production readiness.
 
 Until all of these are met, the preview stays disabled and no protocol is shown to
 users. **Production selection remains disabled.**
+
+## Dev-only preview route (Step 13C)
+
+A dev-only route now mounts this preview for local visual review (never in
+production). See `protocolSolLiquidStakingSelectorPreviewRoute.md`. Run
+`VITE_INTERNAL_SOL_LST_PREVIEW=true npm run dev` and open
+`/internal/sol-lst-preview`. The selected-state example
+(`getInternalOnlySolLstSelectedPreviewExample()`) shows JitoSOL only as
+`INTERNAL_PREVIEW_NOT_LIVE`, with all buttons disabled. It is not mounted in
+Dashboard/Portfolio/Review modal and does not update live suggestions or enable
+transactions.
