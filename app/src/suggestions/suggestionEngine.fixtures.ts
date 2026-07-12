@@ -243,6 +243,19 @@ import {
   hasActiveSolLstProductionMetadata,
 } from "./protocolSolLiquidStakingProductionMetadata";
 import {
+  PROTOCOL_SOL_LST_SELECTOR_EXISTS,
+  PROTOCOL_SOL_LST_SELECTOR_ENABLED,
+  PROTOCOL_SOL_LST_SELECTOR_INTERNAL_ONLY,
+  PROTOCOL_SOL_LST_SELECTOR_SHOWS_UI,
+  PROTOCOL_SOL_LST_SELECTOR_USES_PRODUCTION_METADATA,
+  PROTOCOL_SOL_LST_SELECTOR_USES_QA_SCORE,
+  PROTOCOL_SOL_LST_SELECTOR_ENABLES_TRANSACTIONS,
+  PROTOCOL_SOL_LST_SELECTOR_UPDATES_LIVE_SUGGESTIONS,
+  selectSolLiquidStakingProtocol,
+  dryRunSolLstSelector,
+  previewSolLstSelectorReadiness,
+} from "./protocolSolLiquidStakingSelector";
+import {
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_ASSIGN_SCORES,
@@ -6551,6 +6564,138 @@ export function runSolLstProductionMetadataFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 13A — exact SOL liquid-staking selector shell (hard-disabled, internal).
+ * Returns disabled by default; no selection, no UI, no live behavior change.
+ * ------------------------------------------------------------------ */
+export function runSolLstSelectorShellFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+
+  const FRESH_AS_OF = "2026-07-12T06:00:00Z";
+  const solInput = { assetSymbol: "SOL", eligibleAmountSol: 10, asOf: FRESH_AS_OF };
+  const result = selectSolLiquidStakingProtocol(solInput);
+  const dry = dryRunSolLstSelector(solInput);
+  const jitoEval = dry.candidates.find((c) => c.protocolId === "jito");
+  const preview = previewSolLstSelectorReadiness(solInput);
+  const gng = getProtocolSelectionGoNoGo("t");
+
+  // 13A-A…H. Scoping constants.
+  add("13A-A: PROTOCOL_SOL_LST_SELECTOR_EXISTS is true", PROTOCOL_SOL_LST_SELECTOR_EXISTS === true, `flag=${PROTOCOL_SOL_LST_SELECTOR_EXISTS}`);
+  add("13A-B: PROTOCOL_SOL_LST_SELECTOR_ENABLED is false", PROTOCOL_SOL_LST_SELECTOR_ENABLED === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_ENABLED}`);
+  add("13A-C: PROTOCOL_SOL_LST_SELECTOR_INTERNAL_ONLY is true", PROTOCOL_SOL_LST_SELECTOR_INTERNAL_ONLY === true, `flag=${PROTOCOL_SOL_LST_SELECTOR_INTERNAL_ONLY}`);
+  add("13A-D: PROTOCOL_SOL_LST_SELECTOR_SHOWS_UI is false", PROTOCOL_SOL_LST_SELECTOR_SHOWS_UI === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_SHOWS_UI}`);
+  add("13A-E: PROTOCOL_SOL_LST_SELECTOR_USES_PRODUCTION_METADATA is true", PROTOCOL_SOL_LST_SELECTOR_USES_PRODUCTION_METADATA === true, `flag=${PROTOCOL_SOL_LST_SELECTOR_USES_PRODUCTION_METADATA}`);
+  add("13A-F: PROTOCOL_SOL_LST_SELECTOR_USES_QA_SCORE is false", PROTOCOL_SOL_LST_SELECTOR_USES_QA_SCORE === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_USES_QA_SCORE}`);
+  add("13A-G: PROTOCOL_SOL_LST_SELECTOR_ENABLES_TRANSACTIONS is false", PROTOCOL_SOL_LST_SELECTOR_ENABLES_TRANSACTIONS === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_ENABLES_TRANSACTIONS}`);
+  add("13A-H: PROTOCOL_SOL_LST_SELECTOR_UPDATES_LIVE_SUGGESTIONS is false", PROTOCOL_SOL_LST_SELECTOR_UPDATES_LIVE_SUGGESTIONS === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_UPDATES_LIVE_SUGGESTIONS}`);
+
+  // 13A-I…M. Default selector behavior.
+  add("13A-I: selectSolLiquidStakingProtocol returns status disabled by default", result.status === "disabled", `status=${result.status}`);
+  add("13A-J: default result has no selectedProtocolId", !("selectedProtocolId" in result), `has=${"selectedProtocolId" in result}`);
+  add("13A-K: default result has no selectedProtocolName", !("selectedProtocolName" in result), `has=${"selectedProtocolName" in result}`);
+  add("13A-L: default result has no selectedLstSymbol", !("selectedLstSymbol" in result), `has=${"selectedLstSymbol" in result}`);
+  add("13A-M: default blockers include selector_disabled", result.blockers.includes("selector_disabled"), `blockers=${result.blockers.join(",")}`);
+  // 13A-N…R. Dry-run JitoSOL evaluation.
+  add("13A-N: dryRunSolLstSelector evaluates JitoSOL candidate as blocked", jitoEval?.status === "blocked", `status=${jitoEval?.status}`);
+  add("13A-O: JitoSOL dry-run blockers include approved_risk_score_missing", jitoEval?.blockers.includes("approved_risk_score_missing") === true, `blockers=${jitoEval?.blockers.join(",")}`);
+  add("13A-P: JitoSOL dry-run blockers include source_reverification_missing", jitoEval?.blockers.includes("source_reverification_missing") === true, `has=${jitoEval?.blockers.includes("source_reverification_missing")}`);
+  add("13A-Q: JitoSOL dry-run blockers include go_no_go_not_passed", jitoEval?.blockers.includes("go_no_go_not_passed") === true, `has=${jitoEval?.blockers.includes("go_no_go_not_passed")}`);
+  add("13A-R: JitoSOL dry-run blockers include production_metadata_not_ready/inactive", jitoEval?.blockers.includes("production_metadata_not_ready") === true || jitoEval?.blockers.includes("production_metadata_inactive") === true, `has=${jitoEval?.blockers.includes("production_metadata_not_ready")}`);
+  // 13A-S. Dry-run returns no selectedProtocolId.
+  add("13A-S: dryRunSolLstSelector does not return selectedProtocolId", !("selectedProtocolId" in dry), `has=${"selectedProtocolId" in dry}`);
+  // 13A-T…W. Readiness preview.
+  add("13A-T: previewSolLstSelectorReadiness().canSelect is false", preview.canSelect === false, `v=${preview.canSelect}`);
+  add("13A-U: nextRequiredActions includes approved non-QA riskScore", preview.nextRequiredActions.some((a) => a.includes("approved non-QA riskScore")), `actions=${preview.nextRequiredActions.length}`);
+  add("13A-V: nextRequiredActions includes source re-verification", preview.nextRequiredActions.some((a) => a.includes("source re-verification")), `has=${preview.nextRequiredActions.some((a) => a.includes("source re-verification"))}`);
+  add("13A-W: nextRequiredActions includes go/no-go pass", preview.nextRequiredActions.some((a) => a.includes("go/no-go")), `has=${preview.nextRequiredActions.some((a) => a.includes("go/no-go"))}`);
+  // 13A-X. Rejects unsupported asset.
+  {
+    const usdc = selectSolLiquidStakingProtocol({ assetSymbol: "USDC", eligibleAmountSol: 10, asOf: FRESH_AS_OF });
+    add("13A-X: selector rejects unsupported assetSymbol (USDC)", usdc.blockers.includes("unsupported_asset") && !("selectedProtocolId" in usdc), `blockers=${usdc.blockers.join(",")}`);
+  }
+  // 13A-Y. Rejects amount at/below threshold.
+  {
+    const small = selectSolLiquidStakingProtocol({ assetSymbol: "SOL", eligibleAmountSol: 0.1, asOf: FRESH_AS_OF });
+    add("13A-Y: selector rejects eligibleAmountSol at/below minimum threshold", small.blockers.includes("eligible_amount_too_small"), `blockers=${small.blockers.join(",")}`);
+  }
+  // 13A-Z. Never uses QA-only 7.75 (no candidate surfaces a riskScore).
+  add("13A-Z: selector never uses QA-only 7.75 as production riskScore", dry.candidates.every((c) => c.riskScore === undefined), `jitoScore=${jitoEval?.riskScore}`);
+  // 13A-AA. Does not mutate production metadata (build twice → identical).
+  {
+    const a = JSON.stringify(buildJitoSolProductionMetadataCandidate({ asOf: FRESH_AS_OF }));
+    dryRunSolLstSelector(solInput);
+    const b = JSON.stringify(buildJitoSolProductionMetadataCandidate({ asOf: FRESH_AS_OF }));
+    add("13A-AA: selector does not mutate production metadata", a === b, `unchanged=${a === b}`);
+  }
+  // 13A-AB. Does not update protocolRiskRegistry.
+  add("13A-AB: selector does not update protocolRiskRegistry", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "no riskScore");
+  // 13A-AC. Does not update DEFILLAMA_POOL_MAPPINGS.
+  {
+    const keys = Object.keys(DEFILLAMA_POOL_MAPPINGS);
+    add("13A-AC: selector does not update DEFILLAMA_POOL_MAPPINGS", keys.length === 1 && keys[0] === "sanctum", `keys=${keys.join(",")}`);
+  }
+  // 13A-AD. Does not update evidence drafts.
+  {
+    const before = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    selectSolLiquidStakingProtocol(solInput);
+    dryRunSolLstSelector(solInput);
+    const after = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    add("13A-AD: selector does not update evidence drafts", before === after, `unchanged=${before === after}`);
+  }
+  // 13A-AE/AF/AG. Approval flags false.
+  add("13A-AE: PROTOCOL_RISK_RUBRIC_APPROVED remains false", PROTOCOL_RISK_RUBRIC_APPROVED === false, `flag=${PROTOCOL_RISK_RUBRIC_APPROVED}`);
+  add("13A-AF: PROTOCOL_RISK_APPROVAL_DECISION_APPROVED remains false", PROTOCOL_RISK_APPROVAL_DECISION_APPROVED === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_APPROVED}`);
+  add("13A-AG: canAssignProtocolRiskScores() remains false by default", canAssignProtocolRiskScores() === false, `v=${canAssignProtocolRiskScores()}`);
+  // 13A-AH. productionReady remains false.
+  add("13A-AH: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 13A-AI. Live staking not_evaluated.
+  add("13A-AI: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 13A-AJ. No live suggestion has selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("13A-AJ: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 13A-AK. Cards/modal do not expose selector data or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "selectedProtocolId", "SolLstSelector", "nextRequiredActions", "eligibleAmountSol"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("13A-AK: cards/modal never expose selector data or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 13A-AL/AM/AN. Flags at safe defaults.
+  add("13A-AL: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("13A-AM: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("13A-AN: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 13A-AO. No transaction/signature/swap path in selector output.
+  {
+    const json = (JSON.stringify(result) + JSON.stringify(dry) + JSON.stringify(preview)).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("13A-AO: no transaction/signature/swap path in selector output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 13A-AS. No forbidden investment claims in selector output.
+  {
+    const json = (JSON.stringify(result) + JSON.stringify(dry) + JSON.stringify(preview)).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("13A-AS: no forbidden investment claims in selector output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -6595,6 +6740,7 @@ export function printFixtureResults(): void {
     ...runJitoSolEvidenceReadinessFixtureChecks(),
     ...runProtocolRiskScoreAssignmentFixtureChecks(),
     ...runSolLstProductionMetadataFixtureChecks(),
+    ...runSolLstSelectorShellFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

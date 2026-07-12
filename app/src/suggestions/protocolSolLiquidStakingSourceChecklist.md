@@ -178,3 +178,18 @@ Before a staged production-metadata candidate can be activated (a later step):
 
 The JitoSOL candidate is `blocked` today (no approved score, no re-verification).
 See `protocolSolLiquidStakingProductionMetadata.md`.
+
+## 13A selector checklist
+
+Before the selector can pick a protocol for a user-facing surface:
+
+- [ ] source re-verification complete;
+- [ ] approved non-QA riskScore assigned;
+- [ ] active production metadata;
+- [ ] fresh data;
+- [ ] production go/no-go pass;
+- [ ] product / copy / UI approval;
+- [ ] selector feature flag enabled.
+
+The selector shell is hard-disabled today (`selectSolLiquidStakingProtocol()` →
+`disabled`), so no protocol is selected. See `protocolSolLiquidStakingSelector.md`.

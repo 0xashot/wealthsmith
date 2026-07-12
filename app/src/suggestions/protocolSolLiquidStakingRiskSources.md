@@ -216,3 +216,13 @@ approved score, source re-verification required, selection disabled, go/no-go no
 passed). The QA-only 7.75 is never accepted as production. Nothing is written to
 `protocolRiskRegistry.ts`; no protocol is selected. See
 `protocolSolLiquidStakingProductionMetadata.md`.
+
+## 13A update
+
+The exact SOL liquid-staking selector shell now exists
+(`protocolSolLiquidStakingSelector.ts`), **hard-disabled and internal-only**.
+`selectSolLiquidStakingProtocol()` returns `disabled`; a dry-run evaluates JitoSOL
+as **blocked** (selector disabled, metadata inactive/not-ready, approved riskScore
+missing, source re-verification missing, go/no-go not passed). **No protocol is
+selected**, no riskScore is surfaced (the QA-only 7.75 is never used), and nothing
+is written to any production registry. See `protocolSolLiquidStakingSelector.md`.

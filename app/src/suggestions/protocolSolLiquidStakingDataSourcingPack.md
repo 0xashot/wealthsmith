@@ -181,6 +181,15 @@ always false; nothing is promoted to `protocolRiskRegistry.ts` /
 `DEFILLAMA_POOL_MAPPINGS`; the QA-only 7.75 is never used as production. See
 `protocolSolLiquidStakingProductionMetadata.md`.
 
+## Selector shell (Step 13A)
+
+`protocolSolLiquidStakingSelector.ts` adds the exact SOL liquid-staking selector
+shell. It **consumes production metadata only after all gates pass** — and today it
+is hard-disabled (`selectSolLiquidStakingProtocol()` → `disabled`), so **no
+selection happens**. It mutates no metadata/registry/mappings/drafts, shows no UI,
+updates no live suggestions, and enables no transactions. See
+`protocolSolLiquidStakingSelector.md`.
+
 ## Rules honored
 
 - No pool UUID, APY, TVL, withdrawal time, fee, audit status, or riskScore is

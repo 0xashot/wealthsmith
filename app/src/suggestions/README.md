@@ -856,6 +856,28 @@ Mode uses `SuggestionRail` directly and is untouched.
   live/engine/UI file; live suggestions `not_evaluated`; all selection flags false;
   `productionReady` stays `false`. Fixtures 12Z-A…AX (+47). Next: **13A** exact SOL
   staking selector behind an internal flag.
+- Step 13A (done): **exact SOL liquid-staking selector shell (hard-disabled,
+  internal-only; no selection, no UI, no live change)**. Added
+  `protocolSolLiquidStakingSelector.ts` + `protocolSolLiquidStakingSelector.md`.
+  Constants `PROTOCOL_SOL_LST_SELECTOR_EXISTS = true`, `..._ENABLED = false`,
+  `..._INTERNAL_ONLY = true`, `..._SHOWS_UI`/`..._USES_QA_SCORE`/
+  `..._ENABLES_TRANSACTIONS`/`..._UPDATES_LIVE_SUGGESTIONS = false`,
+  `..._USES_PRODUCTION_METADATA = true`. `selectSolLiquidStakingProtocol()` returns
+  `status: "disabled"` with `selector_disabled` and **no** `selectedProtocolId`/
+  `Name`/`LstSymbol`; input validation still flags `unsupported_asset` (USDC) and
+  `eligible_amount_too_small`. `dryRunSolLstSelector()` evaluates JitoSOL as
+  **blocked** (selector_disabled, protocol_selection_feature_disabled,
+  go_no_go_not_passed, production_metadata_inactive/not_ready,
+  approved_risk_score_missing, source_reverification_missing) with no
+  selectedProtocolId. `previewSolLstSelectorReadiness().canSelect = false` +
+  nextRequiredActions (approve rubric, assign approved non-QA riskScore, source
+  re-verification, activate metadata, pass go/no-go, enable flag, approve UI/copy).
+  Future selection is deterministic (approved riskScore → TVL → withdrawal → APY-30d
+  → id). Never uses the QA-only 7.75; mutates no metadata/registry/mappings/drafts.
+  Not imported by any live/engine/UI file; live suggestions `not_evaluated`; all
+  selection flags false; `productionReady` stays `false`. Fixtures 13A-A…AS (+42).
+  Next: **13B** internal UI preview shell, or the human approval / source
+  re-verification.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -868,8 +890,9 @@ risk evidence drafts + reviewer approval decision gate + one-candidate evidence
 completion harness + source-verification intake + source-value confirmation intake +
 real value-confirmation ledger + evidence gather-decision ledger + JitoSOL
 ready-for-review evidence package + gated riskScore assignment mechanism + staged
-JitoSOL production metadata); production selection remains not evaluated / not
-implemented, and the go/no-go reports `productionReady = false`.
+JitoSOL production metadata + hard-disabled selector shell); production selection
+remains not evaluated / not implemented, and the go/no-go reports `productionReady =
+false`.
 
 ## Suggestion display order
 

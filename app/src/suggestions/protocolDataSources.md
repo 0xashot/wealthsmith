@@ -495,3 +495,20 @@ never accepted as production), status `blocked` with `production_risk_score_abse
 always false; nothing written to `protocolRiskRegistry.ts` / `DEFILLAMA_POOL_MAPPINGS`
 / `ProtocolMarketData`; `getProtocolSelectionGoNoGo().productionReady = false`. Not
 imported by any live/engine/UI file.
+
+---
+
+## 13A — exact SOL liquid-staking selector shell
+
+`protocolSolLiquidStakingSelector.ts` + `protocolSolLiquidStakingSelector.md` add
+the exact selector shell for "idle SOL → which liquid-staking protocol to review".
+It is **hard-disabled** (`PROTOCOL_SOL_LST_SELECTOR_ENABLED = false`) and
+internal-only: `selectSolLiquidStakingProtocol()` returns `disabled` with no
+selected protocol; a dry-run evaluates JitoSOL as `blocked` (selector disabled,
+metadata inactive/not-ready, approved riskScore missing, source re-verification
+missing, go/no-go not passed); `previewSolLstSelectorReadiness().canSelect` is
+false. Future selection is deterministic (approved riskScore → TVL → withdrawal →
+APY-30d → id). **No production enablement:** it never uses the QA-only 7.75, shows
+no UI, updates no live suggestions, enables no transactions, and mutates no
+metadata/registry/mappings/drafts. `productionReady` stays `false`. Not imported by
+any live/engine/UI file.
