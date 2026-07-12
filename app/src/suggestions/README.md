@@ -761,6 +761,31 @@ Mode uses `SuggestionRail` directly and is untouched.
   live/engine/UI file; live suggestions `not_evaluated`; all selection flags false;
   `productionReady` stays `false`. Fixtures 12V-A…AX (+47). Next: **12W**
   gather-decision ledger for `tvl_adoption` and the remaining dimensions.
+- Step 12W (done): **evidence gather-decision ledger for SOL liquid staking
+  (non-production; no score, no draft mutation, no metadata)**. Added
+  `protocolSolLiquidStakingEvidenceGatherDecisions.ts` +
+  `protocolSolLiquidStakingEvidenceGatherDecisions.md`: reviewer decisions that a
+  rubric dimension is `gathered`, freshness-aware. Constants
+  `PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST = true`, `..._APPROVE_RUBRIC`/
+  `..._ASSIGN_SCORES`/`..._AFFECT_PRODUCTION`/`..._ENABLE_SELECTION`/
+  `..._UPDATE_METADATA`/`..._MUTATE_EVIDENCE = false`. Helpers:
+  `getSolLstEvidenceGatherDecisions()`, `getGatherDecisionsByDimension/Status()`,
+  `validateEvidenceGatherDecision()`, `getEffectiveGatherDecisions()`,
+  `summarizeSolLstEvidenceGatherDecisions()`,
+  `evaluateCandidateReadinessFromGatherDecisions()`, plus
+  `mapGatherDecisionsToEvidenceCompletion()` (evidence-completion module) and a
+  non-production gate wrapper
+  `evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions()` (approval-
+  decision module). **`tvl_adoption` gathered for JupSOL/mSOL/JitoSOL/bSOL while
+  their 12V values are fresh** (past 24h → `stale`, not gathered); **INF
+  `needs_review`**; the other five dimensions have no decision. Four candidates =
+  1/6 gathered + 5 missing; INF = 0/6; **no candidate `ready_for_review` or
+  `approved_for_scoring`**, gate wrapper status `blocked`. **No base draft mutated,
+  no production metadata, no `riskScore` assigned.** Not imported by any
+  live/engine/UI file; live suggestions `not_evaluated`; all selection flags false;
+  `productionReady` stays `false`. Fixtures 12W-A…BA (+50). Next: confirm + gather
+  the remaining dimensions (withdrawal/fees/audit/operational/incident) and the
+  human rubric-approval review.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -771,8 +796,9 @@ internal dry-run + verified source completion + Stage-2 real-data dry-run report
 machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubric +
 risk evidence drafts + reviewer approval decision gate + one-candidate evidence
 completion harness + source-verification intake + source-value confirmation intake +
-real value-confirmation ledger); production selection remains not evaluated / not
-implemented, and the go/no-go reports `productionReady = false`.
+real value-confirmation ledger + evidence gather-decision ledger); production
+selection remains not evaluated / not implemented, and the go/no-go reports
+`productionReady = false`.
 
 ## Suggestion display order
 

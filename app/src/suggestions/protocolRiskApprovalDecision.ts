@@ -17,6 +17,7 @@
 import { PROTOCOL_RISK_RUBRIC_VERSION, isProtocolRiskRubricApproved } from "./protocolRiskRubric";
 import type { ProtocolRiskRubricDimensionId } from "./protocolRiskRubric";
 import { getSolLiquidStakingEvidenceDrafts } from "./protocolSolLiquidStakingEvidenceDrafts";
+import { evaluateCandidateReadinessFromGatherDecisions } from "./protocolSolLiquidStakingEvidenceGatherDecisions";
 
 /** The decision model exists (this step) but approves nothing and scores nothing. */
 export const PROTOCOL_RISK_APPROVAL_DECISION_EXISTS = true;
@@ -167,6 +168,55 @@ export function evaluateProtocolRiskCandidateScoreAssignmentGate(
     missingDimensions,
     blockers,
     scoreAssignmentAllowed,
+    scoreAssigned: false,
+  };
+}
+
+/**
+ * Non-production variant of the score-assignment gate that ADDITIONALLY counts
+ * dimensions marked `gathered` in the 12W gather-decision ledger (freshness-aware).
+ * It reuses the same status logic, never mutates base evidence drafts, never
+ * approves scoring, and never assigns a `riskScore`. Not wired into production,
+ * engine, UI, or live suggestions.
+ */
+export function evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions(
+  protocolId: string,
+  asOf?: string
+): ProtocolRiskCandidateScoreAssignmentGate {
+  const lstSymbol = LST_SYMBOL[protocolId] ?? protocolId;
+  const decision = getCurrentProtocolRiskRubricApprovalDecision();
+  const base = evaluateProtocolRiskCandidateScoreAssignmentGate(protocolId);
+  const gatherEval = evaluateCandidateReadinessFromGatherDecisions(protocolId, asOf);
+
+  // Union of draft-gathered and ledger-gathered dimensions.
+  const gatheredDimensions = REQUIRED_DIMENSIONS.filter(
+    (dim) => base.gatheredDimensions.includes(dim) || gatherEval.gatheredDimensions.includes(dim)
+  );
+  const missingDimensions = REQUIRED_DIMENSIONS.filter((dim) => !gatheredDimensions.includes(dim));
+
+  const blockers: string[] = [];
+  if (missingDimensions.length > 0) blockers.push(`evidence_incomplete: ${missingDimensions.length}/${REQUIRED_DIMENSIONS.length} dimensions not gathered`);
+  if (!decision.rubricApproved) blockers.push("rubric_not_approved");
+  if (!decision.scoreAssignmentAllowed) blockers.push("score_assignment_not_allowed");
+
+  let status: ProtocolRiskCandidateApprovalStatus;
+  if (missingDimensions.length > 0) {
+    status = decision.rubricApproved ? "evidence_incomplete" : "blocked";
+  } else if (!decision.rubricApproved || !decision.scoreAssignmentAllowed) {
+    status = "ready_for_review";
+  } else {
+    status = "approved_for_scoring";
+  }
+
+  return {
+    protocolId,
+    lstSymbol,
+    status,
+    requiredDimensions: [...REQUIRED_DIMENSIONS],
+    gatheredDimensions,
+    missingDimensions,
+    blockers,
+    scoreAssignmentAllowed: false,
     scoreAssigned: false,
   };
 }

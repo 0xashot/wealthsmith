@@ -143,6 +143,15 @@ INF stays absent (no exact value supplied; not invented). Values expire after 24
 production metadata:** nothing is written to `DEFILLAMA_POOL_MAPPINGS` /
 `ProtocolMarketData`, no evidence draft is mutated, and no `riskScore` is assigned.
 
+## Gather-decision ledger (Step 12W)
+
+`protocolSolLiquidStakingEvidenceGatherDecisions.ts` records reviewer decisions
+that a dimension is `gathered` (freshness-aware). `tvl_adoption` is gathered for
+JupSOL/mSOL/JitoSOL/bSOL while fresh; INF is `needs_review`; the other five
+dimensions have no decision. **Gather decisions are non-production:** they mutate no
+base evidence drafts and promote no production metadata (`DEFILLAMA_POOL_MAPPINGS` /
+`ProtocolMarketData` untouched), and no `riskScore` is assigned.
+
 ## Rules honored
 
 - No pool UUID, APY, TVL, withdrawal time, fee, audit status, or riskScore is

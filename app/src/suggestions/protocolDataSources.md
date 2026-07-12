@@ -427,3 +427,20 @@ support for `tvl_adoption` only. **No production enablement:** no metadata writt
 `riskScore` assigned; the other five dimensions stay incomplete so no candidate is
 `ready_for_review`, and `approvedForScoring`/`productionReady` stay false. Not
 imported by any live/engine/UI file.
+
+---
+
+## 12W — evidence gather-decision ledger
+
+`protocolSolLiquidStakingEvidenceGatherDecisions.ts` +
+`protocolSolLiquidStakingEvidenceGatherDecisions.md` add a non-production ledger of
+explicit reviewer decisions that a rubric dimension is `gathered`, freshness-aware.
+`tvl_adoption` is gathered for JupSOL/mSOL/JitoSOL/bSOL while their 12V values are
+fresh (past 24h → `stale`); INF is `needs_review`; the other five dimensions have no
+decision. A non-production gate wrapper
+(`evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions`) shows the
+four with `tvl_adoption` gathered but status `blocked` (5 missing),
+`scoreAssignmentAllowed = false`. **No production enablement:** no base draft
+mutated, no metadata written, no `riskScore` assigned; no candidate is
+`ready_for_review` or `approved_for_scoring`, and `productionReady` stays `false`.
+Not imported by any live/engine/UI file.

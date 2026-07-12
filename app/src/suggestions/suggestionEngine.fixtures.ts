@@ -212,7 +212,21 @@ import {
   summarizeSourceValueConfirmations,
   type ProtocolSourceValueConfirmationInput,
 } from "./protocolSolLiquidStakingSourceValueConfirmation";
-import { mapConfirmedValuesToEvidenceCompletion, mapRealValuesToEvidenceCompletion } from "./protocolSolLiquidStakingEvidenceCompletion";
+import { mapConfirmedValuesToEvidenceCompletion, mapRealValuesToEvidenceCompletion, mapGatherDecisionsToEvidenceCompletion } from "./protocolSolLiquidStakingEvidenceCompletion";
+import { evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions } from "./protocolRiskApprovalDecision";
+import {
+  PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST,
+  PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC,
+  PROTOCOL_EVIDENCE_GATHER_DECISIONS_ASSIGN_SCORES,
+  PROTOCOL_EVIDENCE_GATHER_DECISIONS_AFFECT_PRODUCTION,
+  PROTOCOL_EVIDENCE_GATHER_DECISIONS_ENABLE_SELECTION,
+  PROTOCOL_EVIDENCE_GATHER_DECISIONS_UPDATE_METADATA,
+  PROTOCOL_EVIDENCE_GATHER_DECISIONS_MUTATE_EVIDENCE,
+  SOL_LST_EVIDENCE_GATHER_DECISIONS,
+  getGatherDecisionsByDimension,
+  summarizeSolLstEvidenceGatherDecisions,
+  evaluateCandidateReadinessFromGatherDecisions,
+} from "./protocolSolLiquidStakingEvidenceGatherDecisions";
 import {
   PROTOCOL_REAL_VALUE_CONFIRMATIONS_EXIST,
   PROTOCOL_REAL_VALUE_CONFIRMATIONS_APPROVE_RUBRIC,
@@ -5872,6 +5886,162 @@ export function runSolLiquidStakingRealValueFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12W — SOL liquid-staking evidence gather-decision ledger.
+ * Records reviewer "gathered" decisions; no production, no mutation, no score.
+ * ------------------------------------------------------------------ */
+export function runSolLiquidStakingGatherDecisionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+  const four = ["jupiter", "marinade", "jito", "blazestake"];
+
+  const FRESH_AS_OF = "2026-07-12T06:00:00Z";
+  const STALE_AS_OF = "2026-08-01T00:00:00Z";
+  const summaryFresh = summarizeSolLstEvidenceGatherDecisions(FRESH_AS_OF);
+  const gng = getProtocolSelectionGoNoGo("t");
+  const decisionFor = (id: string) => SOL_LST_EVIDENCE_GATHER_DECISIONS.find((d) => d.protocolId === id && d.dimensionId === "tvl_adoption");
+
+  // 12W-A…G. Ledger scoping constants.
+  add("12W-A: PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST is true", PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST === true, `flag=${PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST}`);
+  add("12W-B: PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC is false", PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC === false, `flag=${PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC}`);
+  add("12W-C: PROTOCOL_EVIDENCE_GATHER_DECISIONS_ASSIGN_SCORES is false", PROTOCOL_EVIDENCE_GATHER_DECISIONS_ASSIGN_SCORES === false, `flag=${PROTOCOL_EVIDENCE_GATHER_DECISIONS_ASSIGN_SCORES}`);
+  add("12W-D: PROTOCOL_EVIDENCE_GATHER_DECISIONS_AFFECT_PRODUCTION is false", PROTOCOL_EVIDENCE_GATHER_DECISIONS_AFFECT_PRODUCTION === false, `flag=${PROTOCOL_EVIDENCE_GATHER_DECISIONS_AFFECT_PRODUCTION}`);
+  add("12W-E: PROTOCOL_EVIDENCE_GATHER_DECISIONS_ENABLE_SELECTION is false", PROTOCOL_EVIDENCE_GATHER_DECISIONS_ENABLE_SELECTION === false, `flag=${PROTOCOL_EVIDENCE_GATHER_DECISIONS_ENABLE_SELECTION}`);
+  add("12W-F: PROTOCOL_EVIDENCE_GATHER_DECISIONS_UPDATE_METADATA is false", PROTOCOL_EVIDENCE_GATHER_DECISIONS_UPDATE_METADATA === false, `flag=${PROTOCOL_EVIDENCE_GATHER_DECISIONS_UPDATE_METADATA}`);
+  add("12W-G: PROTOCOL_EVIDENCE_GATHER_DECISIONS_MUTATE_EVIDENCE is false", PROTOCOL_EVIDENCE_GATHER_DECISIONS_MUTATE_EVIDENCE === false, `flag=${PROTOCOL_EVIDENCE_GATHER_DECISIONS_MUTATE_EVIDENCE}`);
+
+  // 12W-H…K. tvl_adoption gathered decisions for the four.
+  add("12W-H: gather decisions include tvl_adoption gathered for JupSOL", decisionFor("jupiter")?.status === "gathered", `status=${decisionFor("jupiter")?.status}`);
+  add("12W-I: gather decisions include tvl_adoption gathered for mSOL", decisionFor("marinade")?.status === "gathered", `status=${decisionFor("marinade")?.status}`);
+  add("12W-J: gather decisions include tvl_adoption gathered for JitoSOL", decisionFor("jito")?.status === "gathered", `status=${decisionFor("jito")?.status}`);
+  add("12W-K: gather decisions include tvl_adoption gathered for bSOL", decisionFor("blazestake")?.status === "gathered", `status=${decisionFor("blazestake")?.status}`);
+  // 12W-L. INF tvl_adoption needs_review / not gathered.
+  add("12W-L: INF tvl_adoption is needs_review or not gathered", decisionFor("sanctum")?.status === "needs_review", `status=${decisionFor("sanctum")?.status}`);
+  // 12W-M…Q. No decisions for other dimensions.
+  add("12W-M: no gather decision exists for audit_security", getGatherDecisionsByDimension("audit_security").length === 0, `n=${getGatherDecisionsByDimension("audit_security").length}`);
+  add("12W-N: no gather decision exists for maturity", getGatherDecisionsByDimension("maturity").length === 0, `n=${getGatherDecisionsByDimension("maturity").length}`);
+  add("12W-O: no gather decision exists for withdrawal_fee_transparency", getGatherDecisionsByDimension("withdrawal_fee_transparency").length === 0, `n=${getGatherDecisionsByDimension("withdrawal_fee_transparency").length}`);
+  add("12W-P: no gather decision exists for operational_dependency_risk", getGatherDecisionsByDimension("operational_dependency_risk").length === 0, `n=${getGatherDecisionsByDimension("operational_dependency_risk").length}`);
+  add("12W-Q: no gather decision exists for incident_history", getGatherDecisionsByDimension("incident_history").length === 0, `n=${getGatherDecisionsByDimension("incident_history").length}`);
+  // 12W-R…U. Fresh effective gathered for the four.
+  for (const [id, sym, code] of [["jupiter", "JupSOL", "R"], ["marinade", "mSOL", "S"], ["jito", "JitoSOL", "T"], ["blazestake", "bSOL", "U"]] as const) {
+    const evalFresh = evaluateCandidateReadinessFromGatherDecisions(id, FRESH_AS_OF);
+    add(`12W-${code}: fresh ${sym} effective gatheredDimensions includes tvl_adoption`, evalFresh.gatheredDimensions.includes("tvl_adoption"), `gathered=${evalFresh.gatheredDimensions.join(",") || "none"}`);
+  }
+  // 12W-V. INF not gathered (fresh).
+  {
+    const infEval = evaluateCandidateReadinessFromGatherDecisions("sanctum", FRESH_AS_OF);
+    add("12W-V: fresh INF gatheredDimensions does not include tvl_adoption", !infEval.gatheredDimensions.includes("tvl_adoption"), `gathered=${infEval.gatheredDimensions.join(",") || "none"}`);
+  }
+  // 12W-W. Stale → not gathered.
+  {
+    const staleEval = evaluateCandidateReadinessFromGatherDecisions("jupiter", STALE_AS_OF);
+    const ok = !staleEval.gatheredDimensions.includes("tvl_adoption") && staleEval.staleDimensions.includes("tvl_adoption");
+    add("12W-W: stale time-sensitive decision becomes stale, not gathered", ok, `gathered=${staleEval.gatheredDimensions.join(",") || "none"} stale=${staleEval.staleDimensions.join(",") || "none"}`);
+  }
+  // 12W-X. candidateReadyForReview false.
+  add("12W-X: jupiter candidateReadyForReview is false", evaluateCandidateReadinessFromGatherDecisions("jupiter", FRESH_AS_OF).candidateReadyForReview === false, `ready=${evaluateCandidateReadinessFromGatherDecisions("jupiter", FRESH_AS_OF).candidateReadyForReview}`);
+  // 12W-Y. Four have 1 gathered + 5 missing (fresh).
+  {
+    const ok = four.every((id) => {
+      const e = evaluateCandidateReadinessFromGatherDecisions(id, FRESH_AS_OF);
+      return e.gatheredDimensions.length === 1 && e.missingDimensions.length === 5;
+    });
+    add("12W-Y: four candidates have 1 gathered + 5 missing when fresh", ok, `ok=${ok}`);
+  }
+  // 12W-Z. INF 0 gathered + 6 missing.
+  {
+    const e = evaluateCandidateReadinessFromGatherDecisions("sanctum", FRESH_AS_OF);
+    add("12W-Z: INF has 0 gathered + 6 missing dimensions", e.gatheredDimensions.length === 0 && e.missingDimensions.length === 6, `gathered=${e.gatheredDimensions.length} missing=${e.missingDimensions.length}`);
+  }
+  // 12W-AA. Gate wrapper keeps status evidence_incomplete or blocked.
+  {
+    const g = evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions("jupiter", FRESH_AS_OF);
+    const ok = (g.status === "evidence_incomplete" || g.status === "blocked") && g.gatheredDimensions.includes("tvl_adoption") && g.missingDimensions.length === 5;
+    add("12W-AA: gate wrapper keeps status evidence_incomplete/blocked, 5 missing", ok, `status=${g.status} gathered=${g.gatheredDimensions.join(",")} missing=${g.missingDimensions.length}`);
+  }
+  // 12W-AB. No candidate gate approved_for_scoring.
+  {
+    const bad = ids.filter((id) => evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions(id, FRESH_AS_OF).status === "approved_for_scoring");
+    add("12W-AB: no candidate gate is approved_for_scoring", bad.length === 0, `bad=${bad.join(",") || "none"}`);
+  }
+  // 12W-AC. No candidate gate scoreAssignmentAllowed true.
+  {
+    const bad = ids.filter((id) => evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions(id, FRESH_AS_OF).scoreAssignmentAllowed === true);
+    add("12W-AC: no candidate gate has scoreAssignmentAllowed true", bad.length === 0, `bad=${bad.join(",") || "none"}`);
+  }
+  // 12W-AD. map does not mutate evidence drafts.
+  {
+    const before = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    mapGatherDecisionsToEvidenceCompletion("jupiter", FRESH_AS_OF);
+    mapGatherDecisionsToEvidenceCompletion("sanctum", FRESH_AS_OF);
+    const after = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    add("12W-AD: mapGatherDecisionsToEvidenceCompletion does not mutate evidence drafts", before === after, `unchanged=${before === after}`);
+  }
+  // 12W-AE/AF/AG. Decisions never set forbidden flags.
+  add("12W-AE: gather decisions never set productionMetadataUpdated true", SOL_LST_EVIDENCE_GATHER_DECISIONS.every((d) => d.productionMetadataUpdated === false), "ok");
+  add("12W-AF: gather decisions never set evidenceDraftMutated true", SOL_LST_EVIDENCE_GATHER_DECISIONS.every((d) => d.evidenceDraftMutated === false), "ok");
+  add("12W-AG: gather decisions never set scoreAssigned true", SOL_LST_EVIDENCE_GATHER_DECISIONS.every((d) => d.scoreAssigned === false), "ok");
+  // 12W-AH/AI/AJ. Summary counts.
+  add("12W-AH: summary.productionMetadataUpdatedCount is 0", summaryFresh.productionMetadataUpdatedCount === 0, `v=${summaryFresh.productionMetadataUpdatedCount}`);
+  add("12W-AI: summary.evidenceDraftMutatedCount is 0", summaryFresh.evidenceDraftMutatedCount === 0, `v=${summaryFresh.evidenceDraftMutatedCount}`);
+  add("12W-AJ: summary.scoreAssignedCount is 0", summaryFresh.scoreAssignedCount === 0, `v=${summaryFresh.scoreAssignedCount}`);
+  // 12W-AK/AL. No riskScore.
+  add("12W-AK: no riskScore is assigned anywhere", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "none");
+  add("12W-AL: riskScore remains absent for all five", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "absent");
+  // 12W-AM/AN/AO. Approval flags false.
+  add("12W-AM: PROTOCOL_RISK_RUBRIC_APPROVED remains false", PROTOCOL_RISK_RUBRIC_APPROVED === false, `flag=${PROTOCOL_RISK_RUBRIC_APPROVED}`);
+  add("12W-AN: PROTOCOL_RISK_APPROVAL_DECISION_APPROVED remains false", PROTOCOL_RISK_APPROVAL_DECISION_APPROVED === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_APPROVED}`);
+  add("12W-AO: canAssignProtocolRiskScores() remains false", canAssignProtocolRiskScores() === false, `v=${canAssignProtocolRiskScores()}`);
+  // 12W-AP. productionReady remains false.
+  add("12W-AP: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 12W-AQ. Live staking not_evaluated.
+  add("12W-AQ: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12W-AR. No live suggestion has selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12W-AR: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12W-AS. Cards/modal do not expose gather decisions or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "gatheredDimensions", "GatherDecision", "basedOnCategories", "candidateReadyForReview"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12W-AS: cards/modal never expose gather decisions or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12W-AT/AU/AV. Flags at safe defaults.
+  add("12W-AT: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12W-AU: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12W-AV: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12W-AW. No transaction/signature/swap path in ledger output.
+  {
+    const json = (JSON.stringify(SOL_LST_EVIDENCE_GATHER_DECISIONS) + JSON.stringify(summaryFresh)).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("12W-AW: no transaction/signature/swap path in gather-decision output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12W-BA. No forbidden investment claims in gather-decision output.
+  {
+    const json = JSON.stringify(SOL_LST_EVIDENCE_GATHER_DECISIONS).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12W-BA: no forbidden investment claims in gather-decision output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -5912,6 +6082,7 @@ export function printFixtureResults(): void {
     ...runSolLiquidStakingSourceVerificationFixtureChecks(),
     ...runSolLiquidStakingSourceValueConfirmationFixtureChecks(),
     ...runSolLiquidStakingRealValueFixtureChecks(),
+    ...runSolLiquidStakingGatherDecisionFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

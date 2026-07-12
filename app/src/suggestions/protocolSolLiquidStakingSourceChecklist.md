@@ -117,3 +117,18 @@ A reviewer-confirmed real value (non-production ledger) must carry:
 confirmations support only `tvl_adoption`, and only when fresh. Confirmed
 JupSOL/mSOL/JitoSOL/bSOL TVL/APY are recorded; INF stays absent/needs_review (no
 exact value supplied). See `protocolSolLiquidStakingRealValueConfirmations.md`.
+
+## 12W gather-decision checklist
+
+Before recording a dimension as `gathered` (in the non-production ledger):
+
+- [ ] the required confirmed values exist (12V);
+- [ ] those values are fresh (within the freshness window);
+- [ ] the reviewer decision is recorded (reviewer + role + decided-at);
+- [ ] the dimension's unresolved questions are closed;
+- [ ] the base evidence draft is **not** mutated;
+- [ ] production metadata is **not** updated.
+
+Current: `tvl_adoption` gathered for JupSOL/mSOL/JitoSOL/bSOL (fresh), INF
+`needs_review`; the other five dimensions have no decision. Stale values revert a
+dimension to not-gathered. See `protocolSolLiquidStakingEvidenceGatherDecisions.md`.

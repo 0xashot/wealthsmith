@@ -34,6 +34,7 @@ import {
   validateRealValueConfirmation,
   type ProtocolRealValueConfirmation,
 } from "./protocolSolLiquidStakingRealValueConfirmations";
+import { evaluateCandidateReadinessFromGatherDecisions } from "./protocolSolLiquidStakingEvidenceGatherDecisions";
 
 /** The harness exists (this step) but approves nothing and scores nothing. */
 export const PROTOCOL_EVIDENCE_COMPLETION_EXISTS = true;
@@ -408,6 +409,49 @@ export function mapRealValuesToEvidenceCompletion(
     dimensionsStillIncomplete,
     gatherableDimensions,
     candidateReadyForReview: gatherableDimensions.length === ALL_DIMENSIONS.length,
+    approvedForScoring: false,
+    scoreAssigned: false,
+    productionAffected: false,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 12W — map the gather-decision ledger to evidence completion.
+ * Freshness-aware, non-mutating; reads the reviewer gather decisions.
+ * ------------------------------------------------------------------ */
+
+export interface GatherDecisionsToEvidenceMap {
+  protocolId: string;
+  lstSymbol: string;
+  gatheredDimensions: ProtocolRiskRubricDimensionId[];
+  missingDimensions: ProtocolRiskRubricDimensionId[];
+  staleDimensions: ProtocolRiskRubricDimensionId[];
+  candidateReadyForReview: boolean;
+  approvedForScoring: false;
+  scoreAssigned: false;
+  productionAffected: false;
+}
+
+/**
+ * Non-mutating map from the 12W gather-decision ledger to evidence completion,
+ * freshness-aware at `asOf`. Reads reviewer gather decisions (never the base
+ * drafts as mutations). Never approves scoring, assigns a score, or affects
+ * production. `candidateReadyForReview` requires all six dimensions `gathered`.
+ */
+export function mapGatherDecisionsToEvidenceCompletion(
+  protocolId: string,
+  asOf?: string
+): GatherDecisionsToEvidenceMap {
+  // Read-only: touch drafts to make the non-mutation contract explicit.
+  void getSolLiquidStakingEvidenceDrafts(protocolId);
+  const evaluation = evaluateCandidateReadinessFromGatherDecisions(protocolId, asOf);
+  return {
+    protocolId: evaluation.protocolId,
+    lstSymbol: evaluation.lstSymbol,
+    gatheredDimensions: evaluation.gatheredDimensions,
+    missingDimensions: evaluation.missingDimensions,
+    staleDimensions: evaluation.staleDimensions,
+    candidateReadyForReview: evaluation.candidateReadyForReview,
     approvedForScoring: false,
     scoreAssigned: false,
     productionAffected: false,

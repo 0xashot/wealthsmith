@@ -167,3 +167,15 @@ incomplete, so **no candidate is `ready_for_review`**. Values are non-production
 (no metadata written, no draft mutated, no `riskScore` assigned) and expire after
 24h (then `stale`). INF real value stays `needs_review`/absent unless an exact
 value is supplied.
+
+## 12W update
+
+An evidence gather-decision ledger now exists
+(`protocolSolLiquidStakingEvidenceGatherDecisions.ts`): reviewer decisions that a
+dimension is `gathered`, freshness-aware. **`tvl_adoption` is gathered for
+JupSOL/mSOL/JitoSOL/bSOL while their 12V values are fresh** (past 24h → `stale`);
+**INF `tvl_adoption` is `needs_review`** (no exact values). The other five
+dimensions (audit/maturity/withdrawal-fee/operational/incident) have no gather
+decision and stay incomplete, so **no candidate is `ready_for_review`** (four have
+1/6 gathered, INF 0/6). Decisions mutate no base drafts and no production metadata,
+and no `riskScore` is assigned.
