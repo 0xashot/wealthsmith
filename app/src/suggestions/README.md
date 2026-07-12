@@ -831,6 +831,31 @@ Mode uses `SuggestionRail` directly and is untouched.
   Not imported by any live/engine/UI file; live suggestions `not_evaluated`; all
   selection flags false; `productionReady` stays `false`. Fixtures 12Y-A…AT (+43).
   Next: **12Z** production metadata registry for a beta candidate.
+- Step 12Z (done): **production metadata registry for the JitoSOL beta candidate
+  (staged + blocked by default; no selection, no production riskScore)**. Added
+  `protocolSolLiquidStakingProductionMetadata.ts` +
+  `protocolSolLiquidStakingProductionMetadata.md`: a production-readable metadata
+  model + a staged JitoSOL candidate built from confirmed 12V/12X evidence (TVL
+  767.95M / APY 5.36% / 30d 5.45% when fresh; withdrawal ~48h + swap-route-is-not-
+  withdrawal; fees 0.1% direct-unstake + 4% annual mgmt; audit reviewed —
+  Quantstamp/Neodyme/Kudelski, SPL Stake Pool scope; operational DAO+StakeNet;
+  incident point-in-time caveat). Constants
+  `PROTOCOL_SOL_LST_PRODUCTION_METADATA_EXISTS = true`, `..._ACTIVE`/
+  `..._ENABLES_SELECTION`/`..._UPDATES_LIVE_SUGGESTIONS`/`..._ALLOWS_TRANSACTIONS`/
+  `..._USES_QA_SCORE = false`. Helpers: `buildJitoSolProductionMetadataCandidate()`,
+  `validateSolLstProductionMetadataCandidate()`, `getSolLstProductionMetadataCandidates()`,
+  `summarizeSolLstProductionMetadata()`, `getProductionMetadataBlockers()`,
+  `hasActiveSolLstProductionMetadata()`. **Blocked by default:** `riskScore`
+  **absent** (`riskScoreStatus: absent`; the QA-only 7.75 is rejected — never
+  production), status `blocked` with `rubric_not_approved` /
+  `production_risk_score_absent` / `source_reverification_required_before_beta` /
+  `protocol_selection_disabled` / `go_no_go_not_passed`. `productionReady`/
+  `selectionEnabled`/`liveSuggestionsUpdated`/`transactionsEnabled` always false;
+  stale TVL/APY → `dataFreshnessStatus: stale` + no values. Nothing written to
+  `protocolRiskRegistry.ts` / `DEFILLAMA_POOL_MAPPINGS`. Not imported by any
+  live/engine/UI file; live suggestions `not_evaluated`; all selection flags false;
+  `productionReady` stays `false`. Fixtures 12Z-A…AX (+47). Next: **13A** exact SOL
+  staking selector behind an internal flag.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -842,9 +867,9 @@ machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubr
 risk evidence drafts + reviewer approval decision gate + one-candidate evidence
 completion harness + source-verification intake + source-value confirmation intake +
 real value-confirmation ledger + evidence gather-decision ledger + JitoSOL
-ready-for-review evidence package + gated riskScore assignment mechanism); production
-selection remains not evaluated / not implemented, and the go/no-go reports
-`productionReady = false`.
+ready-for-review evidence package + gated riskScore assignment mechanism + staged
+JitoSOL production metadata); production selection remains not evaluated / not
+implemented, and the go/no-go reports `productionReady = false`.
 
 ## Suggestion display order
 

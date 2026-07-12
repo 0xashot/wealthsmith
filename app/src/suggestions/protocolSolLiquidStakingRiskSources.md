@@ -204,3 +204,15 @@ production `riskScore` is assigned** — `riskScore` stays absent in
 calculation, but writes no production metadata, mutates no draft, and enables no
 selection. Stale TVL/APY blocks assignment. See `protocolRiskScoreAssignment.md` and
 `protocolRiskApprovalAndScoring.md`.
+
+## 12Z update
+
+A staged JitoSOL production-metadata candidate now exists
+(`protocolSolLiquidStakingProductionMetadata.ts`), built from confirmed 12V/12X
+evidence (TVL/APY, withdrawal ~48h, fees 0.1%/4%, audit reviewed —
+Quantstamp/Neodyme/Kudelski, operational, incident caveat). Its **`riskScore` is
+absent by default** and its status is **`blocked`** (rubric not approved, no real
+approved score, source re-verification required, selection disabled, go/no-go not
+passed). The QA-only 7.75 is never accepted as production. Nothing is written to
+`protocolRiskRegistry.ts`; no protocol is selected. See
+`protocolSolLiquidStakingProductionMetadata.md`.

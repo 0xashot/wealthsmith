@@ -478,3 +478,20 @@ calculation (7.75) with no production effect. Stale TVL/APY blocks assignment. *
 production enablement:** `productionMetadataUpdated`/`evidenceDraftMutated`/
 `selectionEnabled` always false; `protocolRiskRegistry.ts` unchanged;
 `productionReady` stays `false`. Not imported by any live/engine/UI file.
+
+---
+
+## 12Z — production metadata registry (staged JitoSOL)
+
+`protocolSolLiquidStakingProductionMetadata.ts` +
+`protocolSolLiquidStakingProductionMetadata.md` add the production-readable metadata
+layer with one **staged, blocked** JitoSOL candidate built from confirmed 12V/12X
+evidence (TVL/APY, withdrawal ~48h, fees 0.1%/4%, audit reviewed, operational,
+incident caveat). **Blocked by default:** `riskScore` absent (the QA-only 7.75 is
+never accepted as production), status `blocked` with `production_risk_score_absent`
+/ `source_reverification_required_before_beta` / `protocol_selection_disabled` /
+`go_no_go_not_passed`. **No production enablement:**
+`productionReady`/`selectionEnabled`/`liveSuggestionsUpdated`/`transactionsEnabled`
+always false; nothing written to `protocolRiskRegistry.ts` / `DEFILLAMA_POOL_MAPPINGS`
+/ `ProtocolMarketData`; `getProtocolSelectionGoNoGo().productionReady = false`. Not
+imported by any live/engine/UI file.

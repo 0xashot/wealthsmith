@@ -171,6 +171,16 @@ promoted to production metadata (`protocolRiskRegistry.ts` / `ProtocolMarketData
 `DEFILLAMA_POOL_MAPPINGS` untouched). A QA-only path proves the calculation (JitoSOL
 7.75) without production effect. See `protocolRiskScoreAssignment.md`.
 
+## Production metadata registry (Step 12Z)
+
+`protocolSolLiquidStakingProductionMetadata.ts` adds the production-readable
+metadata layer with one **staged, blocked** JitoSOL candidate built from confirmed
+12V/12X evidence. **No selection enabled:** `riskScore` absent by default,
+`productionReady`/`selectionEnabled`/`liveSuggestionsUpdated`/`transactionsEnabled`
+always false; nothing is promoted to `protocolRiskRegistry.ts` /
+`DEFILLAMA_POOL_MAPPINGS`; the QA-only 7.75 is never used as production. See
+`protocolSolLiquidStakingProductionMetadata.md`.
+
 ## Rules honored
 
 - No pool UUID, APY, TVL, withdrawal time, fee, audit status, or riskScore is

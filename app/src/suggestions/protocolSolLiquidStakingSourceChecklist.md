@@ -162,3 +162,19 @@ Before a real (non-QA) `riskScore` can be assigned to a candidate:
 
 Default state is blocked; JitoSOL has no production `riskScore`. See
 `protocolRiskScoreAssignment.md`.
+
+## 12Z production metadata checklist
+
+Before a staged production-metadata candidate can be activated (a later step):
+
+- [ ] real approved (non-QA) `riskScore` assigned;
+- [ ] source re-verification complete;
+- [ ] TVL/APY fresh;
+- [ ] withdrawal data present;
+- [ ] fee data present;
+- [ ] audit data present;
+- [ ] operational + incident review present;
+- [ ] production go/no-go (`getProtocolSelectionGoNoGo()`) still required.
+
+The JitoSOL candidate is `blocked` today (no approved score, no re-verification).
+See `protocolSolLiquidStakingProductionMetadata.md`.

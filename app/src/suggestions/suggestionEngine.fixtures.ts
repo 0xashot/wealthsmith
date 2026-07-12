@@ -230,6 +230,19 @@ import {
 } from "./protocolRiskScoreAssignment";
 import { PROTOCOL_RISK_RUBRIC_VERSION } from "./protocolRiskRubric";
 import {
+  PROTOCOL_SOL_LST_PRODUCTION_METADATA_EXISTS,
+  PROTOCOL_SOL_LST_PRODUCTION_METADATA_ACTIVE,
+  PROTOCOL_SOL_LST_PRODUCTION_METADATA_ENABLES_SELECTION,
+  PROTOCOL_SOL_LST_PRODUCTION_METADATA_UPDATES_LIVE_SUGGESTIONS,
+  PROTOCOL_SOL_LST_PRODUCTION_METADATA_ALLOWS_TRANSACTIONS,
+  PROTOCOL_SOL_LST_PRODUCTION_METADATA_USES_QA_SCORE,
+  buildJitoSolProductionMetadataCandidate,
+  validateSolLstProductionMetadataCandidate,
+  getJitoSolProductionMetadataCandidate,
+  summarizeSolLstProductionMetadata,
+  hasActiveSolLstProductionMetadata,
+} from "./protocolSolLiquidStakingProductionMetadata";
+import {
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_ASSIGN_SCORES,
@@ -6384,6 +6397,160 @@ export function runProtocolRiskScoreAssignmentFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12Z — staged JitoSOL production metadata registry (inactive by default).
+ * No production riskScore, no selection, no live behavior change.
+ * ------------------------------------------------------------------ */
+export function runSolLstProductionMetadataFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+
+  const FRESH_AS_OF = "2026-07-12T06:00:00Z";
+  const STALE_AS_OF = "2026-08-01T00:00:00Z";
+  const jito = buildJitoSolProductionMetadataCandidate({ asOf: FRESH_AS_OF });
+  const validation = validateSolLstProductionMetadataCandidate(jito);
+  const summary = summarizeSolLstProductionMetadata(undefined);
+  const gng = getProtocolSelectionGoNoGo("t");
+
+  // 12Z-A…F. Scoping constants.
+  add("12Z-A: PROTOCOL_SOL_LST_PRODUCTION_METADATA_EXISTS is true", PROTOCOL_SOL_LST_PRODUCTION_METADATA_EXISTS === true, `flag=${PROTOCOL_SOL_LST_PRODUCTION_METADATA_EXISTS}`);
+  add("12Z-B: PROTOCOL_SOL_LST_PRODUCTION_METADATA_ACTIVE is false", PROTOCOL_SOL_LST_PRODUCTION_METADATA_ACTIVE === false, `flag=${PROTOCOL_SOL_LST_PRODUCTION_METADATA_ACTIVE}`);
+  add("12Z-C: PROTOCOL_SOL_LST_PRODUCTION_METADATA_ENABLES_SELECTION is false", PROTOCOL_SOL_LST_PRODUCTION_METADATA_ENABLES_SELECTION === false, `flag=${PROTOCOL_SOL_LST_PRODUCTION_METADATA_ENABLES_SELECTION}`);
+  add("12Z-D: PROTOCOL_SOL_LST_PRODUCTION_METADATA_UPDATES_LIVE_SUGGESTIONS is false", PROTOCOL_SOL_LST_PRODUCTION_METADATA_UPDATES_LIVE_SUGGESTIONS === false, `flag=${PROTOCOL_SOL_LST_PRODUCTION_METADATA_UPDATES_LIVE_SUGGESTIONS}`);
+  add("12Z-E: PROTOCOL_SOL_LST_PRODUCTION_METADATA_ALLOWS_TRANSACTIONS is false", PROTOCOL_SOL_LST_PRODUCTION_METADATA_ALLOWS_TRANSACTIONS === false, `flag=${PROTOCOL_SOL_LST_PRODUCTION_METADATA_ALLOWS_TRANSACTIONS}`);
+  add("12Z-F: PROTOCOL_SOL_LST_PRODUCTION_METADATA_USES_QA_SCORE is false", PROTOCOL_SOL_LST_PRODUCTION_METADATA_USES_QA_SCORE === false, `flag=${PROTOCOL_SOL_LST_PRODUCTION_METADATA_USES_QA_SCORE}`);
+
+  // 12Z-G/H. Candidate exists + identity.
+  add("12Z-G: JitoSOL production metadata candidate exists", jito != null && typeof jito === "object", "exists");
+  add("12Z-H: candidate has protocolId jito and lstSymbol JitoSOL", jito.protocolId === "jito" && jito.lstSymbol === "JitoSOL", `id=${jito.protocolId} sym=${jito.lstSymbol}`);
+  // 12Z-I. TVL/APY/APY-30d from confirmed 12V (fresh).
+  add("12Z-I: candidate has TVL/APY/APY-30d from confirmed 12V values when fresh", jito.tvlUsd === 767950000 && jito.apyPct === 5.36 && jito.apy30dPct === 5.45 && jito.dataFreshnessStatus === "fresh", `tvl=${jito.tvlUsd} apy=${jito.apyPct} apy30=${jito.apy30dPct}`);
+  // 12Z-J. Withdrawal.
+  add("12Z-J: candidate has withdrawal mechanics + withdrawalTimeHours from 12X", jito.withdrawal.withdrawalTimeHours === 48 && jito.withdrawal.instantExitIsSwapRoute === true && jito.withdrawal.withdrawalMechanics.length > 0, `wd=${jito.withdrawal.withdrawalTimeHours}`);
+  // 12Z-K. Fees.
+  add("12Z-K: candidate has fee metadata from 12X", jito.fees.directUnstakeFeePct === 0.1 && jito.fees.annualManagementFeePct === 4, `unstake=${jito.fees.directUnstakeFeePct} mgmt=${jito.fees.annualManagementFeePct}`);
+  // 12Z-L. Audit.
+  add("12Z-L: candidate has audit metadata from 12X", jito.audit.auditStatus === "reviewed" && jito.audit.auditFirms.includes("Quantstamp") && jito.audit.auditFirms.includes("Neodyme") && jito.audit.auditFirms.includes("Kudelski"), `firms=${jito.audit.auditFirms.join(",")}`);
+  // 12Z-M. Operational summary.
+  add("12Z-M: candidate has operational summary from 12X", jito.operationalSummary.toLowerCase().includes("stakenet") && jito.operationalSummary.length > 0, `len=${jito.operationalSummary.length}`);
+  // 12Z-N. Incident caveat, no clean-history claim.
+  {
+    const s = jito.incidentReviewSummary.toLowerCase();
+    add("12Z-N: candidate has incident caveat and does not claim clean history", s.includes("not a clean-history claim") && s.includes("manual review"), `has=${s.includes("not a clean-history claim")}`);
+  }
+  // 12Z-O/P. RiskScore absent by default.
+  add("12Z-O: default candidate riskScore is absent", jito.risk.riskScore === undefined, `score=${jito.risk.riskScore}`);
+  add("12Z-P: default candidate riskScoreStatus is absent", jito.risk.riskScoreStatus === "absent", `status=${jito.risk.riskScoreStatus}`);
+  // 12Z-Q…T. Production/selection flags false.
+  add("12Z-Q: default candidate productionReady is false", jito.productionReady === false, `v=${jito.productionReady}`);
+  add("12Z-R: default candidate selectionEnabled is false", jito.selectionEnabled === false, `v=${jito.selectionEnabled}`);
+  add("12Z-S: default candidate liveSuggestionsUpdated is false", jito.liveSuggestionsUpdated === false, `v=${jito.liveSuggestionsUpdated}`);
+  add("12Z-T: default candidate transactionsEnabled is false", jito.transactionsEnabled === false, `v=${jito.transactionsEnabled}`);
+  // 12Z-U/V/W. Blockers present.
+  add("12Z-U: blockers include production_risk_score_absent", jito.blockers.includes("production_risk_score_absent"), `blockers=${jito.blockers.join(",")}`);
+  add("12Z-V: blockers include source_reverification_required_before_beta", jito.blockers.includes("source_reverification_required_before_beta"), `has=${jito.blockers.includes("source_reverification_required_before_beta")}`);
+  add("12Z-W: blockers include protocol_selection_disabled", jito.blockers.includes("protocol_selection_disabled"), `has=${jito.blockers.includes("protocol_selection_disabled")}`);
+  // 12Z-X. QA-only 7.75 is not used as production. Supply a QA-tagged score_assigned result.
+  {
+    const qaResult = evaluateRiskScoreAssignment(getQaOnlyJitoRiskScoreAssignmentInput(), {
+      approvalDecision: createExplicitProtocolRiskApprovalDecision({
+        decisionId: "qa-only-explicit-approval", rubricVersion: PROTOCOL_RISK_RUBRIC_VERSION, status: "approved",
+        reviewer: "qa-example", reviewerRole: "risk", decidedAt: "2026-07-12T00:00:00Z",
+        notes: ["QA-only"], rubricApproved: true, scoreAssignmentAllowed: true,
+      }),
+      asOf: FRESH_AS_OF,
+    });
+    const withQa = buildJitoSolProductionMetadataCandidate({
+      asOf: FRESH_AS_OF,
+      approvalDecision: createExplicitProtocolRiskApprovalDecision({
+        decisionId: "qa-only-explicit-approval", rubricVersion: PROTOCOL_RISK_RUBRIC_VERSION, status: "approved",
+        reviewer: "qa-example", reviewerRole: "risk", decidedAt: "2026-07-12T00:00:00Z",
+        notes: ["QA-only"], rubricApproved: true, scoreAssignmentAllowed: true,
+      }),
+      riskScoreAssignmentResult: qaResult,
+    });
+    add("12Z-X: QA-only 7.75 score is not used as production riskScore", withQa.risk.riskScore === undefined && withQa.risk.riskScoreStatus !== "approved" && withQa.blockers.includes("production_risk_score_absent"), `score=${withQa.risk.riskScore} status=${withQa.risk.riskScoreStatus}`);
+  }
+  // 12Z-Y/Z. Validation flags.
+  add("12Z-Y: validation productionReady is false", validation.productionReady === false, `v=${validation.productionReady}`);
+  add("12Z-Z: validation selectionEnabled is false", validation.selectionEnabled === false, `v=${validation.selectionEnabled}`);
+  // 12Z-AA. No active metadata.
+  add("12Z-AA: hasActiveSolLstProductionMetadata(jito) returns false", hasActiveSolLstProductionMetadata("jito") === false, `v=${hasActiveSolLstProductionMetadata("jito")}`);
+  // 12Z-AB/AC. Summary counts.
+  add("12Z-AB: summary.productionReadyCount is 0", summary.productionReadyCount === 0, `v=${summary.productionReadyCount}`);
+  add("12Z-AC: summary.selectionEnabledCount is 0", summary.selectionEnabledCount === 0, `v=${summary.selectionEnabledCount}`);
+  // 12Z-AD. Stale TVL/APY → stale or blocked.
+  {
+    const staleJito = buildJitoSolProductionMetadataCandidate({ asOf: STALE_AS_OF });
+    const ok = (staleJito.dataFreshnessStatus === "stale" || staleJito.status === "blocked") && staleJito.tvlUsd === undefined;
+    add("12Z-AD: stale TVL/APY → dataFreshnessStatus stale or candidate blocked", ok, `fresh=${staleJito.dataFreshnessStatus} status=${staleJito.status}`);
+  }
+  // 12Z-AE. Cannot become active without approved non-QA riskScore (getJito never active).
+  add("12Z-AE: candidate cannot become active without approved non-QA riskScore", getJitoSolProductionMetadataCandidate({ asOf: FRESH_AS_OF }).status !== "active", `status=${getJitoSolProductionMetadataCandidate({ asOf: FRESH_AS_OF }).status}`);
+  // 12Z-AF. Cannot become active without source re-verification flag.
+  add("12Z-AF: candidate cannot become active without source re-verification flag", buildJitoSolProductionMetadataCandidate({ asOf: FRESH_AS_OF, sourceReVerifiedForBeta: false }).status !== "active", `status=${buildJitoSolProductionMetadataCandidate({ asOf: FRESH_AS_OF }).status}`);
+  // 12Z-AG. No production riskScore in registry.
+  add("12Z-AG: production metadata does not update protocolRiskRegistry", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "no riskScore");
+  // 12Z-AH. DEFILLAMA_POOL_MAPPINGS still only sanctum.
+  {
+    const keys = Object.keys(DEFILLAMA_POOL_MAPPINGS);
+    add("12Z-AH: production metadata does not update DEFILLAMA_POOL_MAPPINGS", keys.length === 1 && keys[0] === "sanctum", `keys=${keys.join(",")}`);
+  }
+  // 12Z-AI. riskScore absent for all five.
+  add("12Z-AI: riskScore remains absent for all five in production registry", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "absent");
+  // 12Z-AJ/AK/AL. Approval flags false.
+  add("12Z-AJ: PROTOCOL_RISK_RUBRIC_APPROVED remains false", PROTOCOL_RISK_RUBRIC_APPROVED === false, `flag=${PROTOCOL_RISK_RUBRIC_APPROVED}`);
+  add("12Z-AK: PROTOCOL_RISK_APPROVAL_DECISION_APPROVED remains false", PROTOCOL_RISK_APPROVAL_DECISION_APPROVED === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_APPROVED}`);
+  add("12Z-AL: canAssignProtocolRiskScores() remains false by default", canAssignProtocolRiskScores() === false, `v=${canAssignProtocolRiskScores()}`);
+  // 12Z-AM. productionReady remains false.
+  add("12Z-AM: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 12Z-AN. Live staking not_evaluated.
+  add("12Z-AN: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12Z-AO. No live suggestion has selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12Z-AO: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12Z-AP. Cards/modal do not expose production metadata or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "767950000", "annualManagementFeePct", "ProductionMetadata", "auditFirms"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12Z-AP: cards/modal never expose production metadata or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12Z-AQ/AR/AS. Flags at safe defaults.
+  add("12Z-AQ: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12Z-AR: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12Z-AS: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12Z-AT. No transaction/signature/swap path in metadata output.
+  {
+    const json = (JSON.stringify(jito) + JSON.stringify(summary)).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("12Z-AT: no transaction/signature/swap path in production metadata output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12Z-AX. No forbidden investment claims in metadata output.
+  {
+    const json = JSON.stringify(jito).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12Z-AX: no forbidden investment claims in production metadata output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -6427,6 +6594,7 @@ export function printFixtureResults(): void {
     ...runSolLiquidStakingGatherDecisionFixtureChecks(),
     ...runJitoSolEvidenceReadinessFixtureChecks(),
     ...runProtocolRiskScoreAssignmentFixtureChecks(),
+    ...runSolLstProductionMetadataFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
