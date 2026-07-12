@@ -83,3 +83,16 @@ Full evidence lists and scoring guidance: `protocolRiskRubric.md` /
 **Approval is required before scores can be assigned.** While these fields are
 unsigned, `PROTOCOL_RISK_RUBRIC_APPROVED` stays false and no `riskScore` is
 assigned.
+
+## Decision model (Step 12R)
+
+This pack is the **input** to the approval decision model in
+`protocolRiskApprovalDecision.ts` (`getCurrentProtocolRiskRubricApprovalDecision()`
+→ `evaluateProtocolRiskApprovalGate()`). The current decision `status` is
+`not_submitted`, `rubricApproved = false`, `scoreAssignmentAllowed = false`, and no
+candidate is `approved_for_scoring`.
+
+> ⚠️ **Changing the approval status is a human review decision.** It must be made
+> and recorded by an actual reviewer (product / risk / compliance / legal), not
+> flipped as part of normal implementation work. Until then, `riskScore` stays
+> absent and production protocol selection stays blocked.

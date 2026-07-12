@@ -21,7 +21,8 @@ import { SOL_LIQUID_STAKING_CANDIDATE_IDS } from "./protocolSolLiquidStakingData
 import { getSolLiquidStakingSourceStatus } from "./protocolSolLiquidStakingSources";
 import { getProtocolRiskData } from "./protocolRiskRegistry";
 import { buildSolLiquidStakingStage2DryRunReport } from "./protocolSolLiquidStakingStage2DryRun";
-import { PROTOCOL_RISK_RUBRIC_EXISTS, PROTOCOL_RISK_RUBRIC_APPROVED } from "./protocolRiskRubric";
+import { PROTOCOL_RISK_RUBRIC_APPROVED } from "./protocolRiskRubric";
+import { getCurrentProtocolRiskRubricApprovalDecision, evaluateProtocolRiskApprovalGate } from "./protocolRiskApprovalDecision";
 
 /** This module is a checklist only; it can never enable production or UI. */
 export const PROTOCOL_SELECTION_GO_NO_GO_ONLY = true;
@@ -135,10 +136,14 @@ export function getProtocolSelectionGoNoGo(checkedAt: string = new Date().toISOS
     ]);
   }
 
-  /* --- risk_methodology: rubric drafted, not approved. --- */
-  check("risk_methodology", "blocked", [
-    blocker("risk_methodology_not_production_approved", "risk_methodology", "riskScore rubric not approved for production", "A riskScore rubric now exists in DRAFT (protocolRiskRubric.ts, PROTOCOL_RISK_RUBRIC_APPROVED=false) but has no approval sign-off or per-protocol evidence.", [`PROTOCOL_RISK_RUBRIC_EXISTS=${PROTOCOL_RISK_RUBRIC_EXISTS}`, `PROTOCOL_RISK_RUBRIC_APPROVED=${PROTOCOL_RISK_RUBRIC_APPROVED}`, "protocolRiskRubricApprovalPack.md"]),
-  ], ["Rubric is drafted but must be approved with documented evidence before any riskScore can be assigned."]);
+  /* --- risk_methodology: rubric drafted, approval decision not submitted. --- */
+  {
+    const decision = getCurrentProtocolRiskRubricApprovalDecision();
+    const approvalGate = evaluateProtocolRiskApprovalGate();
+    check("risk_methodology", "blocked", [
+      blocker("risk_methodology_not_production_approved", "risk_methodology", "riskScore rubric approval decision not submitted", "A riskScore rubric exists in DRAFT (protocolRiskRubric.ts) with per-candidate evidence drafts, but the reviewer approval decision is not submitted and no candidate is approved for scoring.", [`PROTOCOL_RISK_RUBRIC_APPROVED=${PROTOCOL_RISK_RUBRIC_APPROVED}`, `approvalDecision.status=${decision.status}`, `anyCandidateReadyForScoring=${approvalGate.anyCandidateReadyForScoring}`, "protocolRiskApprovalDecision.ts / protocolRiskRubricApprovalPack.md"]),
+    ], ["Rubric is drafted but the human approval decision must be submitted and approved, with all evidence gathered, before any riskScore can be assigned."]);
+  }
 
   /* --- risk_scores: absent for all five. --- */
   {

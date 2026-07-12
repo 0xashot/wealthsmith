@@ -167,6 +167,16 @@ import {
   getSolLiquidStakingEvidenceDrafts,
   summarizeEvidenceCoverage,
 } from "./protocolSolLiquidStakingEvidenceDrafts";
+import {
+  PROTOCOL_RISK_APPROVAL_DECISION_EXISTS,
+  PROTOCOL_RISK_APPROVAL_DECISION_APPROVED,
+  PROTOCOL_RISK_APPROVAL_DECISION_ASSIGN_SCORES,
+  PROTOCOL_RISK_APPROVAL_DECISION_AFFECTS_PRODUCTION,
+  getCurrentProtocolRiskRubricApprovalDecision,
+  evaluateProtocolRiskCandidateScoreAssignmentGate,
+  evaluateProtocolRiskApprovalGate,
+  canAssignRiskScoreToProtocol,
+} from "./protocolRiskApprovalDecision";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -5168,6 +5178,113 @@ export function runSolLiquidStakingEvidenceFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12R — reviewer approval / riskScore assignment decision gate.
+ * Decision not submitted, no candidate ready, no score assigned, no prod change.
+ * ------------------------------------------------------------------ */
+export function runProtocolRiskApprovalDecisionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+
+  const decision = getCurrentProtocolRiskRubricApprovalDecision();
+  const gateResult = evaluateProtocolRiskApprovalGate();
+  const gng = getProtocolSelectionGoNoGo("t");
+  const gateStatus = (gate: ProtocolSelectionGoNoGoGate) => gng.checks.find((c) => c.gate === gate)?.status;
+
+  // 12R-A…D. Decision scoping constants.
+  add("12R-A: PROTOCOL_RISK_APPROVAL_DECISION_EXISTS is true", PROTOCOL_RISK_APPROVAL_DECISION_EXISTS === true, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_EXISTS}`);
+  add("12R-B: PROTOCOL_RISK_APPROVAL_DECISION_APPROVED is false", PROTOCOL_RISK_APPROVAL_DECISION_APPROVED === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_APPROVED}`);
+  add("12R-C: PROTOCOL_RISK_APPROVAL_DECISION_ASSIGN_SCORES is false", PROTOCOL_RISK_APPROVAL_DECISION_ASSIGN_SCORES === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_ASSIGN_SCORES}`);
+  add("12R-D: PROTOCOL_RISK_APPROVAL_DECISION_AFFECTS_PRODUCTION is false", PROTOCOL_RISK_APPROVAL_DECISION_AFFECTS_PRODUCTION === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_AFFECTS_PRODUCTION}`);
+
+  // 12R-E…G. Current decision state.
+  add("12R-E: current decision status is not_submitted", decision.status === "not_submitted", `status=${decision.status}`);
+  add("12R-F: rubricApproved is false", decision.rubricApproved === false, `v=${decision.rubricApproved}`);
+  add("12R-G: scoreAssignmentAllowed is false", decision.scoreAssignmentAllowed === false, `v=${decision.scoreAssignmentAllowed}`);
+
+  // 12R-H…J. Gate result invariants.
+  add("12R-H: anyCandidateReadyForScoring is false", gateResult.anyCandidateReadyForScoring === false, `v=${gateResult.anyCandidateReadyForScoring}`);
+  add("12R-I: anyScoreAssigned is false", gateResult.anyScoreAssigned === false, `v=${gateResult.anyScoreAssigned}`);
+  add("12R-J: productionAffected is false", gateResult.productionAffected === false, `v=${gateResult.productionAffected}`);
+
+  // 12R-K. One gate per candidate.
+  add("12R-K: one candidate gate per SOL LST candidate", gateResult.candidateGates.length === 5 && ids.every((id) => gateResult.candidateGates.some((g) => g.protocolId === id)), `n=${gateResult.candidateGates.length}`);
+  // 12R-L. No gate allows scoring.
+  add("12R-L: no candidate gate has scoreAssignmentAllowed true", gateResult.candidateGates.every((g) => g.scoreAssignmentAllowed === false), `ok=${gateResult.candidateGates.every((g) => g.scoreAssignmentAllowed === false)}`);
+  // 12R-M. No gate has scoreAssigned true.
+  add("12R-M: no candidate gate has scoreAssigned true", gateResult.candidateGates.every((g) => g.scoreAssigned === false), `ok=${gateResult.candidateGates.every((g) => g.scoreAssigned === false)}`);
+  // 12R-N. No candidate is approved_for_scoring.
+  add("12R-N: no candidate status is approved_for_scoring", gateResult.candidateGates.every((g) => g.status !== "approved_for_scoring"), `statuses=${gateResult.candidateGates.map((g) => g.status).join(",")}`);
+  // 12R-O. canAssignRiskScoreToProtocol false for all five.
+  add("12R-O: canAssignRiskScoreToProtocol returns false for all five", ids.every((id) => canAssignRiskScoreToProtocol(id) === false), "all false");
+  // 12R-P. Sanctum partial TVL does not make it ready for scoring.
+  {
+    const sanctum = gateResult.candidateGates.find((g) => g.protocolId === "sanctum");
+    const ok = sanctum != null && sanctum.status !== "approved_for_scoring" && sanctum.status !== "ready_for_review" && !sanctum.gatheredDimensions.includes("tvl_adoption");
+    add("12R-P: Sanctum partial TVL evidence does not make it ready for scoring", ok, `status=${sanctum?.status} tvlGathered=${sanctum?.gatheredDimensions.includes("tvl_adoption")}`);
+  }
+  // 12R-Q. Partial/needs_review evidence keeps a candidate evidence_incomplete/blocked.
+  {
+    const ok = gateResult.candidateGates.every((g) => (g.status === "evidence_incomplete" || g.status === "blocked") && g.missingDimensions.length === 6);
+    add("12R-Q: partial/needs_review evidence keeps candidate incomplete", ok, `statuses=${gateResult.candidateGates.map((g) => g.status).join(",")}`);
+  }
+  // 12R-R/S. No riskScore assigned anywhere.
+  add("12R-R: no riskScore is assigned anywhere", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "none");
+  add("12R-S: riskScore remains absent for all five", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "absent");
+  // 12R-T/U. Rubric approval gates false.
+  add("12R-T: PROTOCOL_RISK_RUBRIC_APPROVED remains false", PROTOCOL_RISK_RUBRIC_APPROVED === false, `flag=${PROTOCOL_RISK_RUBRIC_APPROVED}`);
+  add("12R-U: canAssignProtocolRiskScores() remains false", canAssignProtocolRiskScores() === false, `v=${canAssignProtocolRiskScores()}`);
+  // 12R-V. productionReady remains false.
+  add("12R-V: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 12R-W. risk_scores gate remains not_started or blocked.
+  add("12R-W: risk_scores gate remains not_started or blocked", gateStatus("risk_scores") === "not_started" || gateStatus("risk_scores") === "blocked", `status=${gateStatus("risk_scores")}`);
+  // 12R-X. Live staking protocolSelection.status remains not_evaluated.
+  add("12R-X: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12R-Y. No live suggestion has selectedProtocolId/Name.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12R-Y: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12R-Z. Cards/modal do not expose approval decision or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "approved_for_scoring", "scoreAssignmentAllowed", "rubricApproved", "ApprovalDecision"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12R-Z: cards/modal never expose approval decision or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12R-AA/AB/AC. Flags at safe defaults.
+  add("12R-AA: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12R-AB: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12R-AC: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12R-AD. No transaction/signature/swap path in approval-gate output.
+  {
+    const json = (JSON.stringify(gateResult) + JSON.stringify(decision) + JSON.stringify(evaluateProtocolRiskCandidateScoreAssignmentGate("jupiter"))).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("12R-AD: no transaction/signature/swap path in approval-gate output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12R-AG. No forbidden investment claims in approval-gate output (existing forbidden-copy list).
+  {
+    const json = (JSON.stringify(gateResult) + JSON.stringify(decision)).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12R-AG: no forbidden investment claims in approval-gate output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -5203,6 +5320,7 @@ export function printFixtureResults(): void {
     ...runSolLiquidStakingSourceCandidateFixtureChecks(),
     ...runProtocolRiskRubricFixtureChecks(),
     ...runSolLiquidStakingEvidenceFixtureChecks(),
+    ...runProtocolRiskApprovalDecisionFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

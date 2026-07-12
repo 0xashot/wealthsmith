@@ -343,3 +343,19 @@ assigned**, the rubric stays unapproved, and **no production metadata changes**
 (auditStatus `unknown`, no `withdrawalTimeHours`/fees, no TVL promotion).
 `getProtocolSelectionGoNoGo().productionReady = false`; risk_scores/audit/
 withdrawal/fees gates unchanged. Drafts are not imported by any live/engine/UI file.
+
+---
+
+## 12R — reviewer approval / score-assignment decision gate
+
+`protocolRiskApprovalDecision.ts` + `protocolRiskApprovalDecision.md` +
+`protocolRiskScoreAssignmentGate.md` add the explicit human decision gate before a
+`riskScore` can ever be assigned. The current decision is **`not_submitted`**
+(`rubricApproved = false`, `scoreAssignmentAllowed = false`); every candidate
+score-assignment gate is **`blocked`** (rubric unapproved + all six evidence
+dimensions not `gathered`; Sanctum's `partial` TVL does not qualify).
+`anyCandidateReadyForScoring = false`, `anyScoreAssigned = false`,
+`productionAffected = false`; `canAssignRiskScoreToProtocol()` → false for all five.
+**No approval submitted, no scores assigned.** The go/no-go risk_methodology blocker
+now names the unsubmitted decision, but `productionReady` stays `false` and all
+risk gates are unchanged. The gate is not imported by any live/engine/UI file.

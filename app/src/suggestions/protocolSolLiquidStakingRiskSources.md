@@ -92,3 +92,21 @@ official audit/maturity/withdrawal-fee/operational/incident source is verified y
 each carries unresolved questions. **No `riskScore` is assigned**, the rubric is
 still not approved, `auditStatus` stays `unknown`, and no production metadata
 changed. See `protocolRiskEvidenceReview.md` for the review workflow.
+
+## 12R update
+
+The reviewer approval + score-assignment decision gate now exists
+(`protocolRiskApprovalDecision.ts`). Current candidate scoring-gate status:
+
+| Candidate | Gate status | scoreAssignmentAllowed |
+| --- | --- | --- |
+| jupiter (JupSOL) | blocked | false |
+| marinade (mSOL) | blocked | false |
+| jito (JitoSOL) | blocked | false |
+| blazestake (bSOL) | blocked | false |
+| sanctum (INF) | blocked | false |
+
+The rubric approval decision is `not_submitted`, so **no candidate is
+`approved_for_scoring`** and **no score is assigned** (all six evidence dimensions
+are not `gathered` for any candidate; Sanctum's `partial` TVL does not qualify).
+`riskScore` stays absent; production selection stays disabled.

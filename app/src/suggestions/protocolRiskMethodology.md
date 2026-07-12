@@ -63,6 +63,18 @@ each with required, source-backed evidence. **It is `draft` and NOT approved**
 approved and per-dimension evidence is sourced; missing/`not_reviewed` evidence
 never yields a score.
 
+### The approval decision gate (Step 12R)
+
+`protocolRiskApprovalDecision.ts` models the explicit human decision that must
+happen before any score is assigned, plus a per-candidate score-assignment gate.
+The current decision is `not_submitted` (`rubricApproved = false`,
+`scoreAssignmentAllowed = false`). A candidate becomes `approved_for_scoring` ONLY
+when (1) the rubric is approved, (2) all six evidence dimensions are `gathered`,
+(3) the reviewer decision explicitly allows scoring, and (4) the assignment is
+auditable. **Today every candidate gate is `blocked`** (rubric unapproved,
+evidence incomplete), so no score is assigned. See
+`protocolRiskScoreAssignmentGate.md`. Evidence gathering (12Q) is not approval.
+
 ## How each curated field is sourced
 
 - **auditStatus** (`audited` / `partially_audited` / `unknown`): from the

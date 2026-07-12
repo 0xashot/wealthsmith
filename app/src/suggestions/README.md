@@ -659,6 +659,27 @@ Mode uses `SuggestionRail` directly and is untouched.
   live/engine/UI file; live suggestions `not_evaluated`; all selection flags false.
   Fixtures 12Q-A…AC (+27). Next: **12R** reviewer approval / score-assignment
   decision.
+- Step 12R (done): **reviewer approval / riskScore assignment decision gate (no
+  approval, no score by default)**. Added `protocolRiskApprovalDecision.ts` +
+  `protocolRiskApprovalDecision.md` + `protocolRiskScoreAssignmentGate.md`: models
+  the human `ProtocolRiskRubricApprovalDecision` (status `not_submitted` →
+  `rubricApproved:false`, `scoreAssignmentAllowed:false`) and a per-candidate
+  `ProtocolRiskCandidateScoreAssignmentGate`. Constants
+  `PROTOCOL_RISK_APPROVAL_DECISION_EXISTS = true`, `..._APPROVED`/`..._ASSIGN_SCORES`/
+  `..._AFFECTS_PRODUCTION = false`. Helpers:
+  `getCurrentProtocolRiskRubricApprovalDecision()`,
+  `evaluateProtocolRiskCandidateScoreAssignmentGate()`,
+  `evaluateProtocolRiskApprovalGate()`, `canAssignRiskScoreToProtocol()` → false.
+  A candidate reaches `approved_for_scoring` only when the rubric is approved, all
+  six evidence dimensions are `gathered`, and the reviewer explicitly allows
+  scoring — **today every candidate gate is `blocked`** (rubric unapproved,
+  evidence incomplete; Sanctum's `partial` TVL does not qualify).
+  `anyCandidateReadyForScoring`/`anyScoreAssigned`/`productionAffected` all false;
+  **no `riskScore` assigned**. The go/no-go risk_methodology blocker now names the
+  unsubmitted decision but `productionReady` stays `false`. Not imported by any
+  live/engine/UI file; live suggestions `not_evaluated`; all selection flags false.
+  Fixtures 12R-A…AG (+31). Next: **12S** evidence completion or reviewer approval
+  process.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -667,8 +688,9 @@ adapters + eligibility + route guardrails + scoring + QA-only narrow-case
 selection + production-readiness plan + first-case real-data mapping + hardened
 internal dry-run + verified source completion + Stage-2 real-data dry-run report +
 machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubric +
-risk evidence drafts); production selection remains not evaluated / not implemented,
-and the go/no-go reports `productionReady = false`.
+risk evidence drafts + reviewer approval decision gate); production selection
+remains not evaluated / not implemented, and the go/no-go reports `productionReady =
+false`.
 
 ## Suggestion display order
 
