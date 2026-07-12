@@ -226,3 +226,14 @@ as **blocked** (selector disabled, metadata inactive/not-ready, approved riskSco
 missing, source re-verification missing, go/no-go not passed). **No protocol is
 selected**, no riskScore is surfaced (the QA-only 7.75 is never used), and nothing
 is written to any production registry. See `protocolSolLiquidStakingSelector.md`.
+
+## 13B update
+
+An internal-only UI preview shell now exists
+(`protocolSolLiquidStakingSelectorPreview.ts`) — a copy model for how the future
+exact SOL staking recommendation would read. It is **hard-disabled**, **not mounted
+in the live app**, and does not render in Dashboard/Portfolio/Review modal. The
+default preview is `disabled`; the internal example names no selected protocol, uses
+no QA score, and always carries "WealthSmith does not move funds for you." **JitoSOL
+is still not selected**, no live UI changed, and `productionReady` stays `false`. See
+`protocolSolLiquidStakingSelectorPreview.md`.

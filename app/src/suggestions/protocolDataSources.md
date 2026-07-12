@@ -512,3 +512,18 @@ APY-30d → id). **No production enablement:** it never uses the QA-only 7.75, s
 no UI, updates no live suggestions, enables no transactions, and mutates no
 metadata/registry/mappings/drafts. `productionReady` stays `false`. Not imported by
 any live/engine/UI file.
+
+---
+
+## 13B — internal UI preview shell
+
+`protocolSolLiquidStakingSelectorPreview.ts` +
+`protocolSolLiquidStakingSelectorPreview.md` add an internal-only copy model for the
+future exact SOL staking recommendation UI. It is **hard-disabled**
+(`PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED = false`), never mounted in the live app,
+and does not render in Dashboard/Portfolio/Review modal. `getDefaultSolLstSelectorPreview()`
+→ status `disabled` (no protocol named, safety note "WealthSmith does not move funds
+for you."); the internal example shows future copy tagged `INTERNAL_PREVIEW_NOT_LIVE`
+with no selected protocol, no QA score, and no production-readiness claim. **No
+production enablement:** no live suggestions updated, no transactions, no UI mounted;
+`productionReady` stays `false`. Not imported by any live/engine/UI file.

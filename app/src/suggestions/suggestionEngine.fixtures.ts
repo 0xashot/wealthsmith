@@ -256,6 +256,18 @@ import {
   previewSolLstSelectorReadiness,
 } from "./protocolSolLiquidStakingSelector";
 import {
+  PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
+  PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
+  PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
+  PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_DASHBOARD,
+  PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_PORTFOLIO,
+  PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_REVIEW_MODAL,
+  PROTOCOL_SOL_LST_SELECTOR_PREVIEW_UPDATES_LIVE_SUGGESTIONS,
+  PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLES_TRANSACTIONS,
+  getDefaultSolLstSelectorPreview,
+  getInternalOnlySolLstSelectorPreviewExample,
+} from "./protocolSolLiquidStakingSelectorPreview";
+import {
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_ASSIGN_SCORES,
@@ -6696,6 +6708,112 @@ export function runSolLstSelectorShellFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 13B — internal SOL staking selector preview shell (hard-disabled, unmounted).
+ * Copy model only; not in Dashboard/Portfolio/modal, no live behavior change.
+ * ------------------------------------------------------------------ */
+export function runSolLstSelectorPreviewFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+
+  const def = getDefaultSolLstSelectorPreview();
+  const example = getInternalOnlySolLstSelectorPreviewExample();
+  const gng = getProtocolSelectionGoNoGo("t");
+
+  // 13B-A…H. Scoping constants.
+  add("13B-A: PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS is true", PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS === true, `flag=${PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS}`);
+  add("13B-B: PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED is false", PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED}`);
+  add("13B-C: PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY is true", PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY === true, `flag=${PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY}`);
+  add("13B-D: PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_DASHBOARD is false", PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_DASHBOARD === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_DASHBOARD}`);
+  add("13B-E: PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_PORTFOLIO is false", PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_PORTFOLIO === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_PORTFOLIO}`);
+  add("13B-F: PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_REVIEW_MODAL is false", PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_REVIEW_MODAL === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_PREVIEW_SHOWS_IN_REVIEW_MODAL}`);
+  add("13B-G: PROTOCOL_SOL_LST_SELECTOR_PREVIEW_UPDATES_LIVE_SUGGESTIONS is false", PROTOCOL_SOL_LST_SELECTOR_PREVIEW_UPDATES_LIVE_SUGGESTIONS === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_PREVIEW_UPDATES_LIVE_SUGGESTIONS}`);
+  add("13B-H: PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLES_TRANSACTIONS is false", PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLES_TRANSACTIONS === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLES_TRANSACTIONS}`);
+
+  // 13B-I…N. Default preview.
+  add("13B-I: default preview status is disabled", def.status === "disabled", `status=${def.status}`);
+  add("13B-J: default preview has no selectedProtocolName", !("selectedProtocolName" in def.copy), `has=${"selectedProtocolName" in def.copy}`);
+  add("13B-K: default preview has no selectedLstSymbol", !("selectedLstSymbol" in def.copy), `has=${"selectedLstSymbol" in def.copy}`);
+  add("13B-L: default preview blockers mention selector preview disabled", def.copy.blockers.some((b) => b.toLowerCase().includes("selector preview is disabled")), `blockers=${def.copy.blockers.length}`);
+  add("13B-M: default preview blockers mention go/no-go not passed", def.copy.blockers.some((b) => b.toLowerCase().includes("go/no-go")), `has=${def.copy.blockers.some((b) => b.toLowerCase().includes("go/no-go"))}`);
+  add("13B-N: default preview safety notes include the no-move-funds line", def.copy.safetyNotes.includes("WealthSmith does not move funds for you."), `notes=${def.copy.safetyNotes.length}`);
+
+  // 13B-O…S. Internal example.
+  add("13B-O: internal example is internalOnly true", example.internalOnly === true, `v=${example.internalOnly}`);
+  add("13B-P: internal example does not update live suggestions", example.updatesLiveSuggestions === false, `v=${example.updatesLiveSuggestions}`);
+  add("13B-Q: internal example does not enable transactions", example.transactionsEnabled === false, `v=${example.transactionsEnabled}`);
+  {
+    const j = JSON.stringify(example).toLowerCase();
+    add("13B-R: internal example does not claim production readiness", !j.includes("production ready") && !j.includes("productionready") && example.status !== "preview_available", `status=${example.status}`);
+    add("13B-S: internal example does not use QA-only score", !j.includes("7.75") && !j.includes("qa_only_not_production"), `clean=${!j.includes("7.75")}`);
+  }
+  // 13B-O also: example names no selected protocol.
+  add("13B-O2: internal example names no selected protocol", !("selectedProtocolName" in example.copy) && !("selectedLstSymbol" in example.copy), `hasName=${"selectedProtocolName" in example.copy}`);
+
+  // 13B-T…W. Preview shape not present in live suggestion-derivation output (proxy for
+  // "not imported by stakingSuggestion / engine / toSuggestionCard / Dashboard-Portfolio-modal").
+  {
+    const previewTokens = ["SOL staking preview unavailable", "Selector preview is disabled", "INTERNAL_PREVIEW_NOT_LIVE", "Suggested protocol to review", "Preview disabled"];
+    const stakingJson = JSON.stringify(staking);
+    const engineJson = JSON.stringify(stakingRun) + JSON.stringify(stableRun);
+    const cardJson = JSON.stringify(toSuggestionCard(staking!)) + JSON.stringify(toSuggestionCard(stable!));
+    const modalJson = JSON.stringify(staking?.reviewDetails) + JSON.stringify(stable?.reviewDetails);
+    add("13B-T: preview shape not present in staking suggestion output", previewTokens.every((t) => !stakingJson.includes(t)), "no preview in staking");
+    add("13B-U: preview shape not present in engine output", previewTokens.every((t) => !engineJson.includes(t)), "no preview in engine");
+    add("13B-V: preview shape not present in toSuggestionCard output", previewTokens.every((t) => !cardJson.includes(t)), "no preview in card");
+    add("13B-W: preview shape not present in Dashboard/Portfolio/modal-facing output", previewTokens.every((t) => !modalJson.includes(t)), "no preview in modal");
+  }
+
+  // 13B-X. Live staking not_evaluated.
+  add("13B-X: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 13B-Y. No live suggestion has selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("13B-Y: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 13B-Z. Cards/modal do not expose preview copy or protocol recommendations.
+  // Use preview-DISTINCTIVE tokens only: the title "Put Idle SOL to Work" is shared
+  // with the real staking suggestion copy by design, so it is not a leak signal.
+  {
+    const tokens = ["Jito", "JitoSOL", "SOL staking preview unavailable", "Selector preview is disabled", "INTERNAL_PREVIEW_NOT_LIVE", "Preview disabled", "selectedProtocolName", "selectedLstSymbol"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("13B-Z: cards/modal never expose preview copy or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 13B-AA/AB/AC. Flags at safe defaults.
+  add("13B-AA: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("13B-AB: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("13B-AC: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 13B-AD. productionReady remains false.
+  add("13B-AD: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 13B-AE. No transaction/signature/swap path in preview output.
+  {
+    const json = (JSON.stringify(def) + JSON.stringify(example)).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("13B-AE: no transaction/signature/swap path in preview output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 13B-AI. No forbidden investment claims in preview output.
+  {
+    const json = (JSON.stringify(def) + JSON.stringify(example)).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("13B-AI: no forbidden investment claims in preview output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -6741,6 +6859,7 @@ export function printFixtureResults(): void {
     ...runProtocolRiskScoreAssignmentFixtureChecks(),
     ...runSolLstProductionMetadataFixtureChecks(),
     ...runSolLstSelectorShellFixtureChecks(),
+    ...runSolLstSelectorPreviewFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

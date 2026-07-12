@@ -878,6 +878,24 @@ Mode uses `SuggestionRail` directly and is untouched.
   selection flags false; `productionReady` stays `false`. Fixtures 13A-A…AS (+42).
   Next: **13B** internal UI preview shell, or the human approval / source
   re-verification.
+- Step 13B (done): **internal UI preview shell for the exact SOL staking
+  recommendation (hard-disabled, unmounted; copy model only)**. Added
+  `protocolSolLiquidStakingSelectorPreview.ts` +
+  `protocolSolLiquidStakingSelectorPreview.md` (no React component mounted — copy
+  model only, to remove any live-mount risk). Constants
+  `PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS = true`, `..._ENABLED = false`,
+  `..._INTERNAL_ONLY = true`, `..._SHOWS_IN_DASHBOARD`/`..._SHOWS_IN_PORTFOLIO`/
+  `..._SHOWS_IN_REVIEW_MODAL`/`..._UPDATES_LIVE_SUGGESTIONS`/`..._ENABLES_TRANSACTIONS
+  = false`, plus `INTERNAL_PREVIEW_NOT_LIVE`. `getDefaultSolLstSelectorPreview()` →
+  status `disabled`, no protocol named, safety note "WealthSmith does not move funds
+  for you."; `getInternalOnlySolLstSelectorPreviewExample()` → future copy shape
+  ("Put Idle SOL to Work" / "Suggested protocol to review") tagged
+  `INTERNAL_PREVIEW_NOT_LIVE`, no selected protocol, no QA score, no
+  production-readiness claim. Preview shape absent from staking/engine/card/modal
+  output; not imported by any live/engine/UI file; live suggestions `not_evaluated`;
+  all selection flags false; `productionReady` stays `false`. Fixtures 13B-A…AI (+33).
+  Next: **human approval / source re-verification**, or mounting the preview behind a
+  dev-only route.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -890,9 +908,9 @@ risk evidence drafts + reviewer approval decision gate + one-candidate evidence
 completion harness + source-verification intake + source-value confirmation intake +
 real value-confirmation ledger + evidence gather-decision ledger + JitoSOL
 ready-for-review evidence package + gated riskScore assignment mechanism + staged
-JitoSOL production metadata + hard-disabled selector shell); production selection
-remains not evaluated / not implemented, and the go/no-go reports `productionReady =
-false`.
+JitoSOL production metadata + hard-disabled selector shell + internal UI preview
+shell); production selection remains not evaluated / not implemented, and the go/no-go
+reports `productionReady = false`.
 
 ## Suggestion display order
 
