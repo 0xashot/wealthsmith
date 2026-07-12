@@ -75,6 +75,19 @@ auditable. **Today every candidate gate is `blocked`** (rubric unapproved,
 evidence incomplete), so no score is assigned. See
 `protocolRiskScoreAssignmentGate.md`. Evidence gathering (12Q) is not approval.
 
+### Weighted riskScore formula + gates (Step 12Y)
+
+`protocolRiskScoreAssignment.ts` computes `riskScore = sum(dimensionScore * weight)
+/ 100` (0–10, higher = more evidence-supported), using the rubric weights
+(audit_security 25, maturity 20, tvl_adoption 15, withdrawal_fee_transparency 15,
+operational_dependency_risk 15, incident_history 10). A score is computed ONLY when
+all gates pass: rubric approved, score assignment allowed, candidate
+`ready_for_review`, rubric version matches, and every dimension has a valid 0–10
+reviewer score with rationale + evidence sources. **Default state is blocked** (the
+approval decision is `not_submitted`), so **no score is assigned by default** and
+`riskScore` stays absent in `protocolRiskRegistry.ts`. See
+`protocolRiskScoreAssignment.md` and `protocolRiskApprovalAndScoring.md`.
+
 ## How each curated field is sourced
 
 - **auditStatus** (`audited` / `partially_audited` / `unknown`): from the

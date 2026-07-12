@@ -162,6 +162,15 @@ with fresh 12V TVL/APY, **JitoSOL reaches `ready_for_review` (6/6 gathered)** â€
 `ProtocolMarketData`, `auditStatus`/`withdrawalTimeHours`/fees stay unset, no base
 draft is mutated, and no `riskScore` is assigned. JitoSOL is not `approved_for_scoring`.
 
+## riskScore assignment mechanism (Step 12Y)
+
+`protocolRiskScoreAssignment.ts` adds the gated, auditable riskScore assignment
+mechanism (weighted 0â€“10 over the rubric). It is **blocked by default** (approval
+`not_submitted`), so **no production `riskScore` is assigned** and nothing is
+promoted to production metadata (`protocolRiskRegistry.ts` / `ProtocolMarketData` /
+`DEFILLAMA_POOL_MAPPINGS` untouched). A QA-only path proves the calculation (JitoSOL
+7.75) without production effect. See `protocolRiskScoreAssignment.md`.
+
 ## Rules honored
 
 - No pool UUID, APY, TVL, withdrawal time, fee, audit status, or riskScore is

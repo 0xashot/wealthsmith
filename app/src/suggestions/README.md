@@ -808,6 +808,29 @@ Mode uses `SuggestionRail` directly and is untouched.
   `not_evaluated`; all selection flags false; `productionReady` stays `false`.
   Fixtures 12X-A…BA (+50, and 12W-M…Q/Y reworded). Next: **12Y** human rubric
   approval + riskScore assignment mechanism.
+- Step 12Y (done): **human rubric approval + riskScore assignment mechanism
+  (blocked by default; QA-only calculation path; no production, no selection)**.
+  Added `protocolRiskScoreAssignment.ts` + `protocolRiskScoreAssignment.md` +
+  `protocolRiskApprovalAndScoring.md`, and `createExplicitProtocolRiskApprovalDecision()`
+  (approval-decision module, does not change the `not_submitted` default). Scoring:
+  `riskScore = sum(dimensionScore * weight) / 100` (0–10) over the rubric weights,
+  computed ONLY when all gates pass — rubric approved, score assignment allowed,
+  candidate `ready_for_review` (freshness-aware), rubric version matches, and every
+  dimension has a valid 0–10 reviewer score with rationale + evidence sources; any
+  failure → `blocked`/`needs_review`/`rejected` with no score. Constants
+  `PROTOCOL_RISK_SCORE_ASSIGNMENT_EXISTS = true` + six `false` guards. Helpers:
+  `calculateWeightedRiskScore()`, `validateRiskScoreDimensionInputs()`,
+  `getRiskScoreAssignmentBlockers()`, `getDefaultProtocolRiskScoreAssignmentInput()`,
+  `getQaOnlyJitoRiskScoreAssignmentInput()` (QA-ONLY, `QA_ONLY_NOT_PRODUCTION`
+  labels), `canAssignRiskScoreWithDecision()`, `summarizeRiskScoreAssignments()`.
+  **Blocked by default** (approval `not_submitted`): JitoSOL has no production
+  `riskScore`; a QA-only explicit-approval path computes the demonstration score
+  **7.75** to prove the calculation, with `productionMetadataUpdated`/
+  `evidenceDraftMutated`/`selectionEnabled` all false. Stale TVL/APY blocks
+  assignment. `protocolRiskRegistry.ts` unchanged; `riskScore` absent for all five.
+  Not imported by any live/engine/UI file; live suggestions `not_evaluated`; all
+  selection flags false; `productionReady` stays `false`. Fixtures 12Y-A…AT (+43).
+  Next: **12Z** production metadata registry for a beta candidate.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -819,8 +842,9 @@ machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubr
 risk evidence drafts + reviewer approval decision gate + one-candidate evidence
 completion harness + source-verification intake + source-value confirmation intake +
 real value-confirmation ledger + evidence gather-decision ledger + JitoSOL
-ready-for-review evidence package); production selection remains not evaluated / not
-implemented, and the go/no-go reports `productionReady = false`.
+ready-for-review evidence package + gated riskScore assignment mechanism); production
+selection remains not evaluated / not implemented, and the go/no-go reports
+`productionReady = false`.
 
 ## Suggestion display order
 

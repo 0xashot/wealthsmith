@@ -148,3 +148,17 @@ JitoSOL now has all six dimensions gathered from source-backed confirmations:
 **incident review must be rechecked before beta and before production.** JitoSOL is
 `ready_for_review` but **not** `approved_for_scoring`; no `riskScore` is assigned.
 See `protocolSolLiquidStakingJitoEvidenceConfirmations.md`.
+
+## 12Y scoring checklist
+
+Before a real (non-QA) `riskScore` can be assigned to a candidate:
+
+- [ ] all six dimensions gathered (candidate `ready_for_review`);
+- [ ] source re-verification complete (re-fetch each cited source);
+- [ ] rubric approval recorded (explicit `approved` decision);
+- [ ] per-dimension scores reviewed (0–10, rationale + evidence sources);
+- [ ] score assignment explicitly allowed;
+- [ ] production go/no-go (`getProtocolSelectionGoNoGo()`) still required before UI.
+
+Default state is blocked; JitoSOL has no production `riskScore`. See
+`protocolRiskScoreAssignment.md`.

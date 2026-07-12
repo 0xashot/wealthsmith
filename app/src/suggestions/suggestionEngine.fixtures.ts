@@ -213,7 +213,22 @@ import {
   type ProtocolSourceValueConfirmationInput,
 } from "./protocolSolLiquidStakingSourceValueConfirmation";
 import { mapConfirmedValuesToEvidenceCompletion, mapRealValuesToEvidenceCompletion, mapGatherDecisionsToEvidenceCompletion } from "./protocolSolLiquidStakingEvidenceCompletion";
-import { evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions } from "./protocolRiskApprovalDecision";
+import { evaluateProtocolRiskCandidateScoreAssignmentGateWithGatherDecisions, createExplicitProtocolRiskApprovalDecision } from "./protocolRiskApprovalDecision";
+import {
+  PROTOCOL_RISK_SCORE_ASSIGNMENT_EXISTS,
+  PROTOCOL_RISK_SCORE_ASSIGNMENT_APPROVES_RUBRIC_BY_DEFAULT,
+  PROTOCOL_RISK_SCORE_ASSIGNMENT_ASSIGNS_PRODUCTION_SCORES,
+  PROTOCOL_RISK_SCORE_ASSIGNMENT_AFFECTS_PRODUCTION,
+  PROTOCOL_RISK_SCORE_ASSIGNMENT_ENABLES_SELECTION,
+  PROTOCOL_RISK_SCORE_ASSIGNMENT_UPDATES_METADATA,
+  PROTOCOL_RISK_SCORE_ASSIGNMENT_MUTATES_EVIDENCE,
+  QA_ONLY_SCORING_LABEL,
+  calculateWeightedRiskScore,
+  evaluateRiskScoreAssignment,
+  getDefaultProtocolRiskScoreAssignmentInput,
+  getQaOnlyJitoRiskScoreAssignmentInput,
+} from "./protocolRiskScoreAssignment";
+import { PROTOCOL_RISK_RUBRIC_VERSION } from "./protocolRiskRubric";
 import {
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC,
@@ -6204,6 +6219,171 @@ export function runJitoSolEvidenceReadinessFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12Y — human rubric approval + riskScore assignment mechanism.
+ * Blocked by default; QA-only score path; no production, no selection.
+ * ------------------------------------------------------------------ */
+export function runProtocolRiskScoreAssignmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+
+  const FRESH_AS_OF = "2026-07-12T06:00:00Z";
+  const STALE_AS_OF = "2026-08-01T00:00:00Z";
+  const qa = getQaOnlyJitoRiskScoreAssignmentInput();
+  const withScore = (dim: (typeof qa.dimensionScores)[number]["dimensionId"], score: number) => ({
+    ...qa,
+    dimensionScores: qa.dimensionScores.map((d) => (d.dimensionId === dim ? { ...d, score } : d)),
+  });
+  const approvedDecision = createExplicitProtocolRiskApprovalDecision({
+    decisionId: "qa-only-explicit-approval",
+    rubricVersion: PROTOCOL_RISK_RUBRIC_VERSION,
+    status: "approved",
+    reviewer: "qa-example",
+    reviewerRole: "risk",
+    decidedAt: "2026-07-12T00:00:00Z",
+    notes: ["QA-only explicit approval to test the calculation path. Not production."],
+    rubricApproved: true,
+    scoreAssignmentAllowed: true,
+  });
+  const okOpts = { approvalDecision: approvedDecision, asOf: FRESH_AS_OF };
+
+  const defaultResult = evaluateRiskScoreAssignment(getDefaultProtocolRiskScoreAssignmentInput("jito"), { asOf: FRESH_AS_OF });
+  const approvedResult = evaluateRiskScoreAssignment(qa, okOpts);
+  const gng = getProtocolSelectionGoNoGo("t");
+
+  // 12Y-A…G. Scoping constants.
+  add("12Y-A: PROTOCOL_RISK_SCORE_ASSIGNMENT_EXISTS is true", PROTOCOL_RISK_SCORE_ASSIGNMENT_EXISTS === true, `flag=${PROTOCOL_RISK_SCORE_ASSIGNMENT_EXISTS}`);
+  add("12Y-B: PROTOCOL_RISK_SCORE_ASSIGNMENT_APPROVES_RUBRIC_BY_DEFAULT is false", PROTOCOL_RISK_SCORE_ASSIGNMENT_APPROVES_RUBRIC_BY_DEFAULT === false, `flag=${PROTOCOL_RISK_SCORE_ASSIGNMENT_APPROVES_RUBRIC_BY_DEFAULT}`);
+  add("12Y-C: PROTOCOL_RISK_SCORE_ASSIGNMENT_ASSIGNS_PRODUCTION_SCORES is false", PROTOCOL_RISK_SCORE_ASSIGNMENT_ASSIGNS_PRODUCTION_SCORES === false, `flag=${PROTOCOL_RISK_SCORE_ASSIGNMENT_ASSIGNS_PRODUCTION_SCORES}`);
+  add("12Y-D: PROTOCOL_RISK_SCORE_ASSIGNMENT_AFFECTS_PRODUCTION is false", PROTOCOL_RISK_SCORE_ASSIGNMENT_AFFECTS_PRODUCTION === false, `flag=${PROTOCOL_RISK_SCORE_ASSIGNMENT_AFFECTS_PRODUCTION}`);
+  add("12Y-E: PROTOCOL_RISK_SCORE_ASSIGNMENT_ENABLES_SELECTION is false", PROTOCOL_RISK_SCORE_ASSIGNMENT_ENABLES_SELECTION === false, `flag=${PROTOCOL_RISK_SCORE_ASSIGNMENT_ENABLES_SELECTION}`);
+  add("12Y-F: PROTOCOL_RISK_SCORE_ASSIGNMENT_UPDATES_METADATA is false", PROTOCOL_RISK_SCORE_ASSIGNMENT_UPDATES_METADATA === false, `flag=${PROTOCOL_RISK_SCORE_ASSIGNMENT_UPDATES_METADATA}`);
+  add("12Y-G: PROTOCOL_RISK_SCORE_ASSIGNMENT_MUTATES_EVIDENCE is false", PROTOCOL_RISK_SCORE_ASSIGNMENT_MUTATES_EVIDENCE === false, `flag=${PROTOCOL_RISK_SCORE_ASSIGNMENT_MUTATES_EVIDENCE}`);
+
+  // 12Y-H…J. Default approval decision unchanged.
+  {
+    const d = getCurrentProtocolRiskRubricApprovalDecision();
+    add("12Y-H: getCurrentProtocolRiskRubricApprovalDecision() still not_submitted", d.status === "not_submitted", `status=${d.status}`);
+    add("12Y-I: default rubricApproved remains false", d.rubricApproved === false, `v=${d.rubricApproved}`);
+    add("12Y-J: default scoreAssignmentAllowed remains false", d.scoreAssignmentAllowed === false, `v=${d.scoreAssignmentAllowed}`);
+  }
+  // 12Y-K/L/M. Default JitoSOL assignment blocked, no score.
+  add("12Y-K: default JitoSOL riskScore assignment is blocked", defaultResult.status === "blocked", `status=${defaultResult.status}`);
+  add("12Y-L: default JitoSOL riskScore is absent", defaultResult.riskScore === undefined, `score=${defaultResult.riskScore}`);
+  add("12Y-M: blocked result includes rubric_not_approved or score_assignment_not_allowed", defaultResult.blockers.includes("rubric_not_approved") || defaultResult.blockers.includes("score_assignment_not_allowed"), `blockers=${defaultResult.blockers.join(",")}`);
+  // 12Y-N. Weighted calc = 7.75.
+  add("12Y-N: calculateWeightedRiskScore returns 7.75 for QA-only Jito input", calculateWeightedRiskScore(qa.dimensionScores) === 7.75, `v=${calculateWeightedRiskScore(qa.dimensionScores)}`);
+  // 12Y-O. QA-only label present.
+  add("12Y-O: QA-only scoring input is labeled QA-only / non-production", qa.dimensionScores.every((d) => d.rationale.some((r) => r.includes(QA_ONLY_SCORING_LABEL))), `label=${QA_ONLY_SCORING_LABEL}`);
+  // 12Y-P. Score > 10 → rejected.
+  {
+    const r = evaluateRiskScoreAssignment(withScore("audit_security", 11), okOpts);
+    add("12Y-P: score above 10 is rejected", r.status === "rejected" && r.riskScore === undefined, `status=${r.status}`);
+  }
+  // 12Y-Q. Score < 0 → rejected.
+  {
+    const r = evaluateRiskScoreAssignment(withScore("audit_security", -1), okOpts);
+    add("12Y-Q: score below 0 is rejected", r.status === "rejected" && r.riskScore === undefined, `status=${r.status}`);
+  }
+  // 12Y-R. Missing dimension → needs_review, no score.
+  {
+    const missing = { ...qa, dimensionScores: qa.dimensionScores.filter((d) => d.dimensionId !== "maturity") };
+    const r = evaluateRiskScoreAssignment(missing, okOpts);
+    add("12Y-R: missing dimension returns needs_review/blocked with no riskScore", (r.status === "needs_review" || r.status === "blocked") && r.riskScore === undefined, `status=${r.status}`);
+  }
+  // 12Y-S. Duplicate dimension → rejected, no score.
+  {
+    const dup = { ...qa, dimensionScores: [...qa.dimensionScores, qa.dimensionScores[0]] };
+    const r = evaluateRiskScoreAssignment(dup, okOpts);
+    add("12Y-S: duplicate dimension returns rejected with no riskScore", r.status === "rejected" && r.riskScore === undefined, `status=${r.status}`);
+  }
+  // 12Y-T. Missing reviewer → needs_review/rejected, no score.
+  {
+    const noRev = { ...qa, dimensionScores: qa.dimensionScores.map((d, i) => (i === 0 ? { ...d, reviewer: "" } : d)) };
+    const r = evaluateRiskScoreAssignment(noRev, okOpts);
+    add("12Y-T: missing reviewer returns needs_review/rejected with no riskScore", (r.status === "needs_review" || r.status === "rejected") && r.riskScore === undefined, `status=${r.status}`);
+  }
+  // 12Y-U. Missing rationale → needs_review/rejected, no score.
+  {
+    const noRat = { ...qa, dimensionScores: qa.dimensionScores.map((d, i) => (i === 0 ? { ...d, rationale: [] } : d)) };
+    const r = evaluateRiskScoreAssignment(noRat, okOpts);
+    add("12Y-U: missing rationale returns needs_review/rejected with no riskScore", (r.status === "needs_review" || r.status === "rejected") && r.riskScore === undefined, `status=${r.status}`);
+  }
+  // 12Y-V. Missing evidenceSourceNames → needs_review/rejected, no score.
+  {
+    const noEv = { ...qa, dimensionScores: qa.dimensionScores.map((d, i) => (i === 0 ? { ...d, evidenceSourceNames: [] } : d)) };
+    const r = evaluateRiskScoreAssignment(noEv, okOpts);
+    add("12Y-V: missing evidenceSourceNames returns needs_review/rejected with no riskScore", (r.status === "needs_review" || r.status === "rejected") && r.riskScore === undefined, `status=${r.status}`);
+  }
+  // 12Y-W. Explicit approved helper does not mutate default.
+  add("12Y-W: explicit approved decision helper does not mutate default decision", getCurrentProtocolRiskRubricApprovalDecision().status === "not_submitted" && approvedDecision.status === "approved", `default=${getCurrentProtocolRiskRubricApprovalDecision().status}`);
+  // 12Y-X/Y/Z/AA/AB. Explicit approved + valid QA + fresh → score_assigned 7.75, safe flags.
+  add("12Y-X: explicit approved + valid QA + fresh → score_assigned", approvedResult.status === "score_assigned", `status=${approvedResult.status}`);
+  add("12Y-Y: score_assigned result has riskScore 7.75", approvedResult.riskScore === 7.75, `score=${approvedResult.riskScore}`);
+  add("12Y-Z: score_assigned result has productionMetadataUpdated false", approvedResult.productionMetadataUpdated === false, `v=${approvedResult.productionMetadataUpdated}`);
+  add("12Y-AA: score_assigned result has evidenceDraftMutated false", approvedResult.evidenceDraftMutated === false, `v=${approvedResult.evidenceDraftMutated}`);
+  add("12Y-AB: score_assigned result has selectionEnabled false", approvedResult.selectionEnabled === false, `v=${approvedResult.selectionEnabled}`);
+  // 12Y-AC. Stale asOf → blocked.
+  {
+    const r = evaluateRiskScoreAssignment(qa, { approvalDecision: approvedDecision, asOf: STALE_AS_OF });
+    add("12Y-AC: stale TVL/APY asOf → JitoSOL score assignment blocked", r.status === "blocked" && r.blockers.includes("candidate_not_ready_for_review") && r.riskScore === undefined, `status=${r.status} blockers=${r.blockers.join(",")}`);
+  }
+  // 12Y-AD/AE. No production riskScore in registry.
+  add("12Y-AD: no production riskScore written to protocolRiskRegistry", getProtocolRiskData("jito").riskScore === undefined, `jito=${getProtocolRiskData("jito").riskScore}`);
+  add("12Y-AE: riskScore remains absent for all five in production registry", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "absent");
+  // 12Y-AF/AG/AH. Approval flags false.
+  add("12Y-AF: PROTOCOL_RISK_RUBRIC_APPROVED remains false", PROTOCOL_RISK_RUBRIC_APPROVED === false, `flag=${PROTOCOL_RISK_RUBRIC_APPROVED}`);
+  add("12Y-AG: PROTOCOL_RISK_APPROVAL_DECISION_APPROVED remains false", PROTOCOL_RISK_APPROVAL_DECISION_APPROVED === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_APPROVED}`);
+  add("12Y-AH: canAssignProtocolRiskScores() remains false by default", canAssignProtocolRiskScores() === false, `v=${canAssignProtocolRiskScores()}`);
+  // 12Y-AI. productionReady remains false.
+  add("12Y-AI: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 12Y-AJ. Live staking not_evaluated.
+  add("12Y-AJ: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12Y-AK. No live suggestion has selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12Y-AK: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12Y-AL. Cards/modal do not expose riskScore assignment or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "riskScore", "weightedContribution", "score_assigned", "7.75"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12Y-AL: cards/modal never expose riskScore assignment or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12Y-AM/AN/AO. Flags at safe defaults.
+  add("12Y-AM: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12Y-AN: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12Y-AO: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12Y-AP. No transaction/signature/swap path in scoring output.
+  {
+    const json = (JSON.stringify(approvedResult) + JSON.stringify(qa)).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("12Y-AP: no transaction/signature/swap path in scoring output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12Y-AT. No forbidden investment claims in scoring output.
+  {
+    const json = (JSON.stringify(approvedResult) + JSON.stringify(qa)).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12Y-AT: no forbidden investment claims in scoring output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -6246,6 +6426,7 @@ export function printFixtureResults(): void {
     ...runSolLiquidStakingRealValueFixtureChecks(),
     ...runSolLiquidStakingGatherDecisionFixtureChecks(),
     ...runJitoSolEvidenceReadinessFixtureChecks(),
+    ...runProtocolRiskScoreAssignmentFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

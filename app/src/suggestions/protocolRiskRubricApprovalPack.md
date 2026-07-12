@@ -96,3 +96,20 @@ candidate is `approved_for_scoring`.
 > and recorded by an actual reviewer (product / risk / compliance / legal), not
 > flipped as part of normal implementation work. Until then, `riskScore` stays
 > absent and production protocol selection stays blocked.
+
+## Scoring sign-off (Step 12Y)
+
+The scoring mechanism (`protocolRiskScoreAssignment.ts`) is BLOCKED by default. To
+assign a real (non-QA) `riskScore`, a reviewer must:
+
+1. **Approve the rubric** — record an explicit `approved` decision
+   (`createExplicitProtocolRiskApprovalDecision`); the default stays `not_submitted`.
+2. **Explicitly allow score assignment** — set `scoreAssignmentAllowed = true`
+   (valid only when the decision is `approved`).
+3. **Re-verify the JitoSOL sources before real approval** — re-check each cited Jito
+   source (values current, audit scope accurate, incident-history review re-run),
+   since the 12X evidence was reviewer-supplied and not independently re-fetched.
+
+Only then does a per-dimension score set (0–10, with rationale + evidence sources)
+compute a weighted `riskScore`. Until all of this is recorded, no score is assigned
+and `productionReady` stays false.

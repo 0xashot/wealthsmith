@@ -118,6 +118,50 @@ export function getCurrentProtocolRiskRubricApprovalDecision(): ProtocolRiskRubr
   };
 }
 
+export interface ExplicitProtocolRiskApprovalDecisionInput {
+  decisionId: string;
+  rubricVersion: string;
+  status: "approved" | "rejected" | "changes_requested";
+  reviewer: string;
+  reviewerRole: ProtocolRiskReviewerRole;
+  decidedAt: string;
+  notes: string[];
+  rubricApproved: boolean;
+  scoreAssignmentAllowed: boolean;
+}
+
+/**
+ * Build an EXPLICIT approval decision from a recorded reviewer/QA flow. This does
+ * NOT change any default or global constant, does not affect production, and does
+ * not alter `getCurrentProtocolRiskRubricApprovalDecision()` (which stays
+ * `not_submitted` / false / false). It only returns the decision object supplied.
+ *
+ * Requires reviewer, role, date, and status. A non-`approved` status forces
+ * `rubricApproved`/`scoreAssignmentAllowed` to false; `approved` may set them true
+ * only when the caller explicitly supplied true.
+ */
+export function createExplicitProtocolRiskApprovalDecision(
+  input: ExplicitProtocolRiskApprovalDecisionInput
+): ProtocolRiskRubricApprovalDecision {
+  if (!input.reviewer || !input.reviewerRole || !input.decidedAt || !input.status) {
+    throw new Error("An explicit approval decision requires reviewer, reviewerRole, decidedAt, and status.");
+  }
+  const approved = input.status === "approved";
+  const rubricApproved = approved && input.rubricApproved === true;
+  const scoreAssignmentAllowed = approved && input.scoreAssignmentAllowed === true;
+  return {
+    decisionId: input.decisionId,
+    rubricVersion: input.rubricVersion,
+    status: input.status,
+    reviewer: input.reviewer,
+    reviewerRole: input.reviewerRole,
+    decidedAt: input.decidedAt,
+    notes: [...input.notes],
+    rubricApproved,
+    scoreAssignmentAllowed,
+  };
+}
+
 /**
  * Evaluate one candidate's score-assignment gate from its evidence drafts and the
  * current approval decision. Never computes or returns a score.

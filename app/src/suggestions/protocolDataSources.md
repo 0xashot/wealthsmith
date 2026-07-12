@@ -460,3 +460,21 @@ TVL/APY drops JitoSOL to 5/6; the incident review must be rechecked before
 beta/production. **No production enablement:** no base draft mutated, no production
 metadata written (`auditStatus`/`withdrawalTimeHours`/fees unchanged),
 `productionReady` stays `false`. Not imported by any live/engine/UI file.
+
+---
+
+## 12Y — human rubric approval + riskScore assignment mechanism
+
+`protocolRiskScoreAssignment.ts` + `protocolRiskScoreAssignment.md` +
+`protocolRiskApprovalAndScoring.md` add the gated, auditable scoring mechanism:
+`riskScore = sum(score * weight) / 100` (0–10), computed ONLY when the rubric is
+approved, score assignment is allowed, the candidate is `ready_for_review`, the
+rubric version matches, and every dimension has a valid reviewer score with
+rationale + evidence sources. `createExplicitProtocolRiskApprovalDecision()` lets a
+reviewer/QA flow record an approval without changing the default
+(`getCurrentProtocolRiskRubricApprovalDecision()` stays `not_submitted`). **Blocked
+by default:** JitoSOL has no production `riskScore`; a QA-only path proves the
+calculation (7.75) with no production effect. Stale TVL/APY blocks assignment. **No
+production enablement:** `productionMetadataUpdated`/`evidenceDraftMutated`/
+`selectionEnabled` always false; `protocolRiskRegistry.ts` unchanged;
+`productionReady` stays `false`. Not imported by any live/engine/UI file.

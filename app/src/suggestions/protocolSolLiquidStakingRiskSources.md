@@ -192,3 +192,15 @@ While TVL/APY values are fresh, **JitoSOL `ready_for_review = true`** but
 **`approved_for_scoring = false`** (rubric unapproved), **no `riskScore` assigned**,
 and **no protocol is selected**. Other candidates are unchanged. Stale TVL/APY
 returns JitoSOL to 5/6. Recheck incident history before beta/production.
+
+## 12Y update
+
+The human rubric-approval + riskScore assignment mechanism now exists
+(`protocolRiskScoreAssignment.ts`). JitoSOL is `ready_for_review`, but the scoring
+mechanism is **blocked by default** (approval decision `not_submitted`), so **no
+production `riskScore` is assigned** — `riskScore` stays absent in
+`protocolRiskRegistry.ts` for all five candidates. A QA-only path (explicit approval
++ QA scores) computes a demonstration score of 7.75 for JitoSOL to prove the
+calculation, but writes no production metadata, mutates no draft, and enables no
+selection. Stale TVL/APY blocks assignment. See `protocolRiskScoreAssignment.md` and
+`protocolRiskApprovalAndScoring.md`.
