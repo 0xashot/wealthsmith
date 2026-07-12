@@ -312,3 +312,19 @@ go/no-go`. A proposal never changes production data on its own:
 Production remains disabled: `PROTOCOL_SELECTION_IMPLEMENTED` / `SHOW_IN_UI` /
 `ALLOW_TRANSACTIONS` false and `getProtocolSelectionGoNoGo().productionReady =
 false` (tvl_mapping/risk_scores/audit/withdrawal/fees gates unchanged).
+
+---
+
+## 12P — riskScore rubric (draft, not approved)
+
+`protocolRiskRubric.ts` + `protocolRiskRubric.md` + `protocolRiskRubricApprovalPack.md`
+add an auditable `riskScore` rubric: six weighted dimensions totaling 100 (audit &
+security 25, maturity 20, TVL & adoption 15, withdrawal & fee transparency 15,
+operational & dependency 15, incident history 10), each with required source-backed
+evidence, plus a reviewer approval workflow. **The rubric is DRAFT and NOT
+approved** (`PROTOCOL_RISK_RUBRIC_APPROVED = false`,
+`canAssignProtocolRiskScores()` → false): **no `riskScore` is assigned**, drafts
+keep `score` absent + `scoreAssigned:false`, `auditStatus` stays `unknown`, and no
+production metadata changes. `getProtocolSelectionGoNoGo().productionReady` stays
+`false` (the risk_methodology blocker now names the draft rubric; risk_scores stays
+not_started). Rubric is not imported by any live/engine/UI file.

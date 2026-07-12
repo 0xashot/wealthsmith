@@ -50,6 +50,19 @@ A `riskScore` (0–10) may be assigned only from documented evidence, e.g.:
 The scoring rubric itself must be written down and reviewed before any number is
 stored. `MIN_PROTOCOL_RISK_SCORE = 7` is the eligibility gate, not a score.
 
+### The rubric now exists in DRAFT (Step 12P)
+
+The rubric is now written down in `protocolRiskRubric.ts` /
+`protocolRiskRubric.md`, with an approval pack in
+`protocolRiskRubricApprovalPack.md`. It defines six weighted dimensions (total
+100) — audit & security (25), maturity (20), TVL & adoption (15), withdrawal & fee
+transparency (15), operational & dependency risk (15), incident history (10) —
+each with required, source-backed evidence. **It is `draft` and NOT approved**
+(`PROTOCOL_RISK_RUBRIC_APPROVED = false`, `canAssignProtocolRiskScores()` → false).
+`riskScore` therefore **remains absent** for every protocol until the rubric is
+approved and per-dimension evidence is sourced; missing/`not_reviewed` evidence
+never yields a score.
+
 ## How each curated field is sourced
 
 - **auditStatus** (`audited` / `partially_audited` / `unknown`): from the

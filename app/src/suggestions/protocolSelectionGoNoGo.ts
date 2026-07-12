@@ -21,6 +21,7 @@ import { SOL_LIQUID_STAKING_CANDIDATE_IDS } from "./protocolSolLiquidStakingData
 import { getSolLiquidStakingSourceStatus } from "./protocolSolLiquidStakingSources";
 import { getProtocolRiskData } from "./protocolRiskRegistry";
 import { buildSolLiquidStakingStage2DryRunReport } from "./protocolSolLiquidStakingStage2DryRun";
+import { PROTOCOL_RISK_RUBRIC_EXISTS, PROTOCOL_RISK_RUBRIC_APPROVED } from "./protocolRiskRubric";
 
 /** This module is a checklist only; it can never enable production or UI. */
 export const PROTOCOL_SELECTION_GO_NO_GO_ONLY = true;
@@ -134,10 +135,10 @@ export function getProtocolSelectionGoNoGo(checkedAt: string = new Date().toISOS
     ]);
   }
 
-  /* --- risk_methodology: rubric not production-approved. --- */
+  /* --- risk_methodology: rubric drafted, not approved. --- */
   check("risk_methodology", "blocked", [
-    blocker("risk_methodology_not_production_approved", "risk_methodology", "riskScore methodology not approved for production", "A riskScore rubric is documented conceptually but has no production-approved sign-off or per-protocol evidence.", ["protocolRiskMethodology.md / protocolSolLiquidStakingRiskSources.md"]),
-  ], ["Methodology must be approved with documented evidence before any riskScore can be assigned."]);
+    blocker("risk_methodology_not_production_approved", "risk_methodology", "riskScore rubric not approved for production", "A riskScore rubric now exists in DRAFT (protocolRiskRubric.ts, PROTOCOL_RISK_RUBRIC_APPROVED=false) but has no approval sign-off or per-protocol evidence.", [`PROTOCOL_RISK_RUBRIC_EXISTS=${PROTOCOL_RISK_RUBRIC_EXISTS}`, `PROTOCOL_RISK_RUBRIC_APPROVED=${PROTOCOL_RISK_RUBRIC_APPROVED}`, "protocolRiskRubricApprovalPack.md"]),
+  ], ["Rubric is drafted but must be approved with documented evidence before any riskScore can be assigned."]);
 
   /* --- risk_scores: absent for all five. --- */
   {

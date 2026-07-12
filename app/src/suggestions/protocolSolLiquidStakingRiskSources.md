@@ -59,3 +59,24 @@ upgrade authority, oracle/dependency); and incident history. This is
 evidence-gathering ONLY — **no `riskScore` is assigned in 12O**, `auditStatus`
 stays `unknown`, and the risk rubric approval is deferred to **12P**. Production
 selection stays disabled (`productionReady = false`).
+
+## 12P update
+
+The `riskScore` rubric now exists in DRAFT (`protocolRiskRubric.ts`,
+`protocolRiskRubric.md`) with an approval pack (`protocolRiskRubricApprovalPack.md`).
+**It is not approved** (`PROTOCOL_RISK_RUBRIC_APPROVED = false`), so **`riskScore`
+remains `not_assigned`** for all five SOL LST candidates. Per-dimension evidence
+still required for every candidate (JupSOL, mSOL, JitoSOL, bSOL, INF):
+
+| Dimension (weight) | Evidence still required |
+| --- | --- |
+| Audit & security (25) | official audit report/review + scope + date + audited version |
+| Maturity (20) | production history + time in production + maintenance/official status |
+| TVL & adoption (15) | source-backed TVL (verified only for INF today) + adoption + freshness |
+| Withdrawal & fee transparency (15) | unstake mechanics + timing + fee schedule (all missing) |
+| Operational & dependency (15) | admin/upgrade authority + stake-pool/oracle deps + custody model |
+| Incident history (10) | disclosed incidents / postmortems / advisories (absent review = missing) |
+
+No dimension is `sufficient` for any candidate yet, so
+`getMissingRiskEvidenceForProtocol()` returns all six for each. `riskScore` stays
+absent; production selection stays disabled.

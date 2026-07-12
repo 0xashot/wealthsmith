@@ -622,6 +622,24 @@ Mode uses `SuggestionRail` directly and is untouched.
   Not imported by any live/engine/UI file; live suggestions `not_evaluated`; all
   selection flags false. Fixtures 12O-B…Z (+24). Next: **12P** risk rubric
   approval pack.
+- Step 12P (done): **protocol riskScore rubric approval pack (draft, not
+  approved)**. Added `protocolRiskRubric.ts` + `protocolRiskRubric.md` +
+  `protocolRiskRubricApprovalPack.md`: an auditable rubric with six weighted
+  dimensions totaling 100 (audit_security 25, maturity 20, tvl_adoption 15,
+  withdrawal_fee_transparency 15, operational_dependency_risk 15, incident_history
+  10), each with required source-backed evidence, plus reviewer sign-off
+  placeholders. Constants `PROTOCOL_RISK_RUBRIC_EXISTS = true`, `..._APPROVED =
+  false`, `..._ASSIGNS_SCORES = false`, `..._AFFECTS_PRODUCTION = false`. Helpers:
+  `getProtocolRiskRubric()`, `isProtocolRiskRubricApproved()` → false,
+  `canAssignProtocolRiskScores()` → false, `createEmptyProtocolRiskScoreDraft()`
+  (score absent, `scoreAssigned:false`, all dimensions `not_reviewed`),
+  `validateProtocolRiskRubricWeights()`, `getMissingRiskEvidenceForProtocol()`.
+  **No `riskScore` assigned** — absent for all five (12P-Q/R); rubric not approved;
+  auditStatus unchanged. The go/no-go risk_methodology blocker now names the draft
+  rubric but `productionReady` stays `false` and risk_scores stays `not_started`.
+  Not imported by any live/engine/UI file; live suggestions `not_evaluated`; all
+  selection flags false. Fixtures 12P-A…AD (+28). Next: **12Q** evidence gathering
+  and sourced risk metadata.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -629,9 +647,9 @@ is a QA-proven-but-DISABLED pipeline behind default-off feature flags (registry 
 adapters + eligibility + route guardrails + scoring + QA-only narrow-case
 selection + production-readiness plan + first-case real-data mapping + hardened
 internal dry-run + verified source completion + Stage-2 real-data dry-run report +
-machine-checkable go/no-go checklist + data sourcing pack); production selection
-remains not evaluated / not implemented, and the go/no-go reports `productionReady
-= false`.
+machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubric);
+production selection remains not evaluated / not implemented, and the go/no-go
+reports `productionReady = false`.
 
 ## Suggestion display order
 
