@@ -109,6 +109,21 @@ here are still not production metadata**, no `riskScore` is assigned, and nothin
 promoted into `protocolSolLiquidStakingSources.ts` / `DEFILLAMA_POOL_MAPPINGS` /
 `ProtocolRiskData`. Production selection stays disabled.
 
+## Source verification intake (Step 12T)
+
+Reviewer-supplied source candidates (exact DefiLlama pool IDs for JupSOL/mSOL/
+JitoSOL/bSOL, INF via the existing codebase pool, and official withdrawal/fee/
+audit/operational docs URLs) are now classified at the SOURCE level in
+`protocolSolLiquidStakingSourceVerification.ts`. Verification status:
+
+- **Verified (source existence only):** the four DefiLlama TVL pools (exact UUID +
+  label + Solana), INF codebase pool, and official docs links.
+- **Needs review:** incident_history for all five; any source with unclear scope.
+
+**No production metadata is promoted.** TVL pools are not added to
+`DEFILLAMA_POOL_MAPPINGS`; `auditStatus` stays `unknown`; no withdrawal/fee value
+and no `riskScore` is assigned. See `protocolSolLiquidStakingSourceVerification.md`.
+
 ## Rules honored
 
 - No pool UUID, APY, TVL, withdrawal time, fee, audit status, or riskScore is

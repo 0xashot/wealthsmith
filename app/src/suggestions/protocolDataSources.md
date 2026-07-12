@@ -375,3 +375,22 @@ questions. Current result: **0/6 gathered** (TVL stays `partial`, the rest
 `canAssignScore = false`). **No production enablement:** it mutates no drafts and no
 production metadata, `productionReady` stays `false`, and it is not imported by any
 live/engine/UI file.
+
+---
+
+## 12T — source-verification intake
+
+`protocolSolLiquidStakingSourceVerification.ts` +
+`protocolSolLiquidStakingSourceVerification.md` add a reviewer source-verification
+layer: reviewer-supplied DefiLlama pool IDs and official docs URLs are classified at
+the SOURCE level (`verified`/`needs_review`/`rejected`). "Verified" means the source
+LINK is legitimate — **not** that a production value is confirmed. Verified: the four
+DefiLlama TVL pools (exact UUID + label + Solana), INF via the existing codebase
+pool, and official withdrawal/fee/audit/operational links. Needs review: incident
+history for all five (absence is not clean history) and unclear-scope sources.
+**No production enablement:** nothing is written to `DEFILLAMA_POOL_MAPPINGS` or
+production metadata, `auditStatus` stays `unknown`, no `withdrawalTimeHours`/fees/
+`riskScore` are assigned, evidence drafts are unmutated
+(`mapVerifiedSourcesToEvidenceDimensions` never marks a dimension `gathered`), and
+`getProtocolSelectionGoNoGo().productionReady = false`. Not imported by any
+live/engine/UI file.

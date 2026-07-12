@@ -7,6 +7,11 @@
  * eligibility by themselves (eligibility still needs the actual data VALUES), and
  * never assign a `riskScore`. Nothing here enables production selection —
  * `PROTOCOL_SELECTION_IMPLEMENTED` stays false. No value is invented.
+ *
+ * Step 12T source-verification intake
+ * (`protocolSolLiquidStakingSourceVerification.ts`) reviews reviewer-supplied
+ * source links at the SOURCE level only; it never promotes them into the
+ * production statuses recorded here (they stay `missing`/`not_applicable`).
  */
 
 export type SolLiquidStakingSourceStatus = "verified" | "partially_verified" | "missing" | "not_applicable";

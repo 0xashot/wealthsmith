@@ -187,6 +187,17 @@ import {
   runEvidenceCompletionForCandidate,
   runSanctumEvidenceCompletionGateCheck,
 } from "./protocolSolLiquidStakingEvidenceCompletion";
+import {
+  PROTOCOL_SOURCE_VERIFICATION_EXISTS,
+  PROTOCOL_SOURCE_VERIFICATION_APPROVES_RUBRIC,
+  PROTOCOL_SOURCE_VERIFICATION_ASSIGNS_SCORES,
+  PROTOCOL_SOURCE_VERIFICATION_AFFECTS_PRODUCTION,
+  PROTOCOL_SOURCE_VERIFICATION_ENABLES_SELECTION,
+  getSolLiquidStakingSourceVerificationCandidates,
+  getSolLiquidStakingSourceVerificationResults,
+  summarizeSolLiquidStakingSourceVerification,
+  mapVerifiedSourcesToEvidenceDimensions,
+} from "./protocolSolLiquidStakingSourceVerification";
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
@@ -5390,6 +5401,146 @@ export function runSolLiquidStakingEvidenceCompletionFixtureChecks(): FixtureChe
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 12T — SOL liquid-staking source-verification intake.
+ * Source-level review only; no production values, no score, no selection.
+ * ------------------------------------------------------------------ */
+export function runSolLiquidStakingSourceVerificationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
+
+  const candidates = getSolLiquidStakingSourceVerificationCandidates();
+  const results = getSolLiquidStakingSourceVerificationResults();
+  const summary = summarizeSolLiquidStakingSourceVerification();
+  const sanctumMap = mapVerifiedSourcesToEvidenceDimensions("sanctum");
+  const gng = getProtocolSelectionGoNoGo("t");
+  const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+  // 12T-A…E. Verification scoping constants.
+  add("12T-A: PROTOCOL_SOURCE_VERIFICATION_EXISTS is true", PROTOCOL_SOURCE_VERIFICATION_EXISTS === true, `flag=${PROTOCOL_SOURCE_VERIFICATION_EXISTS}`);
+  add("12T-B: PROTOCOL_SOURCE_VERIFICATION_APPROVES_RUBRIC is false", PROTOCOL_SOURCE_VERIFICATION_APPROVES_RUBRIC === false, `flag=${PROTOCOL_SOURCE_VERIFICATION_APPROVES_RUBRIC}`);
+  add("12T-C: PROTOCOL_SOURCE_VERIFICATION_ASSIGNS_SCORES is false", PROTOCOL_SOURCE_VERIFICATION_ASSIGNS_SCORES === false, `flag=${PROTOCOL_SOURCE_VERIFICATION_ASSIGNS_SCORES}`);
+  add("12T-D: PROTOCOL_SOURCE_VERIFICATION_AFFECTS_PRODUCTION is false", PROTOCOL_SOURCE_VERIFICATION_AFFECTS_PRODUCTION === false, `flag=${PROTOCOL_SOURCE_VERIFICATION_AFFECTS_PRODUCTION}`);
+  add("12T-E: PROTOCOL_SOURCE_VERIFICATION_ENABLES_SELECTION is false", PROTOCOL_SOURCE_VERIFICATION_ENABLES_SELECTION === false, `flag=${PROTOCOL_SOURCE_VERIFICATION_ENABLES_SELECTION}`);
+
+  // 12T-F. Candidates cover all five.
+  add("12T-F: candidates cover all five SOL LST candidates", ids.every((id) => getSolLiquidStakingSourceVerificationCandidates(id).length > 0) && summary.protocolsCovered.length === 5, `protocols=${summary.protocolsCovered.length}`);
+  // 12T-G. TVL candidates cover the four LSTs.
+  {
+    const four = ["jupiter", "marinade", "jito", "blazestake"];
+    const ok = four.every((id) => candidates.some((c) => c.protocolId === id && c.category === "tvl"));
+    add("12T-G: TVL candidates cover JupSOL/mSOL/JitoSOL/bSOL", ok, `ok=${ok}`);
+  }
+  // 12T-H. The four TVL candidates include exact DefiLlama pool IDs.
+  {
+    const four = ["jupiter", "marinade", "jito", "blazestake"];
+    const ok = four.every((id) => {
+      const c = candidates.find((x) => x.protocolId === id && x.category === "tvl");
+      return c?.sourceType === "defillama_pool" && c.sourceUrl != null && UUID_RE.test(c.sourceUrl);
+    });
+    add("12T-H: four TVL candidates include exact DefiLlama pool IDs", ok, `ok=${ok}`);
+  }
+  // 12T-I. INF TVL uses the existing codebase-verified pool reference.
+  {
+    const c = candidates.find((x) => x.protocolId === "sanctum" && x.category === "tvl");
+    const ok = c?.sourceType === "codebase" && (c.sourceUrl?.includes("3075a746-bdd1-4aac-bcd5-b035abee2622") ?? false);
+    add("12T-I: INF TVL uses existing codebase-verified pool", ok, `type=${c?.sourceType}`);
+  }
+  // 12T-J. Incident history stays needs_review.
+  {
+    const incident = results.filter((r) => r.category === "incident_history");
+    const ok = incident.length === 5 && incident.every((r) => r.status === "needs_review");
+    add("12T-J: incident history candidates remain needs_review", ok, `n=${incident.length} allNeedsReview=${incident.every((r) => r.status === "needs_review")}`);
+  }
+  // 12T-K/L. Results never set production/score flags.
+  add("12T-K: verification results never set productionMetadataUpdated true", results.every((r) => r.productionMetadataUpdated === false), `ok=${results.every((r) => r.productionMetadataUpdated === false)}`);
+  add("12T-L: verification results never set scoreAssigned true", results.every((r) => r.scoreAssigned === false), `ok=${results.every((r) => r.scoreAssigned === false)}`);
+  // 12T-M/N. Summary counts.
+  add("12T-M: summary.productionMetadataUpdatedCount is 0", summary.productionMetadataUpdatedCount === 0, `v=${summary.productionMetadataUpdatedCount}`);
+  add("12T-N: summary.scoreAssignedCount is 0", summary.scoreAssignedCount === 0, `v=${summary.scoreAssignedCount}`);
+  // 12T-O. Verified audit links do not change auditStatus from unknown.
+  add("12T-O: verified source links do not change auditStatus from unknown", ids.every((id) => getProtocolRiskData(id).auditStatus === "unknown"), "all unknown");
+  // 12T-P. Verified withdrawal links do not assign withdrawalTimeHours.
+  {
+    const market = buildSolLiquidStakingMarketDataFromExistingSources();
+    add("12T-P: verified withdrawal links do not assign withdrawalTimeHours", ids.every((id) => market[id].withdrawalTimeHours === undefined), "unset");
+  }
+  // 12T-Q. Verified fee links do not assign fee values.
+  {
+    const market = buildSolLiquidStakingMarketDataFromExistingSources();
+    add("12T-Q: verified fee links do not assign fee values", ids.every((id) => market[id].fees === undefined), "unset");
+  }
+  // 12T-R. Verified source links do not assign riskScore.
+  add("12T-R: verified source links do not assign riskScore", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "absent");
+  // 12T-S. map does not mutate evidence drafts.
+  {
+    const before = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    mapVerifiedSourcesToEvidenceDimensions("sanctum");
+    mapVerifiedSourcesToEvidenceDimensions("jupiter");
+    const after = JSON.stringify(getSolLiquidStakingEvidenceDrafts());
+    add("12T-S: mapVerifiedSourcesToEvidenceDimensions does not mutate evidence drafts", before === after, `unchanged=${before === after}`);
+  }
+  // 12T-T/U. Map result flags false.
+  add("12T-T: map(sanctum).scoreAssigned is false", sanctumMap.scoreAssigned === false, `v=${sanctumMap.scoreAssigned}`);
+  add("12T-U: map(sanctum).productionAffected is false", sanctumMap.productionAffected === false && sanctumMap.canMarkAnyDimensionGathered === false, `prod=${sanctumMap.productionAffected} gather=${sanctumMap.canMarkAnyDimensionGathered}`);
+  // 12T-V. No evidence draft has scoreAssigned true.
+  add("12T-V: no evidence draft has scoreAssigned true", getSolLiquidStakingEvidenceDrafts().every((d) => d.scoreAssigned === false), "ok");
+  // 12T-W/X. No riskScore assigned.
+  add("12T-W: no riskScore is assigned anywhere", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "none");
+  add("12T-X: riskScore remains absent for all five", ids.every((id) => getProtocolRiskData(id).riskScore === undefined), "absent");
+  // 12T-Y/Z/AA. Approval flags false.
+  add("12T-Y: PROTOCOL_RISK_RUBRIC_APPROVED remains false", PROTOCOL_RISK_RUBRIC_APPROVED === false, `flag=${PROTOCOL_RISK_RUBRIC_APPROVED}`);
+  add("12T-Z: PROTOCOL_RISK_APPROVAL_DECISION_APPROVED remains false", PROTOCOL_RISK_APPROVAL_DECISION_APPROVED === false, `flag=${PROTOCOL_RISK_APPROVAL_DECISION_APPROVED}`);
+  add("12T-AA: canAssignProtocolRiskScores() remains false", canAssignProtocolRiskScores() === false, `v=${canAssignProtocolRiskScores()}`);
+  // 12T-AB. productionReady remains false.
+  add("12T-AB: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 12T-AC. Live staking protocolSelection.status remains not_evaluated.
+  add("12T-AC: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 12T-AD. No live suggestion has selectedProtocolId/Name.
+  {
+    const all = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("12T-AD: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 12T-AE. Cards/modal do not expose source-verification data or protocol names.
+  {
+    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "defillama_pool", "SourceVerification", "verifiedValue", "unresolvedQuestions"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("12T-AE: cards/modal never expose source-verification data or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 12T-AF/AG/AH. Flags at safe defaults.
+  add("12T-AF: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("12T-AG: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("12T-AH: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  // 12T-AI. No transaction/signature/swap path in verification output.
+  {
+    const json = (JSON.stringify(results) + JSON.stringify(summary) + JSON.stringify(sanctumMap)).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("12T-AI: no transaction/signature/swap path in verification output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 12T-AM. No forbidden investment claims in verification output (existing forbidden-copy list).
+  {
+    const json = (JSON.stringify(results) + JSON.stringify(candidates)).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("12T-AM: no forbidden investment claims in verification output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -5427,6 +5578,7 @@ export function printFixtureResults(): void {
     ...runSolLiquidStakingEvidenceFixtureChecks(),
     ...runProtocolRiskApprovalDecisionFixtureChecks(),
     ...runSolLiquidStakingEvidenceCompletionFixtureChecks(),
+    ...runSolLiquidStakingSourceVerificationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

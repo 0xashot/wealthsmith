@@ -14,6 +14,11 @@
  * A candidate advances only by a later, explicit, human-reviewed step:
  * proposed / needs_review → verified → production metadata → dry-run → go/no-go.
  * `PROTOCOL_SELECTION_IMPLEMENTED` stays false. No value is invented here.
+ *
+ * Step 12T adds reviewer-supplied verification candidates (exact DefiLlama pool
+ * IDs + official docs URLs) in `protocolSolLiquidStakingSourceVerification.ts`,
+ * classified at the SOURCE level only (verified/needs_review) — still proposals,
+ * never production metadata and never a `risk_score` verification.
  */
 
 /** Proposals only — this registry can never change production data on its own. */

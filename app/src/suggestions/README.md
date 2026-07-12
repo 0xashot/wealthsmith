@@ -698,6 +698,27 @@ Mode uses `SuggestionRail` directly and is untouched.
   selection flags false; `productionReady` stays `false`. Fixtures 12S-A…AD (+28).
   Next: gather actual verified sources across all six dimensions, or pause for the
   human rubric-approval review.
+- Step 12T (done): **source-verification intake for SOL liquid staking (source
+  level only — no production values, no score, no selection)**. Added
+  `protocolSolLiquidStakingSourceVerification.ts` +
+  `protocolSolLiquidStakingSourceVerification.md`: classifies reviewer-supplied
+  source candidates (exact DefiLlama pool IDs for JupSOL/mSOL/JitoSOL/bSOL, INF via
+  the existing codebase pool, official withdrawal/fee/audit/operational docs URLs)
+  as `verified`/`needs_review`/`rejected`. "Verified" = the source LINK is
+  legitimate, **not** a confirmed production value. Constants
+  `PROTOCOL_SOURCE_VERIFICATION_EXISTS = true`, `..._APPROVES_RUBRIC`/
+  `..._ASSIGNS_SCORES`/`..._AFFECTS_PRODUCTION`/`..._ENABLES_SELECTION = false`.
+  Helpers: `verifySolLiquidStakingSourceCandidate()`,
+  `summarizeSolLiquidStakingSourceVerification()`, `getVerified/NeedsReview/
+  RejectedSourceResults()`, `mapVerifiedSourcesToEvidenceDimensions()` (non-mutating,
+  `canMarkAnyDimensionGathered` always false). Incident history stays
+  `needs_review` for all five (absence is not clean history). **Nothing promoted to
+  production:** TVL pools not added to `DEFILLAMA_POOL_MAPPINGS`, `auditStatus`
+  stays `unknown`, no `withdrawalTimeHours`/fees/`riskScore` assigned, evidence
+  drafts unmutated. Not imported by any live/engine/UI file; live suggestions
+  `not_evaluated`; all selection flags false; `productionReady` stays `false`.
+  Fixtures 12T-A…AM (+36). Next: **12U** map verified sources to
+  evidence-completion decisions, or conduct the human rubric-approval review.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -707,8 +728,8 @@ selection + production-readiness plan + first-case real-data mapping + hardened
 internal dry-run + verified source completion + Stage-2 real-data dry-run report +
 machine-checkable go/no-go checklist + data sourcing pack + draft riskScore rubric +
 risk evidence drafts + reviewer approval decision gate + one-candidate evidence
-completion harness); production selection remains not evaluated / not implemented,
-and the go/no-go reports `productionReady = false`.
+completion harness + source-verification intake); production selection remains not
+evaluated / not implemented, and the go/no-go reports `productionReady = false`.
 
 ## Suggestion display order
 

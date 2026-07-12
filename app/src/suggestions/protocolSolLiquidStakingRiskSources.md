@@ -121,3 +121,16 @@ remain), and the other five stay `needs_review` (no verified source).
 `readyForReview = false`, `approvedForScoring = false`, `scoreAssigned = false`; the
 score-assignment gate is unchanged (`blocked`). **No candidate approved for
 scoring, no score assigned.** See `protocolSolLiquidStakingEvidenceCompletion.md`.
+
+## 12T update
+
+A source-verification intake now exists
+(`protocolSolLiquidStakingSourceVerification.ts`): reviewer-supplied DefiLlama pool
+IDs and official docs URLs are classified at the SOURCE level
+(`verified`/`needs_review`/`rejected`). **Source verification does not equal
+gathered evidence, and does not equal score assignment.** Verified source *links*
+(TVL pools for the four LSTs, withdrawal/fee/audit/operational docs) confirm source
+existence only — no production value, no `auditStatus`, no `withdrawalTimeHours`,
+no fees, and no `riskScore` are assigned. Incident history stays `needs_review` for
+all five. `mapVerifiedSourcesToEvidenceDimensions()` never marks a dimension
+`gathered`. `riskScore` stays absent; production selection stays disabled.

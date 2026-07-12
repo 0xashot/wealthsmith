@@ -70,3 +70,19 @@ source does not complete the `tvl_adoption` dimension while adoption/freshness
 requirements and unresolved questions remain. **Partial evidence remains partial
 unless all rubric requirements for the dimension are satisfied.** No score is
 assigned and no source is promoted into production metadata.
+
+## 12T source verification
+
+The source-verification intake (`protocolSolLiquidStakingSourceVerification.ts`)
+classifies reviewer-supplied source links at the SOURCE level:
+
+- **Verified (source existence):** TVL DefiLlama pools for JupSOL/mSOL/JitoSOL/bSOL
+  (exact pool UUID + label + Solana), INF via the existing codebase pool, and
+  official withdrawal/fee/audit/operational docs links.
+- **Needs review:** incident_history for all five (no official incident/advisory
+  source supplied; absence is not clean history), plus any source whose scope is
+  not explicit.
+
+Source-level `verified` is NOT production metadata: TVL pools are **not** added to
+`DEFILLAMA_POOL_MAPPINGS`, `auditStatus` stays `unknown`, and no withdrawal/fee
+value is assigned. Production statuses in the table above are unchanged.
