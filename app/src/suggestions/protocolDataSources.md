@@ -559,3 +559,21 @@ data, not production.** No production enablement: `updatesLiveSuggestions`/
 `transactionsEnabled` false; not imported by `stakingSuggestion`/`engine`/
 `toSuggestionCard`/Dashboard/Portfolio/modal; live suggestions `not_evaluated`; all
 selection/selector flags false; `productionReady` stays `false`.
+
+---
+
+## 13E — Demo Mode exact SOL staking scenario (shared UI)
+
+`demoExactSolStakingScenario.ts`/`.md` add a Demo Mode exact SOL staking scenario that
+renders through the SAME shared UI real wallet mode uses — `RealWalletSuggestionsRail`
+→ `SuggestionCard` → `SuggestionReviewModal` — via `buildDemoExactSolStakingRail()`
+(a shared `SuggestionCardState` + `SuggestionReviewDetails`). Optional protocol-display
+fields were added to the shared card + review-details models (real wallet mode does not
+populate them yet). Demo Mode gains a "Default Demo / SOL Staking Demo" switch;
+Default Demo is unchanged. Fake wallet: **12.5 total / 0.1 reserve / 12.4 eligible SOL**
+($150 fake price → $1,860); Jito · JitoSOL labeled **`DEMO_PREVIEW_NOT_LIVE`**
+(never `INTERNAL_PREVIEW_NOT_LIVE`). **No production enablement:** review-only, no
+transaction/signature; real-wallet suggestions unchanged (`not_evaluated`, no
+selectedProtocolId/Name); scenario not imported by `stakingSuggestion`/`engine`/
+`toSuggestionCard`; all selection/selector flags false; `productionReady` stays
+`false`.

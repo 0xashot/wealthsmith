@@ -176,9 +176,24 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
         </div>
 
         <div className="review-modal__body">
+          {details.demoLabel && (
+            <div className="review-modal__demo-badge">
+              <Badge label={details.demoLabel} tone="warning" />
+            </div>
+          )}
           <p id={reasonId} className="modal__intro">
             {summary.reason}
           </p>
+
+          {details.protocolSelectionDisplay && (
+            <section className="review-modal__section" aria-label="Suggested protocol">
+              <p className="review-modal__section-title">{details.protocolSelectionDisplay.label}</p>
+              <p className="review-modal__protocol">
+                {details.protocolSelectionDisplay.protocolName}
+                {details.protocolSelectionDisplay.assetSymbol ? ` · ${details.protocolSelectionDisplay.assetSymbol}` : ""}
+              </p>
+            </section>
+          )}
 
           {metrics.length > 0 && (
             <section className="review-modal__section" aria-label="Key metrics">

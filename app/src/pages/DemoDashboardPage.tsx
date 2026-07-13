@@ -27,9 +27,12 @@ import SafetyBufferCard from "../components/SafetyBufferCard";
 import ProjectedGrowthChart from "../components/ProjectedGrowthChart";
 import AllocationChart from "../components/AllocationChart";
 import SuggestionRail from "../components/SuggestionRail";
+import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
+import { buildDemoExactSolStakingRail } from "../suggestions/demoExactSolStakingScenario";
 
 type RightRailMode = "suggestions" | "ask_smith_ai";
+type DemoScenario = "default" | "sol_staking";
 
 interface Props {
   pushToast: (message: string, helper?: string) => void;
@@ -48,6 +51,9 @@ export default function DemoDashboardPage({
   activePage,
 }: Props) {
   const [railMode, setRailMode] = useState<RightRailMode>("suggestions");
+  // Demo-only scenario switch. Default Demo is unchanged; "SOL Staking Demo" renders
+  // the exact-staking scenario through the SAME shared real-wallet rail/card/modal.
+  const [demoScenario, setDemoScenario] = useState<DemoScenario>("default");
   const askButtonRef = useRef<HTMLButtonElement>(null);
 
   const openAskSmithAi = () => setRailMode("ask_smith_ai");
@@ -106,12 +112,39 @@ export default function DemoDashboardPage({
         {railMode === "ask_smith_ai" ? (
           <AskSmithAiPanel content={demoSmithAiContent} onClose={closeAskSmithAi} />
         ) : (
-          <SuggestionRail
-            rail={d.right_rail}
-            railLabel={d.accessibility.right_rail_label}
-            onExternalHandoff={onExternalHandoff}
-            onReview={onReviewSuggestion}
-          />
+          <div className="demo-scenario-rail">
+            <div className="demo-scenario-switch" role="group" aria-label="Demo scenario">
+              <button
+                type="button"
+                className={`demo-scenario-switch__btn${demoScenario === "default" ? " demo-scenario-switch__btn--active" : ""}`}
+                aria-pressed={demoScenario === "default"}
+                onClick={() => setDemoScenario("default")}
+              >
+                Default Demo
+              </button>
+              <button
+                type="button"
+                className={`demo-scenario-switch__btn${demoScenario === "sol_staking" ? " demo-scenario-switch__btn--active" : ""}`}
+                aria-pressed={demoScenario === "sol_staking"}
+                onClick={() => setDemoScenario("sol_staking")}
+              >
+                SOL Staking Demo
+              </button>
+            </div>
+            {demoScenario === "sol_staking" ? (
+              <RealWalletSuggestionsRail
+                rail={buildDemoExactSolStakingRail()}
+                railLabel={d.accessibility.right_rail_label}
+              />
+            ) : (
+              <SuggestionRail
+                rail={d.right_rail}
+                railLabel={d.accessibility.right_rail_label}
+                onExternalHandoff={onExternalHandoff}
+                onReview={onReviewSuggestion}
+              />
+            )}
+          </div>
         )}
       </div>
     </div>

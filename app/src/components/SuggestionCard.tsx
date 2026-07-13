@@ -131,6 +131,7 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview }: Pr
         {!isTopPick && card.badge && (
           <Badge label={card.badge} tone={BADGE_TONES[card.badge] ?? "neutral"} />
         )}
+        {card.demoLabel && <Badge label={card.demoLabel} tone="warning" />}
       </div>
 
       <div className="suggestion-card__header">
@@ -140,6 +141,19 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview }: Pr
 
       <p className="suggestion-card__description">{card.description}</p>
       <p className="suggestion-card__impact">{card.impact_text}</p>
+
+      {/* Optional protocol display (Demo Mode now; real wallet later once gates pass). */}
+      {card.protocolName && (
+        <p className="suggestion-card__protocol">
+          <span className="suggestion-card__protocol-label">
+            {card.suggestedProtocolLabel ?? "Suggested protocol to review"}:{" "}
+          </span>
+          <span className="suggestion-card__protocol-name">
+            {card.protocolName}
+            {card.lstSymbol ? ` · ${card.lstSymbol}` : ""}
+          </span>
+        </p>
+      )}
 
       {nonActionable && card.disabled_reason_text && (
         <p className="suggestion-card__locked-reason">{card.disabled_reason_text}</p>

@@ -932,6 +932,22 @@ Mode uses `SuggestionRail` directly and is untouched.
   card/modal output; live suggestions `not_evaluated`; Demo Mode unchanged; all
   selection/selector flags false; `productionReady` stays `false`. Fixtures 13D-A…AK
   (+34). Next: **human approval / source re-verification** before any real enablement.
+- Step 13E (done): **Demo Mode exact SOL staking scenario via the SHARED UI (product
+  decision: risk direction confirmed + JitoSOL source verified for UI/demo — NOT
+  production activation)**. Added `demoExactSolStakingScenario.ts`/`.md`: builds a
+  shared `RailSuggestions` (`SuggestionCardState` + `SuggestionReviewDetails`) rendered
+  through the SAME `RealWalletSuggestionsRail` → `SuggestionCard` →
+  `SuggestionReviewModal` real wallet mode uses — no separate demo-only card/modal/
+  layout. Added optional protocol-display fields to the shared card +
+  review-details models (real wallet does not populate them). `DemoDashboardPage`
+  gains a "Default Demo / SOL Staking Demo" switch (Default Demo unchanged). Fake
+  wallet: **12.5 total / 0.1 reserve / 12.4 eligible SOL** ($150 fake → $1,860); Jito ·
+  JitoSOL labeled **`DEMO_PREVIEW_NOT_LIVE`** (never `INTERNAL_PREVIEW_NOT_LIVE`).
+  Review-only, no transaction/signature; scenario not imported by `stakingSuggestion`/
+  `engine`/`toSuggestionCard`; real-wallet staking `not_evaluated` with no
+  selectedProtocolId/Name; all selection/selector flags false; `productionReady` stays
+  `false`. Fixtures 13E-A…AL (+35). Next: **human approval / source re-verification**
+  before any real-wallet enablement.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection

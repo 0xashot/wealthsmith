@@ -3538,3 +3538,14 @@
 .portfolio-table tbody tr:last-child .portfolio-table__cell {
   border-bottom: none;
 }
+
+/* Step 13E — Demo-only exact SOL staking scenario switch + shared protocol display. */
+.demo-scenario-rail { display: flex; flex-direction: column; gap: 10px; }
+.demo-scenario-switch { display: inline-flex; gap: 4px; padding: 3px; border-radius: var(--radius-control-md, 12px); background: var(--color-surface-canvas, #f6f8fb); border: 1px solid var(--color-border-subtle, #e3e7ee); align-self: flex-start; }
+.demo-scenario-switch__btn { border: 0; background: transparent; padding: 6px 12px; font-size: 13px; font-weight: 600; border-radius: var(--radius-control-md, 10px); color: var(--color-text-secondary, #5b6472); cursor: pointer; }
+.demo-scenario-switch__btn--active { background: var(--color-surface-card, #fff); color: var(--color-text-primary, #14181f); box-shadow: 0 1px 2px rgba(20,24,31,0.08); }
+.suggestion-card__protocol { margin: 4px 0 0; font-size: 13px; }
+.suggestion-card__protocol-label { color: var(--color-text-secondary, #5b6472); }
+.suggestion-card__protocol-name { font-weight: 700; }
+.review-modal__demo-badge { margin-bottom: 8px; }
+.review-modal__protocol { margin: 2px 0 0; font-size: 15px; font-weight: 700; }

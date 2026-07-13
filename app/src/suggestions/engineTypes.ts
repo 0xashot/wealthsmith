@@ -378,6 +378,40 @@ export interface SuggestionReviewDetails {
   guardrailSummary: ReviewGuardrailSummary;
   limitations: ReviewLimitation[];
   safetyNotes: ReviewSafetyNote[];
+  /**
+   * Optional protocol-display fields shared by Demo Mode (now) and real wallet
+   * mode (later). The real engine never populates them until production selection
+   * gates pass; the modal renders them only when present.
+   */
+  demoLabel?: string;
+  protocolSelectionDisplay?: ProtocolSelectionDisplay;
+}
+
+/**
+ * Shared protocol-selection display shape used by Demo Mode now and real wallet
+ * mode later. `marketData` carries verified, sourced values (Demo Mode only in
+ * 13F). Real wallet mode must not populate this until production gates pass.
+ */
+export interface ProtocolSelectionDisplay {
+  label: string;
+  protocolName: string;
+  assetSymbol: string;
+  mode: "demo_preview" | "production";
+  demoLabel?: string;
+  sourceStatusLabel?: string;
+  marketData?: {
+    tvlUsd: number;
+    apyPct: number;
+    apy30dPct: number;
+    directUnstakeTimeHours: number;
+    directUnstakeFeePct: number;
+    annualManagementFeePct: number;
+    annualManagementFeeAppliesTo: string;
+  };
+  productionStatus?: {
+    realWalletSelectionEnabled: false;
+    transactionsEnabled: false;
+  };
 }
 
 /**

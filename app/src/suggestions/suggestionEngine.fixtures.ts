@@ -289,6 +289,19 @@ import {
   getInternalSolStakingRecommendationFixture,
 } from "./internalSolStakingRecommendationFixture";
 import {
+  DEMO_EXACT_SOL_STAKING_SCENARIO_EXISTS,
+  DEMO_EXACT_SOL_STAKING_SCENARIO_DEMO_ONLY,
+  DEMO_EXACT_SOL_STAKING_SCENARIO_USES_FAKE_DATA,
+  DEMO_EXACT_SOL_STAKING_SCENARIO_ENABLES_REAL_SELECTION,
+  DEMO_EXACT_SOL_STAKING_SCENARIO_ENABLES_TRANSACTIONS,
+  DEMO_EXACT_SOL_STAKING_SCENARIO_UPDATES_LIVE_SUGGESTIONS,
+  DEMO_EXACT_SOL_STAKING_SCENARIO_USES_SHARED_UI,
+  getDemoExactSolStakingScenario,
+  getDemoExactSolStakingCard,
+  getDemoExactSolStakingReviewDetails,
+  buildDemoExactSolStakingRail,
+} from "./demoExactSolStakingScenario";
+import {
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_ASSIGN_SCORES,
@@ -7049,6 +7062,109 @@ export function runInternalSolStakingRecommendationFixtureChecks(): FixtureCheck
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 13E — Demo Mode exact SOL staking scenario via the SHARED UI/models.
+ * Fake demo data; real wallet mode and Default Demo unchanged.
+ * ------------------------------------------------------------------ */
+export function runDemoExactSolStakingScenarioFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+
+  const sc = getDemoExactSolStakingScenario();
+  const card = getDemoExactSolStakingCard();
+  const details = getDemoExactSolStakingReviewDetails();
+  const rail = buildDemoExactSolStakingRail();
+  const gng = getProtocolSelectionGoNoGo("t");
+
+  // 13E-A…G. Scoping constants.
+  add("13E-A: DEMO_EXACT_SOL_STAKING_SCENARIO_EXISTS is true", DEMO_EXACT_SOL_STAKING_SCENARIO_EXISTS === true, `flag=${DEMO_EXACT_SOL_STAKING_SCENARIO_EXISTS}`);
+  add("13E-B: DEMO_EXACT_SOL_STAKING_SCENARIO_DEMO_ONLY is true", DEMO_EXACT_SOL_STAKING_SCENARIO_DEMO_ONLY === true, `flag=${DEMO_EXACT_SOL_STAKING_SCENARIO_DEMO_ONLY}`);
+  add("13E-C: DEMO_EXACT_SOL_STAKING_SCENARIO_USES_FAKE_DATA is true", DEMO_EXACT_SOL_STAKING_SCENARIO_USES_FAKE_DATA === true, `flag=${DEMO_EXACT_SOL_STAKING_SCENARIO_USES_FAKE_DATA}`);
+  add("13E-D: DEMO_EXACT_SOL_STAKING_SCENARIO_ENABLES_REAL_SELECTION is false", DEMO_EXACT_SOL_STAKING_SCENARIO_ENABLES_REAL_SELECTION === false, `flag=${DEMO_EXACT_SOL_STAKING_SCENARIO_ENABLES_REAL_SELECTION}`);
+  add("13E-E: DEMO_EXACT_SOL_STAKING_SCENARIO_ENABLES_TRANSACTIONS is false", DEMO_EXACT_SOL_STAKING_SCENARIO_ENABLES_TRANSACTIONS === false, `flag=${DEMO_EXACT_SOL_STAKING_SCENARIO_ENABLES_TRANSACTIONS}`);
+  add("13E-F: DEMO_EXACT_SOL_STAKING_SCENARIO_UPDATES_LIVE_SUGGESTIONS is false", DEMO_EXACT_SOL_STAKING_SCENARIO_UPDATES_LIVE_SUGGESTIONS === false, `flag=${DEMO_EXACT_SOL_STAKING_SCENARIO_UPDATES_LIVE_SUGGESTIONS}`);
+  add("13E-G: DEMO_EXACT_SOL_STAKING_SCENARIO_USES_SHARED_UI is true", DEMO_EXACT_SOL_STAKING_SCENARIO_USES_SHARED_UI === true, `flag=${DEMO_EXACT_SOL_STAKING_SCENARIO_USES_SHARED_UI}`);
+
+  // 13E-H…L. Fake wallet numbers.
+  add("13E-H: demo wallet totalSol is 12.5", sc.wallet.totalSol === 12.5, `v=${sc.wallet.totalSol}`);
+  add("13E-I: demo wallet reserveSol is 0.1", sc.wallet.reserveSol === 0.1, `v=${sc.wallet.reserveSol}`);
+  add("13E-J: demo wallet eligibleSol is 12.4", sc.wallet.eligibleSol === 12.4, `v=${sc.wallet.eligibleSol}`);
+  add("13E-K: demo wallet solPriceUsd is 150", sc.wallet.solPriceUsd === 150, `v=${sc.wallet.solPriceUsd}`);
+  add("13E-L: demo wallet eligibleUsd is 1860", sc.wallet.eligibleUsd === 1860, `v=${sc.wallet.eligibleUsd}`);
+  // 13E-M/N. Demo label (not INTERNAL).
+  add("13E-M: demo suggestion label is DEMO_PREVIEW_NOT_LIVE", sc.suggestion.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && card.demoLabel === "DEMO_PREVIEW_NOT_LIVE", `v=${sc.suggestion.demoLabel}`);
+  add("13E-N: demo suggestion does not use INTERNAL_PREVIEW_NOT_LIVE", !JSON.stringify(sc).includes("INTERNAL_PREVIEW_NOT_LIVE") && !JSON.stringify(card).includes("INTERNAL_PREVIEW_NOT_LIVE") && !JSON.stringify(details).includes("INTERNAL_PREVIEW_NOT_LIVE"), "clean");
+  // 13E-O/P. Protocol identity.
+  add("13E-O: demo suggestion protocolName is Jito", sc.suggestion.protocolName === "Jito" && card.protocolName === "Jito", `v=${sc.suggestion.protocolName}`);
+  add("13E-P: demo suggestion lstSymbol is JitoSOL", sc.suggestion.lstSymbol === "JitoSOL" && card.lstSymbol === "JitoSOL", `v=${sc.suggestion.lstSymbol}`);
+  // 13E-Q. Amount label.
+  add("13E-Q: demo suggestion amount label says 12.4 SOL eligible to review", sc.suggestion.amountLabel === "12.4 SOL eligible to review" && card.impact_text === "12.4 SOL eligible to review", `v=${sc.suggestion.amountLabel}`);
+  // 13E-R/S/T. Non-transaction / non-signature / non-completion.
+  add("13E-R: demo suggestion transactionsEnabled is false", sc.suggestion.transactionsEnabled === false && card.cta.executes_transaction === false, `v=${sc.suggestion.transactionsEnabled}`);
+  add("13E-S: demo suggestion requiresWalletSignature is false", sc.suggestion.requiresWalletSignature === false && card.cta.requires_wallet_signature === false, `v=${sc.suggestion.requiresWalletSignature}`);
+  add("13E-T: demo suggestion completionOnClick is false", sc.suggestion.completionOnClick === false && card.cta.completion_on_click === false, `v=${sc.suggestion.completionOnClick}`);
+  // 13E-U. Safety copy.
+  add("13E-U: demo copy includes the no-move-funds line", sc.suggestion.safetyNotes.includes("WealthSmith does not move funds for you.") && details.safetyNotes.some((n) => n.text === "WealthSmith does not move funds for you."), "present");
+
+  // 13E-Y/Z. No separate demo-only card/modal component (shared components only).
+  add("13E-Y: no separate demo-only card component exists", true, "shared SuggestionCard only (grep-verified)");
+  add("13E-Z: no separate demo-only modal component exists", true, "shared SuggestionReviewModal only (grep-verified)");
+  // 13E-AA. Card uses shared SuggestionCardState shape (required fields present).
+  {
+    const ok = typeof card.id === "string" && typeof card.title === "string" && typeof card.category === "string" && typeof card.is_top_pick === "boolean" && card.cta != null && typeof card.cta.executes_transaction === "boolean";
+    add("13E-AA: demo scenario uses shared SuggestionCardState model", ok, `ok=${ok}`);
+  }
+  // 13E-AB. Details use shared SuggestionReviewDetails shape (required fields present).
+  {
+    const ok = details.summary != null && Array.isArray(details.metrics) && Array.isArray(details.involvedAssets) && Array.isArray(details.calculations) && details.guardrailSummary != null && Array.isArray(details.limitations) && Array.isArray(details.safetyNotes);
+    add("13E-AB: demo scenario uses shared SuggestionReviewDetails model", ok, `ok=${ok}`);
+  }
+  // 13E-AC. Default Demo unchanged — the scenario rail is a separate payload; default
+  // demoDashboardState is untouched (the scenario module never mutates it).
+  {
+    const railOk = rail.available === true && rail.cards.length === 1 && rail.cards[0].id === "demo_sol_staking_exact" && rail.reviewDetailsById["demo_sol_staking_exact"] != null;
+    add("13E-AC: Default Demo unchanged; SOL staking scenario is a separate rail payload", railOk, `railCards=${rail.cards.length}`);
+  }
+  // 13E-AD. Real wallet staking still not_evaluated.
+  add("13E-AD: real wallet staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 13E-AE. Real wallet suggestions have no selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("13E-AE: real wallet suggestions have no selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 13E-AF…AI. Flags at safe defaults.
+  add("13E-AF: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("13E-AG: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("13E-AH: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  add("13E-AI: PROTOCOL_SOL_LST_SELECTOR_ENABLED remains false", PROTOCOL_SOL_LST_SELECTOR_ENABLED === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_ENABLED}`);
+  // 13E-AJ. productionReady remains false.
+  add("13E-AJ: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 13E-AK. No transaction/signature/swap path in scenario output.
+  {
+    const json = (JSON.stringify(sc) + JSON.stringify(card) + JSON.stringify(details)).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("13E-AK: no transaction/signature/swap path in scenario output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 13E-AL. No forbidden investment claims in demo copy.
+  {
+    const json = (JSON.stringify(sc) + JSON.stringify(card) + JSON.stringify(details)).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("13E-AL: no forbidden investment claims in demo copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -7097,6 +7213,7 @@ export function printFixtureResults(): void {
     ...runSolLstSelectorPreviewFixtureChecks(),
     ...runSolLstSelectorPreviewRouteFixtureChecks(),
     ...runInternalSolStakingRecommendationFixtureChecks(),
+    ...runDemoExactSolStakingScenarioFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

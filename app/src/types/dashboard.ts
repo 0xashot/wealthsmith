@@ -147,6 +147,23 @@ export interface SuggestionCardState {
   };
   protocol_decision?: ProtocolDecision;
   apy?: { status: string; display: string };
+  /**
+   * Optional protocol-display fields shared by Demo Mode (now) and real wallet
+   * mode (later). Real wallet mode must NOT populate them until production
+   * selection gates pass; the UI renders them only when present. Copy uses
+   * "Suggested protocol to review", never "best"/"recommended protocol".
+   */
+  demoLabel?: string;
+  suggestedProtocolLabel?: string;
+  protocolName?: string;
+  lstSymbol?: string;
+  protocolStatusLabel?: string;
+  protocolSelectionDisplay?: {
+    label: string;
+    protocolName: string;
+    assetSymbol: string;
+    mode: "demo_preview" | "production";
+  };
 }
 
 export interface RightRailState {
