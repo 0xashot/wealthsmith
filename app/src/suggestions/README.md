@@ -1147,6 +1147,20 @@ logic bug — not a clean-history claim) (14G); `annual_management_fee` = 0 (Mar
 verbatim "No performance fees on staking rewards") (14H); and `direct_unstake_time` as
 sourced **epoch-based text** (14I — the intake now accepts `direct_unstake_time` as numeric
 hours OR text, so no hours are invented for an epoch-based protocol). mSOL is now
-**`readyForRiskGate: true` while fresh** (stale beyond 24h), but **still unscored, not
-approved, and absent from real wallet mode** — rubric + risk-approval decision are separate
-later gates. No stale 14B value reused, nothing invented.
+**`readyForRiskGate: true` while fresh** (stale beyond 24h). No stale 14B value reused,
+nothing invented.
+
+## mSOL risk score — assigned for review (Step 14J)
+
+Marinade · mSOL is assigned a deterministic, evidence-based **risk score of 7.40 / 10**
+(`assigned_for_review`, draft rubric) — see
+[solLiquidStakingMsolRiskScore.md](solLiquidStakingMsolRiskScore.md). Dimension scores
+(audit 9, maturity 8, TVL 7, withdrawal/fee transparency 8, operational 6, incident 4) are
+weighted by the existing rubric; the score is assigned only when the evidence is fresh +
+`readyForRiskGate` (stale → `null`/blocked). The rationale weighs the disclosed SAM
+unstake-priority bug as real risk signal and the audits/TVL as positive signals. **It is
+score assignment only:** mSOL stays `staged_candidate` with `approvedForReadOnlyRecommendation:
+false`, `selectedByProtocolLogic: false`, `currentWinner: false`, the registry `riskScore`
+stays `undefined`, JitoSOL remains the only selected live protocol, and there is no live/Demo/
+testing change and no transaction/signature. Next: read-only recommendation approval → UI
+exposure → later selector comparison.

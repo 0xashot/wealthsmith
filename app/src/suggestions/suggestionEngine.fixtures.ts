@@ -373,6 +373,18 @@ import {
   MARINADE_MSOL_FRESH_EVIDENCE_INPUTS,
 } from "./solLiquidStakingFreshEvidenceRecords";
 import {
+  SOL_LST_MSOL_RISK_SCORE_EXISTS,
+  SOL_LST_MSOL_RISK_SCORE_ASSIGNMENT_ENABLED,
+  SOL_LST_MSOL_RISK_SCORE_APPROVES_READ_ONLY_RECOMMENDATION,
+  SOL_LST_MSOL_RISK_SCORE_ENABLES_MULTI_PROTOCOL_SELECTION,
+  SOL_LST_MSOL_RISK_SCORE_UPDATES_LIVE_RECOMMENDATIONS,
+  SOL_LST_MSOL_RISK_SCORE_ENABLES_TRANSACTIONS,
+  SOL_LST_MSOL_RISK_SCORE_REQUIRES_WALLET_SIGNATURE,
+  SOL_LST_MSOL_RISK_SCORE_REPLACES_JITO,
+  getMsolRiskScoreAssignment,
+  evaluateMsolRiskScoreAssignmentStatus,
+} from "./solLiquidStakingMsolRiskScore";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -8724,6 +8736,118 @@ export function runSolLstEpochUnstakeTimingFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 14J — assign mSOL a deterministic, evidence-based risk score FOR REVIEW.
+ * Verifies the flags, the gate (ready + fresh required; blocked when stale/incomplete),
+ * the deterministic weighted score + dimensions + rationale, and that nothing is
+ * approved/selected and live/Demo/testing + the tx/sig boundary hold.
+ * ------------------------------------------------------------------ */
+export function runSolLstMsolRiskScoreFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const FRESH = "2026-07-13T15:30:00Z"; // within 24h of every mSOL record
+  const STALE = "2026-07-20T00:00:00Z"; // > 24h beyond every mSOL record
+  const a = getMsolRiskScoreAssignment({ checkedAt: FRESH });
+  const statusFresh = evaluateMsolRiskScoreAssignmentStatus({ checkedAt: FRESH });
+  const statusStale = evaluateMsolRiskScoreAssignmentStatus({ checkedAt: STALE });
+  const rationaleCopy = JSON.stringify(a?.rationale ?? {}).toLowerCase();
+  const marinade = getSolLiquidStakingCandidateById("marinade");
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+
+  // 14J-A…H. Flags.
+  add("14J-A: SOL_LST_MSOL_RISK_SCORE_EXISTS is true", SOL_LST_MSOL_RISK_SCORE_EXISTS === true, `v=${SOL_LST_MSOL_RISK_SCORE_EXISTS}`);
+  add("14J-B: SOL_LST_MSOL_RISK_SCORE_ASSIGNMENT_ENABLED is true", SOL_LST_MSOL_RISK_SCORE_ASSIGNMENT_ENABLED === true, `v=${SOL_LST_MSOL_RISK_SCORE_ASSIGNMENT_ENABLED}`);
+  add("14J-C: risk score does not approve read-only recommendation", SOL_LST_MSOL_RISK_SCORE_APPROVES_READ_ONLY_RECOMMENDATION === false, `v=${SOL_LST_MSOL_RISK_SCORE_APPROVES_READ_ONLY_RECOMMENDATION}`);
+  add("14J-D: risk score enables no multi-protocol selection", SOL_LST_MSOL_RISK_SCORE_ENABLES_MULTI_PROTOCOL_SELECTION === false, `v=${SOL_LST_MSOL_RISK_SCORE_ENABLES_MULTI_PROTOCOL_SELECTION}`);
+  add("14J-E: risk score updates no live recommendations", SOL_LST_MSOL_RISK_SCORE_UPDATES_LIVE_RECOMMENDATIONS === false, `v=${SOL_LST_MSOL_RISK_SCORE_UPDATES_LIVE_RECOMMENDATIONS}`);
+  add("14J-F: risk score enables no transactions", SOL_LST_MSOL_RISK_SCORE_ENABLES_TRANSACTIONS === false, `v=${SOL_LST_MSOL_RISK_SCORE_ENABLES_TRANSACTIONS}`);
+  add("14J-G: risk score requires no wallet signature", SOL_LST_MSOL_RISK_SCORE_REQUIRES_WALLET_SIGNATURE === false, `v=${SOL_LST_MSOL_RISK_SCORE_REQUIRES_WALLET_SIGNATURE}`);
+  add("14J-H: risk score does not replace Jito", SOL_LST_MSOL_RISK_SCORE_REPLACES_JITO === false, `v=${SOL_LST_MSOL_RISK_SCORE_REPLACES_JITO}`);
+
+  // 14J-I…L. Gate behavior.
+  add("14J-I: score assignment requires readyForRiskGate true", a != null && statusFresh.readyForRiskGate === true && statusFresh.scoreAssigned === true, `assigned=${a != null}`);
+  add("14J-J: score assignment requires fresh evidence", statusFresh.evidenceFresh === true, `fresh=${statusFresh.evidenceFresh}`);
+  add("14J-K: score assignment is blocked when evidence is stale", getMsolRiskScoreAssignment({ checkedAt: STALE }) === null && statusStale.scoreAssigned === false && statusStale.blockers.includes("evidence_stale"), `blockers=${statusStale.blockers.join("|")}`);
+  add("14J-L: score assignment is blocked when evidence is incomplete", getMsolRiskScoreAssignment({ checkedAt: STALE }) === null && statusStale.blockers.includes("evidence_incomplete"), `blockers=${statusStale.blockers.join("|")}`);
+
+  // 14J-M…Q. Score + dimensions.
+  add("14J-M: mSOL score is between 0 and 10", typeof a?.score === "number" && (a?.score ?? -1) >= 0 && (a?.score ?? 99) <= 10, `score=${a?.score}`);
+  {
+    const dims = a?.dimensionScores;
+    const keys = dims ? Object.keys(dims) : [];
+    add("14J-N: mSOL score has dimension scores", keys.length === 6, `keys=${keys.join(",")}`);
+    add("14J-O: every dimension score is between 0 and 10", dims != null && Object.values(dims).every((v) => v >= 0 && v <= 10), `dims=${JSON.stringify(dims)}`);
+  }
+  {
+    // Recompute the weighted score from the rubric's own weights.
+    const idToKey: Record<ProtocolRiskRubricDimensionId, keyof NonNullable<typeof a>["dimensionScores"]> = {
+      audit_security: "auditSecurity",
+      maturity: "maturityAdoption",
+      tvl_adoption: "tvlLiquidity",
+      withdrawal_fee_transparency: "withdrawalFeeTransparency",
+      operational_dependency_risk: "operationalDependency",
+      incident_history: "incidentHistory",
+    } as const;
+    const dims = getProtocolRiskRubricDimensions();
+    const total = dims.reduce((s, d) => s + d.weight, 0);
+    const expected = a ? Math.round((dims.reduce((s, d) => s + a.dimensionScores[idToKey[d.id]] * d.weight, 0) / total) * 100) / 100 : NaN;
+    add("14J-P: weighted score matches dimension weights", a?.weightedScore === expected, `weighted=${a?.weightedScore} expected=${expected}`);
+    add("14J-Q: final score matches weighted score rounding", a?.score === a?.weightedScore, `score=${a?.score} weighted=${a?.weightedScore}`);
+  }
+
+  // 14J-R…W. Rationale content.
+  add("14J-R: rationale includes positive signals", (a?.rationale.positives.length ?? 0) > 0, `n=${a?.rationale.positives.length}`);
+  add("14J-S: rationale includes risk signals", (a?.rationale.risks.length ?? 0) > 0, `n=${a?.rationale.risks.length}`);
+  add("14J-T: rationale includes the SAM unstake-priority bug / incident review", /unstake-priority|stake auction market|incident/.test(rationaleCopy), "present");
+  add("14J-U: rationale includes operational dependency risk", /dependenc|multisig|stake pool/.test(rationaleCopy), "present");
+  add("14J-V: rationale includes audit/security evidence", /audit|kudelski|neodyme|ackee|sec3|soc 2/.test(rationaleCopy), "present");
+  add("14J-W: rationale limitation states the score is not an approval", /not an approval/.test(rationaleCopy) && /not an endorsement/.test(rationaleCopy), "present");
+
+  // 14J-X…AC. Status flags on the assignment.
+  add("14J-X: mSOL scoreStatus is assigned_for_review", a?.scoreStatus === "assigned_for_review", `v=${a?.scoreStatus}`);
+  add("14J-Y: mSOL approvedForReadOnlyRecommendation is false", (a?.approvedForReadOnlyRecommendation as boolean) === false && marinade?.approvedForReadOnlyRecommendation === false, `module=${a?.approvedForReadOnlyRecommendation} registry=${marinade?.approvedForReadOnlyRecommendation}`);
+  add("14J-Z: mSOL selectedByProtocolLogic is false", (a?.selectedByProtocolLogic as boolean) === false, `v=${a?.selectedByProtocolLogic}`);
+  add("14J-AA: mSOL currentWinner is false", (a?.currentWinner as boolean) === false, `v=${a?.currentWinner}`);
+  add("14J-AB: mSOL transactionsEnabled is false", (a?.transactionsEnabled as boolean) === false, `v=${a?.transactionsEnabled}`);
+  add("14J-AC: mSOL walletSignatureRequired is false", (a?.walletSignatureRequired as boolean) === false, `v=${a?.walletSignatureRequired}`);
+
+  // 14J-AD. Registry unchanged (mSOL still staged; score not written into the registry).
+  add("14J-AD: mSOL remains staged_candidate", marinade?.status === "staged_candidate" && marinade?.risk.riskScore === undefined, `status=${marinade?.status} registryScore=${marinade?.risk.riskScore}`);
+
+  // 14J-AE…AG. Live selection unchanged; mSOL not in real wallet UI.
+  add("14J-AE: JitoSOL remains the current selected live protocol", staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  add("14J-AF: real wallet staking suggestion still selects Jito/JitoSOL only", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito", `status=${staking?.protocolSelection?.status}`);
+  add("14J-AG: mSOL does not appear in real-wallet recommendation UI", !JSON.stringify(toSuggestionCard(staking!)).includes("mSOL") && !JSON.stringify(toSuggestionCard(staking!)).includes("Marinade"), "absent");
+
+  // 14J-AH/AI. Demo Mode and /testing unchanged.
+  add("14J-AH: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !JSON.stringify(demo).includes("mSOL"), "unchanged");
+  add("14J-AI: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
+
+  // 14J-AJ. No transaction/signature/swap/deposit/stake/approve/execute PATH (call-shaped).
+  {
+    const json = (JSON.stringify(a) + JSON.stringify(statusFresh)).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "swap(", "deposit(", "stake(", "approve(", "execute("];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("14J-AJ: no transaction/signature/swap/deposit/stake/approve/execute path", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14J-AK. No forbidden claims in the risk-score COPY (rationale), not field names.
+  {
+    const forbidden = ["best", "safest", "guaranteed", "risk-free", "approved", "recommended", "we will stake", "start staking"];
+    const hits = forbidden.filter((w) => rationaleCopy.includes(w));
+    add("14J-AK: no forbidden claims in risk score copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -8785,6 +8909,7 @@ export function printFixtureResults(): void {
     ...runSolLstFreshEvidenceRecordsFixtureChecks(),
     ...runSolLstMsolFreshEvidenceFixtureChecks(),
     ...runSolLstEpochUnstakeTimingFixtureChecks(),
+    ...runSolLstMsolRiskScoreFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

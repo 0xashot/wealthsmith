@@ -668,5 +668,15 @@ the last field, `direct_unstake_time`, as sourced **epoch-based text** ("claimab
 epoch n+1") after the intake was extended to accept `direct_unstake_time` as numeric hours OR
 text — so no hours are invented for an epoch-based protocol. Nothing was invented and no
 stale value reused. mSOL now has all 10 categories and is `readyForRiskGate: true` **while
-fresh** (stale beyond the 24h window), but stays **unscored, unapproved, and absent from real
-wallet mode** — rubric + risk-approval decision are separate later gates.
+fresh** (stale beyond the 24h window).
+
+**Step 14J — mSOL risk score (assigned for review):** from the completed evidence, mSOL is
+assigned a deterministic **7.40 / 10** (`assigned_for_review`, draft rubric) —
+`solLiquidStakingMsolRiskScore.ts` (see
+[solLiquidStakingMsolRiskScore.md](solLiquidStakingMsolRiskScore.md)). Dimension scores
+(audit 9, maturity 8, TVL 7, withdrawal/fee 8, operational 6, incident 4) are weighted by the
+existing rubric; the score is assigned only while evidence is fresh + `readyForRiskGate`. The
+rationale includes the disclosed SAM unstake-priority bug (risk) and the audit/TVL evidence
+(positive). **Score assignment only:** mSOL stays `staged_candidate`, `approvedForReadOnly
+Recommendation: false`, registry `riskScore` still `undefined`; JitoSOL remains the only
+selected live protocol; no live/Demo/testing change and no transaction/signature.
