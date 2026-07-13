@@ -32,6 +32,7 @@ import {
   getJitoSolExternalStakingLink,
   JITOSOL_BETA_LST_SYMBOL,
 } from "./jitoSolBetaActivation";
+import { buildMsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingMsolReadOnlyApproval";
 import type { ProtocolSelection, ReviewSafetyNote, SuggestionReviewDetails } from "./engineTypes";
 
 /** Stable suggestion ID. */
@@ -112,6 +113,7 @@ export function deriveStakingSuggestion(
   let safetyNotesOverride: ReviewSafetyNote[] | undefined;
   let routeEvaluationDisplay: SuggestionReviewDetails["routeEvaluation"] | undefined;
   let externalLink: SuggestionReviewDetails["externalLink"] | undefined;
+  let otherProtocolsToReview: SuggestionReviewDetails["otherProtocolsToReview"] | undefined;
 
   if (isJitoSolBetaReadOnlyEnabled()) {
     const betaSelection = selectJitoSolReadOnlyBeta({
@@ -139,6 +141,10 @@ export function deriveStakingSuggestion(
       // Read-only external handoff (Step 13J): a user-click link to Jito's staking
       // page in a new tab. Never auto-opened, never a transaction/signature.
       externalLink = getJitoSolExternalStakingLink();
+      // Read-only "alternative protocol to review" (Step 14L): approved mSOL is shown
+      // for review only alongside the selected JitoSOL. It is NOT selected/winner and
+      // has no execution path. Freshness is relative to generation time.
+      otherProtocolsToReview = [buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() })];
       // Read-only recommendation copy — never implies a transaction/signature.
       safetyNotesOverride = [
         { kind: "no_auto_move", text: "WealthSmith does not move funds for you." },
@@ -158,6 +164,7 @@ export function deriveStakingSuggestion(
     ...(safetyNotesOverride ? { safetyNotesOverride } : {}),
     ...(routeEvaluationDisplay ? { routeEvaluationDisplay } : {}),
     ...(externalLink ? { externalLink } : {}),
+    ...(otherProtocolsToReview ? { otherProtocolsToReview } : {}),
     metrics: [
       metric("Liquid SOL", Math.round(totalLiquidSol * 10000) / 10000, "token_amount", "SOL"),
       metric("SOL reserve kept", SOL_FEE_RESERVE, "token_amount", "SOL"),

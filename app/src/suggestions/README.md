@@ -1179,3 +1179,18 @@ base registry** (mSOL stays staged/unapproved/unscored there; the selector-facin
 non-mutating preview (`getReadOnlyReviewApprovedSolLiquidStakingCandidates()`, JitoSOL +
 mSOL). mSOL is **not shown in the UI yet** (that's 14L) and JitoSOL remains the only selected
 live protocol.
+
+## mSOL surfaced as read-only alternative to review (Step 14L)
+
+Approved mSOL is now shown as a read-only **"Other protocols to review"** section in the
+shared `SuggestionReviewModal` across real wallet, Demo Mode, and `/testing` (a dedicated
+"mSOL Review Candidate" card). `buildMsolReadOnlyReviewCandidateDisplay({checkedAt})` renders
+it: **fresh** → `approved_for_review_exposure` with TVL/APY/mechanics/evidence + risk score
+**7.40/10**; **stale** → `stale_evidence` ("Evidence needs refresh"), no current data. It is
+review-only — `selectedByProtocolLogic`/`currentWinner`/`transactionsEnabled`/
+`walletSignatureRequired` are always false, there is no execution CTA, and the modal states
+"Not selected by protocol logic yet.", "Final protocol selection will happen later through
+deterministic WealthSmith protocol logic.", and "Review only — WealthSmith will not move funds
+for you." **JitoSOL stays the selected protocol** (via `ProtocolReviewCandidateDisplay` +
+`SuggestionReviewDetails.otherProtocolsToReview`); mSOL never becomes `selectedProtocolId`,
+never affects Top Pick/ordering, and the multi-protocol selector comparison stays deferred.

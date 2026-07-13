@@ -21,6 +21,10 @@ import type { SuggestionReviewDetails } from "./engineTypes";
 import type { RailSuggestions } from "./useRailSuggestions";
 import { getJitoSolDirectProtocolRouteEvaluationDisplay } from "./jitoSolReadOnlyRouteEvaluation";
 import { getJitoSolExternalStakingLink } from "./jitoSolBetaActivation";
+import { buildMsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingMsolReadOnlyApproval";
+
+/** Deterministic "now" for the demo so the mSOL review evidence reads as fresh. */
+const DEMO_REVIEW_CHECKED_AT = "2026-07-13T15:30:00Z";
 
 export const DEMO_EXACT_SOL_STAKING_SCENARIO_EXISTS = true;
 export const DEMO_EXACT_SOL_STAKING_SCENARIO_DEMO_ONLY = true;
@@ -192,6 +196,9 @@ export function getDemoExactSolStakingReviewDetails(): SuggestionReviewDetails {
     }),
     // Read-only external handoff (Step 13J) — same shape real wallet mode uses.
     externalLink: getJitoSolExternalStakingLink(),
+    // Read-only "alternative protocol to review" (Step 14L): approved mSOL shown for
+    // review only alongside the selected JitoSOL. Not selected/winner; no execution.
+    otherProtocolsToReview: [buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: DEMO_REVIEW_CHECKED_AT })],
     limitations: [
       { kind: "protocol_not_selected", text: s.limitations[0] },
       { kind: "review_only", text: s.limitations[1] },

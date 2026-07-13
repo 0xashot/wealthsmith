@@ -19,6 +19,7 @@ import type {
   SuggestionReviewDetails,
 } from "../suggestions/engineTypes";
 import { getJitoSolDirectProtocolRouteEvaluationDisplay } from "../suggestions/jitoSolReadOnlyRouteEvaluation";
+import { buildMsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiquidStakingMsolReadOnlyApproval";
 
 /* ------------------------------------------------------------------ *
  * Route + safety flags (mirrors the internalPreviewFlags pattern).
@@ -465,6 +466,45 @@ const onTrack: TestingFixture = {
   },
 };
 
+// Step 14L — mSOL as a read-only ALTERNATIVE protocol to review (a separate card;
+// the "Staking" fixture above stays JitoSOL-only). Uses a fresh checkedAt so the
+// review evidence reads as approved-for-review. Review-only; not selected/winner.
+const msolReviewCandidate: TestingFixture = {
+  id: "testing_msol_review",
+  categoryLabel: "Review Candidate",
+  group: "Yield",
+  label: TESTING_PREVIEW_NOT_LIVE,
+  card: buildCard({
+    id: "testing_msol_review",
+    title: "mSOL Review Candidate",
+    type: "stake_idle_sol",
+    category: "staked_assets",
+    description: "Marinade · mSOL — approved for read-only review only (alternative protocol, not selected).",
+    impact_text: "Risk score: 7.40 / 10",
+    severity: "info",
+    extra: {
+      suggestedProtocolLabel: "Alternative protocol to review",
+      protocolName: "Marinade",
+      lstSymbol: "mSOL",
+    },
+  }),
+  details: {
+    summary: { title: "mSOL Review Candidate", reason: "Marinade · mSOL is approved for read-only review only — it is not the selected protocol. Final protocol selection will happen later through deterministic WealthSmith protocol logic.", categoryLabel: "Staking" },
+    metrics: [],
+    involvedAssets: [],
+    involvedPositions: [],
+    calculations: [],
+    guardrailSummary: { checked: [], notEvaluated: [], notApplicable: [] },
+    limitations: [REVIEW_ONLY_LIMITATION],
+    safetyNotes: [
+      { kind: "review_only", text: "Review only — WealthSmith will not move funds for you." },
+      ...REVIEW_ONLY_NOTES,
+    ],
+    demoLabel: TESTING_PREVIEW_NOT_LIVE,
+    otherProtocolsToReview: [buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-13T15:30:00Z" })],
+  },
+};
+
 const ALL_FIXTURES: TestingFixture[] = [
   safetyBuffer,
   rebalance,
@@ -475,6 +515,7 @@ const ALL_FIXTURES: TestingFixture[] = [
   dca,
   positionOptimization,
   onTrack,
+  msolReviewCandidate,
 ];
 
 /** Every testing fixture, in display order (Safety → … → On Track). */

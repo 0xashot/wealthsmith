@@ -397,6 +397,7 @@ import {
   getMsolReadOnlyApprovalDecision,
   evaluateMsolReadOnlyApprovalStatus,
   getReadOnlyReviewApprovedSolLiquidStakingCandidates,
+  buildMsolReadOnlyReviewCandidateDisplay,
 } from "./solLiquidStakingMsolReadOnlyApproval";
 import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
@@ -486,6 +487,19 @@ import {
 
 /** Fixed timestamp so every fixture run is fully reproducible. */
 export const FIXTURE_GENERATED_AT = 1_750_000_000_000;
+
+/**
+ * Step 14L: the read-only "Other protocols to review" section (approved mSOL) is an
+ * INTENTIONAL alternative-to-review, so the generic core-suggestion leak guards strip
+ * it before scanning. It has its own dedicated 14L checks; here we only verify the
+ * core suggestion (card + selected protocol) leaks no OTHER candidate names.
+ */
+function stripReviewAlternatives(rd: unknown): unknown {
+  if (rd == null || typeof rd !== "object") return rd;
+  const { otherProtocolsToReview, ...rest } = rd as Record<string, unknown>;
+  void otherProtocolsToReview;
+  return rest;
+}
 
 /** Minimal priced USDC wallet position (sample data for engine inputs only). */
 const positionsFixture: WalletPosition[] = [
@@ -3674,7 +3688,7 @@ export function runDuplicateExposureFixtureChecks(): FixtureCheck[] {
   {
     const r = run([lst("JupSOL", 1200), lst("mSOL", 300)], 2500);
     const s = posOpt(r);
-    const json = (JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails)).toLowerCase();
+    const json = (JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails))).toLowerCase();
     const hits = ["sell", "buy", "swap", "unwind", "\\bbad\\b", "unsafe"].filter((w) => new RegExp(w).test(json));
     add("12A-M: card + review details use no sell/buy/swap/bad/unsafe language", hits.length === 0, `hits=${hits.join(",") || "none"}`);
   }
@@ -3779,7 +3793,7 @@ export function runProtocolRegistryFixtureChecks(): FixtureCheck[] {
   // (Step 13G). Stable_yield exposes none.
   {
     const otherNames = ["Jupiter", "Marinade", "BlazeStake", "Sanctum", "Kamino", "Orca", "Raydium", "Meteora"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     const stakingJson = scan(staking);
     const stableJson = scan(stable);
     // Staking may name only Jito; stable_yield may name nothing.
@@ -3896,7 +3910,7 @@ export function runProtocolAdapterFixtureChecks(): FixtureCheck[] {
   // except the approved "Jito" on the staking suggestion (Step 13G).
   {
     const otherNames = ["Jupiter", "Marinade", "BlazeStake", "Sanctum", "Kamino", "Orca", "Raydium", "Meteora"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     const stakingLeaks = otherNames.filter((n) => scan(staking).includes(n));
     const stableLeaks = [...otherNames, "Jito"].filter((n) => scan(stable).includes(n));
     add("12D-K: only Jito appears (staking); no other candidate name/market data leaks", stakingLeaks.length === 0 && stableLeaks.length === 0, `stakingLeaks=${stakingLeaks.join(",") || "none"} stableLeaks=${stableLeaks.join(",") || "none"}`);
@@ -4041,7 +4055,7 @@ export function runProtocolEligibilityFixtureChecks(): FixtureCheck[] {
   {
     const resultTokens = ["ineligible", "insufficient_data", "riskScore", "eligibilityStatus", "protocolEligibility"];
     const otherNames = ["Jupiter", "Marinade", "BlazeStake", "Sanctum", "Kamino"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     const stakingJson = scan(staking);
     const stableJson = scan(stable);
     const stakingLeaks = [...resultTokens, ...otherNames].filter((n) => stakingJson.includes(n));
@@ -4171,7 +4185,7 @@ export function runRouteGuardrailFixtureChecks(): FixtureCheck[] {
   // 12F-Q. Cards/modal expose no quote/route/liquidity data.
   {
     const tokens = ["priceImpact", "quoteAvailable", "liquidityUsd", "routeSource", "outAmount", "price_impact"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -4318,7 +4332,7 @@ export function runProtocolScoringFixtureChecks(): FixtureCheck[] {
   // 12G-S. Cards/modal expose no scores/ranks/candidate names/APY/TVL.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "Kamino", "totalScore", "yieldScore", "rankedProtocolIds", "scoredAt", "tvlUsd", "selectionMade"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -4462,7 +4476,7 @@ export function runProtocolSelectionQaFixtureChecks(): FixtureCheck[] {
   // 12H-P. Cards/modal do not show the QA-selected protocol or ranking.
   {
     const tokens = ["marinade", "Marinade", "selectedProtocolId", "rankedProtocolIds", "selectionMade", "qaOnly", "candidateScores"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -4541,7 +4555,7 @@ export function runProtocolReadinessFixtureChecks(): FixtureCheck[] {
   // 12I-M. Cards/modal show no selected protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "Kamino", "selectedProtocolId", "selectedProtocolName"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -4674,7 +4688,7 @@ export function runSolLiquidStakingMappingFixtureChecks(): FixtureCheck[] {
   // 12J-P. Cards/modal do not expose dry-run data or protocol recommendations.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "dataAvailability", "qaResult", "anyFullyEligible", "JupSOL", "5oVNBeEEQvYi"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -4779,7 +4793,7 @@ export function runSolLiquidStakingDryRunFixtureChecks(): FixtureCheck[] {
   // 12K-T. Cards/modal do not expose dry-run data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "candidateReports", "ready_for_qa", "apyStatus", "JupSOL"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -4890,7 +4904,7 @@ export function runSolLiquidStakingSourceFixtureChecks(): FixtureCheck[] {
   // 12L-Q. Cards/modal do not expose source metadata or protocol recommendations.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "sourceStatusByCategory", "lastReviewedAt", "SolLiquidStakingSource", "JupSOL"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -5071,7 +5085,7 @@ export function runSolLiquidStakingStage2FixtureChecks(): FixtureCheck[] {
   // 12M-W. Stage-2 report shape never leaks into live suggestion derivation output.
   {
     const tokens = ["stage_2_real_data_dry_run", "candidateReports", "canSelectForProduction", "productionSelectionEnabled", "candidatesEligible"];
-    const scan = (s: typeof staking) => JSON.stringify(s) + JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(s) + JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -5092,7 +5106,7 @@ export function runSolLiquidStakingStage2FixtureChecks(): FixtureCheck[] {
   // 12M-Z. Cards/modal do not expose Stage-2 report or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "stage_2_real_data_dry_run", "candidateReports"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -5226,7 +5240,7 @@ export function runProtocolSelectionGoNoGoFixtureChecks(): FixtureCheck[] {
   // 12N-AD. Cards/modal do not expose go/no-go data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "productionReady", "go_no_go", "missing_tvl_", "GoNoGo"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -5339,7 +5353,7 @@ export function runSolLiquidStakingSourceCandidateFixtureChecks(): FixtureCheck[
   // 12O-T. Cards/modal do not expose source candidates or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "proposedValue", "needs_review", "SourceCandidate", "DefiLlama"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -5450,7 +5464,7 @@ export function runProtocolRiskRubricFixtureChecks(): FixtureCheck[] {
   // 12P-W. Cards/modal do not expose risk rubric or protocol recommendations.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "audit_security", "riskRubric", "ProtocolRiskRubric", "scoringGuidance"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -5557,7 +5571,7 @@ export function runSolLiquidStakingEvidenceFixtureChecks(): FixtureCheck[] {
   // 12Q-V. Cards/modal do not expose evidence drafts or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "evidenceSummary", "unresolvedQuestions", "EvidenceDraft", "audit_security"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -5669,7 +5683,7 @@ export function runProtocolRiskApprovalDecisionFixtureChecks(): FixtureCheck[] {
   // 12R-Z. Cards/modal do not expose approval decision or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "approved_for_scoring", "scoreAssignmentAllowed", "rubricApproved", "ApprovalDecision"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -5769,7 +5783,7 @@ export function runSolLiquidStakingEvidenceCompletionFixtureChecks(): FixtureChe
   // 12S-W. Cards/modal do not expose evidence-completion data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "dimensionResults", "readyForReview", "EvidenceCompletion", "canMarkGathered"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -5914,7 +5928,7 @@ export function runSolLiquidStakingSourceVerificationFixtureChecks(): FixtureChe
   // 12T-AE. Cards/modal do not expose source-verification data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "defillama_pool", "SourceVerification", "verifiedValue", "unresolvedQuestions"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -6077,7 +6091,7 @@ export function runSolLiquidStakingSourceValueConfirmationFixtureChecks(): Fixtu
   // 12U-AH. Cards/modal do not expose value-confirmation data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "confirmedValue", "confirmedAsOf", "ValueConfirmation", "QA_ONLY_NOT_LIVE"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -6225,7 +6239,7 @@ export function runSolLiquidStakingRealValueFixtureChecks(): FixtureCheck[] {
   // 12V-AP. Cards/modal do not expose real-value confirmations or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "409170000", "confirmedAsOf", "RealValueConfirmation", "defillama"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -6389,7 +6403,7 @@ export function runSolLiquidStakingGatherDecisionFixtureChecks(): FixtureCheck[]
   // 12W-AS. Cards/modal do not expose gather decisions or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "gatheredDimensions", "GatherDecision", "basedOnCategories", "candidateReadyForReview"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -6542,7 +6556,7 @@ export function runJitoSolEvidenceReadinessFixtureChecks(): FixtureCheck[] {
   // 12X-AS. Cards/modal do not expose JitoSOL readiness or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "ready_for_review", "gatheredDimensions", "JitoEvidence", "candidateReadyForReview"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -6712,7 +6726,7 @@ export function runProtocolRiskScoreAssignmentFixtureChecks(): FixtureCheck[] {
   // 12Y-AL. Cards/modal do not expose riskScore assignment or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "riskScore", "weightedContribution", "score_assigned", "7.75"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -6871,7 +6885,7 @@ export function runSolLstProductionMetadataFixtureChecks(): FixtureCheck[] {
   // 12Z-AP. Cards/modal do not expose production metadata or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "767950000", "annualManagementFeePct", "ProductionMetadata", "auditFirms"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -7008,7 +7022,7 @@ export function runSolLstSelectorShellFixtureChecks(): FixtureCheck[] {
   // 13A-AK. Cards/modal do not expose selector data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "selectedProtocolId", "SolLstSelector", "nextRequiredActions", "eligibleAmountSol"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -7119,7 +7133,7 @@ export function runSolLstSelectorPreviewFixtureChecks(): FixtureCheck[] {
   // with the real staking suggestion copy by design, so it is not a leak signal.
   {
     const tokens = ["Jito", "JitoSOL", "SOL staking preview unavailable", "Selector preview is disabled", "INTERNAL_PREVIEW_NOT_LIVE", "Preview disabled", "selectedProtocolName", "selectedLstSymbol"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -7225,7 +7239,7 @@ export function runSolLstSelectorPreviewRouteFixtureChecks(): FixtureCheck[] {
   // 13C-X. Cards/modal do not expose internal preview copy on normal flows.
   {
     const tokens = ["INTERNAL_PREVIEW_NOT_LIVE", "Suggested protocol to review", "Open official protocol page", "selectedProtocolName", "selectedLstSymbol"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -7338,7 +7352,7 @@ export function runInternalSolStakingRecommendationFixtureChecks(): FixtureCheck
   // 13D-AC. Cards/modal do not expose fake-token fixture copy on normal flows.
   {
     const tokens = ["INTERNAL_PREVIEW_NOT_LIVE", "Fake-token recommendation fixture", "Fake internal wallet has 12.4 SOL", "internal-sol-staking-fixture"];
-    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails));
     // Step 13G: the approved JitoSOL production data may appear on the STAKING
     // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
     const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
@@ -8046,7 +8060,7 @@ export function runSolLstCandidateRegistryFixtureChecks(): FixtureCheck[] {
 
   // 14A-AG/AH. Demo Mode and /testing are unchanged (no new candidate leaks in).
   {
-    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "BlazeStake", "Sanctum"];
+    const other = ["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"];
     const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
     add("14A-AG: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
     const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
@@ -8165,7 +8179,7 @@ export function runSolLstSourceValueConfirmationFixtureChecks(): FixtureCheck[] 
 
   // 14B-AG/AH. Demo Mode and /testing unchanged.
   {
-    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "BlazeStake", "Sanctum"];
+    const other = ["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"];
     const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
     add("14B-AG: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
     const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
@@ -8280,7 +8294,7 @@ export function runSolLstRiskScoringGateFixtureChecks(): FixtureCheck[] {
 
   // 14C-AL/AM. Demo Mode and /testing unchanged.
   {
-    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "BlazeStake", "Sanctum"];
+    const other = ["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"];
     const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
     add("14C-AL: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
     const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
@@ -8407,7 +8421,7 @@ export function runSolLstFreshEvidenceIntakeFixtureChecks(): FixtureCheck[] {
 
   // 14D-AK/AL. Demo Mode and /testing unchanged.
   {
-    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "BlazeStake", "Sanctum"];
+    const other = ["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"];
     const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
     add("14D-AK: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
     const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
@@ -8503,7 +8517,7 @@ export function runSolLstFreshEvidenceRecordsFixtureChecks(): FixtureCheck[] {
 
   // 14E-Z/AA. Demo Mode and /testing unchanged.
   {
-    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "BlazeStake", "Sanctum"];
+    const other = ["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"];
     const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
     add("14E-Z: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
     const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
@@ -8591,14 +8605,14 @@ export function runSolLstMsolFreshEvidenceFixtureChecks(): FixtureCheck[] {
   // 14F-M/N/O. mSOL stays unscored, unapproved, out of real wallet.
   add("14F-M: mSOL riskScore remains undefined", marinade?.risk.riskScore === undefined, `v=${marinade?.risk.riskScore}`);
   add("14F-N: mSOL is not approved for read-only recommendation", marinade?.approvedForReadOnlyRecommendation === false && marinade?.status === "staged_candidate", `approved=${marinade?.approvedForReadOnlyRecommendation}`);
-  add("14F-O: mSOL does not appear in real wallet recommendations", !JSON.stringify(staking).includes("mSOL") && !JSON.stringify(staking).includes("Marinade"), "absent");
+  add("14F-O: mSOL does not appear in real wallet recommendations", staking?.protocolSelection?.selectedProtocolName === "Jito" && !JSON.stringify(toSuggestionCard(staking!)).includes("mSOL"), "absent");
 
   // 14F-P/Q. Live selection unchanged.
   add("14F-P: live staking suggestion still selects Jito/JitoSOL", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
   add("14F-Q: live staking suggestion does not select mSOL", staking?.protocolSelection?.selectedLstSymbol !== "mSOL" && staking?.protocolSelection?.selectedProtocolName !== "Marinade", `lst=${staking?.protocolSelection?.selectedLstSymbol}`);
 
   // 14F-R/S. Demo Mode and /testing unchanged.
-  add("14F-R: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !JSON.stringify(demo).includes("mSOL"), "unchanged");
+  add("14F-R: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(demo).includes(t)), "unchanged");
   add("14F-S: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
 
   // 14F-T. No transaction/signature/swap path in mSOL evidence output.
@@ -8724,14 +8738,14 @@ export function runSolLstEpochUnstakeTimingFixtureChecks(): FixtureCheck[] {
   // 14I-AA…AC. No score / no approval / not in real wallet.
   add("14I-AA: mSOL riskScore remains undefined", marinade?.risk.riskScore === undefined && (prevFresh?.scoreAssigned as boolean) === false, `score=${marinade?.risk.riskScore}`);
   add("14I-AB: mSOL is not approved for read-only recommendation", marinade?.approvedForReadOnlyRecommendation === false && marinade?.status === "staged_candidate" && (prevFresh?.candidateApproved as boolean) === false, `approved=${marinade?.approvedForReadOnlyRecommendation}`);
-  add("14I-AC: mSOL does not appear in real wallet recommendations", !JSON.stringify(staking).includes("mSOL") && !JSON.stringify(staking).includes("Marinade"), "absent");
+  add("14I-AC: mSOL does not appear in real wallet recommendations", staking?.protocolSelection?.selectedProtocolName === "Jito" && !JSON.stringify(toSuggestionCard(staking!)).includes("mSOL"), "absent");
 
   // 14I-AD/AE. Live selection unchanged.
   add("14I-AD: live staking suggestion still selects Jito/JitoSOL", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
   add("14I-AE: live staking suggestion does not select mSOL", staking?.protocolSelection?.selectedLstSymbol !== "mSOL" && staking?.protocolSelection?.selectedProtocolName !== "Marinade", `lst=${staking?.protocolSelection?.selectedLstSymbol}`);
 
   // 14I-AF/AG. Demo Mode and /testing unchanged.
-  add("14I-AF: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !JSON.stringify(demo).includes("mSOL"), "unchanged");
+  add("14I-AF: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(demo).includes(t)), "unchanged");
   add("14I-AG: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
 
   // 14I-AH. No transaction/signature/swap path in the epoch-timing output.
@@ -8842,7 +8856,7 @@ export function runSolLstMsolRiskScoreFixtureChecks(): FixtureCheck[] {
   add("14J-AG: mSOL does not appear in real-wallet recommendation UI", !JSON.stringify(toSuggestionCard(staking!)).includes("mSOL") && !JSON.stringify(toSuggestionCard(staking!)).includes("Marinade"), "absent");
 
   // 14J-AH/AI. Demo Mode and /testing unchanged.
-  add("14J-AH: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !JSON.stringify(demo).includes("mSOL"), "unchanged");
+  add("14J-AH: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(demo).includes(t)), "unchanged");
   add("14J-AI: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
 
   // 14J-AJ. No transaction/signature/swap/deposit/stake/approve/execute PATH (call-shaped).
@@ -8946,7 +8960,7 @@ export function runSolLstMsolReadOnlyApprovalFixtureChecks(): FixtureCheck[] {
   add("14K-AJ: mSOL still does not appear in real-wallet UI", !JSON.stringify(toSuggestionCard(staking!)).includes("mSOL") && !JSON.stringify(toSuggestionCard(staking!)).includes("Marinade"), "absent");
 
   // 14K-AK/AL. Demo Mode and /testing unchanged.
-  add("14K-AK: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !JSON.stringify(demo).includes("mSOL"), "unchanged");
+  add("14K-AK: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(demo).includes(t)), "unchanged");
   add("14K-AL: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
 
   // 14K-AM. No transaction/signature/swap/deposit/stake/approve/execute PATH (call-shaped).
@@ -8962,6 +8976,115 @@ export function runSolLstMsolReadOnlyApprovalFixtureChecks(): FixtureCheck[] {
     const hits = forbidden.filter((w) => (ackCopy + limCopy + decisionJson).includes(w));
     add("14K-AN: no forbidden claims in approval copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
   }
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 14L — surface approved mSOL as a READ-ONLY alternative to review across real
+ * wallet, Demo, and /testing. Verifies the display (fresh vs stale), that JitoSOL
+ * stays selected, that mSOL is never selected/winner/executable, and the review-only
+ * boundary + copy.
+ * ------------------------------------------------------------------ */
+export function runSolLstMsolReviewExposureFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const FRESH = "2026-07-13T15:30:00Z";
+  const STALE = "2026-07-20T00:00:00Z";
+  const fresh = buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: FRESH });
+  const stale = buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: STALE });
+  // User-facing copy only (NOT field names like `currentWinner`).
+  const freshCopy = [fresh.roleLabel, fresh.statusLabel, fresh.sourceStatusLabel, fresh.mechanics?.unstakeTiming, fresh.evidence?.auditSecurity, fresh.evidence?.operationalRisk, fresh.evidence?.incidentReview, fresh.externalReviewLink?.label]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const stakingAlts = staking?.reviewDetails?.otherProtocolsToReview;
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingMsol = getTestingPageFixtures().find((f) => f.id === "testing_msol_review");
+
+  // 14L-A. Builder exists.
+  add("14L-A: mSOL review candidate display builder exists", typeof buildMsolReadOnlyReviewCandidateDisplay === "function" && fresh != null, `has=${fresh != null}`);
+
+  // 14L-B…T. Fresh display content.
+  add("14L-B: fresh mSOL reviewState is approved_for_review_exposure", fresh.reviewState === "approved_for_review_exposure", `v=${fresh.reviewState}`);
+  add("14L-C: fresh mSOL status says approved for read-only review", /approved for read-only review/i.test(fresh.statusLabel), `v=${fresh.statusLabel}`);
+  add("14L-D: fresh mSOL includes risk score 7.40", fresh.riskScore === 7.4, `v=${fresh.riskScore}`);
+  add("14L-E: fresh mSOL riskScoreStatus is assigned_for_review", fresh.riskScoreStatus === "assigned_for_review", `v=${fresh.riskScoreStatus}`);
+  add("14L-F: fresh mSOL approvedForReadOnlyRecommendation is true", fresh.approvedForReadOnlyRecommendation === true, `v=${fresh.approvedForReadOnlyRecommendation}`);
+  add("14L-G: fresh mSOL approvedForReviewExposure is true", fresh.approvedForReviewExposure === true, `v=${fresh.approvedForReviewExposure}`);
+  add("14L-H: mSOL selectedByProtocolLogic is false", (fresh.selectedByProtocolLogic as boolean) === false, `v=${fresh.selectedByProtocolLogic}`);
+  add("14L-I: mSOL currentWinner is false", (fresh.currentWinner as boolean) === false, `v=${fresh.currentWinner}`);
+  add("14L-J: mSOL transactionsEnabled is false", (fresh.transactionsEnabled as boolean) === false, `v=${fresh.transactionsEnabled}`);
+  add("14L-K: mSOL walletSignatureRequired is false", (fresh.walletSignatureRequired as boolean) === false, `v=${fresh.walletSignatureRequired}`);
+  add("14L-L: mSOL includes TVL", fresh.marketData?.tvlUsd === 182837237, `v=${fresh.marketData?.tvlUsd}`);
+  add("14L-M: mSOL includes current APY", fresh.marketData?.apyPct === 4.73658, `v=${fresh.marketData?.apyPct}`);
+  add("14L-N: mSOL includes 30-day APY", fresh.marketData?.apy30dPct === 5.84, `v=${fresh.marketData?.apy30dPct}`);
+  add("14L-O: mSOL includes epoch-based unstake timing text", /epoch/i.test(fresh.mechanics?.unstakeTiming ?? ""), `v=${(fresh.mechanics?.unstakeTiming ?? "").slice(0, 24)}`);
+  add("14L-P: mSOL includes direct/delayed unstake fee", fresh.mechanics?.directUnstakeFeePct === 0.2, `v=${fresh.mechanics?.directUnstakeFeePct}`);
+  add("14L-Q: mSOL includes annual management fee", fresh.mechanics?.annualManagementFeePct === 0, `v=${fresh.mechanics?.annualManagementFeePct}`);
+  add("14L-R: mSOL includes audit/security evidence", (fresh.evidence?.auditSecurity ?? "").length > 0, `has=${!!fresh.evidence?.auditSecurity}`);
+  add("14L-S: mSOL includes operational risk evidence", (fresh.evidence?.operationalRisk ?? "").length > 0, `has=${!!fresh.evidence?.operationalRisk}`);
+  add("14L-T: mSOL includes incident review evidence", (fresh.evidence?.incidentReview ?? "").length > 0, `has=${!!fresh.evidence?.incidentReview}`);
+
+  // 14L-U…W. Stale display.
+  add("14L-U: stale mSOL reviewState is stale_evidence", stale.reviewState === "stale_evidence", `v=${stale.reviewState}`);
+  add("14L-V: stale mSOL status does not say evidence complete", stale.sourceStatusLabel !== "Evidence complete" && stale.statusLabel === "Evidence needs refresh", `label=${stale.statusLabel} src=${stale.sourceStatusLabel}`);
+  add("14L-W: stale mSOL does not become selected/current winner", (stale.selectedByProtocolLogic as boolean) === false && (stale.currentWinner as boolean) === false, `sel=${stale.selectedByProtocolLogic}`);
+
+  // 14L-X…AB. Real wallet.
+  add("14L-X: real-wallet staking selectedProtocolId remains Jito/JitoSOL", staking?.protocolSelection?.selectedProtocolId === "jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  add("14L-Y: real-wallet staking includes mSOL only as alternative protocol to review", (stakingAlts?.length ?? 0) === 1 && stakingAlts?.[0]?.protocolId === "marinade" && stakingAlts?.[0]?.roleLabel === "Alternative protocol to review", `alts=${stakingAlts?.length}`);
+  add("14L-Z: mSOL is not selectedProtocolId", staking?.protocolSelection?.selectedProtocolId !== "marinade" && stakingAlts?.[0]?.selectedByProtocolLogic === false, `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  // mSOL is only in reviewDetails (not a ranked suggestion), so it never becomes a
+  // Top Pick and never changes ordering. The JitoSOL staking suggestion's own
+  // is_top_pick is the engine's decision, unrelated to mSOL.
+  add("14L-AA: mSOL does not affect Top Pick ranking", !run.suggestions.some((s) => s.protocolSelection?.selectedProtocolName === "Marinade") && run.suggestions.filter((s) => s.is_top_pick).every((s) => s.protocolSelection?.selectedProtocolName !== "Marinade"), `msolTopPick=${run.suggestions.some((s) => s.is_top_pick && s.protocolSelection?.selectedProtocolName === "Marinade")}`);
+  add("14L-AB: mSOL does not affect engine ordering", run.suggestions.filter((s) => s.category === "staking").length === 1 && run.suggestions.every((s) => s.id !== "marinade"), `stakingCount=${run.suggestions.filter((s) => s.category === "staking").length}`);
+
+  // 14L-AC/AD. Demo Mode.
+  add("14L-AC: Demo SOL staking scenario includes mSOL as alternative protocol to review", (demo.otherProtocolsToReview?.length ?? 0) === 1 && demo.otherProtocolsToReview?.[0]?.protocolId === "marinade", `alts=${demo.otherProtocolsToReview?.length}`);
+  add("14L-AD: Demo selected protocol remains JitoSOL", demo.protocolSelectionDisplay?.protocolName === "Jito" && demo.protocolSelectionDisplay?.assetSymbol === "JitoSOL", `name=${demo.protocolSelectionDisplay?.protocolName}`);
+
+  // 14L-AE/AF. /testing.
+  add("14L-AE: testing page fixture includes mSOL review candidate", testingMsol != null && (testingMsol?.details.otherProtocolsToReview?.[0]?.protocolId === "marinade"), `has=${testingMsol != null}`);
+  add("14L-AF: testing mSOL fixture opens through the shared review modal path", testingMsol?.card.cta.action === "review" && testingMsol?.details.otherProtocolsToReview != null, `cta=${testingMsol?.card.cta.action}`);
+
+  // 14L-AG. No transaction/signature/swap/deposit/stake/approve/execute PATH (call-shaped).
+  {
+    const json = (JSON.stringify(fresh) + JSON.stringify(demo.otherProtocolsToReview) + JSON.stringify(testingMsol?.details.otherProtocolsToReview) + JSON.stringify(stakingAlts)).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "swap(", "deposit(", "stake(", "approve(", "execute("];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("14L-AG: no transaction/signature/swap/deposit/stake/approve/execute path", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14L-AH/AM. No forbidden investment claims in mSOL UI copy.
+  {
+    const forbidden = ["best", "safest", "winner", "guaranteed", "risk-free", "recommended"];
+    const hits = forbidden.filter((w) => freshCopy.includes(w));
+    add("14L-AH: no forbidden investment claims in mSOL UI/copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+    add("14L-AM: UI copy does not call mSOL best/safest/winner/guaranteed/risk-free/recommended", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14L-AI. No execution button (Stake/Deposit/Execute/Swap/Start staking/Approve).
+  add("14L-AI: no button says Stake/Deposit/Execute/Swap/Start staking/Approve", testingMsol?.card.cta.label === "Review Details" && testingMsol?.card.cta.action === "review" && fresh.externalReviewLink?.opensNewTab === true, `cta=${testingMsol?.card.cta.label}`);
+
+  // 14L-AJ. External review link opens new tab and is review-only.
+  add("14L-AJ: external link opens new tab and is review-only", fresh.externalReviewLink?.opensNewTab === true && typeof fresh.externalReviewLink?.url === "string" && (fresh.transactionsEnabled as boolean) === false, `link=${fresh.externalReviewLink?.url}`);
+
+  // 14L-AK/AL. JitoSOL live behavior unchanged; mSOL does not replace Jito.
+  add("14L-AK: JitoSOL live behavior remains unchanged", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && toSuggestionCard(staking!).protocolName === "Jito", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  add("14L-AL: mSOL does not replace JitoSOL anywhere", staking?.protocolSelection?.selectedProtocolName !== "Marinade" && demo.protocolSelectionDisplay?.protocolName !== "Marinade", "jito kept");
+
+  // 14L-AN…AQ. Selection + safety copy (data proxies for the rendered modal).
+  add("14L-AN: UI explains final protocol selection happens later through deterministic protocol logic", /deterministic/i.test(testingMsol?.details.summary.reason ?? "") && /final protocol selection will happen later/i.test(testingMsol?.details.summary.reason ?? ""), "present");
+  add("14L-AO: review flow shows 'Review only — WealthSmith will not move funds for you.'", JSON.stringify(testingMsol?.details).includes("Review only — WealthSmith will not move funds for you."), "present");
+  add("14L-AP: mSOL is not selected by protocol logic", fresh.selectedByProtocolLogic === false && stakingAlts?.[0]?.selectedByProtocolLogic === false, "not selected");
+  add("14L-AQ: mSOL is not current winner", fresh.currentWinner === false && stakingAlts?.[0]?.currentWinner === false, "not winner");
 
   return checks;
 }
@@ -9029,6 +9152,7 @@ export function printFixtureResults(): void {
     ...runSolLstEpochUnstakeTimingFixtureChecks(),
     ...runSolLstMsolRiskScoreFixtureChecks(),
     ...runSolLstMsolReadOnlyApprovalFixtureChecks(),
+    ...runSolLstMsolReviewExposureFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

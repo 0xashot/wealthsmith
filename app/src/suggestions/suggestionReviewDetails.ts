@@ -253,6 +253,8 @@ export function buildReviewDetails(args: {
   routeEvaluationDisplay?: SuggestionReviewDetails["routeEvaluation"];
   /** Optional read-only external handoff link (Step 13J), e.g. "Open Jito staking page". */
   externalLink?: SuggestionReviewDetails["externalLink"];
+  /** Optional read-only "Other protocols to review" alternatives (Step 14L). */
+  otherProtocolsToReview?: SuggestionReviewDetails["otherProtocolsToReview"];
 }): SuggestionReviewDetails {
   const informational = args.actionKind === "informational";
   const excludeExec = args.routeEvaluationDisplay != null;
@@ -278,5 +280,6 @@ export function buildReviewDetails(args: {
     ...(args.protocolSelectionDisplay ? { protocolSelectionDisplay: args.protocolSelectionDisplay } : {}),
     ...(args.routeEvaluationDisplay ? { routeEvaluation: args.routeEvaluationDisplay } : {}),
     ...(args.externalLink ? { externalLink: args.externalLink } : {}),
+    ...(args.otherProtocolsToReview ? { otherProtocolsToReview: args.otherProtocolsToReview } : {}),
   };
 }

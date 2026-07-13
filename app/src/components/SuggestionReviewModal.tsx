@@ -384,8 +384,8 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
             <section className="review-modal__section review-modal__safety" aria-label="Safety">
               <h3 className="review-modal__section-title">Safety</h3>
               <ul className="review-modal__safety-notes">
-                {safetyNotes.map((n) => (
-                  <li key={n.kind}>{n.text}</li>
+                {safetyNotes.map((n, i) => (
+                  <li key={`${n.kind}-${i}`}>{n.text}</li>
                 ))}
               </ul>
             </section>
@@ -405,6 +405,76 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
               <span>{details.externalLink.label}</span>
               <ButtonIcon src={externalLinkUrl} />
             </a>
+          )}
+
+          {/* READ-ONLY "Other protocols to review" (Step 14L). Approved alternative
+              candidates shown for review only — never the selected protocol/winner,
+              and never an execution path. */}
+          {details.otherProtocolsToReview && details.otherProtocolsToReview.length > 0 && (
+            <section className="review-modal__section review-modal__alternatives" aria-label="Other protocols to review">
+              <h3 className="review-modal__section-title">Other protocols to review</h3>
+              {details.protocolSelectionDisplay && (
+                <p className="review-modal__alt-selected">
+                  Currently selected protocol: {details.protocolSelectionDisplay.protocolName}
+                  {details.protocolSelectionDisplay.assetSymbol ? ` · ${details.protocolSelectionDisplay.assetSymbol}` : ""}
+                </p>
+              )}
+              {details.otherProtocolsToReview.map((c) => (
+                <div key={c.protocolId} className="review-modal__alt-card">
+                  <p className="review-modal__alt-name">
+                    {c.protocolName}
+                    {c.assetSymbol ? ` · ${c.assetSymbol}` : ""}
+                  </p>
+                  <p className="review-modal__alt-role">{c.roleLabel} — {c.statusLabel}</p>
+                  {typeof c.riskScore === "number" && (
+                    <p className="review-modal__alt-score">Risk score: {c.riskScore.toFixed(2)} / 10 (assigned for review)</p>
+                  )}
+                  {c.marketData && (
+                    <dl className="review-modal__market">
+                      {typeof c.marketData.tvlUsd === "number" && (
+                        <div className="review-modal__market-row"><dt>TVL</dt><dd>{`$${(c.marketData.tvlUsd / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 2 })}M`}</dd></div>
+                      )}
+                      {typeof c.marketData.apyPct === "number" && (
+                        <div className="review-modal__market-row"><dt>Current APY</dt><dd>{`${c.marketData.apyPct}%`}</dd></div>
+                      )}
+                      {typeof c.marketData.apy30dPct === "number" && (
+                        <div className="review-modal__market-row"><dt>30-day APY</dt><dd>{`${c.marketData.apy30dPct}%`}</dd></div>
+                      )}
+                      {c.mechanics?.unstakeTiming && (
+                        <div className="review-modal__market-row"><dt>Unstake timing</dt><dd>{c.mechanics.unstakeTiming}</dd></div>
+                      )}
+                      {typeof c.mechanics?.directUnstakeFeePct === "number" && (
+                        <div className="review-modal__market-row"><dt>Direct unstake fee</dt><dd>{`${c.mechanics.directUnstakeFeePct}%`}</dd></div>
+                      )}
+                      {typeof c.mechanics?.annualManagementFeePct === "number" && (
+                        <div className="review-modal__market-row"><dt>Annual management fee</dt><dd>{`${c.mechanics.annualManagementFeePct}% on rewards`}</dd></div>
+                      )}
+                    </dl>
+                  )}
+                  {c.evidence && (c.evidence.auditSecurity || c.evidence.operationalRisk || c.evidence.incidentReview) && (
+                    <ul className="review-modal__bullets">
+                      {c.evidence.auditSecurity && <li>Audit &amp; security: {c.evidence.auditSecurity}</li>}
+                      {c.evidence.operationalRisk && <li>Operational risk: {c.evidence.operationalRisk}</li>}
+                      {c.evidence.incidentReview && <li>Incident review: {c.evidence.incidentReview}</li>}
+                    </ul>
+                  )}
+                  <p className="review-modal__alt-status">Not selected by protocol logic yet.</p>
+                  <p className="review-modal__alt-note">Final protocol selection will happen later through deterministic WealthSmith protocol logic.</p>
+                  <p className="review-modal__alt-note">Review only — WealthSmith will not move funds for you.</p>
+                  {c.externalReviewLink && (
+                    <a
+                      className="review-modal__external"
+                      href={c.externalReviewLink.url}
+                      {...(c.externalReviewLink.opensNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                      aria-label={`${c.externalReviewLink.label}. Opens the protocol page in a new tab. No transaction is created.`}
+                    >
+                      <span>{c.externalReviewLink.label}</span>
+                      <ButtonIcon src={externalLinkUrl} />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </section>
           )}
         </div>
       </div>

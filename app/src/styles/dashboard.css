@@ -2266,6 +2266,43 @@
   box-shadow: var(--shadow-control-focus);
 }
 
+/* Read-only "Other protocols to review" alternatives (Step 14L). Review-only —
+   these are not the selected protocol and carry no execution CTA. */
+.review-modal__alt-selected {
+  margin: 0 0 var(--spacing-inline-gap-sm);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.review-modal__alt-card {
+  display: grid;
+  gap: 6px;
+  padding: var(--spacing-card-padding-sm);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-sm);
+  background: var(--color-surface-card);
+}
+
+.review-modal__alt-name {
+  margin: 0;
+  font: var(--typography-label-md-font);
+  font-weight: var(--typography-label-md-font-weight);
+}
+
+.review-modal__alt-role,
+.review-modal__alt-score,
+.review-modal__alt-status,
+.review-modal__alt-note {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.review-modal__alt-score {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
 @media (max-width: 640px) {
   .review-modal {
     width: 100%;

@@ -692,3 +692,14 @@ staged/unapproved/unscored; `getApprovedSolLiquidStakingCandidates()` stays Jito
 separate non-mutating `getReadOnlyReviewApprovedSolLiquidStakingCandidates()` lists JitoSOL +
 mSOL. mSOL is not shown in the UI yet (14L), and JitoSOL remains the only selected live
 protocol.
+
+**Step 14L — mSOL surfaced as a read-only alternative to review:** approved mSOL now appears
+as an "Other protocols to review" section in the shared review modal across real wallet, Demo
+Mode, and `/testing` (a dedicated "mSOL Review Candidate" card), via
+`buildMsolReadOnlyReviewCandidateDisplay`. Fresh → `approved_for_review_exposure` (TVL/APY/
+mechanics/evidence + risk score 7.40); stale → `stale_evidence`. It is review-only —
+`selectedByProtocolLogic`/`currentWinner`/`transactionsEnabled`/`walletSignatureRequired` all
+false, no execution CTA, with "Not selected by protocol logic yet." + the deterministic-
+selection + "will not move funds" copy. JitoSOL stays the selected protocol; mSOL never
+becomes `selectedProtocolId`, never affects Top Pick/ordering, and the selector comparison
+stays deferred.

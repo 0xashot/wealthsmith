@@ -12,6 +12,7 @@
  * Jito-only; the read-only-review list is a separate, non-mutating preview. Not
  * imported by any live/UI file.
  */
+import type { ProtocolReviewCandidateDisplay } from "./engineTypes";
 import {
   getSolLiquidStakingCandidates,
   getSolLiquidStakingCandidateById,
@@ -20,6 +21,7 @@ import {
   getMsolRiskScoreAssignment,
   evaluateMsolRiskScoreAssignmentStatus,
 } from "./solLiquidStakingMsolRiskScore";
+import { getSolLstFreshEvidenceRecords } from "./solLiquidStakingFreshEvidenceRecords";
 
 export const SOL_LST_MSOL_READ_ONLY_APPROVAL_EXISTS = true;
 export const SOL_LST_MSOL_READ_ONLY_APPROVAL_APPROVES_REVIEW_EXPOSURE = true;
@@ -269,4 +271,80 @@ export function getReadOnlyReviewApprovedSolLiquidStakingCandidates(options: App
   }
 
   return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * Read-only "alternative protocol to review" DISPLAY (Step 14L).
+ * ------------------------------------------------------------------ */
+function num(v: unknown): number | undefined {
+  return typeof v === "number" ? v : undefined;
+}
+function str(v: unknown): string | undefined {
+  return typeof v === "string" ? v : undefined;
+}
+
+/**
+ * The read-only mSOL "alternative protocol to review" display for the UI. When the
+ * evidence is fresh and the review approval is active, it renders as
+ * `approved_for_review_exposure` with the sourced market/mechanics/evidence + the
+ * 7.40 risk score; when the evidence is stale it renders as `stale_evidence`
+ * ("Evidence needs refresh") without presenting current data. It is REVIEW-ONLY:
+ * `selectedByProtocolLogic` / `currentWinner` / `transactionsEnabled` /
+ * `walletSignatureRequired` are always false, and it never selects mSOL.
+ */
+export function buildMsolReadOnlyReviewCandidateDisplay(options: ApprovalOptions = {}): ProtocolReviewCandidateDisplay {
+  const checkedAt = options.checkedAt ?? new Date().toISOString();
+  const decision = getMsolReadOnlyApprovalDecision({ checkedAt });
+  const rows = getSolLstFreshEvidenceRecords({ checkedAt }).filter((r) => r.protocolId === "marinade");
+  const val = (cat: string) => rows.find((r) => r.category === cat)?.value;
+  const base = getSolLiquidStakingCandidateById("marinade");
+  const reviewLinkUrl = base?.externalReviewLink?.url;
+
+  const common = {
+    protocolId: "marinade",
+    protocolName: "Marinade",
+    assetSymbol: "mSOL",
+    roleLabel: "Alternative protocol to review" as const,
+    riskScoreStatus: "assigned_for_review" as const,
+    approvalStatus: "approved_for_read_only_review" as const,
+    approvedForReadOnlyRecommendation: true as const,
+    approvedForReviewExposure: true as const,
+    selectedByProtocolLogic: false as const,
+    currentWinner: false as const,
+    transactionsEnabled: false as const,
+    walletSignatureRequired: false as const,
+    ...(reviewLinkUrl ? { externalReviewLink: { label: "Open Marinade staking page", url: reviewLinkUrl, opensNewTab: true as const } } : {}),
+  };
+
+  if (!decision) {
+    // No active approval (evidence stale/not ready). Do not present current data.
+    return {
+      ...common,
+      reviewState: rows.length > 0 ? "stale_evidence" : "missing_evidence",
+      statusLabel: rows.length > 0 ? "Evidence needs refresh" : "Evidence missing",
+    };
+  }
+
+  return {
+    ...common,
+    reviewState: "approved_for_review_exposure",
+    statusLabel: "Approved for read-only review",
+    sourceStatusLabel: "Evidence complete",
+    marketData: {
+      ...(num(val("tvl")) != null ? { tvlUsd: num(val("tvl")) } : {}),
+      ...(num(val("current_apy")) != null ? { apyPct: num(val("current_apy")) } : {}),
+      ...(num(val("apy_30d")) != null ? { apy30dPct: num(val("apy_30d")) } : {}),
+    },
+    mechanics: {
+      ...(str(val("direct_unstake_time")) != null ? { unstakeTiming: str(val("direct_unstake_time")) } : {}),
+      ...(num(val("direct_unstake_fee")) != null ? { directUnstakeFeePct: num(val("direct_unstake_fee")) } : {}),
+      ...(num(val("annual_management_fee")) != null ? { annualManagementFeePct: num(val("annual_management_fee")) } : {}),
+    },
+    evidence: {
+      ...(str(val("audit_security")) != null ? { auditSecurity: str(val("audit_security")) } : {}),
+      ...(str(val("operational_risk")) != null ? { operationalRisk: str(val("operational_risk")) } : {}),
+      ...(str(val("incident_review")) != null ? { incidentReview: str(val("incident_review")) } : {}),
+    },
+    riskScore: decision.basis.riskScore,
+  };
 }

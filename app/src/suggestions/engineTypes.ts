@@ -398,6 +398,12 @@ export interface SuggestionReviewDetails {
    * anchor (new tab) — never auto-opened, never a transaction/signature/completion.
    */
   externalLink?: ReviewExternalLink;
+  /**
+   * Optional read-only "Other protocols to review" (Step 14L) — approved alternative
+   * candidates (e.g. mSOL) shown for review only. None is the selected protocol or
+   * winner; there is no execution path.
+   */
+  otherProtocolsToReview?: ProtocolReviewCandidateDisplay[];
 }
 
 /**
@@ -462,6 +468,63 @@ export interface ReviewExternalLink {
   label: string;
   url: string;
   opensInNewTab: boolean;
+}
+
+/**
+ * A READ-ONLY "alternative protocol to review" display (Step 14L). Surfaces a
+ * protocol that passed evidence + risk-score + read-only review approval as an
+ * ALTERNATIVE to review — never the selected protocol or winner. It carries no
+ * execution path: `selectedByProtocolLogic` / `currentWinner` /
+ * `transactionsEnabled` / `walletSignatureRequired` are always false. The final
+ * protocol winner is chosen later by deterministic selection logic (not here).
+ */
+export interface ProtocolReviewCandidateDisplay {
+  protocolId: string;
+  protocolName: string;
+  assetSymbol: string;
+
+  roleLabel: "Alternative protocol to review";
+  reviewState: "approved_for_review_exposure" | "stale_evidence" | "missing_evidence";
+
+  statusLabel: string;
+  sourceStatusLabel?: string;
+
+  marketData?: {
+    tvlUsd?: number;
+    apyPct?: number;
+    apy30dPct?: number;
+  };
+
+  mechanics?: {
+    unstakeTiming?: string;
+    directUnstakeFeePct?: number;
+    annualManagementFeePct?: number;
+  };
+
+  evidence?: {
+    auditSecurity?: string;
+    operationalRisk?: string;
+    incidentReview?: string;
+  };
+
+  riskScore?: number;
+  riskScoreStatus: "assigned_for_review";
+
+  approvalStatus: "approved_for_read_only_review";
+  approvedForReadOnlyRecommendation: true;
+  approvedForReviewExposure: true;
+
+  selectedByProtocolLogic: false;
+  currentWinner: false;
+
+  transactionsEnabled: false;
+  walletSignatureRequired: false;
+
+  externalReviewLink?: {
+    label: string;
+    url: string;
+    opensNewTab: true;
+  };
 }
 
 /**
