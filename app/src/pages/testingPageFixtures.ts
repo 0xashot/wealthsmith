@@ -20,6 +20,7 @@ import type {
 } from "../suggestions/engineTypes";
 import { getJitoSolDirectProtocolRouteEvaluationDisplay } from "../suggestions/jitoSolReadOnlyRouteEvaluation";
 import { buildMsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiquidStakingMsolReadOnlyApproval";
+import { buildJupsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiquidStakingJupsolReadOnlyApproval";
 
 /* ------------------------------------------------------------------ *
  * Route + safety flags (mirrors the internalPreviewFlags pattern).
@@ -501,7 +502,10 @@ const msolReviewCandidate: TestingFixture = {
       ...REVIEW_ONLY_NOTES,
     ],
     demoLabel: TESTING_PREVIEW_NOT_LIVE,
-    otherProtocolsToReview: [buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-13T15:30:00Z" })],
+    otherProtocolsToReview: [
+      buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-13T19:30:00Z" }),
+      buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-13T19:30:00Z" }),
+    ],
   },
 };
 

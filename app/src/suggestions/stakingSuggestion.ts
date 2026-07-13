@@ -33,6 +33,7 @@ import {
   JITOSOL_BETA_LST_SYMBOL,
 } from "./jitoSolBetaActivation";
 import { buildMsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingMsolReadOnlyApproval";
+import { buildJupsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingJupsolReadOnlyApproval";
 import type { ProtocolSelection, ReviewSafetyNote, SuggestionReviewDetails } from "./engineTypes";
 
 /** Stable suggestion ID. */
@@ -141,10 +142,14 @@ export function deriveStakingSuggestion(
       // Read-only external handoff (Step 13J): a user-click link to Jito's staking
       // page in a new tab. Never auto-opened, never a transaction/signature.
       externalLink = getJitoSolExternalStakingLink();
-      // Read-only "alternative protocol to review" (Step 14L): approved mSOL is shown
-      // for review only alongside the selected JitoSOL. It is NOT selected/winner and
-      // has no execution path. Freshness is relative to generation time.
-      otherProtocolsToReview = [buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() })];
+      // Read-only "alternatives to review" (Steps 14L/14M): approved mSOL and JupSOL are
+      // shown for review only alongside the selected JitoSOL. Neither is selected/winner
+      // and neither has an execution path. Freshness is relative to generation time; each
+      // display self-labels stale ("Evidence needs refresh") if its evidence has lapsed.
+      otherProtocolsToReview = [
+        buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() }),
+        buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() }),
+      ];
       // Read-only recommendation copy — never implies a transaction/signature.
       safetyNotesOverride = [
         { kind: "no_auto_move", text: "WealthSmith does not move funds for you." },

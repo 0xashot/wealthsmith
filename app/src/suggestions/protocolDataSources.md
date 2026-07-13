@@ -703,3 +703,27 @@ false, no execution CTA, with "Not selected by protocol logic yet." + the determ
 selection + "will not move funds" copy. JitoSOL stays the selected protocol; mSOL never
 becomes `selectedProtocolId`, never affects Top Pick/ordering, and the selector comparison
 stays deferred.
+
+**Step 14M — Jupiter · JupSOL run through the full read-only pipeline:** founder-authorized
+public-source fetches recorded **all 10** categories for JupSOL. Market data from the DefiLlama
+JupSOL pool `52bd72a7-9e81-4112-abb4-71673e8de9bf` (latest data point 2026-07-13T19:01Z): `tvl`
+391,943,484 usd, `current_apy` 5.68777%, `apy_30d` 5.60% (30-day mean computed deterministically
+from the last 30 daily `apy` values; range ~5.55–5.69%). Mechanics/audit/operational from
+official Jupiter docs (`jupsol.md` + stake-sol FAQ): `withdrawal_mechanics` (instant DEX swap
+or ~2-day delayed stake-account withdrawal); `direct_unstake_time` **text** (~2 days / one
+epoch — epoch-based per the 14I dual format, no hours invented); `direct_unstake_fee` 0.1% (pool
+unwrap); `annual_management_fee` 5% (Jupiter validator commission on inflation rewards, 0% MEV)
+with the **separate** Sanctum epoch fee on base rewards disclosed in notes rather than merged
+into one number; `audit_security` (Sanctum SPL Stake Pool Program, audited 9×, >$4B secured);
+`operational_risk` (single Jupiter validator concentration + Sanctum infra + 11-member
+multisig); `incident_review` (**point-in-time** — no independent JupSOL incident found; the
+"without exploits" statement is Jupiter's own, **not** a clean-history claim). Nothing invented;
+no stale 14B value reused. JupSOL is `readyForRiskGate: true` while fresh → **risk score 7.65/10**
+(`assigned_for_review`; higher than mSOL's 7.40 mainly on TVL and no disclosed loss event, offset
+by single-validator concentration) → **approved for read-only review** (score ≥ 7, risks
+acknowledged) → **surfaced in the review modal** alongside mSOL (fresh →
+`approved_for_review_exposure` + 7.65; stale → `stale_evidence`). Review-only throughout: no
+selection, no winner, no Top Pick/ordering change, no execution path; the base registry stays
+Jito-only for the selector and JitoSOL remains the only selected live protocol. The combined
+non-mutating preview `getAllReadOnlyReviewApprovedSolLiquidStakingCandidates()` returns Jito +
+mSOL (unchanged) + JupSOL when fresh.

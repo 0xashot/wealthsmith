@@ -1194,3 +1194,28 @@ deterministic WealthSmith protocol logic.", and "Review only — WealthSmith wil
 for you." **JitoSOL stays the selected protocol** (via `ProtocolReviewCandidateDisplay` +
 `SuggestionReviewDetails.otherProtocolsToReview`); mSOL never becomes `selectedProtocolId`,
 never affects Top Pick/ordering, and the multi-protocol selector comparison stays deferred.
+
+## Jupiter · JupSOL onboarded through the full read-only pipeline (Step 14M)
+
+Jupiter · JupSOL is run through the **same gated pipeline** as mSOL, end-to-end in one step:
+**(1) fresh evidence** — founder-authorized public-source fetches recorded **all 10**
+categories (DefiLlama JupSOL pool `52bd72a7-…`: TVL ~$391.9M, current APY 5.68777%, 30-day mean
+5.60%; Jupiter docs: instant DEX swap **or** ~2-day/one-epoch delayed unstake recorded as
+epoch-based **text**, 0.1% pool-unwrap fee, 5% inflation commission recorded as
+`annual_management_fee` with the separate Sanctum epoch fee disclosed in notes, Sanctum SPL
+Stake Pool Program audited 9× / >$4B secured, single-validator + 11-member-multisig
+operational risk, and a point-in-time incident review that is **not** a clean-history claim);
+**(2) risk score 7.65/10** (`assigned_for_review`, draft rubric) — see
+[solLiquidStakingJupsolRiskScore.md](./solLiquidStakingJupsolRiskScore.md), only assigned when
+evidence is complete + fresh; **(3) read-only review approval** (score ≥ 7, risks
+acknowledged) — see
+[solLiquidStakingJupsolReadOnlyApproval.md](./solLiquidStakingJupsolReadOnlyApproval.md);
+**(4) UI exposure** via `buildJupsolReadOnlyReviewCandidateDisplay({checkedAt})`, shown in the
+modal's "Other protocols to review" section **alongside mSOL** in real wallet, Demo, and
+`/testing` (fresh → `approved_for_review_exposure` with data + 7.65 score; stale →
+`stale_evidence`, no data). JupSOL is **review-only**: it never becomes `selectedProtocolId`,
+never the winner, never affects Top Pick/ordering, has **no execution path**, and the base
+registry stays Jito-only for the selector. The combined non-mutating preview
+`getAllReadOnlyReviewApprovedSolLiquidStakingCandidates()` returns Jito + mSOL (verbatim from
+the mSOL module, unchanged) + JupSOL when fresh. **JitoSOL remains the only selected protocol**
+and the multi-protocol selector comparison stays deferred.

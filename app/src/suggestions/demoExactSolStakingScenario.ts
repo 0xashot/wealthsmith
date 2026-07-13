@@ -22,9 +22,14 @@ import type { RailSuggestions } from "./useRailSuggestions";
 import { getJitoSolDirectProtocolRouteEvaluationDisplay } from "./jitoSolReadOnlyRouteEvaluation";
 import { getJitoSolExternalStakingLink } from "./jitoSolBetaActivation";
 import { buildMsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingMsolReadOnlyApproval";
+import { buildJupsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingJupsolReadOnlyApproval";
 
-/** Deterministic "now" for the demo so the mSOL review evidence reads as fresh. */
-const DEMO_REVIEW_CHECKED_AT = "2026-07-13T15:30:00Z";
+/**
+ * Deterministic "now" for the demo so both the mSOL and JupSOL review evidence read as
+ * fresh. Set after JupSOL's confirmedAt (2026-07-13T19:15Z) and within 24h of mSOL's
+ * earliest record so both alternatives are approved-for-review in the demo.
+ */
+const DEMO_REVIEW_CHECKED_AT = "2026-07-13T19:30:00Z";
 
 export const DEMO_EXACT_SOL_STAKING_SCENARIO_EXISTS = true;
 export const DEMO_EXACT_SOL_STAKING_SCENARIO_DEMO_ONLY = true;
@@ -198,7 +203,10 @@ export function getDemoExactSolStakingReviewDetails(): SuggestionReviewDetails {
     externalLink: getJitoSolExternalStakingLink(),
     // Read-only "alternative protocol to review" (Step 14L): approved mSOL shown for
     // review only alongside the selected JitoSOL. Not selected/winner; no execution.
-    otherProtocolsToReview: [buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: DEMO_REVIEW_CHECKED_AT })],
+    otherProtocolsToReview: [
+      buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: DEMO_REVIEW_CHECKED_AT }),
+      buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: DEMO_REVIEW_CHECKED_AT }),
+    ],
     limitations: [
       { kind: "protocol_not_selected", text: s.limitations[0] },
       { kind: "review_only", text: s.limitations[1] },

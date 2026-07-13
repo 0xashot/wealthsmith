@@ -400,6 +400,24 @@ import {
   buildMsolReadOnlyReviewCandidateDisplay,
 } from "./solLiquidStakingMsolReadOnlyApproval";
 import {
+  SOL_LST_JUPSOL_RISK_SCORE_EXISTS,
+  getJupsolRiskScoreAssignment,
+  evaluateJupsolRiskScoreAssignmentStatus,
+} from "./solLiquidStakingJupsolRiskScore";
+import {
+  SOL_LST_JUPSOL_READ_ONLY_APPROVAL_EXISTS,
+  SOL_LST_JUPSOL_READ_ONLY_APPROVAL_SELECTS_PROTOCOL_WINNER,
+  SOL_LST_JUPSOL_READ_ONLY_APPROVAL_ENABLES_MULTI_PROTOCOL_SELECTION,
+  SOL_LST_JUPSOL_READ_ONLY_APPROVAL_UPDATES_LIVE_RECOMMENDATIONS,
+  SOL_LST_JUPSOL_READ_ONLY_APPROVAL_REPLACES_JITO,
+  SOL_LST_JUPSOL_READ_ONLY_APPROVAL_ENABLES_TRANSACTIONS,
+  SOL_LST_JUPSOL_READ_ONLY_APPROVAL_REQUIRES_WALLET_SIGNATURE,
+  getJupsolReadOnlyApprovalDecision,
+  evaluateJupsolReadOnlyApprovalStatus,
+  getAllReadOnlyReviewApprovedSolLiquidStakingCandidates,
+  buildJupsolReadOnlyReviewCandidateDisplay,
+} from "./solLiquidStakingJupsolReadOnlyApproval";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -8061,7 +8079,7 @@ export function runSolLstCandidateRegistryFixtureChecks(): FixtureCheck[] {
   // 14A-AG/AH. Demo Mode and /testing are unchanged (no new candidate leaks in).
   {
     const other = ["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"];
-    const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
+    const demoLeak = other.filter((t) => JSON.stringify(stripReviewAlternatives(demo)).includes(t));
     add("14A-AG: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
     const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
     add("14A-AH: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && testingStaking?.card.lstSymbol === "JitoSOL" && testLeak.length === 0, `leak=${testLeak.join(",") || "none"}`);
@@ -8180,7 +8198,7 @@ export function runSolLstSourceValueConfirmationFixtureChecks(): FixtureCheck[] 
   // 14B-AG/AH. Demo Mode and /testing unchanged.
   {
     const other = ["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"];
-    const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
+    const demoLeak = other.filter((t) => JSON.stringify(stripReviewAlternatives(demo)).includes(t));
     add("14B-AG: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
     const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
     add("14B-AH: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && testLeak.length === 0, `leak=${testLeak.join(",") || "none"}`);
@@ -8295,7 +8313,7 @@ export function runSolLstRiskScoringGateFixtureChecks(): FixtureCheck[] {
   // 14C-AL/AM. Demo Mode and /testing unchanged.
   {
     const other = ["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"];
-    const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
+    const demoLeak = other.filter((t) => JSON.stringify(stripReviewAlternatives(demo)).includes(t));
     add("14C-AL: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
     const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
     add("14C-AM: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && testLeak.length === 0, `leak=${testLeak.join(",") || "none"}`);
@@ -8422,7 +8440,7 @@ export function runSolLstFreshEvidenceIntakeFixtureChecks(): FixtureCheck[] {
   // 14D-AK/AL. Demo Mode and /testing unchanged.
   {
     const other = ["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"];
-    const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
+    const demoLeak = other.filter((t) => JSON.stringify(stripReviewAlternatives(demo)).includes(t));
     add("14D-AK: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
     const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
     add("14D-AL: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && testLeak.length === 0, `leak=${testLeak.join(",") || "none"}`);
@@ -8518,7 +8536,7 @@ export function runSolLstFreshEvidenceRecordsFixtureChecks(): FixtureCheck[] {
   // 14E-Z/AA. Demo Mode and /testing unchanged.
   {
     const other = ["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"];
-    const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
+    const demoLeak = other.filter((t) => JSON.stringify(stripReviewAlternatives(demo)).includes(t));
     add("14E-Z: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
     const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
     add("14E-AA: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && testLeak.length === 0, `leak=${testLeak.join(",") || "none"}`);
@@ -8612,7 +8630,7 @@ export function runSolLstMsolFreshEvidenceFixtureChecks(): FixtureCheck[] {
   add("14F-Q: live staking suggestion does not select mSOL", staking?.protocolSelection?.selectedLstSymbol !== "mSOL" && staking?.protocolSelection?.selectedProtocolName !== "Marinade", `lst=${staking?.protocolSelection?.selectedLstSymbol}`);
 
   // 14F-R/S. Demo Mode and /testing unchanged.
-  add("14F-R: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(demo).includes(t)), "unchanged");
+  add("14F-R: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(stripReviewAlternatives(demo)).includes(t)), "unchanged");
   add("14F-S: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
 
   // 14F-T. No transaction/signature/swap path in mSOL evidence output.
@@ -8745,7 +8763,7 @@ export function runSolLstEpochUnstakeTimingFixtureChecks(): FixtureCheck[] {
   add("14I-AE: live staking suggestion does not select mSOL", staking?.protocolSelection?.selectedLstSymbol !== "mSOL" && staking?.protocolSelection?.selectedProtocolName !== "Marinade", `lst=${staking?.protocolSelection?.selectedLstSymbol}`);
 
   // 14I-AF/AG. Demo Mode and /testing unchanged.
-  add("14I-AF: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(demo).includes(t)), "unchanged");
+  add("14I-AF: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(stripReviewAlternatives(demo)).includes(t)), "unchanged");
   add("14I-AG: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
 
   // 14I-AH. No transaction/signature/swap path in the epoch-timing output.
@@ -8856,7 +8874,7 @@ export function runSolLstMsolRiskScoreFixtureChecks(): FixtureCheck[] {
   add("14J-AG: mSOL does not appear in real-wallet recommendation UI", !JSON.stringify(toSuggestionCard(staking!)).includes("mSOL") && !JSON.stringify(toSuggestionCard(staking!)).includes("Marinade"), "absent");
 
   // 14J-AH/AI. Demo Mode and /testing unchanged.
-  add("14J-AH: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(demo).includes(t)), "unchanged");
+  add("14J-AH: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(stripReviewAlternatives(demo)).includes(t)), "unchanged");
   add("14J-AI: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
 
   // 14J-AJ. No transaction/signature/swap/deposit/stake/approve/execute PATH (call-shaped).
@@ -8960,7 +8978,7 @@ export function runSolLstMsolReadOnlyApprovalFixtureChecks(): FixtureCheck[] {
   add("14K-AJ: mSOL still does not appear in real-wallet UI", !JSON.stringify(toSuggestionCard(staking!)).includes("mSOL") && !JSON.stringify(toSuggestionCard(staking!)).includes("Marinade"), "absent");
 
   // 14K-AK/AL. Demo Mode and /testing unchanged.
-  add("14K-AK: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(demo).includes(t)), "unchanged");
+  add("14K-AK: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !["JupSOL", "bSOL", "INF", "BlazeStake", "Sanctum"].some((t) => JSON.stringify(stripReviewAlternatives(demo)).includes(t)), "unchanged");
   add("14K-AL: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
 
   // 14K-AM. No transaction/signature/swap/deposit/stake/approve/execute PATH (call-shaped).
@@ -9040,8 +9058,8 @@ export function runSolLstMsolReviewExposureFixtureChecks(): FixtureCheck[] {
 
   // 14L-X…AB. Real wallet.
   add("14L-X: real-wallet staking selectedProtocolId remains Jito/JitoSOL", staking?.protocolSelection?.selectedProtocolId === "jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `id=${staking?.protocolSelection?.selectedProtocolId}`);
-  add("14L-Y: real-wallet staking includes mSOL only as alternative protocol to review", (stakingAlts?.length ?? 0) === 1 && stakingAlts?.[0]?.protocolId === "marinade" && stakingAlts?.[0]?.roleLabel === "Alternative protocol to review", `alts=${stakingAlts?.length}`);
-  add("14L-Z: mSOL is not selectedProtocolId", staking?.protocolSelection?.selectedProtocolId !== "marinade" && stakingAlts?.[0]?.selectedByProtocolLogic === false, `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  add("14L-Y: real-wallet staking includes mSOL as an alternative protocol to review", (stakingAlts?.some((a) => a.protocolId === "marinade" && a.roleLabel === "Alternative protocol to review") ?? false), `alts=${stakingAlts?.length}`);
+  add("14L-Z: mSOL is not selectedProtocolId", staking?.protocolSelection?.selectedProtocolId !== "marinade" && (stakingAlts?.find((a) => a.protocolId === "marinade")?.selectedByProtocolLogic === false), `id=${staking?.protocolSelection?.selectedProtocolId}`);
   // mSOL is only in reviewDetails (not a ranked suggestion), so it never becomes a
   // Top Pick and never changes ordering. The JitoSOL staking suggestion's own
   // is_top_pick is the engine's decision, unrelated to mSOL.
@@ -9049,7 +9067,7 @@ export function runSolLstMsolReviewExposureFixtureChecks(): FixtureCheck[] {
   add("14L-AB: mSOL does not affect engine ordering", run.suggestions.filter((s) => s.category === "staking").length === 1 && run.suggestions.every((s) => s.id !== "marinade"), `stakingCount=${run.suggestions.filter((s) => s.category === "staking").length}`);
 
   // 14L-AC/AD. Demo Mode.
-  add("14L-AC: Demo SOL staking scenario includes mSOL as alternative protocol to review", (demo.otherProtocolsToReview?.length ?? 0) === 1 && demo.otherProtocolsToReview?.[0]?.protocolId === "marinade", `alts=${demo.otherProtocolsToReview?.length}`);
+  add("14L-AC: Demo SOL staking scenario includes mSOL as alternative protocol to review", (demo.otherProtocolsToReview?.some((a) => a.protocolId === "marinade") ?? false), `alts=${demo.otherProtocolsToReview?.length}`);
   add("14L-AD: Demo selected protocol remains JitoSOL", demo.protocolSelectionDisplay?.protocolName === "Jito" && demo.protocolSelectionDisplay?.assetSymbol === "JitoSOL", `name=${demo.protocolSelectionDisplay?.protocolName}`);
 
   // 14L-AE/AF. /testing.
@@ -9085,6 +9103,116 @@ export function runSolLstMsolReviewExposureFixtureChecks(): FixtureCheck[] {
   add("14L-AO: review flow shows 'Review only — WealthSmith will not move funds for you.'", JSON.stringify(testingMsol?.details).includes("Review only — WealthSmith will not move funds for you."), "present");
   add("14L-AP: mSOL is not selected by protocol logic", fresh.selectedByProtocolLogic === false && stakingAlts?.[0]?.selectedByProtocolLogic === false, "not selected");
   add("14L-AQ: mSOL is not current winner", fresh.currentWinner === false && stakingAlts?.[0]?.currentWinner === false, "not winner");
+
+  return checks;
+}
+
+/**
+ * Step 14M — Jupiter · JupSOL onboarded through the SAME gated read-only review
+ * pipeline as mSOL: complete+fresh evidence → risk score (7.65, assigned_for_review) →
+ * read-only review approval (score >= 7) → UI exposure as an alternative to review in
+ * Real Wallet, Demo, and /testing. Every check confirms JupSOL is NOT selected, NOT the
+ * winner, NOT replacing JitoSOL, and has NO execution path.
+ */
+export function runSolLstJupsolReviewExposureFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const FRESH = "2026-07-13T19:30:00Z";
+  const STALE = "2026-07-20T00:00:00Z";
+  const fresh = buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: FRESH });
+  const stale = buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: STALE });
+  // User-facing copy only (NOT field names like `currentWinner`).
+  const freshCopy = [fresh.roleLabel, fresh.statusLabel, fresh.sourceStatusLabel, fresh.mechanics?.unstakeTiming, fresh.evidence?.auditSecurity, fresh.evidence?.operationalRisk, fresh.evidence?.incidentReview, fresh.externalReviewLink?.label]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const stakingAlts = staking?.reviewDetails?.otherProtocolsToReview;
+  const jupAlt = stakingAlts?.find((a) => a.protocolId === "jupiter");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const demoJup = demo.otherProtocolsToReview?.find((a) => a.protocolId === "jupiter");
+  const testingMsol = getTestingPageFixtures().find((f) => f.id === "testing_msol_review");
+  const testingJup = testingMsol?.details.otherProtocolsToReview?.find((a) => a.protocolId === "jupiter");
+
+  // 14M-A…D. Fresh evidence is complete + fresh + ready for the risk gate.
+  const jupSummary = getSolLstFreshEvidenceSummaries({ checkedAt: FRESH }).find((s) => s.protocolId === "jupiter");
+  add("14M-A: JupSOL evidence is 10/10 accepted, fresh, and ready for the risk gate", jupSummary?.acceptedCount === 10 && jupSummary?.allEvidenceFresh === true && jupSummary?.readyForRiskGate === true && (jupSummary?.blockers.length ?? 1) === 0, `accepted=${jupSummary?.acceptedCount} ready=${jupSummary?.readyForRiskGate}`);
+  add("14M-B: JupSOL market data is complete", jupSummary?.marketDataComplete === true, `v=${jupSummary?.marketDataComplete}`);
+  add("14M-C: JupSOL mechanics are complete", jupSummary?.mechanicsComplete === true, `v=${jupSummary?.mechanicsComplete}`);
+  add("14M-D: JupSOL evidence (audit/operational/incident) is complete", jupSummary?.evidenceComplete === true, `v=${jupSummary?.evidenceComplete}`);
+
+  // 14M-E…J. Risk score assigned only from complete+fresh evidence.
+  const scoreAssignment = getJupsolRiskScoreAssignment({ checkedAt: FRESH });
+  const scoreStatus = evaluateJupsolRiskScoreAssignmentStatus({ checkedAt: FRESH });
+  add("14M-E: JupSOL risk-score module exists and assigns a score when fresh", SOL_LST_JUPSOL_RISK_SCORE_EXISTS === true && scoreAssignment != null, `has=${scoreAssignment != null}`);
+  add("14M-F: JupSOL risk score is 7.65", scoreAssignment?.score === 7.65 && scoreStatus.score === 7.65, `v=${scoreAssignment?.score}`);
+  add("14M-G: JupSOL score status is assigned_for_review (draft rubric)", scoreAssignment?.scoreStatus === "assigned_for_review", `v=${scoreAssignment?.scoreStatus}`);
+  add("14M-H: JupSOL score is NOT assigned when evidence is stale", getJupsolRiskScoreAssignment({ checkedAt: STALE }) === null && evaluateJupsolRiskScoreAssignmentStatus({ checkedAt: STALE }).scoreAssigned === false, `stale=${getJupsolRiskScoreAssignment({ checkedAt: STALE })}`);
+  add("14M-I: JupSOL score does not approve/select/win", scoreAssignment?.approvedForReadOnlyRecommendation === false && scoreAssignment?.selectedByProtocolLogic === false && scoreAssignment?.currentWinner === false, "no approve/select/win");
+  add("14M-J: JupSOL score enables no transactions/signatures", scoreAssignment?.transactionsEnabled === false && scoreAssignment?.walletSignatureRequired === false, "no tx/sig");
+
+  // 14M-K…Q. Read-only review approval, only when score >= 7 and gates pass.
+  const decision = getJupsolReadOnlyApprovalDecision({ checkedAt: FRESH });
+  const apprStatus = evaluateJupsolReadOnlyApprovalStatus({ checkedAt: FRESH });
+  add("14M-K: JupSOL approval module exists and approves for read-only review when fresh", SOL_LST_JUPSOL_READ_ONLY_APPROVAL_EXISTS === true && decision?.decision === "approved_for_read_only_review", `v=${decision?.decision}`);
+  add("14M-L: JupSOL approval basis carries score 7.65 with a >= 7 threshold", decision?.basis.riskScore === 7.65 && decision?.basis.minimumRiskScoreRequired === 7 && apprStatus.riskScore === 7.65, `v=${decision?.basis.riskScore}`);
+  add("14M-M: JupSOL is NOT approved when evidence is stale", getJupsolReadOnlyApprovalDecision({ checkedAt: STALE }) === null && evaluateJupsolReadOnlyApprovalStatus({ checkedAt: STALE }).approvedForReviewExposure === false, `stale=${getJupsolReadOnlyApprovalDecision({ checkedAt: STALE })}`);
+  add("14M-N: JupSOL approval selects nothing (no winner/selection/multi-protocol)", decision?.approvalScope.approvedForProtocolSelection === false && decision?.approvalScope.selectedByProtocolLogic === false && decision?.approvalScope.currentWinner === false && decision?.approvalScope.enablesMultiProtocolSelection === false, "selects nothing");
+  add("14M-O: JupSOL approval enables no transactions/signatures/live updates", decision?.approvalScope.transactionsEnabled === false && decision?.approvalScope.walletSignatureRequired === false && decision?.approvalScope.updatesLiveRecommendations === false, "no tx/sig/live");
+  const combinedFresh = getAllReadOnlyReviewApprovedSolLiquidStakingCandidates({ checkedAt: FRESH });
+  const combinedStale = getAllReadOnlyReviewApprovedSolLiquidStakingCandidates({ checkedAt: STALE });
+  add("14M-P: combined review-approved list includes JupSOL only when fresh", combinedFresh.some((c) => c.protocolId === "jupiter") && !combinedStale.some((c) => c.protocolId === "jupiter"), `fresh=${combinedFresh.map((c) => c.protocolId).join("/")} stale=${combinedStale.map((c) => c.protocolId).join("/")}`);
+  add("14M-Q: combined list keeps Jito+mSOL and adds JupSOL (read-only, scored)", combinedFresh.some((c) => c.protocolId === "jito") && combinedFresh.some((c) => c.protocolId === "marinade") && combinedFresh.find((c) => c.protocolId === "jupiter")?.approvalStatus === "approved_read_only_review" && combinedFresh.find((c) => c.protocolId === "jupiter")?.riskScore === 7.65, `list=${combinedFresh.map((c) => c.protocolId).join("/")}`);
+
+  // 14M-R…AH. Display content (fresh + stale).
+  add("14M-R: JupSOL display builder exists; fresh reviewState is approved_for_review_exposure", typeof buildJupsolReadOnlyReviewCandidateDisplay === "function" && fresh.reviewState === "approved_for_review_exposure", `v=${fresh.reviewState}`);
+  add("14M-S: fresh JupSOL status says approved for read-only review", /approved for read-only review/i.test(fresh.statusLabel), `v=${fresh.statusLabel}`);
+  add("14M-T: fresh JupSOL includes risk score 7.65", fresh.riskScore === 7.65, `v=${fresh.riskScore}`);
+  add("14M-U: fresh JupSOL riskScoreStatus is assigned_for_review", fresh.riskScoreStatus === "assigned_for_review", `v=${fresh.riskScoreStatus}`);
+  add("14M-V: fresh JupSOL approvedForReadOnlyRecommendation + approvedForReviewExposure true", fresh.approvedForReadOnlyRecommendation === true && fresh.approvedForReviewExposure === true, `rec=${fresh.approvedForReadOnlyRecommendation}`);
+  add("14M-W: JupSOL selectedByProtocolLogic + currentWinner false", (fresh.selectedByProtocolLogic as boolean) === false && (fresh.currentWinner as boolean) === false, `sel=${fresh.selectedByProtocolLogic}`);
+  add("14M-X: JupSOL transactionsEnabled + walletSignatureRequired false", (fresh.transactionsEnabled as boolean) === false && (fresh.walletSignatureRequired as boolean) === false, `tx=${fresh.transactionsEnabled}`);
+  add("14M-Y: JupSOL includes source-backed TVL", fresh.marketData?.tvlUsd === 391943484, `v=${fresh.marketData?.tvlUsd}`);
+  add("14M-Z: JupSOL includes source-backed current APY", fresh.marketData?.apyPct === 5.68777, `v=${fresh.marketData?.apyPct}`);
+  add("14M-AA: JupSOL includes 30-day APY", fresh.marketData?.apy30dPct === 5.6, `v=${fresh.marketData?.apy30dPct}`);
+  add("14M-AB: JupSOL includes epoch-based unstake timing text", /epoch|2 days/i.test(fresh.mechanics?.unstakeTiming ?? ""), `v=${(fresh.mechanics?.unstakeTiming ?? "").slice(0, 28)}`);
+  add("14M-AC: JupSOL includes 0.1% direct/pool unstake fee", fresh.mechanics?.directUnstakeFeePct === 0.1, `v=${fresh.mechanics?.directUnstakeFeePct}`);
+  add("14M-AD: JupSOL includes annual management fee (validator commission)", fresh.mechanics?.annualManagementFeePct === 5, `v=${fresh.mechanics?.annualManagementFeePct}`);
+  add("14M-AE: JupSOL includes audit/security evidence (Sanctum SPL stake pool)", /sanctum|spl stake pool|audited/i.test(fresh.evidence?.auditSecurity ?? ""), `has=${!!fresh.evidence?.auditSecurity}`);
+  add("14M-AF: JupSOL operational-risk evidence names single-validator concentration", /single (jupiter )?validator|concentration/i.test(fresh.evidence?.operationalRisk ?? ""), `has=${!!fresh.evidence?.operationalRisk}`);
+  add("14M-AG: JupSOL incident review is point-in-time, not a clean-history claim", /point-in-time/i.test(fresh.evidence?.incidentReview ?? "") && /not an independent/i.test(fresh.evidence?.incidentReview ?? ""), `has=${!!fresh.evidence?.incidentReview}`);
+  add("14M-AH: stale JupSOL is stale_evidence with no presented market data", stale.reviewState === "stale_evidence" && stale.statusLabel === "Evidence needs refresh" && stale.marketData === undefined && (stale.selectedByProtocolLogic as boolean) === false, `v=${stale.reviewState}`);
+
+  // 14M-AI…AN. Integration: real wallet, demo, /testing.
+  add("14M-AI: real-wallet staking selectedProtocolId remains Jito/JitoSOL", staking?.protocolSelection?.selectedProtocolId === "jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  add("14M-AJ: real-wallet staking includes JupSOL as an alternative protocol to review", jupAlt != null && jupAlt.roleLabel === "Alternative protocol to review", `alts=${stakingAlts?.length}`);
+  add("14M-AK: JupSOL is not selected/winner in real wallet", staking?.protocolSelection?.selectedProtocolId !== "jupiter" && jupAlt?.selectedByProtocolLogic === false && jupAlt?.currentWinner === false, `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  add("14M-AL: JupSOL does not become a ranked suggestion / change ordering / Top Pick", run.suggestions.filter((s) => s.category === "staking").length === 1 && run.suggestions.every((s) => s.id !== "jupiter") && !run.suggestions.some((s) => s.protocolSelection?.selectedProtocolName === "Jupiter"), `stakingCount=${run.suggestions.filter((s) => s.category === "staking").length}`);
+  add("14M-AM: Demo includes JupSOL as alternative; selected protocol remains JitoSOL", demoJup != null && demo.protocolSelectionDisplay?.protocolName === "Jito" && demo.protocolSelectionDisplay?.assetSymbol === "JitoSOL", `demoJup=${demoJup != null}`);
+  add("14M-AN: /testing review-candidate fixture includes JupSOL (review-only modal path)", testingJup != null && testingMsol?.card.cta.action === "review", `has=${testingJup != null}`);
+
+  // 14M-AO…AQ. Safety guardrails: no execution path, no forbidden copy, JitoSOL kept.
+  {
+    const json = (JSON.stringify(fresh) + JSON.stringify(demo.otherProtocolsToReview) + JSON.stringify(testingMsol?.details.otherProtocolsToReview) + JSON.stringify(stakingAlts)).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "swap(", "deposit(", "stake(", "approve(", "execute("];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("14M-AO: no transaction/signature/swap/deposit/stake/approve/execute path for JupSOL", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  {
+    // Marketing/execution copy forbidden by the spec. ("Approved for read-only review"
+    // is an approval-STATUS label, not an execution CTA — execution verbs are guarded by
+    // the call-shaped 14M-AO scan and the review-only button label below.)
+    const forbidden = ["best", "safest", "winner", "guaranteed", "risk-free", "recommended", "stake now", "deposit now", "highest apy"];
+    const hits = forbidden.filter((w) => freshCopy.includes(w));
+    add("14M-AP: no forbidden marketing/execution copy in JupSOL UI", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  add("14M-AQ: JupSOL does not replace JitoSOL; external link is review-only in a new tab", staking?.protocolSelection?.selectedProtocolName === "Jito" && demo.protocolSelectionDisplay?.protocolName !== "Jupiter" && fresh.externalReviewLink?.opensNewTab === true && (fresh.transactionsEnabled as boolean) === false && SOL_LST_JUPSOL_READ_ONLY_APPROVAL_REPLACES_JITO === false && SOL_LST_JUPSOL_READ_ONLY_APPROVAL_SELECTS_PROTOCOL_WINNER === false && SOL_LST_JUPSOL_READ_ONLY_APPROVAL_ENABLES_MULTI_PROTOCOL_SELECTION === false && SOL_LST_JUPSOL_READ_ONLY_APPROVAL_UPDATES_LIVE_RECOMMENDATIONS === false && SOL_LST_JUPSOL_READ_ONLY_APPROVAL_ENABLES_TRANSACTIONS === false && SOL_LST_JUPSOL_READ_ONLY_APPROVAL_REQUIRES_WALLET_SIGNATURE === false, `link=${fresh.externalReviewLink?.url}`);
 
   return checks;
 }
@@ -9153,6 +9281,7 @@ export function printFixtureResults(): void {
     ...runSolLstMsolRiskScoreFixtureChecks(),
     ...runSolLstMsolReadOnlyApprovalFixtureChecks(),
     ...runSolLstMsolReviewExposureFixtureChecks(),
+    ...runSolLstJupsolReviewExposureFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
