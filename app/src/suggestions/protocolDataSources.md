@@ -654,3 +654,10 @@ reused as fresh and nothing is invented. Records are added by appending fully po
 inputs (value + unit + source + confirmedAt + confirmedBy + reviewerRole + notes) within
 the 24h window. No scores, no approval, no live-recommendation change, no
 transaction/signature.
+
+**Step 14F — Marinade · mSOL:** attempted to fill mSOL's fresh evidence, but no value
+could be verified with valid human-reviewer provenance this step; the stale 14B mSOL
+figures must not be reused as fresh and nothing is invented. The mSOL array stays empty
+(0/10 categories), so mSOL remains blocked, unscored, unapproved, and absent from real
+wallet mode. The records doc lists the ten categories and their sources for manual
+verification.

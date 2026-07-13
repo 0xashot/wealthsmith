@@ -1138,3 +1138,10 @@ the per-candidate input arrays are empty and **all four candidates remain blocke
 by appending fully populated inputs to the matching array; a candidate becomes ready only
 with all ten categories fresh + accepted, and even then still needs rubric + risk-approval
 decision. No scores, no approval, no live/Demo/testing change, no transaction/signature.
+
+**Step 14F — Marinade · mSOL:** the mSOL array **stays empty** — no fresh value/evidence
+could be recorded with valid human-reviewer provenance, the stale 14B mSOL figures are not
+reused as fresh, and nothing is invented. mSOL is **not** `readyForRiskGate` (0/10
+categories), unscored, unapproved, and absent from real wallet mode. The doc lists the ten
+categories + sources needing manual verification; records are wired in once a reviewer
+confirms each value within 24h.

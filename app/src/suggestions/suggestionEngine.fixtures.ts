@@ -369,6 +369,7 @@ import {
   getSolLstFreshEvidenceSummaries,
   getSolLstFreshEvidenceRiskGatePreview,
   summarizeSolLstFreshEvidenceRecordStatus,
+  MARINADE_MSOL_FRESH_EVIDENCE_INPUTS,
 } from "./solLiquidStakingFreshEvidenceRecords";
 import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
@@ -8503,6 +8504,107 @@ export function runSolLstFreshEvidenceRecordsFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 14F — fill fresh evidence for Marinade · mSOL. CURRENT: the mSOL array is
+ * still empty (no fresh value could be verified with human-reviewer provenance;
+ * stale 14B values are not reused as fresh), so mSOL stays blocked. The checks are
+ * written to hold now AND to enforce correctness the moment real records are added.
+ * ------------------------------------------------------------------ */
+export function runSolLstMsolFreshEvidenceFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const mSolInputs = MARINADE_MSOL_FRESH_EVIDENCE_INPUTS;
+  // Evaluate each record at its own confirmedAt so a valid filled record is fresh
+  // (age 0); empty → no records. Deterministic regardless of "now".
+  const mSolRecords = mSolInputs.map((i) => createSolLstFreshEvidenceRecord(i, i.confirmedAt));
+  const mSolSummary = summarizeSolLstFreshEvidenceRecords(mSolRecords)[0];
+  const mSolPreview = previewSolLstRiskGateWithFreshEvidence(mSolRecords)[0];
+  const acceptedOf = (cat: string) => mSolRecords.find((r) => r.category === cat && r.status === "accepted");
+  const present = (cat: string) => mSolInputs.some((i) => i.category === cat);
+  const docJson = JSON.stringify(mSolRecords) + JSON.stringify(mSolSummary ?? {}) + JSON.stringify(mSolPreview ?? {});
+  const REQUIRED = ["tvl", "current_apy", "apy_30d", "withdrawal_mechanics", "direct_unstake_time", "direct_unstake_fee", "annual_management_fee", "audit_security", "operational_risk", "incident_review"];
+
+  const marinade = getSolLiquidStakingCandidateById("marinade");
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+
+  // 14F-A. The mSOL evidence array exists.
+  add("14F-A: mSOL fresh evidence record section exists", Array.isArray(mSolInputs), `isArray=${Array.isArray(mSolInputs)}`);
+
+  // 14F-B/C. Staged-only + no TEST_ONLY.
+  add("14F-B: all mSOL evidence records use protocolId marinade", mSolInputs.every((i) => i.protocolId === "marinade"), `n=${mSolInputs.length}`);
+  add("14F-C: no mSOL record uses TEST_ONLY", !JSON.stringify(mSolInputs).includes("TEST_ONLY"), "clean");
+
+  // 14F-D…I. Every mSOL record is fully populated (enforced when records exist).
+  add("14F-D: every mSOL record has sourceName", mSolInputs.every((i) => typeof i.sourceName === "string" && i.sourceName.trim() !== ""), `n=${mSolInputs.length}`);
+  add("14F-E: every mSOL record has sourceUrl", mSolInputs.every((i) => typeof i.sourceUrl === "string" && i.sourceUrl.trim() !== ""), `n=${mSolInputs.length}`);
+  add("14F-F: every mSOL record has confirmedAt", mSolInputs.every((i) => typeof i.confirmedAt === "string" && !Number.isNaN(Date.parse(i.confirmedAt))), `n=${mSolInputs.length}`);
+  add("14F-G: every mSOL record has confirmedBy", mSolInputs.every((i) => typeof i.confirmedBy === "string" && i.confirmedBy.trim() !== ""), `n=${mSolInputs.length}`);
+  add("14F-H: every mSOL record has reviewerRole", mSolInputs.every((i) => typeof i.reviewerRole === "string" && i.reviewerRole.length > 0), `n=${mSolInputs.length}`);
+  add("14F-I: every mSOL record has notes", mSolInputs.every((i) => Array.isArray(i.notes) && i.notes.length > 0), `n=${mSolInputs.length}`);
+
+  // 14F-J. Records go through the intake.
+  add("14F-J: every mSOL input is processed through createSolLstFreshEvidenceRecord", mSolRecords.length === mSolInputs.length, `records=${mSolRecords.length}`);
+
+  // 14F-K/L. readyForRiskGate reflects completeness.
+  const allTenFreshAccepted = REQUIRED.every((c) => acceptedOf(c) != null);
+  add("14F-K: 10 present+fresh mSOL records ⇒ readyForRiskGate true", allTenFreshAccepted ? mSolSummary?.readyForRiskGate === true : true, `allTen=${allTenFreshAccepted} ready=${mSolSummary?.readyForRiskGate ?? false}`);
+  add("14F-L: fewer than 10 mSOL records ⇒ readyForRiskGate false", mSolInputs.length < 10 ? (mSolSummary?.readyForRiskGate ?? false) === false : true, `n=${mSolInputs.length} ready=${mSolSummary?.readyForRiskGate ?? false}`);
+
+  // 14F-M/N/O. mSOL stays unscored, unapproved, out of real wallet.
+  add("14F-M: mSOL riskScore remains undefined", marinade?.risk.riskScore === undefined, `v=${marinade?.risk.riskScore}`);
+  add("14F-N: mSOL is not approved for read-only recommendation", marinade?.approvedForReadOnlyRecommendation === false && marinade?.status === "staged_candidate", `approved=${marinade?.approvedForReadOnlyRecommendation}`);
+  add("14F-O: mSOL does not appear in real wallet recommendations", !JSON.stringify(staking).includes("mSOL") && !JSON.stringify(staking).includes("Marinade"), "absent");
+
+  // 14F-P/Q. Live selection unchanged.
+  add("14F-P: live staking suggestion still selects Jito/JitoSOL", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  add("14F-Q: live staking suggestion does not select mSOL", staking?.protocolSelection?.selectedLstSymbol !== "mSOL" && staking?.protocolSelection?.selectedProtocolName !== "Marinade", `lst=${staking?.protocolSelection?.selectedLstSymbol}`);
+
+  // 14F-R/S. Demo Mode and /testing unchanged.
+  add("14F-R: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !JSON.stringify(demo).includes("mSOL"), "unchanged");
+  add("14F-S: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
+
+  // 14F-T. No transaction/signature/swap path in mSOL evidence output.
+  {
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "swap(", "deposit(", "withdraw(", "unstake("];
+    const hits = tokens.filter((t) => docJson.toLowerCase().includes(t));
+    add("14F-T: no transaction/signature/swap path in mSOL evidence", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14F-U. No forbidden investment claims in mSOL evidence copy.
+  {
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const hits = forbidden.filter((w) => docJson.toLowerCase().includes(w));
+    add("14F-U: no forbidden investment claims in mSOL evidence copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  // 14F-V…AE. Per-category acceptance — asserted only when the record is present
+  // (each holds vacuously while mSOL is empty, and enforces acceptance once filled).
+  const acceptedWhenPresent = (cat: string) => (present(cat) ? acceptedOf(cat) != null : true);
+  add("14F-V: mSOL TVL record, when present, is accepted", acceptedWhenPresent("tvl"), `present=${present("tvl")}`);
+  add("14F-W: mSOL current APY record, when present, is accepted", acceptedWhenPresent("current_apy"), `present=${present("current_apy")}`);
+  add("14F-X: mSOL 30-day APY record, when present, is accepted", acceptedWhenPresent("apy_30d"), `present=${present("apy_30d")}`);
+  add("14F-Y: mSOL withdrawal mechanics record, when present, is accepted", acceptedWhenPresent("withdrawal_mechanics"), `present=${present("withdrawal_mechanics")}`);
+  add("14F-Z: mSOL direct unstake time record, when present, is accepted", acceptedWhenPresent("direct_unstake_time"), `present=${present("direct_unstake_time")}`);
+  add("14F-AA: mSOL direct unstake fee record, when present, is accepted", acceptedWhenPresent("direct_unstake_fee"), `present=${present("direct_unstake_fee")}`);
+  add("14F-AB: mSOL annual management fee record, when present, is accepted", acceptedWhenPresent("annual_management_fee"), `present=${present("annual_management_fee")}`);
+  add("14F-AC: mSOL audit/security record, when present, is accepted", acceptedWhenPresent("audit_security"), `present=${present("audit_security")}`);
+  add("14F-AD: mSOL operational risk record, when present, is accepted", acceptedWhenPresent("operational_risk"), `present=${present("operational_risk")}`);
+  add("14F-AE: mSOL incident review record, when present, is accepted", acceptedWhenPresent("incident_review"), `present=${present("incident_review")}`);
+
+  // 14F-AF/AG. Even a complete package still requires rubric + risk-approval decision.
+  add("14F-AF: risk gate preview says rubric approval is still required", mSolPreview ? mSolPreview.stillRequiresRubricApproval === true : true, `preview=${mSolPreview != null}`);
+  add("14F-AG: risk gate preview says risk approval decision is still required", mSolPreview ? mSolPreview.stillRequiresRiskApprovalDecision === true : true, `preview=${mSolPreview != null}`);
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -8562,6 +8664,7 @@ export function printFixtureResults(): void {
     ...runSolLstRiskScoringGateFixtureChecks(),
     ...runSolLstFreshEvidenceIntakeFixtureChecks(),
     ...runSolLstFreshEvidenceRecordsFixtureChecks(),
+    ...runSolLstMsolFreshEvidenceFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

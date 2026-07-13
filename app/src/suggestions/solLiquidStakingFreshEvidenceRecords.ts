@@ -45,6 +45,15 @@ export const SOL_LST_FRESH_EVIDENCE_RECORDS_REQUIRE_WALLET_SIGNATURE = false;
  * the candidate stays blocked until every required category has a fresh accepted
  * record. DO NOT add a record with a placeholder or stale value.
  * ------------------------------------------------------------------ */
+// Step 14F — Marinade · mSOL. STILL EMPTY. No fresh mSOL value/evidence has been
+// independently verified with proper human-reviewer provenance this step: no
+// verified values + timestamp were supplied, the stale 14B mSOL figures
+// (TVL 184,840,000 / APY 4.75 / APY30d 5.87) must NOT be reused as fresh, and no
+// value/reviewer may be invented. So every mSOL category stays MISSING and mSOL
+// remains blocked (not readyForRiskGate). To fill: append fully populated inputs
+// (value + unit + sourceName + sourceUrl + real confirmedAt + confirmedBy +
+// reviewerRole + notes) once a reviewer has verified each value within 24h — see
+// solLiquidStakingFreshEvidenceRecords.md for the required categories + sources.
 export const MARINADE_MSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [];
 export const JUPITER_JUPSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [];
 export const BLAZESTAKE_BSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [];

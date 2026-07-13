@@ -89,6 +89,43 @@ true`** — no score is assigned and no candidate is approved.
 `approvesCandidates`, `updatesLiveRecommendations`, `transactionsEnabled` all `false`.
 mSOL/JupSOL/bSOL/INF do not appear in real wallet recommendations.
 
+## Marinade · mSOL (Step 14F)
+
+**Status: still blocked — 0 of 10 categories recorded.** No fresh mSOL value/evidence
+could be recorded this step with valid human-reviewer provenance:
+
+- No verified values + verification timestamp were supplied for mSOL.
+- The **stale 14B** mSOL figures (TVL 184,840,000 / APY 4.75 / APY30d 5.87, confirmed
+  2026-07-12) must **not** be reused as fresh — reusing them would fail the freshness
+  rule and misrepresent provenance.
+- No value may be invented, no placeholder or TEST_ONLY value used, and verification
+  cannot be attributed to a reviewer who did not actually confirm it.
+
+So `MARINADE_MSOL_FRESH_EVIDENCE_INPUTS` stays **empty**, and mSOL is **not**
+`readyForRiskGate`. No score is assigned, mSOL is not approved, and it does not appear in
+real wallet mode.
+
+### Categories needing manual verification (and where to source them)
+
+| # | Category | Suggested source |
+| --- | --- | --- |
+| 1 | `tvl` | DefiLlama mSOL pool (`.../yields/pool/b3f93865-5ec8-4662-90a0-11808e0aa2bd`) |
+| 2 | `current_apy` | DefiLlama mSOL pool |
+| 3 | `apy_30d` | DefiLlama mSOL pool |
+| 4 | `withdrawal_mechanics` | Official Marinade docs (unstake/withdrawal) |
+| 5 | `direct_unstake_time` | Official Marinade docs |
+| 6 | `direct_unstake_fee` | Official Marinade docs |
+| 7 | `annual_management_fee` | Official Marinade docs |
+| 8 | `audit_security` | Official Marinade security/audit page |
+| 9 | `operational_risk` | Official Marinade docs / documented manual review |
+| 10 | `incident_review` | Marinade incident/security page or documented review |
+
+To fill: after a reviewer verifies each value within 24h, append fully populated inputs
+(value + unit + sourceName + sourceUrl + real `confirmedAt` + `confirmedBy` +
+`reviewerRole` + notes) to `MARINADE_MSOL_FRESH_EVIDENCE_INPUTS`. Once all ten are fresh
+and accepted, mSOL becomes `readyForRiskGate` — but the preview still shows rubric
+approval and the risk approval decision are required, and no score is assigned here.
+
 ## Next steps
 
 - Provide **fresh real** records (all ten categories, within 24h) for a candidate.
