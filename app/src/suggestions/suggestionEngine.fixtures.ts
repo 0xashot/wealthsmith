@@ -357,6 +357,20 @@ import {
   type SolLstFreshEvidenceInput,
 } from "./solLiquidStakingFreshEvidenceIntake";
 import {
+  SOL_LST_FRESH_EVIDENCE_RECORDS_EXISTS,
+  SOL_LST_FRESH_EVIDENCE_RECORDS_ASSIGN_RISK_SCORES,
+  SOL_LST_FRESH_EVIDENCE_RECORDS_APPROVE_CANDIDATES,
+  SOL_LST_FRESH_EVIDENCE_RECORDS_ENABLE_MULTI_PROTOCOL_SELECTION,
+  SOL_LST_FRESH_EVIDENCE_RECORDS_UPDATE_LIVE_RECOMMENDATIONS,
+  SOL_LST_FRESH_EVIDENCE_RECORDS_ENABLE_TRANSACTIONS,
+  SOL_LST_FRESH_EVIDENCE_RECORDS_REQUIRE_WALLET_SIGNATURE,
+  getSolLstFreshEvidenceInputs,
+  getSolLstFreshEvidenceRecords,
+  getSolLstFreshEvidenceSummaries,
+  getSolLstFreshEvidenceRiskGatePreview,
+  summarizeSolLstFreshEvidenceRecordStatus,
+} from "./solLiquidStakingFreshEvidenceRecords";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -8388,6 +8402,107 @@ export function runSolLstFreshEvidenceIntakeFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 14E — real fresh-evidence records for staged SOL LST candidates. Currently
+ * Mode A (empty/partial): no fresh verified values are available, so every candidate
+ * stays blocked. Verifies the flags, that any recorded inputs are well-formed and
+ * staged-only (jito excluded), the roll-up status, that nothing is scored/approved,
+ * and that live/Demo/testing + the tx/sig boundary hold.
+ * ------------------------------------------------------------------ */
+export function runSolLstFreshEvidenceRecordsFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const STAGED = ["marinade", "jupiter", "blazestake", "sanctum"];
+  const inputs = getSolLstFreshEvidenceInputs();
+  const records = getSolLstFreshEvidenceRecords();
+  const summaries = getSolLstFreshEvidenceSummaries();
+  const preview = getSolLstFreshEvidenceRiskGatePreview();
+  const status = summarizeSolLstFreshEvidenceRecordStatus();
+  const docJson = JSON.stringify(records) + JSON.stringify(summaries) + JSON.stringify(status) + JSON.stringify(preview);
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+
+  // 14E-A…G. Flags.
+  add("14E-A: SOL_LST_FRESH_EVIDENCE_RECORDS_EXISTS is true", SOL_LST_FRESH_EVIDENCE_RECORDS_EXISTS === true, `v=${SOL_LST_FRESH_EVIDENCE_RECORDS_EXISTS}`);
+  add("14E-B: records assign no risk scores", SOL_LST_FRESH_EVIDENCE_RECORDS_ASSIGN_RISK_SCORES === false, `v=${SOL_LST_FRESH_EVIDENCE_RECORDS_ASSIGN_RISK_SCORES}`);
+  add("14E-C: records approve no candidates", SOL_LST_FRESH_EVIDENCE_RECORDS_APPROVE_CANDIDATES === false, `v=${SOL_LST_FRESH_EVIDENCE_RECORDS_APPROVE_CANDIDATES}`);
+  add("14E-D: records enable no multi-protocol selection", SOL_LST_FRESH_EVIDENCE_RECORDS_ENABLE_MULTI_PROTOCOL_SELECTION === false, `v=${SOL_LST_FRESH_EVIDENCE_RECORDS_ENABLE_MULTI_PROTOCOL_SELECTION}`);
+  add("14E-E: records update no live recommendations", SOL_LST_FRESH_EVIDENCE_RECORDS_UPDATE_LIVE_RECOMMENDATIONS === false, `v=${SOL_LST_FRESH_EVIDENCE_RECORDS_UPDATE_LIVE_RECOMMENDATIONS}`);
+  add("14E-F: records enable no transactions", SOL_LST_FRESH_EVIDENCE_RECORDS_ENABLE_TRANSACTIONS === false, `v=${SOL_LST_FRESH_EVIDENCE_RECORDS_ENABLE_TRANSACTIONS}`);
+  add("14E-G: records require no wallet signature", SOL_LST_FRESH_EVIDENCE_RECORDS_REQUIRE_WALLET_SIGNATURE === false, `v=${SOL_LST_FRESH_EVIDENCE_RECORDS_REQUIRE_WALLET_SIGNATURE}`);
+
+  // 14E-H/I. Staged-only protocol ids; never jito.
+  add("14E-H: fresh evidence inputs include only staged protocol ids", inputs.every((i) => STAGED.includes(i.protocolId)), `nonStaged=${inputs.filter((i) => !STAGED.includes(i.protocolId)).length}`);
+  add("14E-I: fresh evidence inputs do not include jito", inputs.every((i) => (i.protocolId as string) !== "jito"), `jito=${inputs.filter((i) => (i.protocolId as string) === "jito").length}`);
+
+  // 14E-J…N. Every recorded input is fully populated (well-formed). Vacuous while
+  // Mode A arrays are empty; enforced the moment any real record is added.
+  add("14E-J: every fresh evidence input has sourceName", inputs.every((i) => typeof i.sourceName === "string" && i.sourceName.trim() !== ""), `n=${inputs.length}`);
+  add("14E-K: every fresh evidence input has sourceUrl", inputs.every((i) => typeof i.sourceUrl === "string" && i.sourceUrl.trim() !== ""), `n=${inputs.length}`);
+  add("14E-L: every fresh evidence input has confirmedAt", inputs.every((i) => typeof i.confirmedAt === "string" && !Number.isNaN(Date.parse(i.confirmedAt))), `n=${inputs.length}`);
+  add("14E-M: every fresh evidence input has confirmedBy", inputs.every((i) => typeof i.confirmedBy === "string" && i.confirmedBy.trim() !== ""), `n=${inputs.length}`);
+  add("14E-N: every fresh evidence input has reviewerRole", inputs.every((i) => typeof i.reviewerRole === "string" && i.reviewerRole.length > 0), `n=${inputs.length}`);
+
+  // 14E-O/P. Records go through the 14D intake; totals line up.
+  add("14E-O: every fresh evidence input is processed through the intake", records.length === inputs.length, `records=${records.length} inputs=${inputs.length}`);
+  add("14E-P: summary totalInputs matches input count", status.totalInputs === inputs.length, `total=${status.totalInputs} inputs=${inputs.length}`);
+
+  // 14E-Q…T. Status flags stay off.
+  add("14E-Q: summary assignsRiskScores is false", status.assignsRiskScores === false, `v=${status.assignsRiskScores}`);
+  add("14E-R: summary approvesCandidates is false", status.approvesCandidates === false, `v=${status.approvesCandidates}`);
+  add("14E-S: summary updatesLiveRecommendations is false", status.updatesLiveRecommendations === false, `v=${status.updatesLiveRecommendations}`);
+  add("14E-T: summary transactionsEnabled is false", status.transactionsEnabled === false, `v=${status.transactionsEnabled}`);
+
+  // 14E-U…W. Risk-gate preview never scores/approves/updates.
+  add("14E-U: risk gate preview does not assign scores", preview.every((p) => (p.scoreAssigned as boolean) === false), `n=${preview.length}`);
+  add("14E-V: risk gate preview does not approve candidates", preview.every((p) => (p.candidateApproved as boolean) === false), `n=${preview.length}`);
+  add("14E-W: risk gate preview does not update live recommendations", preview.every((p) => (p.liveRecommendationsUpdated as boolean) === false), `n=${preview.length}`);
+
+  // 14E-X/Y. Live selection unchanged.
+  add("14E-X: live staking suggestion still selects Jito/JitoSOL", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  {
+    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "Jupiter", "BlazeStake", "Sanctum"];
+    const leaked = other.filter((t) => JSON.stringify(staking?.protocolSelection).includes(t));
+    add("14E-Y: live staking suggestion does not select mSOL/JupSOL/bSOL/INF", leaked.length === 0, `leaked=${leaked.join(",") || "none"}`);
+  }
+
+  // 14E-Z/AA. Demo Mode and /testing unchanged.
+  {
+    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "BlazeStake", "Sanctum"];
+    const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
+    add("14E-Z: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
+    const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
+    add("14E-AA: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && testLeak.length === 0, `leak=${testLeak.join(",") || "none"}`);
+  }
+
+  // 14E-AB. No transaction/signature/swap path in the records output.
+  {
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "swap(", "deposit(", "withdraw(", "unstake("];
+    const hits = tokens.filter((t) => docJson.toLowerCase().includes(t));
+    add("14E-AB: no transaction/signature/swap path in fresh-evidence records", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14E-AC. No forbidden investment claims in the records copy.
+  {
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const hits = forbidden.filter((w) => docJson.toLowerCase().includes(w));
+    add("14E-AC: no forbidden investment claims in fresh-evidence records copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  // 14E-AD/AE. Ready-state semantics: any candidate with complete records is ready;
+  // with incomplete/empty records none is ready (current: all blocked).
+  add("14E-AD: candidates with complete real records are readyForRiskGate", summaries.filter((s) => s.marketDataComplete && s.mechanicsComplete && s.evidenceComplete).every((s) => s.readyForRiskGate === true), `ready=${status.candidatesReadyForRiskGate}`);
+  add("14E-AE: incomplete/empty records keep candidates not ready (all blocked)", status.candidatesReadyForRiskGate === 0, `ready=${status.candidatesReadyForRiskGate}`);
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -8446,6 +8561,7 @@ export function printFixtureResults(): void {
     ...runSolLstSourceValueConfirmationFixtureChecks(),
     ...runSolLstRiskScoringGateFixtureChecks(),
     ...runSolLstFreshEvidenceIntakeFixtureChecks(),
+    ...runSolLstFreshEvidenceRecordsFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

@@ -1125,3 +1125,16 @@ protocols/categories are rejected. `summarizeSolLstFreshEvidenceRecords` reports
 non-live `previewSolLstRiskGateWithFreshEvidence` shows that even a complete package
 **still requires rubric + risk-approval decision**. It **invents no values**, assigns no
 scores, approves nothing, and changes nothing live (not imported by any live/UI file).
+
+## Real fresh-evidence records for staged candidates (Step 14E)
+
+Where real, freshly verified evidence is recorded via the 14D intake — see
+[solLiquidStakingFreshEvidenceRecords.md](solLiquidStakingFreshEvidenceRecords.md).
+**Current state: Mode A (empty/partial)** — no fresh verified values are available yet, so
+the per-candidate input arrays are empty and **all four candidates remain blocked** (none
+`readyForRiskGate`); the stale 14B values are not reused as fresh and nothing is invented.
+`getSolLstFreshEvidenceRecords` / `getSolLstFreshEvidenceSummaries` /
+`summarizeSolLstFreshEvidenceRecordStatus` report the roll-up (all counts 0). Add records
+by appending fully populated inputs to the matching array; a candidate becomes ready only
+with all ten categories fresh + accepted, and even then still needs rubric + risk-approval
+decision. No scores, no approval, no live/Demo/testing change, no transaction/signature.

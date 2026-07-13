@@ -644,3 +644,13 @@ confirmedAt + confirmedBy + reviewerRole within 24h; otherwise stale/incomplete/
 No value or evidence is invented; without fresh input candidates stay blocked. It assigns
 no scores, approves nothing, selects nothing, and changes no live/Demo/testing behavior. A
 non-live preview confirms a complete package still needs rubric + risk-approval decision.
+
+**Step 14E — real fresh-evidence records:** `solLiquidStakingFreshEvidenceRecords.ts` (see
+[solLiquidStakingFreshEvidenceRecords.md](solLiquidStakingFreshEvidenceRecords.md)) is
+where real verified evidence is recorded via the 14D intake. **Currently Mode A
+(empty/partial)** — no fresh verified values are available, so the arrays are empty and all
+four staged candidates remain blocked (none `readyForRiskGate`); stale 14B values are not
+reused as fresh and nothing is invented. Records are added by appending fully populated
+inputs (value + unit + source + confirmedAt + confirmedBy + reviewerRole + notes) within
+the 24h window. No scores, no approval, no live-recommendation change, no
+transaction/signature.
