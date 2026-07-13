@@ -16,7 +16,7 @@
  * Rollback: set `JITOSOL_BETA_READ_ONLY_RECOMMENDATION_ENABLED = false` (real-wallet
  * staking returns to `protocolSelection.status = not_evaluated`).
  */
-import type { ProtocolSelectionDisplay, RouteEvaluationDisplay } from "./engineTypes";
+import type { ProtocolSelectionDisplay, RouteEvaluationDisplay, ReviewExternalLink } from "./engineTypes";
 import { getJitoSolDirectProtocolRouteEvaluationDisplay } from "./jitoSolReadOnlyRouteEvaluation";
 
 /** Read-only recommendation is ENABLED for the JitoSOL beta. */
@@ -147,6 +147,32 @@ export function getJitoSolReadOnlyBetaGoNoGo(): JitoSolReadOnlyBetaGoNoGo {
 
 /** The JitoSOL recommendation uses the READ-ONLY route evaluation (Step 13I). */
 export const JITOSOL_BETA_ROUTE_EVALUATION_READ_ONLY = true;
+
+/* ------------------------------------------------------------------ *
+ * Step 13J — READ-ONLY "Open Jito staking page" external handoff link.
+ * ------------------------------------------------------------------ */
+/** Jito's own staking page (matches the protocol registry `manageUrl`). */
+export const JITOSOL_STAKING_EXTERNAL_URL = "https://www.jito.network/staking/";
+export const JITOSOL_EXTERNAL_LINK_LABEL = "Open Jito staking page";
+/** The link opens in a NEW TAB on user click. */
+export const JITOSOL_EXTERNAL_LINK_OPENS_NEW_TAB = true;
+/** WealthSmith NEVER auto-opens it — user click only. */
+export const JITOSOL_EXTERNAL_LINK_AUTO_OPENS = false;
+/** Read-only: opening the page executes nothing and moves no funds. */
+export const JITOSOL_EXTERNAL_LINK_IS_READ_ONLY = true;
+
+/**
+ * The read-only external handoff link for the JitoSOL recommendation. Rendered as
+ * a user-click anchor that opens Jito's staking page in a new tab — never
+ * auto-opened, never a transaction/signature, never a completion.
+ */
+export function getJitoSolExternalStakingLink(): ReviewExternalLink {
+  return {
+    label: JITOSOL_EXTERNAL_LINK_LABEL,
+    url: JITOSOL_STAKING_EXTERNAL_URL,
+    opensInNewTab: JITOSOL_EXTERNAL_LINK_OPENS_NEW_TAB,
+  };
+}
 
 /**
  * The read-only "Route and execution checks" display for the JitoSOL recommendation.

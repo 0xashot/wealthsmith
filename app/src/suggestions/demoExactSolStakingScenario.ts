@@ -20,6 +20,7 @@ import type { SuggestionCardState } from "../types/dashboard";
 import type { SuggestionReviewDetails } from "./engineTypes";
 import type { RailSuggestions } from "./useRailSuggestions";
 import { getJitoSolDirectProtocolRouteEvaluationDisplay } from "./jitoSolReadOnlyRouteEvaluation";
+import { getJitoSolExternalStakingLink } from "./jitoSolBetaActivation";
 
 export const DEMO_EXACT_SOL_STAKING_SCENARIO_EXISTS = true;
 export const DEMO_EXACT_SOL_STAKING_SCENARIO_DEMO_ONLY = true;
@@ -189,6 +190,8 @@ export function getDemoExactSolStakingReviewDetails(): SuggestionReviewDetails {
       inputAmountSol: wallet.eligibleSol,
       checkedAt: "2026-07-13T00:00:00Z",
     }),
+    // Read-only external handoff (Step 13J) — same shape real wallet mode uses.
+    externalLink: getJitoSolExternalStakingLink(),
     limitations: [
       { kind: "protocol_not_selected", text: s.limitations[0] },
       { kind: "review_only", text: s.limitations[1] },

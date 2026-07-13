@@ -15,6 +15,7 @@ import { useEffect, useId, useRef } from "react";
 import ButtonIcon from "./ButtonIcon";
 import Badge from "./Badge";
 import closeUrl from "../../../assets/icons/ui/close.svg";
+import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
 import type {
   ReviewAssetRole,
   ReviewMetric,
@@ -388,6 +389,22 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
                 ))}
               </ul>
             </section>
+          )}
+
+          {/* READ-ONLY external handoff (Step 13J). A plain anchor the user may
+              click to open the protocol's own page in a new tab. WealthSmith never
+              auto-opens it, executes a transaction, requests a signature, or marks
+              the suggestion complete — clicking only navigates. */}
+          {details.externalLink && (
+            <a
+              className="review-modal__external"
+              href={details.externalLink.url}
+              {...(details.externalLink.opensInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              aria-label={`${details.externalLink.label}. Opens the protocol page in a new tab. No transaction is created.`}
+            >
+              <span>{details.externalLink.label}</span>
+              <ButtonIcon src={externalLinkUrl} />
+            </a>
           )}
         </div>
       </div>

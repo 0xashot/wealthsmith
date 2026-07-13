@@ -393,6 +393,11 @@ export interface SuggestionReviewDetails {
    * these guardrails are removed from the generic "Not evaluated yet" group.
    */
   routeEvaluation?: RouteEvaluationDisplay;
+  /**
+   * Optional READ-ONLY external handoff link (Step 13J). Rendered as a user-click
+   * anchor (new tab) — never auto-opened, never a transaction/signature/completion.
+   */
+  externalLink?: ReviewExternalLink;
 }
 
 /**
@@ -445,6 +450,18 @@ export interface RouteEvaluationDisplay {
   groups: RouteEvaluationDisplayGroup[];
   /** Informational, read-only reassurance — never an execution-readiness claim. */
   explanation: string;
+}
+
+/**
+ * A READ-ONLY external handoff link (Step 13J), e.g. "Open Jito staking page".
+ * The modal renders it as a plain anchor the user may click to open the protocol's
+ * own page in a new tab. WealthSmith never auto-opens it, executes a transaction,
+ * requests a signature, or completes the suggestion — the user chooses to continue.
+ */
+export interface ReviewExternalLink {
+  label: string;
+  url: string;
+  opensInNewTab: boolean;
 }
 
 /**

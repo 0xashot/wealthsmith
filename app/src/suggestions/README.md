@@ -1060,3 +1060,15 @@ is evaluation only — no swap, no transaction, no signature, no route execution
 suggestion stays `review_only` with all execution booleans false. The section replaces
 the generic "not evaluated yet" route rows for this recommendation (real wallet, Demo,
 and `/testing`); other suggestions are unchanged.
+
+## Read-only "Open Jito staking page" link (Step 13J)
+
+Review Details for the JitoSOL recommendation includes a read-only **"Open Jito staking
+page"** link that opens `https://www.jito.network/staking/` in a new tab on user click
+(`target="_blank"`, `rel="noopener noreferrer"`). WealthSmith never auto-opens it,
+executes a transaction, requests a signature, or completes the suggestion — the user
+chooses to continue externally. It appears on real wallet, Demo (`DEMO_PREVIEW_NOT_LIVE`),
+and `/testing` (`TESTING_PREVIEW_NOT_LIVE`) via the shared modal, and the card keeps its
+separate "Review" button (the link never becomes the CTA). Testing scope + QA status:
+[jitoSolRecommendationQaChecklist.md](jitoSolRecommendationQaChecklist.md) — **real-wallet
+browser QA is pending a funded wallet**; real-wallet behavior stays covered by fixtures.

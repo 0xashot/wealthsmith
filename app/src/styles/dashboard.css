@@ -2239,6 +2239,33 @@
   font-weight: 700;
 }
 
+/* Read-only external handoff link (Step 13J) — opens the protocol page in a new
+   tab on user click. Styled as a secondary button; it executes nothing. */
+.review-modal__external {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+  align-self: start;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  font: var(--typography-button-sm-font);
+  color: var(--color-action-secondary-text-default);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-action-secondary-stroke-default);
+  border-radius: var(--radius-control-md);
+  text-decoration: none;
+  transition: var(--motion-interaction-hover-property) var(--motion-interaction-hover-duration)
+    var(--motion-interaction-hover-easing);
+}
+
+.review-modal__external:hover {
+  background: var(--color-action-secondary-background-hover);
+}
+
+.review-modal__external:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
 @media (max-width: 640px) {
   .review-modal {
     width: 100%;

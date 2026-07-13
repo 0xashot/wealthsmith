@@ -316,6 +316,9 @@ const staking: TestingFixture = {
       inputAmountSol: 12.4,
       checkedAt: "2026-07-13T00:00:00Z",
     }),
+    // Read-only external handoff (Step 13J) — same shape real wallet mode uses.
+    // Inlined here to keep this fixtures module free of live/beta imports.
+    externalLink: { label: "Open Jito staking page", url: "https://www.jito.network/staking/", opensInNewTab: true },
     limitations: [REVIEW_ONLY_LIMITATION],
     safetyNotes: REVIEW_ONLY_NOTES,
     demoLabel: TESTING_PREVIEW_NOT_LIVE,

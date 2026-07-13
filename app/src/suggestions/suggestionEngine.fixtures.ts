@@ -268,6 +268,12 @@ import {
   getJitoSolBetaProtocolSelectionDisplay,
   getJitoSolBetaActivatedMetadata,
   getJitoSolReadOnlyBetaGoNoGo,
+  JITOSOL_STAKING_EXTERNAL_URL,
+  JITOSOL_EXTERNAL_LINK_LABEL,
+  JITOSOL_EXTERNAL_LINK_OPENS_NEW_TAB,
+  JITOSOL_EXTERNAL_LINK_AUTO_OPENS,
+  JITOSOL_EXTERNAL_LINK_IS_READ_ONLY,
+  getJitoSolExternalStakingLink,
 } from "./jitoSolBetaActivation";
 import {
   TESTING_PAGE_EXISTS,
@@ -7802,6 +7808,72 @@ export function runJitoSolRouteEvaluationFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 13J — READ-ONLY "Open Jito staking page" external handoff link. Verifies
+ * the link config, that the real-wallet / Demo / testing staking details carry it,
+ * that it opens Jito's staking page in a new tab (user click only, never
+ * auto-opened), and that nothing about it enables a transaction/signature.
+ * ------------------------------------------------------------------ */
+export function runJitoSolExternalLinkFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const link = getJitoSolExternalStakingLink();
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const stakingCard = staking ? toSuggestionCard(staking) : undefined;
+  const stakingLink = staking?.reviewDetails?.externalLink;
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+  const registryUrl = getProtocolCandidateById("jito")?.manageUrl;
+
+  // 13J-A…E. Link config.
+  add("13J-A: external URL is the Jito staking page", JITOSOL_STAKING_EXTERNAL_URL === "https://www.jito.network/staking/", `url=${JITOSOL_STAKING_EXTERNAL_URL}`);
+  add("13J-B: external link opens in a new tab", JITOSOL_EXTERNAL_LINK_OPENS_NEW_TAB === true, `v=${JITOSOL_EXTERNAL_LINK_OPENS_NEW_TAB}`);
+  add("13J-C: external link is never auto-opened", JITOSOL_EXTERNAL_LINK_AUTO_OPENS === false, `v=${JITOSOL_EXTERNAL_LINK_AUTO_OPENS}`);
+  add("13J-D: external link is read-only", JITOSOL_EXTERNAL_LINK_IS_READ_ONLY === true, `v=${JITOSOL_EXTERNAL_LINK_IS_READ_ONLY}`);
+  add("13J-E: link helper returns label + url + opensInNewTab", link.label === JITOSOL_EXTERNAL_LINK_LABEL && link.url === JITOSOL_STAKING_EXTERNAL_URL && link.opensInNewTab === true, `label=${link.label} url=${link.url}`);
+
+  // 13J-F. Link label is "Open Jito staking page".
+  add("13J-F: external link label is 'Open Jito staking page'", link.label === "Open Jito staking page", `label=${link.label}`);
+
+  // 13J-G. URL matches the protocol registry (single source of truth).
+  add("13J-G: external URL matches the Jito protocol registry manageUrl", registryUrl === JITOSOL_STAKING_EXTERNAL_URL, `registry=${registryUrl}`);
+
+  // 13J-H…J. Present on real wallet / Demo / testing staking details.
+  add("13J-H: real wallet JitoSOL staking details include the external link", stakingLink?.url === JITOSOL_STAKING_EXTERNAL_URL && stakingLink?.label === "Open Jito staking page" && stakingLink?.opensInNewTab === true, `url=${stakingLink?.url}`);
+  add("13J-I: Demo SOL Staking details include the external link", demo.externalLink?.url === JITOSOL_STAKING_EXTERNAL_URL && demo.externalLink?.opensInNewTab === true, `url=${demo.externalLink?.url}`);
+  add("13J-J: testing Staking fixture includes the external link", testingStaking?.details.externalLink?.url === JITOSOL_STAKING_EXTERNAL_URL && testingStaking?.details.externalLink?.label === "Open Jito staking page", `url=${testingStaking?.details.externalLink?.url}`);
+
+  // 13J-K…N. The link never turns the suggestion into an execution/handoff CTA.
+  add("13J-K: staking suggestion stays actionKind review_only", staking?.action_kind === "review_only", `kind=${staking?.action_kind}`);
+  add("13J-L: staking card CTA is not an external-protocol handoff (Review button stays)", stakingCard?.cta.action !== "open_external_protocol" && stakingCard?.protocol_decision == null, `action=${stakingCard?.cta.action}`);
+  add("13J-M: staking card CTA executes no transaction / signature / completion", stakingCard?.cta.executes_transaction === false && stakingCard?.cta.requires_wallet_signature === false && stakingCard?.cta.completion_on_click === false, `tx=${stakingCard?.cta.executes_transaction}`);
+  add("13J-N: labels unchanged — Demo DEMO_PREVIEW_NOT_LIVE, testing TESTING_PREVIEW_NOT_LIVE", demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && testingStaking?.card.demoLabel === TESTING_PREVIEW_NOT_LIVE, `demo=${demo.demoLabel} testing=${testingStaking?.card.demoLabel}`);
+
+  // 13J-O. No sign/send transaction path anywhere in the link/details.
+  {
+    const json = (JSON.stringify(link) + JSON.stringify(staking?.reviewDetails?.externalLink) + JSON.stringify(demo.externalLink)).toLowerCase();
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage"];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("13J-O: no sign/send transaction path in the external link", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  // 13J-P. No forbidden investment / auto-open claims in the external link copy.
+  {
+    const json = (JSON.stringify(link) + JSON.stringify(staking?.reviewDetails?.externalLink)).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy", "auto-open", "automatically open"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("13J-P: no forbidden claims in the external link copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -7855,6 +7927,7 @@ export function printFixtureResults(): void {
     ...runJitoSolBetaActivationFixtureChecks(),
     ...runTestingPageFixtureChecks(),
     ...runJitoSolRouteEvaluationFixtureChecks(),
+    ...runJitoSolExternalLinkFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
