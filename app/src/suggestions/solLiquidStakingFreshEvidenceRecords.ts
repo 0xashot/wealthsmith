@@ -45,16 +45,18 @@ export const SOL_LST_FRESH_EVIDENCE_RECORDS_REQUIRE_WALLET_SIGNATURE = false;
  * the candidate stays blocked until every required category has a fresh accepted
  * record. DO NOT add a record with a placeholder or stale value.
  * ------------------------------------------------------------------ */
-// Step 14F — Marinade · mSOL. PARTIAL: 5 of 10 categories verified from public
-// sources (founder-authorized fetch, 2026-07-13). Market data is fresh from the
-// DefiLlama mSOL pool; withdrawal MECHANISM and audit list from official Marinade
-// docs. The other 5 categories stay MISSING because they could not be verified
-// unambiguously: direct_unstake_time + direct_unstake_fee + annual_management_fee
-// (Marinade's FAQ vs. search results CONFLICT — 0% vs 0.2% unstake fee, 1 vs 1-2
-// epochs, and management fee is ambiguous), and operational_risk + incident_review
-// (no clean official source obtained). No stale 14B value is reused and nothing is
-// invented. mSOL stays NOT readyForRiskGate (market complete; mechanics + evidence
-// incomplete).
+// Step 14F/14G — Marinade · mSOL. PARTIAL: 8 of 10 categories verified from public
+// sources (founder-authorized fetch, 2026-07-13). 14F recorded market data
+// (DefiLlama pool) + withdrawal MECHANISM + audit list. 14G resolved three more:
+// direct_unstake_fee (Marinade FAQ verbatim: 0.2% for the direct/delayed path),
+// operational_risk (delegation/stake-pool/LP/multisig dependencies), and
+// incident_review (a documented SAM auction-logic bug — NOT a clean-history claim).
+// TWO categories stay MISSING: direct_unstake_time (epoch-based "1 epoch"; no
+// reliable hours conversion and the field is numeric) and annual_management_fee
+// (current docs indicate no reward fee via the SAM model, but no crisp verbatim 0%
+// was obtained and older sources cite ~6% — left missing as unresolved). No stale
+// 14B value is reused and nothing is invented. mSOL stays NOT readyForRiskGate
+// (market + evidence complete; mechanics incomplete).
 export const MARINADE_MSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [
   {
     protocolId: "marinade",
@@ -115,6 +117,42 @@ export const MARINADE_MSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [
     confirmedBy: "Ashot",
     reviewerRole: "founder",
     notes: ["Auditor list verified from Marinade's official audits page. Point-in-time review; an audit does not by itself ensure future safety."],
+  },
+  {
+    protocolId: "marinade",
+    category: "direct_unstake_fee",
+    value: 0.2,
+    unit: "pct",
+    sourceName: "Marinade Documentation — FAQ",
+    sourceUrl: "https://docs.marinade.finance/marinade-protocol/faq",
+    confirmedAt: "2026-07-13T13:30:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Direct (delayed) mSOL unstake fee: 0.2% (20 bps) per the Marinade FAQ (quoted verbatim). This is the direct-protocol path (claim ticket, ~1 epoch). Marinade's SEPARATE instant-unstake path adds no extra Marinade protocol fee but is priced via the LP / Jupiter DEX route (market slippage), so it is not a single fixed fee — see withdrawal_mechanics."],
+  },
+  {
+    protocolId: "marinade",
+    category: "operational_risk",
+    value: "Operational dependencies: (a) validator delegation — Marinade becomes the staking authority and delegates pooled SOL to validators via its Stake Auction Market; (b) stake pool — mSOL represents SOL held in Marinade's stake pool; (c) liquidity dependency — instant unstake routes mSOL to SOL via a Jupiter DEX route and depends on LP depth; (d) program control — the mSOL smart contract is controlled by a 13-party community multisig requiring 6 signers.",
+    unit: "text",
+    sourceName: "Marinade Documentation — What is mSOL? / Audits",
+    sourceUrl: "https://docs.marinade.finance/marinade-protocol/protocol-overview/marinade-liquid/what-is-msol",
+    confirmedAt: "2026-07-13T13:30:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Sourced summary of operational dependencies (delegation via SAM, stake pool, LP/Jupiter instant-unstake dependency, 13-party/6-signer multisig program control). Descriptive only — not an endorsement or safety claim."],
+  },
+  {
+    protocolId: "marinade",
+    category: "incident_review",
+    value: "Point-in-time review (2026-07-13): a Marinade community forum incident report documents a bug in the Stake Auction Market unstake-priority logic that let validators retain delegation while underpaying the pool, causing ~37,000 SOL (~$5M) in losses / missed staker rewards (~28% of advertised APY on affected stake) over epochs 652-777. Classified as a program logic bug in the auction mechanism, not a theft or drain of staked principal. Marinade's response was criticized in the thread.",
+    unit: "text",
+    sourceName: "Marinade community forum — Incident Report: 37,000 SOL in Losses",
+    sourceUrl: "https://forum.marinade.finance/t/incident-report-37-000-sol-in-losses-a-call-for-investigation-and-action/1853",
+    confirmedAt: "2026-07-13T13:30:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Community forum report (not an official Marinade postmortem). Point-in-time finding, NOT a clean-history claim; concerns the SAM rewards mechanism, not a loss of staked principal. A bug bounty (Immunefi) exists."],
   },
 ];
 export const JUPITER_JUPSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [];

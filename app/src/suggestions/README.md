@@ -1139,12 +1139,13 @@ by appending fully populated inputs to the matching array; a candidate becomes r
 with all ten categories fresh + accepted, and even then still needs rubric + risk-approval
 decision. No scores, no approval, no live/Demo/testing change, no transaction/signature.
 
-**Step 14F — Marinade · mSOL:** founder-authorized public-source fetch recorded **5 of 10**
-categories (accepted): `tvl` $182.84M, `current_apy` 4.737% (point-in-time), `apy_30d`
-5.84% (30-day mean) from the DefiLlama mSOL pool; `withdrawal_mechanics` and
-`audit_security` (Kudelski/Ackee/Neodyme/Sec3) from official Marinade docs. The other five
-stay **missing** — `direct_unstake_time` / `direct_unstake_fee` / `annual_management_fee`
-(sources conflict: 0% vs 0.2% fee, 1 vs 1–2 epochs, management fee ambiguous) and
-`operational_risk` / `incident_review` (no clean source). No stale 14B value reused,
-nothing invented. mSOL is **`readyForRiskGate: false`** (mechanics + evidence incomplete),
-unscored, unapproved, and absent from real wallet mode.
+**Steps 14F + 14G — Marinade · mSOL:** founder-authorized public-source fetches recorded
+**8 of 10** categories (accepted): market data (`tvl`/`current_apy`/`apy_30d`, DefiLlama
+pool) + `withdrawal_mechanics` + `audit_security` (14F), and `direct_unstake_fee` (0.2%
+direct/delayed path, FAQ verbatim), `operational_risk` (delegation/stake-pool/LP/multisig),
+`incident_review` (documented SAM unstake-priority logic bug — not a clean-history claim)
+(14G). Two stay **missing**: `direct_unstake_time` (epoch-based; no reliable numeric hours)
+and `annual_management_fee` (unresolved — current docs indicate no reward fee via SAM but no
+verbatim 0% obtained, historical ~6% conflict). No stale 14B value reused, nothing invented.
+mSOL is **`readyForRiskGate: false`** (mechanics incomplete), unscored, unapproved, absent
+from real wallet mode.

@@ -29,7 +29,7 @@ arrays are **empty**, so every staged candidate stays **blocked** and none is
 
 | Candidate | Fresh records | Status |
 | --- | --- | --- |
-| Marinade · mSOL | 5 / 10 (see 14F below) | blocked — mechanics + evidence incomplete |
+| Marinade · mSOL | 8 / 10 (see 14F+14G below) | blocked — mechanics incomplete (2 categories) |
 | Jupiter · JupSOL | none | blocked — all categories missing |
 | BlazeStake · bSOL | none | blocked — all categories missing |
 | Sanctum · INF | none | blocked — all categories missing |
@@ -89,12 +89,12 @@ true`** — no score is assigned and no candidate is approved.
 `approvesCandidates`, `updatesLiveRecommendations`, `transactionsEnabled` all `false`.
 mSOL/JupSOL/bSOL/INF do not appear in real wallet recommendations.
 
-## Marinade · mSOL (Step 14F)
+## Marinade · mSOL (Steps 14F + 14G)
 
-**Status: partial — 5 of 10 categories verified & accepted; mSOL is NOT
-`readyForRiskGate`.** Founder-authorized public-source fetch on **2026-07-13**
-(`confirmedBy: "Ashot"`, `reviewerRole: "founder"`). The stale 14B figures were not
-reused and nothing was invented.
+**Status: partial — 8 of 10 categories verified & accepted; mSOL is NOT
+`readyForRiskGate`.** Founder-authorized public-source fetches on **2026-07-13**
+(`confirmedBy: "Ashot"`, `reviewerRole: "founder"`). The stale 14B figures were not reused
+and nothing was invented.
 
 ### Recorded (accepted)
 
@@ -103,35 +103,37 @@ reused and nothing was invented.
 | 1 | `tvl` | $182,837,237 | [DefiLlama mSOL pool](https://yields.llama.fi/chart/b3f93865-5ec8-4662-90a0-11808e0aa2bd) (point 2026-07-13T12:01Z) |
 | 2 | `current_apy` | 4.73658% (point-in-time snapshot) | DefiLlama mSOL pool |
 | 3 | `apy_30d` | 5.84% (mean of last 30 daily points, range 4.69–7.07%) | DefiLlama mSOL pool |
-| 4 | `withdrawal_mechanics` | Delayed unstake → claim ticket, claimable after ~1–2 epochs; instant unstake via LP for a variable fee | [Marinade FAQ](https://docs.marinade.finance/marinade-protocol/faq) |
+| 4 | `withdrawal_mechanics` | Delayed unstake → claim ticket (~1–2 epochs); instant unstake via Jupiter LP route | [Marinade FAQ](https://docs.marinade.finance/marinade-protocol/faq) |
+| 6 | `direct_unstake_fee` | 0.2% (direct/delayed path; instant path priced via LP/Jupiter, no fixed fee) | [Marinade FAQ](https://docs.marinade.finance/marinade-protocol/faq) |
 | 8 | `audit_security` | Audited by Kudelski, Ackee, Neodyme, Sec3; SOC 2 Type I/II | [Marinade Audits](https://docs.marinade.finance/marinade-protocol/security/audits) |
+| 9 | `operational_risk` | Delegation via SAM, stake pool, LP/Jupiter dependency, 13-party/6-signer multisig program control | [What is mSOL?](https://docs.marinade.finance/marinade-protocol/protocol-overview/marinade-liquid/what-is-msol) |
+| 10 | `incident_review` | Documented SAM unstake-priority logic bug: ~37,000 SOL / ~28% missed rewards over epochs 652–777 (program logic bug, not a principal drain) | [Marinade forum incident report](https://forum.marinade.finance/t/incident-report-37-000-sol-in-losses-a-call-for-investigation-and-action/1853) |
 
-> Note: mSOL's DefiLlama APY snapshot oscillates day-to-day with the Solana epoch
-> boundary (`apy === apyBase`, range ~4.7–7.1% over 30 days). `current_apy` records the
-> latest snapshot; `apy_30d` records the smoothed 30-day mean (computed deterministically
-> from the raw chart). Audit existence is a point-in-time fact, not a guarantee of safety.
+> Notes: mSOL's DefiLlama APY snapshot oscillates day-to-day with the Solana epoch boundary
+> (`apy === apyBase`, range ~4.7–7.1%); `current_apy` is the latest snapshot, `apy_30d` the
+> deterministically computed 30-day mean. `direct_unstake_fee` = 0.2% is the direct/delayed
+> path (FAQ verbatim); the instant path adds no Marinade protocol fee but is priced by the
+> LP/Jupiter route. `incident_review` is a point-in-time community-forum finding, **not** a
+> clean-history claim, and concerns the SAM rewards mechanism, not staked principal.
 
-### Still missing — need manual verification
+### Still missing — need verification
 
 | # | Category | Why not recorded |
 | --- | --- | --- |
-| 5 | `direct_unstake_time` | Sources conflict: FAQ says "1 epoch", search summary says "1–2 epochs". Exact hours unverified. |
-| 6 | `direct_unstake_fee` | Sources conflict: FAQ says **0.2%** for mSOL delayed unstake; search summary says **0%**. Unresolved. |
-| 7 | `annual_management_fee` | Ambiguous: some sources say no management fee on rewards; historically 6%. Not confirmable. |
-| 9 | `operational_risk` | No clean, authoritative single source obtained for a point-in-time operational review. |
-| 10 | `incident_review` | No official incident/postmortem source obtained; not recorded (would only be a documented point-in-time review, never a clean-history guarantee). |
+| 5 | `direct_unstake_time` | Epoch-based ("claimable after 1 epoch", 1–2 epochs depending on timing). The field is **numeric** and no reliable fixed-hours conversion is given by the source, so no honest number can be recorded (the mechanism/timing is captured qualitatively in `withdrawal_mechanics`). |
+| 7 | `annual_management_fee` | Current sources indicate **no** commission/management fee on mSOL rewards (revenue comes from validators via the Stake Auction Market), but no crisp verbatim "0%" doc line was obtained and older sources cite ~6%. Left **missing as unresolved** rather than record a number I could not authoritatively confirm. |
 
-Because mechanics and evidence are incomplete, `getSolLstFreshEvidenceSummaries()` reports
-mSOL `marketDataComplete: true`, `mechanicsComplete: false`, `evidenceComplete: false`,
-**`readyForRiskGate: false`** (blockers: `mechanics_incomplete`, `evidence_incomplete`).
-The preview shows `wouldClearValueAndEvidenceBlockers: false` and still
-`stillRequiresRubricApproval: true` / `stillRequiresRiskApprovalDecision: true`; no score
-is assigned and mSOL is not approved.
+Because **mechanics** is incomplete (missing `direct_unstake_time` + `annual_management_fee`),
+`getSolLstFreshEvidenceSummaries()` reports mSOL `marketDataComplete: true`,
+`mechanicsComplete: false`, `evidenceComplete: true`, **`readyForRiskGate: false`**
+(blocker: `mechanics_incomplete`). The preview shows
+`wouldClearValueAndEvidenceBlockers: false` and still `stillRequiresRubricApproval: true` /
+`stillRequiresRiskApprovalDecision: true`; no score is assigned and mSOL is not approved.
 
-To finish mSOL: verify the five missing categories (resolve the unstake fee/time and
-management-fee discrepancies from the authoritative Marinade docs, and complete an
-operational-risk + incident review), append them within the 24h window, and mSOL becomes
-`readyForRiskGate` — still pending rubric + risk-approval decision before any score.
+To finish mSOL: obtain an authoritative fixed unstake time (or a reliable epoch→hours
+basis) and an authoritative management-fee statement, append them within the 24h window,
+and mSOL becomes `readyForRiskGate` — still pending rubric + risk-approval decision before
+any score.
 
 ## Next steps
 
