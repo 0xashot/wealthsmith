@@ -655,9 +655,12 @@ inputs (value + unit + source + confirmedAt + confirmedBy + reviewerRole + notes
 the 24h window. No scores, no approval, no live-recommendation change, no
 transaction/signature.
 
-**Step 14F — Marinade · mSOL:** attempted to fill mSOL's fresh evidence, but no value
-could be verified with valid human-reviewer provenance this step; the stale 14B mSOL
-figures must not be reused as fresh and nothing is invented. The mSOL array stays empty
-(0/10 categories), so mSOL remains blocked, unscored, unapproved, and absent from real
-wallet mode. The records doc lists the ten categories and their sources for manual
-verification.
+**Step 14F — Marinade · mSOL:** a founder-authorized public-source fetch (2026-07-13)
+recorded **5 of 10** categories: market data (`tvl` $182,837,237, `current_apy` 4.73658%,
+`apy_30d` 5.84%) from the DefiLlama mSOL pool `b3f93865-…`, and `withdrawal_mechanics` +
+`audit_security` (Kudelski/Ackee/Neodyme/Sec3, SOC 2) from official Marinade docs. The
+remaining five are **not recorded** — the delayed-unstake fee/time and management fee are
+reported inconsistently across Marinade sources (0% vs 0.2%, 1 vs 1–2 epochs), and no clean
+operational-risk/incident source was obtained. Stale 14B values were not reused and nothing
+was invented, so mSOL stays `readyForRiskGate: false` — unscored, unapproved, absent from
+real wallet mode.

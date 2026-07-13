@@ -29,7 +29,7 @@ arrays are **empty**, so every staged candidate stays **blocked** and none is
 
 | Candidate | Fresh records | Status |
 | --- | --- | --- |
-| Marinade · mSOL | none | blocked — all categories missing |
+| Marinade · mSOL | 5 / 10 (see 14F below) | blocked — mechanics + evidence incomplete |
 | Jupiter · JupSOL | none | blocked — all categories missing |
 | BlazeStake · bSOL | none | blocked — all categories missing |
 | Sanctum · INF | none | blocked — all categories missing |
@@ -91,40 +91,47 @@ mSOL/JupSOL/bSOL/INF do not appear in real wallet recommendations.
 
 ## Marinade · mSOL (Step 14F)
 
-**Status: still blocked — 0 of 10 categories recorded.** No fresh mSOL value/evidence
-could be recorded this step with valid human-reviewer provenance:
+**Status: partial — 5 of 10 categories verified & accepted; mSOL is NOT
+`readyForRiskGate`.** Founder-authorized public-source fetch on **2026-07-13**
+(`confirmedBy: "Ashot"`, `reviewerRole: "founder"`). The stale 14B figures were not
+reused and nothing was invented.
 
-- No verified values + verification timestamp were supplied for mSOL.
-- The **stale 14B** mSOL figures (TVL 184,840,000 / APY 4.75 / APY30d 5.87, confirmed
-  2026-07-12) must **not** be reused as fresh — reusing them would fail the freshness
-  rule and misrepresent provenance.
-- No value may be invented, no placeholder or TEST_ONLY value used, and verification
-  cannot be attributed to a reviewer who did not actually confirm it.
+### Recorded (accepted)
 
-So `MARINADE_MSOL_FRESH_EVIDENCE_INPUTS` stays **empty**, and mSOL is **not**
-`readyForRiskGate`. No score is assigned, mSOL is not approved, and it does not appear in
-real wallet mode.
+| # | Category | Value | Source |
+| --- | --- | --- | --- |
+| 1 | `tvl` | $182,837,237 | [DefiLlama mSOL pool](https://yields.llama.fi/chart/b3f93865-5ec8-4662-90a0-11808e0aa2bd) (point 2026-07-13T12:01Z) |
+| 2 | `current_apy` | 4.73658% (point-in-time snapshot) | DefiLlama mSOL pool |
+| 3 | `apy_30d` | 5.84% (mean of last 30 daily points, range 4.69–7.07%) | DefiLlama mSOL pool |
+| 4 | `withdrawal_mechanics` | Delayed unstake → claim ticket, claimable after ~1–2 epochs; instant unstake via LP for a variable fee | [Marinade FAQ](https://docs.marinade.finance/marinade-protocol/faq) |
+| 8 | `audit_security` | Audited by Kudelski, Ackee, Neodyme, Sec3; SOC 2 Type I/II | [Marinade Audits](https://docs.marinade.finance/marinade-protocol/security/audits) |
 
-### Categories needing manual verification (and where to source them)
+> Note: mSOL's DefiLlama APY snapshot oscillates day-to-day with the Solana epoch
+> boundary (`apy === apyBase`, range ~4.7–7.1% over 30 days). `current_apy` records the
+> latest snapshot; `apy_30d` records the smoothed 30-day mean (computed deterministically
+> from the raw chart). Audit existence is a point-in-time fact, not a guarantee of safety.
 
-| # | Category | Suggested source |
+### Still missing — need manual verification
+
+| # | Category | Why not recorded |
 | --- | --- | --- |
-| 1 | `tvl` | DefiLlama mSOL pool (`.../yields/pool/b3f93865-5ec8-4662-90a0-11808e0aa2bd`) |
-| 2 | `current_apy` | DefiLlama mSOL pool |
-| 3 | `apy_30d` | DefiLlama mSOL pool |
-| 4 | `withdrawal_mechanics` | Official Marinade docs (unstake/withdrawal) |
-| 5 | `direct_unstake_time` | Official Marinade docs |
-| 6 | `direct_unstake_fee` | Official Marinade docs |
-| 7 | `annual_management_fee` | Official Marinade docs |
-| 8 | `audit_security` | Official Marinade security/audit page |
-| 9 | `operational_risk` | Official Marinade docs / documented manual review |
-| 10 | `incident_review` | Marinade incident/security page or documented review |
+| 5 | `direct_unstake_time` | Sources conflict: FAQ says "1 epoch", search summary says "1–2 epochs". Exact hours unverified. |
+| 6 | `direct_unstake_fee` | Sources conflict: FAQ says **0.2%** for mSOL delayed unstake; search summary says **0%**. Unresolved. |
+| 7 | `annual_management_fee` | Ambiguous: some sources say no management fee on rewards; historically 6%. Not confirmable. |
+| 9 | `operational_risk` | No clean, authoritative single source obtained for a point-in-time operational review. |
+| 10 | `incident_review` | No official incident/postmortem source obtained; not recorded (would only be a documented point-in-time review, never a clean-history guarantee). |
 
-To fill: after a reviewer verifies each value within 24h, append fully populated inputs
-(value + unit + sourceName + sourceUrl + real `confirmedAt` + `confirmedBy` +
-`reviewerRole` + notes) to `MARINADE_MSOL_FRESH_EVIDENCE_INPUTS`. Once all ten are fresh
-and accepted, mSOL becomes `readyForRiskGate` — but the preview still shows rubric
-approval and the risk approval decision are required, and no score is assigned here.
+Because mechanics and evidence are incomplete, `getSolLstFreshEvidenceSummaries()` reports
+mSOL `marketDataComplete: true`, `mechanicsComplete: false`, `evidenceComplete: false`,
+**`readyForRiskGate: false`** (blockers: `mechanics_incomplete`, `evidence_incomplete`).
+The preview shows `wouldClearValueAndEvidenceBlockers: false` and still
+`stillRequiresRubricApproval: true` / `stillRequiresRiskApprovalDecision: true`; no score
+is assigned and mSOL is not approved.
+
+To finish mSOL: verify the five missing categories (resolve the unstake fee/time and
+management-fee discrepancies from the authoritative Marinade docs, and complete an
+operational-risk + incident review), append them within the 24h window, and mSOL becomes
+`readyForRiskGate` — still pending rubric + risk-approval decision before any score.
 
 ## Next steps
 

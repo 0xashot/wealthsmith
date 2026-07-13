@@ -1139,9 +1139,12 @@ by appending fully populated inputs to the matching array; a candidate becomes r
 with all ten categories fresh + accepted, and even then still needs rubric + risk-approval
 decision. No scores, no approval, no live/Demo/testing change, no transaction/signature.
 
-**Step 14F — Marinade · mSOL:** the mSOL array **stays empty** — no fresh value/evidence
-could be recorded with valid human-reviewer provenance, the stale 14B mSOL figures are not
-reused as fresh, and nothing is invented. mSOL is **not** `readyForRiskGate` (0/10
-categories), unscored, unapproved, and absent from real wallet mode. The doc lists the ten
-categories + sources needing manual verification; records are wired in once a reviewer
-confirms each value within 24h.
+**Step 14F — Marinade · mSOL:** founder-authorized public-source fetch recorded **5 of 10**
+categories (accepted): `tvl` $182.84M, `current_apy` 4.737% (point-in-time), `apy_30d`
+5.84% (30-day mean) from the DefiLlama mSOL pool; `withdrawal_mechanics` and
+`audit_security` (Kudelski/Ackee/Neodyme/Sec3) from official Marinade docs. The other five
+stay **missing** — `direct_unstake_time` / `direct_unstake_fee` / `annual_management_fee`
+(sources conflict: 0% vs 0.2% fee, 1 vs 1–2 epochs, management fee ambiguous) and
+`operational_risk` / `incident_review` (no clean source). No stale 14B value reused,
+nothing invented. mSOL is **`readyForRiskGate: false`** (mechanics + evidence incomplete),
+unscored, unapproved, and absent from real wallet mode.
