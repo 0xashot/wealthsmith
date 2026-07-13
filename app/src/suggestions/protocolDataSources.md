@@ -608,3 +608,13 @@ JitoSOL is a **direct protocol stake** (not a DEX swap), route cost is *checked 
 review* and DEX liquidity depth / slippage are *not applicable*. A swap-route path stays
 *insufficient data* until a real read-only quote exists; no route/liquidity/slippage value
 is invented. Still read-only: no transaction, signature, or fund movement.
+
+**Step 14A — multi-protocol candidate registry:** the SOL liquid-staking candidates are now
+catalogued in a read-only registry (`solLiquidStakingCandidateRegistry.ts`; see
+[solLiquidStakingCandidateRegistry.md](solLiquidStakingCandidateRegistry.md)). Only JitoSOL
+is approved (`active_read_only_beta`, verified data + risk 7.75); mSOL/JupSOL/bSOL/INF are
+`staged_candidate` with `needs_review` market/mechanics and no risk score. The reviewer-
+confirmed (non-production) DefiLlama values for JupSOL/mSOL/bSOL live in the confirmation
+ledger but are **not** carried in as verified — they stay `needs_review` until 14B
+re-verifies them; INF has no value and none is invented. Nothing here changes live/Demo/
+testing behavior or enables transactions/signatures.

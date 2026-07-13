@@ -1072,3 +1072,16 @@ and `/testing` (`TESTING_PREVIEW_NOT_LIVE`) via the shared modal, and the card k
 separate "Review" button (the link never becomes the CTA). Testing scope + QA status:
 [jitoSolRecommendationQaChecklist.md](jitoSolRecommendationQaChecklist.md) — **real-wallet
 browser QA is pending a funded wallet**; real-wallet behavior stays covered by fixtures.
+
+## Multi-protocol SOL LST candidate registry (Step 14A)
+
+A read-only, **data-model-only** registry of the MVP SOL liquid-staking candidates and the
+data each still needs before it could become eligible — see
+[solLiquidStakingCandidateRegistry.md](solLiquidStakingCandidateRegistry.md). Five
+candidates: **Jito · JitoSOL** (`active_read_only_beta`, approved, risk 7.75, verified data)
+and **Marinade · mSOL / Jupiter · JupSOL / BlazeStake · bSOL / Sanctum · INF**
+(`staged_candidate` only — not approved, no risk score, `needs_review` data,
+`source_reverification_required`). It changes **nothing live**: JitoSOL stays the only
+selected protocol, staged candidates never appear in real wallet mode, and no
+transaction/signature/selection is enabled (the module is not imported by any live/UI file).
+Future: 14B source/value confirmation, 14C risk scoring, 14D selector comparison.

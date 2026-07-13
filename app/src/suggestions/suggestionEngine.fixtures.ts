@@ -303,6 +303,19 @@ import {
   evaluateJitoSolSwapRoute,
 } from "./jitoSolReadOnlyRouteEvaluation";
 import {
+  SOL_LST_CANDIDATE_REGISTRY_EXISTS,
+  SOL_LST_CANDIDATE_REGISTRY_ENABLES_MULTI_PROTOCOL_SELECTION,
+  SOL_LST_CANDIDATE_REGISTRY_UPDATES_LIVE_RECOMMENDATIONS,
+  SOL_LST_CANDIDATE_REGISTRY_ENABLES_TRANSACTIONS,
+  SOL_LST_CANDIDATE_REGISTRY_REQUIRES_WALLET_SIGNATURE,
+  getSolLiquidStakingCandidates,
+  getSolLiquidStakingCandidateById,
+  getStagedSolLiquidStakingCandidates,
+  getSolLiquidStakingCandidateBlockers,
+  isSolLstCandidateApprovedForReadOnly,
+  summarizeSolLiquidStakingCandidateRegistry,
+} from "./solLiquidStakingCandidateRegistry";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -7874,6 +7887,105 @@ export function runJitoSolExternalLinkFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 14A — multi-protocol SOL liquid-staking candidate registry (data model
+ * only). Verifies the registry shape, the five candidates, that JitoSOL stays the
+ * only approved read-only candidate while mSOL/JupSOL/bSOL/INF are staged, and
+ * that nothing here changes live/Demo/testing behavior or enables tx/signatures.
+ * ------------------------------------------------------------------ */
+export function runSolLstCandidateRegistryFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const candidates = getSolLiquidStakingCandidates();
+  const byId = (id: string) => getSolLiquidStakingCandidateById(id);
+  const has = (name: string, sym: string) => candidates.some((c) => c.protocolName === name && c.lstSymbol === sym);
+  const jito = byId("jito");
+  const summary = summarizeSolLiquidStakingCandidateRegistry();
+  const staged = getStagedSolLiquidStakingCandidates();
+  const registryJson = JSON.stringify(candidates);
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+
+  // 14A-A…E. Registry flags.
+  add("14A-A: SOL_LST_CANDIDATE_REGISTRY_EXISTS is true", SOL_LST_CANDIDATE_REGISTRY_EXISTS === true, `v=${SOL_LST_CANDIDATE_REGISTRY_EXISTS}`);
+  add("14A-B: registry does not enable multi-protocol selection", SOL_LST_CANDIDATE_REGISTRY_ENABLES_MULTI_PROTOCOL_SELECTION === false, `v=${SOL_LST_CANDIDATE_REGISTRY_ENABLES_MULTI_PROTOCOL_SELECTION}`);
+  add("14A-C: registry does not update live recommendations", SOL_LST_CANDIDATE_REGISTRY_UPDATES_LIVE_RECOMMENDATIONS === false, `v=${SOL_LST_CANDIDATE_REGISTRY_UPDATES_LIVE_RECOMMENDATIONS}`);
+  add("14A-D: registry enables no transactions", SOL_LST_CANDIDATE_REGISTRY_ENABLES_TRANSACTIONS === false, `v=${SOL_LST_CANDIDATE_REGISTRY_ENABLES_TRANSACTIONS}`);
+  add("14A-E: registry requires no wallet signature", SOL_LST_CANDIDATE_REGISTRY_REQUIRES_WALLET_SIGNATURE === false, `v=${SOL_LST_CANDIDATE_REGISTRY_REQUIRES_WALLET_SIGNATURE}`);
+
+  // 14A-F…K. Exactly five candidates, all present.
+  add("14A-F: registry returns exactly 5 candidates", candidates.length === 5, `n=${candidates.length}`);
+  add("14A-G: registry includes Jito/JitoSOL", has("Jito", "JitoSOL"), `has=${has("Jito", "JitoSOL")}`);
+  add("14A-H: registry includes Marinade/mSOL", has("Marinade", "mSOL"), `has=${has("Marinade", "mSOL")}`);
+  add("14A-I: registry includes Jupiter/JupSOL", has("Jupiter", "JupSOL"), `has=${has("Jupiter", "JupSOL")}`);
+  add("14A-J: registry includes BlazeStake/bSOL", has("BlazeStake", "bSOL"), `has=${has("BlazeStake", "bSOL")}`);
+  add("14A-K: registry includes Sanctum/INF", has("Sanctum", "INF"), `has=${has("Sanctum", "INF")}`);
+
+  // 14A-L…S. Jito is the approved active read-only candidate.
+  add("14A-L: Jito status is active_read_only_beta", jito?.status === "active_read_only_beta", `v=${jito?.status}`);
+  add("14A-M: Jito approvalStatus is approved_read_only", jito?.approvalStatus === "approved_read_only", `v=${jito?.approvalStatus}`);
+  add("14A-N: Jito approvedForReadOnlyRecommendation is true", jito?.approvedForReadOnlyRecommendation === true, `v=${jito?.approvedForReadOnlyRecommendation}`);
+  add("14A-O: Jito riskScoreStatus is approved", jito?.risk.riskScoreStatus === "approved", `v=${jito?.risk.riskScoreStatus}`);
+  add("14A-P: Jito riskScore is 7.75", jito?.risk.riskScore === 7.75, `v=${jito?.risk.riskScore}`);
+  add("14A-Q: Jito transactionsEnabled is false", (jito?.transactionsEnabled as boolean) === false, `v=${jito?.transactionsEnabled}`);
+  add("14A-R: Jito walletSignaturesEnabled is false", (jito?.walletSignaturesEnabled as boolean) === false, `v=${jito?.walletSignaturesEnabled}`);
+  add("14A-S: Jito externalReviewLink URL is the Jito staking page", jito?.externalReviewLink?.url === "https://www.jito.network/staking/" && jito?.externalReviewLink?.enabled === true, `url=${jito?.externalReviewLink?.url}`);
+
+  // 14A-T…Z. The other four are staged (not approved, no risk score, re-verification required).
+  add("14A-T: Marinade is staged_candidate", byId("marinade")?.status === "staged_candidate", `v=${byId("marinade")?.status}`);
+  add("14A-U: Jupiter is staged_candidate", byId("jupiter")?.status === "staged_candidate", `v=${byId("jupiter")?.status}`);
+  add("14A-V: BlazeStake is staged_candidate", byId("blazestake")?.status === "staged_candidate", `v=${byId("blazestake")?.status}`);
+  add("14A-W: Sanctum is staged_candidate", byId("sanctum")?.status === "staged_candidate", `v=${byId("sanctum")?.status}`);
+  add("14A-X: staged candidates are not approved for read-only recommendation", staged.every((c) => c.approvedForReadOnlyRecommendation === false) && staged.every((c) => !isSolLstCandidateApprovedForReadOnly(c.protocolId)), `n=${staged.length}`);
+  add("14A-Y: staged candidates have missing riskScore", staged.every((c) => c.risk.riskScore === undefined && c.risk.riskScoreStatus === "missing"), `n=${staged.length}`);
+  add("14A-Z: staged candidates include source_reverification_required blocker", staged.every((c) => getSolLiquidStakingCandidateBlockers(c.protocolId).includes("source_reverification_required")), `n=${staged.length}`);
+
+  // 14A-AA…AD. Summary counts.
+  add("14A-AA: approved read-only candidates count is 1", summary.approvedReadOnlyCandidates === 1, `v=${summary.approvedReadOnlyCandidates}`);
+  add("14A-AB: staged candidates count is 4", summary.stagedCandidates === 4, `v=${summary.stagedCandidates}`);
+  add("14A-AC: transactions-enabled candidates count is 0", summary.transactionsEnabledCandidates === 0, `v=${summary.transactionsEnabledCandidates}`);
+  add("14A-AD: wallet-signature candidates count is 0", summary.walletSignatureCandidates === 0, `v=${summary.walletSignatureCandidates}`);
+
+  // 14A-AE/AF. Live selection is UNCHANGED — Jito/JitoSOL only.
+  add("14A-AE: live staking suggestion still selects Jito/JitoSOL", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  {
+    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "Jupiter", "BlazeStake", "Sanctum"];
+    const leaked = other.filter((t) => JSON.stringify(staking?.protocolSelection).includes(t));
+    add("14A-AF: live staking suggestion does not select mSOL/JupSOL/bSOL/INF", leaked.length === 0, `leaked=${leaked.join(",") || "none"}`);
+  }
+
+  // 14A-AG/AH. Demo Mode and /testing are unchanged (no new candidate leaks in).
+  {
+    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "BlazeStake", "Sanctum"];
+    const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
+    add("14A-AG: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
+    const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
+    add("14A-AH: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && testingStaking?.card.lstSymbol === "JitoSOL" && testLeak.length === 0, `leak=${testLeak.join(",") || "none"}`);
+  }
+
+  // 14A-AI. No transaction/signature/swap path in the registry.
+  {
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "swap(", "deposit(", "withdraw(", "unstake("];
+    const hits = tokens.filter((t) => registryJson.toLowerCase().includes(t));
+    add("14A-AI: no transaction/signature/swap path in the candidate registry", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14A-AJ. No forbidden investment claims in registry copy.
+  {
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const hits = forbidden.filter((w) => registryJson.toLowerCase().includes(w));
+    add("14A-AJ: no forbidden investment claims in candidate registry copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -7928,6 +8040,7 @@ export function printFixtureResults(): void {
     ...runTestingPageFixtureChecks(),
     ...runJitoSolRouteEvaluationFixtureChecks(),
     ...runJitoSolExternalLinkFixtureChecks(),
+    ...runSolLstCandidateRegistryFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
