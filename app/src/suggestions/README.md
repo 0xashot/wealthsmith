@@ -1164,3 +1164,18 @@ false`, `selectedByProtocolLogic: false`, `currentWinner: false`, the registry `
 stays `undefined`, JitoSOL remains the only selected live protocol, and there is no live/Demo/
 testing change and no transaction/signature. Next: read-only recommendation approval → UI
 exposure → later selector comparison.
+
+## mSOL read-only review approval (Step 14K)
+
+mSOL is **approved for read-only review exposure** — see
+[solLiquidStakingMsolReadOnlyApproval.md](solLiquidStakingMsolReadOnlyApproval.md). The gate
+requires a risk score ≥ 7 (mSOL: 7.40), fresh evidence + `readyForRiskGate`, and the SAM
+incident acknowledged; below-threshold or stale → blocked/`null`. The decision approves mSOL
+to appear as an **alternative protocol to review** — `approvedForReviewExposure: true` — but
+`approvedForProtocolSelection: false`, `selectedByProtocolLogic: false`, `currentWinner:
+false`, and no live-recommendation/transaction/signature change. It **does not mutate the
+base registry** (mSOL stays staged/unapproved/unscored there; the selector-facing
+`getApprovedSolLiquidStakingCandidates()` stays Jito-only); the review approval is a separate
+non-mutating preview (`getReadOnlyReviewApprovedSolLiquidStakingCandidates()`, JitoSOL +
+mSOL). mSOL is **not shown in the UI yet** (that's 14L) and JitoSOL remains the only selected
+live protocol.

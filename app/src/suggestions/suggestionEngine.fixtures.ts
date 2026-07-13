@@ -385,6 +385,20 @@ import {
   evaluateMsolRiskScoreAssignmentStatus,
 } from "./solLiquidStakingMsolRiskScore";
 import {
+  SOL_LST_MSOL_READ_ONLY_APPROVAL_EXISTS,
+  SOL_LST_MSOL_READ_ONLY_APPROVAL_APPROVES_REVIEW_EXPOSURE,
+  SOL_LST_MSOL_READ_ONLY_APPROVAL_SELECTS_PROTOCOL_WINNER,
+  SOL_LST_MSOL_READ_ONLY_APPROVAL_ENABLES_MULTI_PROTOCOL_SELECTION,
+  SOL_LST_MSOL_READ_ONLY_APPROVAL_UPDATES_LIVE_RECOMMENDATIONS,
+  SOL_LST_MSOL_READ_ONLY_APPROVAL_REPLACES_JITO,
+  SOL_LST_MSOL_READ_ONLY_APPROVAL_ENABLES_TRANSACTIONS,
+  SOL_LST_MSOL_READ_ONLY_APPROVAL_REQUIRES_WALLET_SIGNATURE,
+  isRiskScoreAboveReadOnlyThreshold,
+  getMsolReadOnlyApprovalDecision,
+  evaluateMsolReadOnlyApprovalStatus,
+  getReadOnlyReviewApprovedSolLiquidStakingCandidates,
+} from "./solLiquidStakingMsolReadOnlyApproval";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -8848,6 +8862,110 @@ export function runSolLstMsolRiskScoreFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 14K — mSOL read-only recommendation approval gate. Verifies the flags, the
+ * threshold (>=7) + freshness/readiness/acknowledgement requirements, the approval
+ * decision scope (review-approved but NOT selected/winner/executable), the
+ * non-mutating review-approved preview, and that live/Demo/testing + the tx/sig
+ * boundary hold and the base registry is unchanged (selector stays Jito-only).
+ * ------------------------------------------------------------------ */
+export function runSolLstMsolReadOnlyApprovalFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const FRESH = "2026-07-13T15:30:00Z";
+  const STALE = "2026-07-20T00:00:00Z";
+  const d = getMsolReadOnlyApprovalDecision({ checkedAt: FRESH });
+  const statusFresh = evaluateMsolReadOnlyApprovalStatus({ checkedAt: FRESH });
+  const statusStale = evaluateMsolReadOnlyApprovalStatus({ checkedAt: STALE });
+  const preview = getReadOnlyReviewApprovedSolLiquidStakingCandidates({ checkedAt: FRESH });
+  const previewMsol = preview.find((c) => c.protocolId === "marinade");
+  const decisionJson = JSON.stringify(d ?? {}).toLowerCase();
+  const ackCopy = JSON.stringify(d?.acknowledgedRisks ?? []).toLowerCase();
+  const limCopy = JSON.stringify(d?.limitations ?? []).toLowerCase();
+  const registryMsol = getSolLiquidStakingCandidateById("marinade");
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+
+  // 14K-A…H. Flags.
+  add("14K-A: SOL_LST_MSOL_READ_ONLY_APPROVAL_EXISTS is true", SOL_LST_MSOL_READ_ONLY_APPROVAL_EXISTS === true, `v=${SOL_LST_MSOL_READ_ONLY_APPROVAL_EXISTS}`);
+  add("14K-B: approval approves review exposure", SOL_LST_MSOL_READ_ONLY_APPROVAL_APPROVES_REVIEW_EXPOSURE === true, `v=${SOL_LST_MSOL_READ_ONLY_APPROVAL_APPROVES_REVIEW_EXPOSURE}`);
+  add("14K-C: approval selects no protocol winner", SOL_LST_MSOL_READ_ONLY_APPROVAL_SELECTS_PROTOCOL_WINNER === false, `v=${SOL_LST_MSOL_READ_ONLY_APPROVAL_SELECTS_PROTOCOL_WINNER}`);
+  add("14K-D: approval enables no multi-protocol selection", SOL_LST_MSOL_READ_ONLY_APPROVAL_ENABLES_MULTI_PROTOCOL_SELECTION === false, `v=${SOL_LST_MSOL_READ_ONLY_APPROVAL_ENABLES_MULTI_PROTOCOL_SELECTION}`);
+  add("14K-E: approval updates no live recommendations", SOL_LST_MSOL_READ_ONLY_APPROVAL_UPDATES_LIVE_RECOMMENDATIONS === false, `v=${SOL_LST_MSOL_READ_ONLY_APPROVAL_UPDATES_LIVE_RECOMMENDATIONS}`);
+  add("14K-F: approval does not replace Jito", SOL_LST_MSOL_READ_ONLY_APPROVAL_REPLACES_JITO === false, `v=${SOL_LST_MSOL_READ_ONLY_APPROVAL_REPLACES_JITO}`);
+  add("14K-G: approval enables no transactions", SOL_LST_MSOL_READ_ONLY_APPROVAL_ENABLES_TRANSACTIONS === false, `v=${SOL_LST_MSOL_READ_ONLY_APPROVAL_ENABLES_TRANSACTIONS}`);
+  add("14K-H: approval requires no wallet signature", SOL_LST_MSOL_READ_ONLY_APPROVAL_REQUIRES_WALLET_SIGNATURE === false, `v=${SOL_LST_MSOL_READ_ONLY_APPROVAL_REQUIRES_WALLET_SIGNATURE}`);
+
+  // 14K-I…O. Approval requirements.
+  add("14K-I: approval requires mSOL risk score exists", d != null && statusFresh.riskScore != null, `score=${statusFresh.riskScore}`);
+  add("14K-J: approval requires risk score >= 7", isRiskScoreAboveReadOnlyThreshold(7.4) === true && (d?.basis.riskScore ?? 0) >= (d?.basis.minimumRiskScoreRequired ?? 7), `score=${d?.basis.riskScore}`);
+  add("14K-K: approval is blocked when score below threshold", isRiskScoreAboveReadOnlyThreshold(6.99) === false, "below=blocked");
+  add("14K-L: approval requires evidence fresh", statusFresh.evidenceFresh === true, `fresh=${statusFresh.evidenceFresh}`);
+  add("14K-M: approval is blocked when evidence stale", getMsolReadOnlyApprovalDecision({ checkedAt: STALE }) === null && statusStale.approvedForReadOnlyRecommendation === false && statusStale.blockers.includes("evidence_stale"), `blockers=${statusStale.blockers.join("|")}`);
+  add("14K-N: approval requires readyForRiskGate true", statusFresh.readyForRiskGate === true, `ready=${statusFresh.readyForRiskGate}`);
+  add("14K-O: approval requires SAM incident risk acknowledged", (d?.acknowledgedRisks?.length ?? 0) > 0 && /unstake-priority|stake auction market/.test(ackCopy), "acknowledged");
+
+  // 14K-P…Q. Basis.
+  add("14K-P: approval decision includes risk score 7.40", d?.basis.riskScore === 7.4, `v=${d?.basis.riskScore}`);
+  add("14K-Q: approval decision includes threshold 7", d?.basis.minimumRiskScoreRequired === 7 && statusFresh.riskScoreThreshold === 7, `v=${d?.basis.minimumRiskScoreRequired}`);
+
+  // 14K-R…Z. Approval scope flags.
+  add("14K-R: approval scope approvedForReadOnlyRecommendation true", d?.approvalScope.approvedForReadOnlyRecommendation === true, `v=${d?.approvalScope.approvedForReadOnlyRecommendation}`);
+  add("14K-S: approval scope approvedForReviewExposure true", d?.approvalScope.approvedForReviewExposure === true, `v=${d?.approvalScope.approvedForReviewExposure}`);
+  add("14K-T: approval scope approvedForProtocolSelection false", (d?.approvalScope.approvedForProtocolSelection as boolean) === false, `v=${d?.approvalScope.approvedForProtocolSelection}`);
+  add("14K-U: approval scope selectedByProtocolLogic false", (d?.approvalScope.selectedByProtocolLogic as boolean) === false, `v=${d?.approvalScope.selectedByProtocolLogic}`);
+  add("14K-V: approval scope currentWinner false", (d?.approvalScope.currentWinner as boolean) === false, `v=${d?.approvalScope.currentWinner}`);
+  add("14K-W: approval scope updatesLiveRecommendations false", (d?.approvalScope.updatesLiveRecommendations as boolean) === false, `v=${d?.approvalScope.updatesLiveRecommendations}`);
+  add("14K-X: approval scope enablesMultiProtocolSelection false", (d?.approvalScope.enablesMultiProtocolSelection as boolean) === false, `v=${d?.approvalScope.enablesMultiProtocolSelection}`);
+  add("14K-Y: approval scope transactionsEnabled false", (d?.approvalScope.transactionsEnabled as boolean) === false, `v=${d?.approvalScope.transactionsEnabled}`);
+  add("14K-Z: approval scope walletSignatureRequired false", (d?.approvalScope.walletSignatureRequired as boolean) === false, `v=${d?.approvalScope.walletSignatureRequired}`);
+
+  // 14K-AA…AD. Acknowledged risks + limitations content.
+  add("14K-AA: acknowledged risks include the SAM unstake-priority bug", /unstake-priority|stake auction market/.test(ackCopy), "present");
+  add("14K-AB: acknowledged risks include operational dependencies", /dependenc|multisig|stake pool/.test(ackCopy), "present");
+  add("14K-AC: limitations say approval is not endorsement / safety claim", /not an endorsement/.test(limCopy) && /not a safety/.test(limCopy), "present");
+  add("14K-AD: limitations say approval does not select the protocol winner", /protocol winner/.test(limCopy), "present");
+
+  // 14K-AE…AG. Review-approved preview (non-mutating; base registry unchanged).
+  add("14K-AE: review-approved preview mSOL has riskScore 7.40", previewMsol?.riskScore === 7.4, `v=${previewMsol?.riskScore}`);
+  add("14K-AF: review-approved preview mSOL approvedForReadOnlyRecommendation true", previewMsol?.approvedForReadOnlyRecommendation === true, `v=${previewMsol?.approvedForReadOnlyRecommendation}`);
+  add("14K-AG: review-approved preview mSOL still not selectedByProtocolLogic/currentWinner", previewMsol?.selectedByProtocolLogic === false && previewMsol?.currentWinner === false, `sel=${previewMsol?.selectedByProtocolLogic} win=${previewMsol?.currentWinner}`);
+  // Base registry untouched: mSOL still staged/unapproved/unscored (selector stays Jito-only).
+  add("14K-AG2: base registry mSOL unchanged (staged, unapproved, unscored)", registryMsol?.status === "staged_candidate" && registryMsol?.approvedForReadOnlyRecommendation === false && registryMsol?.risk.riskScore === undefined, `status=${registryMsol?.status} approved=${registryMsol?.approvedForReadOnlyRecommendation}`);
+
+  // 14K-AH…AJ. Live selection unchanged; mSOL not in real wallet UI.
+  add("14K-AH: JitoSOL remains the current selected live protocol", staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  add("14K-AI: real wallet staking suggestion still selects Jito/JitoSOL only", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito", `status=${staking?.protocolSelection?.status}`);
+  add("14K-AJ: mSOL still does not appear in real-wallet UI", !JSON.stringify(toSuggestionCard(staking!)).includes("mSOL") && !JSON.stringify(toSuggestionCard(staking!)).includes("Marinade"), "absent");
+
+  // 14K-AK/AL. Demo Mode and /testing unchanged.
+  add("14K-AK: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !JSON.stringify(demo).includes("mSOL"), "unchanged");
+  add("14K-AL: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
+
+  // 14K-AM. No transaction/signature/swap/deposit/stake/approve/execute PATH (call-shaped).
+  {
+    const json = (decisionJson + JSON.stringify(statusFresh).toLowerCase() + JSON.stringify(preview).toLowerCase());
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "swap(", "deposit(", "stake(", "approve(", "execute("];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("14K-AM: no transaction/signature/swap/deposit/stake/approve/execute path", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14K-AN. No forbidden claims in approval copy (approval/recommendation terms are allowed).
+  {
+    const forbidden = ["best", "safest", "guaranteed", "risk-free", "we will stake", "start staking"];
+    const hits = forbidden.filter((w) => (ackCopy + limCopy + decisionJson).includes(w));
+    add("14K-AN: no forbidden claims in approval copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -8910,6 +9028,7 @@ export function printFixtureResults(): void {
     ...runSolLstMsolFreshEvidenceFixtureChecks(),
     ...runSolLstEpochUnstakeTimingFixtureChecks(),
     ...runSolLstMsolRiskScoreFixtureChecks(),
+    ...runSolLstMsolReadOnlyApprovalFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

@@ -680,3 +680,15 @@ rationale includes the disclosed SAM unstake-priority bug (risk) and the audit/T
 (positive). **Score assignment only:** mSOL stays `staged_candidate`, `approvedForReadOnly
 Recommendation: false`, registry `riskScore` still `undefined`; JitoSOL remains the only
 selected live protocol; no live/Demo/testing change and no transaction/signature.
+
+**Step 14K — mSOL read-only review approval:** with the 7.40 score (≥ 7 threshold), fresh
+evidence, and the SAM incident acknowledged, mSOL is **approved for read-only review
+exposure** — `solLiquidStakingMsolReadOnlyApproval.ts` (see
+[solLiquidStakingMsolReadOnlyApproval.md](solLiquidStakingMsolReadOnlyApproval.md)). The
+approval is limited: `approvedForReviewExposure: true` but `approvedForProtocolSelection:
+false`, `selectedByProtocolLogic: false`, `currentWinner: false`, no live-recommendation /
+transaction / signature change. It does **not** mutate the base registry (mSOL stays
+staged/unapproved/unscored; `getApprovedSolLiquidStakingCandidates()` stays Jito-only); a
+separate non-mutating `getReadOnlyReviewApprovedSolLiquidStakingCandidates()` lists JitoSOL +
+mSOL. mSOL is not shown in the UI yet (14L), and JitoSOL remains the only selected live
+protocol.

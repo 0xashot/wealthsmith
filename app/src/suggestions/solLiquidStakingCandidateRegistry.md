@@ -89,6 +89,19 @@ JupSOL/mSOL/bSOL are recorded with a 24h freshness rule (currently **stale**); I
 value (`missing`); mechanics/evidence stay `needs_review`. No candidate is approved or
 scored, and the registry above is unchanged — 14B is a confirmation ledger only.
 
+## mSOL read-only review approval (Step 14K)
+
+mSOL has completed evidence (14F–14I) and a risk score of 7.40 (14J), and is now
+**approved for read-only review exposure** (14K) — see
+[solLiquidStakingMsolReadOnlyApproval.md](solLiquidStakingMsolReadOnlyApproval.md). This
+**does not mutate the base registry above**: mSOL stays `staged_candidate` /
+`approvedForReadOnlyRecommendation: false` / `riskScore: undefined`, and
+`getApprovedSolLiquidStakingCandidates()` (selector-facing) stays Jito-only. The review
+approval is a **separate, non-mutating** view,
+`getReadOnlyReviewApprovedSolLiquidStakingCandidates()`, which lists JitoSOL plus mSOL
+(marked `approved_read_only_review`, `riskScore 7.40`, not selected, not winner) while the
+approval is active. Read-only review approval ≠ selector eligibility.
+
 ## Future steps
 
 - **14B** — ✅ source / value confirmation for staged candidates (TVL/APY re-verification
