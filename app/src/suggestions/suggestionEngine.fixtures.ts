@@ -316,6 +316,18 @@ import {
   summarizeSolLiquidStakingCandidateRegistry,
 } from "./solLiquidStakingCandidateRegistry";
 import {
+  SOL_LST_SOURCE_VALUE_CONFIRMATION_EXISTS,
+  SOL_LST_SOURCE_VALUE_CONFIRMATION_UPDATES_LIVE_RECOMMENDATIONS,
+  SOL_LST_SOURCE_VALUE_CONFIRMATION_APPROVES_CANDIDATES,
+  SOL_LST_SOURCE_VALUE_CONFIRMATION_ASSIGNS_RISK_SCORES,
+  SOL_LST_SOURCE_VALUE_CONFIRMATION_ENABLES_MULTI_PROTOCOL_SELECTION,
+  SOL_LST_SOURCE_VALUE_CONFIRMATION_ENABLES_TRANSACTIONS,
+  SOL_LST_SOURCE_VALUE_CONFIRMATION_REQUIRES_WALLET_SIGNATURE,
+  SOL_LST_CONFIRMED_VALUE_MAX_AGE_HOURS,
+  getSolLstStagedCandidateValueConfirmations,
+  summarizeSolLstCandidateValueConfirmations,
+} from "./solLiquidStakingSourceValueConfirmation";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -7986,6 +7998,125 @@ export function runSolLstCandidateRegistryFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 14B — source/value confirmation for staged SOL LST candidates. Verifies the
+ * flags, the recorded prior DefiLlama values, the 24h freshness rule (verified vs
+ * stale), per-candidate summaries, that no staged candidate is ready/approved/scored,
+ * and that live/Demo/testing behavior and the tx/sig boundary are unchanged.
+ * ------------------------------------------------------------------ */
+export function runSolLstSourceValueConfirmationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const WITHIN_24H = "2026-07-12T12:00:00Z"; // +12h from confirmedAt
+  const BEYOND_24H = "2026-07-14T00:00:00Z"; // +48h from confirmedAt
+
+  const confBeyond = getSolLstStagedCandidateValueConfirmations({ checkedAt: BEYOND_24H });
+  const confWithin = getSolLstStagedCandidateValueConfirmations({ checkedAt: WITHIN_24H });
+  const val = (list: typeof confBeyond, id: string, cat: string) => list.find((v) => v.protocolId === id && v.category === cat);
+  const sumBeyond = summarizeSolLstCandidateValueConfirmations({ checkedAt: BEYOND_24H });
+  const sumOf = (list: typeof sumBeyond, id: string) => list.find((s) => s.protocolId === id);
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+  const docJson = JSON.stringify(confBeyond) + JSON.stringify(sumBeyond);
+
+  // 14B-A…G. Flags.
+  add("14B-A: SOL_LST_SOURCE_VALUE_CONFIRMATION_EXISTS is true", SOL_LST_SOURCE_VALUE_CONFIRMATION_EXISTS === true, `v=${SOL_LST_SOURCE_VALUE_CONFIRMATION_EXISTS}`);
+  add("14B-B: does not update live recommendations", SOL_LST_SOURCE_VALUE_CONFIRMATION_UPDATES_LIVE_RECOMMENDATIONS === false, `v=${SOL_LST_SOURCE_VALUE_CONFIRMATION_UPDATES_LIVE_RECOMMENDATIONS}`);
+  add("14B-C: does not approve candidates", SOL_LST_SOURCE_VALUE_CONFIRMATION_APPROVES_CANDIDATES === false, `v=${SOL_LST_SOURCE_VALUE_CONFIRMATION_APPROVES_CANDIDATES}`);
+  add("14B-D: does not assign risk scores", SOL_LST_SOURCE_VALUE_CONFIRMATION_ASSIGNS_RISK_SCORES === false, `v=${SOL_LST_SOURCE_VALUE_CONFIRMATION_ASSIGNS_RISK_SCORES}`);
+  add("14B-E: does not enable multi-protocol selection", SOL_LST_SOURCE_VALUE_CONFIRMATION_ENABLES_MULTI_PROTOCOL_SELECTION === false, `v=${SOL_LST_SOURCE_VALUE_CONFIRMATION_ENABLES_MULTI_PROTOCOL_SELECTION}`);
+  add("14B-F: enables no transactions", SOL_LST_SOURCE_VALUE_CONFIRMATION_ENABLES_TRANSACTIONS === false, `v=${SOL_LST_SOURCE_VALUE_CONFIRMATION_ENABLES_TRANSACTIONS}`);
+  add("14B-G: requires no wallet signature", SOL_LST_SOURCE_VALUE_CONFIRMATION_REQUIRES_WALLET_SIGNATURE === false, `v=${SOL_LST_SOURCE_VALUE_CONFIRMATION_REQUIRES_WALLET_SIGNATURE}`);
+
+  // 14B-H. Freshness threshold.
+  add("14B-H: freshness threshold is 24 hours", SOL_LST_CONFIRMED_VALUE_MAX_AGE_HOURS === 24, `v=${SOL_LST_CONFIRMED_VALUE_MAX_AGE_HOURS}`);
+
+  // 14B-I…L. Confirmations include the four staged candidates.
+  const hasId = (id: string) => confBeyond.some((v) => v.protocolId === id);
+  add("14B-I: confirmations include mSOL", confBeyond.some((v) => v.lstSymbol === "mSOL"), `has=${hasId("marinade")}`);
+  add("14B-J: confirmations include JupSOL", confBeyond.some((v) => v.lstSymbol === "JupSOL"), `has=${hasId("jupiter")}`);
+  add("14B-K: confirmations include bSOL", confBeyond.some((v) => v.lstSymbol === "bSOL"), `has=${hasId("blazestake")}`);
+  add("14B-L: confirmations include INF", confBeyond.some((v) => v.lstSymbol === "INF"), `has=${hasId("sanctum")}`);
+
+  // 14B-M…U. Prior recorded values.
+  add("14B-M: JupSOL prior TVL value is 409170000", val(confBeyond, "jupiter", "tvl")?.value === 409170000, `v=${val(confBeyond, "jupiter", "tvl")?.value}`);
+  add("14B-N: JupSOL prior current APY is 5.67", val(confBeyond, "jupiter", "current_apy")?.value === 5.67, `v=${val(confBeyond, "jupiter", "current_apy")?.value}`);
+  add("14B-O: JupSOL prior 30-day APY is 5.60", val(confBeyond, "jupiter", "apy_30d")?.value === 5.6, `v=${val(confBeyond, "jupiter", "apy_30d")?.value}`);
+  add("14B-P: mSOL prior TVL value is 184840000", val(confBeyond, "marinade", "tvl")?.value === 184840000, `v=${val(confBeyond, "marinade", "tvl")?.value}`);
+  add("14B-Q: mSOL prior current APY is 4.75", val(confBeyond, "marinade", "current_apy")?.value === 4.75, `v=${val(confBeyond, "marinade", "current_apy")?.value}`);
+  add("14B-R: mSOL prior 30-day APY is 5.87", val(confBeyond, "marinade", "apy_30d")?.value === 5.87, `v=${val(confBeyond, "marinade", "apy_30d")?.value}`);
+  add("14B-S: bSOL prior TVL value is 69750000", val(confBeyond, "blazestake", "tvl")?.value === 69750000, `v=${val(confBeyond, "blazestake", "tvl")?.value}`);
+  add("14B-T: bSOL prior current APY is 5.27", val(confBeyond, "blazestake", "current_apy")?.value === 5.27, `v=${val(confBeyond, "blazestake", "current_apy")?.value}`);
+  add("14B-U: bSOL prior 30-day APY is 5.32", val(confBeyond, "blazestake", "apy_30d")?.value === 5.32, `v=${val(confBeyond, "blazestake", "apy_30d")?.value}`);
+
+  // 14B-V. INF market data missing / needs_review.
+  {
+    const infMarket = confBeyond.filter((v) => v.protocolId === "sanctum" && ["tvl", "current_apy", "apy_30d"].includes(v.category));
+    add("14B-V: INF market data is missing or needs_review", infMarket.length === 3 && infMarket.every((v) => v.status === "missing" || v.status === "needs_review"), `statuses=${infMarket.map((v) => v.status).join(",")}`);
+  }
+
+  // 14B-W/X. Freshness behavior.
+  add("14B-W: values within 24h of confirmedAt are verified", val(confWithin, "jupiter", "tvl")?.status === "verified" && val(confWithin, "marinade", "tvl")?.status === "verified" && val(confWithin, "blazestake", "tvl")?.status === "verified", `jup=${val(confWithin, "jupiter", "tvl")?.status}`);
+  add("14B-X: values beyond 24h of confirmedAt are stale", val(confBeyond, "jupiter", "tvl")?.status === "stale" && val(confBeyond, "marinade", "current_apy")?.status === "stale" && val(confBeyond, "blazestake", "apy_30d")?.status === "stale", `jup=${val(confBeyond, "jupiter", "tvl")?.status}`);
+
+  // 14B-Y/Z. Summary market-data statuses.
+  add("14B-Y: summaries mark JupSOL/mSOL/bSOL marketDataStatus stale beyond 24h", ["jupiter", "marinade", "blazestake"].every((id) => sumOf(sumBeyond, id)?.marketDataStatus === "stale"), `jup=${sumOf(sumBeyond, "jupiter")?.marketDataStatus}`);
+  add("14B-Z: summaries mark INF marketDataStatus missing or needs_review", ["missing", "needs_review"].includes(sumOf(sumBeyond, "sanctum")?.marketDataStatus ?? ""), `v=${sumOf(sumBeyond, "sanctum")?.marketDataStatus}`);
+
+  // 14B-AA. No staged candidate ready for risk scoring by default.
+  add("14B-AA: no staged candidate readyForRiskScoring by default", sumBeyond.length === 4 && sumBeyond.every((s) => s.readyForRiskScoring === false), `ready=${sumBeyond.filter((s) => s.readyForRiskScoring).length}`);
+
+  // 14B-AB…AD. Candidate registry is unchanged (still staged, not approved, no score).
+  {
+    const stagedIds = ["marinade", "jupiter", "blazestake", "sanctum"];
+    const stillStaged = stagedIds.every((id) => getSolLiquidStakingCandidateById(id)?.status === "staged_candidate");
+    const notApproved = stagedIds.every((id) => getSolLiquidStakingCandidateById(id)?.approvedForReadOnlyRecommendation === false);
+    const noScore = stagedIds.every((id) => getSolLiquidStakingCandidateById(id)?.risk.riskScore === undefined);
+    add("14B-AB: all staged candidates retain approvedForReadOnlyRecommendation false", notApproved, `notApproved=${notApproved}`);
+    add("14B-AC: all staged candidates retain staged_candidate status", stillStaged, `stillStaged=${stillStaged}`);
+    add("14B-AD: no staged candidate receives a riskScore", noScore, `noScore=${noScore}`);
+  }
+
+  // 14B-AE/AF. Live selection unchanged — Jito/JitoSOL only.
+  add("14B-AE: live staking suggestion still selects Jito/JitoSOL", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  {
+    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "Jupiter", "BlazeStake", "Sanctum"];
+    const leaked = other.filter((t) => JSON.stringify(staking?.protocolSelection).includes(t));
+    add("14B-AF: live staking suggestion does not select mSOL/JupSOL/bSOL/INF", leaked.length === 0, `leaked=${leaked.join(",") || "none"}`);
+  }
+
+  // 14B-AG/AH. Demo Mode and /testing unchanged.
+  {
+    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "BlazeStake", "Sanctum"];
+    const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
+    add("14B-AG: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
+    const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
+    add("14B-AH: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && testLeak.length === 0, `leak=${testLeak.join(",") || "none"}`);
+  }
+
+  // 14B-AI. No transaction/signature/swap path in the confirmation module output.
+  {
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "swap(", "deposit(", "withdraw(", "unstake("];
+    const hits = tokens.filter((t) => docJson.toLowerCase().includes(t));
+    add("14B-AI: no transaction/signature/swap path in source/value confirmations", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14B-AJ. No forbidden investment claims in the confirmation copy.
+  {
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const hits = forbidden.filter((w) => docJson.toLowerCase().includes(w));
+    add("14B-AJ: no forbidden investment claims in source/value confirmation copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -8041,6 +8172,7 @@ export function printFixtureResults(): void {
     ...runJitoSolRouteEvaluationFixtureChecks(),
     ...runJitoSolExternalLinkFixtureChecks(),
     ...runSolLstCandidateRegistryFixtureChecks(),
+    ...runSolLstSourceValueConfirmationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

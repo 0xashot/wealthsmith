@@ -1085,3 +1085,16 @@ and **Marinade · mSOL / Jupiter · JupSOL / BlazeStake · bSOL / Sanctum · INF
 selected protocol, staged candidates never appear in real wallet mode, and no
 transaction/signature/selection is enabled (the module is not imported by any live/UI file).
 Future: 14B source/value confirmation, 14C risk scoring, 14D selector comparison.
+
+## Staged-candidate source/value confirmation (Step 14B)
+
+Source values for the staged candidates (mSOL/JupSOL/bSOL/INF) are recorded and
+freshness-checked in
+[solLiquidStakingSourceValueConfirmation.md](solLiquidStakingSourceValueConfirmation.md).
+Prior DefiLlama TVL/APY/30-day values for JupSOL/mSOL/bSOL are recorded with a **24h
+freshness rule** — `verified` only within 24h of confirmation, else `stale` (currently
+stale); INF market data is `missing` (none invented); mechanics/evidence are
+`needs_review`. `readyForRiskScoring` is false for all four. It changes **nothing live**:
+no approval, no risk score, no selection, no live-recommendation change, no
+transaction/signature — the module is not imported by any live/UI file. JitoSOL stays the
+only selected protocol.

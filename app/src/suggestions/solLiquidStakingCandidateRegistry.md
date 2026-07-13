@@ -80,10 +80,19 @@ Nothing in the registry executes, signs, swaps, deposits, stakes, or moves funds
 candidate has `transactionsEnabled` / `walletSignaturesEnabled` / `autoExecutionEnabled`
 false. Staged candidates never appear in real wallet mode.
 
+## Source/value confirmation (Step 14B)
+
+Staged-candidate source values are now recorded and freshness-checked in
+[solLiquidStakingSourceValueConfirmation.md](solLiquidStakingSourceValueConfirmation.md)
+(`solLiquidStakingSourceValueConfirmation.ts`). Prior DefiLlama values for
+JupSOL/mSOL/bSOL are recorded with a 24h freshness rule (currently **stale**); INF has no
+value (`missing`); mechanics/evidence stay `needs_review`. No candidate is approved or
+scored, and the registry above is unchanged — 14B is a confirmation ledger only.
+
 ## Future steps
 
-- **14B** — source / value confirmation for staged candidates (TVL/APY/mechanics
-  re-verification with timestamps).
+- **14B** — ✅ source / value confirmation for staged candidates (TVL/APY re-verification
+  with a 24h freshness rule). See above.
 - **14C** — risk scoring for staged candidates (rubric-based approved `riskScore`).
 - **14D** — selector comparison across approved candidates (only once more than one is
   approved for read-only recommendation).

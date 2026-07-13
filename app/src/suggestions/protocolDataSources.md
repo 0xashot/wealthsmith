@@ -618,3 +618,11 @@ confirmed (non-production) DefiLlama values for JupSOL/mSOL/bSOL live in the con
 ledger but are **not** carried in as verified — they stay `needs_review` until 14B
 re-verifies them; INF has no value and none is invented. Nothing here changes live/Demo/
 testing behavior or enables transactions/signatures.
+
+**Step 14B — staged-candidate source/value confirmation:** those prior DefiLlama values
+are now recorded in `solLiquidStakingSourceValueConfirmation.ts` (see
+[solLiquidStakingSourceValueConfirmation.md](solLiquidStakingSourceValueConfirmation.md))
+under a **24h freshness rule** — `verified` only within 24h of `confirmedAt`
+(2026-07-12T00:00:00Z), else `stale` (currently stale). INF market data is `missing`;
+mechanics/evidence stay `needs_review`. No candidate is approved, scored, or selected, and
+no live/Demo/testing behavior changes.
