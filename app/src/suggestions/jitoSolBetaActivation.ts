@@ -16,7 +16,8 @@
  * Rollback: set `JITOSOL_BETA_READ_ONLY_RECOMMENDATION_ENABLED = false` (real-wallet
  * staking returns to `protocolSelection.status = not_evaluated`).
  */
-import type { ProtocolSelectionDisplay } from "./engineTypes";
+import type { ProtocolSelectionDisplay, RouteEvaluationDisplay } from "./engineTypes";
+import { getJitoSolDirectProtocolRouteEvaluationDisplay } from "./jitoSolReadOnlyRouteEvaluation";
 
 /** Read-only recommendation is ENABLED for the JitoSOL beta. */
 export const JITOSOL_BETA_READ_ONLY_RECOMMENDATION_ENABLED = true;
@@ -142,4 +143,20 @@ export function getJitoSolReadOnlyBetaGoNoGo(): JitoSolReadOnlyBetaGoNoGo {
     productionReady: false,
     transactionsReady: false,
   };
+}
+
+/** The JitoSOL recommendation uses the READ-ONLY route evaluation (Step 13I). */
+export const JITOSOL_BETA_ROUTE_EVALUATION_READ_ONLY = true;
+
+/**
+ * The read-only "Route and execution checks" display for the JitoSOL recommendation.
+ * Idle SOL → JitoSOL is a DIRECT PROTOCOL stake, so route cost is reviewed and DEX
+ * liquidity depth / slippage are not applicable. Never a transaction/signature.
+ * See `jitoSolReadOnlyRouteEvaluation.ts`.
+ */
+export function getJitoSolBetaRouteEvaluationDisplay(args: {
+  inputAmountSol: number;
+  checkedAt: string;
+}): RouteEvaluationDisplay {
+  return getJitoSolDirectProtocolRouteEvaluationDisplay(args);
 }

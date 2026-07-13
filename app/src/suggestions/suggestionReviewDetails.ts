@@ -156,16 +156,26 @@ export function pctMetric(label: string, value: number): ReviewMetric {
  * not_applicable → Not applicable. Protocol selection is derived from the model
  * (rules no longer carry a protocol_selection guardrail). Raw codes never leak.
  */
+/** Execution guardrails shown in the dedicated route section instead (Step 13I). */
+const EXECUTION_GUARDRAIL_CODES: ReadonlySet<GuardrailCode> = new Set([
+  "cost_available",
+  "liquidity_available",
+  "slippage_available",
+]);
+
 export function summarizeGuardrails(
   guardrails: SuggestionGuardrail[],
-  protocolSelection: ProtocolSelection | undefined
+  protocolSelection: ProtocolSelection | undefined,
+  excludeExecutionGuardrails = false
 ): ReviewGuardrailSummary {
   const checked: string[] = [];
   const notEvaluated: string[] = [];
   const notApplicable: string[] = [];
 
   const all: SuggestionGuardrail[] = [
-    ...guardrails.filter((g) => g.code !== "protocol_selection"),
+    ...guardrails.filter(
+      (g) => g.code !== "protocol_selection" && !(excludeExecutionGuardrails && EXECUTION_GUARDRAIL_CODES.has(g.code))
+    ),
     { code: "protocol_selection", status: protocolGuardrailStatus(protocolSelection) },
   ];
 
@@ -191,18 +201,23 @@ export function summarizeGuardrails(
  */
 function standardLimitations(
   guardrails: SuggestionGuardrail[],
-  protocolSelection: ProtocolSelection | undefined
+  protocolSelection: ProtocolSelection | undefined,
+  excludeExecutionGuardrails = false
 ): ReviewLimitation[] {
   const out: ReviewLimitation[] = [];
   const notEvaluated = (code: GuardrailCode) =>
     guardrails.some((g) => g.code === code && g.status === "not_evaluated");
 
-  if (notEvaluated("cost_available"))
-    out.push({ kind: "cost_not_evaluated", text: LIMITATION_TEXT.cost_not_evaluated });
-  if (notEvaluated("liquidity_available"))
-    out.push({ kind: "liquidity_not_evaluated", text: LIMITATION_TEXT.liquidity_not_evaluated });
-  if (notEvaluated("slippage_available"))
-    out.push({ kind: "slippage_not_evaluated", text: LIMITATION_TEXT.slippage_not_evaluated });
+  // When a route evaluation is shown (Step 13I), the execution guardrails move to
+  // the dedicated "Route and execution checks" section — no not-evaluated lines here.
+  if (!excludeExecutionGuardrails) {
+    if (notEvaluated("cost_available"))
+      out.push({ kind: "cost_not_evaluated", text: LIMITATION_TEXT.cost_not_evaluated });
+    if (notEvaluated("liquidity_available"))
+      out.push({ kind: "liquidity_not_evaluated", text: LIMITATION_TEXT.liquidity_not_evaluated });
+    if (notEvaluated("slippage_available"))
+      out.push({ kind: "slippage_not_evaluated", text: LIMITATION_TEXT.slippage_not_evaluated });
+  }
   if (protocolSelection?.status === "not_evaluated")
     out.push({ kind: "protocol_not_selected", text: LIMITATION_TEXT.protocol_not_selected });
 
@@ -230,8 +245,15 @@ export function buildReviewDetails(args: {
   protocolSelectionDisplay?: SuggestionReviewDetails["protocolSelectionDisplay"];
   /** Optional safety-note override (read-only recommendation copy). */
   safetyNotesOverride?: SuggestionReviewDetails["safetyNotes"];
+  /**
+   * Optional read-only route/liquidity/slippage evaluation (Step 13I). When
+   * present, the execution guardrails move out of the generic summary/limitations
+   * into a dedicated "Route and execution checks" section.
+   */
+  routeEvaluationDisplay?: SuggestionReviewDetails["routeEvaluation"];
 }): SuggestionReviewDetails {
   const informational = args.actionKind === "informational";
+  const excludeExec = args.routeEvaluationDisplay != null;
   return {
     summary: {
       title: TITLE_BY_CATEGORY[args.category],
@@ -242,15 +264,16 @@ export function buildReviewDetails(args: {
     involvedAssets: args.involvedAssets ?? [],
     involvedPositions: args.involvedPositions ?? [],
     calculations: args.calculations ?? [],
-    guardrailSummary: summarizeGuardrails(args.guardrails, args.protocolSelection),
+    guardrailSummary: summarizeGuardrails(args.guardrails, args.protocolSelection, excludeExec),
     limitations: informational
       ? []
-      : standardLimitations(args.guardrails, args.protocolSelection),
+      : standardLimitations(args.guardrails, args.protocolSelection, excludeExec),
     safetyNotes: args.safetyNotesOverride
       ? [...args.safetyNotesOverride]
       : informational
         ? [...INFORMATIONAL_SAFETY_NOTES]
         : [...ACTIONABLE_SAFETY_NOTES],
     ...(args.protocolSelectionDisplay ? { protocolSelectionDisplay: args.protocolSelectionDisplay } : {}),
+    ...(args.routeEvaluationDisplay ? { routeEvaluation: args.routeEvaluationDisplay } : {}),
   };
 }

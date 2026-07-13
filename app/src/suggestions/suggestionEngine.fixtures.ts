@@ -287,6 +287,16 @@ import {
   getTestingPageFixtures,
 } from "../pages/testingPageFixtures";
 import {
+  JITOSOL_READ_ONLY_ROUTE_EVALUATION_EXISTS,
+  JITOSOL_READ_ONLY_ROUTE_EVALUATION_ENABLED,
+  JITOSOL_READ_ONLY_ROUTE_EVALUATION_USES_READ_ONLY_QUOTES,
+  JITOSOL_READ_ONLY_ROUTE_EVALUATION_ENABLES_TRANSACTIONS,
+  JITOSOL_READ_ONLY_ROUTE_EVALUATION_REQUIRES_WALLET_SIGNATURE,
+  JITOSOL_READ_ONLY_ROUTE_EVALUATION_PREFILLS_ROUTE,
+  evaluateJitoSolDirectProtocolRoute,
+  evaluateJitoSolSwapRoute,
+} from "./jitoSolReadOnlyRouteEvaluation";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -7544,13 +7554,17 @@ export function runJitoSolBetaActivationFixtureChecks(): FixtureCheck[] {
   // 13G-Z. Card surfaces the approved "Suggested protocol to review" (production, no demo label).
   add("13G-Z: card shows Jito · JitoSOL as production suggested protocol to review", card?.protocolName === "Jito" && card?.lstSymbol === "JitoSOL" && card?.suggestedProtocolLabel === "Suggested protocol to review" && card?.protocolSelectionDisplay?.mode === "production" && card?.protocolSelectionDisplay?.protocolName === "Jito", `name=${card?.protocolName} lst=${card?.lstSymbol} mode=${card?.protocolSelectionDisplay?.mode}`);
 
-  // 13G-AA. Execution guardrails stay not evaluated (no quote/route data) — never "passed".
+  // 13G-AA. Execution guardrails are never "passed" for execution. The raw engine
+  // guardrails stay not_evaluated; the read-only route review (Step 13I) shows them
+  // in its own section, so they no longer appear in the generic "Not evaluated yet".
   {
     const g = (code: string) => staking?.guardrails.find((x) => x.code === code)?.status;
     const execNotPassed = ["cost_available", "liquidity_available", "slippage_available"].every((c) => g(c) === "not_evaluated");
     const summary = details?.guardrailSummary;
-    const inNotEvaluated = ["Route cost", "Liquidity depth", "Slippage"].every((l) => summary?.notEvaluated.includes(l));
-    add("13G-AA: execution guardrails (cost/liquidity/slippage) stay not evaluated", execNotPassed && inNotEvaluated === true, `execNotPassed=${execNotPassed} inNotEvaluated=${inNotEvaluated}`);
+    const notInGenericGroups = ["Route cost", "Liquidity depth", "Slippage"].every(
+      (l) => !(summary?.notEvaluated ?? []).includes(l) && !(summary?.checked ?? []).includes(l)
+    );
+    add("13G-AA: execution guardrails never pass for execution; shown only in the route section", execNotPassed && notInGenericGroups && details?.routeEvaluation != null, `execNotPassed=${execNotPassed} notInGeneric=${notInGenericGroups} hasRoute=${details?.routeEvaluation != null}`);
   }
 
   // 13G-AB…AD. Demo Mode is UNCHANGED by enabling the real-wallet beta.
@@ -7690,6 +7704,104 @@ export function runTestingPageFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 13I — read-only route cost / liquidity depth / slippage evaluation for the
+ * JitoSOL recommendation. Verifies the flags, the direct-protocol evaluation, that
+ * the real-wallet / Demo / testing staking details carry the route section and stay
+ * review-only, that swap-route values are never invented, and no tx/sig path exists.
+ * ------------------------------------------------------------------ */
+export function runJitoSolRouteEvaluationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const CHECKED_AT = "2026-07-13T00:00:00Z";
+  const direct = evaluateJitoSolDirectProtocolRoute({ inputAmountSol: 12.4, checkedAt: CHECKED_AT });
+  const swapNoQuote = evaluateJitoSolSwapRoute({ inputAmountSol: 12.4, checkedAt: CHECKED_AT });
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const stakingDetails = staking?.reviewDetails;
+  const stakingCard = staking ? toSuggestionCard(staking) : undefined;
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+
+  // 13I-A…F. Flags.
+  add("13I-A: JITOSOL_READ_ONLY_ROUTE_EVALUATION_EXISTS is true", JITOSOL_READ_ONLY_ROUTE_EVALUATION_EXISTS === true, `v=${JITOSOL_READ_ONLY_ROUTE_EVALUATION_EXISTS}`);
+  add("13I-B: JITOSOL_READ_ONLY_ROUTE_EVALUATION_ENABLED is true", JITOSOL_READ_ONLY_ROUTE_EVALUATION_ENABLED === true, `v=${JITOSOL_READ_ONLY_ROUTE_EVALUATION_ENABLED}`);
+  add("13I-C: route evaluation uses read-only quotes", JITOSOL_READ_ONLY_ROUTE_EVALUATION_USES_READ_ONLY_QUOTES === true, `v=${JITOSOL_READ_ONLY_ROUTE_EVALUATION_USES_READ_ONLY_QUOTES}`);
+  add("13I-D: route evaluation enables no transactions", JITOSOL_READ_ONLY_ROUTE_EVALUATION_ENABLES_TRANSACTIONS === false, `v=${JITOSOL_READ_ONLY_ROUTE_EVALUATION_ENABLES_TRANSACTIONS}`);
+  add("13I-E: route evaluation requires no wallet signature", JITOSOL_READ_ONLY_ROUTE_EVALUATION_REQUIRES_WALLET_SIGNATURE === false, `v=${JITOSOL_READ_ONLY_ROUTE_EVALUATION_REQUIRES_WALLET_SIGNATURE}`);
+  add("13I-F: route evaluation prefills no route", JITOSOL_READ_ONLY_ROUTE_EVALUATION_PREFILLS_ROUTE === false, `v=${JITOSOL_READ_ONLY_ROUTE_EVALUATION_PREFILLS_ROUTE}`);
+
+  // 13I-G…K. Direct protocol evaluation.
+  add("13I-G: direct protocol evaluation input asset is SOL", direct.inputAsset === "SOL", `v=${direct.inputAsset}`);
+  add("13I-H: direct protocol evaluation output asset is JitoSOL", direct.outputAsset === "JitoSOL", `v=${direct.outputAsset}`);
+  add("13I-I: direct protocol route cost is checked_for_review", direct.status === "checked_for_review" && direct.routeType === "direct_protocol", `status=${direct.status} type=${direct.routeType}`);
+  add("13I-J: direct protocol liquidity depth is not applicable", (direct.liquidityDepthLabel ?? "").toLowerCase().includes("not required for the direct protocol path"), `label=${direct.liquidityDepthLabel}`);
+  add("13I-K: direct protocol slippage is not applicable", (direct.slippageLabel ?? "").toLowerCase().includes("not applicable to the direct protocol path"), `label=${direct.slippageLabel}`);
+
+  // 13I-L. Evaluation copy says no transaction is created.
+  add("13I-L: evaluation copy says no transaction is created", JSON.stringify(direct).includes("No transaction is created"), "present");
+
+  // 13I-M…Q. Real wallet JitoSOL staking suggestion.
+  {
+    const re = stakingDetails?.routeEvaluation;
+    add("13I-M: real wallet JitoSOL staking includes route evaluation details", re != null && re.title === "Route and execution checks" && re.groups.some((g) => g.items.includes("Route cost")), `has=${re != null}`);
+    add("13I-N: real wallet JitoSOL staking stays actionKind review_only", staking?.action_kind === "review_only", `kind=${staking?.action_kind}`);
+    add("13I-O: real wallet JitoSOL staking card executes no transaction", stakingCard?.cta.executes_transaction === false, `v=${stakingCard?.cta.executes_transaction}`);
+    add("13I-P: real wallet JitoSOL staking card requires no wallet signature", stakingCard?.cta.requires_wallet_signature === false, `v=${stakingCard?.cta.requires_wallet_signature}`);
+    add("13I-Q: real wallet JitoSOL staking card completion_on_click false", stakingCard?.cta.completion_on_click === false, `v=${stakingCard?.cta.completion_on_click}`);
+  }
+
+  // 13I-R/S. Demo and /testing staking include route evaluation.
+  add("13I-R: Demo SOL Staking includes route evaluation details", demo.routeEvaluation != null && demo.routeEvaluation.groups.some((g) => g.items.includes("Route cost")), `has=${demo.routeEvaluation != null}`);
+  add("13I-S: testing Staking fixture includes route evaluation details", testingStaking?.details.routeEvaluation != null && (testingStaking?.details.routeEvaluation?.groups.some((g) => g.items.includes("Liquidity depth")) ?? false), `has=${testingStaking?.details.routeEvaluation != null}`);
+
+  // 13I-T. The generic "not evaluated yet" no longer lists route rows for JitoSOL.
+  {
+    const gs = stakingDetails?.guardrailSummary;
+    const noRouteInNotEvaluated = ["Route cost", "Liquidity depth", "Slippage"].every((l) => !(gs?.notEvaluated ?? []).includes(l));
+    const noRouteNotEvaluatedLimitation = !(stakingDetails?.limitations ?? []).some((l) => l.kind === "cost_not_evaluated" || l.kind === "liquidity_not_evaluated" || l.kind === "slippage_not_evaluated");
+    add("13I-T: JitoSOL route checks no longer shown as 'market data WealthSmith doesn't have yet'", noRouteInNotEvaluated && noRouteNotEvaluatedLimitation, `noRouteNotEval=${noRouteInNotEvaluated} noLimit=${noRouteNotEvaluatedLimitation}`);
+  }
+
+  // 13I-U. Swap-route values are not invented when quote data is missing.
+  {
+    const noInvented = swapNoQuote.status === "insufficient_data" && swapNoQuote.routeCostLabel == null && swapNoQuote.liquidityDepthLabel == null && swapNoQuote.slippageLabel == null && swapNoQuote.priceImpactPct == null;
+    add("13I-U: swap-route values are not invented when quote data is missing", noInvented, `status=${swapNoQuote.status} cost=${swapNoQuote.routeCostLabel}`);
+  }
+
+  // 13I-V. Execution guardrails are not marked transaction-ready.
+  {
+    const g = (code: string) => staking?.guardrails.find((x) => x.code === code)?.status;
+    const noPassedExec = ["cost_available", "liquidity_available", "slippage_available"].every((c) => g(c) !== "passed");
+    const json = (JSON.stringify(direct) + JSON.stringify(stakingDetails?.routeEvaluation)).toLowerCase();
+    const noReadyClaims = !["execution ready", "safe to execute", "ready to execute", "transaction ready"].some((w) => json.includes(w));
+    add("13I-V: execution guardrails are not marked transaction-ready", noPassedExec && noReadyClaims && direct.transactionsEnabled === false, `noPassed=${noPassedExec} noReady=${noReadyClaims}`);
+  }
+
+  // 13I-W. No signMessage/signTransaction/signAllTransactions/sendTransaction path.
+  {
+    const json = (JSON.stringify(direct) + JSON.stringify(swapNoQuote) + JSON.stringify(stakingDetails?.routeEvaluation) + JSON.stringify(demo.routeEvaluation)).toLowerCase();
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage"];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("13I-W: no sign/send transaction path in route evaluation", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  // 13I-X. No forbidden investment claims in route evaluation copy.
+  {
+    const json = (JSON.stringify(direct) + JSON.stringify(swapNoQuote) + JSON.stringify(stakingDetails?.routeEvaluation)).toLowerCase();
+    const forbidden = ["best route", "optimal route", "guaranteed", "risk-free", "safest", "recommended", "you should", "highest apy", "safe to execute", "execution ready"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("13I-X: no forbidden investment claims in route evaluation copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -7742,6 +7854,7 @@ export function printFixtureResults(): void {
     ...runDemoExactSolStakingMarketDataFixtureChecks(),
     ...runJitoSolBetaActivationFixtureChecks(),
     ...runTestingPageFixtureChecks(),
+    ...runJitoSolRouteEvaluationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

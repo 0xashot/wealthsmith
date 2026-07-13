@@ -60,6 +60,15 @@ and `.transactionsEnabled` are false; the limitations still state production sel
 is disabled and real wallet mode needs the approval gates. No production flag changes,
 no transaction/signature path.
 
+## Read-only route checks (Step 13I)
+
+The demo Review Details now includes the shared **"Route and execution checks"** section
+(same as real wallet mode): route cost *checked for review*, DEX liquidity depth and
+slippage *not applicable* (idle SOL → JitoSOL is a direct protocol stake, not a swap),
+with the read-only note that WealthSmith does not create transactions or move funds. See
+[jitoSolReadOnlyRouteEvaluation.md](jitoSolReadOnlyRouteEvaluation.md). Demo label stays
+`DEMO_PREVIEW_NOT_LIVE`; no transaction/signature path.
+
 ## Not production selection
 
 - This is not real wallet data and not production selector output.

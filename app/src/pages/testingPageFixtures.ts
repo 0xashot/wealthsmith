@@ -18,6 +18,7 @@ import type {
   ReviewSafetyNote,
   SuggestionReviewDetails,
 } from "../suggestions/engineTypes";
+import { getJitoSolDirectProtocolRouteEvaluationDisplay } from "../suggestions/jitoSolReadOnlyRouteEvaluation";
 
 /* ------------------------------------------------------------------ *
  * Route + safety flags (mirrors the internalPreviewFlags pattern).
@@ -306,15 +307,16 @@ const staking: TestingFixture = {
     calculations: [],
     guardrailSummary: {
       checked: ["Safety Buffer protection", "SOL fee reserve", "Minimum suggestion size", "Protocol selection"],
-      notEvaluated: ["Route cost", "Liquidity depth", "Slippage"],
+      notEvaluated: [],
       notApplicable: [],
     },
-    limitations: [
-      { kind: "cost_not_evaluated", text: "WealthSmith has not evaluated route cost yet." },
-      { kind: "liquidity_not_evaluated", text: "WealthSmith has not evaluated liquidity depth yet." },
-      { kind: "slippage_not_evaluated", text: "WealthSmith has not evaluated slippage yet." },
-      REVIEW_ONLY_LIMITATION,
-    ],
+    // Read-only route/liquidity/slippage checks (Step 13I) — same shape real wallet
+    // mode uses: direct protocol route reviewed, DEX liquidity/slippage not applicable.
+    routeEvaluation: getJitoSolDirectProtocolRouteEvaluationDisplay({
+      inputAmountSol: 12.4,
+      checkedAt: "2026-07-13T00:00:00Z",
+    }),
+    limitations: [REVIEW_ONLY_LIMITATION],
     safetyNotes: REVIEW_ONLY_NOTES,
     demoLabel: TESTING_PREVIEW_NOT_LIVE,
     protocolSelectionDisplay: {

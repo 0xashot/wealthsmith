@@ -598,5 +598,13 @@ also appears in **real wallet mode** behind the read-only beta flag (source stat
 **"Verified source data"**, mode `production`) — see
 [jitoSolBetaActivation.md](jitoSolBetaActivation.md). `realWalletSelectionEnabled` is
 true (read-only selection) while `transactionsEnabled` stays false. This is a
-recommendation to review, not execution: no transaction, signature, or fund movement,
-and the execution guardrails (cost/liquidity/slippage) stay not evaluated.
+recommendation to review, not execution: no transaction, signature, or fund movement.
+
+**Step 13I — read-only route/liquidity/slippage evaluation:** the execution guardrails
+are now surfaced via a read-only "Route and execution checks" section rather than left as
+generic "not evaluated yet" — see
+[jitoSolReadOnlyRouteEvaluation.md](jitoSolReadOnlyRouteEvaluation.md). Because idle SOL →
+JitoSOL is a **direct protocol stake** (not a DEX swap), route cost is *checked for
+review* and DEX liquidity depth / slippage are *not applicable*. A swap-route path stays
+*insufficient data* until a real read-only quote exists; no route/liquidity/slippage value
+is invented. Still read-only: no transaction, signature, or fund movement.

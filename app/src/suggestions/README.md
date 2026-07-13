@@ -1048,3 +1048,15 @@ any page, reachable only by opening the URL (gated by `isTestingPageEnabled()`: 
 `VITE_ENABLE_TESTING_PAGE=true`), uses deterministic fixtures labeled
 `TESTING_PREVIEW_NOT_LIVE`, connects no wallet, enables no transactions, and mutates no
 live/Demo behavior. `TestingPage` is imported only by `App.tsx`'s route gate.
+
+## Read-only route / liquidity / slippage evaluation (Step 13I)
+
+The JitoSOL recommendation now shows a **read-only** "Route and execution checks" section
+in Review Details — see [jitoSolReadOnlyRouteEvaluation.md](jitoSolReadOnlyRouteEvaluation.md).
+Idle SOL → JitoSOL is a **direct protocol stake**, so route cost is *checked for review*
+and DEX liquidity depth / slippage are *not applicable*; a swap-route path stays
+*insufficient data* until a real read-only quote exists (values are never invented). It
+is evaluation only — no swap, no transaction, no signature, no route execution — and the
+suggestion stays `review_only` with all execution booleans false. The section replaces
+the generic "not evaluated yet" route rows for this recommendation (real wallet, Demo,
+and `/testing`); other suggestions are unchanged.

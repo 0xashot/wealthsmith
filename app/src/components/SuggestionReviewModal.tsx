@@ -341,6 +341,33 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
             </section>
           )}
 
+          {details.routeEvaluation && (
+            <section className="review-modal__section" aria-label="Route and execution checks">
+              <h3 className="review-modal__section-title">{details.routeEvaluation.title}</h3>
+              <p className="review-modal__source-status">{details.routeEvaluation.sourceStatusLabel}</p>
+              <div className="review-modal__guardrails">
+                {details.routeEvaluation.groups.map((g) => (
+                  <div
+                    key={g.title}
+                    className={`review-modal__guardrail-group review-modal__guardrail-group--${
+                      g.tone === "checked" ? "checked" : g.tone === "na" ? "na" : "pending"
+                    }`}
+                  >
+                    <p className="review-modal__guardrail-title">{g.title}</p>
+                    <ul className="review-modal__chips">
+                      {g.items.map((item) => (
+                        <li key={item} className="review-modal__chip">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+              <p className="review-modal__guardrail-hint">{details.routeEvaluation.explanation}</p>
+            </section>
+          )}
+
           {limitations.length > 0 && (
             <section className="review-modal__section" aria-label="What is not evaluated yet">
               <h3 className="review-modal__section-title">Not evaluated yet</h3>

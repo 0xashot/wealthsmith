@@ -387,6 +387,12 @@ export interface SuggestionReviewDetails {
    */
   demoLabel?: string;
   protocolSelectionDisplay?: ProtocolSelectionDisplay;
+  /**
+   * Optional read-only route/liquidity/slippage evaluation (Step 13I). When
+   * present, the modal shows a dedicated "Route and execution checks" section and
+   * these guardrails are removed from the generic "Not evaluated yet" group.
+   */
+  routeEvaluation?: RouteEvaluationDisplay;
 }
 
 /**
@@ -416,6 +422,29 @@ export interface ProtocolSelectionDisplay {
     realWalletSelectionEnabled: boolean;
     transactionsEnabled: false;
   };
+}
+
+/**
+ * Read-only "Route and execution checks" display (Step 13I). Renders route cost,
+ * liquidity depth, and slippage as review-only, grouped chips — NEVER an
+ * execution-readiness claim. Present only for the approved JitoSOL recommendation
+ * (real wallet, Demo preview, and the /testing fixture); other suggestions keep
+ * showing these guardrails in the generic "Not evaluated yet" group.
+ */
+export interface RouteEvaluationDisplayGroup {
+  title: string;
+  tone: "checked" | "na" | "insufficient";
+  items: string[];
+}
+
+export interface RouteEvaluationDisplay {
+  /** Section heading, e.g. "Route and execution checks". */
+  title: string;
+  /** Read-only source label, e.g. "Read-only protocol route review". */
+  sourceStatusLabel: string;
+  groups: RouteEvaluationDisplayGroup[];
+  /** Informational, read-only reassurance — never an execution-readiness claim. */
+  explanation: string;
 }
 
 /**

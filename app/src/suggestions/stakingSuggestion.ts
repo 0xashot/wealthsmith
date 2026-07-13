@@ -28,6 +28,7 @@ import { selectJitoSolReadOnlyBeta } from "./protocolSolLiquidStakingSelector";
 import {
   isJitoSolBetaReadOnlyEnabled,
   getJitoSolBetaProtocolSelectionDisplay,
+  getJitoSolBetaRouteEvaluationDisplay,
   JITOSOL_BETA_LST_SYMBOL,
 } from "./jitoSolBetaActivation";
 import type { ProtocolSelection, ReviewSafetyNote, SuggestionReviewDetails } from "./engineTypes";
@@ -108,6 +109,7 @@ export function deriveStakingSuggestion(
   );
   let protocolSelectionDisplay: SuggestionReviewDetails["protocolSelectionDisplay"] | undefined;
   let safetyNotesOverride: ReviewSafetyNote[] | undefined;
+  let routeEvaluationDisplay: SuggestionReviewDetails["routeEvaluation"] | undefined;
 
   if (isJitoSolBetaReadOnlyEnabled()) {
     const betaSelection = selectJitoSolReadOnlyBeta({
@@ -126,6 +128,12 @@ export function deriveStakingSuggestion(
         dataSources: ["Verified source data"],
       });
       protocolSelectionDisplay = getJitoSolBetaProtocolSelectionDisplay();
+      // Read-only route/liquidity/slippage evaluation (Step 13I). Direct protocol
+      // stake → route cost reviewed; DEX liquidity/slippage not applicable. No tx.
+      routeEvaluationDisplay = getJitoSolBetaRouteEvaluationDisplay({
+        inputAmountSol: Math.round(eligibleSol * 10000) / 10000,
+        checkedAt: new Date(generatedAt).toISOString(),
+      });
       // Read-only recommendation copy — never implies a transaction/signature.
       safetyNotesOverride = [
         { kind: "no_auto_move", text: "WealthSmith does not move funds for you." },
@@ -143,6 +151,7 @@ export function deriveStakingSuggestion(
     protocolSelection,
     ...(protocolSelectionDisplay ? { protocolSelectionDisplay } : {}),
     ...(safetyNotesOverride ? { safetyNotesOverride } : {}),
+    ...(routeEvaluationDisplay ? { routeEvaluationDisplay } : {}),
     metrics: [
       metric("Liquid SOL", Math.round(totalLiquidSol * 10000) / 10000, "token_amount", "SOL"),
       metric("SOL reserve kept", SOL_FEE_RESERVE, "token_amount", "SOL"),

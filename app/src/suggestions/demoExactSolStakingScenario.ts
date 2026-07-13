@@ -19,6 +19,7 @@
 import type { SuggestionCardState } from "../types/dashboard";
 import type { SuggestionReviewDetails } from "./engineTypes";
 import type { RailSuggestions } from "./useRailSuggestions";
+import { getJitoSolDirectProtocolRouteEvaluationDisplay } from "./jitoSolReadOnlyRouteEvaluation";
 
 export const DEMO_EXACT_SOL_STAKING_SCENARIO_EXISTS = true;
 export const DEMO_EXACT_SOL_STAKING_SCENARIO_DEMO_ONLY = true;
@@ -182,6 +183,12 @@ export function getDemoExactSolStakingReviewDetails(): SuggestionReviewDetails {
     // Demo-only: JitoSOL market data is verified for this demo preview; real wallet
     // protocol selection is still disabled. (Not a passed production guardrail.)
     guardrailSummary: { checked: ["Protocol selection (verified for demo)"], notEvaluated: [], notApplicable: [] },
+    // Read-only route/liquidity/slippage checks (Step 13I). Direct protocol stake:
+    // route cost reviewed; DEX liquidity depth / slippage not applicable. No tx.
+    routeEvaluation: getJitoSolDirectProtocolRouteEvaluationDisplay({
+      inputAmountSol: wallet.eligibleSol,
+      checkedAt: "2026-07-13T00:00:00Z",
+    }),
     limitations: [
       { kind: "protocol_not_selected", text: s.limitations[0] },
       { kind: "review_only", text: s.limitations[1] },

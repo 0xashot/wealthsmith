@@ -49,8 +49,9 @@ All nine: Safety Buffer, Rebalance (Allocation), Capital Efficiency, Trim Long-T
 Staking, Stable Yield, DCA, Position Optimization, and On Track. The Staking fixture
 surfaces **Jito · JitoSOL** as the "Suggested protocol to review" with the verified
 market data (TVL $767.95M, current APY 5.36%, 30-day APY 5.45%, direct unstake ~48h,
-unstake fee 0.1%, 4% annual management fee on rewards). On Track is informational (no
-CTA, never a Top Pick).
+unstake fee 0.1%, 4% annual management fee on rewards) and the read-only "Route and
+execution checks" section (Step 13I — route cost *checked for review*, DEX liquidity
+depth / slippage *not applicable*). On Track is informational (no CTA, never a Top Pick).
 
 ## Testing label
 
