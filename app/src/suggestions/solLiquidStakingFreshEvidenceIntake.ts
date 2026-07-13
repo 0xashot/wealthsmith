@@ -124,9 +124,19 @@ function evaluateInput(input: SolLstFreshEvidenceInput, checkedAt?: string): { s
 
   const blockers: string[] = [];
   const isNumeric = NUMERIC_CATEGORIES.includes(input.category);
+  const isDirectUnstakeTime = input.category === "direct_unstake_time";
   const valueMissing = input.value === undefined || input.value === null || (typeof input.value === "string" && input.value.trim() === "");
   if (valueMissing) {
     blockers.push("missing_value");
+  } else if (isDirectUnstakeTime) {
+    // Dual-format (Step 14I): direct_unstake_time accepts EITHER numeric hours
+    // (number + unit "hours") OR sourced epoch-based text (string + unit "text").
+    // This avoids inventing fixed hours for epoch-based protocols. The unit must
+    // match the value type (number↔hours, string↔text), so number+text and
+    // text+hours are rejected.
+    const okHours = typeof input.value === "number" && input.unit === "hours";
+    const okText = typeof input.value === "string" && input.unit === "text";
+    if (!okHours && !okText) blockers.push("invalid_value_type");
   } else if ((isNumeric && typeof input.value !== "number") || (!isNumeric && typeof input.value !== "string")) {
     blockers.push("invalid_value_type");
   }
@@ -153,6 +163,18 @@ function evaluateInput(input: SolLstFreshEvidenceInput, checkedAt?: string): { s
 /** Validate one fresh-evidence input and return its status (never approves/scores). */
 export function validateSolLstFreshEvidenceInput(input: SolLstFreshEvidenceInput, checkedAt?: string): SolLstFreshEvidenceStatus {
   return evaluateInput(input, checkedAt).status;
+}
+
+/**
+ * Whether a `direct_unstake_time` input is in a valid dual-format shape (Step 14I):
+ * numeric hours (`unit: "hours"`) OR non-empty sourced text (`unit: "text"`). Makes
+ * the epoch-based-vs-hours rule explicit; does not check freshness or other fields.
+ */
+export function isValidDirectUnstakeTimeEvidence(input: SolLstFreshEvidenceInput): boolean {
+  if (input.category !== "direct_unstake_time") return false;
+  const okHours = typeof input.value === "number" && input.unit === "hours";
+  const okText = typeof input.value === "string" && input.value.trim() !== "" && input.unit === "text";
+  return okHours || okText;
 }
 
 /** Convert one input into a validated record (adds registry name/symbol + blockers). */

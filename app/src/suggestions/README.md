@@ -1139,13 +1139,14 @@ by appending fully populated inputs to the matching array; a candidate becomes r
 with all ten categories fresh + accepted, and even then still needs rubric + risk-approval
 decision. No scores, no approval, no live/Demo/testing change, no transaction/signature.
 
-**Steps 14F + 14G + 14H — Marinade · mSOL:** founder-authorized public-source fetches
-recorded **9 of 10** categories (accepted): market data (`tvl`/`current_apy`/`apy_30d`,
-DefiLlama pool) + `withdrawal_mechanics` + `audit_security` (14F); `direct_unstake_fee`
-(0.2% direct/delayed path, FAQ verbatim), `operational_risk`, `incident_review` (documented
-SAM unstake-priority logic bug — not a clean-history claim) (14G); and `annual_management_fee`
-= 0 (Marinade docs verbatim "No performance fees on staking rewards"; SAM revenue model) (14H).
-**One** stays missing: `direct_unstake_time` — epoch-based with no reliable fixed-hours figure,
-and the field is numeric, so it is not forced. No stale 14B value reused, nothing invented.
-mSOL is **`readyForRiskGate: false`** (mechanics incomplete — only `direct_unstake_time`),
-unscored, unapproved, absent from real wallet mode.
+**Steps 14F–14I — Marinade · mSOL:** founder-authorized public-source fetches recorded **all
+10** categories (accepted): market data (`tvl`/`current_apy`/`apy_30d`, DefiLlama pool) +
+`withdrawal_mechanics` + `audit_security` (14F); `direct_unstake_fee` (0.2% direct/delayed
+path, FAQ verbatim), `operational_risk`, `incident_review` (documented SAM unstake-priority
+logic bug — not a clean-history claim) (14G); `annual_management_fee` = 0 (Marinade docs
+verbatim "No performance fees on staking rewards") (14H); and `direct_unstake_time` as
+sourced **epoch-based text** (14I — the intake now accepts `direct_unstake_time` as numeric
+hours OR text, so no hours are invented for an epoch-based protocol). mSOL is now
+**`readyForRiskGate: true` while fresh** (stale beyond 24h), but **still unscored, not
+approved, and absent from real wallet mode** — rubric + risk-approval decision are separate
+later gates. No stale 14B value reused, nothing invented.

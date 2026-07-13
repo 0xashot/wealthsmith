@@ -663,8 +663,10 @@ verbatim; instant path LP/Jupiter-priced), `operational_risk` (SAM delegation, s
 LP/Jupiter dependency, 13-party multisig), `incident_review` (documented SAM unstake-priority
 logic bug, ~37,000 SOL / ~28% missed rewards over epochs 652–777 — a point-in-time finding,
 not a clean-history claim); and `annual_management_fee` = 0 (Marinade docs verbatim "No
-performance fees on staking rewards"; SAM revenue model; supersedes historical ~6%). **One**
-stays not recorded: `direct_unstake_time` — the docs give only epoch-based timing with no
-reliable fixed-hours figure, and the field is numeric, so it is not forced. Nothing was
-invented and no stale value reused, so mSOL stays `readyForRiskGate: false` — unscored,
-unapproved, absent from real wallet mode.
+performance fees on staking rewards"; SAM revenue model; supersedes historical ~6%). And **14I** recorded
+the last field, `direct_unstake_time`, as sourced **epoch-based text** ("claimable after
+epoch n+1") after the intake was extended to accept `direct_unstake_time` as numeric hours OR
+text — so no hours are invented for an epoch-based protocol. Nothing was invented and no
+stale value reused. mSOL now has all 10 categories and is `readyForRiskGate: true` **while
+fresh** (stale beyond the 24h window), but stays **unscored, unapproved, and absent from real
+wallet mode** — rubric + risk-approval decision are separate later gates.

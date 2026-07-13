@@ -25,9 +25,21 @@ Flags: `SOL_LST_FRESH_EVIDENCE_INTAKE_EXISTS = true`; `..._ASSIGNS_RISK_SCORES`,
 ## Required evidence categories
 
 - **Market:** `tvl`, `current_apy`, `apy_30d` (numeric).
-- **Mechanics:** `withdrawal_mechanics` (text), `direct_unstake_time`,
-  `direct_unstake_fee`, `annual_management_fee` (numeric).
+- **Mechanics:** `withdrawal_mechanics` (text), `direct_unstake_fee`,
+  `annual_management_fee` (numeric), `direct_unstake_time` (**dual-format** — see below).
 - **Evidence:** `audit_security`, `operational_risk`, `incident_review` (text).
+
+## `direct_unstake_time` is dual-format (Step 14I)
+
+`direct_unstake_time` accepts **either** a numeric hours value (`value: number`,
+`unit: "hours"`) **or** sourced text timing (`value: non-empty string`, `unit: "text"`).
+The text format exists for **epoch-based protocols** (e.g. Marinade mSOL: "claimable after
+epoch n+1") where a fixed-hours number would be misleading — recording it as text avoids
+inventing an hour conversion the source does not support. The unit must match the value
+type: `number+text` and `text+hours` are rejected; empty text is rejected. Text timing
+must still be sourced and fresh (same 24h rule). `isValidDirectUnstakeTimeEvidence(input)`
+exposes the rule explicitly. All other categories keep strict typing (market/fee fields
+numeric-only; audit/operational/incident text-only).
 
 ## Freshness rule: 24 hours
 

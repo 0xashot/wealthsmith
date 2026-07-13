@@ -354,6 +354,7 @@ import {
   summarizeSolLstFreshEvidenceRecords,
   getSolLstFreshEvidenceFixtureInputs,
   previewSolLstRiskGateWithFreshEvidence,
+  isValidDirectUnstakeTimeEvidence,
   type SolLstFreshEvidenceInput,
 } from "./solLiquidStakingFreshEvidenceIntake";
 import {
@@ -8496,10 +8497,13 @@ export function runSolLstFreshEvidenceRecordsFixtureChecks(): FixtureCheck[] {
     add("14E-AC: no forbidden investment claims in fresh-evidence records copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
   }
 
-  // 14E-AD/AE. Ready-state semantics: any candidate with complete records is ready;
-  // with incomplete/empty records none is ready (current: all blocked).
+  // 14E-AD/AE. Ready-state semantics: a candidate with complete records is ready only
+  // while fresh; beyond the 24h freshness window records go stale and none is ready.
   add("14E-AD: candidates with complete real records are readyForRiskGate", summaries.filter((s) => s.marketDataComplete && s.mechanicsComplete && s.evidenceComplete).every((s) => s.readyForRiskGate === true), `ready=${status.candidatesReadyForRiskGate}`);
-  add("14E-AE: incomplete/empty records keep candidates not ready (all blocked)", status.candidatesReadyForRiskGate === 0, `ready=${status.candidatesReadyForRiskGate}`);
+  {
+    const staleStatus = summarizeSolLstFreshEvidenceRecordStatus({ checkedAt: "2026-08-01T00:00:00Z" });
+    add("14E-AE: beyond the 24h window records go stale, so no candidate is readyForRiskGate", staleStatus.candidatesReadyForRiskGate === 0, `readyWhenStale=${staleStatus.candidatesReadyForRiskGate}`);
+  }
 
   return checks;
 }
@@ -8605,6 +8609,121 @@ export function runSolLstMsolFreshEvidenceFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 14I — epoch-based unstake-timing evidence. The intake now accepts
+ * direct_unstake_time as EITHER numeric hours OR sourced text; mSOL's epoch-based
+ * timing completes its 10th category so it is readyForRiskGate while fresh (stale
+ * beyond 24h). Still no score/approval/live change; rubric + decision still required.
+ * ------------------------------------------------------------------ */
+export function runSolLstEpochUnstakeTimingFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const CONFIRMED = "2026-07-13T14:00:00Z";
+  const FRESH = "2026-07-13T15:00:00Z";  // within 24h of every mSOL record
+  const STALE = "2026-07-20T00:00:00Z";  // > 24h beyond every mSOL record
+  const timeInput = (value: number | string, unit: SolLstFreshEvidenceInput["unit"]): SolLstFreshEvidenceInput => ({
+    protocolId: "marinade",
+    category: "direct_unstake_time",
+    value,
+    unit,
+    sourceName: "Marinade Documentation — FAQ",
+    sourceUrl: "https://docs.marinade.finance/marinade-protocol/faq",
+    confirmedAt: CONFIRMED,
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Epoch-based unstake timing evidence."],
+  });
+  const otherInput = (category: SolLstFreshEvidenceInput["category"], value: number | string, unit: SolLstFreshEvidenceInput["unit"]): SolLstFreshEvidenceInput => ({
+    protocolId: "marinade", category, value, unit,
+    sourceName: "src", sourceUrl: "https://example.com/x", confirmedAt: CONFIRMED, confirmedBy: "Ashot", reviewerRole: "founder", notes: ["n"],
+  });
+  const statusOf = (i: SolLstFreshEvidenceInput) => validateSolLstFreshEvidenceInput(i, FRESH);
+
+  const mSolTimeRecord = MARINADE_MSOL_FRESH_EVIDENCE_INPUTS.find((i) => i.category === "direct_unstake_time");
+  const recsFresh = getSolLstFreshEvidenceRecords({ checkedAt: FRESH });
+  const mSolFresh = recsFresh.filter((r) => r.protocolId === "marinade");
+  const sumFresh = getSolLstFreshEvidenceSummaries({ checkedAt: FRESH }).find((s) => s.protocolId === "marinade");
+  const sumStale = getSolLstFreshEvidenceSummaries({ checkedAt: STALE }).find((s) => s.protocolId === "marinade");
+  const prevFresh = getSolLstFreshEvidenceRiskGatePreview({ checkedAt: FRESH }).find((p) => p.protocolId === "marinade");
+  const marinade = getSolLiquidStakingCandidateById("marinade");
+  const docJson = JSON.stringify(mSolFresh) + JSON.stringify(sumFresh) + JSON.stringify(prevFresh) + JSON.stringify(mSolTimeRecord);
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+
+  // 14I-A…E. Dual-format validation for direct_unstake_time.
+  add("14I-A: direct_unstake_time accepts numeric hours", statusOf(timeInput(48, "hours")) === "accepted", `s=${statusOf(timeInput(48, "hours"))}`);
+  add("14I-B: direct_unstake_time accepts non-empty text with unit text", statusOf(timeInput("Claimable after epoch n+1.", "text")) === "accepted", `s=${statusOf(timeInput("Claimable after epoch n+1.", "text"))}`);
+  add("14I-C: direct_unstake_time rejects empty text", ["incomplete", "rejected"].includes(statusOf(timeInput("", "text"))), `s=${statusOf(timeInput("", "text"))}`);
+  add("14I-D: direct_unstake_time rejects numeric value with unit text", statusOf(timeInput(48, "text")) === "rejected", `s=${statusOf(timeInput(48, "text"))}`);
+  add("14I-E: direct_unstake_time rejects text value with unit hours", statusOf(timeInput("two epochs", "hours")) === "rejected", `s=${statusOf(timeInput("two epochs", "hours"))}`);
+
+  // 14I-F/G. Other categories keep strict typing.
+  add("14I-F: other numeric categories still reject text values", statusOf(otherInput("tvl", "not a number", "text")) === "rejected" && statusOf(otherInput("direct_unstake_fee", "0.2", "text")) === "rejected", "ok");
+  add("14I-G: other text categories still reject numeric values", statusOf(otherInput("audit_security", 123, "text")) === "rejected" && statusOf(otherInput("operational_risk", 5, "text")) === "rejected", "ok");
+  // Helper agrees with the validator.
+  add("14I-G2: isValidDirectUnstakeTimeEvidence agrees (hours & text ok; mismatches not)", isValidDirectUnstakeTimeEvidence(timeInput(48, "hours")) && isValidDirectUnstakeTimeEvidence(timeInput("x", "text")) && !isValidDirectUnstakeTimeEvidence(timeInput(48, "text")) && !isValidDirectUnstakeTimeEvidence(timeInput("x", "hours")), "ok");
+
+  // 14I-H…P. The recorded mSOL direct_unstake_time record.
+  add("14I-H: mSOL direct_unstake_time record exists", mSolTimeRecord != null, `has=${mSolTimeRecord != null}`);
+  add("14I-I: mSOL direct_unstake_time record uses unit text", mSolTimeRecord?.unit === "text", `unit=${mSolTimeRecord?.unit}`);
+  add("14I-J: mSOL direct_unstake_time record does not use TEST_ONLY", !JSON.stringify(mSolTimeRecord).includes("TEST_ONLY"), "clean");
+  add("14I-K: mSOL direct_unstake_time record has sourceName", (mSolTimeRecord?.sourceName ?? "").trim() !== "", `v=${mSolTimeRecord?.sourceName}`);
+  add("14I-L: mSOL direct_unstake_time record has sourceUrl", (mSolTimeRecord?.sourceUrl ?? "").trim() !== "", `v=${mSolTimeRecord?.sourceUrl}`);
+  add("14I-M: mSOL direct_unstake_time record has confirmedAt", !Number.isNaN(Date.parse(mSolTimeRecord?.confirmedAt ?? "")), `v=${mSolTimeRecord?.confirmedAt}`);
+  add("14I-N: mSOL direct_unstake_time record has confirmedBy", (mSolTimeRecord?.confirmedBy ?? "").trim() !== "", `v=${mSolTimeRecord?.confirmedBy}`);
+  add("14I-O: mSOL direct_unstake_time record has reviewerRole", (mSolTimeRecord?.reviewerRole ?? "").length > 0, `v=${mSolTimeRecord?.reviewerRole}`);
+  add("14I-P: mSOL direct_unstake_time record has notes", (mSolTimeRecord?.notes?.length ?? 0) > 0, `n=${mSolTimeRecord?.notes?.length}`);
+  add("14I-Q: mSOL direct_unstake_time record is accepted when fresh", mSolFresh.find((r) => r.category === "direct_unstake_time")?.status === "accepted", `s=${mSolFresh.find((r) => r.category === "direct_unstake_time")?.status}`);
+
+  // 14I-R…V. mSOL completeness + readiness (fresh) and staleness.
+  add("14I-R: mSOL has 10 accepted records within the freshness window", mSolFresh.filter((r) => r.status === "accepted").length === 10, `accepted=${mSolFresh.filter((r) => r.status === "accepted").length}`);
+  add("14I-S: mSOL marketDataComplete is true", sumFresh?.marketDataComplete === true, `v=${sumFresh?.marketDataComplete}`);
+  add("14I-T: mSOL mechanicsComplete is true", sumFresh?.mechanicsComplete === true, `v=${sumFresh?.mechanicsComplete}`);
+  add("14I-U: mSOL evidenceComplete is true", sumFresh?.evidenceComplete === true, `v=${sumFresh?.evidenceComplete}`);
+  add("14I-V: mSOL readyForRiskGate is true when all 10 records are fresh", sumFresh?.readyForRiskGate === true, `v=${sumFresh?.readyForRiskGate}`);
+  add("14I-W: mSOL readyForRiskGate becomes false when records are stale", sumStale?.readyForRiskGate === false, `v=${sumStale?.readyForRiskGate}`);
+
+  // 14I-X…Z. Preview: value/evidence clear, but rubric + decision still required.
+  add("14I-X: preview wouldClearValueAndEvidenceBlockers is true for fresh complete mSOL", prevFresh?.wouldClearValueAndEvidenceBlockers === true, `v=${prevFresh?.wouldClearValueAndEvidenceBlockers}`);
+  add("14I-Y: preview still requires rubric approval", prevFresh?.stillRequiresRubricApproval === true, `v=${prevFresh?.stillRequiresRubricApproval}`);
+  add("14I-Z: preview still requires risk approval decision", prevFresh?.stillRequiresRiskApprovalDecision === true, `v=${prevFresh?.stillRequiresRiskApprovalDecision}`);
+
+  // 14I-AA…AC. No score / no approval / not in real wallet.
+  add("14I-AA: mSOL riskScore remains undefined", marinade?.risk.riskScore === undefined && (prevFresh?.scoreAssigned as boolean) === false, `score=${marinade?.risk.riskScore}`);
+  add("14I-AB: mSOL is not approved for read-only recommendation", marinade?.approvedForReadOnlyRecommendation === false && marinade?.status === "staged_candidate" && (prevFresh?.candidateApproved as boolean) === false, `approved=${marinade?.approvedForReadOnlyRecommendation}`);
+  add("14I-AC: mSOL does not appear in real wallet recommendations", !JSON.stringify(staking).includes("mSOL") && !JSON.stringify(staking).includes("Marinade"), "absent");
+
+  // 14I-AD/AE. Live selection unchanged.
+  add("14I-AD: live staking suggestion still selects Jito/JitoSOL", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  add("14I-AE: live staking suggestion does not select mSOL", staking?.protocolSelection?.selectedLstSymbol !== "mSOL" && staking?.protocolSelection?.selectedProtocolName !== "Marinade", `lst=${staking?.protocolSelection?.selectedLstSymbol}`);
+
+  // 14I-AF/AG. Demo Mode and /testing unchanged.
+  add("14I-AF: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !JSON.stringify(demo).includes("mSOL"), "unchanged");
+  add("14I-AG: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && !JSON.stringify(testingStaking).includes("mSOL"), "unchanged");
+
+  // 14I-AH. No transaction/signature/swap path in the epoch-timing output.
+  {
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "swap(", "deposit(", "withdraw(", "unstake("];
+    const hits = tokens.filter((t) => docJson.toLowerCase().includes(t));
+    add("14I-AH: no transaction/signature/swap path in epoch-timing evidence", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14I-AI. No forbidden investment claims in the epoch-timing copy.
+  {
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const hits = forbidden.filter((w) => docJson.toLowerCase().includes(w));
+    add("14I-AI: no forbidden investment claims in epoch-timing copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -8665,6 +8784,7 @@ export function printFixtureResults(): void {
     ...runSolLstFreshEvidenceIntakeFixtureChecks(),
     ...runSolLstFreshEvidenceRecordsFixtureChecks(),
     ...runSolLstMsolFreshEvidenceFixtureChecks(),
+    ...runSolLstEpochUnstakeTimingFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

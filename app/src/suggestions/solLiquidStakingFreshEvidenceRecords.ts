@@ -45,18 +45,18 @@ export const SOL_LST_FRESH_EVIDENCE_RECORDS_REQUIRE_WALLET_SIGNATURE = false;
  * the candidate stays blocked until every required category has a fresh accepted
  * record. DO NOT add a record with a placeholder or stale value.
  * ------------------------------------------------------------------ */
-// Step 14F/14G/14H — Marinade · mSOL. PARTIAL: 9 of 10 categories verified from
+// Step 14F/14G/14H/14I — Marinade · mSOL. COMPLETE: all 10 categories verified from
 // public sources (founder-authorized fetch, 2026-07-13). 14F: market data (DefiLlama
 // pool) + withdrawal MECHANISM + audit list. 14G: direct_unstake_fee (FAQ verbatim
 // 0.2% direct/delayed path), operational_risk, incident_review (documented SAM
 // auction-logic bug — NOT a clean-history claim). 14H: annual_management_fee = 0
 // (Marinade docs verbatim "No performance fees on staking rewards"; SAM revenue
-// model; supersedes historical ~6%). ONE category stays MISSING: direct_unstake_time
-// — the docs give only epoch-based timing ("epoch n+1", "approximately two days")
-// with no reliable fixed-hours basis, and the field is numeric, so it is NOT forced
-// (the timing is captured qualitatively in withdrawal_mechanics). No stale 14B value
-// is reused and nothing is invented. mSOL stays NOT readyForRiskGate (market +
-// evidence complete; mechanics incomplete — only direct_unstake_time missing).
+// model). 14I: direct_unstake_time recorded as sourced EPOCH-BASED TEXT (claimable
+// after epoch n+1, up to n+2) — the intake now accepts dual-format timing so no
+// fixed hours are invented for an epoch-based protocol. No stale 14B value is reused
+// and nothing is invented. mSOL is now readyForRiskGate = true WITHIN the 24h
+// freshness window — but still unscored and NOT approved (rubric + risk-approval
+// decision are separate later gates).
 export const MARINADE_MSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [
   {
     protocolId: "marinade",
@@ -165,6 +165,22 @@ export const MARINADE_MSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [
     confirmedBy: "Ashot",
     reviewerRole: "founder",
     notes: ["Current Marinade docs state 'No performance fees on staking rewards' (verbatim), i.e. no reward/management fee on mSOL; protocol revenue comes from validators via the Stake Auction Market. Recorded as 0% on rewards. Supersedes the historical ~6% management-fee figure cited by older sources."],
+  },
+  {
+    protocolId: "marinade",
+    category: "direct_unstake_time",
+    value: "Claimable after epoch n+1; may become n+2 when unstaking in an epoch's final 4 hours. Marinade describes epoch length as approximate, so this is recorded as sourced epoch-based timing rather than fixed hours.",
+    unit: "text",
+    sourceName: "Marinade Documentation — FAQ",
+    sourceUrl: "https://docs.marinade.finance/marinade-protocol/faq",
+    confirmedAt: "2026-07-13T14:45:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: [
+      "Fresh mSOL delayed-unstake timing verified as epoch-based evidence.",
+      "No fixed-hour conversion was recorded because the source gives approximate epoch timing rather than a deterministic hour value.",
+      "This record completes the direct_unstake_time category without inventing hours.",
+    ],
   },
 ];
 export const JUPITER_JUPSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [];

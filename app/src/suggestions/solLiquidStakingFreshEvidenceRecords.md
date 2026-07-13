@@ -29,7 +29,7 @@ arrays are **empty**, so every staged candidate stays **blocked** and none is
 
 | Candidate | Fresh records | Status |
 | --- | --- | --- |
-| Marinade · mSOL | 9 / 10 (see 14F+14G+14H below) | blocked — mechanics incomplete (`direct_unstake_time`) |
+| Marinade · mSOL | 10 / 10 (see 14F–14I below) | `readyForRiskGate` while fresh — still unscored + unapproved |
 | Jupiter · JupSOL | none | blocked — all categories missing |
 | BlazeStake · bSOL | none | blocked — all categories missing |
 | Sanctum · INF | none | blocked — all categories missing |
@@ -89,12 +89,14 @@ true`** — no score is assigned and no candidate is approved.
 `approvesCandidates`, `updatesLiveRecommendations`, `transactionsEnabled` all `false`.
 mSOL/JupSOL/bSOL/INF do not appear in real wallet recommendations.
 
-## Marinade · mSOL (Steps 14F + 14G + 14H)
+## Marinade · mSOL (Steps 14F + 14G + 14H + 14I)
 
-**Status: partial — 9 of 10 categories verified & accepted; mSOL is NOT
-`readyForRiskGate`.** Founder-authorized public-source fetches on **2026-07-13**
-(`confirmedBy: "Ashot"`, `reviewerRole: "founder"`). The stale 14B figures were not reused
-and nothing was invented.
+**Status: COMPLETE — 10 of 10 categories verified & accepted; mSOL is
+`readyForRiskGate: true` *while fresh* (within the 24h window).** Founder-authorized
+public-source fetches on **2026-07-13** (`confirmedBy: "Ashot"`, `reviewerRole: "founder"`).
+The stale 14B figures were not reused and nothing was invented. **Still no `riskScore`, not
+approved, absent from real wallet mode** — rubric approval + risk-approval decision remain
+separate later gates.
 
 ### Recorded (accepted)
 
@@ -109,32 +111,27 @@ and nothing was invented.
 | 7 | `annual_management_fee` | 0% on rewards — Marinade docs state "No performance fees on staking rewards" (verbatim); revenue via the SAM validator model; supersedes historical ~6% | [Marinade docs (full export)](https://docs.marinade.finance/llms-full.txt) |
 | 9 | `operational_risk` | Delegation via SAM, stake pool, LP/Jupiter dependency, 13-party/6-signer multisig program control | [What is mSOL?](https://docs.marinade.finance/marinade-protocol/protocol-overview/marinade-liquid/what-is-msol) |
 | 10 | `incident_review` | Documented SAM unstake-priority logic bug: ~37,000 SOL / ~28% missed rewards over epochs 652–777 (program logic bug, not a principal drain) | [Marinade forum incident report](https://forum.marinade.finance/t/incident-report-37-000-sol-in-losses-a-call-for-investigation-and-action/1853) |
+| 5 | `direct_unstake_time` | **Text (14I):** "Claimable after epoch n+1; may become n+2 when unstaking in an epoch's final 4 hours" — recorded as sourced epoch-based text, not fixed hours | [Marinade FAQ](https://docs.marinade.finance/marinade-protocol/faq) |
 
 > Notes: mSOL's DefiLlama APY snapshot oscillates day-to-day with the Solana epoch boundary
 > (`apy === apyBase`, range ~4.7–7.1%); `current_apy` is the latest snapshot, `apy_30d` the
 > deterministically computed 30-day mean. `direct_unstake_fee` = 0.2% is the direct/delayed
 > path (FAQ verbatim); the instant path adds no Marinade protocol fee but is priced by the
 > LP/Jupiter route. `annual_management_fee` = 0 records "No performance fees on staking
-> rewards" (Marinade docs verbatim). `incident_review` is a point-in-time community-forum
-> finding, **not** a clean-history claim, and concerns the SAM rewards mechanism, not staked
-> principal.
+> rewards" (Marinade docs verbatim). `direct_unstake_time` is recorded as **epoch-based
+> text** (Step 14I dual-format) — no hours were invented for an epoch-based protocol.
+> `incident_review` is a point-in-time community-forum finding, **not** a clean-history
+> claim, and concerns the SAM rewards mechanism, not staked principal.
 
-### Still missing (1) — cannot be honestly recorded
+All ten categories are accepted while fresh, so `getSolLstFreshEvidenceSummaries()` reports
+mSOL `marketDataComplete: true`, `mechanicsComplete: true`, `evidenceComplete: true`,
+**`readyForRiskGate: true`** (blockers: none) **within the 24h window**; beyond it the
+records go `stale` and `readyForRiskGate` returns to `false`. The preview shows
+`wouldClearValueAndEvidenceBlockers: true` but still `stillRequiresRubricApproval: true` /
+`stillRequiresRiskApprovalDecision: true`; **no score is assigned and mSOL is not approved.**
 
-| # | Category | Why not recorded |
-| --- | --- | --- |
-| 5 | `direct_unstake_time` | Epoch-based only: docs say "claimable after epoch n+1" (up to n+2 if unstaking in the last 4h of an epoch) and "an epoch lasts approximately two days" — **no reliable fixed-hours figure**. The field is **numeric (hours)**, so it is not forced (per Step 14H guidance). The timing is captured qualitatively in `withdrawal_mechanics`. |
-
-Because **mechanics** is incomplete (only `direct_unstake_time` missing),
-`getSolLstFreshEvidenceSummaries()` reports mSOL `marketDataComplete: true`,
-`mechanicsComplete: false`, `evidenceComplete: true`, **`readyForRiskGate: false`**
-(blocker: `mechanics_incomplete`). The preview shows
-`wouldClearValueAndEvidenceBlockers: false` and still `stillRequiresRubricApproval: true` /
-`stillRequiresRiskApprovalDecision: true`; no score is assigned and mSOL is not approved.
-
-To finish mSOL: obtain an authoritative fixed unstake time (or a reliable epoch→hours
-basis) for `direct_unstake_time`, append it within the 24h window, and mSOL becomes
-`readyForRiskGate` — still pending rubric + risk-approval decision before any score.
+Next for mSOL: rubric approval + risk-approval decision (a separate gate), then risk
+scoring — none of which happen here.
 
 ## Next steps
 
