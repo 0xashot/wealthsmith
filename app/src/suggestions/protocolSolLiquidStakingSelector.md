@@ -62,3 +62,14 @@ protocol to review"** — and never "best", "safest", "optimal", "guaranteed", o
 The selector shell makes no user-facing recommendation, mutates no production
 metadata / `protocolRiskRegistry.ts` / `DEFILLAMA_POOL_MAPPINGS` / evidence drafts,
 and enables no transactions. **Production selection remains disabled.**
+
+## JitoSOL read-only beta path (Step 13G)
+
+The generic `selectSolLiquidStakingProtocol` stays hard-disabled. A separate,
+approved function `selectJitoSolReadOnlyBeta(input, options?)` powers the real-wallet
+**read-only** JitoSOL recommendation behind `JITOSOL_BETA_READ_ONLY_RECOMMENDATION_ENABLED`
+(see [jitoSolBetaActivation.md](jitoSolBetaActivation.md)). It returns `selected`
+(Jito / JitoSOL, with the approved riskScore + verified market data) only for SOL above
+`MIN_SELECTOR_STAKE_SOL`; it rejects non-SOL and at/below-minimum amounts, and returns
+`disabled` when the beta is off (`options.betaEnabled = false`). `transactionsEnabled`
+stays `false` on every path — this is a recommendation to review, never execution.

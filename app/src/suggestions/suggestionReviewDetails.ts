@@ -226,6 +226,10 @@ export function buildReviewDetails(args: {
   involvedAssets?: ReviewAsset[];
   involvedPositions?: ReviewPosition[];
   calculations?: ReviewCalculation[];
+  /** Optional shared protocol display (Demo now; real-wallet read-only beta, 13G). */
+  protocolSelectionDisplay?: SuggestionReviewDetails["protocolSelectionDisplay"];
+  /** Optional safety-note override (read-only recommendation copy). */
+  safetyNotesOverride?: SuggestionReviewDetails["safetyNotes"];
 }): SuggestionReviewDetails {
   const informational = args.actionKind === "informational";
   return {
@@ -242,8 +246,11 @@ export function buildReviewDetails(args: {
     limitations: informational
       ? []
       : standardLimitations(args.guardrails, args.protocolSelection),
-    safetyNotes: informational
-      ? [...INFORMATIONAL_SAFETY_NOTES]
-      : [...ACTIONABLE_SAFETY_NOTES],
+    safetyNotes: args.safetyNotesOverride
+      ? [...args.safetyNotesOverride]
+      : informational
+        ? [...INFORMATIONAL_SAFETY_NOTES]
+        : [...ACTIONABLE_SAFETY_NOTES],
+    ...(args.protocolSelectionDisplay ? { protocolSelectionDisplay: args.protocolSelectionDisplay } : {}),
   };
 }

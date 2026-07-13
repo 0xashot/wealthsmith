@@ -21,9 +21,16 @@ import {
   MIN_STAKING_SUGGESTION_USD,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
-import { notEvaluatedProtocolSelection } from "./protocolSelection";
+import { notEvaluatedProtocolSelection, selectedProtocolSelection } from "./protocolSelection";
 import { getProtocolCandidatesForSelection } from "./protocolRegistry";
 import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
+import { selectJitoSolReadOnlyBeta } from "./protocolSolLiquidStakingSelector";
+import {
+  isJitoSolBetaReadOnlyEnabled,
+  getJitoSolBetaProtocolSelectionDisplay,
+  JITOSOL_BETA_LST_SYMBOL,
+} from "./jitoSolBetaActivation";
+import type { ProtocolSelection, ReviewSafetyNote, SuggestionReviewDetails } from "./engineTypes";
 
 /** Stable suggestion ID. */
 export const STAKING_SUGGESTION_ID = "staking_idle_sol";
@@ -89,15 +96,53 @@ export function deriveStakingSuggestion(
   // Static candidate protocols (Step 12C) — metadata only, NOT a recommendation;
   // status stays not_evaluated and no protocol is named.
   const candidateProtocolIds = getProtocolCandidatesForSelection("liquid_staking", "SOL").map((c) => c.id);
-  const protocolSelection = notEvaluatedProtocolSelection(
+
+  // Selection defaults to not_evaluated (no data source). The JitoSOL READ-ONLY
+  // beta (Step 13G) may surface an APPROVED protocol to review when its flag is
+  // on and the input is idle SOL above the minimum. This is a review-only
+  // recommendation: it never creates a transaction, requests a signature, or
+  // moves funds. Beta OFF → the not_evaluated rollback path below is unchanged.
+  let protocolSelection: ProtocolSelection = notEvaluatedProtocolSelection(
     ["missing_apy_data", "missing_tvl_data", "missing_risk_data", "missing_lockup_data"],
     candidateProtocolIds
   );
+  let protocolSelectionDisplay: SuggestionReviewDetails["protocolSelectionDisplay"] | undefined;
+  let safetyNotesOverride: ReviewSafetyNote[] | undefined;
+
+  if (isJitoSolBetaReadOnlyEnabled()) {
+    const betaSelection = selectJitoSolReadOnlyBeta({
+      assetSymbol: "SOL",
+      eligibleAmountSol: eligibleSol,
+      eligibleAmountUsd: eligibleValueUsd,
+      asOf: new Date(generatedAt).toISOString(),
+    });
+    if (betaSelection.status === "selected") {
+      protocolSelection = selectedProtocolSelection({
+        protocolId: betaSelection.selectedProtocolId as string,
+        protocolName: betaSelection.selectedProtocolName as string,
+        lstSymbol: betaSelection.selectedLstSymbol ?? JITOSOL_BETA_LST_SYMBOL,
+        strategyType: "liquid_staking",
+        evaluatedAt: new Date(generatedAt).toISOString(),
+        dataSources: ["Verified source data"],
+      });
+      protocolSelectionDisplay = getJitoSolBetaProtocolSelectionDisplay();
+      // Read-only recommendation copy — never implies a transaction/signature.
+      safetyNotesOverride = [
+        { kind: "no_auto_move", text: "WealthSmith does not move funds for you." },
+        { kind: "informational", text: "You choose whether to continue externally." },
+        { kind: "no_transaction", text: "No transaction is created from this suggestion." },
+        { kind: "no_signature", text: "No wallet signature is requested." },
+      ];
+    }
+  }
+
   const reviewDetails = buildReviewDetails({
     category: "staking",
     actionKind: "review_only",
     guardrails,
     protocolSelection,
+    ...(protocolSelectionDisplay ? { protocolSelectionDisplay } : {}),
+    ...(safetyNotesOverride ? { safetyNotesOverride } : {}),
     metrics: [
       metric("Liquid SOL", Math.round(totalLiquidSol * 10000) / 10000, "token_amount", "SOL"),
       metric("SOL reserve kept", SOL_FEE_RESERVE, "token_amount", "SOL"),

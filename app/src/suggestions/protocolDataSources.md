@@ -592,3 +592,11 @@ later) gated on `marketData` being present. **No production enablement:**
 `productionStatus.realWalletSelectionEnabled`/`.transactionsEnabled` false; real-wallet
 staking `not_evaluated` with no selectedProtocolId/Name; all selection/selector flags
 false; `productionReady` stays `false`; no transaction/signature path.
+
+**Step 13G — real wallet read-only beta:** the same verified JitoSOL market data now
+also appears in **real wallet mode** behind the read-only beta flag (source status
+**"Verified source data"**, mode `production`) — see
+[jitoSolBetaActivation.md](jitoSolBetaActivation.md). `realWalletSelectionEnabled` is
+true (read-only selection) while `transactionsEnabled` stays false. This is a
+recommendation to review, not execution: no transaction, signature, or fund movement,
+and the execution guardrails (cost/liquidity/slippage) stay not evaluated.

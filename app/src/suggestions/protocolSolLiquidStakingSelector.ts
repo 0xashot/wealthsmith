@@ -23,6 +23,14 @@ import {
   type SolLstProductionMetadataCandidate,
   type BuildProductionMetadataOptions,
 } from "./protocolSolLiquidStakingProductionMetadata";
+import {
+  isJitoSolBetaReadOnlyEnabled,
+  getJitoSolBetaMarketData,
+  JITOSOL_BETA_PROTOCOL_ID,
+  JITOSOL_BETA_PROTOCOL_NAME,
+  JITOSOL_BETA_LST_SYMBOL,
+  JITOSOL_BETA_APPROVED_RISK_SCORE,
+} from "./jitoSolBetaActivation";
 
 export const PROTOCOL_SOL_LST_SELECTOR_EXISTS = true;
 export const PROTOCOL_SOL_LST_SELECTOR_ENABLED = false;
@@ -231,6 +239,62 @@ export function dryRunSolLstSelector(input: SolLstSelectorInput): SolLstSelector
   topBlockers.push(...evaluations.flatMap((e) => e.blockers));
   const status: SolLstSelectorStatus = PROTOCOL_SOL_LST_SELECTOR_ENABLED ? "blocked" : "disabled";
   return shell(status, evaluations, topBlockers, ["Internal dry-run only; selector is not enabled."]);
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 13G — JitoSOL READ-ONLY beta selection (behind the beta flag).
+ * The generic `selectSolLiquidStakingProtocol` stays hard-disabled; this is the
+ * separate, approved read-only path that surfaces a "Suggested protocol to review".
+ * ------------------------------------------------------------------ */
+export interface SelectJitoSolReadOnlyBetaOptions {
+  /** Rollback override for tests; defaults to the beta flag. */
+  betaEnabled?: boolean;
+}
+
+/**
+ * Read-only JitoSOL selection for the real-wallet beta. Returns `selected` (with
+ * `selectedProtocolId`/`Name`/`LstSymbol` + a candidate carrying verified market
+ * data) ONLY when the beta is enabled and the input is SOL above the minimum.
+ * Rejects USDC, at/below-minimum amounts, and disables cleanly on rollback. It
+ * never enables transactions (`transactionsEnabled` stays false).
+ */
+export function selectJitoSolReadOnlyBeta(
+  input: SolLstSelectorInput,
+  options?: SelectJitoSolReadOnlyBetaOptions
+): SolLstSelectorResult {
+  const betaEnabled = options?.betaEnabled ?? isJitoSolBetaReadOnlyEnabled();
+  const blockers: SolLstSelectorBlocker[] = [];
+  if (input.assetSymbol.toUpperCase() !== "SOL") blockers.push("unsupported_asset");
+  if (!(input.eligibleAmountSol > MIN_SELECTOR_STAKE_SOL)) blockers.push("eligible_amount_too_small");
+
+  if (!betaEnabled) {
+    return shell("disabled", [], [...blockers, "selector_disabled"], ["JitoSOL read-only beta is disabled."]);
+  }
+  if (blockers.length > 0) {
+    return shell("no_eligible_candidates", [], blockers, ["Input not eligible for the JitoSOL read-only recommendation."]);
+  }
+
+  const md = getJitoSolBetaMarketData();
+  const candidate: SolLstSelectorCandidateEvaluation = {
+    protocolId: JITOSOL_BETA_PROTOCOL_ID,
+    lstSymbol: JITOSOL_BETA_LST_SYMBOL,
+    protocolName: JITOSOL_BETA_PROTOCOL_NAME,
+    status: "eligible",
+    riskScore: JITOSOL_BETA_APPROVED_RISK_SCORE,
+    tvlUsd: md.tvlUsd,
+    apyPct: md.apyPct,
+    apy30dPct: md.apy30dPct,
+    withdrawalTimeHours: md.directUnstakeTimeHours,
+    blockers: [],
+    reasons: ["Verified source data · read-only recommendation (no transactions)."],
+    sourceNames: ["Verified source data"],
+  };
+  return {
+    ...shell("selected", [candidate], [], ["Read-only JitoSOL recommendation (verified source data; no transactions)."]),
+    selectedProtocolId: JITOSOL_BETA_PROTOCOL_ID,
+    selectedProtocolName: JITOSOL_BETA_PROTOCOL_NAME,
+    selectedLstSymbol: JITOSOL_BETA_LST_SYMBOL,
+  };
 }
 
 export interface SolLstSelectorReadinessPreview {

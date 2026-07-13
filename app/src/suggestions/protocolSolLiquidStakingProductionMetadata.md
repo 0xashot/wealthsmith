@@ -71,3 +71,14 @@ until an explicit re-verification flag is supplied.
 module is not imported by any live/engine/UI file; and `getProtocolSelectionGoNoGo()`
 must still pass. **Production selection remains disabled** and no protocol appears in
 the UI.
+
+## Step 13G — JitoSOL read-only beta is a SEPARATE, approved record
+
+The strict staged candidate above stays `blocked` (full production go/no-go still
+false). The real-wallet **read-only** JitoSOL recommendation is powered by a distinct,
+founder-approved record in `jitoSolBetaActivation.ts` —
+see [jitoSolBetaActivation.md](jitoSolBetaActivation.md). That record marks JitoSOL
+active for read-only recommendation with an approved risk score, while
+`transactionsEnabled` stays false and full production readiness is **not** claimed
+(`getJitoSolReadOnlyBetaGoNoGo().productionReady = false`). This module's staged
+candidate is unchanged.

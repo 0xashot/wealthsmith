@@ -1024,3 +1024,16 @@ Demo Mode keeps its own fixture order and is unaffected by the engine/mapper.
   must never import them.
 - Insufficient inputs → empty result with `unavailable_reason`, never a
   fabricated fallback suggestion.
+
+## JitoSOL read-only recommendation (Step 13G)
+
+The exact SOL staking recommendation for **JitoSOL** is enabled in real wallet mode
+behind a read-only beta flag — see [jitoSolBetaActivation.md](jitoSolBetaActivation.md).
+When on, the live "Put Idle SOL to Work" suggestion names **Jito · JitoSOL** as the
+"Suggested protocol to review" (mode `production`, no DEMO/INTERNAL label) with verified
+market data in Review Details. It is **read-only**: no transaction, no signature, no
+fund movement, review-only CTA. Execution guardrails (cost/liquidity/slippage) stay not
+evaluated. Only SOL staking is affected; stable-yield selection stays `not_evaluated`.
+Global flags (`PROTOCOL_SELECTION_IMPLEMENTED`, `..._SHOW_IN_UI`,
+`..._ALLOW_TRANSACTIONS`, go/no-go `productionReady`, `PROTOCOL_SOL_LST_SELECTOR_ENABLED`)
+stay `false`; rollback is a single flag flip back to `not_evaluated`.

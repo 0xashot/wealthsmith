@@ -244,6 +244,8 @@ export interface ProtocolSelection {
   selectedProtocolId?: string;
   /** Present ONLY when status === "selected". */
   selectedProtocolName?: string;
+  /** LST symbol of the selected liquid-staking protocol (only when selected). */
+  selectedLstSymbol?: string;
   selectedStrategyType?: ProtocolStrategyType;
   reasons: ProtocolSelectionReason[];
   /**
@@ -409,7 +411,9 @@ export interface ProtocolSelectionDisplay {
     annualManagementFeeAppliesTo: string;
   };
   productionStatus?: {
-    realWalletSelectionEnabled: false;
+    // Read-only real-wallet selection MAY be enabled (JitoSOL beta, 13G); the
+    // transaction path stays hard-off — this is a review-only recommendation.
+    realWalletSelectionEnabled: boolean;
     transactionsEnabled: false;
   };
 }

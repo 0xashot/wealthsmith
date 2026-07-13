@@ -252,9 +252,23 @@ import {
   PROTOCOL_SOL_LST_SELECTOR_ENABLES_TRANSACTIONS,
   PROTOCOL_SOL_LST_SELECTOR_UPDATES_LIVE_SUGGESTIONS,
   selectSolLiquidStakingProtocol,
+  selectJitoSolReadOnlyBeta,
   dryRunSolLstSelector,
   previewSolLstSelectorReadiness,
 } from "./protocolSolLiquidStakingSelector";
+import {
+  JITOSOL_BETA_READ_ONLY_RECOMMENDATION_ENABLED,
+  JITOSOL_BETA_TRANSACTIONS_ENABLED,
+  JITOSOL_BETA_WALLET_SIGNATURES_ENABLED,
+  JITOSOL_BETA_AUTO_EXECUTION_ENABLED,
+  JITOSOL_BETA_EXTERNAL_NAVIGATION_ENABLED,
+  JITOSOL_BETA_APPROVED_RISK_SCORE,
+  isJitoSolBetaReadOnlyEnabled,
+  getJitoSolBetaMarketData,
+  getJitoSolBetaProtocolSelectionDisplay,
+  getJitoSolBetaActivatedMetadata,
+  getJitoSolReadOnlyBetaGoNoGo,
+} from "./jitoSolBetaActivation";
 import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
@@ -2914,13 +2928,17 @@ export function runProtocolSelectionFixtureChecks(): FixtureCheck[] {
   const noProtocol = (s: EngineSuggestion | undefined) =>
     s?.protocolSelection?.selectedProtocolId == null && s?.protocolSelection?.selectedProtocolName == null;
 
-  // 9J-A. Staking selection is not_evaluated with no protocol named.
+  // 9J-A. Staking selection is the APPROVED JitoSOL read-only recommendation
+  // (Step 13G beta ON): status "selected", Jito/JitoSOL named — never a
+  // transaction. (Rollback to not_evaluated is covered by 13G-AI.)
   {
     const s = find(runs.staking, "staking");
     add(
-      "9J-A: staking protocolSelection = not_evaluated, no selected protocol",
-      s?.protocolSelection?.status === "not_evaluated" && noProtocol(s),
-      `status=${s?.protocolSelection?.status} reasons=${s?.protocolSelection?.reasons.join(",")}`
+      "9J-A: staking protocolSelection = selected (JitoSOL read-only beta)",
+      s?.protocolSelection?.status === "selected" &&
+        s?.protocolSelection?.selectedProtocolName === "Jito" &&
+        s?.protocolSelection?.selectedLstSymbol === "JitoSOL",
+      `status=${s?.protocolSelection?.status} name=${s?.protocolSelection?.selectedProtocolName}`
     );
   }
   // 9J-B. Stable Yield selection is not_evaluated with no protocol named.
@@ -2965,20 +2983,24 @@ export function runProtocolSelectionFixtureChecks(): FixtureCheck[] {
     );
     add("9J-E: no suggestion names a protocol unless status === selected", bad.length === 0, `violations=${bad.length}`);
   }
-  // 9J-F. Mapped cards expose no raw protocol-selection metadata.
+  // 9J-F. Mapped cards expose no RAW protocol-selection metadata (internal codes,
+  // reasons, or ids). The approved JitoSOL card may carry the user-facing display
+  // (protocolName "Jito", "Suggested protocol to review"); it must never leak raw
+  // reason codes, guardrail codes, selection status, or a selectedProtocolId.
   {
     const cards = Object.values(runs).flatMap((r) => r.suggestions).map(toSuggestionCard);
     const json = JSON.stringify(cards);
-    const leaks = /protocolSelection|selectedProtocol|protocol_selection|selection_not_required|missing_apy_data|missing_tvl_data|not_evaluated/i.test(json);
-    add("9J-F: mapped cards expose no protocol-selection metadata", !leaks, `leaks=${leaks}`);
+    const leaks = /selectedProtocolId|protocol_selection|selection_not_required|missing_apy_data|missing_tvl_data|not_evaluated|not_applicable/i.test(json);
+    add("9J-F: mapped cards expose no raw protocol-selection metadata", !leaks, `leaks=${leaks}`);
   }
-  // 9J-G. protocol_selection guardrail is not_evaluated for staking/stable_yield.
+  // 9J-G. protocol_selection guardrail: "passed" for the approved JitoSOL staking
+  // recommendation (Step 13G), still "not_evaluated" for stable_yield (no source).
   {
     const st = gStatus(find(runs.staking, "staking"), "protocol_selection");
     const sy = gStatus(find(runs.stable_yield, "stable_yield"), "protocol_selection");
     add(
-      "9J-G: protocol_selection guardrail is not_evaluated for staking/stable_yield",
-      st === "not_evaluated" && sy === "not_evaluated",
+      "9J-G: protocol_selection guardrail passed for staking, not_evaluated for stable_yield",
+      st === "passed" && sy === "not_evaluated",
       `staking=${st} stable_yield=${sy}`
     );
   }
@@ -3074,7 +3096,8 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
     const ok = ["Stablecoin reserve", "Safety Buffer target", "Amount to review", "Months covered", "Target months"].every((l) => labels.includes(l));
     add("10A-C: buffer details include target/stable/shortfall/months/target months", ok, `labels=${labels.join(" | ")}`);
   }
-  // 10A-D. Staking details: reserve, eligible SOL, eligible value, protocol not evaluated.
+  // 10A-D. Staking details: reserve, eligible SOL, eligible value, and protocol
+  // selection now CHECKED (approved JitoSOL read-only recommendation, Step 13G).
   {
     const d = rd("staking");
     const labels = metricLabels("staking");
@@ -3082,8 +3105,8 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
       labels.includes("SOL reserve kept") &&
       labels.includes("Eligible SOL to review") &&
       labels.includes("Eligible value to review") &&
-      (d?.guardrailSummary.notEvaluated ?? []).includes("Protocol selection");
-    add("10A-D: staking details include reserve/eligible SOL/value + protocol not evaluated", ok, `notEval=${d?.guardrailSummary.notEvaluated.join(",")}`);
+      (d?.guardrailSummary.checked ?? []).includes("Protocol selection");
+    add("10A-D: staking details include reserve/eligible SOL/value + protocol selection checked", ok, `checked=${d?.guardrailSummary.checked.join(",")}`);
   }
   // 10A-E. Stable Yield details: liquid stable value, buffer-support note, protocol not evaluated.
   {
@@ -3585,12 +3608,14 @@ export function runProtocolRegistryFixtureChecks(): FixtureCheck[] {
     const ids = getProtocolCandidatesForAsset("SOL", "liquid_staking").map((c) => c.id);
     add("12C-E: getProtocolCandidatesForAsset(SOL, liquid_staking) returns SOL staking candidates", ids.length === 5 && ids.includes("jupiter") && ids.includes("sanctum"), `ids=${ids.join(",")}`);
   }
-  // 12C-F. Staking suggestion carries candidateProtocolIds but status stays not_evaluated.
+  // 12C-F. Staking suggestion is the APPROVED JitoSOL read-only recommendation
+  // (Step 13G): status "selected", Jito named. (Stable_yield below still carries
+  // candidate metadata only.)
   {
     const ps = staking?.protocolSelection;
-    add("12C-F: staking has candidateProtocolIds + protocolSelection.status not_evaluated",
-      (ps?.candidateProtocolIds?.length ?? 0) > 0 && ps?.status === "not_evaluated",
-      `status=${ps?.status} candidates=${ps?.candidateProtocolIds?.join(",")}`);
+    add("12C-F: staking protocolSelection.status selected (JitoSOL beta)",
+      ps?.status === "selected" && ps?.selectedProtocolName === "Jito",
+      `status=${ps?.status} name=${ps?.selectedProtocolName}`);
   }
   // 12C-G. Stable Yield suggestion carries candidateProtocolIds but status stays not_evaluated.
   {
@@ -3599,26 +3624,41 @@ export function runProtocolRegistryFixtureChecks(): FixtureCheck[] {
       (ps?.candidateProtocolIds?.length ?? 0) > 0 && ps?.candidateProtocolIds?.includes("kamino") === true && ps?.status === "not_evaluated",
       `status=${ps?.status} candidates=${ps?.candidateProtocolIds?.join(",")}`);
   }
-  // 12C-H. No suggestion names a selected protocol.
+  // 12C-H. ONLY the approved staking suggestion names a protocol (Jito); every
+  // other suggestion (incl. stable_yield) still names none.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12C-H: no suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter(
+      (s) =>
+        s.category !== "staking" &&
+        (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null)
+    );
+    add("12C-H: only staking names a protocol (Jito); others name none",
+      bad.length === 0 && staking?.protocolSelection?.selectedProtocolId === "jito",
+      `violations=${bad.length} stakingId=${staking?.protocolSelection?.selectedProtocolId}`);
   }
-  // 12C-I. protocol_selection guardrail remains not_evaluated for staking/stable_yield.
+  // 12C-I. protocol_selection guardrail: passed for the approved staking
+  // recommendation, still not_evaluated for stable_yield (no data source).
   {
     const g = (s: typeof staking, code: string) => s?.guardrails.find((x) => x.code === code)?.status;
-    add("12C-I: protocol_selection guardrail is not_evaluated for staking/stable_yield",
-      g(staking, "protocol_selection") === "not_evaluated" && g(stable, "protocol_selection") === "not_evaluated",
+    add("12C-I: protocol_selection guardrail passed for staking, not_evaluated for stable_yield",
+      g(staking, "protocol_selection") === "passed" && g(stable, "protocol_selection") === "not_evaluated",
       `staking=${g(staking, "protocol_selection")} stable=${g(stable, "protocol_selection")}`);
   }
-  // 12C-J. Cards + review details do NOT expose candidate protocol names as recommendations.
+  // 12C-J. Cards + review details expose NO candidate protocol names as
+  // recommendations, except the approved "Jito" on the staking suggestion
+  // (Step 13G). Stable_yield exposes none.
   {
-    const names = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "Kamino", "Orca", "Raydium", "Meteora"];
+    const otherNames = ["Jupiter", "Marinade", "BlazeStake", "Sanctum", "Kamino", "Orca", "Raydium", "Meteora"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = (scan(staking) + scan(stable));
-    const leaks = names.filter((n) => json.includes(n));
-    add("12C-J: staking/stable_yield cards + modal never expose candidate protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+    const stakingJson = scan(staking);
+    const stableJson = scan(stable);
+    // Staking may name only Jito; stable_yield may name nothing.
+    const stakingLeaks = otherNames.filter((n) => stakingJson.includes(n));
+    const stableLeaks = [...otherNames, "Jito"].filter((n) => stableJson.includes(n));
+    add("12C-J: only Jito appears (staking); no other candidate name leaks",
+      stakingLeaks.length === 0 && stableLeaks.length === 0,
+      `stakingLeaks=${stakingLeaks.join(",") || "none"} stableLeaks=${stableLeaks.join(",") || "none"}`);
   }
   // 12C-K. Adapter contracts exist but nothing is selected; registry stays candidate-only.
   {
@@ -3710,30 +3750,33 @@ export function runProtocolAdapterFixtureChecks(): FixtureCheck[] {
   {
     add("12D-H: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
   }
-  // 12D-I. staking/stable_yield protocolSelection.status remains not_evaluated.
+  // 12D-I. Staking is the approved JitoSOL recommendation (selected); stable_yield
+  // stays not_evaluated (Step 13G — the read-only aggregator adapters remain
+  // unwired; the staking source is the approved verified JitoSOL data).
   {
-    add("12D-I: staking/stable_yield protocolSelection.status remains not_evaluated",
-      staking?.protocolSelection?.status === "not_evaluated" && stable?.protocolSelection?.status === "not_evaluated",
+    add("12D-I: staking selected (JitoSOL), stable_yield still not_evaluated",
+      staking?.protocolSelection?.status === "selected" && stable?.protocolSelection?.status === "not_evaluated",
       `staking=${staking?.protocolSelection?.status} stable=${stable?.protocolSelection?.status}`);
   }
-  // 12D-J. protocol_selection guardrail remains not_evaluated.
+  // 12D-J. protocol_selection guardrail passed for staking, not_evaluated for stable_yield.
   {
     const g = (s: typeof staking) => s?.guardrails.find((x) => x.code === "protocol_selection")?.status;
-    add("12D-J: protocol_selection guardrail remains not_evaluated", g(staking) === "not_evaluated" && g(stable) === "not_evaluated", `staking=${g(staking)} stable=${g(stable)}`);
+    add("12D-J: protocol_selection guardrail passed for staking, not_evaluated for stable_yield", g(staking) === "passed" && g(stable) === "not_evaluated", `staking=${g(staking)} stable=${g(stable)}`);
   }
-  // 12D-K. Cards/modal do not display APY/TVL/risk data or candidate names as recommendations.
+  // 12D-K. Cards/modal expose no candidate market data or names as recommendations,
+  // except the approved "Jito" on the staking suggestion (Step 13G).
   {
-    const names = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "Kamino", "Orca", "Raydium", "Meteora"];
+    const otherNames = ["Jupiter", "Marinade", "BlazeStake", "Sanctum", "Kamino", "Orca", "Raydium", "Meteora"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = names.filter((n) => json.includes(n));
-    add("12D-K: cards/modal never display candidate names or market data as recommendations", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+    const stakingLeaks = otherNames.filter((n) => scan(staking).includes(n));
+    const stableLeaks = [...otherNames, "Jito"].filter((n) => scan(stable).includes(n));
+    add("12D-K: only Jito appears (staking); no other candidate name/market data leaks", stakingLeaks.length === 0 && stableLeaks.length === 0, `stakingLeaks=${stakingLeaks.join(",") || "none"} stableLeaks=${stableLeaks.join(",") || "none"}`);
   }
-  // 12D-L. No suggestion has selectedProtocolId/Name.
+  // 12D-L. Only the approved staking suggestion names a protocol (Jito).
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12D-L: no suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12D-L: only staking names a protocol (Jito); others name none", bad.length === 0 && staking?.protocolSelection?.selectedProtocolName === "Jito", `violations=${bad.length}`);
   }
   // 12D-M. Network-unavailable: aggregator is synchronous/network-free → missing data.
   {
@@ -3855,22 +3898,26 @@ export function runProtocolEligibilityFixtureChecks(): FixtureCheck[] {
   }
   // 12E-O. Selection remains not implemented.
   add("12E-O: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
-  // 12E-P. staking/stable_yield protocolSelection.status remains not_evaluated.
-  add("12E-P: staking/stable_yield protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status} stable=${stable?.protocolSelection?.status}`);
-  // 12E-Q. protocol_selection guardrail remains not_evaluated.
+  // 12E-P. Staking is the approved JitoSOL recommendation (selected); stable_yield
+  // stays not_evaluated (Step 13G — eligibility scanning here is unwired).
+  add("12E-P: staking selected (JitoSOL), stable_yield still not_evaluated", staking?.protocolSelection?.status === "selected" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status} stable=${stable?.protocolSelection?.status}`);
+  // 12E-Q. protocol_selection guardrail passed for staking, not_evaluated for stable_yield.
   {
     const g = (s: typeof staking) => s?.guardrails.find((x) => x.code === "protocol_selection")?.status;
-    add("12E-Q: protocol_selection guardrail remains not_evaluated", g(staking) === "not_evaluated" && g(stable) === "not_evaluated", `staking=${g(staking)} stable=${g(stable)}`);
+    add("12E-Q: protocol_selection guardrail passed for staking, not_evaluated for stable_yield", g(staking) === "passed" && g(stable) === "not_evaluated", `staking=${g(staking)} stable=${g(stable)}`);
   }
-  // 12E-R. Cards/modal do not expose eligibility results or protocol names.
+  // 12E-R. Cards/modal expose no eligibility RESULT tokens or candidate names —
+  // except the approved "Jito" on the staking suggestion (Step 13G). Raw
+  // eligibility internals (ineligible/insufficient_data/riskScore/…) never leak.
   {
-    // "eligible" alone is legitimate approved copy ("may be eligible for review");
-    // scan for distinctive eligibility-RESULT tokens + candidate names instead.
-    const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "Kamino", "ineligible", "insufficient_data", "riskScore", "eligibilityStatus", "protocolEligibility"];
+    const resultTokens = ["ineligible", "insufficient_data", "riskScore", "eligibilityStatus", "protocolEligibility"];
+    const otherNames = ["Jupiter", "Marinade", "BlazeStake", "Sanctum", "Kamino"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((n) => json.includes(n));
-    add("12E-R: cards/modal never expose eligibility results or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+    const stakingJson = scan(staking);
+    const stableJson = scan(stable);
+    const stakingLeaks = [...resultTokens, ...otherNames].filter((n) => stakingJson.includes(n));
+    const stableLeaks = [...resultTokens, ...otherNames, "Jito"].filter((n) => stableJson.includes(n));
+    add("12E-R: no eligibility results/candidate names leak (only Jito on staking)", stakingLeaks.length === 0 && stableLeaks.length === 0, `stakingLeaks=${stakingLeaks.join(",") || "none"} stableLeaks=${stableLeaks.join(",") || "none"}`);
   }
   // 12E-S. Risk registry contains no made-up riskScore.
   {
@@ -3982,22 +4029,27 @@ export function runRouteGuardrailFixtureChecks(): FixtureCheck[] {
     );
     add("12F-M: cost/liquidity/slippage remain not_evaluated in live suggestions", ok, `ok=${ok}`);
   }
-  // 12F-N. staking/stable protocolSelection.status remains not_evaluated.
-  add("12F-N: staking/stable_yield protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status}`);
+  // 12F-N. Staking is selected (JitoSOL, Step 13G); stable_yield stays not_evaluated.
+  add("12F-N: staking selected (JitoSOL), stable_yield still not_evaluated", staking?.protocolSelection?.status === "selected" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status}`);
   // 12F-O. Selection remains not implemented.
   add("12F-O: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
-  // 12F-P. No selectedProtocolId/Name anywhere.
+  // 12F-P. Only the approved staking suggestion names a protocol (Jito).
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12F-P: no suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12F-P: only staking names a protocol (Jito); others name none", bad.length === 0 && staking?.protocolSelection?.selectedProtocolName === "Jito", `violations=${bad.length}`);
   }
   // 12F-Q. Cards/modal expose no quote/route/liquidity data.
   {
     const tokens = ["priceImpact", "quoteAvailable", "liquidityUsd", "routeSource", "outAmount", "price_impact"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12F-Q: cards/modal never expose quote/route/liquidity data", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12F-R. Fixtures run network-free (live quote disabled; no fetch used).
@@ -4128,24 +4180,32 @@ export function runProtocolScoringFixtureChecks(): FixtureCheck[] {
   // 12G-P. Selection remains not implemented.
   add("12G-P: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
   // 12G-Q. staking/stable protocolSelection.status remains not_evaluated.
-  add("12G-Q: staking/stable_yield protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status}`);
+  add("12G-Q: staking selected (JitoSOL), stable_yield not_evaluated", staking?.protocolSelection?.status === "selected" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status}`);
   // 12G-R. protocol_selection guardrail remains not_evaluated.
   {
     const g = (s: typeof staking) => s?.guardrails.find((x) => x.code === "protocol_selection")?.status;
-    add("12G-R: protocol_selection guardrail remains not_evaluated", g(staking) === "not_evaluated" && g(stable) === "not_evaluated", `staking=${g(staking)}`);
+    add("12G-R: protocol_selection guardrail passed for staking, not_evaluated for stable_yield", g(staking) === "passed" && g(stable) === "not_evaluated", `staking=${g(staking)}`);
   }
   // 12G-S. Cards/modal expose no scores/ranks/candidate names/APY/TVL.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "Kamino", "totalScore", "yieldScore", "rankedProtocolIds", "scoredAt", "tvlUsd", "selectionMade"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12G-S: cards/modal never expose scores/ranks/names/APY/TVL", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
-  // 12G-T. Scoring helpers are utility-only (not wired into live suggestions).
+  // 12G-T. Scoring helpers are utility-only (not wired into live suggestions):
+  // the only passed protocol_selection is staking's approved JitoSOL beta, sourced
+  // from verified data (not a score); stable_yield is never elevated by scoring.
   {
-    const anyProtoPassed = [staking, stable].some((s) => (s?.guardrails ?? []).some((g) => g.code === "protocol_selection" && g.status === "passed"));
-    add("12G-T: scoring not wired into live suggestions", typeof rankProtocolCandidates === "function" && !anyProtoPassed, `anyProtoPassed=${anyProtoPassed}`);
+    const stableProtoPassed = (stable?.guardrails ?? []).some((g) => g.code === "protocol_selection" && g.status === "passed");
+    const stakingFromVerified = staking?.protocolSelection?.status === "selected" && (staking?.protocolSelection?.dataSources ?? []).includes("Verified source data");
+    add("12G-T: scoring not wired into live suggestions (staking selection is verified JitoSOL, not scored)", typeof rankProtocolCandidates === "function" && !stableProtoPassed && stakingFromVerified === true, `stableProtoPassed=${stableProtoPassed} stakingVerified=${stakingFromVerified}`);
   }
   // 12G-U. Scoring is not recommendation; ranking is not selection.
   add("12G-U: scoring is not recommendation and ranking is not selection", SCORING_IS_RECOMMENDATION === false && RANKING_IS_SELECTION === false, `scoringRec=${SCORING_IS_RECOMMENDATION} rankingSel=${RANKING_IS_SELECTION}`);
@@ -4258,22 +4318,29 @@ export function runProtocolSelectionQaFixtureChecks(): FixtureCheck[] {
   {
     run(buildSolLiquidStakingQaInput()); // running QA must not affect live suggestions
     const freshStaking = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT).suggestions.find((s) => s.category === "staking");
-    add("12H-M: QA does not mutate live ProtocolSelection", freshStaking?.protocolSelection?.status === "not_evaluated" && freshStaking?.protocolSelection?.selectedProtocolId === undefined, `status=${freshStaking?.protocolSelection?.status}`);
+    // Live staking selection comes from the approved JitoSOL beta (id "jito"),
+    // never from the QA fixture candidate — running QA must not change it.
+    add("12H-M: QA does not mutate live ProtocolSelection (stays approved JitoSOL beta)", freshStaking?.protocolSelection?.status === "selected" && freshStaking?.protocolSelection?.selectedProtocolId === "jito", `status=${freshStaking?.protocolSelection?.status} id=${freshStaking?.protocolSelection?.selectedProtocolId}`);
   }
   // 12H-N. Production selection remains not implemented.
   add("12H-N: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
   // 12H-O. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12H-O: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12H-O: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12H-P. Cards/modal do not show the QA-selected protocol or ranking.
   {
     const tokens = ["marinade", "Marinade", "selectedProtocolId", "rankedProtocolIds", "selectionMade", "qaOnly", "candidateScores"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12H-P: cards/modal never show QA-selected protocol or ranking", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12H-S. Fixture data is labeled fixture-only / not live / not recommendation.
@@ -4330,30 +4397,35 @@ export function runProtocolReadinessFixtureChecks(): FixtureCheck[] {
     add("12I-I: rollout stages are ordered disabled → … → production", JSON.stringify([...PROTOCOL_SELECTION_ROLLOUT_STAGES]) === JSON.stringify(expected), `stages=${PROTOCOL_SELECTION_ROLLOUT_STAGES.join(",")}`);
   }
   // 12I-J. Live staking/stable protocolSelection.status remains not_evaluated.
-  add("12I-J: staking/stable_yield protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status}`);
+  add("12I-J: staking selected (JitoSOL), stable_yield not_evaluated", staking?.protocolSelection?.status === "selected" && stable?.protocolSelection?.status === "not_evaluated", `staking=${staking?.protocolSelection?.status}`);
   // 12I-K. Live suggestions carry no selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12I-K: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12I-K: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12I-L. protocol_selection guardrail remains not_evaluated.
   {
     const g = (s: typeof staking) => s?.guardrails.find((x) => x.code === "protocol_selection")?.status;
-    add("12I-L: protocol_selection guardrail remains not_evaluated", g(staking) === "not_evaluated" && g(stable) === "not_evaluated", `staking=${g(staking)}`);
+    add("12I-L: protocol_selection guardrail passed for staking, not_evaluated for stable_yield", g(staking) === "passed" && g(stable) === "not_evaluated", `staking=${g(staking)}`);
   }
   // 12I-M. Cards/modal show no selected protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "Kamino", "selectedProtocolId", "selectedProtocolName"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12I-M: cards/modal show no selected protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12I-N. QA can still select fixture-only candidate; live selection stays disabled.
   {
     const qa = runProtocolSelectionQa({ input: buildSolLiquidStakingQaInput(), checkedAt: "t" });
-    add("12I-N: QA selects fixture candidate; live selection stays disabled", qa.status === "selected" && qa.qaOnly === true && PROTOCOL_SELECTION_IMPLEMENTED === false && staking?.protocolSelection?.status === "not_evaluated", `qa=${qa.selectedProtocolId} implemented=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+    add("12I-N: QA selects fixture candidate; generic selection stays unimplemented (live staking uses the approved JitoSOL beta)", qa.status === "selected" && qa.qaOnly === true && PROTOCOL_SELECTION_IMPLEMENTED === false && staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito", `qa=${qa.selectedProtocolId} implemented=${PROTOCOL_SELECTION_IMPLEMENTED} live=${staking?.protocolSelection?.status}`);
   }
   // 12I-P. Production-readiness posture: QA-only, not production (doc mirrors this).
   add("12I-P: QA selection is not production selection", PROTOCOL_SELECTION_QA_ONLY === true && isProtocolSelectionProductionReady() === false && PROTOCOL_SELECTION_SHOW_IN_UI === false, `qaOnly=${PROTOCOL_SELECTION_QA_ONLY}`);
@@ -4458,22 +4530,29 @@ export function runSolLiquidStakingMappingFixtureChecks(): FixtureCheck[] {
   {
     runSolLiquidStakingInternalDryRun({ checkedAt: "t" });
     const fresh = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT).suggestions.find((s) => s.category === "staking");
-    add("12J-M: dry-run does not mutate live ProtocolSelection", fresh?.protocolSelection?.status === "not_evaluated" && fresh?.protocolSelection?.selectedProtocolId === undefined, `status=${fresh?.protocolSelection?.status}`);
+    // Live staking selection is the approved JitoSOL beta (id "jito"); the dry-run
+    // must not change it into some other candidate.
+    add("12J-M: dry-run does not mutate live ProtocolSelection (stays approved JitoSOL beta)", fresh?.protocolSelection?.status === "selected" && fresh?.protocolSelection?.selectedProtocolId === "jito", `status=${fresh?.protocolSelection?.status} id=${fresh?.protocolSelection?.selectedProtocolId}`);
   }
   // 12J-N. Live staking protocolSelection.status remains not_evaluated.
-  add("12J-N: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12J-N: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12J-O. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12J-O: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12J-O: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12J-P. Cards/modal do not expose dry-run data or protocol recommendations.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "dataAvailability", "qaResult", "anyFullyEligible", "JupSOL", "5oVNBeEEQvYi"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12J-P: cards/modal never expose dry-run data or recommendations", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12J-Q / R / S. Flags at safe defaults.
@@ -4561,19 +4640,24 @@ export function runSolLiquidStakingDryRunFixtureChecks(): FixtureCheck[] {
     add("12K-P: dry-run errors do not throw (→ source_error)", !threw && status === "source_error", `threw=${threw} status=${status}`);
   }
   // 12K-R. Live staking protocolSelection.status remains not_evaluated.
-  add("12K-R: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12K-R: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12K-S. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12K-S: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12K-S: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12K-T. Cards/modal do not expose dry-run data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "candidateReports", "ready_for_qa", "apyStatus", "JupSOL"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12K-T: cards/modal never expose dry-run data or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12K-U/V/W. Flags at safe defaults.
@@ -4667,19 +4751,24 @@ export function runSolLiquidStakingSourceFixtureChecks(): FixtureCheck[] {
     add("12L-N: dry-run includes source status but stays insufficient_data", hasSourceStatus && dryRun.status === "insufficient_data", `status=${dryRun.status}`);
   }
   // 12L-O. Live staking protocolSelection.status remains not_evaluated.
-  add("12L-O: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12L-O: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12L-P. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12L-P: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12L-P: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12L-Q. Cards/modal do not expose source metadata or protocol recommendations.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "sourceStatusByCategory", "lastReviewedAt", "SolLiquidStakingSource", "JupSOL"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12L-Q: cards/modal never expose source metadata or recommendations", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12L-R/S/T. Flags at safe defaults.
@@ -4854,24 +4943,34 @@ export function runSolLiquidStakingStage2FixtureChecks(): FixtureCheck[] {
   {
     const tokens = ["stage_2_real_data_dry_run", "candidateReports", "canSelectForProduction", "productionSelectionEnabled", "candidatesEligible"];
     const scan = (s: typeof staking) => JSON.stringify(s) + JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12M-W: stage-2 report shape not present in live suggestion output", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12M-X. Live staking protocolSelection.status remains not_evaluated.
-  add("12M-X: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12M-X: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12M-Y. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12M-Y: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12M-Y: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12M-Z. Cards/modal do not expose Stage-2 report or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "stage_2_real_data_dry_run", "candidateReports"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12M-Z: cards/modal never expose Stage-2 report or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12M-AA/AB/AC. Global selection flags at safe defaults.
@@ -4988,19 +5087,24 @@ export function runProtocolSelectionGoNoGoFixtureChecks(): FixtureCheck[] {
     add("12N-AA: no selectedProtocolId/Name in go/no-go result", noSel, `hasKey=${"selectedProtocolId" in gng}`);
   }
   // 12N-AB. Live staking protocolSelection.status remains not_evaluated.
-  add("12N-AB: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12N-AB: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12N-AC. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12N-AC: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12N-AC: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12N-AD. Cards/modal do not expose go/no-go data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "productionReady", "go_no_go", "missing_tvl_", "GoNoGo"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12N-AD: cards/modal never expose go/no-go data or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12N-AE/AF/AG. Global selection flags at safe defaults.
@@ -5096,19 +5200,24 @@ export function runSolLiquidStakingSourceCandidateFixtureChecks(): FixtureCheck[
   add("12O-Q: fee_data gate remains blocked", gateStatus("fee_data") === "blocked", `status=${gateStatus("fee_data")}`);
 
   // 12O-R. Live staking protocolSelection.status remains not_evaluated.
-  add("12O-R: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12O-R: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12O-S. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12O-S: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12O-S: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12O-T. Cards/modal do not expose source candidates or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "proposedValue", "needs_review", "SourceCandidate", "DefiLlama"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12O-T: cards/modal never expose source candidates or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12O-U/V/W. Flags at safe defaults.
@@ -5202,19 +5311,24 @@ export function runProtocolRiskRubricFixtureChecks(): FixtureCheck[] {
     add("12P-T: risk methodology / risk score gates remain blocked or not_started", ok, `method=${method} scores=${scores}`);
   }
   // 12P-U. Live staking protocolSelection.status remains not_evaluated.
-  add("12P-U: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12P-U: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12P-V. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12P-V: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12P-V: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12P-W. Cards/modal do not expose risk rubric or protocol recommendations.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "audit_security", "riskRubric", "ProtocolRiskRubric", "scoringGuidance"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12P-W: cards/modal never expose risk rubric or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12P-X/Y/Z. Flags at safe defaults.
@@ -5304,19 +5418,24 @@ export function runSolLiquidStakingEvidenceFixtureChecks(): FixtureCheck[] {
   add("12Q-R: withdrawal_data gate remains blocked", gateStatus("withdrawal_data") === "blocked", `status=${gateStatus("withdrawal_data")}`);
   add("12Q-S: fee_data gate remains blocked", gateStatus("fee_data") === "blocked", `status=${gateStatus("fee_data")}`);
   // 12Q-T. Live staking protocolSelection.status remains not_evaluated.
-  add("12Q-T: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12Q-T: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12Q-U. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12Q-U: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12Q-U: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12Q-V. Cards/modal do not expose evidence drafts or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "evidenceSummary", "unresolvedQuestions", "EvidenceDraft", "audit_security"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12Q-V: cards/modal never expose evidence drafts or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12Q-W/X/Y. Flags at safe defaults.
@@ -5411,19 +5530,24 @@ export function runProtocolRiskApprovalDecisionFixtureChecks(): FixtureCheck[] {
   // 12R-W. risk_scores gate remains not_started or blocked.
   add("12R-W: risk_scores gate remains not_started or blocked", gateStatus("risk_scores") === "not_started" || gateStatus("risk_scores") === "blocked", `status=${gateStatus("risk_scores")}`);
   // 12R-X. Live staking protocolSelection.status remains not_evaluated.
-  add("12R-X: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12R-X: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12R-Y. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12R-Y: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12R-Y: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12R-Z. Cards/modal do not expose approval decision or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "approved_for_scoring", "scoreAssignmentAllowed", "rubricApproved", "ApprovalDecision"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12R-Z: cards/modal never expose approval decision or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12R-AA/AB/AC. Flags at safe defaults.
@@ -5506,19 +5630,24 @@ export function runSolLiquidStakingEvidenceCompletionFixtureChecks(): FixtureChe
   // 12S-T. risk_scores gate remains not_started or blocked.
   add("12S-T: risk_scores gate remains not_started or blocked", gateStatus("risk_scores") === "not_started" || gateStatus("risk_scores") === "blocked", `status=${gateStatus("risk_scores")}`);
   // 12S-U. Live staking protocolSelection.status remains not_evaluated.
-  add("12S-U: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12S-U: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12S-V. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12S-V: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12S-V: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12S-W. Cards/modal do not expose evidence-completion data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "dimensionResults", "readyForReview", "EvidenceCompletion", "canMarkGathered"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12S-W: cards/modal never expose evidence-completion data or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12S-X/Y/Z. Flags at safe defaults.
@@ -5646,19 +5775,24 @@ export function runSolLiquidStakingSourceVerificationFixtureChecks(): FixtureChe
   // 12T-AB. productionReady remains false.
   add("12T-AB: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
   // 12T-AC. Live staking protocolSelection.status remains not_evaluated.
-  add("12T-AC: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12T-AC: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12T-AD. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12T-AD: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12T-AD: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12T-AE. Cards/modal do not expose source-verification data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "defillama_pool", "SourceVerification", "verifiedValue", "unresolvedQuestions"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12T-AE: cards/modal never expose source-verification data or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12T-AF/AG/AH. Flags at safe defaults.
@@ -5804,19 +5938,24 @@ export function runSolLiquidStakingSourceValueConfirmationFixtureChecks(): Fixtu
   // 12U-AE. productionReady remains false.
   add("12U-AE: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
   // 12U-AF. Live staking protocolSelection.status remains not_evaluated.
-  add("12U-AF: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12U-AF: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12U-AG. No live suggestion has selectedProtocolId/Name.
   {
     const all = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = all.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12U-AG: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = all.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12U-AG: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12U-AH. Cards/modal do not expose value-confirmation data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "confirmedValue", "confirmedAsOf", "ValueConfirmation", "QA_ONLY_NOT_LIVE"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12U-AH: cards/modal never expose value-confirmation data or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12U-AI/AJ/AK. Flags at safe defaults.
@@ -5947,19 +6086,24 @@ export function runSolLiquidStakingRealValueFixtureChecks(): FixtureCheck[] {
   // 12V-AM. productionReady remains false.
   add("12V-AM: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
   // 12V-AN. Live staking not_evaluated.
-  add("12V-AN: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12V-AN: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12V-AO. No live suggestion has selectedProtocolId/Name.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12V-AO: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12V-AO: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12V-AP. Cards/modal do not expose real-value confirmations or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "409170000", "confirmedAsOf", "RealValueConfirmation", "defillama"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12V-AP: cards/modal never expose real-value confirmations or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12V-AQ/AR/AS. Flags at safe defaults.
@@ -6106,19 +6250,24 @@ export function runSolLiquidStakingGatherDecisionFixtureChecks(): FixtureCheck[]
   // 12W-AP. productionReady remains false.
   add("12W-AP: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
   // 12W-AQ. Live staking not_evaluated.
-  add("12W-AQ: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12W-AQ: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12W-AR. No live suggestion has selectedProtocolId/Name.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12W-AR: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12W-AR: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12W-AS. Cards/modal do not expose gather decisions or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JupSOL", "gatheredDimensions", "GatherDecision", "basedOnCategories", "candidateReadyForReview"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12W-AS: cards/modal never expose gather decisions or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12W-AT/AU/AV. Flags at safe defaults.
@@ -6254,19 +6403,24 @@ export function runJitoSolEvidenceReadinessFixtureChecks(): FixtureCheck[] {
   // 12X-AP. productionReady remains false.
   add("12X-AP: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
   // 12X-AQ. Live staking not_evaluated.
-  add("12X-AQ: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12X-AQ: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12X-AR. No live suggestion has selectedProtocolId/Name.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12X-AR: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12X-AR: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12X-AS. Cards/modal do not expose JitoSOL readiness or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "ready_for_review", "gatheredDimensions", "JitoEvidence", "candidateReadyForReview"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12X-AS: cards/modal never expose JitoSOL readiness or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12X-AT/AU/AV. Flags at safe defaults.
@@ -6419,19 +6573,24 @@ export function runProtocolRiskScoreAssignmentFixtureChecks(): FixtureCheck[] {
   // 12Y-AI. productionReady remains false.
   add("12Y-AI: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
   // 12Y-AJ. Live staking not_evaluated.
-  add("12Y-AJ: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12Y-AJ: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12Y-AK. No live suggestion has selectedProtocolId/Name.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12Y-AK: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12Y-AK: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12Y-AL. Cards/modal do not expose riskScore assignment or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "riskScore", "weightedContribution", "score_assigned", "7.75"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12Y-AL: cards/modal never expose riskScore assignment or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12Y-AM/AN/AO. Flags at safe defaults.
@@ -6573,19 +6732,24 @@ export function runSolLstProductionMetadataFixtureChecks(): FixtureCheck[] {
   // 12Z-AM. productionReady remains false.
   add("12Z-AM: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
   // 12Z-AN. Live staking not_evaluated.
-  add("12Z-AN: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("12Z-AN: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 12Z-AO. No live suggestion has selectedProtocolId/Name.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("12Z-AO: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("12Z-AO: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 12Z-AP. Cards/modal do not expose production metadata or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "767950000", "annualManagementFeePct", "ProductionMetadata", "auditFirms"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("12Z-AP: cards/modal never expose production metadata or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 12Z-AQ/AR/AS. Flags at safe defaults.
@@ -6705,19 +6869,24 @@ export function runSolLstSelectorShellFixtureChecks(): FixtureCheck[] {
   // 13A-AH. productionReady remains false.
   add("13A-AH: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
   // 13A-AI. Live staking not_evaluated.
-  add("13A-AI: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("13A-AI: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 13A-AJ. No live suggestion has selectedProtocolId/Name.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("13A-AJ: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("13A-AJ: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 13A-AK. Cards/modal do not expose selector data or protocol names.
   {
     const tokens = ["Jupiter", "Marinade", "Jito", "BlazeStake", "Sanctum", "JitoSOL", "selectedProtocolId", "SolLstSelector", "nextRequiredActions", "eligibleAmountSol"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("13A-AK: cards/modal never expose selector data or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 13A-AL/AM/AN. Flags at safe defaults.
@@ -6795,7 +6964,9 @@ export function runSolLstSelectorPreviewFixtureChecks(): FixtureCheck[] {
   // 13B-T…W. Preview shape not present in live suggestion-derivation output (proxy for
   // "not imported by stakingSuggestion / engine / toSuggestionCard / Dashboard-Portfolio-modal").
   {
-    const previewTokens = ["SOL staking preview unavailable", "Selector preview is disabled", "INTERNAL_PREVIEW_NOT_LIVE", "Suggested protocol to review", "Preview disabled"];
+    // "Suggested protocol to review" is shared production copy (Step 13G) — no
+    // longer a preview-distinctive token; scan only for INTERNAL preview strings.
+    const previewTokens = ["SOL staking preview unavailable", "Selector preview is disabled", "INTERNAL_PREVIEW_NOT_LIVE", "Preview disabled"];
     const stakingJson = JSON.stringify(staking);
     const engineJson = JSON.stringify(stakingRun) + JSON.stringify(stableRun);
     const cardJson = JSON.stringify(toSuggestionCard(staking!)) + JSON.stringify(toSuggestionCard(stable!));
@@ -6807,12 +6978,12 @@ export function runSolLstSelectorPreviewFixtureChecks(): FixtureCheck[] {
   }
 
   // 13B-X. Live staking not_evaluated.
-  add("13B-X: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("13B-X: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 13B-Y. No live suggestion has selectedProtocolId/Name.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("13B-Y: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("13B-Y: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 13B-Z. Cards/modal do not expose preview copy or protocol recommendations.
   // Use preview-DISTINCTIVE tokens only: the title "Put Idle SOL to Work" is shared
@@ -6820,8 +6991,13 @@ export function runSolLstSelectorPreviewFixtureChecks(): FixtureCheck[] {
   {
     const tokens = ["Jito", "JitoSOL", "SOL staking preview unavailable", "Selector preview is disabled", "INTERNAL_PREVIEW_NOT_LIVE", "Preview disabled", "selectedProtocolName", "selectedLstSymbol"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("13B-Z: cards/modal never expose preview copy or protocol names", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 13B-AA/AB/AC. Flags at safe defaults.
@@ -6892,7 +7068,9 @@ export function runSolLstSelectorPreviewRouteFixtureChecks(): FixtureCheck[] {
   // (proxy for "preview component not imported by Dashboard/Portfolio/Card/Modal/
   // stakingSuggestion/engine/toSuggestionCard"; import graph is grep-verified too).
   {
-    const previewTokens = ["INTERNAL_PREVIEW_NOT_LIVE", "Suggested protocol to review", "internal-sol-lst-preview", "Open official protocol page", "SolLstSelectorPreview"];
+    // "Suggested protocol to review" is shared production copy (Step 13G); the
+    // preview-DISTINCTIVE tokens are the internal route/label/component strings.
+    const previewTokens = ["INTERNAL_PREVIEW_NOT_LIVE", "internal-sol-lst-preview", "Open official protocol page", "SolLstSelectorPreview"];
     const stakingJson = JSON.stringify(staking);
     const engineJson = JSON.stringify(stakingRun) + JSON.stringify(stableRun);
     const cardJson = JSON.stringify(toSuggestionCard(staking!)) + JSON.stringify(toSuggestionCard(stable!));
@@ -6908,19 +7086,24 @@ export function runSolLstSelectorPreviewRouteFixtureChecks(): FixtureCheck[] {
   }
 
   // 13C-V. Live staking not_evaluated.
-  add("13C-V: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("13C-V: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 13C-W. No live suggestion has selectedProtocolId/Name.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("13C-W: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("13C-W: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 13C-X. Cards/modal do not expose internal preview copy on normal flows.
   {
     const tokens = ["INTERNAL_PREVIEW_NOT_LIVE", "Suggested protocol to review", "Open official protocol page", "selectedProtocolName", "selectedLstSymbol"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("13C-X: cards/modal do not expose internal preview copy on normal flows", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 13C-Y/Z/AA. Selection flags.
@@ -7016,19 +7199,24 @@ export function runInternalSolStakingRecommendationFixtureChecks(): FixtureCheck
   }
 
   // 13D-AA. Live staking not_evaluated.
-  add("13D-AA: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("13D-AA: live staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 13D-AB. No live suggestion has selectedProtocolId/Name.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("13D-AB: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("13D-AB: no non-staking suggestion names a protocol", bad.length === 0, `violations=${bad.length}`);
   }
   // 13D-AC. Cards/modal do not expose fake-token fixture copy on normal flows.
   {
     const tokens = ["INTERNAL_PREVIEW_NOT_LIVE", "Fake-token recommendation fixture", "Fake internal wallet has 12.4 SOL", "internal-sol-staking-fixture"];
     const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
-    const json = scan(staking) + scan(stable);
-    const leaks = tokens.filter((t) => json.includes(t));
+    // Step 13G: the approved JitoSOL production data may appear on the STAKING
+    // suggestion; it is a leak only on stable_yield or if a non-approved token appears.
+    const approvedOnStaking = ["Jito", "JitoSOL", "Suggested protocol to review", "Verified source data", "tvlUsd", "apyPct", "apy30dPct", "directUnstakeTimeHours", "directUnstakeFeePct", "annualManagementFeePct", "annualManagementFeeAppliesTo", "767950000", "5.36", "5.45", "rewards"];
+    const stakingScan = scan(staking);
+    const stableScan = scan(stable);
+    const leaks = tokens.filter((t) => stableScan.includes(t) || (stakingScan.includes(t) && !approvedOnStaking.includes(t)));
+
     add("13D-AC: cards/modal do not expose fake-token fixture copy on normal flows", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
   }
   // 13D-AD. Demo Mode suggestions unchanged (fixture data are not the demo suggestion set).
@@ -7133,11 +7321,11 @@ export function runDemoExactSolStakingScenarioFixtureChecks(): FixtureCheck[] {
     add("13E-AC: Default Demo unchanged; SOL staking scenario is a separate rail payload", railOk, `railCards=${rail.cards.length}`);
   }
   // 13E-AD. Real wallet staking still not_evaluated.
-  add("13E-AD: real wallet staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  add("13E-AD: real wallet staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
   // 13E-AE. Real wallet suggestions have no selectedProtocolId/Name.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
     add("13E-AE: real wallet suggestions have no selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
   }
   // 13E-AF…AI. Flags at safe defaults.
@@ -7206,13 +7394,15 @@ export function runDemoExactSolStakingMarketDataFixtureChecks(): FixtureCheck[] 
   // 13F-O/P. Production status flags on the display.
   add("13F-O: demo market data does not enable real wallet selection", psd?.productionStatus?.realWalletSelectionEnabled === false, `v=${psd?.productionStatus?.realWalletSelectionEnabled}`);
   add("13F-P: demo market data does not enable transactions", psd?.productionStatus?.transactionsEnabled === false, `v=${psd?.productionStatus?.transactionsEnabled}`);
-  // 13F-Q. Real wallet staking not_evaluated.
-  add("13F-Q: real wallet staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
-  // 13F-R. Real wallet suggestions have no selectedProtocolId/Name.
+  // 13F-Q. Real wallet staking is now the approved JitoSOL recommendation
+  // (Step 13G beta ON): status "selected". (13G covers the full read-only
+  // contract; 13G-AI covers rollback to not_evaluated.)
+  add("13F-Q: real wallet staking protocolSelection.status is selected (JitoSOL beta)", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
+  // 13F-R. Only the approved staking suggestion names a protocol (Jito); stable_yield names none.
   {
     const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
-    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
-    add("13F-R: real wallet suggestions have no selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+    const bad = allSug.filter((s) => s.category !== "staking" && (s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null));
+    add("13F-R: only staking names a protocol (Jito); others name none", bad.length === 0 && staking?.protocolSelection?.selectedProtocolName === "Jito", `violations=${bad.length}`);
   }
   // 13F-S…V. Flags at safe defaults.
   add("13F-S: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
@@ -7242,6 +7432,133 @@ export function runDemoExactSolStakingMarketDataFixtureChecks(): FixtureCheck[] 
     const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
     const hits = forbidden.filter((w) => json.includes(w));
     add("13F-Z: no forbidden investment claims in demo market-data copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 13G — JitoSOL exact SOL staking recommendation ENABLED for real
+ * wallet mode behind the read-only beta flag. Verifies: the beta selects
+ * Jito/JitoSOL for idle SOL, the real staking suggestion becomes "selected"
+ * with the production display + verified market data, the read-only boundary
+ * holds (no transaction/signature/completion), Demo Mode is unchanged, and
+ * the rollback path (beta OFF → not selected) still works.
+ * ------------------------------------------------------------------ */
+export function runJitoSolBetaActivationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const FRESH = "2026-07-12T06:00:00Z";
+
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+  const card = staking ? toSuggestionCard(staking) : undefined;
+  const details = staking?.reviewDetails;
+  const psd = details?.protocolSelectionDisplay;
+  const md = psd?.marketData;
+  const stakingJson = JSON.stringify(card) + JSON.stringify(details) + JSON.stringify(staking?.protocolSelection);
+
+  const betaSel = selectJitoSolReadOnlyBeta({ assetSymbol: "SOL", eligibleAmountSol: 5, eligibleAmountUsd: 1000, asOf: FRESH });
+  const usdcSel = selectJitoSolReadOnlyBeta({ assetSymbol: "USDC", eligibleAmountSol: 5, asOf: FRESH });
+  const smallSel = selectJitoSolReadOnlyBeta({ assetSymbol: "SOL", eligibleAmountSol: 0.1, asOf: FRESH });
+  const rollbackSel = selectJitoSolReadOnlyBeta({ assetSymbol: "SOL", eligibleAmountSol: 5, asOf: FRESH }, { betaEnabled: false });
+  const meta = getJitoSolBetaActivatedMetadata();
+  const gng = getJitoSolReadOnlyBetaGoNoGo();
+  const betaMd = getJitoSolBetaMarketData();
+  const betaPsd = getJitoSolBetaProtocolSelectionDisplay();
+  const demoDetails = getDemoExactSolStakingReviewDetails();
+
+  // 13G-A…E. Beta flags: read-only ON, everything transactional hard-OFF.
+  add("13G-A: read-only recommendation beta is enabled", isJitoSolBetaReadOnlyEnabled() && JITOSOL_BETA_READ_ONLY_RECOMMENDATION_ENABLED === true, `enabled=${isJitoSolBetaReadOnlyEnabled()}`);
+  add("13G-B: beta transactions flag is false", JITOSOL_BETA_TRANSACTIONS_ENABLED === false, `v=${JITOSOL_BETA_TRANSACTIONS_ENABLED}`);
+  add("13G-C: beta wallet-signatures flag is false", JITOSOL_BETA_WALLET_SIGNATURES_ENABLED === false, `v=${JITOSOL_BETA_WALLET_SIGNATURES_ENABLED}`);
+  add("13G-D: beta auto-execution flag is false", JITOSOL_BETA_AUTO_EXECUTION_ENABLED === false, `v=${JITOSOL_BETA_AUTO_EXECUTION_ENABLED}`);
+  add("13G-E: beta auto external-navigation flag is false", JITOSOL_BETA_EXTERNAL_NAVIGATION_ENABLED === false, `v=${JITOSOL_BETA_EXTERNAL_NAVIGATION_ENABLED}`);
+
+  // 13G-F…I. Approved metadata + go/no-go.
+  add("13G-F: approved risk score is 7.75", JITOSOL_BETA_APPROVED_RISK_SCORE === 7.75, `v=${JITOSOL_BETA_APPROVED_RISK_SCORE}`);
+  add("13G-G: beta metadata status is active with approved risk score", meta.status === "active" && meta.riskScoreStatus === "approved" && meta.riskScore === 7.75, `status=${meta.status} risk=${meta.riskScore}`);
+  add("13G-H: beta metadata is read-only-ready but transactions stay off", meta.productionReadyForReadOnly === true && meta.selectionEnabled === true && meta.transactionsEnabled === false, `readOnly=${meta.productionReadyForReadOnly} tx=${meta.transactionsEnabled}`);
+  add("13G-I: read-only beta go/no-go: ready, production+transactions NOT ready", gng.readOnlyBetaReady === true && gng.productionReady === false && gng.transactionsReady === false, `ready=${gng.readOnlyBetaReady} prod=${gng.productionReady} tx=${gng.transactionsReady}`);
+
+  // 13G-J…M. Selector selects Jito/JitoSOL for idle SOL with sourced candidate data.
+  add("13G-J: selector selects Jito/JitoSOL for idle SOL above minimum", betaSel.status === "selected" && betaSel.selectedProtocolId === "jito" && betaSel.selectedProtocolName === "Jito" && betaSel.selectedLstSymbol === "JitoSOL", `status=${betaSel.status} id=${betaSel.selectedProtocolId} lst=${betaSel.selectedLstSymbol}`);
+  add("13G-K: selected candidate carries the approved risk score 7.75", betaSel.candidates[0]?.riskScore === 7.75, `risk=${betaSel.candidates[0]?.riskScore}`);
+  {
+    const c = betaSel.candidates[0];
+    add("13G-L: selected candidate carries sourced tvl/apy/apy30d/withdrawal", c?.tvlUsd === betaMd.tvlUsd && c?.apyPct === betaMd.apyPct && c?.apy30dPct === betaMd.apy30dPct && c?.withdrawalTimeHours === betaMd.directUnstakeTimeHours, `tvl=${c?.tvlUsd} apy=${c?.apyPct} wd=${c?.withdrawalTimeHours}`);
+  }
+  add("13G-M: selector result never enables transactions", betaSel.transactionsEnabled === false, `v=${betaSel.transactionsEnabled}`);
+
+  // 13G-N/O. Rejects non-SOL and at/below-minimum amounts (no selection).
+  add("13G-N: selector does not select USDC", usdcSel.status !== "selected" && usdcSel.selectedProtocolId == null, `status=${usdcSel.status}`);
+  add("13G-O: selector does not select an at/below-minimum SOL amount", smallSel.status !== "selected" && smallSel.selectedProtocolId == null, `status=${smallSel.status}`);
+
+  // 13G-P…R. Real staking suggestion is the approved selection.
+  add("13G-P: real staking suggestion protocolSelection.status is selected", staking?.protocolSelection?.status === "selected", `status=${staking?.protocolSelection?.status}`);
+  add("13G-Q: real staking selectedProtocolName is Jito", staking?.protocolSelection?.selectedProtocolName === "Jito", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  add("13G-R: real staking selectedLstSymbol is JitoSOL", staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `lst=${staking?.protocolSelection?.selectedLstSymbol}`);
+
+  // 13G-S…U. Production display + verified market data in Review Details.
+  add("13G-S: review details protocolSelectionDisplay mode is production (real wallet selection enabled, tx off)", psd?.mode === "production" && psd?.productionStatus?.realWalletSelectionEnabled === true && psd?.productionStatus?.transactionsEnabled === false, `mode=${psd?.mode} sel=${psd?.productionStatus?.realWalletSelectionEnabled} tx=${psd?.productionStatus?.transactionsEnabled}`);
+  add("13G-T: market data TVL is 767950000", md?.tvlUsd === 767950000, `v=${md?.tvlUsd}`);
+  add("13G-U: market data current APY 5.36 / 30-day APY 5.45", md?.apyPct === 5.36 && md?.apy30dPct === 5.45, `apy=${md?.apyPct} apy30=${md?.apy30dPct}`);
+
+  // 13G-V…Y. Read-only boundary: review-only, non-transactional, honest notes.
+  add("13G-V: staking action_kind stays review_only", staking?.action_kind === "review_only", `kind=${staking?.action_kind}`);
+  add("13G-W: card CTA executes no transaction / no signature / no completion", card?.cta.executes_transaction === false && card?.cta.requires_wallet_signature === false && card?.cta.completion_on_click === false, `tx=${card?.cta.executes_transaction} sig=${card?.cta.requires_wallet_signature} done=${card?.cta.completion_on_click}`);
+  {
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw(", "unstake("];
+    const hits = tokens.filter((t) => stakingJson.toLowerCase().includes(t));
+    add("13G-X: no transaction/signature/swap path in staking output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  {
+    const notes = (details?.safetyNotes ?? []).map((n) => n.text);
+    const ok = notes.includes("WealthSmith does not move funds for you.") && notes.includes("No transaction is created from this suggestion.") && notes.includes("No wallet signature is requested.");
+    add("13G-Y: read-only safety notes (no funds moved / no transaction / no signature)", ok, `notes=${notes.join(" | ")}`);
+  }
+
+  // 13G-Z. Card surfaces the approved "Suggested protocol to review" (production, no demo label).
+  add("13G-Z: card shows Jito · JitoSOL as production suggested protocol to review", card?.protocolName === "Jito" && card?.lstSymbol === "JitoSOL" && card?.suggestedProtocolLabel === "Suggested protocol to review" && card?.protocolSelectionDisplay?.mode === "production" && card?.protocolSelectionDisplay?.protocolName === "Jito", `name=${card?.protocolName} lst=${card?.lstSymbol} mode=${card?.protocolSelectionDisplay?.mode}`);
+
+  // 13G-AA. Execution guardrails stay not evaluated (no quote/route data) — never "passed".
+  {
+    const g = (code: string) => staking?.guardrails.find((x) => x.code === code)?.status;
+    const execNotPassed = ["cost_available", "liquidity_available", "slippage_available"].every((c) => g(c) === "not_evaluated");
+    const summary = details?.guardrailSummary;
+    const inNotEvaluated = ["Route cost", "Liquidity depth", "Slippage"].every((l) => summary?.notEvaluated.includes(l));
+    add("13G-AA: execution guardrails (cost/liquidity/slippage) stay not evaluated", execNotPassed && inNotEvaluated === true, `execNotPassed=${execNotPassed} inNotEvaluated=${inNotEvaluated}`);
+  }
+
+  // 13G-AB…AD. Demo Mode is UNCHANGED by enabling the real-wallet beta.
+  add("13G-AB: demo scenario protocol display stays demo_preview mode", demoDetails.protocolSelectionDisplay?.mode === "demo_preview", `mode=${demoDetails.protocolSelectionDisplay?.mode}`);
+  add("13G-AC: demo scenario still uses DEMO_PREVIEW_NOT_LIVE", demoDetails.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoDetails.protocolSelectionDisplay?.demoLabel === "DEMO_PREVIEW_NOT_LIVE", `label=${demoDetails.demoLabel}`);
+  add("13G-AD: demo scenario does not enable real-wallet selection", demoDetails.protocolSelectionDisplay?.productionStatus?.realWalletSelectionEnabled === false, `v=${demoDetails.protocolSelectionDisplay?.productionStatus?.realWalletSelectionEnabled}`);
+
+  // 13G-AE. Only SOL staking is selected; stable_yield remains not_evaluated.
+  add("13G-AE: stable_yield protocolSelection stays not_evaluated (only SOL staking is enabled)", stable?.protocolSelection?.status === "not_evaluated", `status=${stable?.protocolSelection?.status}`);
+
+  // 13G-AF/AG. Real wallet output carries NO Demo/Internal preview label.
+  add("13G-AF: real wallet staking output has no DEMO preview label", !stakingJson.includes("DEMO_PREVIEW_NOT_LIVE"), "clean");
+  add("13G-AG: real wallet staking output has no INTERNAL preview label", !stakingJson.includes("INTERNAL_PREVIEW_NOT_LIVE"), "clean");
+
+  // 13G-AH/AI. Rollback: beta OFF → selector disabled, no protocol selected
+  // (the deriveStakingSuggestion path then falls back to not_evaluated).
+  add("13G-AH: rollback — selector with beta disabled returns disabled, no protocol", rollbackSel.status === "disabled" && rollbackSel.selectedProtocolId == null && rollbackSel.selectedProtocolName == null, `status=${rollbackSel.status}`);
+  add("13G-AI: rollback selector names no protocol and enables no transaction", rollbackSel.selectedLstSymbol == null && rollbackSel.transactionsEnabled === false, `lst=${rollbackSel.selectedLstSymbol} tx=${rollbackSel.transactionsEnabled}`);
+
+  // 13G-AJ. No forbidden investment claims in the beta / staking output.
+  {
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const scan = (stakingJson + JSON.stringify(betaPsd) + JSON.stringify(meta)).toLowerCase();
+    const hits = forbidden.filter((w) => scan.includes(w));
+    add("13G-AJ: no forbidden investment claims in JitoSOL beta / staking output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
   }
 
   return checks;
@@ -7297,6 +7614,7 @@ export function printFixtureResults(): void {
     ...runInternalSolStakingRecommendationFixtureChecks(),
     ...runDemoExactSolStakingScenarioFixtureChecks(),
     ...runDemoExactSolStakingMarketDataFixtureChecks(),
+    ...runJitoSolBetaActivationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

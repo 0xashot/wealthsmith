@@ -67,6 +67,7 @@ export function unavailableProtocolSelection(
 export function selectedProtocolSelection(args: {
   protocolId: string;
   protocolName: string;
+  lstSymbol?: string;
   strategyType: ProtocolStrategyType;
   reasons?: ProtocolSelectionReason[];
   evaluatedAt: string;
@@ -76,6 +77,7 @@ export function selectedProtocolSelection(args: {
     status: "selected",
     selectedProtocolId: args.protocolId,
     selectedProtocolName: args.protocolName,
+    ...(args.lstSymbol ? { selectedLstSymbol: args.lstSymbol } : {}),
     selectedStrategyType: args.strategyType,
     reasons: args.reasons ?? ["deterministic_selection_available"],
     evaluatedAt: args.evaluatedAt,

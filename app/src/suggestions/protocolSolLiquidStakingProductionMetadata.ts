@@ -14,6 +14,11 @@
  * The QA-only 7.75 score (12Y) is NEVER accepted as production. No value is
  * invented — every figure traces to a prior reviewer confirmation.
  * `PROTOCOL_SELECTION_IMPLEMENTED = false`; `productionReady = false`.
+ *
+ * NOTE (Step 13G): this staged candidate stays blocked/inactive. The real-wallet
+ * READ-ONLY JitoSOL recommendation is a SEPARATE, founder-approved record in
+ * `jitoSolBetaActivation.ts` (transactions still off, full production not claimed);
+ * it does not change this module.
  */
 import { getConfirmedRealValues } from "./protocolSolLiquidStakingRealValueConfirmations";
 import {

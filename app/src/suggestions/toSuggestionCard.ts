@@ -111,6 +111,33 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
     completion_on_click: false,
   };
 
+  // Selected protocol (JitoSOL READ-ONLY beta, Step 13G): surface the approved
+  // "Suggested protocol to review" fields from the engine's selection + shared
+  // display. Mode is "production" (never a DEMO/INTERNAL label) and no marketData
+  // leaks onto the card — the card shows the label/name only; the modal shows the
+  // sourced market data. Still non-transactional (the CTA booleans stay false).
+  const sel = s.protocolSelection;
+  const selDisplay = s.reviewDetails?.protocolSelectionDisplay;
+  const selectedProtocolFields: Partial<SuggestionCardState> =
+    sel?.status === "selected"
+      ? {
+          suggestedProtocolLabel: selDisplay?.label ?? "Suggested protocol to review",
+          protocolName: sel.selectedProtocolName,
+          lstSymbol: sel.selectedLstSymbol,
+          ...(selDisplay?.sourceStatusLabel ? { protocolStatusLabel: selDisplay.sourceStatusLabel } : {}),
+          ...(selDisplay
+            ? {
+                protocolSelectionDisplay: {
+                  label: selDisplay.label,
+                  protocolName: selDisplay.protocolName,
+                  assetSymbol: selDisplay.assetSymbol,
+                  mode: selDisplay.mode,
+                },
+              }
+            : {}),
+        }
+      : {};
+
   return {
     id: s.id,
     title: copy(s.title_key),
@@ -126,6 +153,7 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
     impact_text,
     disabled_reason_text: disabled ? BELOW_MIN_REASON : undefined,
     cta,
+    ...selectedProtocolFields,
   };
 }
 
