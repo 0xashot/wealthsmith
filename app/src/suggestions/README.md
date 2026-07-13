@@ -916,6 +916,22 @@ Mode uses `SuggestionRail` directly and is untouched.
   `VITE_INTERNAL_SOL_LST_PREVIEW=true npm run dev` → `/internal/sol-lst-preview`.
   Fixtures 13C-A…AJ (+34). Next: **human approval / source re-verification** before
   any real enablement.
+- Step 13D (done): **dev-only fake-token exact SOL staking recommendation UI fixture
+  (not Demo Mode, not real wallet, not live)**. Added
+  `internalSolStakingRecommendationFixture.ts`/`.md`,
+  `SolStakingRecommendationFixture.tsx`, `solStakingRecommendationFixture.css`; added
+  a `showFixturePanel` prop to `SolLstSelectorPreview.tsx` (rendered once, on the
+  dev-only route via App). Fake wallet: **12.5 SOL total, 0.1 SOL reserve, 12.4 SOL
+  eligible** (~$1,860 at a clearly-fake ~$150 price); Jito · JitoSOL shown only as
+  `INTERNAL_PREVIEW_NOT_LIVE`; disabled buttons. Constants
+  `INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_EXISTS = true`,
+  `..._ENABLED_BY_DEFAULT = false`, `..._FAKE_DATA = true`,
+  `..._UPDATES_LIVE_SUGGESTIONS`/`..._ENABLES_SELECTION`/`..._ENABLES_TRANSACTIONS =
+  false`. Fixture module/component not imported by `stakingSuggestion`/`engine`/
+  `toSuggestionCard`/Dashboard/Portfolio/modal; no fixture copy in any live/engine/
+  card/modal output; live suggestions `not_evaluated`; Demo Mode unchanged; all
+  selection/selector flags false; `productionReady` stays `false`. Fixtures 13D-A…AK
+  (+34). Next: **human approval / source re-verification** before any real enablement.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection
@@ -929,8 +945,9 @@ completion harness + source-verification intake + source-value confirmation inta
 real value-confirmation ledger + evidence gather-decision ledger + JitoSOL
 ready-for-review evidence package + gated riskScore assignment mechanism + staged
 JitoSOL production metadata + hard-disabled selector shell + internal UI preview
-shell + dev-only preview route); production selection remains not evaluated / not
-implemented, and the go/no-go reports `productionReady = false`.
+shell + dev-only preview route + fake-token recommendation fixture); production
+selection remains not evaluated / not implemented, and the go/no-go reports
+`productionReady = false`.
 
 ## Suggestion display order
 

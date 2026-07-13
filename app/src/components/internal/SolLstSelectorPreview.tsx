@@ -4,17 +4,21 @@
 // selector live flow, calls no wallet code, no engine, and never fetches or
 // navigates to real protocol pages. All action buttons are disabled (preview-only).
 import type { SolLstSelectorPreviewResult } from "../../suggestions/protocolSolLiquidStakingSelectorPreview";
+import SolStakingRecommendationFixture from "./SolStakingRecommendationFixture";
 import "./solLstSelectorPreview.css";
 
 interface SolLstSelectorPreviewProps {
   preview: SolLstSelectorPreviewResult;
+  /** Dev-only: also render the fake-token recommendation fixture panel below. */
+  showFixturePanel?: boolean;
 }
 
-export default function SolLstSelectorPreview({ preview }: SolLstSelectorPreviewProps) {
+export default function SolLstSelectorPreview({ preview, showFixturePanel = false }: SolLstSelectorPreviewProps) {
   const { status, copy } = preview;
   const selected = copy.selectedProtocolName != null;
 
   return (
+    <>
     <section className="internal-sol-lst-preview" aria-label="Internal SOL staking preview (not live)">
       <div className="internal-sol-lst-preview__card" data-status={status}>
         <p className="internal-sol-lst-preview__badge">Internal preview · Not live</p>
@@ -86,5 +90,19 @@ export default function SolLstSelectorPreview({ preview }: SolLstSelectorPreview
         </div>
       </div>
     </section>
+
+    {showFixturePanel && (
+      <section className="internal-sol-lst-preview" aria-label="Fake-token recommendation fixture (not live)">
+        <div className="internal-sol-lst-preview__card">
+          <p className="internal-sol-lst-preview__badge">Internal preview · Not live</p>
+          <h2 className="internal-sol-lst-preview__title">Fake-token recommendation fixture</h2>
+          <p className="internal-sol-lst-preview__desc">
+            Uses internal fake wallet data to preview how an exact SOL staking recommendation may look.
+          </p>
+        </div>
+        <SolStakingRecommendationFixture />
+      </section>
+    )}
+    </>
   );
 }

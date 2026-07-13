@@ -71,7 +71,7 @@ export default function App() {
       <InternalPreviewGate fallback={<MainApp />}>
         <main style={{ minHeight: "100vh", padding: "24px 0" }}>
           <SolLstSelectorPreview preview={getDefaultSolLstSelectorPreview()} />
-          <SolLstSelectorPreview preview={getInternalOnlySolLstSelectedPreviewExample()} />
+          <SolLstSelectorPreview preview={getInternalOnlySolLstSelectedPreviewExample()} showFixturePanel />
         </main>
       </InternalPreviewGate>
     );

@@ -280,6 +280,15 @@ import {
   isInternalSolLstPreviewRouteEnabled,
 } from "../components/internal/internalPreviewFlags";
 import {
+  INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_EXISTS,
+  INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLED_BY_DEFAULT,
+  INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_FAKE_DATA,
+  INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_UPDATES_LIVE_SUGGESTIONS,
+  INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLES_SELECTION,
+  INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLES_TRANSACTIONS,
+  getInternalSolStakingRecommendationFixture,
+} from "./internalSolStakingRecommendationFixture";
+import {
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_EXIST,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_APPROVE_RUBRIC,
   PROTOCOL_EVIDENCE_GATHER_DECISIONS_ASSIGN_SCORES,
@@ -6929,6 +6938,117 @@ export function runSolLstSelectorPreviewRouteFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 13D — dev-only fake-token SOL staking recommendation UI fixture.
+ * Fake internal data; not Demo Mode, not live, no selection, no transactions.
+ * ------------------------------------------------------------------ */
+export function runInternalSolStakingRecommendationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+  const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
+
+  const fx = getInternalSolStakingRecommendationFixture();
+  const r = fx.recommendation;
+  const gng = getProtocolSelectionGoNoGo("t");
+
+  // 13D-A…F. Scoping constants.
+  add("13D-A: INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_EXISTS is true", INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_EXISTS === true, `flag=${INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_EXISTS}`);
+  add("13D-B: INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLED_BY_DEFAULT is false", INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLED_BY_DEFAULT === false, `flag=${INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLED_BY_DEFAULT}`);
+  add("13D-C: INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_FAKE_DATA is true", INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_FAKE_DATA === true, `flag=${INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_FAKE_DATA}`);
+  add("13D-D: INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_UPDATES_LIVE_SUGGESTIONS is false", INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_UPDATES_LIVE_SUGGESTIONS === false, `flag=${INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_UPDATES_LIVE_SUGGESTIONS}`);
+  add("13D-E: INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLES_SELECTION is false", INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLES_SELECTION === false, `flag=${INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLES_SELECTION}`);
+  add("13D-F: INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLES_TRANSACTIONS is false", INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLES_TRANSACTIONS === false, `flag=${INTERNAL_SOL_STAKING_RECOMMENDATION_FIXTURE_ENABLES_TRANSACTIONS}`);
+
+  // 13D-G…I. Fake wallet numbers.
+  add("13D-G: fixture wallet totalSol is 12.5", fx.wallet.totalSol === 12.5, `v=${fx.wallet.totalSol}`);
+  add("13D-H: fixture wallet reserveSol is 0.1", fx.wallet.reserveSol === 0.1, `v=${fx.wallet.reserveSol}`);
+  add("13D-I: fixture wallet eligibleSol is 12.4", fx.wallet.eligibleSol === 12.4, `v=${fx.wallet.eligibleSol}`);
+  // 13D-J…L. Recommendation identity.
+  add("13D-J: recommendation internalLabel is INTERNAL_PREVIEW_NOT_LIVE", r.internalLabel === "INTERNAL_PREVIEW_NOT_LIVE", `v=${r.internalLabel}`);
+  add("13D-K: recommendation protocolName is Jito", r.protocolName === "Jito", `v=${r.protocolName}`);
+  add("13D-L: recommendation lstSymbol is JitoSOL", r.lstSymbol === "JitoSOL", `v=${r.lstSymbol}`);
+  // 13D-M. No selectedProtocolId anywhere in the fixture.
+  add("13D-M: recommendation has no selectedProtocolId", !JSON.stringify(fx).includes("selectedProtocolId"), `clean=${!JSON.stringify(fx).includes("selectedProtocolId")}`);
+  // 13D-N/O. Flags on recommendation.
+  add("13D-N: recommendation transactionsEnabled is false", r.transactionsEnabled === false, `v=${r.transactionsEnabled}`);
+  add("13D-O: recommendation updatesLiveSuggestions is false", r.updatesLiveSuggestions === false, `v=${r.updatesLiveSuggestions}`);
+  // 13D-P. Disabled actions.
+  add("13D-P: disabledActions include Open official protocol page", r.disabledActions.includes("Open official protocol page"), `actions=${r.disabledActions.join(",")}`);
+  // 13D-Q. Safety notes.
+  add("13D-Q: safety notes include the no-move-funds line", r.safetyNotes.includes("WealthSmith does not move funds for you."), `notes=${r.safetyNotes.length}`);
+
+  // 13D-U…Z. Fixture module/component not present in live suggestion-derivation output
+  // (proxy for "not imported by stakingSuggestion/engine/toSuggestionCard/Dashboard/
+  // Portfolio/modal"; import graph is grep-verified too).
+  {
+    const fxTokens = ["INTERNAL_PREVIEW_NOT_LIVE", "Fake-token recommendation fixture", "internal-sol-staking-fixture", "Fake internal wallet has 12.4 SOL", "SolStakingRecommendationFixture", "getInternalSolStakingRecommendationFixture"];
+    const stakingJson = JSON.stringify(staking);
+    const engineJson = JSON.stringify(stakingRun) + JSON.stringify(stableRun);
+    const cardJson = JSON.stringify(toSuggestionCard(staking!)) + JSON.stringify(toSuggestionCard(stable!));
+    const modalJson = JSON.stringify(staking?.reviewDetails) + JSON.stringify(stable?.reviewDetails);
+    const clean = (j: string) => fxTokens.every((t) => !j.includes(t));
+    add("13D-U: fixture not present in stakingSuggestion output", clean(stakingJson), "no fixture");
+    add("13D-V: fixture not present in engine output", clean(engineJson), "no fixture");
+    add("13D-W: fixture not present in toSuggestionCard output", clean(cardJson), "no fixture");
+    add("13D-X: fixture not present in Dashboard-facing output", clean(engineJson), "no fixture");
+    add("13D-Y: fixture not present in Portfolio-facing output", clean(engineJson), "no fixture");
+    add("13D-Z: fixture not present in Review-modal output", clean(modalJson), "no fixture");
+  }
+
+  // 13D-AA. Live staking not_evaluated.
+  add("13D-AA: live staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 13D-AB. No live suggestion has selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("13D-AB: no live suggestion has selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 13D-AC. Cards/modal do not expose fake-token fixture copy on normal flows.
+  {
+    const tokens = ["INTERNAL_PREVIEW_NOT_LIVE", "Fake-token recommendation fixture", "Fake internal wallet has 12.4 SOL", "internal-sol-staking-fixture"];
+    const scan = (s: typeof staking) => JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails);
+    const json = scan(staking) + scan(stable);
+    const leaks = tokens.filter((t) => json.includes(t));
+    add("13D-AC: cards/modal do not expose fake-token fixture copy on normal flows", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
+  }
+  // 13D-AD. Demo Mode suggestions unchanged (fixture data are not the demo suggestion set).
+  {
+    const demoRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+    const json = JSON.stringify(demoRun);
+    add("13D-AD: Demo/engine suggestion output free of fixture copy", !json.includes("Fake internal wallet has 12.4 SOL") && !json.includes("INTERNAL_PREVIEW_NOT_LIVE"), "no fixture copy");
+  }
+  // 13D-AE…AH. Flags at safe defaults.
+  add("13D-AE: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("13D-AF: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("13D-AG: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  add("13D-AH: PROTOCOL_SOL_LST_SELECTOR_ENABLED remains false", PROTOCOL_SOL_LST_SELECTOR_ENABLED === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_ENABLED}`);
+  // 13D-AI. productionReady remains false.
+  add("13D-AI: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 13D-AJ. No transaction/signature/swap path in fixture output.
+  {
+    const json = JSON.stringify(fx).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("13D-AJ: no transaction/signature/swap path in fixture output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 13D-AK. No forbidden investment claims in fixture output.
+  {
+    const json = JSON.stringify(fx).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("13D-AK: no forbidden investment claims in fixture output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -6976,6 +7096,7 @@ export function printFixtureResults(): void {
     ...runSolLstSelectorShellFixtureChecks(),
     ...runSolLstSelectorPreviewFixtureChecks(),
     ...runSolLstSelectorPreviewRouteFixtureChecks(),
+    ...runInternalSolStakingRecommendationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

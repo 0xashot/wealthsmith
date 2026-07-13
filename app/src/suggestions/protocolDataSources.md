@@ -544,3 +544,18 @@ with disabled buttons. **No production enablement:** not in Dashboard/Portfolio/
 no live-suggestion update, no selection, no transactions; all selection/selector
 flags false; `productionReady` stays `false`. Run:
 `VITE_INTERNAL_SOL_LST_PREVIEW=true npm run dev`.
+
+---
+
+## 13D — dev-only fake-token recommendation fixture
+
+`internalSolStakingRecommendationFixture.ts`/`.md` +
+`SolStakingRecommendationFixture.tsx` + `solStakingRecommendationFixture.css` add a
+dev-only fake-token UI fixture (rendered as a third panel on the existing
+`/internal/sol-lst-preview` route). Fake wallet: **12.5 SOL total, 0.1 SOL reserve,
+12.4 SOL eligible** (~$1,860 at a clearly-fake ~$150 price); Jito · JitoSOL shown only
+as `INTERNAL_PREVIEW_NOT_LIVE`, all buttons disabled. **Not Demo Mode, not real wallet
+data, not production.** No production enablement: `updatesLiveSuggestions`/
+`transactionsEnabled` false; not imported by `stakingSuggestion`/`engine`/
+`toSuggestionCard`/Dashboard/Portfolio/modal; live suggestions `not_evaluated`; all
+selection/selector flags false; `productionReady` stays `false`.

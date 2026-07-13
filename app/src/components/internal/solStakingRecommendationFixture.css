@@ -1,0 +1,190 @@
+/*
+ * Internal-only fake-token fixture styles. Scoped ENTIRELY under
+ * .internal-sol-staking-fixture so they cannot affect Dashboard / Portfolio /
+ * global layout. Uses design tokens with safe fallbacks; mobile responsive.
+ */
+.internal-sol-staking-fixture {
+  display: block;
+  max-width: 520px;
+  margin: 16px auto;
+  padding: 0 16px;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.internal-sol-staking-fixture__badge {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--color-feedback-warning-text-tint, #7a5a00);
+  background: var(--color-feedback-warning-background-tint, #fff4d6);
+  border-radius: var(--radius-badge-default, 999px);
+}
+
+.internal-sol-staking-fixture__wallet {
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--color-surface-canvas, #f6f8fb);
+  border: 1px solid var(--color-border-subtle, #e3e7ee);
+  border-radius: var(--radius-control-md, 12px);
+}
+
+.internal-sol-staking-fixture__wallet-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary, #5b6472);
+}
+
+.internal-sol-staking-fixture__wallet-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 0;
+}
+
+.internal-sol-staking-fixture__wallet-grid dt {
+  font-size: 11px;
+  color: var(--color-text-secondary, #5b6472);
+}
+
+.internal-sol-staking-fixture__wallet-grid dd {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-text-primary, #14181f);
+}
+
+.internal-sol-staking-fixture__card {
+  background: var(--color-surface-card, #ffffff);
+  color: var(--color-text-primary, #14181f);
+  border: 1px solid var(--color-border-subtle, #e3e7ee);
+  border-radius: var(--radius-control-lg, 16px);
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(20, 24, 31, 0.06);
+}
+
+.internal-sol-staking-fixture__eyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary, #5b6472);
+}
+
+.internal-sol-staking-fixture__title {
+  margin: 0 0 12px;
+  font-size: 19px;
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.internal-sol-staking-fixture__suggested {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: var(--color-surface-canvas, #f6f8fb);
+  border: 1px solid var(--color-border-subtle, #e3e7ee);
+  border-radius: var(--radius-control-md, 12px);
+}
+
+.internal-sol-staking-fixture__suggested-label {
+  font-size: 12px;
+  color: var(--color-text-secondary, #5b6472);
+}
+
+.internal-sol-staking-fixture__suggested-value {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.internal-sol-staking-fixture__amount {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.internal-sol-staking-fixture__amount-usd {
+  font-weight: 500;
+  color: var(--color-text-secondary, #5b6472);
+}
+
+.internal-sol-staking-fixture__section {
+  margin-bottom: 14px;
+}
+
+.internal-sol-staking-fixture__section-title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-secondary, #5b6472);
+}
+
+.internal-sol-staking-fixture__list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.internal-sol-staking-fixture__list--blockers {
+  color: var(--color-feedback-warning-text-tint, #7a5a00);
+}
+
+.internal-sol-staking-fixture__safety {
+  padding: 10px 12px;
+  background: var(--color-surface-canvas, #f6f8fb);
+  border-radius: var(--radius-control-md, 12px);
+}
+
+.internal-sol-staking-fixture__safety-note {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #5b6472);
+}
+
+.internal-sol-staking-fixture__safety-note:last-child {
+  margin-bottom: 0;
+}
+
+.internal-sol-staking-fixture__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.internal-sol-staking-fixture__btn {
+  flex: 1 1 auto;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius-control-md, 12px);
+  border: 1px solid var(--color-border-strong, #c3cad6);
+  background: var(--color-surface-canvas, #f6f8fb);
+  color: var(--color-text-disabled, #9aa3b2);
+  cursor: not-allowed;
+}
+
+.internal-sol-staking-fixture__btn-tag {
+  font-weight: 500;
+  opacity: 0.8;
+}
+
+@media (max-width: 420px) {
+  .internal-sol-staking-fixture__wallet-grid {
+    grid-template-columns: 1fr;
+  }
+  .internal-sol-staking-fixture__actions {
+    flex-direction: column;
+  }
+}

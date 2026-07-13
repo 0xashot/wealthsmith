@@ -52,3 +52,12 @@ All action buttons are **disabled** and labeled preview-only. The external
 - Use **"Suggested protocol to review"**.
 - Always include **"WealthSmith does not move funds for you."**
 - Avoid "best", "safest", "guaranteed", "risk-free", and "you should".
+
+## Fake-token fixture panel (Step 13D)
+
+The route now renders a third panel: **"Fake-token recommendation fixture"** — a
+WealthSmith-style card driven by `internalSolStakingRecommendationFixture.ts` (fake
+wallet: 12.5 SOL total, 0.1 SOL reserve, 12.4 SOL eligible; Jito · JitoSOL as
+`INTERNAL_PREVIEW_NOT_LIVE`). It is **not Demo Mode**, **not real wallet data**, and
+its buttons are **disabled**. It renders only on `/internal/sol-lst-preview` with the
+dev flag set. See `internalSolStakingRecommendationFixture.md`.
