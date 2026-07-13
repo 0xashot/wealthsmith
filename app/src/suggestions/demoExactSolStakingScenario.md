@@ -37,6 +37,29 @@ Suggested protocol to review: **Jito · JitoSOL**, labeled **`DEMO_PREVIEW_NOT_L
 (Demo Mode uses `DEMO_PREVIEW_NOT_LIVE`, never `INTERNAL_PREVIEW_NOT_LIVE` — that
 label is only for the dev-only internal route).
 
+## Verified JitoSOL market data (Demo Mode, Step 13F)
+
+The shared Review Details modal shows verified JitoSOL market data via
+`protocolSelectionDisplay.marketData` (source status **"Verified source data · Demo
+preview"**):
+
+| Field | Value |
+| --- | --- |
+| TVL | $767.95M |
+| Current APY | 5.36% |
+| 30-day APY | 5.45% |
+| Direct unstake | ~48 hours |
+| Direct unstake fee | 0.1% |
+| Annual management fee | 4% on rewards |
+
+The demo guardrail now reads "Protocol selection (verified for demo)" instead of
+"needs market data WealthSmith doesn't have yet". This is a **shared** modal section
+(real wallet mode will use the same section once production selection is enabled) and
+renders only when `marketData` exists. `productionStatus.realWalletSelectionEnabled`
+and `.transactionsEnabled` are false; the limitations still state production selection
+is disabled and real wallet mode needs the approval gates. No production flag changes,
+no transaction/signature path.
+
 ## Not production selection
 
 - This is not real wallet data and not production selector output.

@@ -948,6 +948,22 @@ Mode uses `SuggestionRail` directly and is untouched.
   selectedProtocolId/Name; all selection/selector flags false; `productionReady` stays
   `false`. Fixtures 13E-A…AL (+35). Next: **human approval / source re-verification**
   before any real-wallet enablement.
+- Step 13F (done): **verified JitoSOL market data in the Demo exact SOL staking
+  scenario (Demo Mode only)**. Extended the shared `ProtocolSelectionDisplay`
+  (`engineTypes.ts`) with optional `sourceStatusLabel` + `marketData` +
+  `productionStatus`; the shared `SuggestionReviewModal` renders a market-data section
+  when `marketData` is present. Demo scenario shows: TVL **$767.95M**, current APY
+  **5.36%**, 30-day APY **5.45%**, direct unstake **~48h**, unstake fee **0.1%**, **4%**
+  annual management fee on rewards, source status **"Verified source data · Demo
+  preview"**; the demo guardrail reads "Protocol selection (verified for demo)" instead
+  of "needs market data". Shared section (real wallet mode uses it later), gated on
+  `marketData`. Demo label stays `DEMO_PREVIEW_NOT_LIVE` (never
+  `INTERNAL_PREVIEW_NOT_LIVE`). **No production enablement:**
+  `productionStatus.realWalletSelectionEnabled`/`.transactionsEnabled` false;
+  real-wallet staking `not_evaluated` with no selectedProtocolId/Name; all
+  selection/selector flags false; `productionReady` stays `false`; no
+  transaction/signature path. Fixtures 13F-A…Z (+26). Next: **human approval /
+  source re-verification** before any real-wallet enablement.
 
 All suggestion categories and reason codes are implemented. Every documented
 suggestion path — including `duplicate_exposure` — now emits. Protocol selection

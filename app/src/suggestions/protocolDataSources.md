@@ -577,3 +577,18 @@ transaction/signature; real-wallet suggestions unchanged (`not_evaluated`, no
 selectedProtocolId/Name); scenario not imported by `stakingSuggestion`/`engine`/
 `toSuggestionCard`; all selection/selector flags false; `productionReady` stays
 `false`.
+
+---
+
+## 13F — verified JitoSOL market data in the Demo scenario
+
+The Demo exact SOL staking scenario's shared Review Details modal now shows verified
+JitoSOL market data (`protocolSelectionDisplay.marketData`, source status "Verified
+source data · Demo preview"): TVL $767.95M, current APY 5.36%, 30-day APY 5.45%,
+direct unstake ~48h, unstake fee 0.1%, 4% annual management fee on rewards. The demo
+guardrail reads "Protocol selection (verified for demo)" (no longer "needs market
+data"). This is a **shared** modal section (real wallet mode uses the same section
+later) gated on `marketData` being present. **No production enablement:**
+`productionStatus.realWalletSelectionEnabled`/`.transactionsEnabled` false; real-wallet
+staking `not_evaluated` with no selectedProtocolId/Name; all selection/selector flags
+false; `productionReady` stays `false`; no transaction/signature path.

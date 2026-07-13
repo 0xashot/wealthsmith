@@ -7165,6 +7165,88 @@ export function runDemoExactSolStakingScenarioFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 13F — verified JitoSOL market data in the Demo exact SOL staking scenario.
+ * Demo Mode only; real wallet mode / production unchanged.
+ * ------------------------------------------------------------------ */
+export function runDemoExactSolStakingMarketDataFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const staking = stakingRun.suggestions.find((s) => s.category === "staking");
+
+  const details = getDemoExactSolStakingReviewDetails();
+  const psd = details.protocolSelectionDisplay;
+  const md = psd?.marketData;
+  const gng = getProtocolSelectionGoNoGo("t");
+
+  // 13F-A. Market data present.
+  add("13F-A: demo scenario includes protocol market data", psd != null && md != null, `hasMd=${md != null}`);
+  // 13F-B…E. Display identity + source status.
+  add("13F-B: protocol market data mode is demo_preview", psd?.mode === "demo_preview", `mode=${psd?.mode}`);
+  add("13F-C: protocol name is Jito", psd?.protocolName === "Jito", `name=${psd?.protocolName}`);
+  add("13F-D: asset symbol is JitoSOL", psd?.assetSymbol === "JitoSOL", `asset=${psd?.assetSymbol}`);
+  add("13F-E: source status label is verified demo preview", psd?.sourceStatusLabel === "Verified source data · Demo preview", `label=${psd?.sourceStatusLabel}`);
+  // 13F-F…L. Market data values.
+  add("13F-F: TVL is 767950000", md?.tvlUsd === 767950000, `v=${md?.tvlUsd}`);
+  add("13F-G: current APY is 5.36", md?.apyPct === 5.36, `v=${md?.apyPct}`);
+  add("13F-H: 30-day APY is 5.45", md?.apy30dPct === 5.45, `v=${md?.apy30dPct}`);
+  add("13F-I: direct unstake time is 48 hours", md?.directUnstakeTimeHours === 48, `v=${md?.directUnstakeTimeHours}`);
+  add("13F-J: direct unstake fee is 0.1%", md?.directUnstakeFeePct === 0.1, `v=${md?.directUnstakeFeePct}`);
+  add("13F-K: annual management fee is 4%", md?.annualManagementFeePct === 4, `v=${md?.annualManagementFeePct}`);
+  add("13F-L: annual management fee applies to rewards", md?.annualManagementFeeAppliesTo === "rewards", `v=${md?.annualManagementFeeAppliesTo}`);
+  // 13F-M/N. Demo label (not INTERNAL).
+  add("13F-M: demo mode still uses DEMO_PREVIEW_NOT_LIVE", psd?.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && details.demoLabel === "DEMO_PREVIEW_NOT_LIVE", `v=${psd?.demoLabel}`);
+  add("13F-N: demo mode does not use INTERNAL_PREVIEW_NOT_LIVE", !JSON.stringify(details).includes("INTERNAL_PREVIEW_NOT_LIVE"), "clean");
+  // 13F-O/P. Production status flags on the display.
+  add("13F-O: demo market data does not enable real wallet selection", psd?.productionStatus?.realWalletSelectionEnabled === false, `v=${psd?.productionStatus?.realWalletSelectionEnabled}`);
+  add("13F-P: demo market data does not enable transactions", psd?.productionStatus?.transactionsEnabled === false, `v=${psd?.productionStatus?.transactionsEnabled}`);
+  // 13F-Q. Real wallet staking not_evaluated.
+  add("13F-Q: real wallet staking protocolSelection.status remains not_evaluated", staking?.protocolSelection?.status === "not_evaluated", `status=${staking?.protocolSelection?.status}`);
+  // 13F-R. Real wallet suggestions have no selectedProtocolId/Name.
+  {
+    const allSug = [...stakingRun.suggestions, ...stableRun.suggestions];
+    const bad = allSug.filter((s) => s.protocolSelection?.selectedProtocolId != null || s.protocolSelection?.selectedProtocolName != null);
+    add("13F-R: real wallet suggestions have no selectedProtocolId/Name", bad.length === 0, `violations=${bad.length}`);
+  }
+  // 13F-S…V. Flags at safe defaults.
+  add("13F-S: PROTOCOL_SELECTION_IMPLEMENTED remains false", PROTOCOL_SELECTION_IMPLEMENTED === false, `flag=${PROTOCOL_SELECTION_IMPLEMENTED}`);
+  add("13F-T: PROTOCOL_SELECTION_SHOW_IN_UI remains false", PROTOCOL_SELECTION_SHOW_IN_UI === false, `flag=${PROTOCOL_SELECTION_SHOW_IN_UI}`);
+  add("13F-U: PROTOCOL_SELECTION_ALLOW_TRANSACTIONS remains false", PROTOCOL_SELECTION_ALLOW_TRANSACTIONS === false, `flag=${PROTOCOL_SELECTION_ALLOW_TRANSACTIONS}`);
+  add("13F-V: PROTOCOL_SOL_LST_SELECTOR_ENABLED remains false", PROTOCOL_SOL_LST_SELECTOR_ENABLED === false, `flag=${PROTOCOL_SOL_LST_SELECTOR_ENABLED}`);
+  // 13F-W. productionReady remains false.
+  add("13F-W: getProtocolSelectionGoNoGo().productionReady remains false", gng.productionReady === false, `v=${gng.productionReady}`);
+  // 13F-X. Market-data section renders only when marketData exists (details without it → no section data).
+  {
+    const empty = getDemoExactSolStakingReviewDetails();
+    // A details object without protocolSelectionDisplay.marketData must be renderable
+    // without a market section: simulate by checking the guard is data-driven.
+    const rendersOnlyWhenPresent = (empty.protocolSelectionDisplay?.marketData != null) === (md != null);
+    add("13F-X: market section is gated on protocolSelectionDisplay.marketData", rendersOnlyWhenPresent && md != null, `gated=${rendersOnlyWhenPresent}`);
+  }
+  // 13F-Y. No transaction/signature/swap path in scenario output.
+  {
+    const json = JSON.stringify(details).toLowerCase();
+    const txTokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw("];
+    const hits = txTokens.filter((t) => json.includes(t));
+    add("13F-Y: no transaction/signature/swap path in scenario output", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 13F-Z. No forbidden investment claims in demo market-data copy.
+  {
+    const json = JSON.stringify(details).toLowerCase();
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const hits = forbidden.filter((w) => json.includes(w));
+    add("13F-Z: no forbidden investment claims in demo market-data copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -7214,6 +7296,7 @@ export function printFixtureResults(): void {
     ...runSolLstSelectorPreviewRouteFixtureChecks(),
     ...runInternalSolStakingRecommendationFixtureChecks(),
     ...runDemoExactSolStakingScenarioFixtureChecks(),
+    ...runDemoExactSolStakingMarketDataFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

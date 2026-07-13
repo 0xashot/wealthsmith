@@ -146,8 +146,23 @@ export function getDemoExactSolStakingReviewDetails(): SuggestionReviewDetails {
     protocolSelectionDisplay: {
       label: s.suggestedProtocolLabel,
       protocolName: s.protocolName,
-      assetSymbol: "SOL",
+      assetSymbol: s.lstSymbol,
       mode: "demo_preview",
+      demoLabel: s.demoLabel,
+      sourceStatusLabel: "Verified source data · Demo preview",
+      marketData: {
+        tvlUsd: 767950000,
+        apyPct: 5.36,
+        apy30dPct: 5.45,
+        directUnstakeTimeHours: 48,
+        directUnstakeFeePct: 0.1,
+        annualManagementFeePct: 4,
+        annualManagementFeeAppliesTo: "rewards",
+      },
+      productionStatus: {
+        realWalletSelectionEnabled: false,
+        transactionsEnabled: false,
+      },
     },
     summary: {
       title: s.title,
@@ -164,7 +179,9 @@ export function getDemoExactSolStakingReviewDetails(): SuggestionReviewDetails {
     calculations: [
       { label: "Eligible to review", formula: "total − reserve", currentValue: wallet.totalSol, threshold: wallet.reserveSol, difference: wallet.eligibleSol, unit: "SOL" },
     ],
-    guardrailSummary: { checked: [], notEvaluated: ["Protocol selection"], notApplicable: [] },
+    // Demo-only: JitoSOL market data is verified for this demo preview; real wallet
+    // protocol selection is still disabled. (Not a passed production guardrail.)
+    guardrailSummary: { checked: ["Protocol selection (verified for demo)"], notEvaluated: [], notApplicable: [] },
     limitations: [
       { kind: "protocol_not_selected", text: s.limitations[0] },
       { kind: "review_only", text: s.limitations[1] },

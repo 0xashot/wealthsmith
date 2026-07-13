@@ -192,6 +192,30 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
                 {details.protocolSelectionDisplay.protocolName}
                 {details.protocolSelectionDisplay.assetSymbol ? ` · ${details.protocolSelectionDisplay.assetSymbol}` : ""}
               </p>
+              {details.protocolSelectionDisplay.sourceStatusLabel && (
+                <p className="review-modal__source-status">{details.protocolSelectionDisplay.sourceStatusLabel}</p>
+              )}
+              {details.protocolSelectionDisplay.marketData && (
+                <dl className="review-modal__market">
+                  {(() => {
+                    const md = details.protocolSelectionDisplay.marketData;
+                    const rows: [string, string][] = [
+                      ["TVL", `$${(md.tvlUsd / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 2 })}M`],
+                      ["Current APY", `${md.apyPct}%`],
+                      ["30-day APY", `${md.apy30dPct}%`],
+                      ["Direct unstake", `~${md.directUnstakeTimeHours} hours`],
+                      ["Direct unstake fee", `${md.directUnstakeFeePct}%`],
+                      ["Annual management fee", `${md.annualManagementFeePct}% on ${md.annualManagementFeeAppliesTo}`],
+                    ];
+                    return rows.map(([label, value]) => (
+                      <div key={label} className="review-modal__market-row">
+                        <dt>{label}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ));
+                  })()}
+                </dl>
+              )}
             </section>
           )}
 
