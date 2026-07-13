@@ -626,3 +626,12 @@ under a **24h freshness rule** — `verified` only within 24h of `confirmedAt`
 (2026-07-12T00:00:00Z), else `stale` (currently stale). INF market data is `missing`;
 mechanics/evidence stay `needs_review`. No candidate is approved, scored, or selected, and
 no live/Demo/testing behavior changes.
+
+**Step 14C — risk scoring gate:** `solLiquidStakingRiskScoringGate.ts` (see
+[solLiquidStakingRiskScoringGate.md](solLiquidStakingRiskScoringGate.md)) reports which
+staged candidates are blocked from risk scoring and why — currently **all four are
+blocked** (stale/missing market data, mechanics/evidence review required, source
+re-verification required, rubric + approval decision not approved). It is a gate only: it
+assigns no scores, approves nothing, selects nothing, updates no live recommendation, and
+adds no transaction/signature. 14D will assign scores only for candidates the gate reports
+as `ready_for_scoring`.

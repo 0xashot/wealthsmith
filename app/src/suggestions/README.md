@@ -1098,3 +1098,16 @@ stale); INF market data is `missing` (none invented); mechanics/evidence are
 no approval, no risk score, no selection, no live-recommendation change, no
 transaction/signature — the module is not imported by any live/UI file. JitoSOL stays the
 only selected protocol.
+
+## Risk scoring gate for staged candidates (Step 14C)
+
+A **gate, not scoring** — see [solLiquidStakingRiskScoringGate.md](solLiquidStakingRiskScoringGate.md).
+`evaluateSolLstRiskScoringGate(protocolId, options?)` reports each staged candidate as
+`blocked` with exact reasons (mSOL/JupSOL/bSOL: `market_data_stale` + mechanics/evidence
+review + source re-verification + `approved_rubric_missing` + `risk_approval_decision_missing`;
+INF: `market_data_missing` + the same). `ready_for_scoring` requires all prerequisites
+verified — **none qualify today** (`readyForScoringCount: 0`, `blockedCount: 4`). Jito
+returns `already_approved`; unknown protocols `not_candidate`. It **assigns no scores,
+approves no candidates**, and changes nothing live (no selection, no live recommendation,
+no transaction/signature; not imported by any live/UI file). Next: 14D assigns scores only
+for `ready_for_scoring` candidates.

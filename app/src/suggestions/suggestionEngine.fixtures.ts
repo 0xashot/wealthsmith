@@ -328,6 +328,19 @@ import {
   summarizeSolLstCandidateValueConfirmations,
 } from "./solLiquidStakingSourceValueConfirmation";
 import {
+  SOL_LST_RISK_SCORING_GATE_EXISTS,
+  SOL_LST_RISK_SCORING_GATE_ASSIGNS_SCORES,
+  SOL_LST_RISK_SCORING_GATE_APPROVES_CANDIDATES,
+  SOL_LST_RISK_SCORING_GATE_ENABLES_MULTI_PROTOCOL_SELECTION,
+  SOL_LST_RISK_SCORING_GATE_UPDATES_LIVE_RECOMMENDATIONS,
+  SOL_LST_RISK_SCORING_GATE_ENABLES_TRANSACTIONS,
+  SOL_LST_RISK_SCORING_GATE_REQUIRES_WALLET_SIGNATURE,
+  evaluateSolLstRiskScoringGate,
+  evaluateAllStagedSolLstRiskScoringGates,
+  summarizeSolLstRiskScoringGates,
+  buildSolLstRiskScoringGateReadyFixture,
+} from "./solLiquidStakingRiskScoringGate";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -8117,6 +8130,121 @@ export function runSolLstSourceValueConfirmationFixtureChecks(): FixtureCheck[] 
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 14C — risk scoring GATE for staged SOL LST candidates. Verifies the flags,
+ * that every staged candidate is blocked with the exact reasons, that none can be
+ * scored/approved, that Jito already-approved and unknown protocols are handled, the
+ * fixture-only ready state, and that live/Demo/testing + the tx/sig boundary hold.
+ * ------------------------------------------------------------------ */
+export function runSolLstRiskScoringGateFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const BEYOND_24H = "2026-07-14T00:00:00Z";
+  const gates = evaluateAllStagedSolLstRiskScoringGates({ checkedAt: BEYOND_24H });
+  const gateOf = (id: string) => gates.find((g) => g.protocolId === id);
+  const summary = summarizeSolLstRiskScoringGates({ checkedAt: BEYOND_24H });
+  const jitoGate = evaluateSolLstRiskScoringGate("jito", { checkedAt: BEYOND_24H });
+  const unknownGate = evaluateSolLstRiskScoringGate("does_not_exist", { checkedAt: BEYOND_24H });
+  const readyFixture = buildSolLstRiskScoringGateReadyFixture("marinade");
+  const gateJson = JSON.stringify(gates) + JSON.stringify(summary);
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+
+  // 14C-A…G. Flags.
+  add("14C-A: SOL_LST_RISK_SCORING_GATE_EXISTS is true", SOL_LST_RISK_SCORING_GATE_EXISTS === true, `v=${SOL_LST_RISK_SCORING_GATE_EXISTS}`);
+  add("14C-B: gate assigns no scores", SOL_LST_RISK_SCORING_GATE_ASSIGNS_SCORES === false, `v=${SOL_LST_RISK_SCORING_GATE_ASSIGNS_SCORES}`);
+  add("14C-C: gate approves no candidates", SOL_LST_RISK_SCORING_GATE_APPROVES_CANDIDATES === false, `v=${SOL_LST_RISK_SCORING_GATE_APPROVES_CANDIDATES}`);
+  add("14C-D: gate enables no multi-protocol selection", SOL_LST_RISK_SCORING_GATE_ENABLES_MULTI_PROTOCOL_SELECTION === false, `v=${SOL_LST_RISK_SCORING_GATE_ENABLES_MULTI_PROTOCOL_SELECTION}`);
+  add("14C-E: gate updates no live recommendations", SOL_LST_RISK_SCORING_GATE_UPDATES_LIVE_RECOMMENDATIONS === false, `v=${SOL_LST_RISK_SCORING_GATE_UPDATES_LIVE_RECOMMENDATIONS}`);
+  add("14C-F: gate enables no transactions", SOL_LST_RISK_SCORING_GATE_ENABLES_TRANSACTIONS === false, `v=${SOL_LST_RISK_SCORING_GATE_ENABLES_TRANSACTIONS}`);
+  add("14C-G: gate requires no wallet signature", SOL_LST_RISK_SCORING_GATE_REQUIRES_WALLET_SIGNATURE === false, `v=${SOL_LST_RISK_SCORING_GATE_REQUIRES_WALLET_SIGNATURE}`);
+
+  // 14C-H…K. Gate evaluates each staged candidate.
+  add("14C-H: gate evaluates mSOL", gateOf("marinade")?.lstSymbol === "mSOL", `has=${gateOf("marinade") != null}`);
+  add("14C-I: gate evaluates JupSOL", gateOf("jupiter")?.lstSymbol === "JupSOL", `has=${gateOf("jupiter") != null}`);
+  add("14C-J: gate evaluates bSOL", gateOf("blazestake")?.lstSymbol === "bSOL", `has=${gateOf("blazestake") != null}`);
+  add("14C-K: gate evaluates INF", gateOf("sanctum")?.lstSymbol === "INF", `has=${gateOf("sanctum") != null}`);
+
+  // 14C-L…O. Default status blocked.
+  add("14C-L: default mSOL gate status is blocked", gateOf("marinade")?.status === "blocked", `v=${gateOf("marinade")?.status}`);
+  add("14C-M: default JupSOL gate status is blocked", gateOf("jupiter")?.status === "blocked", `v=${gateOf("jupiter")?.status}`);
+  add("14C-N: default bSOL gate status is blocked", gateOf("blazestake")?.status === "blocked", `v=${gateOf("blazestake")?.status}`);
+  add("14C-O: default INF gate status is blocked", gateOf("sanctum")?.status === "blocked", `v=${gateOf("sanctum")?.status}`);
+
+  // 14C-P/Q. Market-data blockers.
+  add("14C-P: mSOL/JupSOL/bSOL include market_data_stale beyond 24h", ["marinade", "jupiter", "blazestake"].every((id) => gateOf(id)?.blockers.includes("market_data_stale")), `mar=${gateOf("marinade")?.blockers.join("|")}`);
+  add("14C-Q: INF includes market_data_missing", gateOf("sanctum")?.blockers.includes("market_data_missing") === true, `inf=${gateOf("sanctum")?.blockers.join("|")}`);
+
+  // 14C-R…V. Shared blockers on all staged candidates.
+  add("14C-R: all staged candidates include mechanics_review_required", gates.every((g) => g.blockers.includes("mechanics_review_required")), "all");
+  add("14C-S: all staged candidates include evidence_review_required", gates.every((g) => g.blockers.includes("evidence_review_required")), "all");
+  add("14C-T: all staged candidates include source_reverification_required", gates.every((g) => g.blockers.includes("source_reverification_required")), "all");
+  add("14C-U: all staged candidates include approved_rubric_missing by default", gates.every((g) => g.blockers.includes("approved_rubric_missing")), "all");
+  add("14C-V: all staged candidates include risk_approval_decision_missing by default", gates.every((g) => g.blockers.includes("risk_approval_decision_missing")), "all");
+
+  // 14C-W…AB. No scoring / approval / live-update on any staged candidate.
+  add("14C-W: no staged candidate readyForRiskScoring by default", gates.every((g) => g.readyForRiskScoring === false), "all false");
+  add("14C-X: no staged candidate canAssignRiskScore by default", gates.every((g) => g.canAssignRiskScore === false), "all false");
+  add("14C-Y: no staged candidate receives scoreAssigned true", gates.every((g) => (g.scoreAssigned as boolean) === false), "all false");
+  add("14C-Z: no staged candidate candidateApproved true", gates.every((g) => (g.candidateApproved as boolean) === false), "all false");
+  add("14C-AA: gate result liveRecommendationsUpdated is false", gates.every((g) => (g.liveRecommendationsUpdated as boolean) === false), "all false");
+  add("14C-AB: gate result transactionsEnabled is false", gates.every((g) => (g.transactionsEnabled as boolean) === false), "all false");
+
+  // 14C-AC…AF. Summary counts.
+  add("14C-AC: summary totalStagedCandidates is 4", summary.totalStagedCandidates === 4, `v=${summary.totalStagedCandidates}`);
+  add("14C-AD: summary readyForScoringCount is 0 by default", summary.readyForScoringCount === 0, `v=${summary.readyForScoringCount}`);
+  add("14C-AE: summary blockedCount is 4 by default", summary.blockedCount === 4, `v=${summary.blockedCount}`);
+  add("14C-AF: summary canAssignRiskScoreCount is 0 by default", summary.canAssignRiskScoreCount === 0, `v=${summary.canAssignRiskScoreCount}`);
+
+  // 14C-AG. Jito is already approved (gate does not re-score it).
+  add("14C-AG: Jito gate returns already_approved (blocked from re-scoring)", jitoGate.status === "already_approved" && jitoGate.canAssignRiskScore === false && jitoGate.blockers.includes("already_approved_read_only"), `status=${jitoGate.status}`);
+
+  // 14C-AH. Unknown protocol.
+  add("14C-AH: unknown protocol returns not_candidate + candidate_not_found", unknownGate.status === "not_candidate" && unknownGate.blockers.includes("candidate_not_found"), `status=${unknownGate.status}`);
+
+  // 14C-AI. Fixture-only ready state proves the gate CAN return ready — but never scores/approves.
+  add("14C-AI: ready-state fixture returns ready_for_scoring yet scoreAssigned/candidateApproved false", readyFixture.status === "ready_for_scoring" && readyFixture.readyForRiskScoring === true && (readyFixture.scoreAssigned as boolean) === false && (readyFixture.candidateApproved as boolean) === false, `status=${readyFixture.status}`);
+
+  // 14C-AJ/AK. Live selection unchanged.
+  add("14C-AJ: live staking suggestion still selects Jito/JitoSOL", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  {
+    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "Jupiter", "BlazeStake", "Sanctum"];
+    const leaked = other.filter((t) => JSON.stringify(staking?.protocolSelection).includes(t));
+    add("14C-AK: live staking suggestion does not select mSOL/JupSOL/bSOL/INF", leaked.length === 0, `leaked=${leaked.join(",") || "none"}`);
+  }
+
+  // 14C-AL/AM. Demo Mode and /testing unchanged.
+  {
+    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "BlazeStake", "Sanctum"];
+    const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
+    add("14C-AL: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
+    const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
+    add("14C-AM: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && testLeak.length === 0, `leak=${testLeak.join(",") || "none"}`);
+  }
+
+  // 14C-AN. No transaction/signature/swap path in the gate output.
+  {
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "swap(", "deposit(", "withdraw(", "unstake("];
+    const hits = tokens.filter((t) => gateJson.toLowerCase().includes(t));
+    add("14C-AN: no transaction/signature/swap path in the risk scoring gate", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14C-AO. No forbidden investment claims in the gate copy.
+  {
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const hits = forbidden.filter((w) => gateJson.toLowerCase().includes(w));
+    add("14C-AO: no forbidden investment claims in risk scoring gate copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -8173,6 +8301,7 @@ export function printFixtureResults(): void {
     ...runJitoSolExternalLinkFixtureChecks(),
     ...runSolLstCandidateRegistryFixtureChecks(),
     ...runSolLstSourceValueConfirmationFixtureChecks(),
+    ...runSolLstRiskScoringGateFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
