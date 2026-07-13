@@ -341,6 +341,22 @@ import {
   buildSolLstRiskScoringGateReadyFixture,
 } from "./solLiquidStakingRiskScoringGate";
 import {
+  SOL_LST_FRESH_EVIDENCE_INTAKE_EXISTS,
+  SOL_LST_FRESH_EVIDENCE_INTAKE_ASSIGNS_RISK_SCORES,
+  SOL_LST_FRESH_EVIDENCE_INTAKE_APPROVES_CANDIDATES,
+  SOL_LST_FRESH_EVIDENCE_INTAKE_ENABLES_MULTI_PROTOCOL_SELECTION,
+  SOL_LST_FRESH_EVIDENCE_INTAKE_UPDATES_LIVE_RECOMMENDATIONS,
+  SOL_LST_FRESH_EVIDENCE_INTAKE_ENABLES_TRANSACTIONS,
+  SOL_LST_FRESH_EVIDENCE_INTAKE_REQUIRES_WALLET_SIGNATURE,
+  SOL_LST_FRESH_EVIDENCE_MAX_AGE_HOURS,
+  validateSolLstFreshEvidenceInput,
+  createSolLstFreshEvidenceRecord,
+  summarizeSolLstFreshEvidenceRecords,
+  getSolLstFreshEvidenceFixtureInputs,
+  previewSolLstRiskGateWithFreshEvidence,
+  type SolLstFreshEvidenceInput,
+} from "./solLiquidStakingFreshEvidenceIntake";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -8245,6 +8261,133 @@ export function runSolLstRiskScoringGateFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 14D — fresh source/evidence confirmation intake for staged SOL LST
+ * candidates. Verifies the flags, per-category input validation (accept / stale /
+ * incomplete / rejected / unsupported / invalid), the complete fixture package
+ * driving marketData/mechanics/evidence complete + readyForRiskGate, the non-live
+ * risk-gate preview (still needs rubric + decision), and that nothing is
+ * scored/approved and live/Demo/testing + the tx/sig boundary hold.
+ * ------------------------------------------------------------------ */
+export function runSolLstFreshEvidenceIntakeFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const CONFIRMED = "2026-07-13T00:00:00Z";
+  const FRESH_CHECK = "2026-07-13T06:00:00Z"; // +6h → fresh
+  const OLD_CONFIRMED = "2026-07-01T00:00:00Z";
+
+  const baseInput = (category: SolLstFreshEvidenceInput["category"], value: number | string, unit: SolLstFreshEvidenceInput["unit"]): SolLstFreshEvidenceInput => ({
+    protocolId: "marinade",
+    category,
+    value,
+    unit,
+    sourceName: "TEST source",
+    sourceUrl: "https://example.com/x",
+    confirmedAt: CONFIRMED,
+    confirmedBy: "TEST reviewer",
+    reviewerRole: "risk",
+    notes: ["Fixture-only value for intake validation; not production evidence."],
+  });
+  const statusOf = (input: SolLstFreshEvidenceInput) => validateSolLstFreshEvidenceInput(input, FRESH_CHECK);
+
+  const fixtureInputs = getSolLstFreshEvidenceFixtureInputs({ confirmedAt: CONFIRMED });
+  const fixtureRecords = fixtureInputs.map((i) => createSolLstFreshEvidenceRecord(i, FRESH_CHECK));
+  const summary = summarizeSolLstFreshEvidenceRecords(fixtureRecords, FRESH_CHECK)[0];
+  const preview = previewSolLstRiskGateWithFreshEvidence(fixtureRecords, FRESH_CHECK)[0];
+  const docJson = JSON.stringify(fixtureRecords) + JSON.stringify(summary) + JSON.stringify(preview);
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingStaking = getTestingPageFixtures().find((f) => f.categoryLabel === "Staking");
+
+  // 14D-A…G. Flags.
+  add("14D-A: SOL_LST_FRESH_EVIDENCE_INTAKE_EXISTS is true", SOL_LST_FRESH_EVIDENCE_INTAKE_EXISTS === true, `v=${SOL_LST_FRESH_EVIDENCE_INTAKE_EXISTS}`);
+  add("14D-B: intake assigns no risk scores", SOL_LST_FRESH_EVIDENCE_INTAKE_ASSIGNS_RISK_SCORES === false, `v=${SOL_LST_FRESH_EVIDENCE_INTAKE_ASSIGNS_RISK_SCORES}`);
+  add("14D-C: intake approves no candidates", SOL_LST_FRESH_EVIDENCE_INTAKE_APPROVES_CANDIDATES === false, `v=${SOL_LST_FRESH_EVIDENCE_INTAKE_APPROVES_CANDIDATES}`);
+  add("14D-D: intake enables no multi-protocol selection", SOL_LST_FRESH_EVIDENCE_INTAKE_ENABLES_MULTI_PROTOCOL_SELECTION === false, `v=${SOL_LST_FRESH_EVIDENCE_INTAKE_ENABLES_MULTI_PROTOCOL_SELECTION}`);
+  add("14D-E: intake updates no live recommendations", SOL_LST_FRESH_EVIDENCE_INTAKE_UPDATES_LIVE_RECOMMENDATIONS === false, `v=${SOL_LST_FRESH_EVIDENCE_INTAKE_UPDATES_LIVE_RECOMMENDATIONS}`);
+  add("14D-F: intake enables no transactions", SOL_LST_FRESH_EVIDENCE_INTAKE_ENABLES_TRANSACTIONS === false, `v=${SOL_LST_FRESH_EVIDENCE_INTAKE_ENABLES_TRANSACTIONS}`);
+  add("14D-G: intake requires no wallet signature", SOL_LST_FRESH_EVIDENCE_INTAKE_REQUIRES_WALLET_SIGNATURE === false, `v=${SOL_LST_FRESH_EVIDENCE_INTAKE_REQUIRES_WALLET_SIGNATURE}`);
+
+  // 14D-H. Freshness threshold.
+  add("14D-H: freshness threshold is 24 hours", SOL_LST_FRESH_EVIDENCE_MAX_AGE_HOURS === 24, `v=${SOL_LST_FRESH_EVIDENCE_MAX_AGE_HOURS}`);
+
+  // 14D-I…R. Each valid fresh category input is accepted.
+  add("14D-I: valid fresh TVL input is accepted", statusOf(baseInput("tvl", 100000000, "usd")) === "accepted", "");
+  add("14D-J: valid fresh APY input is accepted", statusOf(baseInput("current_apy", 5.0, "pct")) === "accepted", "");
+  add("14D-K: valid fresh 30-day APY input is accepted", statusOf(baseInput("apy_30d", 5.1, "pct")) === "accepted", "");
+  add("14D-L: valid withdrawal mechanics text is accepted", statusOf(baseInput("withdrawal_mechanics", "Delayed unstake (fixture).", "text")) === "accepted", "");
+  add("14D-M: valid direct unstake time input is accepted", statusOf(baseInput("direct_unstake_time", 48, "hours")) === "accepted", "");
+  add("14D-N: valid direct unstake fee input is accepted", statusOf(baseInput("direct_unstake_fee", 0.1, "pct")) === "accepted", "");
+  add("14D-O: valid annual management fee input is accepted", statusOf(baseInput("annual_management_fee", 6, "pct")) === "accepted", "");
+  add("14D-P: valid audit/security text is accepted", statusOf(baseInput("audit_security", "Audited (fixture).", "text")) === "accepted", "");
+  add("14D-Q: valid operational risk text is accepted", statusOf(baseInput("operational_risk", "Reviewed (fixture).", "text")) === "accepted", "");
+  add("14D-R: valid incident review text is accepted", statusOf(baseInput("incident_review", "No incidents (fixture).", "text")) === "accepted", "");
+
+  // 14D-S…Y. Rejections and edge cases.
+  add("14D-S: missing source URL is incomplete/rejected", ["incomplete", "rejected"].includes(statusOf({ ...baseInput("tvl", 100000000, "usd"), sourceUrl: "" })), "");
+  add("14D-T: missing confirmedAt is incomplete/rejected", ["incomplete", "rejected"].includes(statusOf({ ...baseInput("tvl", 100000000, "usd"), confirmedAt: "" })), "");
+  add("14D-U: old confirmedAt becomes stale", statusOf({ ...baseInput("tvl", 100000000, "usd"), confirmedAt: OLD_CONFIRMED }) === "stale", "");
+  add("14D-V: unsupported protocol returns unsupported_protocol", statusOf({ ...baseInput("tvl", 100000000, "usd"), protocolId: "kamino" as SolLstFreshEvidenceInput["protocolId"] }) === "unsupported_protocol", "");
+  add("14D-W: invalid category returns invalid_category", statusOf({ ...baseInput("tvl", 100000000, "usd"), category: "not_a_category" as SolLstFreshEvidenceInput["category"] }) === "invalid_category", "");
+  add("14D-X: numeric category with text value is rejected", statusOf(baseInput("tvl", "not a number" as unknown as number, "usd")) === "rejected", "");
+  add("14D-Y: text category with numeric value is rejected", statusOf(baseInput("audit_security", 123 as unknown as string, "text")) === "rejected", "");
+
+  // 14D-Z…AC. Complete fixture package.
+  add("14D-Z: complete fixture records make marketDataComplete true", summary?.marketDataComplete === true, `v=${summary?.marketDataComplete}`);
+  add("14D-AA: complete fixture records make mechanicsComplete true", summary?.mechanicsComplete === true, `v=${summary?.mechanicsComplete}`);
+  add("14D-AB: complete fixture records make evidenceComplete true", summary?.evidenceComplete === true, `v=${summary?.evidenceComplete}`);
+  add("14D-AC: complete fixture records make readyForRiskGate true", summary?.readyForRiskGate === true, `v=${summary?.readyForRiskGate}`);
+
+  // 14D-AD/AE. Ready fixture still does not score or approve (registry untouched).
+  add("14D-AD: ready fixture still does not assign a riskScore", getSolLiquidStakingCandidateById("marinade")?.risk.riskScore === undefined, `v=${getSolLiquidStakingCandidateById("marinade")?.risk.riskScore}`);
+  add("14D-AE: ready fixture still does not approve the candidate", getSolLiquidStakingCandidateById("marinade")?.approvedForReadOnlyRecommendation === false && getSolLiquidStakingCandidateById("marinade")?.status === "staged_candidate", `approved=${getSolLiquidStakingCandidateById("marinade")?.approvedForReadOnlyRecommendation}`);
+
+  // 14D-AF/AG. Preview still requires rubric + approval decision.
+  add("14D-AF: preview says rubric approval is still required", preview?.stillRequiresRubricApproval === true && preview?.wouldClearValueAndEvidenceBlockers === true, `rubric=${preview?.stillRequiresRubricApproval}`);
+  add("14D-AG: preview says risk approval decision is still required", preview?.stillRequiresRiskApprovalDecision === true, `decision=${preview?.stillRequiresRiskApprovalDecision}`);
+
+  // 14D-AH. No staged candidate approved by default.
+  add("14D-AH: no staged candidate is approved by default", ["marinade", "jupiter", "blazestake", "sanctum"].every((id) => getSolLiquidStakingCandidateById(id)?.approvedForReadOnlyRecommendation === false), "all false");
+
+  // 14D-AI/AJ. Live selection unchanged.
+  add("14D-AI: live staking suggestion still selects Jito/JitoSOL", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  {
+    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "Jupiter", "BlazeStake", "Sanctum"];
+    const leaked = other.filter((t) => JSON.stringify(staking?.protocolSelection).includes(t));
+    add("14D-AJ: live staking suggestion does not select mSOL/JupSOL/bSOL/INF", leaked.length === 0, `leaked=${leaked.join(",") || "none"}`);
+  }
+
+  // 14D-AK/AL. Demo Mode and /testing unchanged.
+  {
+    const other = ["mSOL", "JupSOL", "bSOL", "INF", "Marinade", "BlazeStake", "Sanctum"];
+    const demoLeak = other.filter((t) => JSON.stringify(demo).includes(t));
+    add("14D-AK: Demo Mode remains unchanged (still JitoSOL only)", demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && demoLeak.length === 0, `leak=${demoLeak.join(",") || "none"}`);
+    const testLeak = other.filter((t) => JSON.stringify(testingStaking).includes(t));
+    add("14D-AL: /testing remains unchanged (still JitoSOL only)", testingStaking?.card.protocolName === "Jito" && testLeak.length === 0, `leak=${testLeak.join(",") || "none"}`);
+  }
+
+  // 14D-AM. No transaction/signature/swap path in the intake output.
+  {
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "swap(", "deposit(", "withdraw(", "unstake("];
+    const hits = tokens.filter((t) => docJson.toLowerCase().includes(t));
+    add("14D-AM: no transaction/signature/swap path in fresh-evidence intake", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 14D-AN. No forbidden investment claims in the intake copy.
+  {
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const hits = forbidden.filter((w) => docJson.toLowerCase().includes(w));
+    add("14D-AN: no forbidden investment claims in fresh-evidence intake copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -8302,6 +8445,7 @@ export function printFixtureResults(): void {
     ...runSolLstCandidateRegistryFixtureChecks(),
     ...runSolLstSourceValueConfirmationFixtureChecks(),
     ...runSolLstRiskScoringGateFixtureChecks(),
+    ...runSolLstFreshEvidenceIntakeFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

@@ -633,5 +633,14 @@ staged candidates are blocked from risk scoring and why — currently **all four
 blocked** (stale/missing market data, mechanics/evidence review required, source
 re-verification required, rubric + approval decision not approved). It is a gate only: it
 assigns no scores, approves nothing, selects nothing, updates no live recommendation, and
-adds no transaction/signature. 14D will assign scores only for candidates the gate reports
+adds no transaction/signature. 14E will assign scores only for candidates the gate reports
 as `ready_for_scoring`.
+
+**Step 14D — fresh source/evidence intake:** `solLiquidStakingFreshEvidenceIntake.ts` (see
+[solLiquidStakingFreshEvidenceIntake.md](solLiquidStakingFreshEvidenceIntake.md)) is the
+intake/validation layer for recording fresh market/mechanics/evidence for
+mSOL/JupSOL/bSOL/INF. A record is `accepted` only with value + sourceName + sourceUrl +
+confirmedAt + confirmedBy + reviewerRole within 24h; otherwise stale/incomplete/rejected.
+No value or evidence is invented; without fresh input candidates stay blocked. It assigns
+no scores, approves nothing, selects nothing, and changes no live/Demo/testing behavior. A
+non-live preview confirms a complete package still needs rubric + risk-approval decision.

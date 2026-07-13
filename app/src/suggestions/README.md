@@ -1109,5 +1109,19 @@ INF: `market_data_missing` + the same). `ready_for_scoring` requires all prerequ
 verified — **none qualify today** (`readyForScoringCount: 0`, `blockedCount: 4`). Jito
 returns `already_approved`; unknown protocols `not_candidate`. It **assigns no scores,
 approves no candidates**, and changes nothing live (no selection, no live recommendation,
-no transaction/signature; not imported by any live/UI file). Next: 14D assigns scores only
+no transaction/signature; not imported by any live/UI file). Next: 14E assigns scores only
 for `ready_for_scoring` candidates.
+
+## Fresh source/evidence intake for staged candidates (Step 14D)
+
+An **intake + validation** layer for recording fresh market/mechanics/evidence for
+mSOL/JupSOL/bSOL/INF before scoring — see
+[solLiquidStakingFreshEvidenceIntake.md](solLiquidStakingFreshEvidenceIntake.md).
+`validateSolLstFreshEvidenceInput` / `createSolLstFreshEvidenceRecord` accept a record only
+with value + sourceName + sourceUrl + confirmedAt + confirmedBy + reviewerRole and within
+the 24h window (else `stale`/`incomplete`/`rejected`); type mismatches and unsupported
+protocols/categories are rejected. `summarizeSolLstFreshEvidenceRecords` reports
+`marketDataComplete`/`mechanicsComplete`/`evidenceComplete`/`readyForRiskGate`, and a
+non-live `previewSolLstRiskGateWithFreshEvidence` shows that even a complete package
+**still requires rubric + risk-approval decision**. It **invents no values**, assigns no
+scores, approves nothing, and changes nothing live (not imported by any live/UI file).
