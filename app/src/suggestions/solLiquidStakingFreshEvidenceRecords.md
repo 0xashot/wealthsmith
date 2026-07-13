@@ -29,7 +29,7 @@ arrays are **empty**, so every staged candidate stays **blocked** and none is
 
 | Candidate | Fresh records | Status |
 | --- | --- | --- |
-| Marinade · mSOL | 8 / 10 (see 14F+14G below) | blocked — mechanics incomplete (2 categories) |
+| Marinade · mSOL | 9 / 10 (see 14F+14G+14H below) | blocked — mechanics incomplete (`direct_unstake_time`) |
 | Jupiter · JupSOL | none | blocked — all categories missing |
 | BlazeStake · bSOL | none | blocked — all categories missing |
 | Sanctum · INF | none | blocked — all categories missing |
@@ -89,9 +89,9 @@ true`** — no score is assigned and no candidate is approved.
 `approvesCandidates`, `updatesLiveRecommendations`, `transactionsEnabled` all `false`.
 mSOL/JupSOL/bSOL/INF do not appear in real wallet recommendations.
 
-## Marinade · mSOL (Steps 14F + 14G)
+## Marinade · mSOL (Steps 14F + 14G + 14H)
 
-**Status: partial — 8 of 10 categories verified & accepted; mSOL is NOT
+**Status: partial — 9 of 10 categories verified & accepted; mSOL is NOT
 `readyForRiskGate`.** Founder-authorized public-source fetches on **2026-07-13**
 (`confirmedBy: "Ashot"`, `reviewerRole: "founder"`). The stale 14B figures were not reused
 and nothing was invented.
@@ -106,6 +106,7 @@ and nothing was invented.
 | 4 | `withdrawal_mechanics` | Delayed unstake → claim ticket (~1–2 epochs); instant unstake via Jupiter LP route | [Marinade FAQ](https://docs.marinade.finance/marinade-protocol/faq) |
 | 6 | `direct_unstake_fee` | 0.2% (direct/delayed path; instant path priced via LP/Jupiter, no fixed fee) | [Marinade FAQ](https://docs.marinade.finance/marinade-protocol/faq) |
 | 8 | `audit_security` | Audited by Kudelski, Ackee, Neodyme, Sec3; SOC 2 Type I/II | [Marinade Audits](https://docs.marinade.finance/marinade-protocol/security/audits) |
+| 7 | `annual_management_fee` | 0% on rewards — Marinade docs state "No performance fees on staking rewards" (verbatim); revenue via the SAM validator model; supersedes historical ~6% | [Marinade docs (full export)](https://docs.marinade.finance/llms-full.txt) |
 | 9 | `operational_risk` | Delegation via SAM, stake pool, LP/Jupiter dependency, 13-party/6-signer multisig program control | [What is mSOL?](https://docs.marinade.finance/marinade-protocol/protocol-overview/marinade-liquid/what-is-msol) |
 | 10 | `incident_review` | Documented SAM unstake-priority logic bug: ~37,000 SOL / ~28% missed rewards over epochs 652–777 (program logic bug, not a principal drain) | [Marinade forum incident report](https://forum.marinade.finance/t/incident-report-37-000-sol-in-losses-a-call-for-investigation-and-action/1853) |
 
@@ -113,17 +114,18 @@ and nothing was invented.
 > (`apy === apyBase`, range ~4.7–7.1%); `current_apy` is the latest snapshot, `apy_30d` the
 > deterministically computed 30-day mean. `direct_unstake_fee` = 0.2% is the direct/delayed
 > path (FAQ verbatim); the instant path adds no Marinade protocol fee but is priced by the
-> LP/Jupiter route. `incident_review` is a point-in-time community-forum finding, **not** a
-> clean-history claim, and concerns the SAM rewards mechanism, not staked principal.
+> LP/Jupiter route. `annual_management_fee` = 0 records "No performance fees on staking
+> rewards" (Marinade docs verbatim). `incident_review` is a point-in-time community-forum
+> finding, **not** a clean-history claim, and concerns the SAM rewards mechanism, not staked
+> principal.
 
-### Still missing — need verification
+### Still missing (1) — cannot be honestly recorded
 
 | # | Category | Why not recorded |
 | --- | --- | --- |
-| 5 | `direct_unstake_time` | Epoch-based ("claimable after 1 epoch", 1–2 epochs depending on timing). The field is **numeric** and no reliable fixed-hours conversion is given by the source, so no honest number can be recorded (the mechanism/timing is captured qualitatively in `withdrawal_mechanics`). |
-| 7 | `annual_management_fee` | Current sources indicate **no** commission/management fee on mSOL rewards (revenue comes from validators via the Stake Auction Market), but no crisp verbatim "0%" doc line was obtained and older sources cite ~6%. Left **missing as unresolved** rather than record a number I could not authoritatively confirm. |
+| 5 | `direct_unstake_time` | Epoch-based only: docs say "claimable after epoch n+1" (up to n+2 if unstaking in the last 4h of an epoch) and "an epoch lasts approximately two days" — **no reliable fixed-hours figure**. The field is **numeric (hours)**, so it is not forced (per Step 14H guidance). The timing is captured qualitatively in `withdrawal_mechanics`. |
 
-Because **mechanics** is incomplete (missing `direct_unstake_time` + `annual_management_fee`),
+Because **mechanics** is incomplete (only `direct_unstake_time` missing),
 `getSolLstFreshEvidenceSummaries()` reports mSOL `marketDataComplete: true`,
 `mechanicsComplete: false`, `evidenceComplete: true`, **`readyForRiskGate: false`**
 (blocker: `mechanics_incomplete`). The preview shows
@@ -131,9 +133,8 @@ Because **mechanics** is incomplete (missing `direct_unstake_time` + `annual_man
 `stillRequiresRiskApprovalDecision: true`; no score is assigned and mSOL is not approved.
 
 To finish mSOL: obtain an authoritative fixed unstake time (or a reliable epoch→hours
-basis) and an authoritative management-fee statement, append them within the 24h window,
-and mSOL becomes `readyForRiskGate` — still pending rubric + risk-approval decision before
-any score.
+basis) for `direct_unstake_time`, append it within the 24h window, and mSOL becomes
+`readyForRiskGate` — still pending rubric + risk-approval decision before any score.
 
 ## Next steps
 

@@ -655,16 +655,16 @@ inputs (value + unit + source + confirmedAt + confirmedBy + reviewerRole + notes
 the 24h window. No scores, no approval, no live-recommendation change, no
 transaction/signature.
 
-**Steps 14F + 14G — Marinade · mSOL:** founder-authorized public-source fetches (2026-07-13)
-recorded **8 of 10** categories: market data (`tvl` $182,837,237, `current_apy` 4.73658%,
-`apy_30d` 5.84%, DefiLlama pool `b3f93865-…`), `withdrawal_mechanics` + `audit_security`
-(Marinade docs), and — resolved in 14G — `direct_unstake_fee` (0.2% direct/delayed path, FAQ
-verbatim; the instant path is LP/Jupiter-priced), `operational_risk` (SAM delegation, stake
-pool, LP/Jupiter dependency, 13-party multisig), and `incident_review` (a documented SAM
-unstake-priority logic bug, ~37,000 SOL / ~28% missed rewards over epochs 652–777 — a
-point-in-time finding, not a clean-history claim). Two stay **not recorded**:
-`direct_unstake_time` (epoch-based; the numeric field has no reliable hours conversion) and
-`annual_management_fee` (unresolved — current docs indicate no reward fee via the SAM model
-but no verbatim 0% obtained and historical ~6% conflicts). Nothing was invented and no stale
-value reused, so mSOL stays `readyForRiskGate: false` — unscored, unapproved, absent from
-real wallet mode.
+**Steps 14F + 14G + 14H — Marinade · mSOL:** founder-authorized public-source fetches
+(2026-07-13) recorded **9 of 10** categories: market data (`tvl` $182,837,237, `current_apy`
+4.73658%, `apy_30d` 5.84%, DefiLlama pool `b3f93865-…`), `withdrawal_mechanics` +
+`audit_security` (Marinade docs); `direct_unstake_fee` (0.2% direct/delayed path, FAQ
+verbatim; instant path LP/Jupiter-priced), `operational_risk` (SAM delegation, stake pool,
+LP/Jupiter dependency, 13-party multisig), `incident_review` (documented SAM unstake-priority
+logic bug, ~37,000 SOL / ~28% missed rewards over epochs 652–777 — a point-in-time finding,
+not a clean-history claim); and `annual_management_fee` = 0 (Marinade docs verbatim "No
+performance fees on staking rewards"; SAM revenue model; supersedes historical ~6%). **One**
+stays not recorded: `direct_unstake_time` — the docs give only epoch-based timing with no
+reliable fixed-hours figure, and the field is numeric, so it is not forced. Nothing was
+invented and no stale value reused, so mSOL stays `readyForRiskGate: false` — unscored,
+unapproved, absent from real wallet mode.

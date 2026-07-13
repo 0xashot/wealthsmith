@@ -45,18 +45,18 @@ export const SOL_LST_FRESH_EVIDENCE_RECORDS_REQUIRE_WALLET_SIGNATURE = false;
  * the candidate stays blocked until every required category has a fresh accepted
  * record. DO NOT add a record with a placeholder or stale value.
  * ------------------------------------------------------------------ */
-// Step 14F/14G — Marinade · mSOL. PARTIAL: 8 of 10 categories verified from public
-// sources (founder-authorized fetch, 2026-07-13). 14F recorded market data
-// (DefiLlama pool) + withdrawal MECHANISM + audit list. 14G resolved three more:
-// direct_unstake_fee (Marinade FAQ verbatim: 0.2% for the direct/delayed path),
-// operational_risk (delegation/stake-pool/LP/multisig dependencies), and
-// incident_review (a documented SAM auction-logic bug — NOT a clean-history claim).
-// TWO categories stay MISSING: direct_unstake_time (epoch-based "1 epoch"; no
-// reliable hours conversion and the field is numeric) and annual_management_fee
-// (current docs indicate no reward fee via the SAM model, but no crisp verbatim 0%
-// was obtained and older sources cite ~6% — left missing as unresolved). No stale
-// 14B value is reused and nothing is invented. mSOL stays NOT readyForRiskGate
-// (market + evidence complete; mechanics incomplete).
+// Step 14F/14G/14H — Marinade · mSOL. PARTIAL: 9 of 10 categories verified from
+// public sources (founder-authorized fetch, 2026-07-13). 14F: market data (DefiLlama
+// pool) + withdrawal MECHANISM + audit list. 14G: direct_unstake_fee (FAQ verbatim
+// 0.2% direct/delayed path), operational_risk, incident_review (documented SAM
+// auction-logic bug — NOT a clean-history claim). 14H: annual_management_fee = 0
+// (Marinade docs verbatim "No performance fees on staking rewards"; SAM revenue
+// model; supersedes historical ~6%). ONE category stays MISSING: direct_unstake_time
+// — the docs give only epoch-based timing ("epoch n+1", "approximately two days")
+// with no reliable fixed-hours basis, and the field is numeric, so it is NOT forced
+// (the timing is captured qualitatively in withdrawal_mechanics). No stale 14B value
+// is reused and nothing is invented. mSOL stays NOT readyForRiskGate (market +
+// evidence complete; mechanics incomplete — only direct_unstake_time missing).
 export const MARINADE_MSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [
   {
     protocolId: "marinade",
@@ -153,6 +153,18 @@ export const MARINADE_MSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [
     confirmedBy: "Ashot",
     reviewerRole: "founder",
     notes: ["Community forum report (not an official Marinade postmortem). Point-in-time finding, NOT a clean-history claim; concerns the SAM rewards mechanism, not a loss of staked principal. A bug bounty (Immunefi) exists."],
+  },
+  {
+    protocolId: "marinade",
+    category: "annual_management_fee",
+    value: 0,
+    unit: "pct",
+    sourceName: "Marinade Documentation — Marinade Liquid (full docs export)",
+    sourceUrl: "https://docs.marinade.finance/llms-full.txt",
+    confirmedAt: "2026-07-13T14:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Current Marinade docs state 'No performance fees on staking rewards' (verbatim), i.e. no reward/management fee on mSOL; protocol revenue comes from validators via the Stake Auction Market. Recorded as 0% on rewards. Supersedes the historical ~6% management-fee figure cited by older sources."],
   },
 ];
 export const JUPITER_JUPSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [];
