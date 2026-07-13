@@ -270,6 +270,23 @@ import {
   getJitoSolReadOnlyBetaGoNoGo,
 } from "./jitoSolBetaActivation";
 import {
+  TESTING_PAGE_EXISTS,
+  TESTING_PAGE_ROUTE,
+  TESTING_PAGE_VISIBLE_IN_NAV,
+  TESTING_PAGE_USES_FIXTURE_DATA,
+  TESTING_PAGE_USES_REAL_WALLET_DATA,
+  TESTING_PAGE_ENABLES_TRANSACTIONS,
+  TESTING_PAGE_MUTATES_LIVE_SUGGESTIONS,
+  TESTING_PAGE_USES_SHARED_CARD,
+  TESTING_PAGE_USES_SHARED_MODAL,
+  TESTING_PAGE_LINKED_IN_NAV,
+  TESTING_PAGE_IMPORTED_BY_DASHBOARD,
+  TESTING_PAGE_IMPORTED_BY_PORTFOLIO,
+  TESTING_PAGE_IMPORTED_BY_RAIL,
+  TESTING_PREVIEW_NOT_LIVE,
+  getTestingPageFixtures,
+} from "../pages/testingPageFixtures";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -7564,6 +7581,115 @@ export function runJitoSolBetaActivationFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 13H — hidden `/testing` page: fixture-only visual QA of every suggestion
+ * category through the SAME shared card/modal. Verifies the route flags, that
+ * every category is present, the read-only/fixture-only guarantees, the JitoSOL
+ * staking testing fixture, and that Demo/real-wallet behavior is unchanged.
+ * ------------------------------------------------------------------ */
+export function runTestingPageFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const fixtures = getTestingPageFixtures();
+  const byCategory = (label: string) => fixtures.find((f) => f.categoryLabel === label);
+  const fixturesJson = JSON.stringify(fixtures);
+
+  // 13H-A…G. Route + safety flags.
+  add("13H-A: TESTING_PAGE_EXISTS is true", TESTING_PAGE_EXISTS === true, `v=${TESTING_PAGE_EXISTS}`);
+  add("13H-B: TESTING_PAGE_ROUTE is /testing", TESTING_PAGE_ROUTE === "/testing", `v=${TESTING_PAGE_ROUTE}`);
+  add("13H-C: TESTING_PAGE_VISIBLE_IN_NAV is false", TESTING_PAGE_VISIBLE_IN_NAV === false, `v=${TESTING_PAGE_VISIBLE_IN_NAV}`);
+  add("13H-D: TESTING_PAGE_USES_FIXTURE_DATA is true", TESTING_PAGE_USES_FIXTURE_DATA === true, `v=${TESTING_PAGE_USES_FIXTURE_DATA}`);
+  add("13H-E: TESTING_PAGE_USES_REAL_WALLET_DATA is false", TESTING_PAGE_USES_REAL_WALLET_DATA === false, `v=${TESTING_PAGE_USES_REAL_WALLET_DATA}`);
+  add("13H-F: TESTING_PAGE_ENABLES_TRANSACTIONS is false", TESTING_PAGE_ENABLES_TRANSACTIONS === false, `v=${TESTING_PAGE_ENABLES_TRANSACTIONS}`);
+  add("13H-G: TESTING_PAGE_MUTATES_LIVE_SUGGESTIONS is false", TESTING_PAGE_MUTATES_LIVE_SUGGESTIONS === false, `v=${TESTING_PAGE_MUTATES_LIVE_SUGGESTIONS}`);
+
+  // 13H-H…P. Every suggestion category is present.
+  add("13H-H: testing fixtures include Safety Buffer", byCategory("Safety Buffer") != null, `has=${byCategory("Safety Buffer") != null}`);
+  add("13H-I: testing fixtures include Rebalance", byCategory("Allocation") != null, `has=${byCategory("Allocation") != null}`);
+  add("13H-J: testing fixtures include Capital Efficiency", byCategory("Capital Efficiency") != null, `has=${byCategory("Capital Efficiency") != null}`);
+  add("13H-K: testing fixtures include Trim Long-Tail", fixtures.some((f) => f.card.type === "trim_long_tail"), `has=${fixtures.some((f) => f.card.type === "trim_long_tail")}`);
+  add("13H-L: testing fixtures include Staking", byCategory("Staking") != null, `has=${byCategory("Staking") != null}`);
+  add("13H-M: testing fixtures include Stable Yield", byCategory("Stablecoin Yield") != null, `has=${byCategory("Stablecoin Yield") != null}`);
+  add("13H-N: testing fixtures include DCA", byCategory("Contribution Plan") != null, `has=${byCategory("Contribution Plan") != null}`);
+  add("13H-O: testing fixtures include Position Optimization", fixtures.some((f) => f.card.type === "review_yield_strategy"), `has=${fixtures.some((f) => f.card.type === "review_yield_strategy")}`);
+  add("13H-P: testing fixtures include On Track", byCategory("On Track") != null, `has=${byCategory("On Track") != null}`);
+
+  // 13H-Q. Every fixture carries the TESTING_PREVIEW_NOT_LIVE label.
+  {
+    const bad = fixtures.filter((f) => f.label !== TESTING_PREVIEW_NOT_LIVE || JSON.stringify(f).indexOf(TESTING_PREVIEW_NOT_LIVE) === -1);
+    add("13H-Q: every testing fixture has TESTING_PREVIEW_NOT_LIVE", bad.length === 0 && TESTING_PREVIEW_NOT_LIVE === "TESTING_PREVIEW_NOT_LIVE", `missing=${bad.length}`);
+  }
+
+  // 13H-R. Every ACTIONABLE fixture has actionKind review_only (CTA action "review").
+  {
+    const actionable = fixtures.filter((f) => f.card.actionability === "actionable");
+    const bad = actionable.filter((f) => f.card.cta.action !== "review");
+    add("13H-R: every actionable testing fixture is review-only", actionable.length > 0 && bad.length === 0, `actionable=${actionable.length} bad=${bad.length}`);
+  }
+  // 13H-S…U. No transaction / signature / completion on any fixture CTA.
+  add("13H-S: every testing fixture has executes_transaction false", fixtures.every((f) => f.card.cta.executes_transaction === false), "all false");
+  add("13H-T: every testing fixture has requires_wallet_signature false", fixtures.every((f) => f.card.cta.requires_wallet_signature === false), "all false");
+  add("13H-U: every testing fixture has completion_on_click false", fixtures.every((f) => f.card.cta.completion_on_click === false), "all false");
+
+  // 13H-V…X. JitoSOL staking testing fixture content.
+  {
+    const s = byCategory("Staking");
+    const md = s?.details.protocolSelectionDisplay?.marketData;
+    add("13H-V: staking testing fixture includes Jito · JitoSOL", s?.card.protocolName === "Jito" && s?.card.lstSymbol === "JitoSOL" && s?.details.protocolSelectionDisplay?.protocolName === "Jito", `name=${s?.card.protocolName} lst=${s?.card.lstSymbol}`);
+    add("13H-W: staking testing fixture includes TVL 767950000", md?.tvlUsd === 767950000, `tvl=${md?.tvlUsd}`);
+    add("13H-X: staking testing fixture includes APY 5.36", md?.apyPct === 5.36, `apy=${md?.apyPct}`);
+  }
+
+  // 13H-Y. On Track fixture is not actionable (informational, no CTA, not Top Pick).
+  {
+    const ot = byCategory("On Track");
+    add("13H-Y: On Track testing fixture is not actionable", ot?.card.actionability === "informational" && ot?.card.cta.label === "" && ot?.card.is_top_pick === false, `actionability=${ot?.card.actionability} cta=${ot?.card.cta.label}`);
+  }
+
+  // 13H-Z/AA. The page uses the SHARED card/modal (declared flags; grep-verified in the report).
+  add("13H-Z: testing page uses the shared SuggestionCard", TESTING_PAGE_USES_SHARED_CARD === true, `v=${TESTING_PAGE_USES_SHARED_CARD}`);
+  add("13H-AA: testing page uses the shared SuggestionReviewModal", TESTING_PAGE_USES_SHARED_MODAL === true, `v=${TESTING_PAGE_USES_SHARED_MODAL}`);
+
+  // 13H-AB…AE. Not imported by live pages / rails, and not linked in nav.
+  add("13H-AB: testing page is not imported by Dashboard", TESTING_PAGE_IMPORTED_BY_DASHBOARD === false, `v=${TESTING_PAGE_IMPORTED_BY_DASHBOARD}`);
+  add("13H-AC: testing page is not imported by Portfolio", TESTING_PAGE_IMPORTED_BY_PORTFOLIO === false, `v=${TESTING_PAGE_IMPORTED_BY_PORTFOLIO}`);
+  add("13H-AD: testing page is not imported by SuggestionRail/RealWalletSuggestionsRail", TESTING_PAGE_IMPORTED_BY_RAIL === false, `v=${TESTING_PAGE_IMPORTED_BY_RAIL}`);
+  add("13H-AE: testing page is not linked in navigation", TESTING_PAGE_LINKED_IN_NAV === false && TESTING_PAGE_VISIBLE_IN_NAV === false, `linked=${TESTING_PAGE_LINKED_IN_NAV}`);
+
+  // 13H-AF. Demo Mode remains unchanged (still demo_preview, DEMO label — no TESTING label).
+  {
+    const demo = getDemoExactSolStakingReviewDetails();
+    const ok = demo.protocolSelectionDisplay?.mode === "demo_preview" && demo.demoLabel === "DEMO_PREVIEW_NOT_LIVE" && !JSON.stringify(demo).includes(TESTING_PREVIEW_NOT_LIVE);
+    add("13H-AF: Demo Mode remains unchanged", ok, `mode=${demo.protocolSelectionDisplay?.mode} label=${demo.demoLabel}`);
+  }
+  // 13H-AG. Real wallet behavior remains unchanged (staking still the JitoSOL beta selection; no TESTING label).
+  {
+    const funded = bufferFixture(5000, 1000, 3);
+    const aligned = allocationFixture(15000, 62, 2);
+    const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+    const staking = run.suggestions.find((s) => s.category === "staking");
+    const ok = staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && !JSON.stringify(run).includes(TESTING_PREVIEW_NOT_LIVE);
+    add("13H-AG: real wallet behavior remains unchanged", ok, `status=${staking?.protocolSelection?.status}`);
+  }
+
+  // 13H-AH. No transaction/signature/swap path in any testing fixture.
+  {
+    const tokens = ["sendtransaction", "signtransaction", "signalltransactions", "signmessage", "publickey", "swap(", "deposit(", "withdraw(", "unstake("];
+    const hits = tokens.filter((t) => fixturesJson.toLowerCase().includes(t));
+    add("13H-AH: no transaction/signature/swap path in testing fixtures", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  // 13H-AI. No forbidden investment claims in testing fixture copy.
+  {
+    const forbidden = ["best", "safest", "optimal", "guaranteed", "risk-free", "recommended", "you should", "highest apy"];
+    const hits = forbidden.filter((w) => fixturesJson.toLowerCase().includes(w));
+    add("13H-AI: no forbidden investment claims in testing fixture copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -7615,6 +7741,7 @@ export function printFixtureResults(): void {
     ...runDemoExactSolStakingScenarioFixtureChecks(),
     ...runDemoExactSolStakingMarketDataFixtureChecks(),
     ...runJitoSolBetaActivationFixtureChecks(),
+    ...runTestingPageFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

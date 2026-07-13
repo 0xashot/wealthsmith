@@ -1,0 +1,102 @@
+/**
+ * testingPage.css — Step 13H. Layout wrapper ONLY for the hidden `/testing` page.
+ * Everything is scoped under `.testing-page`; no global resets, and no changes to
+ * Dashboard/Portfolio/Demo styling. Uses existing design tokens. The cards/modal
+ * are the shared components and keep their own styles (dashboard.css).
+ */
+.testing-page {
+  min-height: 100vh;
+  background: var(--color-surface-canvas);
+  color: var(--color-text-primary);
+  padding: var(--spacing-page-padding-desktop);
+  display: grid;
+  gap: var(--spacing-section-gap-md);
+}
+
+.testing-page__header {
+  display: grid;
+  gap: var(--spacing-stack-gap-xs);
+  max-width: 720px;
+}
+
+.testing-page__eyebrow {
+  margin: 0;
+  align-self: start;
+  padding: 2px var(--spacing-inline-gap-sm);
+  font: var(--typography-label-sm-font);
+  letter-spacing: 0.04em;
+  color: var(--color-feedback-warning-text-tint);
+  background: var(--color-feedback-warning-background-tint);
+  border-radius: var(--radius-badge-default);
+}
+
+.testing-page__title {
+  margin: 0;
+  font: var(--typography-heading-lg-font);
+}
+
+.testing-page__subtext {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}
+
+.testing-page__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+.testing-page__filter {
+  padding: var(--spacing-inline-gap-xs) var(--spacing-inline-gap-md);
+  font: var(--typography-button-sm-font);
+  color: var(--color-action-secondary-text-default);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-action-secondary-stroke-default);
+  border-radius: var(--radius-control-pill);
+  cursor: pointer;
+  transition: var(--motion-interaction-hover-property) var(--motion-interaction-hover-duration)
+    var(--motion-interaction-hover-easing);
+}
+
+.testing-page__filter:hover {
+  background: var(--color-action-secondary-background-hover);
+}
+
+.testing-page__filter--active {
+  color: var(--color-action-primary-text-default);
+  background: var(--color-action-primary-background-default);
+  border-color: var(--color-action-primary-background-default);
+}
+
+.testing-page__filter:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.testing-page__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--spacing-card-gap-md);
+  align-items: start;
+}
+
+.testing-page__cell {
+  display: grid;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+.testing-page__cell-label {
+  margin: 0;
+  font: var(--typography-label-sm-font);
+  color: var(--color-text-secondary);
+}
+
+@media (max-width: 768px) {
+  .testing-page {
+    padding: var(--spacing-page-padding-mobile);
+  }
+  .testing-page__grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1037,3 +1037,14 @@ evaluated. Only SOL staking is affected; stable-yield selection stays `not_evalu
 Global flags (`PROTOCOL_SELECTION_IMPLEMENTED`, `..._SHOW_IN_UI`,
 `..._ALLOW_TRANSACTIONS`, go/no-go `productionReady`, `PROTOCOL_SOL_LST_SELECTOR_ENABLED`)
 stay `false`; rollback is a single flag flip back to `not_evaluated`.
+
+## Hidden `/testing` page for visual QA (Step 13H)
+
+A hidden, fixture-only page at `/testing` renders **every** suggestion category through
+the SAME shared `SuggestionCard` + `SuggestionReviewModal` real wallet mode uses — see
+[testingPage.md](testingPage.md). It is for visually verifying how each category looks
+in the real card and Review Details modal. It is **not in navigation**, not linked from
+any page, reachable only by opening the URL (gated by `isTestingPageEnabled()`: dev, or
+`VITE_ENABLE_TESTING_PAGE=true`), uses deterministic fixtures labeled
+`TESTING_PREVIEW_NOT_LIVE`, connects no wallet, enables no transactions, and mutates no
+live/Demo behavior. `TestingPage` is imported only by `App.tsx`'s route gate.

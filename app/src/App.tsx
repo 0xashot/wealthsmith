@@ -50,6 +50,8 @@ import {
   getDefaultSolLstSelectorPreview,
   getInternalOnlySolLstSelectedPreviewExample,
 } from "./suggestions/protocolSolLiquidStakingSelectorPreview";
+import TestingPage from "./pages/TestingPage";
+import { isTestingPageEnabled, TESTING_PAGE_ROUTE } from "./pages/testingPageFixtures";
 import "./styles/dashboard.css";
 
 export type AppMode = "connected" | "demo" | "disconnected";
@@ -62,6 +64,17 @@ export type ConnectedPage = "dashboard" | "portfolio" | "goal" | "support";
  * renders exactly as before. It calls no hooks, so it wraps MainApp cleanly.
  */
 export default function App() {
+  // HIDDEN, fixture-only QA surface (Step 13H). Reachable ONLY by opening
+  // `/testing` directly AND only when the route is enabled (local dev, or a
+  // staging build with VITE_ENABLE_TESTING_PAGE="true"). Never linked in nav.
+  // Renders no wallet UI and mutates no live/Demo state. Disabled → normal app.
+  if (
+    isTestingPageEnabled() &&
+    typeof window !== "undefined" &&
+    window.location.pathname === TESTING_PAGE_ROUTE
+  ) {
+    return <TestingPage />;
+  }
   if (
     isInternalSolLstPreviewRouteEnabled() &&
     typeof window !== "undefined" &&
