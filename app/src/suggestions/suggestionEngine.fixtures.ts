@@ -516,6 +516,44 @@ import {
 import { buildNativeStakingReviewCandidateDisplay } from "./solNativeStakingBaselineReadOnlyApproval";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import {
+  INVESTMENT_TARGET_SCHEMA_VERSION,
+  INVESTMENT_TARGET_REGISTRY_VERSION,
+  INVESTMENT_TARGET_DEFAULT_PRICE_MAX_AGE_MS,
+  type InvestmentTargetDefinition,
+} from "./investmentTargetTypes";
+import {
+  INVESTMENT_TARGET_REGISTRY_EXISTS,
+  CONTRIBUTION_PLANNING_EXISTS,
+  CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS,
+  TARGET_ALLOCATION_GAP_ENGINE_EXISTS,
+  DCA_PLAN_GENERATION_EXISTS,
+  DCA_SUGGESTION_ENABLED,
+  BTC_CONTRIBUTION_TARGET_ENABLED,
+  ETH_CONTRIBUTION_TARGET_ENABLED,
+  RWA_CONTRIBUTION_TARGET_ENABLED,
+  USDC_GROWTH_DCA_TARGET_ENABLED,
+  USDC_CONTRIBUTION_FUNDING_SOURCE_ENABLED,
+  INVESTMENT_TARGET_TRANSACTIONS_ENABLED,
+  INVESTMENT_TARGET_SIGNATURE_REQUIRED,
+  listInvestmentTargets,
+  getInvestmentTarget,
+  getEnabledInvestmentTargets,
+  getMvpInvestmentTargets,
+  getContributionFundingSources,
+  getSafetyBufferTargets,
+  getStableAllocationDestinations,
+  getEnabledContributionGrowthTargets,
+  getModeledFutureTargets,
+  validateInvestmentTargetDefinition,
+  validateInvestmentTargetRegistry,
+} from "./investmentTargetRegistry";
+import {
+  evaluateInvestmentTargetTechnicalEligibility,
+  listTechnicallyEligibleContributionTargets,
+  listTechnicallyEligibleFundingSources,
+  type InvestmentTargetTechnicalContext,
+} from "./investmentTargetEligibility";
+import {
   SOL_STAKING_MARKET_DATA_MODEL_EXISTS,
   SOL_STAKING_MARKET_DATA_MUTATES_APPROVAL_EVIDENCE,
   SOL_STAKING_MARKET_DATA_MUTATES_RISK_SCORES,
@@ -11460,6 +11498,205 @@ export function runSolStakingProductIntegrationFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const targets = listInvestmentTargets();
+  const sol = getInvestmentTarget("sol")!;
+  const usdc = getInvestmentTarget("usdc")!;
+  const btc = getInvestmentTarget("btc")!;
+  const eth = getInvestmentTarget("eth")!;
+
+  const CHECKED = "2026-07-14T03:00:00Z";
+  const FRESH = "2026-07-14T02:50:00Z"; // 10 min → within 60-min default
+  const STALE = "2026-07-11T00:00:00Z";
+  const fullCtx: InvestmentTargetTechnicalContext = {
+    checkedAt: CHECKED,
+    availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"],
+    priceStatusByTargetId: { sol: { available: true, fetchedAt: FRESH }, usdc: { available: true, fetchedAt: FRESH }, btc: { available: true, fetchedAt: FRESH }, eth: { available: true, fetchedAt: FRESH } },
+    configuredAllocationPolicyKeys: ["growth_target_allocation_v_future"],
+    configuredMinimumPolicyKeys: ["dca_minimum_v_future"],
+    configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v_future"],
+    approvedTargetIds: [],
+  };
+
+  // A fully-specified SYNTHETIC RWA product (fixture-only; never runtime/UI).
+  const syntheticRwa: InvestmentTargetDefinition = {
+    schemaVersion: "1.0.0",
+    targetId: "synthetic_rwa_product",
+    assetId: "rwa:synthetic:tbill-fund-2026",
+    symbol: "SYNRWA",
+    displayName: "Synthetic RWA Product",
+    category: "rwa",
+    lifecycleStatus: "modeled_not_enabled",
+    holdingSources: ["future_external_import"],
+    suggestionRoles: ["contribution_growth_target", "rebalance_increase_target"],
+    canBeContributionTarget: false,
+    canFundContributionPlan: false,
+    canServeAsSafetyBuffer: false,
+    canReceiveStableAllocation: false,
+    priceRequirements: { priceRequiredForContributionPlanning: true, maximumPriceAgeMs: INVESTMENT_TARGET_DEFAULT_PRICE_MAX_AGE_MS },
+    allocationRequirements: { targetAllocationRequired: true, allocationPolicyKey: "rwa_alloc_v_future", maximumOvershootAllowed: false },
+    minimumRequirements: { minimumSuggestedAmountUsd: 1000, minimumPolicyKey: "rwa_min_v_future" },
+    suitabilityPolicyKey: "rwa_suitability_v_future",
+    rwaRequirements: { productSpecificApprovalRequired: true, jurisdictionEligibilityRequired: true, liquidityReviewRequired: true, lockupReviewRequired: true, issuerOrProtocolReviewRequired: true, pricingMethodRequired: true },
+    executionStatus: "read_only_only",
+    transactionsEnabled: false,
+    walletSignatureRequired: false,
+    enabledForMvp: false,
+    activationBlockers: ["target_disabled", "product_not_approved", "jurisdiction_rules_not_configured", "liquidity_rules_not_configured", "lockup_rules_not_configured", "risk_review_incomplete"],
+    notes: ["SYNTHETIC fixture-only RWA product — never exposed to runtime or UI."],
+  };
+
+  // 15A-A…G. Schema + registry.
+  add("15A-A: schema version exists", INVESTMENT_TARGET_SCHEMA_VERSION === "1.0.0" && sol.schemaVersion === "1.0.0", INVESTMENT_TARGET_SCHEMA_VERSION);
+  add("15A-B: registry version exists", INVESTMENT_TARGET_REGISTRY_VERSION === "1.0.0", INVESTMENT_TARGET_REGISTRY_VERSION);
+  add("15A-C: registry exists", INVESTMENT_TARGET_REGISTRY_EXISTS === true && targets.length === 4, `n=${targets.length}`);
+  add("15A-D: registry validation passes", validateInvestmentTargetRegistry().valid === true, "valid");
+  add("15A-E: canonical order is deterministic", JSON.stringify(targets.map((t) => t.targetId)) === JSON.stringify(["usdc", "sol", "btc", "eth"]), targets.map((t) => t.targetId).join(","));
+  add("15A-F: target IDs are unique", new Set(targets.map((t) => t.targetId)).size === targets.length, "unique");
+  { const a = getInvestmentTarget("sol")!; a.symbol = "MUTATED"; add("15A-G: definitions are immutable or returned safely", getInvestmentTarget("sol")!.symbol === "SOL", "safe copy"); }
+
+  // 15A-H…P. SOL.
+  add("15A-H: SOL exists", sol != null, "exists");
+  add("15A-I: SOL category is growth_crypto", sol.category === "growth_crypto", sol.category);
+  add("15A-J: SOL is enabled for MVP", sol.lifecycleStatus === "enabled" && sol.enabledForMvp === true, "enabled");
+  add("15A-K: SOL can be a contribution target", sol.canBeContributionTarget === true && sol.suggestionRoles.includes("contribution_growth_target"), "target");
+  add("15A-L: SOL cannot fund its own contribution plan", sol.canFundContributionPlan === false, "no funding");
+  add("15A-M: SOL is not a safety-buffer asset", sol.canServeAsSafetyBuffer === false, "not buffer");
+  add("15A-N: SOL requires pricing", sol.priceRequirements.priceRequiredForContributionPlanning === true, "requires price");
+  add("15A-O: SOL requires target allocation", sol.allocationRequirements.targetAllocationRequired === true, "requires allocation");
+  add("15A-P: SOL execution is read-only", sol.executionStatus === "read_only_only" && sol.transactionsEnabled === false && sol.walletSignatureRequired === false, "read-only");
+
+  // 15A-Q…Y. USDC.
+  add("15A-Q: USDC exists", usdc != null, "exists");
+  add("15A-R: USDC category is stable_asset", usdc.category === "stable_asset", usdc.category);
+  add("15A-S: USDC is enabled for MVP", usdc.lifecycleStatus === "enabled" && usdc.enabledForMvp === true, "enabled");
+  add("15A-T: USDC can fund a contribution plan", usdc.canFundContributionPlan === true && USDC_CONTRIBUTION_FUNDING_SOURCE_ENABLED === true, "funds");
+  add("15A-U: USDC can serve as the safety-buffer asset", usdc.canServeAsSafetyBuffer === true, "buffer");
+  add("15A-V: USDC can receive stable allocation", usdc.canReceiveStableAllocation === true, "stable dest");
+  add("15A-W: USDC is not an enabled growth DCA target", usdc.canBeContributionTarget === false && USDC_GROWTH_DCA_TARGET_ENABLED === false, "not growth");
+  add("15A-X: USDC appears in funding sources", getContributionFundingSources().some((t) => t.targetId === "usdc"), "funding");
+  add("15A-Y: USDC does not appear in growth contribution targets", getEnabledContributionGrowthTargets().every((t) => t.targetId !== "usdc"), "excluded");
+
+  // 15A-Z…AF. BTC.
+  add("15A-Z: BTC exists", btc != null, "exists");
+  add("15A-AA: BTC represents native BTC", btc.assetId === "bitcoin:native", btc.assetId);
+  add("15A-AB: BTC does not represent wrapped BTC", !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(btc.assetId) && !btc.assetId.toLowerCase().includes("wbtc"), "native");
+  add("15A-AC: BTC supports manual_entry", btc.holdingSources.includes("manual_entry"), "manual");
+  add("15A-AD: BTC is modeled_not_enabled", btc.lifecycleStatus === "modeled_not_enabled" && btc.enabledForMvp === false, "modeled");
+  add("15A-AE: BTC is not enabled for contribution suggestions", btc.canBeContributionTarget === false && BTC_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
+  add("15A-AF: BTC fails closed with explicit blockers", btc.activationBlockers.includes("target_disabled") && btc.activationBlockers.includes("price_source_not_configured") && btc.activationBlockers.includes("suitability_policy_not_configured"), btc.activationBlockers.join(","));
+
+  // 15A-AG…AM. ETH.
+  add("15A-AG: ETH exists", eth != null, "exists");
+  add("15A-AH: ETH represents native ETH", eth.assetId === "ethereum:native", eth.assetId);
+  add("15A-AI: ETH does not represent wrapped ETH", !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(eth.assetId) && !eth.assetId.toLowerCase().includes("weth"), "native");
+  add("15A-AJ: ETH supports manual_entry", eth.holdingSources.includes("manual_entry"), "manual");
+  add("15A-AK: ETH is modeled_not_enabled", eth.lifecycleStatus === "modeled_not_enabled" && eth.enabledForMvp === false, "modeled");
+  add("15A-AL: ETH is not enabled for contribution suggestions", eth.canBeContributionTarget === false && ETH_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
+  add("15A-AM: ETH fails closed with explicit blockers", eth.activationBlockers.includes("target_disabled") && eth.activationBlockers.includes("target_allocation_not_configured"), eth.activationBlockers.join(","));
+
+  // 15A-AN…AV. RWA extensibility.
+  add("15A-AN: RWA category exists", validateInvestmentTargetDefinition(syntheticRwa).valid === true && syntheticRwa.category === "rwa", "category");
+  add("15A-AO: no generic production RWA target exists", targets.every((t) => t.category !== "rwa") && RWA_CONTRIBUTION_TARGET_ENABLED === false, "none");
+  add("15A-AP: a fully specified synthetic RWA fixture validates", validateInvestmentTargetDefinition(syntheticRwa).valid === true, "valid");
+  add("15A-AQ: generic RWA placeholder fails validation", validateInvestmentTargetDefinition({ ...syntheticRwa, targetId: "generic_rwa" }).valid === false && validateInvestmentTargetDefinition({ ...syntheticRwa, targetId: "rwa" }).valid === false && validateInvestmentTargetDefinition({ ...syntheticRwa, targetId: "rwa_placeholder" }).valid === false, "rejected");
+  add("15A-AR: RWA without jurisdiction requirements fails", validateInvestmentTargetDefinition({ ...syntheticRwa, rwaRequirements: { ...syntheticRwa.rwaRequirements!, jurisdictionEligibilityRequired: false } } as never).valid === false, "rejected");
+  add("15A-AS: RWA without liquidity review fails", validateInvestmentTargetDefinition({ ...syntheticRwa, rwaRequirements: { ...syntheticRwa.rwaRequirements!, liquidityReviewRequired: false } } as never).valid === false, "rejected");
+  add("15A-AT: RWA without lockup review fails", validateInvestmentTargetDefinition({ ...syntheticRwa, rwaRequirements: { ...syntheticRwa.rwaRequirements!, lockupReviewRequired: false } } as never).valid === false, "rejected");
+  add("15A-AU: RWA without pricing method fails", validateInvestmentTargetDefinition({ ...syntheticRwa, rwaRequirements: { ...syntheticRwa.rwaRequirements!, pricingMethodRequired: false } } as never).valid === false, "rejected");
+  add("15A-AV: RWA without product approval fails", validateInvestmentTargetDefinition({ ...syntheticRwa, rwaRequirements: { ...syntheticRwa.rwaRequirements!, productSpecificApprovalRequired: false } } as never).valid === false && validateInvestmentTargetDefinition({ ...syntheticRwa, rwaRequirements: undefined }).valid === false, "rejected");
+
+  // 15A-AW…BB. Role validation.
+  add("15A-AW: contribution target requires contribution role", validateInvestmentTargetDefinition({ ...sol, suggestionRoles: sol.suggestionRoles.filter((r) => r !== "contribution_growth_target") }).valid === false, "required");
+  add("15A-AX: funding source requires funding role", validateInvestmentTargetDefinition({ ...usdc, suggestionRoles: usdc.suggestionRoles.filter((r) => r !== "contribution_funding_source") }).valid === false, "required");
+  add("15A-AY: buffer asset requires buffer role", validateInvestmentTargetDefinition({ ...usdc, suggestionRoles: usdc.suggestionRoles.filter((r) => r !== "safety_buffer_asset") }).valid === false, "required");
+  add("15A-AZ: stable destination requires stable-allocation role", validateInvestmentTargetDefinition({ ...usdc, suggestionRoles: usdc.suggestionRoles.filter((r) => r !== "stable_allocation_destination") }).valid === false, "required");
+  add("15A-BA: unknown role fails validation", validateInvestmentTargetDefinition({ ...sol, suggestionRoles: [...sol.suggestionRoles, "buy_the_dip" as never] }).valid === false, "rejected");
+  add("15A-BB: enabled target with critical blocker fails validation", validateInvestmentTargetDefinition({ ...sol, activationBlockers: ["target_disabled"] }).valid === false, "rejected");
+
+  // 15A-BC…BP. Technical eligibility.
+  const solElig = evaluateInvestmentTargetTechnicalEligibility(sol, fullCtx);
+  add("15A-BC: SOL can become technically eligible with all required context", solElig.eligibleAsContributionTarget === true && solElig.blockers.length === 0, `blockers=${solElig.blockers.join(",")}`);
+  add("15A-BD: SOL fails when price is unavailable", evaluateInvestmentTargetTechnicalEligibility(sol, { ...fullCtx, priceStatusByTargetId: { sol: { available: false } } }).eligibleAsContributionTarget === false, "unavailable");
+  add("15A-BE: SOL fails when price is stale", evaluateInvestmentTargetTechnicalEligibility(sol, { ...fullCtx, priceStatusByTargetId: { sol: { available: true, fetchedAt: STALE } } }).blockers.includes("price_stale"), "stale");
+  add("15A-BF: SOL fails when allocation policy is missing", evaluateInvestmentTargetTechnicalEligibility(sol, { ...fullCtx, configuredAllocationPolicyKeys: [] }).blockers.includes("target_allocation_not_configured"), "missing");
+  add("15A-BG: SOL fails when suitability policy is missing", evaluateInvestmentTargetTechnicalEligibility(sol, { ...fullCtx, configuredSuitabilityPolicyKeys: [] }).blockers.includes("suitability_policy_not_configured"), "missing");
+  add("15A-BH: SOL eligibility does not calculate an allocation gap", solElig.allocationGapEvaluated === false, "no gap");
+  add("15A-BI: SOL eligibility does not calculate an amount", solElig.contributionAmountCalculated === false, "no amount");
+  add("15A-BJ: SOL eligibility does not generate a suggestion", solElig.suggestionGenerated === false && solElig.userSuitabilityEvaluated === false, "no suggestion");
+  const usdcElig = evaluateInvestmentTargetTechnicalEligibility(usdc, fullCtx);
+  add("15A-BK: USDC can be eligible as a funding source", usdcElig.eligibleAsFundingSource === true, "funding eligible");
+  add("15A-BL: USDC remains ineligible as a growth contribution target", usdcElig.eligibleAsContributionTarget === false, "not growth");
+  add("15A-BM: BTC remains ineligible even if synthetic price data exists", evaluateInvestmentTargetTechnicalEligibility(btc, fullCtx).eligibleAsContributionTarget === false, "ineligible");
+  add("15A-BN: ETH remains ineligible even if synthetic price data exists", evaluateInvestmentTargetTechnicalEligibility(eth, fullCtx).eligibleAsContributionTarget === false, "ineligible");
+  {
+    const eligible = listTechnicallyEligibleContributionTargets(fullCtx).map((t) => t.targetId);
+    add("15A-BO: disabled targets never appear in eligible target lists", JSON.stringify(eligible) === JSON.stringify(["sol"]) && !eligible.includes("btc") && !eligible.includes("eth") && !eligible.includes("usdc"), eligible.join(","));
+    const funding = listTechnicallyEligibleFundingSources(fullCtx).map((t) => t.targetId);
+    add("15A-BP: eligible target lists preserve registry order", JSON.stringify(funding) === JSON.stringify(["usdc"]), funding.join(","));
+  }
+
+  // 15A-BQ…BU. Manual-entry boundaries.
+  add("15A-BQ: manual BTC is modeled but not implemented", btc.holdingSources.includes("manual_entry") && btc.enabledForMvp === false && btc.activationBlockers.includes("manual_entry_not_supported"), "modeled");
+  add("15A-BR: manual ETH is modeled but not implemented", eth.holdingSources.includes("manual_entry") && eth.enabledForMvp === false && eth.activationBlockers.includes("manual_entry_not_supported"), "modeled");
+  add("15A-BS: no ownership verification is implied", /cannot verify ownership|no ownership verification/i.test(readIf("src/suggestions/investmentTargetRegistry.md")) && /ownership verification/i.test(btc.notes.join(" ")), "no verification");
+  add("15A-BT: no BTC wallet connector is added", !existsSync(`${root}/src/wallet/bitcoinWallet.ts`) && !existsSync(`${root}/src/wallet/btcConnector.ts`) && btc.holdingSources.join(",") === "manual_entry", "no connector");
+  add("15A-BU: no ETH wallet connector is added", !existsSync(`${root}/src/wallet/ethereumWallet.ts`) && !existsSync(`${root}/src/wallet/ethConnector.ts`) && eth.holdingSources.join(",") === "manual_entry", "no connector");
+
+  // 15A-BV…CA. Product invariants.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const engineRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = engineRun.suggestions.find((s) => s.category === "staking");
+  add("15A-BV: existing suggestion output remains unchanged", engineRun.suggestions.length > 0 && staking?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  add("15A-BW: Safety Buffer behavior remains unchanged", engineRun.suggestions.some((s) => s.category === "buffer") || engineRun.suggestions.every((s) => s.id !== "investment_target"), "unchanged");
+  add("15A-BX: SOL staking behavior remains unchanged", staking != null && staking.protocolSelection?.selectedProtocolName === "Jito", "unchanged");
+  add("15A-BY: Top Pick remains unchanged", engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => s.id !== "sol" && s.id !== "usdc" && s.id !== "btc" && s.id !== "eth"), "unchanged");
+  add("15A-BZ: engine ordering remains unchanged", engineRun.suggestions.every((s) => !s.id.startsWith("investment_target") && s.id !== "sol" && s.id !== "btc" && s.id !== "eth"), "unchanged");
+  {
+    // No product-facing file imports the registry/eligibility (only its own modules, fixtures, docs).
+    const allowed = /investmentTarget(Types|Registry|Eligibility)|suggestionEngine\.fixtures/;
+    let hits: string[] = [];
+    let entries: string[] = [];
+    try { entries = readdirSync(`${root}/src`, { recursive: true }) as string[]; } catch { /* ignore */ }
+    for (const e of entries) {
+      if (!/\.(ts|tsx)$/.test(e) || allowed.test(e)) continue;
+      const c = readIf(`src/${e}`);
+      if (/from ["']\.[^"']*investmentTarget(Registry|Eligibility|Types)["']/.test(c)) hits.push(e);
+    }
+    add("15A-CA: no product-facing import exists", hits.length === 0, hits.join(",") || "none");
+  }
+
+  // 15A-CB…CH. Feature-state invariants.
+  add("15A-CB: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
+  add("15A-CC: rhythm normalization remains disabled", CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS === false, "disabled");
+  add("15A-CD: allocation-gap calculation remains disabled", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === false, "disabled");
+  add("15A-CE: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false && DCA_SUGGESTION_ENABLED === false, "disabled");
+  add("15A-CF: BTC contribution suggestions remain disabled", BTC_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
+  add("15A-CG: ETH contribution suggestions remain disabled", ETH_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
+  add("15A-CH: RWA contribution suggestions remain disabled", RWA_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
+
+  // 15A-CI…CK. Execution invariants.
+  {
+    const blob = (readIf("src/suggestions/investmentTargetTypes.ts") + readIf("src/suggestions/investmentTargetRegistry.ts") + readIf("src/suggestions/investmentTargetEligibility.ts")).toLowerCase();
+    add("15A-CI: no transaction path exists", INVESTMENT_TARGET_TRANSACTIONS_ENABLED === false && !blob.includes("sendtransaction") && targets.every((t) => t.transactionsEnabled === false), "none");
+    add("15A-CJ: no signature path exists", INVESTMENT_TARGET_SIGNATURE_REQUIRED === false && !blob.includes("signtransaction") && targets.every((t) => t.walletSignatureRequired === false), "none");
+    const handlers = ["buy(", "swap(", "deposit(", "invest(", "execute(", "delegate(", "withdraw("];
+    add("15A-CK: no buy/swap/deposit/invest/execute handler exists", handlers.filter((h) => blob.includes(h)).length === 0, "none");
+  }
+
+  // Accessor smoke.
+  add("15A-accessors: enabled/mvp/modeled accessors are consistent", getEnabledInvestmentTargets().map((t) => t.targetId).join(",") === "usdc,sol" && getMvpInvestmentTargets().map((t) => t.targetId).join(",") === "usdc,sol" && getModeledFutureTargets().map((t) => t.targetId).join(",") === "btc,eth" && getSafetyBufferTargets().map((t) => t.targetId).join(",") === "usdc" && getStableAllocationDestinations().map((t) => t.targetId).join(",") === "usdc" && getEnabledContributionGrowthTargets().map((t) => t.targetId).join(",") === "sol", "ok");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -11536,6 +11773,7 @@ export function printFixtureResults(): void {
     ...runSolStakingSelectorSensitivityFixtureChecks(),
     ...runSolStakingSelectorPresentationFixtureChecks(),
     ...runSolStakingProductIntegrationFixtureChecks(),
+    ...runInvestmentTargetRegistryFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

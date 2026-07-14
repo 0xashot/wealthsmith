@@ -1463,3 +1463,19 @@ four scored dimensions with exact weights/contributions (leader − runner-up), 
 JupSOL/JitoSOL/bSOL/native leaders). Displayed protocol follows `topProtocol`, never
 `selectedProtocolId`; JitoSOL stays the internal default; no automatic switching, no Top Pick/order
 change, no execution. Browser-verified live on /testing (no console errors).
+
+## 15A — investment-target registry (DCA / contribution planning foundation)
+
+A deterministic, versioned, asset-agnostic registry describing what each investment target is
+allowed to do (see [investmentTargetRegistry.md](./investmentTargetRegistry.md)). MVP targets
+(canonical order usdc, sol, btc, eth — display determinism, not ranking): SOL is the only enabled
+growth-contribution target; USDC funds plans / protects the buffer / receives stable allocation
+(not a growth DCA target); native BTC and ETH are modeled-not-enabled (native-chain assetIds
+`bitcoin:native`/`ethereum:native`, never wrapped, manual-entry only, fail closed). No generic RWA
+entry exists — RWA support is proven via the type system + a synthetic fixture, and each future RWA
+must be a specific reviewed product (own pricing/liquidity/lockup/jurisdiction/minimum/risk).
+`evaluateInvestmentTargetTechnicalEligibility` checks technical readiness only (enabled + holding
+source + fresh price + configured allocation/suitability/minimum policy keys) and fails closed; it
+never evaluates user suitability, computes an allocation gap/amount, or generates a suggestion. No
+product-facing file imports the registry; no execution/signatures. Contribution planning, rhythm
+normalization, allocation-gap, and DCA generation all remain disabled.
