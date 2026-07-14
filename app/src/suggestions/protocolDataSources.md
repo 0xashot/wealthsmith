@@ -846,3 +846,16 @@ concentration, incident 7) → read-only approval (>= 7) → surfaced as a **"Ba
 in Real Wallet / Demo / /testing. Native keeps `isLiquidStakingToken false` / `splTokenMint
 null` / `assetSymbol "SOL"`; JitoSOL stays selected; mSOL/JupSOL/bSOL review and INF's blocked
 state are unchanged; no selector comparison; no transaction/signature path.
+
+## 14U — live market-data refresh + cache layer
+
+A server-side **refresh + last-known-good cache** for the eligible SOL staking candidates,
+distinct from approval evidence. Sources (all public, no key): **DefiLlama** `yields.llama.fi/pools`
+matched by exact verified pool UUID for JitoSOL/JupSOL/mSOL/bSOL/INF (current APY = `apy`,
+30-day = `apyMean30d`, TVL = `tvlUsd`); **Stakewiz** + **Marinade** validator history for Jupiter
+Native Stake (the 14T pipeline). Freshness: 24h window, 6h refresh interval, 24h hard-stale;
+Marinade latest-epoch window 96h. Failed refreshes preserve previous last-known-good values
+(original `fetchedAt` kept; old data marked stale, ineligible). `npm run market:refresh-staking`
+→ atomic write to git-ignored `tmp/sol-staking-market-data-cache.json`. No selector/ranking, no
+approval/risk/evidence mutation, INF stays blocked, no execution path. See
+[solStakingMarketDataRefresh.md](./solStakingMarketDataRefresh.md).

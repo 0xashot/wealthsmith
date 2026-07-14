@@ -1364,3 +1364,19 @@ WealthSmith server-side refresh job (current data every 6–12h; Marinade histor
 or every 6–12h) → schema validation → normalized cache/history (WealthSmith keeps its own
 snapshots as backup) → selector data layer → frontend. Fail closed on stale/malformed data;
 never fetch per browser user.
+
+## 14U — live SOL staking market-data refresh + cache
+
+A production **refresh + last-known-good cache** layer for the eligible SOL staking candidates,
+SEPARATE from point-in-time approval evidence (see
+[solStakingMarketDataRefresh.md](./solStakingMarketDataRefresh.md)). LSTs (JitoSOL/JupSOL/mSOL/
+bSOL/INF) refresh from the DefiLlama public yields feed by exact verified pool UUID; Jupiter
+Native Stake reuses the 14T Stakewiz + Marinade pipeline. Each candidate snapshot is marked
+complete/partial/stale/invalid/missing/source_error honestly, carries field-level source
+attribution, and fails closed. `npm run market:refresh-staking` runs the server-side job (no API
+keys, no browser fetch, atomic write to git-ignored `tmp/sol-staking-market-data-cache.json`,
+merging over the previous last-known-good cache). Approval reflects the EXISTING decision (never
+recomputed); `eligibleForFutureComparison` is data-readiness only and does not enable anything.
+No selector/ranking/winner, no risk-score or evidence mutation, no JitoSOL/Top-Pick/ordering
+change, INF stays blocked, no transaction/signature path, no product-facing UI change. Next:
+14V normalization → 14W deterministic selector.

@@ -516,6 +516,40 @@ import {
 import { buildNativeStakingReviewCandidateDisplay } from "./solNativeStakingBaselineReadOnlyApproval";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import {
+  SOL_STAKING_MARKET_DATA_MODEL_EXISTS,
+  SOL_STAKING_MARKET_DATA_MUTATES_APPROVAL_EVIDENCE,
+  SOL_STAKING_MARKET_DATA_MUTATES_RISK_SCORES,
+  SOL_STAKING_MARKET_DATA_ENABLES_SELECTOR,
+  SOL_STAKING_MARKET_DATA_RANKS_CANDIDATES,
+  SOL_STAKING_MARKET_DATA_SELECTS_WINNER,
+  SOL_STAKING_MARKET_DATA_ENABLES_TRANSACTIONS,
+  SOL_STAKING_MARKET_DATA_REQUIRES_WALLET_SIGNATURE,
+  SOL_STAKING_MARKET_CANDIDATE_IDS,
+} from "./solStakingMarketDataTypes";
+import {
+  SOL_STAKING_MARKET_CACHE_SCHEMA_VERSION,
+  SOL_STAKING_MARKET_REFRESH_INTERVAL_HOURS,
+  SOL_STAKING_MARKET_HARD_STALE_HOURS,
+  SOL_STAKING_CURRENT_MARKET_MAX_AGE_HOURS,
+  SOL_STAKING_MARKET_SOURCES_REQUIRE_API_KEY,
+  SOL_STAKING_MARKET_SOURCES_USE_RATED,
+  SOL_STAKING_MARKET_SOURCES_USE_BLOCKDAEMON,
+  getSolStakingMarketSource,
+  listSolStakingMarketSources,
+} from "./solStakingMarketDataSources";
+import {
+  parseDefiLlamaPoolMarketData,
+  buildLstMarketSnapshot,
+  buildJupiterNativeStakeMarketSnapshot,
+  buildSolStakingMarketCache,
+} from "./solStakingMarketDataRefresh";
+import {
+  validateSolStakingMarketCache,
+  mergeSolStakingMarketRefresh,
+  getSolStakingMarketSnapshot,
+  listFreshApprovedMarketSnapshots,
+} from "./solStakingMarketDataCache";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -10039,6 +10073,228 @@ export function runNativeStakingMarinadeFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+export function runSolStakingMarketRefreshFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const scriptSrc = readIf("scripts/refresh-sol-staking-market-data.mjs");
+  const gitignore = readIf(".gitignore");
+
+  const CHECKED = "2026-07-14T03:00:00Z";
+  const FRESH = "2026-07-14T02:50:00Z";        // ~10 min before CHECKED → fresh
+  const OLD = "2026-07-11T00:00:00Z";          // ~3 days before CHECKED → stale
+  const CHECKED_PLUS_1H = "2026-07-14T04:00:00Z";
+  const CHECKED_PLUS_48H = "2026-07-16T03:00:00Z";
+  const IDS = SOL_STAKING_MARKET_CANDIDATE_IDS;
+
+  const POOL = {
+    jito: "0e7d0722-9054-4907-8593-567b353c0900",
+    jupiter: "52bd72a7-9e81-4112-abb4-71673e8de9bf",
+    marinade: "b3f93865-5ec8-4662-90a0-11808e0aa2bd",
+    blazestake: "387d6732-59f0-4ae0-8a88-aba75a5cbe4a",
+    sanctum: "3075a746-bdd1-4aac-bcd5-b035abee2622",
+  };
+  const rec = (pool: string, apy: unknown, apyMean30d: unknown, tvlUsd: unknown, chain = "Solana", project?: string) =>
+    ({ pool, chain, ...(project ? { project } : {}), symbol: "X", apy, apyMean30d, tvlUsd });
+  const dllValid = { status: "success", data: [
+    rec(POOL.jito, 5.36, 5.45, 767950000),
+    rec(POOL.jupiter, 5.67, 5.6, 409170000),
+    rec(POOL.marinade, 4.75, 5.87, 184840000),
+    rec(POOL.blazestake, 5.27, 5.32, 69750000),
+    rec(POOL.sanctum, 5.84, 5.95, 152555981),
+  ] };
+
+  // Native validator fixtures (Marinade + Stakewiz real schema shapes).
+  const VA = JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const IDENT = JUPITER_NATIVE_STAKE_IDENTITY;
+  const mkEpochs = (n: number, endEpoch: number, lastEndIso: string, apyBase = 0.054) => {
+    const out: Record<string, unknown>[] = [];
+    let end = Date.parse(lastEndIso);
+    const twoDays = 2 * 86400_000;
+    for (let k = 0; k < n; k++) {
+      const start = end - twoDays;
+      out.push({ epoch: endEpoch - k, apy: apyBase - k * 0.0004, activated_stake: 12_500_000_000_000_000, commission_effective: 5, epoch_start_at: new Date(start).toISOString(), epoch_end_at: new Date(end).toISOString() });
+      end = start;
+    }
+    return out;
+  };
+  const marinadeValid = { validators: [{ vote_account: VA, identity: IDENT, epoch_stats: [{ epoch: 1001, apy: null, epoch_start_at: "2026-07-12T12:22:01Z", epoch_end_at: "2026-07-14T12:00:00Z" }, ...mkEpochs(16, 1000, "2026-07-12T12:22:01Z")] }] };
+  const marinadeInsufficient = { validators: [{ vote_account: VA, epoch_stats: mkEpochs(2, 1000, "2026-07-12T12:22:01Z") }] };
+  const stakewiz = [{ vote_identity: VA, identity: IDENT, activated_stake: 12_500_954.43, commission: 500, apy_estimate: 5.23, delinquent: false, epoch: 1001 }];
+  const stakewizDelinquent = [{ ...stakewiz[0], delinquent: true }];
+
+  const fullCacheInput = {
+    checkedAt: CHECKED,
+    defiLlama: { payload: dllValid, fetchedAt: FRESH },
+    stakewiz: { payload: stakewiz, fetchedAt: FRESH },
+    marinade: { payload: marinadeValid, fetchedAt: FRESH },
+  };
+
+  // ---- Evidence/risk immutability guards (capture before any build) ----
+  const evidenceLstBefore = getSolLstFreshEvidenceInputs().length;
+  const evidenceNativeBefore = NATIVE_SOL_STAKE_EVIDENCE_INPUTS.length;
+  const nativeScoreBefore = computeNativeStakingScore();
+
+  const fullCache = buildSolStakingMarketCache(fullCacheInput);
+
+  // 14U-A…H. Core model + separation from approval evidence.
+  {
+    const s = fullCache.candidates[IDS.jito];
+    const hasKeys = s != null && typeof s.candidateId === "string" && typeof s.fields === "object" && typeof s.status === "string" && typeof s.approvedForReadOnlyReview === "boolean" && typeof s.eligibleForFutureComparison === "boolean";
+    add("14U-A: market-data types exist", SOL_STAKING_MARKET_DATA_MODEL_EXISTS === true && hasKeys, `keys=${hasKeys}`);
+  }
+  add("14U-B: cache schema version is explicit", SOL_STAKING_MARKET_CACHE_SCHEMA_VERSION === "1.0.0", SOL_STAKING_MARKET_CACHE_SCHEMA_VERSION);
+  add("14U-C: refresh interval is explicit", SOL_STAKING_MARKET_REFRESH_INTERVAL_HOURS === 6, `${SOL_STAKING_MARKET_REFRESH_INTERVAL_HOURS}h`);
+  add("14U-D: hard-stale threshold is explicit", SOL_STAKING_MARKET_HARD_STALE_HOURS === 24 && SOL_STAKING_CURRENT_MARKET_MAX_AGE_HOURS === 24, `${SOL_STAKING_MARKET_HARD_STALE_HOURS}h`);
+  add("14U-E: live market cache is separate from approval evidence", SOL_STAKING_MARKET_DATA_MUTATES_APPROVAL_EVIDENCE === false && !("confirmedBy" in (fullCache.candidates[IDS.jito] as object)), "separate");
+  add("14U-F: live refresh does not mutate evidence arrays", getSolLstFreshEvidenceInputs().length === evidenceLstBefore && NATIVE_SOL_STAKE_EVIDENCE_INPUTS.length === evidenceNativeBefore, `lst=${evidenceLstBefore} native=${evidenceNativeBefore}`);
+  add("14U-G: live refresh does not mutate risk scores", SOL_STAKING_MARKET_DATA_MUTATES_RISK_SCORES === false && computeNativeStakingScore() === nativeScoreBefore, `score=${nativeScoreBefore}`);
+  {
+    const emptyNative = buildJupiterNativeStakeMarketSnapshot({ checkedAt: CHECKED });
+    const staleMsol = buildLstMarketSnapshot({ candidateId: IDS.marinade, defiLlamaPayload: dllValid, fetchedAt: OLD, checkedAt: CHECKED });
+    add("14U-H: live refresh does not recalculate approval", emptyNative.approvedForReadOnlyReview === true && staleMsol.approvedForReadOnlyReview === true, "approval stable");
+  }
+
+  // 14U-I…Q. Sources.
+  add("14U-I: JitoSOL source uses its existing verified pool id", getSolStakingMarketSource(IDS.jito)?.providers[0].poolId === POOL.jito, "verified");
+  add("14U-J: mSOL source uses its existing verified pool id", getSolStakingMarketSource(IDS.marinade)?.providers[0].poolId === POOL.marinade, "verified");
+  add("14U-K: JupSOL source uses its existing verified pool id", getSolStakingMarketSource(IDS.jupiter)?.providers[0].poolId === POOL.jupiter, "verified");
+  add("14U-L: bSOL source uses its existing verified pool id", getSolStakingMarketSource(IDS.blazestake)?.providers[0].poolId === POOL.blazestake, "verified");
+  {
+    const nat = getSolStakingMarketSource(IDS.jupiterNativeStake);
+    const sw = nat?.providers.find((p) => p.provider === "stakewiz");
+    const mr = nat?.providers.find((p) => p.provider === "marinade_validator_history");
+    add("14U-M: Jupiter Native Stake uses Stakewiz for current data", sw != null && sw.providesFields.includes("delegated_stake_sol") && sw.providesFields.includes("current_apy_pct"), "stakewiz");
+    add("14U-N: Jupiter Native Stake uses Marinade for 30-day history", mr != null && mr.providesFields.includes("apy_30d_pct"), "marinade");
+  }
+  {
+    const urls = listSolStakingMarketSources().flatMap((d) => d.providers.map((p) => `${p.sourceName} ${p.sourceUrl}`.toLowerCase()));
+    add("14U-O: no Rated source exists", SOL_STAKING_MARKET_SOURCES_USE_RATED === false && urls.every((u) => !u.includes("rated")), "none");
+    add("14U-P: no Blockdaemon source exists", SOL_STAKING_MARKET_SOURCES_USE_BLOCKDAEMON === false && urls.every((u) => !u.includes("blockdaemon")), "none");
+    const allNoKey = listSolStakingMarketSources().every((d) => d.providers.every((p) => p.requiresApiKey === false && p.usesBrowserFetch === false));
+    add("14U-Q: no API key is required", SOL_STAKING_MARKET_SOURCES_REQUIRE_API_KEY === false && allNoKey, "no key");
+  }
+
+  // 14U-R…Z. LST parsing.
+  const pJito = parseDefiLlamaPoolMarketData(dllValid, { expectedPoolId: POOL.jito, expectedChain: "Solana" });
+  add("14U-R: exact pool/candidate match is required", pJito.matched === true && pJito.currentApy.value === 5.36, `matched=${pJito.matched}`);
+  add("14U-S: another pool is rejected", parseDefiLlamaPoolMarketData({ data: [rec(POOL.marinade, 4.75, 5.87, 1)] }, { expectedPoolId: POOL.jito }).blockers.includes("pool_id_mismatch"), "rejected");
+  add("14U-T: wrong chain is rejected when chain metadata exists", parseDefiLlamaPoolMarketData({ data: [rec(POOL.jito, 5, 5, 1, "Ethereum")] }, { expectedPoolId: POOL.jito, expectedChain: "Solana" }).blockers.includes("chain_mismatch"), "rejected");
+  add("14U-U: wrong project/protocol is rejected when metadata exists", parseDefiLlamaPoolMarketData({ data: [rec(POOL.jito, 5, 5, 1, "Solana", "marinade-finance")] }, { expectedPoolId: POOL.jito, expectedProject: "jito" }).blockers.includes("protocol_mismatch"), "rejected");
+  add("14U-V: current APY is parsed deterministically", pJito.currentApy.value === 5.36 && parseDefiLlamaPoolMarketData(dllValid, { expectedPoolId: POOL.jito }).currentApy.value === 5.36, `apy=${pJito.currentApy.value}`);
+  add("14U-W: 30-day APY is parsed deterministically", pJito.apy30d.value === 5.45, `apy30d=${pJito.apy30d.value}`);
+  add("14U-X: TVL is parsed deterministically", pJito.tvl.value === 767950000, `tvl=${pJito.tvl.value}`);
+  {
+    const neg = parseDefiLlamaPoolMarketData({ data: [rec(POOL.jito, -1, 5, 1)] }, { expectedPoolId: POOL.jito });
+    const nonFinite = parseDefiLlamaPoolMarketData({ data: [rec(POOL.jito, "abc", 5, 1)] }, { expectedPoolId: POOL.jito });
+    add("14U-Y: negative or non-finite values are rejected", neg.currentApy.valid === false && neg.blockers.includes("field_invalid") && nonFinite.currentApy.valid === false, "rejected");
+  }
+  {
+    const missing30d = buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: { data: [rec(POOL.jito, 5.36, null, 767950000)] }, fetchedAt: FRESH, checkedAt: CHECKED });
+    add("14U-Z: missing required APY produces partial status", missing30d.status === "partial" && missing30d.missingFields.includes("apy_30d_pct"), `status=${missing30d.status}`);
+  }
+
+  // 14U-AA…AH. Native parsing.
+  const natSnap = buildJupiterNativeStakeMarketSnapshot({ stakewizPayload: stakewiz, stakewizFetchedAt: FRESH, marinadePayload: marinadeValid, marinadeFetchedAt: FRESH, checkedAt: CHECKED });
+  add("14U-AA: exact Jupiter vote account remains required", natSnap.status === "complete" && buildJupiterNativeStakeMarketSnapshot({ stakewizPayload: [{ vote_identity: "other", activated_stake: 1, commission: 5, apy_estimate: 5 }], stakewizFetchedAt: FRESH, marinadePayload: marinadeValid, marinadeFetchedAt: FRESH, checkedAt: CHECKED }).status !== "complete", `status=${natSnap.status}`);
+  add("14U-AB: native delegated stake is present", natSnap.fields.delegatedStakeSol?.value === 12_500_954.43, `stake=${natSnap.fields.delegatedStakeSol?.value}`);
+  add("14U-AC: native current APY is present", natSnap.fields.currentApyPct?.value === 5.23, `apy=${natSnap.fields.currentApyPct?.value}`);
+  add("14U-AD: native 30-day APY is present", typeof natSnap.fields.apy30dPct?.value === "number", `apy30d=${natSnap.fields.apy30dPct?.value}`);
+  add("14U-AE: native commission is present", natSnap.fields.validatorCommissionPct?.value === 5, `comm=${natSnap.fields.validatorCommissionPct?.value}`);
+  add("14U-AF: native delinquency is present", natSnap.fields.validatorDelinquent?.value === false, `delinquent=${natSnap.fields.validatorDelinquent?.value}`);
+  {
+    const delinq = buildJupiterNativeStakeMarketSnapshot({ stakewizPayload: stakewizDelinquent, stakewizFetchedAt: FRESH, marinadePayload: marinadeValid, marinadeFetchedAt: FRESH, checkedAt: CHECKED });
+    add("14U-AG: delinquent native validator becomes ineligible", delinq.eligibleForFutureComparison === false && delinq.blockers.includes("validator_delinquent"), "ineligible");
+  }
+  {
+    const insuff = buildJupiterNativeStakeMarketSnapshot({ stakewizPayload: stakewiz, stakewizFetchedAt: FRESH, marinadePayload: marinadeInsufficient, marinadeFetchedAt: FRESH, checkedAt: CHECKED });
+    add("14U-AH: insufficient Marinade history becomes partial", insuff.status === "partial" && insuff.missingFields.includes("apy_30d_pct"), `status=${insuff.status}`);
+  }
+
+  // 14U-AI…AO. Freshness.
+  const jitoFresh = buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: dllValid, fetchedAt: FRESH, checkedAt: CHECKED });
+  add("14U-AI: fresh complete data has complete status", jitoFresh.status === "complete", `status=${jitoFresh.status}`);
+  add("14U-AJ: missing required field has partial status", buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: { data: [rec(POOL.jito, 5.36, 5.45, null)] }, fetchedAt: FRESH, checkedAt: CHECKED }).status === "partial", "partial");
+  add("14U-AK: old data has stale status", buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: dllValid, fetchedAt: OLD, checkedAt: CHECKED }).status === "stale", "stale");
+  add("14U-AL: invalid data has invalid status", buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: { data: [rec(POOL.jito, -1, 5.45, 767950000)] }, fetchedAt: FRESH, checkedAt: CHECKED }).status === "invalid", "invalid");
+  add("14U-AM: fetch failure has source_error status", buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: undefined, checkedAt: CHECKED }).status === "source_error", "source_error");
+  add("14U-AN: freshness uses explicit checkedAt", buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: dllValid, fetchedAt: FRESH, checkedAt: CHECKED }).status === "complete" && buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: dllValid, fetchedAt: FRESH, checkedAt: CHECKED_PLUS_48H }).status === "stale", "explicit");
+  add("14U-AO: fixture behavior does not depend on system clock", JSON.stringify(buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: dllValid, fetchedAt: FRESH, checkedAt: CHECKED })) === JSON.stringify(buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: dllValid, fetchedAt: FRESH, checkedAt: CHECKED })), "deterministic");
+
+  // 14U-AP…AY. Cache behavior.
+  const nativeOnlyCache = buildSolStakingMarketCache({ checkedAt: CHECKED, defiLlama: undefined, stakewiz: { payload: stakewiz, fetchedAt: FRESH }, marinade: { payload: marinadeValid, fetchedAt: FRESH } });
+  add("14U-AP: candidate refreshes are independent", nativeOnlyCache.candidates[IDS.jupiterNativeStake].status === "complete" && nativeOnlyCache.candidates[IDS.jito].status === "source_error", "independent");
+  add("14U-AQ: one candidate failure does not erase successful candidates", nativeOnlyCache.successfulCandidateIds.includes(IDS.jupiterNativeStake) && nativeOnlyCache.candidates[IDS.jupiterNativeStake].fields.currentApyPct?.value === 5.23, "preserved");
+  const attemptFailed = buildSolStakingMarketCache({ checkedAt: CHECKED_PLUS_1H });
+  const merged1h = mergeSolStakingMarketRefresh(fullCache, attemptFailed, { checkedAt: CHECKED_PLUS_1H });
+  add("14U-AR: failed refresh preserves previous last-known-good values", merged1h.candidates[IDS.jito].fields.currentApyPct?.value === 5.36 && merged1h.failedCandidateIds.includes(IDS.jito), "preserved");
+  add("14U-AS: preserved last-known-good fetchedAt is not changed", merged1h.candidates[IDS.jito].fields.currentApyPct?.fetchedAt === FRESH && merged1h.candidates[IDS.jito].fetchedAt === FRESH, `fetchedAt=${merged1h.candidates[IDS.jito].fetchedAt}`);
+  const merged48h = mergeSolStakingMarketRefresh(fullCache, buildSolStakingMarketCache({ checkedAt: CHECKED_PLUS_48H }), { checkedAt: CHECKED_PLUS_48H });
+  add("14U-AT: old last-known-good data is marked stale", merged48h.candidates[IDS.jito].status === "stale" && getSolStakingMarketSnapshot(fullCache, IDS.jito, CHECKED_PLUS_48H)?.status === "stale", `status=${merged48h.candidates[IDS.jito].status}`);
+  add("14U-AU: stale values are ineligible for future comparison", merged48h.candidates[IDS.jito].eligibleForFutureComparison === false, "ineligible");
+  add("14U-AV: invalid cache schema fails closed", validateSolStakingMarketCache({ schemaVersion: "0.0.0", candidates: {} }).valid === false && validateSolStakingMarketCache(fullCache).valid === true, "fail-closed");
+  {
+    const withUnknown = { ...fullCache, candidates: { ...fullCache.candidates, not_a_real_protocol: { ...fullCache.candidates[IDS.jito], candidateId: "not_a_real_protocol" } } };
+    const v = validateSolStakingMarketCache(withUnknown);
+    add("14U-AW: unknown candidates do not enter the canonical set", v.valid === true && v.ignoredCandidateIds.includes("not_a_real_protocol") && v.cache?.candidates["not_a_real_protocol"] === undefined, "ignored");
+  }
+  add("14U-AX: candidate ordering remains deterministic", JSON.stringify(Object.keys(fullCache.candidates)) === JSON.stringify([IDS.jito, IDS.jupiter, IDS.marinade, IDS.blazestake, IDS.jupiterNativeStake, IDS.sanctum]), Object.keys(fullCache.candidates).join(","));
+  {
+    const listed = listFreshApprovedMarketSnapshots(fullCache, CHECKED).map((s) => s.candidateId);
+    const canonicalApproved = [IDS.jito, IDS.jupiter, IDS.marinade, IDS.blazestake, IDS.jupiterNativeStake];
+    add("14U-AY: fresh-approved listing does not rank candidates", JSON.stringify(listed) === JSON.stringify(canonicalApproved) && !listed.includes(IDS.sanctum), listed.join(","));
+  }
+
+  // 14U-AZ…BH. Approval invariants.
+  add("14U-AZ: JitoSOL existing selected behavior is unchanged", fullCache.candidates[IDS.jito].approvedForReadOnlyReview === true && fullCache.candidates[IDS.jito].selectedByProtocolLogic === false && fullCache.candidates[IDS.jito].currentWinner === false, "unchanged");
+  add("14U-BA: mSOL remains approved for read-only review", fullCache.candidates[IDS.marinade].approvedForReadOnlyReview === true, "approved");
+  add("14U-BB: JupSOL remains approved for read-only review", fullCache.candidates[IDS.jupiter].approvedForReadOnlyReview === true, "approved");
+  add("14U-BC: bSOL remains approved for read-only review", fullCache.candidates[IDS.blazestake].approvedForReadOnlyReview === true, "approved");
+  add("14U-BD: Jupiter Native Stake remains approved as a baseline", fullCache.candidates[IDS.jupiterNativeStake].approvedForReadOnlyReview === true, "approved");
+  add("14U-BE: INF remains blocked", fullCache.candidates[IDS.sanctum].approvedForReadOnlyReview === false && fullCache.candidates[IDS.sanctum].blockedByRiskApproval === true, "blocked");
+  add("14U-BF: INF is never eligible for future comparison", fullCache.candidates[IDS.sanctum].eligibleForFutureComparison === false && fullCache.candidates[IDS.sanctum].status === "complete", "never eligible");
+  {
+    const partialMsol = buildLstMarketSnapshot({ candidateId: IDS.marinade, defiLlamaPayload: { data: [rec(POOL.marinade, 4.75, null, 184840000)] }, fetchedAt: FRESH, checkedAt: CHECKED });
+    add("14U-BG: incomplete approved candidate is temporarily ineligible without losing approval", partialMsol.approvedForReadOnlyReview === true && partialMsol.eligibleForFutureComparison === false && partialMsol.status === "partial", "temp ineligible");
+    const staleMsol = buildLstMarketSnapshot({ candidateId: IDS.marinade, defiLlamaPayload: dllValid, fetchedAt: OLD, checkedAt: CHECKED });
+    add("14U-BH: stale approved candidate is temporarily ineligible without losing approval", staleMsol.approvedForReadOnlyReview === true && staleMsol.eligibleForFutureComparison === false && staleMsol.status === "stale", "temp ineligible");
+  }
+
+  // 14U-BI…BQ. Selector + execution invariants.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const engineRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stakingSug = engineRun.suggestions.find((s) => s.category === "staking");
+  const cacheJson = JSON.stringify(fullCache).toLowerCase();
+  add("14U-BI: no selector score is calculated", SOL_STAKING_MARKET_DATA_ENABLES_SELECTOR === false && !cacheJson.includes("selectorscore") && !cacheJson.includes("\"score\""), "none");
+  add("14U-BJ: no ranking is calculated", SOL_STAKING_MARKET_DATA_RANKS_CANDIDATES === false && !cacheJson.includes("\"rank\"") && !cacheJson.includes("rankedprotocolids"), "none");
+  add("14U-BK: no current winner is assigned", SOL_STAKING_MARKET_DATA_SELECTS_WINNER === false && Object.values(fullCache.candidates).every((s) => s.currentWinner === false), "none");
+  add("14U-BL: no selectedProtocolId is changed", stakingSug?.protocolSelection?.selectedProtocolId === "jito", `id=${stakingSug?.protocolSelection?.selectedProtocolId}`);
+  add("14U-BM: multi-protocol selection remains disabled", SOL_STAKING_MARKET_DATA_SELECTS_WINNER === false && engineRun.suggestions.filter((s) => s.category === "staking").length === 1, "disabled");
+  add("14U-BN: Top Pick remains unchanged", engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => s.protocolSelection?.selectedProtocolName !== "Jupiter Native Stake"), "unchanged");
+  add("14U-BO: engine ordering remains unchanged", engineRun.suggestions.every((s) => s.id !== "jupiter_native_stake" && !s.id.startsWith("sol_staking_market")), "unchanged");
+  {
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "stake(", "delegate(", "withdraw(", "swap(", "deposit(", "approve(", "execute("];
+    add("14U-BP: no transaction path exists", tokens.filter((t) => cacheJson.includes(t)).length === 0 && SOL_STAKING_MARKET_DATA_ENABLES_TRANSACTIONS === false, "none");
+    add("14U-BQ: no signature path exists", SOL_STAKING_MARKET_DATA_REQUIRES_WALLET_SIGNATURE === false && Object.values(fullCache.candidates).every((s) => s.walletSignatureRequired === false), "none");
+  }
+
+  // 14U-BR…BZ. Script.
+  add("14U-BR: market:refresh-staking package script exists", /"market:refresh-staking"\s*:\s*"node scripts\/refresh-sol-staking-market-data\.mjs"/.test(readIf("package.json")), "exists");
+  add("14U-BS: refresh script requires no secret", scriptSrc.length > 0 && scriptSrc.includes("FORBIDDEN_SECRETS") && !scriptSrc.includes("Authorization") && !/headers:\s*{[^}]*api[_-]?key/i.test(scriptSrc), "no secret");
+  add("14U-BT: refresh script uses server-side fetch only", scriptSrc.includes("AbortController") && !scriptSrc.includes("window.") && !scriptSrc.includes("document."), "server-side");
+  add("14U-BU: refresh script has timeouts", scriptSrc.includes("FETCH_TIMEOUT_MS") && scriptSrc.includes("AbortController"), "timeouts");
+  add("14U-BV: refresh script handles non-200 responses", scriptSrc.includes("res.ok") && scriptSrc.includes("HTTP "), "handled");
+  add("14U-BW: refresh script handles invalid JSON", scriptSrc.includes("invalid_json"), "handled");
+  add("14U-BX: refresh script writes sanitized cache output", scriptSrc.includes("sanitizeSource") && scriptSrc.includes("sourceResponses"), "sanitized");
+  add("14U-BY: refresh script uses atomic output replacement", scriptSrc.includes("renameSync") && scriptSrc.includes(".tmp"), "atomic");
+  add("14U-BZ: tmp cache output remains ignored by Git", /(^|\n)tmp\/?(\n|$)/.test(gitignore), "ignored");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -10109,6 +10365,7 @@ export function printFixtureResults(): void {
     ...runSolNativeStakingBaselineFixtureChecks(),
     ...runNativeValidatorMarketDataFixtureChecks(),
     ...runNativeStakingMarinadeFixtureChecks(),
+    ...runSolStakingMarketRefreshFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
