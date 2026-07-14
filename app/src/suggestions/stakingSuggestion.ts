@@ -35,6 +35,7 @@ import {
 import { buildMsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingMsolReadOnlyApproval";
 import { buildJupsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingJupsolReadOnlyApproval";
 import { buildBsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingBsolReadOnlyApproval";
+import { buildNativeStakingReviewCandidateDisplay } from "./solNativeStakingBaselineReadOnlyApproval";
 import type { ProtocolSelection, ReviewSafetyNote, SuggestionReviewDetails } from "./engineTypes";
 
 /** Stable suggestion ID. */
@@ -152,6 +153,9 @@ export function deriveStakingSuggestion(
         buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() }),
         buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() }),
         buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() }),
+        // Step 14T — Jupiter Native Stake as a "Baseline to review" (not an LST; native
+        // stake account). Review-only; never selected/winner; no execution path.
+        buildNativeStakingReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() }),
       ];
       // Read-only recommendation copy — never implies a transaction/signature.
       safetyNotesOverride = [

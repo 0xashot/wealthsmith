@@ -103,13 +103,13 @@ validators endpoint, Solana Compass API), feeds the raw payloads through the bui
 (unblocking the deterministic score → approval → UI-exposure path); or (b) proceed to a live
 market-data refresh layer for the already-approved LST candidates.
 
-## Rated provider (Step 14S)
+## Marinade + Stakewiz providers (Step 14T)
 
-The `NativeValidatorApyProvider` union now includes **`rated`**, and this module adds
-`parseNativeValidatorApyFromRatedSummary(payload, options?)` — the parser for Rated's
-single-validator summary (validator-specific 30-day **delegator** APY, `window=30d`). The
-`NativeValidatorMarketData` type gained `currentApySource` + `apy30dSource` so a package can
-carry two different APY providers (Stakewiz current APY + Rated 30-day APY), and
-`convertNativeValidatorMarketDataToEvidenceInputs` now attributes each of the 3 records to its
-correct per-field source. The Stakewiz+Rated combine builder + the server-side fetch script
-live in [nativeValidatorRatedData.md](./nativeValidatorRatedData.md).
+The `NativeValidatorApyProvider` union is `stakewiz | solana_compass | validators_app |
+marinade`. This module adds `parseStakewizValidatorSummary` (current stake / APY / commission /
+delinquency / epoch), and the `NativeValidatorMarketData` type carries `currentApySource` and
+`apy30dSource` so a package can source current data from Stakewiz and 30-day history from
+Marinade. `convertNativeValidatorMarketDataToEvidenceInputs` attributes each of the three
+records to its correct per-field source. The Marinade validator-history parser and the
+Stakewiz+Marinade combine builder live in
+[nativeValidatorMarinadeData.md](./nativeValidatorMarinadeData.md).

@@ -483,11 +483,21 @@ export interface ProtocolReviewCandidateDisplay {
   protocolName: string;
   assetSymbol: string;
 
-  roleLabel: "Alternative protocol to review";
+  roleLabel: "Alternative protocol to review" | "Baseline to review";
   reviewState: "approved_for_review_exposure" | "stale_evidence" | "missing_evidence";
 
   statusLabel: string;
   sourceStatusLabel?: string;
+
+  // Native SOL staking baseline (Step 14T) — set only for the non-LST baseline candidate.
+  // LST candidates leave these undefined, so their display is unchanged.
+  candidateType?: "native_staking";
+  isLiquidStakingToken?: boolean;
+  notLstLabel?: string;
+  nativeStakeAccountLabel?: string;
+  delegatedStakeSol?: number;
+  validatorCommissionPct?: number;
+  apy30dMethodology?: string;
 
   marketData?: {
     tvlUsd?: number;

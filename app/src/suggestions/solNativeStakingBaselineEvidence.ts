@@ -199,11 +199,17 @@ const COMMON = {
 /* ------------------------------------------------------------------ *
  * Fresh evidence inputs.
  *
- * 7 of 10 categories are recorded from authoritative public sources. The 3 MARKET
- * categories (delegated_stake_or_tvl, current_apy, apy_30d) are intentionally OMITTED:
- * Jupiter's docs do not publish an exact native-staking APY / 30-day APY / delegated
- * stake, and the validator stats page is JS-rendered (not reliably verifiable). They are
- * left MISSING rather than invented or reused from JupSOL — so the baseline stays blocked.
+ * ALL 10 categories are recorded from authoritative public sources. Mechanics/fees/security
+ * (7 categories) come from the Jupiter Stake FAQ + the Solana native-staking model. The 3
+ * MARKET categories (delegated_stake_or_tvl, current_apy, apy_30d) come from PUBLIC,
+ * NO-API-KEY validator data (Step 14T):
+ *   • delegated_stake_or_tvl + current_apy ← Stakewiz (api.stakewiz.com/validator/{vote})
+ *   • apy_30d ← Marinade validators API (per-epoch validator APY history), computed as a
+ *     duration-weighted 30-day average of completed per-epoch delegator APY observations.
+ * All three are validator-specific (Jupiter vote account CatzoSMUk…, identity JUPiTERr…),
+ * NOT JupSOL, NOT mSOL, NOT network-wide. Values reflect the epoch-1001 Stakewiz snapshot and
+ * the Marinade history through completed epoch 1000 (ended 2026-07-12), stable as of the
+ * 2026-07-14T02:45Z review snapshot. (Rated was removed — it required a paid subscription.)
  * ------------------------------------------------------------------ */
 export const NATIVE_SOL_STAKE_EVIDENCE_INPUTS: NativeSolStakeEvidenceInput[] = [
   {
@@ -268,6 +274,43 @@ export const NATIVE_SOL_STAKE_EVIDENCE_INPUTS: NativeSolStakeEvidenceInput[] = [
     sourceName: "Jupiter Documentation / Solana staking model",
     sourceUrl: "https://docs.jup.ag/user-docs/earn/stake-sol/faq.md",
     notes: ["Point-in-time finding, NOT a clean-history claim. No independent incident obtained; native staking relies on the base Solana staking program."],
+  },
+  // --- Step 14T market data (public, no API key) ---
+  {
+    ...COMMON,
+    category: "delegated_stake_or_tvl",
+    value: 12500954.43,
+    unit: "sol",
+    sourceName: "Stakewiz — Jupiter validator (activated stake)",
+    sourceUrl: "https://api.stakewiz.com/validator/CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb",
+    notes: [
+      "Validator-specific Jupiter Native Stake data. Activated (delegated) stake for the Jupiter validator (vote account CatzoSMUk…, identity JUPiTERr…), epoch-1001 Stakewiz snapshot. Cross-checked vs Marinade validators API (~12,505,570 SOL, <0.1% diff).",
+      "Not JupSOL APY or TVL. Not mSOL APY. Not network-wide Solana APY.",
+    ],
+  },
+  {
+    ...COMMON,
+    category: "current_apy",
+    value: 5.23,
+    unit: "pct",
+    sourceName: "Stakewiz — Jupiter validator (apy_estimate)",
+    sourceUrl: "https://api.stakewiz.com/validator/CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb",
+    notes: [
+      "Validator-specific Jupiter Native Stake data. Current APY = Stakewiz apy_estimate for the Jupiter validator (delegator-facing). Commission 5%, not delinquent, epoch 1001.",
+      "Not JupSOL APY or TVL. Not mSOL APY. Not network-wide Solana APY.",
+    ],
+  },
+  {
+    ...COMMON,
+    category: "apy_30d",
+    value: 5.4,
+    unit: "pct",
+    sourceName: "Marinade validators API — Jupiter validator epoch APY history",
+    sourceUrl: "https://validators-api.marinade.finance/validators?query_vote_accounts=CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb",
+    notes: [
+      "Validator-specific Jupiter Native Stake data. Methodology: DURATION-WEIGHTED 30-DAY AVERAGE of Marinade completed per-epoch validator APY observations (delegator-facing, net of validator commission). Window: completed epochs 986-1000, coverage 30.13 days (2026-06-12 → 2026-07-12); 15 in-window epochs; latest completed epoch 1000 (~38h before the review snapshot). It is a 30-day AVERAGE of per-epoch realized APY, not a single realized 30-day yield figure. Independently cross-checked against Trillium (epoch 1000: 5.2523% vs 5.2462%).",
+      "Not JupSOL APY or TVL. Not mSOL APY. Not network-wide Solana APY.",
+    ],
   },
 ];
 

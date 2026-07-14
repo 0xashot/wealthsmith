@@ -426,11 +426,17 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
                     {c.assetSymbol ? ` · ${c.assetSymbol}` : ""}
                   </p>
                   <p className="review-modal__alt-role">{c.roleLabel} — {c.statusLabel}</p>
+                  {c.candidateType === "native_staking" && (c.notLstLabel || c.nativeStakeAccountLabel) && (
+                    <p className="review-modal__alt-note">{[c.notLstLabel, c.nativeStakeAccountLabel].filter(Boolean).join(" · ")}</p>
+                  )}
                   {typeof c.riskScore === "number" && (
                     <p className="review-modal__alt-score">Risk score: {c.riskScore.toFixed(2)} / 10 (assigned for review)</p>
                   )}
                   {c.marketData && (
                     <dl className="review-modal__market">
+                      {typeof c.delegatedStakeSol === "number" && (
+                        <div className="review-modal__market-row"><dt>Delegated stake</dt><dd>{`${c.delegatedStakeSol.toLocaleString("en-US", { maximumFractionDigits: 2 })} SOL`}</dd></div>
+                      )}
                       {typeof c.marketData.tvlUsd === "number" && (
                         <div className="review-modal__market-row"><dt>TVL</dt><dd>{`$${(c.marketData.tvlUsd / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 2 })}M`}</dd></div>
                       )}
@@ -449,7 +455,13 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
                       {typeof c.mechanics?.annualManagementFeePct === "number" && (
                         <div className="review-modal__market-row"><dt>Annual management fee</dt><dd>{`${c.mechanics.annualManagementFeePct}% on rewards`}</dd></div>
                       )}
+                      {typeof c.validatorCommissionPct === "number" && (
+                        <div className="review-modal__market-row"><dt>Validator commission</dt><dd>{`${c.validatorCommissionPct}%`}</dd></div>
+                      )}
                     </dl>
+                  )}
+                  {c.apy30dMethodology && (
+                    <p className="review-modal__alt-note">{c.apy30dMethodology}</p>
                   )}
                   {c.evidence && (c.evidence.auditSecurity || c.evidence.operationalRisk || c.evidence.incidentReview) && (
                     <ul className="review-modal__bullets">

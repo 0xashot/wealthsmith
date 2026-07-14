@@ -1,19 +1,20 @@
 /**
- * solNativeStakingBaselineReadOnlyApproval — Step 14P. The approval gate for the Native
- * SOL / Jupiter Native Stake BASELINE candidate.
+ * solNativeStakingBaselineReadOnlyApproval — Step 14P/14T. The approval gate for the Native
+ * SOL / Jupiter Native Stake BASELINE candidate, and the "Baseline to review" display.
  *
- * OUTCOME IN 14P: BLOCKED (incomplete evidence). Native-staking evidence is missing its
- * three market categories, so `readyForRiskGate` is false and NO risk score is assigned.
- * With no score there is nothing to compare against the 7.0 threshold, so the approval gate
- * cannot pass: `getNativeStakingBaselineReadOnlyApprovalDecision()` returns `null`, the
- * baseline is NOT surfaced in Real Wallet / Demo / the approved review section, and it is
- * NOT added to any read-only-review-approved list. Only a clearly-labelled, internal
- * `/testing` BLOCKED evidence view is produced (`getNativeStakingBaselineBlockedReviewSummary`).
+ * OUTCOME AT 14T: APPROVED. The three market categories are now recorded from public
+ * validator data (Stakewiz stake/current APY + Marinade 30-day APY), so the evidence is
+ * 10/10, fresh, and `readyForRiskGate`; the deterministic risk score is 7.10 (>= the 7.0
+ * threshold). `getNativeStakingBaselineReadOnlyApprovalDecision()` returns an active
+ * decision, and `buildNativeStakingReviewCandidateDisplay()` renders it as a "Baseline to
+ * review" alongside the LST review candidates. When the market evidence goes stale the
+ * decision is `null` and the display falls back to the internal blocked view.
  *
- * It never approves selection, replaces JitoSOL, enables the disabled selector comparison,
- * updates live recommendations, or enables transactions/signatures. This is a native stake
- * account baseline, NOT an LST and NOT JupSOL.
+ * It never selects native staking, replaces JitoSOL, makes it the winner, enables the
+ * disabled selector comparison, updates live recommendations, or enables transactions/
+ * signatures. This is a native stake account baseline, NOT an LST and NOT JupSOL.
  */
+import type { ProtocolReviewCandidateDisplay } from "./engineTypes";
 import {
   getNativeStakingBaselineRiskScoreAssignment,
   evaluateNativeStakingBaselineRiskScoreAssignmentStatus,
@@ -28,8 +29,8 @@ import {
 } from "./solNativeStakingBaselineEvidence";
 
 export const SOL_NATIVE_STAKING_BASELINE_READ_ONLY_APPROVAL_EXISTS = true;
-/** No score is assigned (evidence incomplete), so review exposure is NOT approved. */
-export const SOL_NATIVE_STAKING_BASELINE_READ_ONLY_APPROVAL_APPROVES_REVIEW_EXPOSURE = false;
+/** With complete+fresh evidence and score 7.10 (>= 7), review exposure is approved (14T). */
+export const SOL_NATIVE_STAKING_BASELINE_READ_ONLY_APPROVAL_APPROVES_REVIEW_EXPOSURE = true;
 export const SOL_NATIVE_STAKING_BASELINE_READ_ONLY_APPROVAL_SELECTS_PROTOCOL_WINNER = false;
 export const SOL_NATIVE_STAKING_BASELINE_READ_ONLY_APPROVAL_ENABLES_SELECTOR_COMPARISON = false;
 export const SOL_NATIVE_STAKING_BASELINE_READ_ONLY_APPROVAL_UPDATES_LIVE_RECOMMENDATIONS = false;
@@ -276,3 +277,73 @@ export function getNativeStakingBaselineBlockedReviewSummary(options: NativeStak
 
 /** Void reference so the identity constant is available to consumers/tests. */
 export const NATIVE_STAKING_BASELINE_APPROVAL_IDENTITY = NATIVE_STAKING_BASELINE_IDENTITY;
+
+/* ------------------------------------------------------------------ *
+ * Product-facing "Baseline to review" DISPLAY (Step 14T UI exposure).
+ * ------------------------------------------------------------------ */
+const NATIVE_APY30D_METHODOLOGY_LABEL =
+  "30-day APY = duration-weighted average of Marinade per-epoch validator APY (delegator-facing, net of validator commission)";
+
+/**
+ * The read-only Jupiter Native Stake "Baseline to review" display for the UI. When the
+ * evidence is complete/fresh and the review approval is active (score 7.10 >= 7), it renders
+ * as `approved_for_review_exposure` with the validator-specific market/mechanics/evidence, the
+ * not-an-LST / native-stake-account labels, delegated stake (SOL), validator commission, and
+ * the 30-day APY methodology; when stale it renders as `stale_evidence` ("Evidence needs
+ * refresh") without presenting current data. REVIEW-ONLY: `selectedByProtocolLogic` /
+ * `currentWinner` / `transactionsEnabled` / `walletSignatureRequired` are always false.
+ */
+export function buildNativeStakingReviewCandidateDisplay(options: NativeStakingEvidenceOptions = {}): ProtocolReviewCandidateDisplay {
+  const checkedAt = options.checkedAt ?? new Date().toISOString();
+  const decision = getNativeStakingBaselineReadOnlyApprovalDecision({ checkedAt });
+  const rows = getNativeSolStakeEvidenceRecords({ checkedAt });
+  const val = (cat: NativeSolStakeEvidenceCategory) => rows.find((r) => r.category === cat)?.value;
+
+  const common = {
+    protocolId: "jupiter_native_stake",
+    protocolName: "Jupiter Native Stake",
+    assetSymbol: "SOL",
+    roleLabel: "Baseline to review" as const,
+    candidateType: "native_staking" as const,
+    isLiquidStakingToken: false,
+    notLstLabel: "Not a liquid staking token",
+    nativeStakeAccountLabel: "Native SOL stake-account based",
+    riskScoreStatus: "assigned_for_review" as const,
+    approvalStatus: "approved_for_read_only_review" as const,
+    approvedForReadOnlyRecommendation: true as const,
+    approvedForReviewExposure: true as const,
+    selectedByProtocolLogic: false as const,
+    currentWinner: false as const,
+    transactionsEnabled: false as const,
+    walletSignatureRequired: false as const,
+    externalReviewLink: { label: "Open Jupiter staking page", url: "https://jup.ag/stake", opensNewTab: true as const },
+  };
+
+  if (!decision) {
+    return { ...common, reviewState: rows.length > 0 ? "stale_evidence" : "missing_evidence", statusLabel: rows.length > 0 ? "Evidence needs refresh" : "Evidence missing" };
+  }
+
+  return {
+    ...common,
+    reviewState: "approved_for_review_exposure",
+    statusLabel: "Cleared for read-only review",
+    sourceStatusLabel: "Evidence complete",
+    ...(num(val("delegated_stake_or_tvl")) != null ? { delegatedStakeSol: num(val("delegated_stake_or_tvl")) } : {}),
+    ...(num(val("validator_commission")) != null ? { validatorCommissionPct: num(val("validator_commission")) } : {}),
+    apy30dMethodology: NATIVE_APY30D_METHODOLOGY_LABEL,
+    marketData: {
+      ...(num(val("current_apy")) != null ? { apyPct: num(val("current_apy")) } : {}),
+      ...(num(val("apy_30d")) != null ? { apy30dPct: num(val("apy_30d")) } : {}),
+    },
+    mechanics: {
+      ...(str(val("unstake_time")) != null ? { unstakeTiming: str(val("unstake_time")) } : {}),
+      ...(num(val("annual_management_fee")) != null ? { annualManagementFeePct: num(val("annual_management_fee")) } : {}),
+    },
+    evidence: {
+      ...(str(val("security_model")) != null ? { auditSecurity: str(val("security_model")) } : {}),
+      ...(str(val("operational_risk")) != null ? { operationalRisk: str(val("operational_risk")) } : {}),
+      ...(str(val("incident_review")) != null ? { incidentReview: str(val("incident_review")) } : {}),
+    },
+    riskScore: decision.basis.riskScore,
+  };
+}

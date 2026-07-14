@@ -24,13 +24,15 @@ import { getJitoSolExternalStakingLink } from "./jitoSolBetaActivation";
 import { buildMsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingMsolReadOnlyApproval";
 import { buildJupsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingJupsolReadOnlyApproval";
 import { buildBsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingBsolReadOnlyApproval";
+import { buildNativeStakingReviewCandidateDisplay } from "./solNativeStakingBaselineReadOnlyApproval";
 
 /**
- * Deterministic "now" for the demo so the mSOL, JupSOL, and bSOL review evidence all read
- * as fresh. Set after bSOL's confirmedAt (2026-07-13T20:15Z) and within 24h of mSOL's
- * earliest record so all three alternatives are approved-for-review in the demo.
+ * Deterministic "now" for the demo so the mSOL, JupSOL, bSOL, and Jupiter Native Stake review
+ * evidence all read as fresh. Set just after the native-staking market snapshot
+ * (2026-07-14T02:45Z) and within 24h of mSOL's earliest record so all four are
+ * approved-for-review in the demo.
  */
-const DEMO_REVIEW_CHECKED_AT = "2026-07-13T20:30:00Z";
+const DEMO_REVIEW_CHECKED_AT = "2026-07-14T02:50:00Z";
 
 export const DEMO_EXACT_SOL_STAKING_SCENARIO_EXISTS = true;
 export const DEMO_EXACT_SOL_STAKING_SCENARIO_DEMO_ONLY = true;
@@ -208,6 +210,7 @@ export function getDemoExactSolStakingReviewDetails(): SuggestionReviewDetails {
       buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: DEMO_REVIEW_CHECKED_AT }),
       buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: DEMO_REVIEW_CHECKED_AT }),
       buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: DEMO_REVIEW_CHECKED_AT }),
+      buildNativeStakingReviewCandidateDisplay({ checkedAt: DEMO_REVIEW_CHECKED_AT }),
     ],
     limitations: [
       { kind: "protocol_not_selected", text: s.limitations[0] },

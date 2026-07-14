@@ -65,6 +65,36 @@ export function computeNativeStakingWeightedScore(dimensionScores: Record<Protoc
   return round2(weighted);
 }
 
+/* ------------------------------------------------------------------ *
+ * Deterministic dimension scores (0–10) for Jupiter Native Stake, each tied to recorded
+ * evidence. Mapped onto the shared rubric IDs (labels via getNativeStakingRubricDimensions).
+ * ------------------------------------------------------------------ */
+const NATIVE_STAKING_DIMENSION_SCORES: Record<ProtocolRiskRubricDimensionId, number> = {
+  // Security / custody / protocol model: non-custodial native stake account governed by the
+  // base Solana stake program (no LST token-contract exploit surface); no slashing today.
+  audit_security: 8,
+  // Maturity / adoption: Jupiter validator is long-established (411 epochs of history) and
+  // large, though "Jupiter Native Stake" as a product wrapper is newer.
+  maturity: 7,
+  // Delegated stake / validator adoption: ~12.5M SOL activated stake — a very large,
+  // top-tier validator (source-backed via Stakewiz + Marinade cross-check).
+  tvl_adoption: 8,
+  // Withdrawal / fee transparency: 5% commission + 0% management fee, clearly disclosed;
+  // epoch-based unstake (~2 days) is transparent but a liquidity/timing mark.
+  withdrawal_fee_transparency: 7,
+  // Operational / validator dependency: SINGLE-validator delegation concentration (the
+  // Jupiter validator) plus epoch-lockup illiquidity and lower DeFi composability.
+  operational_dependency_risk: 5,
+  // Incident history: point-in-time review found no independent incident; base staking
+  // program, no slashing — not a verified clean-history claim.
+  incident_history: 7,
+};
+
+/** The deterministic Jupiter Native Stake weighted score from the recorded dimension scores. */
+export function computeNativeStakingScore(): number {
+  return computeNativeStakingWeightedScore(NATIVE_STAKING_DIMENSION_SCORES);
+}
+
 /**
  * Qualitative native-staking risk rationale. Knowable independent of the missing market
  * data, so it is defined now (required by spec): it states native staking is NOT an LST,
@@ -73,21 +103,23 @@ export function computeNativeStakingWeightedScore(dimensionScores: Record<Protoc
  */
 export const NATIVE_STAKING_RISK_RATIONALE = {
   isNotLiquidStakingToken: true,
-  notLstStatement: "This is native SOL staking (a native Solana stake account of delegated SOL), NOT a liquid staking token — it is not JupSOL/mSOL/JupSOL/bSOL/INF and has no SPL LST mint.",
+  notLstStatement: "This is native SOL staking — a native Solana stake account of delegated SOL. It is NOT a liquid staking token (not JupSOL/mSOL/bSOL/INF) and has NO SPL token mint.",
   positives: [
-    "Non-custodial: SOL is staked on-chain directly from your wallet and you own the native stake account (no LST smart-contract wrapper).",
+    "Native stake-account model: non-custodial, staked on-chain directly from your wallet, and you own the stake account (no LST smart-contract wrapper, no SPL token mint).",
     "Security rests on the base Solana staking program rather than an LST token contract, so there is no LST token-contract exploit surface; Solana currently has no stake slashing.",
-    "Transparent, simple fee model: a 5% validator commission on inflation rewards (0% MEV) and no separate management/performance fee.",
+    "Transparent, simple fee model: a freshly reconfirmed 5% validator commission (0% MEV) and no separate management/performance fee.",
+    "Source-backed validator-specific market data: ~12.5M SOL activated stake, current APY ~5.23% (Stakewiz), and a 30-day APY ~5.40% (Marinade per-epoch history) — a large, established validator.",
   ],
   risks: [
-    "Validator / delegation exposure: stake is delegated to a single validator (the Jupiter validator), so validator performance, downtime, or a future commission change affects rewards.",
+    "Single-validator / delegation concentration: stake is delegated to a single validator (the Jupiter validator), so validator performance, downtime, or a future commission change affects rewards.",
     "Epoch-based unstake timing: exiting requires deactivating the stake account and waiting until the end of the current epoch (~2 days), during which no rewards accrue — there is no instant liquidity.",
     "Lower DeFi composability than LSTs: a native stake account is not a liquid token (unlike an LST), even though Jupiter Lend now accepts native stake as collateral.",
     "It is NOT an LST: there is no LST liquidity token and no instant-swap exit path.",
   ],
   limitations: [
-    "This is an internal review input, not an approval; native staking is not selected, does not replace JitoSOL, and moves no funds.",
-    "Market/adoption evidence (delegated stake, current APY, 30-day APY) is not yet available, so no risk score is assigned in this step.",
+    "This risk score is `assigned_for_review` using the draft rubric — an internal review input, not an endorsement or a safety claim.",
+    "It does not select native staking, replace JitoSOL, enable multi-protocol selection, or move funds; WealthSmith has no transaction or signature capability here.",
+    "Validity depends on the validator market data staying within the freshness window (stale → the score is not assigned).",
   ],
 } as const;
 
@@ -153,10 +185,13 @@ export function evaluateNativeStakingBaselineRiskScoreAssignmentStatus(options: 
   const blockers = [...summary.blockers];
   if (!readyForRiskGate && !blockers.includes("not_ready_for_risk_gate")) blockers.push("not_ready_for_risk_gate");
 
+  // A score is assigned only when evidence is complete AND fresh (readyForRiskGate).
+  const scoreAssigned = readyForRiskGate && evidenceFresh && blockers.length === 0;
   return {
     protocolId: "jupiter_native_stake",
     isLiquidStakingToken: false,
-    scoreAssigned: false, // never assigned while evidence is incomplete
+    scoreAssigned,
+    ...(scoreAssigned ? { score: computeNativeStakingScore() } : {}),
     readyForRiskGate,
     evidenceFresh,
     approvedForReadOnlyRecommendation: false,
@@ -177,11 +212,40 @@ export function evaluateNativeStakingBaselineRiskScoreAssignmentStatus(options: 
 export function getNativeStakingBaselineRiskScoreAssignment(options: NativeStakingEvidenceOptions = {}): NativeStakingBaselineRiskScoreAssignment | null {
   const checkedAt = options.checkedAt ?? new Date().toISOString();
   const summary = summarizeNativeSolStakeEvidence({ checkedAt });
-  if (!summary.readyForRiskGate) return null;
-  // Unreachable in 14P (evidence incomplete). A future step that completes the market
-  // evidence will supply real dimension scores and assign a deterministic weighted score
-  // via `computeNativeStakingWeightedScore`.
-  return null;
+  if (!summary.readyForRiskGate || !summary.allEvidenceFresh) return null;
+
+  const weightedScore = computeNativeStakingScore();
+  return {
+    protocolId: "jupiter_native_stake",
+    protocolName: "Jupiter Native Stake",
+    assetSymbol: "SOL",
+    candidateType: "native_staking",
+    isLiquidStakingToken: false,
+
+    score: weightedScore,
+    scoreStatus: "assigned_for_review",
+    scoreScale: "0_to_10",
+
+    readyForRiskGate: summary.readyForRiskGate,
+    evidenceFresh: summary.allEvidenceFresh,
+
+    assignedAt: checkedAt,
+    assignedBy: "Ashot",
+    reviewerRole: "founder",
+
+    rubricVersion: PROTOCOL_RISK_RUBRIC_VERSION,
+
+    dimensionScores: { ...NATIVE_STAKING_DIMENSION_SCORES },
+    weightedScore,
+
+    rationale: NATIVE_STAKING_RISK_RATIONALE,
+
+    approvedForReadOnlyRecommendation: false,
+    selectedByProtocolLogic: false,
+    currentWinner: false,
+    transactionsEnabled: false,
+    walletSignatureRequired: false,
+  };
 }
 
 /** Void reference so `PROTOCOL_RISK_RUBRIC_VERSION` import is available for future scoring. */

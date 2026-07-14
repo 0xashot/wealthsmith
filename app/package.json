@@ -9,8 +9,7 @@
     "dev": "vite",
     "prebuild": "npm run tokens",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "native:fetch-rated": "node scripts/fetch-rated-jupiter-native-stake.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@hubbleprotocol/hubble-sdk": "^8.0.4",

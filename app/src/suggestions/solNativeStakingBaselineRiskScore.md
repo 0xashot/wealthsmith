@@ -74,3 +74,15 @@ flag `false`.
 
 A risk score is not approval, not an endorsement, does not mean safe, does not mean selected,
 and moves no funds. (Moot in 14P, since no score is assigned.)
+
+## Step 14T update — COMPLETED and APPROVED
+
+The three market categories are now recorded from public, no-API-key validator data
+(Stakewiz stake/current APY + Marinade duration-weighted 30-day APY = 5.40%; see
+[nativeValidatorMarinadeData.md](./nativeValidatorMarinadeData.md)). Evidence is now **10/10
+fresh** → `readyForRiskGate` → a deterministic **risk score of 7.10** (audit 8, maturity 7,
+delegated-stake 8, fee-transparency 7, operational 5, incident 7) → **read-only approval**
+(score ≥ 7). Jupiter Native Stake is surfaced as a **"Baseline to review"** in Real Wallet,
+Demo, and `/testing` — validator-specific, not an LST (`isLiquidStakingToken: false`,
+`splTokenMint: null`), never selected/winner, no execution path. Any earlier "blocked /
+incomplete" wording above is superseded by this outcome.

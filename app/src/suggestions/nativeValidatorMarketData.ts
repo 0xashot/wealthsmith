@@ -52,10 +52,10 @@ export type NativeValidatorMarketDataSource =
   | "stakewiz"
   | "solana_compass"
   | "validators_app"
-  | "rated"
+  | "marinade"
   | "unavailable";
 
-export type NativeValidatorApyProvider = "stakewiz" | "solana_compass" | "validators_app" | "rated";
+export type NativeValidatorApyProvider = "stakewiz" | "solana_compass" | "validators_app" | "marinade";
 
 export type NativeValidatorMarketDataStatus = "complete" | "partial" | "missing" | "stale" | "source_error" | "unsupported";
 
@@ -281,105 +281,68 @@ export function parseNativeValidatorApyFromAnalytics(
 }
 
 /* ------------------------------------------------------------------ *
- * (4b) Rated parser — Step 14S. Validator-specific 30-day DELEGATOR APY from the Rated
- * single-validator summary endpoint. Rated returns APY/commission as decimal ratios
- * (0.0523 → 5.23%). This is validator-specific — NOT network-wide, NOT JupSOL, and it uses
- * `delegatorApy` (net of commission), never `validatorApy`.
+ * (4b) Stakewiz parser — current validator stake / APY / commission / status.
+ * Stakewiz (api.stakewiz.com/validator/{vote}) needs no API key. Its `commission` is
+ * expressed in hundredths (e.g. 500 → 5.00%), so a value above 100 is divided by 100;
+ * current APY comes from `apy_estimate`.
  * ------------------------------------------------------------------ */
-export type RatedWindow = "1d" | "7d" | "30d" | "all";
-
-export interface RatedValidatorApyParseResult {
-  provider: "rated";
-  voteAccount?: string;
-  timeWindow?: string;
-  delegatorApyPct?: number;
-  validatorApyPct?: number;
-  voteCommissionPct?: number;
-  mevCommissionPct?: number;
-  totalStakeSol?: number;
-  effectivenessPct?: number;
-  stakeAccountCount?: number;
-  status: "complete" | "partial" | "invalid";
+export interface StakewizValidatorParseResult {
+  matched: boolean;
+  activatedStakeSol?: number;
+  commissionPct?: number;
+  currentApyPct?: number;
+  identityAccount?: string;
+  delinquent?: boolean;
+  currentEpoch?: number;
   blockers: string[];
   notes: string[];
 }
 
-const ratioToPct = (v: unknown): number | undefined => {
-  const n = num(v);
-  return n != null ? round2(n * 100) : undefined;
-};
+function stakewizValidatorList(payload: unknown): unknown[] | null {
+  if (Array.isArray(payload)) return payload;
+  const p = payload as { validators?: unknown; data?: unknown } | null;
+  if (p && Array.isArray(p.validators)) return p.validators;
+  if (p && Array.isArray(p.data)) return p.data;
+  if (p && typeof p === "object" && ("vote_identity" in p || "voteAccount" in p)) return [p];
+  return null;
+}
 
 /**
- * Parse a Rated single-validator summary payload for the Jupiter validator's 30-day
- * delegator APY. Requires an exact vote-account match and the expected time window; converts
- * decimal ratios to percentages; uses `delegatorApy` (never substitutes `validatorApy`);
- * rejects network overviews / mismatched validator or window / missing delegator APY.
+ * Parse a Stakewiz validator payload for the Jupiter validator's current stake, commission,
+ * current APY, identity, delinquency, and epoch. Requires an exact vote-account match. Never
+ * approves, selects, or enables execution.
  */
-export function parseNativeValidatorApyFromRatedSummary(
+export function parseStakewizValidatorSummary(
   payload: unknown,
-  options: { expectedVoteAccount?: string; expectedWindow?: RatedWindow } = {},
-): RatedValidatorApyParseResult {
-  const expectedVoteAccount = options.expectedVoteAccount ?? JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
-  const expectedWindow = options.expectedWindow ?? "30d";
+  options: { voteAccount?: string } = {},
+): StakewizValidatorParseResult {
+  const voteAccount = options.voteAccount ?? JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const list = stakewizValidatorList(payload);
+  if (!list) return { matched: false, blockers: ["stakewiz_schema_unrecognized"], notes: ["Stakewiz payload schema not recognized."] };
+  const v = list.find((e) => e && typeof e === "object" && ((e as Record<string, unknown>).vote_identity === voteAccount || (e as Record<string, unknown>).voteAccount === voteAccount)) as Record<string, unknown> | undefined;
+  if (!v) return { matched: false, blockers: ["stakewiz_vote_account_mismatch"], notes: [`Jupiter vote account ${voteAccount} not found in Stakewiz payload.`] };
+
   const blockers: string[] = [];
-  const notes: string[] = [];
-
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return { provider: "rated", status: "invalid", blockers: ["rated_payload_invalid"], notes: ["Rated payload is not an object."] };
-  }
-  const p = payload as Record<string, unknown>;
-  // A network overview payload (no per-validator voteAccount) is rejected outright.
-  const voteAccount = (p.voteAccount as string) ?? (p.vote_account as string);
-  if (typeof voteAccount !== "string") {
-    return { provider: "rated", status: "invalid", blockers: ["rated_schema_unrecognized"], notes: ["Rated payload has no voteAccount field (possible network overview) — rejected."] };
-  }
-  if (voteAccount !== expectedVoteAccount) {
-    return { provider: "rated", voteAccount, status: "invalid", blockers: ["rated_vote_account_mismatch"], notes: [`Rated voteAccount ${voteAccount} != expected Jupiter vote account.`] };
-  }
-  const timeWindow = (p.timeWindow as string) ?? (p.time_window as string) ?? (p.window as string);
-  if (timeWindow !== expectedWindow) {
-    return { provider: "rated", voteAccount, timeWindow, status: "invalid", blockers: ["rated_window_mismatch"], notes: [`Rated timeWindow '${timeWindow}' != expected '${expectedWindow}'.`] };
-  }
-
-  const rawDelegator = p.delegatorApy ?? p.delegator_apy;
-  if (rawDelegator === undefined || rawDelegator === null) {
-    return { provider: "rated", voteAccount, timeWindow, status: "invalid", blockers: ["rated_delegator_apy_missing"], notes: ["Rated delegatorApy missing."] };
-  }
-  const delegatorRatio = num(rawDelegator);
-  if (delegatorRatio == null || delegatorRatio < 0) {
-    return { provider: "rated", voteAccount, timeWindow, status: "invalid", blockers: ["rated_delegator_apy_invalid"], notes: ["Rated delegatorApy is not a finite, non-negative number."] };
-  }
-  const delegatorApyPct = round2(delegatorRatio * 100);
-  const validatorApyPct = ratioToPct(p.validatorApy ?? p.validator_apy);
-  const voteCommissionPct = ratioToPct(p.voteCommissionRate ?? p.vote_commission_rate);
-  const mevCommissionPct = ratioToPct(p.mevCommissionRate ?? p.mev_commission_rate);
-  const effectivenessPct = ratioToPct(p.effectiveness);
-  const stakeAccountCount = num(p.stakeAccountCount ?? p.stake_account_count);
-
-  const rawTotalStake = p.totalStake ?? p.total_stake;
-  let totalStakeSol: number | undefined;
-  if (rawTotalStake !== undefined && rawTotalStake !== null) {
-    const ts = num(rawTotalStake);
-    if (ts == null || ts < 0) blockers.push("rated_total_stake_invalid");
-    else totalStakeSol = ts;
-  }
-
-  notes.push(`Rated 30-day delegator APY ${delegatorApyPct}% (net of validator commission) for vote account ${voteAccount}. Validator-specific — not network-wide, not JupSOL.`);
+  const activatedStakeSol = num(v.activated_stake);
+  if (activatedStakeSol == null) blockers.push("missing_activated_stake");
+  const rawCommission = num(v.commission);
+  const commissionPct = rawCommission == null ? undefined : round2(rawCommission > 100 ? rawCommission / 100 : rawCommission);
+  if (commissionPct == null) blockers.push("missing_commission");
+  const currentApyPct = num(v.apy_estimate) ?? num(v.apy);
+  if (currentApyPct == null) blockers.push("missing_current_apy");
+  const delinquent = typeof v.delinquent === "boolean" ? v.delinquent : undefined;
+  if (delinquent === true) blockers.push("validator_delinquent");
 
   return {
-    provider: "rated",
-    voteAccount,
-    timeWindow,
-    delegatorApyPct,
-    ...(validatorApyPct != null ? { validatorApyPct } : {}),
-    ...(voteCommissionPct != null ? { voteCommissionPct } : {}),
-    ...(mevCommissionPct != null ? { mevCommissionPct } : {}),
-    ...(totalStakeSol != null ? { totalStakeSol } : {}),
-    ...(effectivenessPct != null ? { effectivenessPct } : {}),
-    ...(stakeAccountCount != null ? { stakeAccountCount } : {}),
-    status: blockers.length === 0 ? "complete" : "partial",
+    matched: true,
+    ...(activatedStakeSol != null ? { activatedStakeSol: round2(activatedStakeSol) } : {}),
+    ...(commissionPct != null ? { commissionPct } : {}),
+    ...(currentApyPct != null ? { currentApyPct } : {}),
+    ...(typeof v.identity === "string" ? { identityAccount: v.identity } : {}),
+    ...(delinquent != null ? { delinquent } : {}),
+    ...(num(v.epoch) != null ? { currentEpoch: num(v.epoch) } : {}),
     blockers,
-    notes,
+    notes: [`Stakewiz validator-specific: activated stake ${activatedStakeSol} SOL, commission ${commissionPct}%, current APY ${currentApyPct}%, delinquent=${delinquent}.`],
   };
 }
 
@@ -544,7 +507,7 @@ const APY_PROVIDER_LABEL: Record<NativeValidatorApyProvider, { name: string; url
   stakewiz: { name: "Stakewiz — Jupiter validator analytics", url: `https://stakewiz.com/validator/${JUPITER_NATIVE_STAKE_VOTE_ACCOUNT}` },
   solana_compass: { name: "Solana Compass — Jupiter validator", url: `https://solanacompass.com/validators/${JUPITER_NATIVE_STAKE_VOTE_ACCOUNT}` },
   validators_app: { name: "Validators.app — Jupiter validator", url: `https://www.validators.app/validators/${JUPITER_NATIVE_STAKE_VOTE_ACCOUNT}` },
-  rated: { name: "Rated — Jupiter validator 30-day summary (delegatorApy, window=30d)", url: `https://api.rated.network/v1/solana/validators/${JUPITER_NATIVE_STAKE_VOTE_ACCOUNT}/summary?window=30d` },
+  marinade: { name: "Marinade validators API — Jupiter validator epoch APY history", url: `https://validators-api.marinade.finance/validators?query_vote_accounts=${JUPITER_NATIVE_STAKE_VOTE_ACCOUNT}` },
 };
 
 /**
@@ -573,7 +536,7 @@ export function convertNativeValidatorMarketDataToEvidenceInputs(
   const reviewerRole = options.reviewerRole ?? "founder";
   const confirmedAt = marketData.fetchedAt;
   // Per-field source attribution: stake ← stakeSource, current APY ← currentApySource,
-  // 30-day APY ← apy30dSource (Rated in the 14S Stakewiz+Rated package).
+  // 30-day APY ← apy30dSource (Marinade validator epoch-APY history).
   const stakewizLabel = APY_PROVIDER_LABEL.stakewiz;
   const stakeLabel = marketData.stakeSource === "stakewiz"
     ? { name: "Stakewiz — Jupiter validator (activated stake)", url: stakewizLabel.url }
@@ -606,7 +569,7 @@ export function convertNativeValidatorMarketDataToEvidenceInputs(
     unit: usePreferUsd ? "usd" : "sol",
     sourceName: stakeName,
     sourceUrl: stakeUrl,
-    notes: [`Validator-specific Jupiter Native Stake data. Activated (delegated) stake ${marketData.activatedStakeSol} SOL${usePreferUsd ? ` (~$${marketData.delegatedStakeUsd} at the supplied SOL price)` : ""} from ${marketData.stakeSource}. Not JupSOL TVL. Not network-wide.`],
+    notes: [`Validator-specific Jupiter Native Stake data. Activated (delegated) stake ${marketData.activatedStakeSol} SOL${usePreferUsd ? ` (~$${marketData.delegatedStakeUsd} at the supplied SOL price)` : ""} from ${marketData.stakeSource}. Not JupSOL APY or TVL. Not mSOL APY. Not network-wide Solana APY.`],
   };
   const currentApyInput: NativeSolStakeEvidenceInput = {
     ...common,
@@ -615,7 +578,7 @@ export function convertNativeValidatorMarketDataToEvidenceInputs(
     unit: "pct",
     sourceName: currentApyName,
     sourceUrl: currentApyUrl,
-    notes: [`Validator-specific Jupiter Native Stake data. Current APY from ${currentApyProvider ?? "analytics"} for vote account ${marketData.voteAccount}. Not JupSOL APY. Not network-wide Solana APY.`],
+    notes: [`Validator-specific Jupiter Native Stake data. Current APY from ${currentApyProvider ?? "analytics"} for vote account ${marketData.voteAccount}. Not JupSOL APY or TVL. Not mSOL APY. Not network-wide Solana APY.`],
   };
   const apy30dInput: NativeSolStakeEvidenceInput = {
     ...common,
@@ -624,7 +587,7 @@ export function convertNativeValidatorMarketDataToEvidenceInputs(
     unit: "pct",
     sourceName: options.apySourceName ?? apy30dLabel.name,
     sourceUrl: options.apySourceUrl ?? apy30dLabel.url,
-    notes: [`Validator-specific Jupiter Native Stake data. ${apy30dProvider === "rated" ? "30-day delegator APY, net of validator commission, from Rated (window=30d)" : `30-day APY from ${apy30dProvider ?? "analytics"}`} for vote account ${marketData.voteAccount}. Not JupSOL APY or TVL. Not network-wide Solana APY.`],
+    notes: [`Validator-specific Jupiter Native Stake data. ${apy30dProvider === "marinade" ? "Duration-weighted 30-day average of Marinade completed per-epoch validator APY observations (delegator-facing, net of validator commission)" : `30-day APY from ${apy30dProvider ?? "analytics"}`} for vote account ${marketData.voteAccount}. Not JupSOL APY or TVL. Not mSOL APY. Not network-wide Solana APY.`],
   };
 
   return {

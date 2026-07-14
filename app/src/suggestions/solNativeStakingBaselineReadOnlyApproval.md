@@ -71,3 +71,15 @@ Record the three missing market categories (an authoritative Jupiter native-stak
 (if `>= 7`) → UI exposure as a **baseline to review**. Then the deferred **deterministic
 selector comparison** can weigh the approved LST candidates against this native-staking
 baseline.
+
+## Step 14T update — COMPLETED and APPROVED
+
+The three market categories are now recorded from public, no-API-key validator data
+(Stakewiz stake/current APY + Marinade duration-weighted 30-day APY = 5.40%; see
+[nativeValidatorMarinadeData.md](./nativeValidatorMarinadeData.md)). Evidence is now **10/10
+fresh** → `readyForRiskGate` → a deterministic **risk score of 7.10** (audit 8, maturity 7,
+delegated-stake 8, fee-transparency 7, operational 5, incident 7) → **read-only approval**
+(score ≥ 7). Jupiter Native Stake is surfaced as a **"Baseline to review"** in Real Wallet,
+Demo, and `/testing` — validator-specific, not an LST (`isLiquidStakingToken: false`,
+`splTokenMint: null`), never selected/winner, no execution path. Any earlier "blocked /
+incomplete" wording above is superseded by this outcome.

@@ -23,7 +23,7 @@ import { buildMsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiqui
 import { buildJupsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiquidStakingJupsolReadOnlyApproval";
 import { buildBsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiquidStakingBsolReadOnlyApproval";
 import { getInfBlockedReviewSummary } from "../suggestions/solLiquidStakingInfReadOnlyApproval";
-import { getNativeStakingBaselineBlockedReviewSummary } from "../suggestions/solNativeStakingBaselineReadOnlyApproval";
+import { buildNativeStakingReviewCandidateDisplay } from "../suggestions/solNativeStakingBaselineReadOnlyApproval";
 
 /* ------------------------------------------------------------------ *
  * Route + safety flags (mirrors the internalPreviewFlags pattern).
@@ -506,9 +506,10 @@ const msolReviewCandidate: TestingFixture = {
     ],
     demoLabel: TESTING_PREVIEW_NOT_LIVE,
     otherProtocolsToReview: [
-      buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-13T20:30:00Z" }),
-      buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-13T20:30:00Z" }),
-      buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-13T20:30:00Z" }),
+      buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:50:00Z" }),
+      buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:50:00Z" }),
+      buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:50:00Z" }),
+      buildNativeStakingReviewCandidateDisplay({ checkedAt: "2026-07-14T02:50:00Z" }),
     ],
   },
 };
@@ -564,58 +565,6 @@ const infBlockedCandidate: TestingFixture = {
   },
 };
 
-// Step 14P — Native SOL / Jupiter Native Stake BASELINE. This is NOT an LST and NOT
-// JupSOL — it is a native Solana stake account (delegated SOL). Its mechanics/fees/security
-// are recorded, but the three market categories (delegated stake / current APY / 30-day
-// APY) are not published by Jupiter and are left MISSING, so evidence is incomplete → no
-// score → not approved. This is an INTERNAL, clearly-labelled BLOCKED evidence view only
-// (driven by getNativeStakingBaselineBlockedReviewSummary); it has no otherProtocolsToReview.
-const nativeBlocked = getNativeStakingBaselineBlockedReviewSummary({ checkedAt: "2026-07-14T02:45:00Z" });
-const nativeStakeBlockedCandidate: TestingFixture = {
-  id: "testing_native_stake_blocked",
-  categoryLabel: "Blocked Candidate",
-  group: "Yield",
-  label: TESTING_PREVIEW_NOT_LIVE,
-  card: buildCard({
-    id: "testing_native_stake_blocked",
-    title: "Native SOL Staking — Baseline (Blocked)",
-    type: "stake_idle_sol",
-    category: "staked_assets",
-    description: "Jupiter Native Stake — native SOL staking baseline (NOT a liquid staking token, not JupSOL). Market evidence still incomplete after the 14R adapter run (30-day APY history unavailable); not cleared for review. Internal evidence view only.",
-    impact_text: "Baseline to review · evidence incomplete (no risk score)",
-    severity: "info",
-    extra: {
-      suggestedProtocolLabel: "Baseline to review — not cleared (incomplete evidence)",
-      protocolName: "Jupiter Native Stake",
-      lstSymbol: "SOL",
-    },
-  }),
-  details: {
-    summary: {
-      title: "Native SOL Staking — Baseline (Blocked, incomplete)",
-      reason: `Jupiter Native Stake is native SOL staking — a native Solana stake account of delegated SOL. ${nativeBlocked.notLstLabel}: it is NOT a liquid staking token and NOT JupSOL (no SPL LST mint). Its mechanics, ${nativeBlocked.mechanics?.validatorCommissionPct}% validator commission, and non-custodial security model are recorded, but the market categories (${nativeBlocked.missingCategories.join(", ")}) are not published by Jupiter and were left missing rather than invented or reused from JupSOL — so evidence is incomplete, no risk score is assigned, and it is not cleared for read-only review. Internal evidence view only. Final protocol selection will happen later through deterministic WealthSmith protocol logic.`,
-      categoryLabel: "Blocked Candidate",
-    },
-    metrics: [],
-    involvedAssets: [],
-    involvedPositions: [],
-    calculations: [],
-    guardrailSummary: { checked: [], notEvaluated: ["Risk score (market evidence incomplete)", "Read-only review approval (no risk score)"], notApplicable: ["Protocol selection"] },
-    limitations: [
-      { kind: "review_only", text: `Blocked: native-staking market evidence is incomplete (missing: ${nativeBlocked.missingCategories.join(", ")}) — no risk score assigned; not cleared for read-only review.` },
-      { kind: "review_only", text: `Not a liquid staking token — native stake account (delegated SOL), detected via Solana stake accounts, no SPL token mint. Distinct from JupSOL (an SPL LST token).` },
-      { kind: "review_only", text: `Validator/delegation exposure + epoch-based unstake timing: ${nativeBlocked.mechanics?.unstakeTiming}` },
-      { kind: "review_only", text: `Lower DeFi composability than LSTs. Validator commission ${nativeBlocked.mechanics?.validatorCommissionPct}% on inflation (0% MEV); no separate management fee.` },
-      { kind: "review_only", text: `Step 14R: validator-specific delegated stake (~12,500,954 SOL) and current APY (5.23%) were obtained via the native validator adapter (Stakewiz, vote account CatzoSMUk…). But no validator-specific 30-day APY history is publicly available (direct Solana RPC unreachable here; no per-validator 30-day series without a token), so market data is PARTIAL — not JupSOL APY/TVL, not network-wide — and the baseline stays blocked (no records appended).` },
-      REVIEW_ONLY_LIMITATION,
-    ],
-    safetyNotes: [
-      { kind: "review_only", text: "Review only — WealthSmith will not move funds for you." },
-      ...REVIEW_ONLY_NOTES,
-    ],
-    demoLabel: TESTING_PREVIEW_NOT_LIVE,
-  },
-};
 
 const ALL_FIXTURES: TestingFixture[] = [
   safetyBuffer,
@@ -629,7 +578,6 @@ const ALL_FIXTURES: TestingFixture[] = [
   onTrack,
   msolReviewCandidate,
   infBlockedCandidate,
-  nativeStakeBlockedCandidate,
 ];
 
 /** Every testing fixture, in display order (Safety → … → On Track). */

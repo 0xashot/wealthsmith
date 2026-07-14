@@ -1336,47 +1336,31 @@ updates live recommendations, and has no transaction/signature path; every recor
 JitoSOL stays the only selected protocol, and the LST candidates + INF are unchanged. A later
 backend/job can feed real payloads through the builder to complete the evidence.
 
-## Real validator data run for Jupiter Native Stake (Step 14R) — still PARTIAL
+## Jupiter Native Stake completed with Stakewiz + Marinade (Step 14T)
 
-14R drove the 14Q adapter with **real** validator data (Stakewiz, vote account
-`CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb` / identity `JUPiTERr…`): validator-specific
-**delegated stake ~12,500,954 SOL** and **current APY 5.23%** (commission 5%, corroborating
-14P) were obtained. But a validator-specific **30-day APY history is not publicly available**
-here — the direct Solana RPC `getVoteAccounts` host was unreachable in this environment, Solana
-Compass has no public API, and Stakewiz exposes only point APY estimates (no per-validator
-30-day series without a Validators.app token). Per the guardrails, `apy_30d` was **left
-missing** (not invented, not JupSOL's, not network-wide), so `buildNativeValidatorMarketData`
-returns **`partial`** and `convertNativeValidatorMarketDataToEvidenceInputs` produces **no**
-inputs. Nothing was appended → native evidence stays **7/10** → the baseline **remains
-blocked** (no score, no approval, no product-facing UI; only the internal `/testing` blocked
-card, now noting the 14R finding). The complete-path is proven by fixtures (a complete payload
-converts to all 3 records). JitoSOL stays the only selected protocol; mSOL/JupSOL/bSOL review
-and INF's blocked state are unchanged; no execution path anywhere. **Remaining blocker:** the
-validator-specific 30-day APY history — obtainable by a backend/job with Solana RPC access or a
-Validators.app token, which would then complete the evidence and unblock the deterministic
-score → approval → UI path.
+Jupiter Native Stake is now a fully **approved read-only "Baseline to review"** candidate,
+completed with **public, no-API-key validator data**. Its three market evidence records come from:
 
-## Rated 30-day delegator APY adapter for Jupiter Native Stake (Step 14S) — still BLOCKED
+- **Stakewiz** (`api.stakewiz.com/validator/{vote}`) — delegated stake (~12,500,954 SOL),
+  current APY (5.23%), commission (5%), identity, delinquency, epoch.
+- **Marinade validators API** (`validators-api.marinade.finance/validators?query_vote_accounts={vote}`,
+  see [nativeValidatorMarinadeData.md](./nativeValidatorMarinadeData.md)) — per-epoch validator
+  APY history → a **duration-weighted 30-day average = 5.40%** over 15 completed epochs
+  (30.13-day coverage; cross-checked against Trillium, epoch 1000: 5.2523% vs 5.2462%).
 
-14S adds the bridge to source native staking's last missing field (the validator-specific
-30-day APY) from **Rated**: a parser
-(`parseNativeValidatorApyFromRatedSummary` in [nativeValidatorMarketData.ts](./nativeValidatorMarketData.ts)),
-a Stakewiz+Rated combine builder + fetch script
-([nativeValidatorRatedData.ts](./nativeValidatorRatedData.ts) /
-[nativeValidatorRatedData.md](./nativeValidatorRatedData.md) /
-`scripts/fetch-rated-jupiter-native-stake.mjs`). The Rated summary
-(`GET api.rated.network/v1/solana/validators/{vote}/summary?window=30d`) is fetched
-**server-side only**: the key is read **only** from `process.env.RATED_API_KEY` (never
-`VITE_RATED_API_KEY`), never hardcoded, never logged, never in the browser bundle; output is
-sanitized to a git-ignored `tmp/` file. The parser is validator-specific — exact vote-account
-match + `window=30d`, uses **`delegatorApy`** (net of commission, never `validatorApy`),
-converts ratios → percent (`0.0523 → 5.23%`), and rejects network-overview / mismatched
-payloads. The combine builder attaches `stakeSource: "stakewiz"` / `currentApySource:
-"stakewiz"` / `apy30dSource: "rated"` and cross-checks Rated `totalStake` vs Stakewiz stake.
-**`RATED_API_KEY` was not available in this environment**, so no real Rated value was fetched
-and **nothing was invented** — the native evidence array stays **7/10** and the baseline
-**remains blocked** (no score, no approval, no product-facing UI). Fixtures prove the full
-path completes with a valid Rated payload. JitoSOL stays the only selected protocol;
-mSOL/JupSOL/bSOL review and INF's blocked state are unchanged; no execution path anywhere.
-**Remaining blocker:** the one environment secret `RATED_API_KEY` — configure it locally and
-run `npm run native:fetch-rated`, then append the 3 converted records to complete the evidence.
+All three are validator-specific (vote `CatzoSMUk…`, identity `JUPiTERr…`): **not** JupSOL,
+**not** mSOL, **not** network-wide, and Marinade's `/msol/apy` endpoint is explicitly rejected.
+With 10/10 fresh evidence → `readyForRiskGate` → a deterministic **risk score of 7.10** (audit
+8, maturity 7, delegated-stake 8, fee-transparency 7, operational 5, incident 7) → read-only
+approval (>= 7). It renders as a **"Baseline to review"** in Real Wallet, Demo, and `/testing`,
+alongside the mSOL/JupSOL/bSOL alternatives, showing "Not a liquid staking token · Native SOL
+stake-account based", delegated stake (SOL), current + 30-day APY (with methodology), validator
+commission, epoch-based unstake timing, and the 7.10 score — never selected, never the winner,
+no execution path. JitoSOL stays the only selected protocol; mSOL/JupSOL/bSOL review behavior
+and INF's blocked state are unchanged; the multi-protocol selector comparison stays deferred.
+
+**Production architecture** (not built here): Stakewiz + Marinade public validator APIs → a
+WealthSmith server-side refresh job (current data every 6–12h; Marinade history once per epoch
+or every 6–12h) → schema validation → normalized cache/history (WealthSmith keeps its own
+snapshots as backup) → selector data layer → frontend. Fail closed on stale/malformed data;
+never fetch per browser user.
