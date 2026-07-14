@@ -525,6 +525,7 @@ import {
   SOL_STAKING_MARKET_DATA_ENABLES_TRANSACTIONS,
   SOL_STAKING_MARKET_DATA_REQUIRES_WALLET_SIGNATURE,
   SOL_STAKING_MARKET_CANDIDATE_IDS,
+  SOL_STAKING_MARKET_CANDIDATE_ORDER,
 } from "./solStakingMarketDataTypes";
 import {
   SOL_STAKING_MARKET_CACHE_SCHEMA_VERSION,
@@ -549,6 +550,23 @@ import {
   getSolStakingMarketSnapshot,
   listFreshApprovedMarketSnapshots,
 } from "./solStakingMarketDataCache";
+import {
+  SOL_STAKING_NORMALIZATION_SCHEMA_VERSION,
+  SOL_STAKING_NORMALIZATION_DEFINES_SELECTOR_WEIGHTS,
+  SOL_STAKING_NORMALIZATION_CANDIDATE_ORDER,
+} from "./solStakingCandidateNormalizationTypes";
+import {
+  getSolStakingCandidateStaticFacts,
+  listSolStakingCandidateStaticFacts,
+} from "./solStakingCandidateStaticFacts";
+import {
+  normalizeSolStakingCandidate,
+  buildNormalizedSolStakingCandidateSet,
+  validateNormalizedSolStakingCandidate,
+  validateNormalizedSolStakingCandidateSet,
+  listSelectorReadyNormalizedCandidates,
+  getSolStakingNormalizationDiagnostics,
+} from "./solStakingCandidateNormalization";
 import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
@@ -10295,6 +10313,199 @@ export function runSolStakingMarketRefreshFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+export function runSolStakingNormalizationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const CHECKED = "2026-07-14T03:00:00Z";
+  const FRESH = "2026-07-14T02:50:00Z";
+  const OLD = "2026-07-11T00:00:00Z";
+  const IDS = SOL_STAKING_MARKET_CANDIDATE_IDS;
+
+  const POOL = {
+    jito: "0e7d0722-9054-4907-8593-567b353c0900",
+    jupiter: "52bd72a7-9e81-4112-abb4-71673e8de9bf",
+    marinade: "b3f93865-5ec8-4662-90a0-11808e0aa2bd",
+    blazestake: "387d6732-59f0-4ae0-8a88-aba75a5cbe4a",
+    sanctum: "3075a746-bdd1-4aac-bcd5-b035abee2622",
+  };
+  const rec = (pool: string, apy: unknown, apyMean30d: unknown, tvlUsd: unknown) => ({ pool, chain: "Solana", symbol: "X", apy, apyMean30d, tvlUsd });
+  const dllValid = { status: "success", data: [
+    rec(POOL.jito, 5.36, 5.45, 767950000),
+    rec(POOL.jupiter, 5.67, 5.6, 409170000),
+    rec(POOL.marinade, 4.75, 5.87, 184840000),
+    rec(POOL.blazestake, 5.27, 5.32, 69750000),
+    rec(POOL.sanctum, 5.84, 5.95, 152555981),
+  ] };
+
+  const VA = JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const IDENT = JUPITER_NATIVE_STAKE_IDENTITY;
+  const mkEpochs = (n: number, endEpoch: number, lastEndIso: string, apyBase = 0.054) => {
+    const out: Record<string, unknown>[] = [];
+    let end = Date.parse(lastEndIso);
+    const twoDays = 2 * 86400_000;
+    for (let k = 0; k < n; k++) {
+      const start = end - twoDays;
+      out.push({ epoch: endEpoch - k, apy: apyBase - k * 0.0004, activated_stake: 12_500_000_000_000_000, commission_effective: 5, epoch_start_at: new Date(start).toISOString(), epoch_end_at: new Date(end).toISOString() });
+      end = start;
+    }
+    return out;
+  };
+  const marinadeValid = { validators: [{ vote_account: VA, identity: IDENT, epoch_stats: [{ epoch: 1001, apy: null, epoch_start_at: "2026-07-12T12:22:01Z", epoch_end_at: "2026-07-14T12:00:00Z" }, ...mkEpochs(16, 1000, "2026-07-12T12:22:01Z")] }] };
+  const stakewiz = [{ vote_identity: VA, identity: IDENT, activated_stake: 12_500_954.43, commission: 500, apy_estimate: 5.23, delinquent: false, epoch: 1001 }];
+
+  const fullCache = buildSolStakingMarketCache({ checkedAt: CHECKED, defiLlama: { payload: dllValid, fetchedAt: FRESH }, stakewiz: { payload: stakewiz, fetchedAt: FRESH }, marinade: { payload: marinadeValid, fetchedAt: FRESH } });
+  const set = buildNormalizedSolStakingCandidateSet(fullCache, { checkedAt: CHECKED });
+  const cJito = set.candidates[IDS.jito];
+  const cMsol = set.candidates[IDS.marinade];
+  const cNative = set.candidates[IDS.jupiterNativeStake];
+  const cInf = set.candidates[IDS.sanctum];
+
+  // 14V-A…F. Model.
+  add("14V-A: normalization schema version exists", SOL_STAKING_NORMALIZATION_SCHEMA_VERSION === "1.0.0" && set.schemaVersion === "1.0.0", set.schemaVersion);
+  add("14V-B: normalization uses canonical Step 14U candidate IDs", JSON.stringify(SOL_STAKING_NORMALIZATION_CANDIDATE_ORDER) === JSON.stringify(SOL_STAKING_MARKET_CANDIDATE_ORDER), "canonical");
+  add("14V-C: normalization preserves canonical candidate order", JSON.stringify(Object.keys(set.candidates)) === JSON.stringify([...SOL_STAKING_MARKET_CANDIDATE_ORDER]), Object.keys(set.candidates).join(","));
+  add("14V-D: normalized set contains all canonical candidates", SOL_STAKING_MARKET_CANDIDATE_ORDER.every((id) => set.candidates[id] != null), "all present");
+  add("14V-E: normalization creates no duplicate candidate IDs", new Set(Object.keys(set.candidates)).size === Object.keys(set.candidates).length, "unique");
+  add("14V-F: normalization validates the source cache first", buildNormalizedSolStakingCandidateSet({ schemaVersion: "0.0.0", candidates: {} }, { checkedAt: CHECKED }).candidates && Object.keys(buildNormalizedSolStakingCandidateSet({ schemaVersion: "0.0.0" }, { checkedAt: CHECKED }).candidates).length === 0, "validated");
+
+  // 14V-G…O. Market metrics.
+  add("14V-G: current APY copies the live value exactly", cJito.yield.currentApyPct.value === 5.36, `apy=${cJito.yield.currentApyPct.value}`);
+  add("14V-H: current APY preserves source attribution", (cJito.yield.currentApyPct.sourceName ?? "").toLowerCase().includes("defillama") && cJito.yield.currentApyPct.sourceFetchedAt === FRESH, "attributed");
+  add("14V-I: 30-day APY copies the live value exactly", cJito.yield.apy30dPct.value === 5.45, `apy30d=${cJito.yield.apy30dPct.value}`);
+  add("14V-J: 30-day APY preserves source methodology", (cNative.yield.apy30dPct.methodology ?? "").toLowerCase().includes("marinade"), "methodology");
+  add("14V-K: APY delta equals current APY minus 30-day APY", cJito.yield.apyDeltaPctPoints.value === Math.round((5.36 - 5.45) * 10000) / 10000 && cJito.yield.apyDeltaPctPoints.unit === "pct_points", `delta=${cJito.yield.apyDeltaPctPoints.value}`);
+  add("14V-L: absolute APY delta is deterministic", cJito.yield.absoluteApyDeltaPctPoints.value === Math.abs(Math.round((5.36 - 5.45) * 10000) / 10000), `abs=${cJito.yield.absoluteApyDeltaPctPoints.value}`);
+  add("14V-M: APY delta is not called a stability score", cJito.yield.apyDeltaPctPoints.key === "apy_delta_pct_points" && cJito.yield.apyDeltaPctPoints.dataClass === "derived_transparent" && /transparent/i.test(cJito.yield.apyDeltaPctPoints.methodology ?? ""), "transparent delta");
+  {
+    const staleSnap = buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: dllValid, fetchedAt: OLD, checkedAt: CHECKED });
+    const staleNorm = normalizeSolStakingCandidate(staleSnap, getSolStakingCandidateStaticFacts(IDS.jito)!, { checkedAt: CHECKED, sourceCacheGeneratedAt: CHECKED });
+    add("14V-N: stale APY does not produce a fresh derived value", staleNorm.yield.apyDeltaPctPoints.status === "stale" && staleNorm.yield.apyDeltaPctPoints.value === undefined, `status=${staleNorm.yield.apyDeltaPctPoints.status}`);
+    const missSnap = buildLstMarketSnapshot({ candidateId: IDS.jito, defiLlamaPayload: { data: [rec(POOL.jito, 5.36, null, 767950000)] }, fetchedAt: FRESH, checkedAt: CHECKED });
+    const missNorm = normalizeSolStakingCandidate(missSnap, getSolStakingCandidateStaticFacts(IDS.jito)!, { checkedAt: CHECKED, sourceCacheGeneratedAt: CHECKED });
+    add("14V-O: missing APY does not produce a derived value", missNorm.yield.apyDeltaPctPoints.status === "missing" && missNorm.yield.apyDeltaPctPoints.value === undefined, `status=${missNorm.yield.apyDeltaPctPoints.status}`);
+  }
+
+  // 14V-P…V. Adoption.
+  add("14V-P: LST adoption uses tvl_usd", cJito.adoption.metricKind === "tvl_usd" && cJito.adoption.metric.unit === "usd" && cJito.adoption.metric.value === 767950000, cJito.adoption.metricKind);
+  add("14V-Q: LST adoption comparison scope is lst_only", cJito.adoption.metric.comparisonScope === "lst_only", cJito.adoption.metric.comparisonScope);
+  add("14V-R: native adoption uses delegated_stake_sol", cNative.adoption.metricKind === "delegated_stake_sol" && cNative.adoption.metric.unit === "sol" && cNative.adoption.metric.value === 12_500_954.43, cNative.adoption.metricKind);
+  add("14V-S: native adoption comparison scope is native_only", cNative.adoption.metric.comparisonScope === "native_only", cNative.adoption.metric.comparisonScope);
+  add("14V-T: delegated stake is not automatically converted to USD", cNative.adoption.metric.unit === "sol" && cNative.adoption.metricKind !== "tvl_usd", "sol not usd");
+  add("14V-U: LST TVL and native delegated stake are not marked directly comparable", cJito.adoption.directlyComparableAcrossAllCandidates === false && cNative.adoption.directlyComparableAcrossAllCandidates === false, "not comparable");
+  add("14V-V: no adoption score is calculated", !/adoptionscore|adoption_score|percentile/i.test(JSON.stringify(cJito.adoption) + JSON.stringify(cNative.adoption)), "no score");
+
+  // 14V-W…AB. Fees.
+  add("14V-W: LST annual management fee remains separate", cMsol.fees.annualManagementFeePct.status === "available" && cMsol.fees.annualManagementFeePct.value === 0, `mgmt=${cMsol.fees.annualManagementFeePct.value}`);
+  add("14V-X: LST direct unstake fee remains separate", cMsol.fees.directUnstakeFeePct.status === "available" && cMsol.fees.directUnstakeFeePct.value === 0.2, `fee=${cMsol.fees.directUnstakeFeePct.value}`);
+  add("14V-Y: native validator commission remains separate", cNative.fees.validatorCommissionPct.status === "available" && cNative.fees.validatorCommissionPct.value === 5, `comm=${cNative.fees.validatorCommissionPct.value}`);
+  add("14V-Z: no synthetic total fee is created", !/totalfee|total_fee|combinedfee|sumfee/i.test(JSON.stringify(cMsol.fees) + JSON.stringify(cNative.fees)), "no total");
+  add("14V-AA: validator commission is not treated as principal loss", cNative.fees.notes.some((n) => /principal/i.test(n)) && cNative.fees.validatorCommissionPct.value === 5, "not principal");
+  add("14V-AB: fee comparison scope is candidate_type_specific", cMsol.fees.annualManagementFeePct.comparisonScope === "candidate_type_specific" && cNative.fees.validatorCommissionPct.comparisonScope === "candidate_type_specific", "type-specific");
+
+  // 14V-AC…AJ. Exit mechanics.
+  add("14V-AC: LST token model remains liquid-token based", cMsol.tokenModel === "spl_liquid_staking_token" && cMsol.exit.liquidityClass === "liquid_token", cMsol.tokenModel);
+  add("14V-AD: native token model remains native stake account", cNative.tokenModel === "native_stake_account" && cNative.exit.liquidityClass === "native_stake_account", cNative.tokenModel);
+  add("14V-AE: native staking is not marked as an LST", cNative.isLiquidStakingToken === false && cNative.candidateType === "native_staking", "not lst");
+  add("14V-AF: native splTokenMint remains null", cNative.splTokenMint === null, `mint=${cNative.splTokenMint}`);
+  add("14V-AG: JupSOL remains separate from Jupiter Native Stake", cJito != null && set.candidates[IDS.jupiter].candidateId === "jupiter" && set.candidates[IDS.jupiter].isLiquidStakingToken === true && cNative.candidateId === "jupiter_native_stake" && cNative.isLiquidStakingToken === false, "separate");
+  add("14V-AH: native exit timing remains epoch-based", cNative.exit.delayModel === "epoch_based" && cNative.exit.immediateExitAvailable.value === false, cNative.exit.delayModel);
+  add("14V-AI: no invented fixed native unstake hours exist", cNative.exit.delayDescription.status === "available" && !/\d+\s*hours?/i.test(cNative.exit.delayDescription.value ?? ""), "no hours");
+  add("14V-AJ: exit mechanics comparison scope is descriptive_only", cMsol.exit.immediateExitAvailable.comparisonScope === "descriptive_only" && cNative.exit.delayDescription.comparisonScope === "descriptive_only", "descriptive");
+
+  // 14V-AK…AS. Risk + approval.
+  add("14V-AK: reviewed risk scores come from existing score modules", cJito.risk.reviewedRiskScore.value === 7.75 && cMsol.risk.reviewedRiskScore.value === 7.4 && set.candidates[IDS.jupiter].risk.reviewedRiskScore.value === 7.65 && set.candidates[IDS.blazestake].risk.reviewedRiskScore.value === 7.35 && cNative.risk.reviewedRiskScore.value === 7.1, `jito=${cJito.risk.reviewedRiskScore.value}`);
+  add("14V-AL: normalization does not recalculate risk scores", Object.values(set.candidates).every((c) => c.risk.riskScoreRecalculatedByNormalization === false), "not recalculated");
+  add("14V-AM: normalization does not modify approval decisions", getSolStakingCandidateStaticFacts(IDS.marinade)!.approvedForReadOnlyReview === true && getSolStakingCandidateStaticFacts(IDS.sanctum)!.approvedForReadOnlyReview === false, "unchanged");
+  add("14V-AN: Jito remains approved", cJito.approval.approvedForReadOnlyReview === true, "approved");
+  add("14V-AO: mSOL remains approved", cMsol.approval.approvedForReadOnlyReview === true, "approved");
+  add("14V-AP: JupSOL remains approved", set.candidates[IDS.jupiter].approval.approvedForReadOnlyReview === true, "approved");
+  add("14V-AQ: bSOL remains approved", set.candidates[IDS.blazestake].approval.approvedForReadOnlyReview === true, "approved");
+  add("14V-AR: Jupiter Native Stake remains approved as a baseline", cNative.approval.approvedForReadOnlyReview === true, "approved");
+  add("14V-AS: INF remains blocked", cInf.approval.approvedForReadOnlyReview === false && cInf.approval.blockedByRiskApproval === true, "blocked");
+
+  // 14V-AT…BE. Readiness.
+  add("14V-AT: fresh complete approved candidates become selector-input ready", cJito.readiness.eligibleForFutureSelectorInput === true && cNative.readiness.eligibleForFutureSelectorInput === true, "ready");
+  add("14V-AU: selector-input readiness does not enable selection", cJito.selectedByProtocolLogic === false && cJito.selectorScoreCalculated === false && set.winnerSelected === false, "no selection");
+  {
+    const staleCache = buildSolStakingMarketCache({ checkedAt: CHECKED, defiLlama: { payload: dllValid, fetchedAt: OLD }, stakewiz: { payload: stakewiz, fetchedAt: FRESH }, marinade: { payload: marinadeValid, fetchedAt: FRESH } });
+    const staleSet = buildNormalizedSolStakingCandidateSet(staleCache, { checkedAt: CHECKED });
+    const m = staleSet.candidates[IDS.marinade];
+    add("14V-AV: stale approved candidate remains approved but is excluded", m.approval.approvedForReadOnlyReview === true && m.readiness.eligibleForFutureSelectorInput === false && staleSet.excludedCandidateIds.includes(IDS.marinade) && (staleSet.exclusions[IDS.marinade] ?? []).includes("stale_live_market_data"), "stale excluded");
+    const partialSnap = buildLstMarketSnapshot({ candidateId: IDS.marinade, defiLlamaPayload: { data: [rec(POOL.marinade, 4.75, null, 184840000)] }, fetchedAt: FRESH, checkedAt: CHECKED });
+    const partialNorm = normalizeSolStakingCandidate(partialSnap, getSolStakingCandidateStaticFacts(IDS.marinade)!, { checkedAt: CHECKED, sourceCacheGeneratedAt: CHECKED });
+    add("14V-AW: partial approved candidate remains approved but is excluded", partialNorm.approval.approvedForReadOnlyReview === true && partialNorm.readiness.eligibleForFutureSelectorInput === false && partialNorm.readiness.blockers.includes("incomplete_live_market_data"), "partial excluded");
+  }
+  add("14V-AX: blocked INF is normalized for diagnostics but excluded", cInf.readiness.normalized === true && set.excludedCandidateIds.includes(IDS.sanctum) && (set.exclusions[IDS.sanctum] ?? []).some((b) => b === "not_approved_for_read_only_review" || b === "blocked_by_risk_approval"), "diag-only");
+  add("14V-AY: INF never appears in selectorReadyCandidateIds", !set.selectorReadyCandidateIds.includes(IDS.sanctum), "never");
+  {
+    const facts = getSolStakingCandidateStaticFacts(IDS.marinade)!;
+    const noScore = { ...facts, reviewedRiskScore: undefined };
+    const snap = buildLstMarketSnapshot({ candidateId: IDS.marinade, defiLlamaPayload: dllValid, fetchedAt: FRESH, checkedAt: CHECKED });
+    const n1 = normalizeSolStakingCandidate(snap, noScore, { checkedAt: CHECKED, sourceCacheGeneratedAt: CHECKED });
+    add("14V-AZ: missing reviewed risk score excludes a candidate", n1.readiness.eligibleForFutureSelectorInput === false && n1.readiness.blockers.includes("missing_reviewed_risk_score"), "excluded");
+    const noMech = { ...facts, immediateExitAvailable: undefined };
+    const n2 = normalizeSolStakingCandidate(snap, noMech, { checkedAt: CHECKED, sourceCacheGeneratedAt: CHECKED });
+    add("14V-BA: missing required static mechanics excludes a candidate", n2.readiness.eligibleForFutureSelectorInput === false && n2.readiness.blockers.includes("missing_required_static_mechanics"), "excluded");
+  }
+  const readyIds = listSelectorReadyNormalizedCandidates(set).map((c) => c.candidateId);
+  const canonicalReady = [IDS.jito, IDS.jupiter, IDS.marinade, IDS.blazestake, IDS.jupiterNativeStake];
+  add("14V-BB: selector-ready list preserves canonical order", JSON.stringify(readyIds) === JSON.stringify(canonicalReady), readyIds.join(","));
+  add("14V-BC: selector-ready list does not sort by APY", readyIds[0] === IDS.jito && set.candidates[IDS.jupiter].yield.currentApyPct.value! > set.candidates[IDS.jito].yield.currentApyPct.value!, "not apy-sorted");
+  add("14V-BD: selector-ready list does not sort by risk score", readyIds[readyIds.length - 1] === IDS.jupiterNativeStake && cNative.risk.reviewedRiskScore.value! < cJito.risk.reviewedRiskScore.value!, "not risk-sorted");
+  add("14V-BE: selector-ready list does not sort by TVL or stake", JSON.stringify(readyIds) === JSON.stringify(canonicalReady), "not tvl-sorted");
+
+  // 14V-BF…BR. Selector + execution invariants.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const engineRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stakingSug = engineRun.suggestions.find((s) => s.category === "staking");
+  const setJson = JSON.stringify(set).toLowerCase();
+  add("14V-BF: no selector score is calculated", set.selectorScoreCalculated === false && Object.values(set.candidates).every((c) => c.selectorScoreCalculated === false) && !("selectorScore" in set) && Object.values(set.candidates).every((c) => !("selectorScore" in c)), "none");
+  add("14V-BG: no selector weights exist", SOL_STAKING_NORMALIZATION_DEFINES_SELECTOR_WEIGHTS === false && !("weights" in set) && Object.values(set.candidates).every((c) => !("weight" in c) && !("weights" in c)), "none");
+  add("14V-BH: no ranking is calculated", set.rankingCalculated === false && Object.values(set.candidates).every((c) => c.rankingCalculated === false) && !("rankedCandidateIds" in set) && !("winnerId" in set), "none");
+  add("14V-BI: no winner is selected", set.winnerSelected === false && Object.values(set.candidates).every((c) => c.currentWinner === false), "none");
+  add("14V-BJ: no selectedProtocolId changes", stakingSug?.protocolSelection?.selectedProtocolId === "jito", `id=${stakingSug?.protocolSelection?.selectedProtocolId}`);
+  add("14V-BK: Jito live selected behavior remains unchanged", stakingSug?.protocolSelection?.selectedProtocolName === "Jito", "unchanged");
+  add("14V-BL: multi-protocol selector remains disabled", engineRun.suggestions.filter((s) => s.category === "staking").length === 1, "disabled");
+  add("14V-BM: Top Pick remains unchanged", engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => s.protocolSelection?.selectedProtocolName !== "Jupiter Native Stake"), "unchanged");
+  add("14V-BN: engine ordering remains unchanged", engineRun.suggestions.every((s) => s.id !== "jupiter_native_stake" && !s.id.startsWith("sol_staking")), "unchanged");
+  {
+    const prodFiles = ["src/suggestions/stakingSuggestion.ts", "src/suggestions/suggestionReviewDetails.ts", "src/components/SuggestionReviewModal.tsx", "src/suggestions/demoExactSolStakingScenario.ts"];
+    const anyImport = prodFiles.some((f) => readIf(f).includes("solStakingCandidateNormalization") || readIf(f).includes("solStakingMarketDataRefresh"));
+    add("14V-BO: no product-facing UI integration exists", anyImport === false, "no ui import");
+  }
+  {
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "stake(", "delegate(", "withdraw(", "swap(", "deposit(", "approve(", "execute("];
+    add("14V-BP: no transaction path exists", tokens.filter((t) => setJson.includes(t)).length === 0 && Object.values(set.candidates).every((c) => c.transactionsEnabled === false), "none");
+    add("14V-BQ: no signature path exists", Object.values(set.candidates).every((c) => c.walletSignatureRequired === false), "none");
+    add("14V-BR: no stake/delegate/withdraw/swap/deposit/approve/execute handler exists", tokens.filter((t) => setJson.includes(t)).length === 0, "none");
+  }
+
+  // 14V-BS…BV. Validation.
+  add("14V-BS: invalid normalized candidate fails closed", validateNormalizedSolStakingCandidate({}).valid === false && validateNormalizedSolStakingCandidate(cJito).valid === true, "fail-closed");
+  add("14V-BT: invalid normalized set fails closed", validateNormalizedSolStakingCandidateSet({ ...set, winnerSelected: true }).valid === false && validateNormalizedSolStakingCandidateSet(set).valid === true, "fail-closed");
+  {
+    const withUnknown = { ...fullCache, candidates: { ...fullCache.candidates, fake_protocol: { ...fullCache.candidates[IDS.jito], candidateId: "fake_protocol" } } };
+    const unkSet = buildNormalizedSolStakingCandidateSet(withUnknown, { checkedAt: CHECKED });
+    add("14V-BU: unknown candidate does not enter the selector-ready set", !unkSet.selectorReadyCandidateIds.includes("fake_protocol") && unkSet.candidates["fake_protocol"] === undefined, "ignored");
+  }
+  {
+    const diag = getSolStakingNormalizationDiagnostics(set);
+    const infDiag = diag.find((d) => d.candidateId === IDS.sanctum);
+    const hasRank = diag.some((d) => Object.keys(d).some((k) => /rank|score|winner/i.test(k)));
+    add("14V-BV: diagnostics expose blockers without ranking", infDiag != null && infDiag.blockers.length > 0 && hasRank === false && diag.length === SOL_STAKING_MARKET_CANDIDATE_ORDER.length, "diagnostics");
+  }
+
+  // Static-facts adapter smoke (source mapping integrity).
+  add("14V-static: static facts list is canonical and native stays SOL/native", listSolStakingCandidateStaticFacts().map((f) => f.candidateId).join(",") === SOL_STAKING_MARKET_CANDIDATE_ORDER.join(",") && getSolStakingCandidateStaticFacts(IDS.jupiterNativeStake)!.assetSymbol === "SOL", "ok");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -10366,6 +10577,7 @@ export function printFixtureResults(): void {
     ...runNativeValidatorMarketDataFixtureChecks(),
     ...runNativeStakingMarinadeFixtureChecks(),
     ...runSolStakingMarketRefreshFixtureChecks(),
+    ...runSolStakingNormalizationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

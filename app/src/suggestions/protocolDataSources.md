@@ -859,3 +859,15 @@ Marinade latest-epoch window 96h. Failed refreshes preserve previous last-known-
 → atomic write to git-ignored `tmp/sol-staking-market-data-cache.json`. No selector/ranking, no
 approval/risk/evidence mutation, INF stays blocked, no execution path. See
 [solStakingMarketDataRefresh.md](./solStakingMarketDataRefresh.md).
+
+## 14V — normalized candidate comparison model
+
+Normalizes the Step 14U live cache + reviewed static facts into one shared model for Step 14W,
+with per-metric `comparisonScope` so consumers know which fields are genuinely comparable
+(`all_candidates`: current/30-day APY, transparent APY delta, reviewed risk score) versus
+type-specific or descriptive (LST TVL `lst_only`, native delegated stake `native_only`, fees
+`candidate_type_specific`, exit/token model `descriptive_only`). Reviewed risk scores are read
+from the existing score modules (not recalculated); fees stay separate (no synthetic total);
+adoption units stay distinct (USD TVL vs SOL delegated stake, never interchangeable). No scoring,
+ranking, winner, weights, UI, or execution. See
+[solStakingCandidateNormalization.md](./solStakingCandidateNormalization.md).

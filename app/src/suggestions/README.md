@@ -1380,3 +1380,19 @@ recomputed); `eligibleForFutureComparison` is data-readiness only and does not e
 No selector/ranking/winner, no risk-score or evidence mutation, no JitoSOL/Top-Pick/ordering
 change, INF stays blocked, no transaction/signature path, no product-facing UI change. Next:
 14V normalization → 14W deterministic selector.
+
+## 14V — normalized SOL staking comparison model
+
+One deterministic, comparison-ready model over the Step 14U live cache + reviewed static facts
+(see [solStakingCandidateNormalization.md](./solStakingCandidateNormalization.md)). It aligns
+field names while PRESERVING semantics via a per-metric `comparisonScope`: APY (current / 30-day
+/ transparent delta) and reviewed risk score are `all_candidates`; LST TVL is `lst_only`; native
+delegated stake is `native_only`; fees are `candidate_type_specific`; exit + token model are
+`descriptive_only`. LST TVL (USD) and native delegated stake (SOL) are never marked directly
+comparable, no synthetic total fee is created, reviewed risk scores are carried (not
+recalculated), and no fixed hours are invented for epoch exits. `eligibleForFutureSelectorInput`
+is data-readiness only. Stale/partial approved candidates stay approved but excluded; INF is
+normalized for diagnostics but never selector-ready. No selector score/weights/ranking/winner, no
+`selectedProtocolId` change, no product UI, no execution. Real-cache QA: selector-ready = jito,
+jupiter, marinade, blazestake, jupiter_native_stake; excluded = sanctum. Next: 14W deterministic
+selector.
