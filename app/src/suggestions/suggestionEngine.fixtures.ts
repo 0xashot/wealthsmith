@@ -589,6 +589,38 @@ import {
   type SelectorRankable,
 } from "./solStakingSelectorComparison";
 import {
+  SOL_STAKING_SELECTOR_SENSITIVITY_SCHEMA_VERSION,
+  SOL_STAKING_SELECTOR_SENSITIVITY_POLICY_ID,
+  SOL_STAKING_SELECTOR_SENSITIVITY_POLICY_VERSION,
+  SOL_STAKING_SENSITIVITY_MIN_LEADER_RETENTION_RATE,
+  SOL_STAKING_SENSITIVITY_MIN_BASELINE_MARGIN,
+  SOL_STAKING_SENSITIVITY_KNIFE_EDGE_MARGIN,
+  SOL_STAKING_ACTIVATION_MIN_HISTORY_SNAPSHOTS,
+  SOL_STAKING_ACTIVATION_MIN_HISTORY_SPAN_HOURS,
+  SOL_STAKING_ACTIVATION_MIN_CONSECUTIVE_REFRESH_SUCCESSES,
+  SOL_STAKING_SELECTOR_SENSITIVITY_POLICY,
+  validateSolStakingSelectorSensitivityPolicy,
+  listDefaultSolStakingSensitivityScenarios,
+} from "./solStakingSelectorSensitivityPolicy";
+import {
+  runSolStakingSelectorSensitivityAnalysis,
+  applySolStakingSensitivityMarketOverrides,
+  analyzeSolStakingSelectorHistory,
+  validateSolStakingSensitivityResult,
+  validateSolStakingHistoricalSensitivityAnalysis,
+  explainSolStakingSensitivityScenario,
+} from "./solStakingSelectorSensitivity";
+import type { SolStakingSensitivityScenario, SolStakingHistoricalSensitivityInput } from "./solStakingSelectorSensitivityTypes";
+import {
+  SOL_STAKING_SELECTOR_ACTIVATION_PERFORMED,
+  SOL_STAKING_SELECTOR_UPDATES_PRODUCT_UI as SOL_STAKING_ACTIVATION_UPDATES_PRODUCT_UI,
+  evaluateSolStakingSelectorActivationGate,
+  evaluateOperationalReadiness,
+  validateSolStakingSelectorActivationReviewDecision,
+  getSolStakingActivationReviewDiagnostics,
+  type SolStakingSelectorOperationalReadiness,
+} from "./solStakingSelectorActivationGate";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -10771,6 +10803,219 @@ export function runSolStakingSelectorComparisonFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+export function runSolStakingSelectorSensitivityFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const CHECKED = "2026-07-14T03:00:00Z";
+  const FRESH = "2026-07-14T02:50:00Z";
+  const IDS = SOL_STAKING_MARKET_CANDIDATE_IDS;
+
+  const POOL = { jito: "0e7d0722-9054-4907-8593-567b353c0900", jupiter: "52bd72a7-9e81-4112-abb4-71673e8de9bf", marinade: "b3f93865-5ec8-4662-90a0-11808e0aa2bd", blazestake: "387d6732-59f0-4ae0-8a88-aba75a5cbe4a", sanctum: "3075a746-bdd1-4aac-bcd5-b035abee2622" };
+  const rec = (pool: string, apy: unknown, apyMean30d: unknown, tvlUsd: unknown) => ({ pool, chain: "Solana", symbol: "X", apy, apyMean30d, tvlUsd });
+  const dllValid = { status: "success", data: [rec(POOL.jito, 5.36, 5.45, 767950000), rec(POOL.jupiter, 5.67, 5.6, 409170000), rec(POOL.marinade, 4.75, 5.87, 184840000), rec(POOL.blazestake, 5.27, 5.32, 69750000), rec(POOL.sanctum, 5.84, 5.95, 152555981)] };
+  const VA = JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const IDENT = JUPITER_NATIVE_STAKE_IDENTITY;
+  const mkEpochs = (n: number, endEpoch: number, lastEndIso: string, apyBase = 0.054) => { const out: Record<string, unknown>[] = []; let end = Date.parse(lastEndIso); const twoDays = 2 * 86400_000; for (let k = 0; k < n; k++) { const start = end - twoDays; out.push({ epoch: endEpoch - k, apy: apyBase - k * 0.0004, activated_stake: 12_500_000_000_000_000, commission_effective: 5, epoch_start_at: new Date(start).toISOString(), epoch_end_at: new Date(end).toISOString() }); end = start; } return out; };
+  const marinadeValid = { validators: [{ vote_account: VA, identity: IDENT, epoch_stats: [{ epoch: 1001, apy: null, epoch_start_at: "2026-07-12T12:22:01Z", epoch_end_at: "2026-07-14T12:00:00Z" }, ...mkEpochs(16, 1000, "2026-07-12T12:22:01Z")] }] };
+  const stakewiz = [{ vote_identity: VA, identity: IDENT, activated_stake: 12_500_954.43, commission: 500, apy_estimate: 5.23, delinquent: false, epoch: 1001 }];
+
+  const freshCache = buildSolStakingMarketCache({ checkedAt: CHECKED, defiLlama: { payload: dllValid, fetchedAt: FRESH }, stakewiz: { payload: stakewiz, fetchedAt: FRESH }, marinade: { payload: marinadeValid, fetchedAt: FRESH } });
+  const set = buildNormalizedSolStakingCandidateSet(freshCache, { checkedAt: CHECKED });
+  const setJsonBefore = JSON.stringify(set);
+  const policyWeightsBefore = JSON.stringify(SOL_STAKING_SELECTOR_POLICY.weights);
+  const sens = runSolStakingSelectorSensitivityAnalysis(set, { checkedAt: CHECKED });
+  const cmp = buildSolStakingSelectorComparison(set, { checkedAt: CHECKED });
+
+  // 14X-A…I. Policy + model.
+  add("14X-A: sensitivity schema version exists", SOL_STAKING_SELECTOR_SENSITIVITY_SCHEMA_VERSION === "1.0.0" && sens.schemaVersion === "1.0.0", sens.schemaVersion);
+  add("14X-B: sensitivity policy ID/version exist", SOL_STAKING_SELECTOR_SENSITIVITY_POLICY_ID === "balanced_safety_first_v1_sensitivity" && SOL_STAKING_SELECTOR_SENSITIVITY_POLICY_VERSION === "1.0.0", SOL_STAKING_SELECTOR_SENSITIVITY_POLICY_ID);
+  add("14X-C: minimum leader retention is 0.70", SOL_STAKING_SENSITIVITY_MIN_LEADER_RETENTION_RATE === 0.7, `${SOL_STAKING_SENSITIVITY_MIN_LEADER_RETENTION_RATE}`);
+  add("14X-D: minimum baseline margin is 0.25", SOL_STAKING_SENSITIVITY_MIN_BASELINE_MARGIN === 0.25, `${SOL_STAKING_SENSITIVITY_MIN_BASELINE_MARGIN}`);
+  add("14X-E: knife-edge margin is 0.10", SOL_STAKING_SENSITIVITY_KNIFE_EDGE_MARGIN === 0.1, `${SOL_STAKING_SENSITIVITY_KNIFE_EDGE_MARGIN}`);
+  add("14X-F: historical minimum is 12 snapshots", SOL_STAKING_ACTIVATION_MIN_HISTORY_SNAPSHOTS === 12, `${SOL_STAKING_ACTIVATION_MIN_HISTORY_SNAPSHOTS}`);
+  add("14X-G: historical span minimum is 72 hours", SOL_STAKING_ACTIVATION_MIN_HISTORY_SPAN_HOURS === 72, `${SOL_STAKING_ACTIVATION_MIN_HISTORY_SPAN_HOURS}`);
+  add("14X-H: consecutive refresh minimum is 3", SOL_STAKING_ACTIVATION_MIN_CONSECUTIVE_REFRESH_SUCCESSES === 3, `${SOL_STAKING_ACTIVATION_MIN_CONSECUTIVE_REFRESH_SUCCESSES}`);
+  add("14X-I: sensitivity-policy validator rejects invalid thresholds", validateSolStakingSelectorSensitivityPolicy({ ...SOL_STAKING_SELECTOR_SENSITIVITY_POLICY, minHistorySnapshots: 0 }).valid === false && validateSolStakingSelectorSensitivityPolicy(SOL_STAKING_SELECTOR_SENSITIVITY_POLICY).valid === true, "rejected");
+
+  // 14X-J…Y. Scenario catalog.
+  const cat = listDefaultSolStakingSensitivityScenarios();
+  const byId = (id: string) => cat.find((s) => s.scenarioId === id);
+  add("14X-J: baseline scenario exists", byId("baseline")?.scenarioClass === "baseline", "exists");
+  add("14X-K: risk-heavier scenario exists", byId("risk_heavier")?.policyOverrides?.reviewedRiskWeight === 0.6, "exists");
+  add("14X-L: risk-strict scenario exists", byId("risk_strict")?.policyOverrides?.reviewedRiskWeight === 0.7, "exists");
+  add("14X-M: yield-balanced scenario exists", byId("yield_balanced")?.policyOverrides?.apy30dWeight === 0.35, "exists");
+  add("14X-N: durable-yield scenario exists", byId("durable_yield")?.policyOverrides?.currentApyWeight === 0.0, "exists");
+  add("14X-O: low-current-signal scenario exists", byId("low_current_signal") != null, "exists");
+  add("14X-P: narrower-range scenario exists", byId("narrower_normalization_ranges")?.policyOverrides?.apyMinimumRangePctPoints === 0.15, "exists");
+  add("14X-Q: wider-range scenario exists", byId("wider_normalization_ranges")?.policyOverrides?.apyMinimumRangePctPoints === 0.5, "exists");
+  add("14X-R: leader mean-reversion scenario exists", byId("baseline_leader_current_mean_reversion") != null, "exists");
+  add("14X-S: all-candidate mean-reversion scenario exists", byId("all_candidates_current_mean_reversion") != null, "exists");
+  add("14X-T: leader-down scenario exists", byId("baseline_leader_yield_down_0_25") != null, "exists");
+  add("14X-U: runner-up-up scenario exists", byId("runner_up_yield_up_0_25") != null, "exists");
+  add("14X-V: combined leader-down/runner-up-up scenario exists", byId("baseline_leader_down_runner_up_up") != null, "exists");
+  add("14X-W: data-availability scenarios exist", ["baseline_leader_stale", "runner_up_stale", "highest_risk_candidate_stale", "native_candidate_stale"].every((id) => byId(id)?.scenarioClass === "data_availability"), "exists");
+  add("14X-X: scenario IDs are unique", new Set(cat.map((s) => s.scenarioId)).size === cat.length && cat.length === 18, `n=${cat.length}`);
+  add("14X-Y: synthetic scenarios are labeled synthetic", cat.filter((s) => s.scenarioClass !== "baseline").every((s) => s.syntheticScenario === true) && byId("baseline")?.syntheticScenario === false, "labeled");
+
+  // 14X-Z…AE. Mutation safety.
+  add("14X-Z: base selector policy is not mutated", JSON.stringify(SOL_STAKING_SELECTOR_POLICY.weights) === policyWeightsBefore, "unchanged");
+  add("14X-AA: normalized set is not mutated", JSON.stringify(set) === setJsonBefore, "unchanged");
+  {
+    const scen: SolStakingSensitivityScenario = { scenarioId: "t", scenarioName: "t", scenarioClass: "market_perturbation", description: "", syntheticScenario: true, includedInLeaderRetentionRate: true, marketOverrides: { marinade: { currentApyDeltaPctPoints: -0.25, apy30dDeltaPctPoints: -0.25 } }, notes: [] };
+    const applied = applySolStakingSensitivityMarketOverrides(set, scen, {});
+    const cm = applied.set.candidates[IDS.marinade];
+    const om = set.candidates[IDS.marinade];
+    add("14X-AB: reviewed risk scores are not modified", cm.risk.reviewedRiskScore.value === om.risk.reviewedRiskScore.value, "unchanged");
+    add("14X-AC: approval decisions are not modified", cm.approval.approvedForReadOnlyReview === om.approval.approvedForReadOnlyReview, "unchanged");
+    add("14X-AD: adoption/fees/exit/token model are not modified", JSON.stringify(cm.adoption) === JSON.stringify(om.adoption) && JSON.stringify(cm.fees) === JSON.stringify(om.fees) && cm.tokenModel === om.tokenModel && JSON.stringify(cm.exit) === JSON.stringify(om.exit), "unchanged");
+    add("14X-AE: synthetic APY values are labeled", cm.yield.currentApyPct.value === 4.5 && om.yield.currentApyPct.value === 4.75 && cm.yield.currentApyPct.notes.some((n) => n.includes("SYNTHETIC")), `new=${cm.yield.currentApyPct.value}`);
+  }
+
+  // 14X-AF…AM. Scenario behavior.
+  const baselineRes = sens.scenarios.find((s) => s.scenarioId === "baseline")!;
+  add("14X-AF: every valid scenario uses the Step 14W comparison engine", sens.scenarios.filter((s) => s.status === "complete").every((s) => typeof s.candidateScores[s.comparisonLeaderCandidateId!] === "number"), "engine");
+  add("14X-AG: baseline scenario matches the unchanged selector result", baselineRes.comparisonLeaderCandidateId === cmp.comparisonLeaderCandidateId && baselineRes.candidateScores[cmp.comparisonLeaderCandidateId!] === cmp.candidateResults[cmp.comparisonLeaderCandidateId!].totalScore, "matches");
+  {
+    const scen: SolStakingSensitivityScenario = { scenarioId: "mr", scenarioName: "mr", scenarioClass: "market_perturbation", description: "", syntheticScenario: true, includedInLeaderRetentionRate: true, marketOverrides: { jito: { replaceCurrentApyWith30d: true } }, notes: [] };
+    const applied = applySolStakingSensitivityMarketOverrides(set, scen, {});
+    add("14X-AH: mean reversion recalculates APY delta", applied.set.candidates[IDS.jito].yield.absoluteApyDeltaPctPoints.value === 0 && applied.set.candidates[IDS.jito].yield.currentApyPct.value === applied.set.candidates[IDS.jito].yield.apy30dPct.value, "recalculated");
+    const bigNeg: SolStakingSensitivityScenario = { ...scen, scenarioId: "neg", marketOverrides: { jito: { currentApyDeltaPctPoints: -100 } } };
+    add("14X-AI: negative APY is never produced", applySolStakingSensitivityMarketOverrides(set, bigNeg, {}).set.candidates[IDS.jito].yield.currentApyPct.value === 0, "floored");
+    const staleScen: SolStakingSensitivityScenario = { ...scen, scenarioId: "st", marketOverrides: { marinade: { markCandidateStale: true } } };
+    add("14X-AJ: stale scenario excludes the affected candidate", !applySolStakingSensitivityMarketOverrides(set, staleScen, {}).set.selectorReadyCandidateIds.includes(IDS.marinade), "excluded");
+    const partScen: SolStakingSensitivityScenario = { ...scen, scenarioId: "pt", marketOverrides: { marinade: { markCandidatePartial: true } } };
+    add("14X-AK: partial scenario excludes the affected candidate", !applySolStakingSensitivityMarketOverrides(set, partScen, {}).set.selectorReadyCandidateIds.includes(IDS.marinade), "excluded");
+  }
+  add("14X-AL: data-availability scenarios are excluded from retention rate", sens.retentionEligibleScenarioCount === sens.scenarios.filter((s) => s.status === "complete" && s.scenarioClass !== "data_availability").length, `re=${sens.retentionEligibleScenarioCount}`);
+  {
+    const badScen: SolStakingSensitivityScenario = { scenarioId: "bad", scenarioName: "bad", scenarioClass: "policy_weights", description: "", syntheticScenario: true, includedInLeaderRetentionRate: true, policyOverrides: { reviewedRiskWeight: 0.9, apy30dWeight: 0.9, currentApyWeight: 0.0, apyStabilityWeight: 0.0 }, notes: [] };
+    const badSens = runSolStakingSelectorSensitivityAnalysis(set, { checkedAt: CHECKED, scenarios: [byId("baseline")!, badScen] });
+    add("14X-AM: invalid scenario fails closed", badSens.scenarios.find((s) => s.scenarioId === "bad")?.status === "invalid_input", "fail-closed");
+  }
+
+  // 14X-AN…AY. Aggregation.
+  const sens2 = runSolStakingSelectorSensitivityAnalysis(set, { checkedAt: CHECKED });
+  add("14X-AN: leader retention rate is deterministic", sens.leaderRetentionRate === sens2.leaderRetentionRate, `${sens.leaderRetentionRate}`);
+  add("14X-AO: baseline leader average rank is deterministic", sens.baselineLeaderAverageRank === sens2.baselineLeaderAverageRank, `${sens.baselineLeaderAverageRank}`);
+  add("14X-AP: worst rank is deterministic", sens.baselineLeaderWorstRank === sens2.baselineLeaderWorstRank, `${sens.baselineLeaderWorstRank}`);
+  add("14X-AQ: minimum leader margin is deterministic", sens.minimumLeaderMargin === sens2.minimumLeaderMargin, `${sens.minimumLeaderMargin}`);
+  add("14X-AR: median leader margin is deterministic", sens.medianLeaderMargin === sens2.medianLeaderMargin, `${sens.medianLeaderMargin}`);
+  {
+    const completed = sens.scenarios.filter((s) => s.status === "complete");
+    const knife = completed.filter((s) => typeof s.leaderMargin === "number" && s.leaderMargin < 0.1).length;
+    add("14X-AS: knife-edge count matches scenario margins", sens.knifeEdgeScenarioCount === knife, `${sens.knifeEdgeScenarioCount}`);
+    const retentionEligible = completed.filter((s) => s.scenarioClass !== "data_availability");
+    const switches = retentionEligible.filter((s) => !s.baselineLeaderRetained).length;
+    add("14X-AT: leader-switch count is correct", sens.leaderSwitchScenarioCount === switches, `${sens.leaderSwitchScenarioCount}`);
+    const freqTotal = Object.values(sens.leaderFrequency).reduce((a, b) => a + b, 0);
+    add("14X-AU: leader frequencies total completed scenarios", freqTotal === completed.filter((s) => s.comparisonLeaderCandidateId).length, `${freqTotal}`);
+    add("14X-AV: unique leader IDs are deterministic", JSON.stringify(sens.uniqueLeaderCandidateIds) === JSON.stringify(sens2.uniqueLeaderCandidateIds), sens.uniqueLeaderCandidateIds.join(","));
+  }
+  {
+    const knifeRate = sens.completedScenarioCount > 0 ? sens.knifeEdgeScenarioCount / sens.completedScenarioCount : 1;
+    const expectStable = baselineRes.status === "complete" && typeof baselineRes.leaderMargin === "number" && baselineRes.leaderMargin >= 0.25 && typeof sens.leaderRetentionRate === "number" && sens.leaderRetentionRate >= 0.7 && knifeRate <= 0.25 && sens.retentionEligibleScenarioCount >= 8 && sens.scenarios.every((s) => s.status !== "invalid_input");
+    add("14X-AW: leader-stable requires every configured threshold", sens.leaderStable === expectStable, `stable=${sens.leaderStable}`);
+    const policyC = sens.scenarios.filter((s) => s.status === "complete" && s.scenarioClass === "policy_weights");
+    const expectPolicySensitive = policyC.some((s) => !s.baselineLeaderRetained) || (policyC.length > 0 && policyC.filter((s) => s.baselineLeaderRetained).length / policyC.length < 0.7);
+    add("14X-AX: policy sensitivity derives from policy scenarios", sens.policySensitive === expectPolicySensitive, `${sens.policySensitive}`);
+    const marketC = sens.scenarios.filter((s) => s.status === "complete" && s.scenarioClass === "market_perturbation");
+    const mSwitches = marketC.filter((s) => !s.baselineLeaderRetained).length;
+    const expectMarketSensitive = mSwitches >= 2 || (marketC.length > 0 && marketC.filter((s) => s.baselineLeaderRetained).length / marketC.length < 0.7);
+    add("14X-AY: market sensitivity derives from market scenarios", sens.marketSensitive === expectMarketSensitive, `${sens.marketSensitive}`);
+  }
+
+  // 14X-AZ…BI. Historical analysis.
+  const histInputs = (n: number, spanHours: number): SolStakingHistoricalSensitivityInput[] => Array.from({ length: n }, (_, i) => ({ snapshotId: `snap_${i}`, cacheGeneratedAt: new Date(Date.parse("2026-07-10T00:00:00Z") + (i * spanHours / Math.max(1, n - 1)) * 3_600_000).toISOString(), checkedAt: CHECKED, normalizedSet: set }));
+  const histEmpty = analyzeSolStakingSelectorHistory([], { checkedAt: CHECKED, baselineLeaderId: sens.baselineLeaderCandidateId });
+  add("14X-AZ: historical analysis uses real supplied snapshots only", analyzeSolStakingSelectorHistory(histInputs(2, 10), { checkedAt: CHECKED }).validSnapshotCount === 2, "real only");
+  add("14X-BA: no snapshots yields insufficient historical coverage", histEmpty.validSnapshotCount === 0 && histEmpty.historyRequirementsPass === false && histEmpty.blockers.includes("historical_coverage_insufficient"), "insufficient");
+  {
+    const dup: SolStakingHistoricalSensitivityInput[] = [{ snapshotId: "d", cacheGeneratedAt: "2026-07-10T00:00:00Z", checkedAt: CHECKED, normalizedSet: set }, { snapshotId: "d", cacheGeneratedAt: "2026-07-10T06:00:00Z", checkedAt: CHECKED, normalizedSet: set }];
+    add("14X-BB: duplicate historical snapshot IDs are rejected", analyzeSolStakingSelectorHistory(dup, { checkedAt: CHECKED }).blockers.some((b) => b.startsWith("duplicate_snapshot_id")), "rejected");
+    const bad: SolStakingHistoricalSensitivityInput[] = [{ snapshotId: "x", cacheGeneratedAt: "not-a-date", checkedAt: CHECKED, normalizedSet: set }];
+    add("14X-BC: malformed timestamps are rejected", analyzeSolStakingSelectorHistory(bad, { checkedAt: CHECKED }).blockers.some((b) => b.startsWith("malformed_timestamp")), "rejected");
+    const unordered: SolStakingHistoricalSensitivityInput[] = [{ snapshotId: "b", cacheGeneratedAt: "2026-07-12T00:00:00Z", checkedAt: CHECKED, normalizedSet: set }, { snapshotId: "a", cacheGeneratedAt: "2026-07-10T00:00:00Z", checkedAt: CHECKED, normalizedSet: set }];
+    const ua = analyzeSolStakingSelectorHistory(unordered, { checkedAt: CHECKED });
+    add("14X-BD: historical snapshots are sorted deterministically", ua.firstSnapshotAt === "2026-07-10T00:00:00Z" && ua.lastSnapshotAt === "2026-07-12T00:00:00Z", "sorted");
+    add("14X-BE: history span is calculated correctly", Math.abs(ua.historySpanHours - 48) < 1e-6, `${ua.historySpanHours}`);
+  }
+  add("14X-BF: fewer than 12 valid snapshots fails history gate", analyzeSolStakingSelectorHistory(histInputs(4, 80), { checkedAt: CHECKED }).historyRequirementsPass === false, "fail");
+  add("14X-BG: less than 72 hours fails history gate", analyzeSolStakingSelectorHistory(histInputs(12, 10), { checkedAt: CHECKED }).historyRequirementsPass === false, "fail");
+  add("14X-BH: sufficient snapshots and span can pass history gate", analyzeSolStakingSelectorHistory(histInputs(12, 80), { checkedAt: CHECKED }).historyRequirementsPass === true, "pass");
+  add("14X-BI: synthetic sensitivity scenarios are not counted as history", histEmpty.validSnapshotCount === 0 && sens.scenarios.length === 18, "separate");
+
+  // 14X-BJ…BT. Activation gate.
+  const passingSens = { ...sens, leaderStable: true, policySensitive: false, marketSensitive: false };
+  const passingHist = { ...histEmpty, historyRequirementsPass: true, validSnapshotCount: 12, historySpanHours: 80, historicalLeaderRetentionRate: 0.9 };
+  const passingOp: SolStakingSelectorOperationalReadiness = { scheduledRefreshConfigured: true, refreshIntervalHours: 6, consecutiveSuccessfulRefreshes: 3, latestCacheFresh: true, repeatedSourceFailureAlertingConfigured: true, rollbackFlagAvailable: true, rollbackProcedureDocumented: true, regressionQaComplete: true, productCopyReviewComplete: true, humanPolicySignOff: true, humanActivationApproval: true, notes: [] };
+  const gate = (over: Partial<{ c: typeof cmp; s: typeof passingSens; h: typeof passingHist; o: SolStakingSelectorOperationalReadiness }>) => evaluateSolStakingSelectorActivationGate({ comparisonResult: over.c ?? cmp, sensitivityResult: over.s ?? passingSens, historicalAnalysis: over.h ?? passingHist, operationalReadiness: over.o ?? passingOp });
+  add("14X-BJ: invalid input produces blocked_invalid_input", gate({ c: { ...cmp, status: "invalid_input" } as never }).status === "blocked_invalid_input", "status");
+  add("14X-BK: insufficient candidates produces blocked_insufficient_candidates", gate({ c: { ...cmp, eligibleCandidateIds: [cmp.eligibleCandidateIds[0]] } as never }).status === "blocked_insufficient_candidates", "status");
+  add("14X-BL: insufficient history produces blocked_historical_coverage", gate({ h: { ...passingHist, historyRequirementsPass: false } }).status === "blocked_historical_coverage", "status");
+  add("14X-BM: unstable leader produces blocked_leader_unstable", gate({ s: { ...passingSens, leaderStable: false } }).status === "blocked_leader_unstable", "status");
+  add("14X-BN: policy-sensitive result produces blocked_policy_sensitive", gate({ s: { ...passingSens, policySensitive: true } }).status === "blocked_policy_sensitive", "status");
+  add("14X-BO: market-sensitive result produces blocked_market_sensitive", gate({ s: { ...passingSens, marketSensitive: true } }).status === "blocked_market_sensitive", "status");
+  add("14X-BP: missing operational readiness produces blocked_operational_readiness", gate({ o: { ...passingOp, scheduledRefreshConfigured: false } }).status === "blocked_operational_readiness", "status");
+  add("14X-BQ: missing policy sign-off produces blocked_human_approval", gate({ o: { ...passingOp, humanPolicySignOff: false } }).status === "blocked_human_approval", "status");
+  add("14X-BR: missing activation approval produces blocked_human_approval", gate({ o: { ...passingOp, humanActivationApproval: false } }).status === "blocked_human_approval", "status");
+  const readyDecision = gate({});
+  add("14X-BS: ready status requires all gates", readyDecision.status === "ready_for_human_activation_review" && validateSolStakingSelectorActivationReviewDecision(readyDecision).valid === true, readyDecision.status);
+  add("14X-BT: ready status still performs no activation", readyDecision.activationPerformed === false && readyDecision.selectedProtocolIdChanged === false && readyDecision.winnerActivated === false && readyDecision.updatesProductUi === false, "inert");
+
+  // 14X-BU…CB. Operational readiness.
+  add("14X-BU: refresh interval above 6 hours fails", evaluateOperationalReadiness({ ...passingOp, refreshIntervalHours: 12 }).passed === false, "fail");
+  add("14X-BV: fewer than 3 consecutive successes fails", evaluateOperationalReadiness({ ...passingOp, consecutiveSuccessfulRefreshes: 2 }).passed === false, "fail");
+  add("14X-BW: stale latest cache fails", evaluateOperationalReadiness({ ...passingOp, latestCacheFresh: false }).passed === false, "fail");
+  add("14X-BX: missing alerting fails", evaluateOperationalReadiness({ ...passingOp, repeatedSourceFailureAlertingConfigured: false }).passed === false, "fail");
+  add("14X-BY: missing rollback flag fails", evaluateOperationalReadiness({ ...passingOp, rollbackFlagAvailable: false }).passed === false, "fail");
+  add("14X-BZ: missing rollback documentation fails", evaluateOperationalReadiness({ ...passingOp, rollbackProcedureDocumented: false }).passed === false, "fail");
+  add("14X-CA: incomplete regression QA fails", evaluateOperationalReadiness({ ...passingOp, regressionQaComplete: false }).passed === false, "fail");
+  add("14X-CB: incomplete product-copy review fails", evaluateOperationalReadiness({ ...passingOp, productCopyReviewComplete: false }).passed === false && evaluateOperationalReadiness(passingOp).passed === true, "fail");
+
+  // 14X-CC…CK. Product invariants.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const engineRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stakingSug = engineRun.suggestions.find((s) => s.category === "staking");
+  add("14X-CC: current selected protocol remains Jito", readyDecision.currentSelectedCandidateId === "jito" && stakingSug?.protocolSelection?.selectedProtocolId === "jito", "jito");
+  add("14X-CD: selectedProtocolIdChanged is false", sens.selectedProtocolIdChanged === false && readyDecision.selectedProtocolIdChanged === false, "false");
+  add("14X-CE: winnerActivated is false", readyDecision.winnerActivated === false && SOL_STAKING_SELECTOR_ACTIVATION_PERFORMED === false, "false");
+  add("14X-CF: multi-protocol selection remains disabled", engineRun.suggestions.filter((s) => s.category === "staking").length === 1, "disabled");
+  add("14X-CG: Top Pick remains unchanged", engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => s.protocolSelection?.selectedProtocolName !== "Jupiter Native Stake"), "unchanged");
+  add("14X-CH: engine ordering remains unchanged", engineRun.suggestions.every((s) => s.id !== "jupiter_native_stake" && !s.id.startsWith("sol_staking")), "unchanged");
+  {
+    const prodFiles = ["src/suggestions/stakingSuggestion.ts", "src/suggestions/suggestionReviewDetails.ts", "src/components/SuggestionReviewModal.tsx", "src/suggestions/demoExactSolStakingScenario.ts"];
+    add("14X-CI: no product-facing import exists", prodFiles.every((f) => !readIf(f).includes("solStakingSelectorSensitivity") && !readIf(f).includes("solStakingSelectorActivationGate")), "no import");
+  }
+  add("14X-CJ: no product UI update exists", SOL_STAKING_ACTIVATION_UPDATES_PRODUCT_UI === false, "false");
+  add("14X-CK: INF remains blocked and unscored", getInfReadOnlyApprovalDecision({ checkedAt: "2026-07-14T02:30:00Z" }) === null && sens.scenarios.every((s) => s.candidateScores[IDS.sanctum] === undefined), "blocked");
+
+  // 14X-CL…CN. Execution invariants.
+  {
+    const j = (JSON.stringify(sens) + JSON.stringify(readyDecision)).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "stake(", "delegate(", "withdraw(", "swap(", "deposit(", "approve(", "execute("];
+    add("14X-CL: no transaction path exists", sens.transactionsEnabled === false && readyDecision.transactionsEnabled === false && tokens.filter((t) => j.includes(t)).length === 0, "none");
+    add("14X-CM: no signature path exists", sens.walletSignatureRequired === false && readyDecision.walletSignatureRequired === false, "none");
+    add("14X-CN: no stake/delegate/withdraw/swap/deposit/approve/execute handler exists", tokens.filter((t) => j.includes(t)).length === 0, "none");
+  }
+
+  // 14X-CO…CR. Cache QA (synthetic) + integrity.
+  add("14X-CO: fresh cache can run sensitivity analysis", sens.completedScenarioCount >= 2 && validateSolStakingSensitivityResult(sens).valid === true, `completed=${sens.completedScenarioCount}`);
+  add("14X-CP: scenario leaders are formula-derived", baselineRes.comparisonLeaderCandidateId === cmp.comparisonLeaderCandidateId && explainSolStakingSensitivityScenario(sens, "baseline")?.comparisonLeaderCandidateId === cmp.comparisonLeaderCandidateId, "formula");
+  add("14X-CQ: history is not fabricated", histEmpty.validSnapshotCount === 0 && validateSolStakingHistoricalSensitivityAnalysis(histEmpty).valid === true, "not fabricated");
+  {
+    const truthfulOp: SolStakingSelectorOperationalReadiness = { scheduledRefreshConfigured: false, refreshIntervalHours: 6, consecutiveSuccessfulRefreshes: 1, latestCacheFresh: true, repeatedSourceFailureAlertingConfigured: false, rollbackFlagAvailable: false, rollbackProcedureDocumented: false, regressionQaComplete: false, productCopyReviewComplete: false, humanPolicySignOff: false, humanActivationApproval: false, notes: [] };
+    const realDecision = evaluateSolStakingSelectorActivationGate({ comparisonResult: cmp, sensitivityResult: sens, historicalAnalysis: histEmpty, operationalReadiness: truthfulOp });
+    add("14X-CR: activation decision reflects actual blockers", realDecision.status === "blocked_historical_coverage" && realDecision.blockers.includes("historical_coverage_insufficient") && getSolStakingActivationReviewDiagnostics(realDecision).status === "blocked_historical_coverage", realDecision.status);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -10844,6 +11089,7 @@ export function printFixtureResults(): void {
     ...runSolStakingMarketRefreshFixtureChecks(),
     ...runSolStakingNormalizationFixtureChecks(),
     ...runSolStakingSelectorComparisonFixtureChecks(),
+    ...runSolStakingSelectorSensitivityFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

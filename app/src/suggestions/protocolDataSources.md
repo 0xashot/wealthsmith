@@ -882,3 +882,15 @@ comparison). Produces a transparent per-dimension breakdown, a deterministic ran
 order as final tie-break), and a "comparison leader" — with NO activation: `selectedProtocolId`
 unchanged, no product winner, no UI/Top-Pick/ordering change, no execution, INF never scored. See
 [solStakingSelectorComparison.md](./solStakingSelectorComparison.md).
+
+## 14X — sensitivity analysis + activation gate
+
+Deterministic policy/market/availability sensitivity scenarios over the Step 14W comparison, plus a
+historical-snapshot analysis and a formal activation-review gate. Sensitivity aggregates leader
+retention, margins, knife-edge, and policy/market sensitivity (leader-stable requires margin ≥0.25,
+retention ≥0.70, knife-edge ≤0.25, ≥8 eligible scenarios). Activation additionally requires ≥12
+real snapshots spanning ≥72h, operational readiness (scheduled 6h refresh, alerting, rollback,
+regression QA, product-copy review), and two human approvals — evaluated in strict order.
+`ready_for_human_activation_review` still activates nothing. Real cache: leader mSOL is
+policy-robust, market-sensitive; blocked on historical coverage. See
+[solStakingSelectorActivationReview.md](./solStakingSelectorActivationReview.md).

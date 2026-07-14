@@ -1414,3 +1414,19 @@ UI/Top-Pick/engine-ordering change, no execution; JitoSOL stays selected, INF st
 Real-cache QA leader = marinade (validated, independent recompute matches). Future activation is
 gated behind policy/result review, sensitivity analysis, a scheduled refresh job, explicit
 approval, regression QA, product-copy review, and a rollback plan.
+
+## 14X — selector sensitivity + activation gate
+
+A deterministic sensitivity + activation-REVIEW layer (see
+[solStakingSelectorActivationReview.md](./solStakingSelectorActivationReview.md)) over the Step 14W
+comparison. It runs 18 deterministic scenarios (baseline + 5 policy-weight + 2 normalization-range
++ 6 market-perturbation + 4 data-availability) through the existing 14W engine — never mutating the
+base policy, the normalized set, reviewed risk, approval, the cache, or evidence — and aggregates
+leader retention, margins, knife-edge, and policy/market/data-availability sensitivity. Historical
+analysis uses only real supplied snapshots (≥12 spanning ≥72h to pass; empty → insufficient).
+`evaluateSolStakingSelectorActivationGate` combines comparison + sensitivity + history + truthful
+operational readiness into an activation-review decision in strict gate order; even
+`ready_for_human_activation_review` activates nothing (no selectedProtocolId change, no product
+winner, no UI/Top-Pick/ordering change, no execution). Current real-cache outcome: leader mSOL is
+policy-robust but market-sensitive; activation is blocked on historical coverage (and operational
+readiness + human approval). Jito stays selected, INF stays blocked/unscored.
