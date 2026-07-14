@@ -32,7 +32,7 @@ arrays are **empty**, so every staged candidate stays **blocked** and none is
 | Marinade · mSOL | 10 / 10 (see 14F–14I below) | `readyForRiskGate` while fresh — scored 7.40, approved for read-only review (14J/14K/14L) |
 | Jupiter · JupSOL | 10 / 10 (Step 14M) | `readyForRiskGate` while fresh — scored 7.65, approved for read-only review (14M) |
 | BlazeStake · bSOL | 10 / 10 (Step 14N) | `readyForRiskGate` while fresh — scored 7.35, approved for read-only review (14N) |
-| Sanctum · INF | none | blocked — all categories missing |
+| Sanctum · INF | 10 / 10 (Step 14O) | `readyForRiskGate` while fresh — scored 6.95 (multi-LST pool), **BLOCKED** (below the 7.0 threshold); not approved, not surfaced product-facing (14O) |
 
 ## Required categories per candidate
 

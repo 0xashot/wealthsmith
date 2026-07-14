@@ -1248,3 +1248,35 @@ now returns Jito + mSOL + JupSOL (all unchanged) + bSOL when fresh (the bSOL ent
 the bSOL module's `getBsolReviewApprovedCandidateEntry()`). **JitoSOL remains the only selected
 protocol** and the multi-protocol selector comparison stays deferred. (Sanctum · INF remains a
 staged candidate with no fresh evidence.)
+
+## Sanctum · INF run through the pipeline — BLOCKED below threshold (Step 14O)
+
+Sanctum · INF — a **multi-LST / shared-liquidity pool**, not a single LST — is run through the
+same gated pipeline. **(1) fresh evidence** — founder-authorized public-source fetches recorded
+**all 10** categories (DefiLlama INF pool `3075a746-…`: TVL ~$152.6M, current APY 5.83868%,
+30-day mean 5.95% from raw JSON; Sanctum docs: INF is a shared-liquidity pool that HOLDS many
+underlying LSTs — all Sanctum LSTs plus non-Sanctum **jitoSOL and bSOL** plus SOL/wSOL — with
+dynamic allocation; RemoveLiquidity redemption is instant so `direct_unstake_time` is sourced
+**text** with no invented hours; 0.2% withdrawal fee; 0% pool-level management fee; Infinity
+program audited 3× (OtterSec/Sec3/Neodyme) + base SPL stake pool 5×; and a point-in-time
+incident review that is **not** a clean-history claim). Crucially, `operational_risk` records
+the **OVERLAP** — INF's underlying exposure overlaps JitoSOL (selected) and bSOL (a review
+candidate), so it is explicitly **not** framed as independent diversification. **(2) risk score
+6.95/10** (`assigned_for_review`) — see
+[solLiquidStakingInfRiskScore.md](./solLiquidStakingInfRiskScore.md); its multi-LST structure,
+added program surface, variable swap-fee transparency, and non-independent overlap place it just
+**below** the single-LST cohort. **(3) read-only review approval — BLOCKED:** 6.95 is below the
+7.0 threshold, so `getInfReadOnlyApprovalDecision()` is `null` with blocker
+`risk_score_below_threshold` (see
+[solLiquidStakingInfReadOnlyApproval.md](./solLiquidStakingInfReadOnlyApproval.md)). **(4) UI
+exposure — none product-facing:** INF is NOT surfaced in Real Wallet / Demo / the approved
+"Other protocols to review" section, and is NOT added to
+`getAllReadOnlyReviewApprovedSolLiquidStakingCandidates()` (still Jito + mSOL + JupSOL + bSOL).
+Its only UI presence is a clearly-labelled **internal `/testing` BLOCKED** card
+(`testing_inf_blocked`, driven by `getInfBlockedReviewSummary`) that documents the completed
+evidence + below-threshold score + multi-LST/overlap, review-only with no execution CTA. mSOL,
+JupSOL, and bSOL review behavior are unchanged, and JitoSOL remains the only selected protocol.
+This is the gate working as intended — a complete, well-audited candidate can still fall short
+of the review-exposure bar. All five staged SOL LST candidates are now processed (4 approved for
+read-only review, INF blocked); the natural next step is the deterministic multi-candidate
+selector comparison across the approved review candidates.

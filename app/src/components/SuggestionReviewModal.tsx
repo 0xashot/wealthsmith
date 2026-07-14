@@ -373,8 +373,8 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
             <section className="review-modal__section" aria-label="What is not evaluated yet">
               <h3 className="review-modal__section-title">Not evaluated yet</h3>
               <ul className="review-modal__bullets">
-                {limitations.map((l) => (
-                  <li key={l.kind}>{l.text}</li>
+                {limitations.map((l, i) => (
+                  <li key={`${l.kind}-${i}`}>{l.text}</li>
                 ))}
               </ul>
             </section>

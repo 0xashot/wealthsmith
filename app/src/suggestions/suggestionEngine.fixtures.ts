@@ -372,6 +372,7 @@ import {
   summarizeSolLstFreshEvidenceRecordStatus,
   MARINADE_MSOL_FRESH_EVIDENCE_INPUTS,
   BLAZESTAKE_BSOL_FRESH_EVIDENCE_INPUTS,
+  SANCTUM_INF_FRESH_EVIDENCE_INPUTS,
 } from "./solLiquidStakingFreshEvidenceRecords";
 import {
   SOL_LST_MSOL_RISK_SCORE_EXISTS,
@@ -436,6 +437,27 @@ import {
   evaluateBsolReadOnlyApprovalStatus,
   buildBsolReadOnlyReviewCandidateDisplay,
 } from "./solLiquidStakingBsolReadOnlyApproval";
+import {
+  SOL_LST_INF_RISK_SCORE_EXISTS,
+  SOL_LST_INF_IS_MULTI_LST_POOL,
+  getInfRiskScoreAssignment,
+  evaluateInfRiskScoreAssignmentStatus,
+} from "./solLiquidStakingInfRiskScore";
+import {
+  SOL_LST_INF_READ_ONLY_APPROVAL_EXISTS,
+  SOL_LST_INF_READ_ONLY_APPROVAL_APPROVES_REVIEW_EXPOSURE,
+  SOL_LST_INF_READ_ONLY_APPROVAL_SELECTS_PROTOCOL_WINNER,
+  SOL_LST_INF_READ_ONLY_APPROVAL_ENABLES_MULTI_PROTOCOL_SELECTION,
+  SOL_LST_INF_READ_ONLY_APPROVAL_UPDATES_LIVE_RECOMMENDATIONS,
+  SOL_LST_INF_READ_ONLY_APPROVAL_REPLACES_JITO,
+  SOL_LST_INF_READ_ONLY_APPROVAL_ENABLES_TRANSACTIONS,
+  SOL_LST_INF_READ_ONLY_APPROVAL_REQUIRES_WALLET_SIGNATURE,
+  isRiskScoreAboveReadOnlyThreshold as isInfRiskScoreAboveReadOnlyThreshold,
+  getInfReadOnlyApprovalDecision,
+  evaluateInfReadOnlyApprovalStatus,
+  getInfReviewApprovedCandidateEntry,
+  getInfBlockedReviewSummary,
+} from "./solLiquidStakingInfReadOnlyApproval";
 import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
@@ -9386,6 +9408,160 @@ export function runSolLstBsolReviewExposureFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 14O — Sanctum · INF run through the SAME gated pipeline as a MULTI-LST pool. Its
+ * evidence is complete + fresh and a risk score is assigned (6.95 / 10), but that is
+ * BELOW the 7.0 read-only-review threshold, so INF is **blocked**: not approved, not added
+ * to the combined review list, and not surfaced in Real Wallet / Demo. Only a
+ * clearly-labelled internal `/testing` BLOCKED evidence view exists. Every check confirms
+ * INF is not selected/winner, does not replace Jito/mSOL/JupSOL/bSOL, has no execution
+ * path, and that the other candidates' review behavior is unchanged.
+ */
+export function runSolLstInfReviewExposureFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const FRESH = "2026-07-14T02:30:00Z";
+  const STALE = "2026-07-25T00:00:00Z";
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const stakingAlts = staking?.reviewDetails?.otherProtocolsToReview;
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingMsol = getTestingPageFixtures().find((f) => f.id === "testing_msol_review");
+  const testingInf = getTestingPageFixtures().find((f) => f.id === "testing_inf_blocked");
+
+  const infInputs = SANCTUM_INF_FRESH_EVIDENCE_INPUTS;
+  // 14O-A…J. Evidence inputs are well-formed and run through the intake.
+  add("14O-A: INF evidence inputs exist", infInputs.length > 0, `count=${infInputs.length}`);
+  add("14O-B: every INF input uses protocolId sanctum", infInputs.every((i) => i.protocolId === "sanctum"), `n=${infInputs.length}`);
+  add("14O-C: no INF input uses TEST_ONLY", !infInputs.some((i) => JSON.stringify(i).includes("TEST_ONLY")), "clean");
+  add("14O-D: every INF input has sourceName", infInputs.every((i) => !!i.sourceName && i.sourceName.trim() !== ""), "ok");
+  add("14O-E: every INF input has sourceUrl", infInputs.every((i) => !!i.sourceUrl && i.sourceUrl.trim() !== ""), "ok");
+  add("14O-F: every INF input has confirmedAt", infInputs.every((i) => !!i.confirmedAt && !Number.isNaN(Date.parse(i.confirmedAt))), "ok");
+  add("14O-G: every INF input has confirmedBy", infInputs.every((i) => i.confirmedBy === "Ashot"), "ok");
+  add("14O-H: every INF input has reviewerRole", infInputs.every((i) => i.reviewerRole === "founder"), "ok");
+  add("14O-I: every INF input has notes", infInputs.every((i) => Array.isArray(i.notes) && i.notes.length > 0), "ok");
+  {
+    const recs = infInputs.map((i) => createSolLstFreshEvidenceRecord(i, FRESH));
+    add("14O-J: every INF input is processed through createSolLstFreshEvidenceRecord", recs.length === infInputs.length && recs.every((r, idx) => r.category === infInputs[idx].category && r.status === "accepted"), `records=${recs.length}`);
+  }
+
+  // 14O-K…M. readyForRiskGate gating.
+  const infSummary = getSolLstFreshEvidenceSummaries({ checkedAt: FRESH }).find((s) => s.protocolId === "sanctum");
+  add("14O-K: INF readyForRiskGate is true only if all 10 fresh accepted records exist", infSummary?.acceptedCount === 10 && infSummary?.readyForRiskGate === true && (infSummary?.blockers.length ?? 1) === 0, `accepted=${infSummary?.acceptedCount} ready=${infSummary?.readyForRiskGate}`);
+  {
+    const nineRecords = infInputs.slice(0, 9).map((i) => createSolLstFreshEvidenceRecord(i, FRESH));
+    const nine = summarizeSolLstFreshEvidenceRecords(nineRecords, FRESH).find((s) => s.protocolId === "sanctum");
+    add("14O-L: INF readyForRiskGate is false if incomplete", nine?.readyForRiskGate === false && (nine?.acceptedCount ?? 0) < 10, `ready=${nine?.readyForRiskGate}`);
+  }
+  add("14O-M: INF readyForRiskGate is false if stale", getSolLstFreshEvidenceSummaries({ checkedAt: STALE }).find((s) => s.protocolId === "sanctum")?.readyForRiskGate === false, `stale-ready=${getSolLstFreshEvidenceSummaries({ checkedAt: STALE }).find((s) => s.protocolId === "sanctum")?.readyForRiskGate}`);
+
+  // 14O-N/O. Multi-LST identification + no diversification claim without overlap caveat.
+  const scoreAssignment = getInfRiskScoreAssignment({ checkedAt: FRESH });
+  const scoreStatus = evaluateInfRiskScoreAssignmentStatus({ checkedAt: FRESH });
+  const infOpRisk = getSolLstFreshEvidenceRecords({ checkedAt: FRESH }).find((r) => r.protocolId === "sanctum" && r.category === "operational_risk");
+  add("14O-N: INF records/rationale identify INF as multi-LST / shared-liquidity pool", SOL_LST_INF_IS_MULTI_LST_POOL === true && scoreAssignment?.isMultiLstPool === true && /multi-lst|shared[- ]liquidity/i.test(String(infOpRisk?.value ?? "")) && /multi-lst|shared liquidity/i.test(scoreAssignment?.poolComposition.poolType ?? ""), `multi=${scoreAssignment?.isMultiLstPool}`);
+  {
+    const overlapOk = /not independent diversification/i.test(scoreAssignment?.poolComposition.overlapNote ?? "");
+    const noBarePositiveDiversification = !(scoreAssignment?.rationale.positives ?? []).some((p) => /diversif/i.test(p));
+    add("14O-O: INF does not claim diversification without underlying-exposure/overlap caveat", overlapOk && noBarePositiveDiversification, `overlapCaveat=${overlapOk} noBarePositive=${noBarePositiveDiversification}`);
+  }
+
+  // 14O-P…W. Risk score, only from complete+fresh evidence.
+  add("14O-P: INF risk score exists only if readyForRiskGate is true", SOL_LST_INF_RISK_SCORE_EXISTS === true && scoreAssignment != null && getInfRiskScoreAssignment({ checkedAt: STALE }) === null, `fresh=${scoreAssignment != null} stale=${getInfRiskScoreAssignment({ checkedAt: STALE })}`);
+  add("14O-Q: INF risk score is between 0 and 10", (scoreAssignment?.score ?? -1) >= 0 && (scoreAssignment?.score ?? 11) <= 10, `v=${scoreAssignment?.score}`);
+  add("14O-R: INF score has dimension scores", scoreAssignment?.dimensionScores != null && Object.keys(scoreAssignment?.dimensionScores ?? {}).length === 6, `keys=${Object.keys(scoreAssignment?.dimensionScores ?? {}).length}`);
+  add("14O-S: every INF dimension score is between 0 and 10", Object.values(scoreAssignment?.dimensionScores ?? {}).every((v) => typeof v === "number" && v >= 0 && v <= 10), "ok");
+  {
+    const rubricDims = getProtocolRiskRubricDimensions();
+    const idMap: Record<ProtocolRiskRubricDimensionId, keyof NonNullable<typeof scoreAssignment>["dimensionScores"]> = {
+      audit_security: "auditSecurity",
+      maturity: "maturityAdoption",
+      tvl_adoption: "tvlLiquidity",
+      withdrawal_fee_transparency: "withdrawalFeeTransparency",
+      operational_dependency_risk: "operationalDependency",
+      incident_history: "incidentHistory",
+    };
+    const totalW = rubricDims.reduce((s, d) => s + d.weight, 0);
+    const recomputed = Math.round((rubricDims.reduce((s, d) => s + (scoreAssignment?.dimensionScores[idMap[d.id]] ?? 0) * d.weight, 0) / totalW) * 100) / 100;
+    add("14O-T: weighted score matches rubric weights", recomputed === scoreAssignment?.score && recomputed === 6.95, `recomputed=${recomputed} score=${scoreAssignment?.score}`);
+  }
+  add("14O-U: INF score status is assigned_for_review", scoreAssignment?.scoreStatus === "assigned_for_review", `v=${scoreAssignment?.scoreStatus}`);
+  add("14O-V: INF score does not approve protocol selection", scoreAssignment?.approvedForReadOnlyRecommendation === false && scoreAssignment?.selectedByProtocolLogic === false && scoreAssignment?.currentWinner === false && scoreStatus.approvedForReadOnlyRecommendation === false, "no approve/select/win");
+  add("14O-W: INF score enables no transactions/signatures", scoreAssignment?.transactionsEnabled === false && scoreAssignment?.walletSignatureRequired === false, "no tx/sig");
+  add("14O-X: INF rationale includes multi-LST pool mechanics", /multi-lst|pool/i.test((scoreAssignment?.rationale.risks ?? []).join(" ")), "present");
+  add("14O-Y: INF rationale includes overlap/underlying exposure risk", /overlap|underlying/i.test((scoreAssignment?.rationale.risks ?? []).join(" ")), "present");
+
+  // 14O-Z…AF. Read-only review approval — BLOCKED (score 6.95 < 7).
+  const decision = getInfReadOnlyApprovalDecision({ checkedAt: FRESH });
+  const apprStatus = evaluateInfReadOnlyApprovalStatus({ checkedAt: FRESH });
+  const blocked = getInfBlockedReviewSummary({ checkedAt: FRESH });
+  add("14O-Z: INF read-only approval exists only if score >= 7 (INF is below → blocked)", SOL_LST_INF_READ_ONLY_APPROVAL_EXISTS === true && SOL_LST_INF_READ_ONLY_APPROVAL_APPROVES_REVIEW_EXPOSURE === false && decision === null && isInfRiskScoreAboveReadOnlyThreshold(scoreAssignment?.score ?? 0) === false && apprStatus.blockers.includes("risk_score_below_threshold"), `decision=${decision} blockers=${apprStatus.blockers.join(",")}`);
+  add("14O-AA: INF approvedForReadOnlyRecommendation true only if approval gate passes (it does not)", apprStatus.approvedForReadOnlyRecommendation === false && blocked.approvedForReadOnlyRecommendation === false, `v=${apprStatus.approvedForReadOnlyRecommendation}`);
+  add("14O-AB: INF approvedForProtocolSelection is false", decision === null && blocked.approvedForReviewExposure === false && apprStatus.approvedForReviewExposure === false, "false");
+  add("14O-AC: INF selectedByProtocolLogic is false", blocked.selectedByProtocolLogic === false && scoreAssignment?.selectedByProtocolLogic === false && apprStatus.selectedByProtocolLogic === false, "false");
+  add("14O-AD: INF currentWinner is false", blocked.currentWinner === false && scoreAssignment?.currentWinner === false && apprStatus.currentWinner === false, "false");
+  add("14O-AE: INF transactionsEnabled is false", blocked.transactionsEnabled === false && apprStatus.transactionsEnabled === false, "false");
+  add("14O-AF: INF walletSignatureRequired is false", blocked.walletSignatureRequired === false && apprStatus.walletSignatureRequired === false, "false");
+
+  // 14O-AG…AN. Integration: INF is NOT surfaced in Real Wallet / Demo; only /testing (blocked).
+  const infInRealWallet = stakingAlts?.some((a) => a.protocolId === "sanctum") ?? false;
+  const infInDemo = demo.otherProtocolsToReview?.some((a) => a.protocolId === "sanctum") ?? false;
+  const infInMsolCard = testingMsol?.details.otherProtocolsToReview?.some((a) => a.protocolId === "sanctum") ?? false;
+  add("14O-AG: real-wallet staking selectedProtocolId remains Jito/JitoSOL", staking?.protocolSelection?.selectedProtocolId === "jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  add("14O-AH: real-wallet staking does NOT surface INF (not approved) — only-if-approved holds", infInRealWallet === false, `infPresent=${infInRealWallet}`);
+  add("14O-AI: INF is not selectedProtocolId", staking?.protocolSelection?.selectedProtocolId !== "sanctum" && staking?.protocolSelection?.selectedProtocolName !== "Sanctum", `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  add("14O-AJ: INF does not affect Top Pick ranking", !run.suggestions.some((s) => s.protocolSelection?.selectedProtocolName === "Sanctum") && run.suggestions.filter((s) => s.is_top_pick).every((s) => s.protocolSelection?.selectedProtocolName !== "Sanctum"), `infTopPick=${run.suggestions.some((s) => s.is_top_pick && s.protocolSelection?.selectedProtocolName === "Sanctum")}`);
+  add("14O-AK: INF does not affect engine ordering", run.suggestions.filter((s) => s.category === "staking").length === 1 && run.suggestions.every((s) => s.id !== "sanctum"), `stakingCount=${run.suggestions.filter((s) => s.category === "staking").length}`);
+  add("14O-AL: Demo SOL staking scenario includes INF only if approved (it is not → absent)", infInDemo === false, `infInDemo=${infInDemo}`);
+  add("14O-AM: Demo selected protocol remains JitoSOL", demo.protocolSelectionDisplay?.protocolName === "Jito" && demo.protocolSelectionDisplay?.assetSymbol === "JitoSOL", `name=${demo.protocolSelectionDisplay?.protocolName}`);
+  add("14O-AN: testing page includes INF as a clearly-labelled BLOCKED evidence fixture (not in approved review section)", testingInf != null && /blocked/i.test(testingInf?.card.title ?? "") && /below the 7\.0 read-only review threshold/i.test(testingInf?.details.summary.reason ?? "") && infInMsolCard === false, `has=${testingInf != null} inApproved=${infInMsolCard}`);
+
+  // 14O-AO…AQ. Safety guardrails.
+  {
+    const json = (JSON.stringify(blocked) + JSON.stringify(testingInf?.details) + JSON.stringify(getSolLstFreshEvidenceRecords({ checkedAt: FRESH }).filter((r) => r.protocolId === "sanctum"))).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "swap(", "deposit(", "stake(", "approve(", "execute("];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("14O-AO: no transaction/signature/swap/deposit/stake/approve/execute path for INF", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  {
+    const infCopy = [blocked.statusLabel, blocked.poolComposition.poolType, blocked.poolComposition.underlyingExposure, blocked.poolComposition.overlapNote, testingInf?.details.summary.reason, ...(testingInf?.details.limitations ?? []).map((l) => l.text)]
+      .filter(Boolean).join(" ").toLowerCase();
+    const forbidden = ["best", "safest", "winner", "guaranteed", "risk-free", "recommended", "stake now", "deposit now", "highest apy"];
+    const hits = forbidden.filter((w) => infCopy.includes(w));
+    add("14O-AP: no forbidden investment claims in INF UI/copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  add("14O-AQ: no button says Stake/Deposit/Execute/Swap/Start staking/Approve", testingInf?.card.cta.label === "Review Details" && testingInf?.card.cta.action === "review" && testingInf?.card.cta.executes_transaction === false && testingInf?.card.cta.requires_wallet_signature === false, `cta=${testingInf?.card.cta.label}`);
+
+  // 14O-AR…AV. JitoSOL live + mSOL/JupSOL/bSOL review behavior unchanged; INF replaces nothing.
+  add("14O-AR: JitoSOL live behavior remains unchanged", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && toSuggestionCard(staking!).protocolName === "Jito", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  {
+    const msol = buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: FRESH });
+    add("14O-AS: mSOL review behavior remains unchanged", msol.reviewState === "approved_for_review_exposure" && msol.riskScore === 7.4, `score=${msol.riskScore}`);
+  }
+  {
+    const jup = buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: FRESH });
+    add("14O-AT: JupSOL review behavior remains unchanged", jup.reviewState === "approved_for_review_exposure" && jup.riskScore === 7.65, `score=${jup.riskScore}`);
+  }
+  {
+    const bsol = buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: FRESH });
+    add("14O-AU: bSOL review behavior remains unchanged", bsol.reviewState === "approved_for_review_exposure" && bsol.riskScore === 7.35, `score=${bsol.riskScore}`);
+  }
+  {
+    const combined = getAllReadOnlyReviewApprovedSolLiquidStakingCandidates({ checkedAt: FRESH });
+    const ids = combined.map((c) => c.protocolId);
+    const flagsSafe = SOL_LST_INF_READ_ONLY_APPROVAL_SELECTS_PROTOCOL_WINNER === false && SOL_LST_INF_READ_ONLY_APPROVAL_ENABLES_MULTI_PROTOCOL_SELECTION === false && SOL_LST_INF_READ_ONLY_APPROVAL_UPDATES_LIVE_RECOMMENDATIONS === false && SOL_LST_INF_READ_ONLY_APPROVAL_REPLACES_JITO === false && SOL_LST_INF_READ_ONLY_APPROVAL_ENABLES_TRANSACTIONS === false && SOL_LST_INF_READ_ONLY_APPROVAL_REQUIRES_WALLET_SIGNATURE === false;
+    add("14O-AV: INF does not replace JitoSOL, mSOL, JupSOL, or bSOL anywhere", flagsSafe && staking?.protocolSelection?.selectedProtocolName === "Jito" && ids.includes("jito") && ids.includes("marinade") && ids.includes("jupiter") && ids.includes("blazestake") && !ids.includes("sanctum") && getInfReviewApprovedCandidateEntry({ checkedAt: FRESH }) === null, `ids=${ids.join("/")}`);
+  }
+  add("14O-AW: UI explains final protocol selection happens later through deterministic protocol logic", /deterministic/i.test(testingInf?.details.summary.reason ?? "") && /final protocol selection will happen later/i.test(testingInf?.details.summary.reason ?? ""), "present");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -9452,6 +9628,7 @@ export function printFixtureResults(): void {
     ...runSolLstMsolReviewExposureFixtureChecks(),
     ...runSolLstJupsolReviewExposureFixtureChecks(),
     ...runSolLstBsolReviewExposureFixtureChecks(),
+    ...runSolLstInfReviewExposureFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

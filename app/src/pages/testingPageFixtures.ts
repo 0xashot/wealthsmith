@@ -22,6 +22,7 @@ import { getJitoSolDirectProtocolRouteEvaluationDisplay } from "../suggestions/j
 import { buildMsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiquidStakingMsolReadOnlyApproval";
 import { buildJupsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiquidStakingJupsolReadOnlyApproval";
 import { buildBsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiquidStakingBsolReadOnlyApproval";
+import { getInfBlockedReviewSummary } from "../suggestions/solLiquidStakingInfReadOnlyApproval";
 
 /* ------------------------------------------------------------------ *
  * Route + safety flags (mirrors the internalPreviewFlags pattern).
@@ -511,6 +512,57 @@ const msolReviewCandidate: TestingFixture = {
   },
 };
 
+// Step 14O — Sanctum · INF is a MULTI-LST pool. Its evidence is complete + fresh and a
+// risk score is assigned (6.95 / 10), but that is BELOW the 7.0 read-only-review
+// threshold, so INF is NOT approved and is NOT surfaced as an alternative protocol to
+// review anywhere product-facing. This is an INTERNAL, clearly-labelled BLOCKED evidence
+// view only (driven by getInfBlockedReviewSummary); it has no otherProtocolsToReview.
+const infBlocked = getInfBlockedReviewSummary({ checkedAt: "2026-07-14T02:30:00Z" });
+const infBlockedCandidate: TestingFixture = {
+  id: "testing_inf_blocked",
+  categoryLabel: "Blocked Candidate",
+  group: "Yield",
+  label: TESTING_PREVIEW_NOT_LIVE,
+  card: buildCard({
+    id: "testing_inf_blocked",
+    title: "INF Review Candidate — Blocked",
+    type: "stake_idle_sol",
+    category: "staked_assets",
+    description: "Sanctum · INF (Multi-LST pool) — evidence complete, but risk score is below the read-only review threshold; not cleared for review. Internal evidence view only.",
+    impact_text: `Risk score: ${infBlocked.riskScore?.toFixed(2)} / 10 (below ${infBlocked.riskScoreThreshold}.0 threshold — blocked)`,
+    severity: "info",
+    extra: {
+      suggestedProtocolLabel: "Blocked — not cleared for read-only review",
+      protocolName: "Sanctum",
+      lstSymbol: "INF",
+    },
+  }),
+  details: {
+    summary: {
+      title: "INF Review Candidate — Blocked (below threshold)",
+      reason: `Sanctum · INF is a ${infBlocked.poolComposition.poolType}. ${infBlocked.poolComposition.overlapNote} Evidence is complete and fresh, but its risk score ${infBlocked.riskScore?.toFixed(2)} / 10 is below the ${infBlocked.riskScoreThreshold}.0 read-only review threshold, so INF is not cleared for read-only review and is not shown as an alternative protocol to review. Internal evidence view only. Final protocol selection will happen later through deterministic WealthSmith protocol logic.`,
+      categoryLabel: "Blocked Candidate",
+    },
+    metrics: [],
+    involvedAssets: [],
+    involvedPositions: [],
+    calculations: [],
+    guardrailSummary: { checked: [], notEvaluated: ["Read-only review approval (risk score below threshold)"], notApplicable: ["Protocol selection"] },
+    limitations: [
+      { kind: "review_only", text: `Blocked: risk score ${infBlocked.riskScore?.toFixed(2)} / 10 is below the ${infBlocked.riskScoreThreshold}.0 read-only review threshold — not cleared for read-only review.` },
+      { kind: "review_only", text: `Multi-LST pool — underlying exposure: ${infBlocked.poolComposition.underlyingExposure}` },
+      { kind: "review_only", text: `Overlap: ${infBlocked.poolComposition.overlapNote}` },
+      { kind: "review_only", text: `Evidence (complete): TVL $${((infBlocked.marketData?.tvlUsd ?? 0) / 1_000_000).toFixed(2)}M · APY ${infBlocked.marketData?.apyPct}% · 30-day ${infBlocked.marketData?.apy30dPct}%.` },
+      REVIEW_ONLY_LIMITATION,
+    ],
+    safetyNotes: [
+      { kind: "review_only", text: "Review only — WealthSmith will not move funds for you." },
+      ...REVIEW_ONLY_NOTES,
+    ],
+    demoLabel: TESTING_PREVIEW_NOT_LIVE,
+  },
+};
+
 const ALL_FIXTURES: TestingFixture[] = [
   safetyBuffer,
   rebalance,
@@ -522,6 +574,7 @@ const ALL_FIXTURES: TestingFixture[] = [
   positionOptimization,
   onTrack,
   msolReviewCandidate,
+  infBlockedCandidate,
 ];
 
 /** Every testing fixture, in display order (Safety → … → On Track). */

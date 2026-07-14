@@ -442,7 +442,140 @@ export const BLAZESTAKE_BSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] =
     notes: ["Point-in-time finding, NOT a clean-history claim. No independent incident/postmortem obtained; the docs' security emphasis is the protocol's own statement."],
   },
 ];
-export const SANCTUM_INF_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [];
+// Step 14O — Sanctum · INF (a MULTI-LST / shared-liquidity pool, not a single LST).
+// COMPLETE: all 10 categories verified from public sources (founder-authorized fetch,
+// 2026-07-14). Market data from the DefiLlama INF pool (fresh raw JSON, not stale prior
+// values). Mechanics/fees/composition/audits/operational from official Sanctum docs
+// (learn.sanctum.so). INF is a shared-liquidity pool for LST swaps that HOLDS multiple
+// underlying LSTs (all Sanctum LSTs + non-Sanctum jitoSOL and bSOL + SOL/wSOL), with
+// dynamic allocation — so its exposure OVERLAPS with the selected protocol (JitoSOL) and
+// existing review candidates (bSOL). That overlap is recorded in operational_risk (NOT
+// framed as independent diversification). `direct_unstake_time` is recorded as sourced
+// TEXT (14I dual-format): INF has no per-LST holder unstake cooldown — RemoveLiquidity is
+// instant — so no fixed hours are invented. `incident_review` is point-in-time, NOT a
+// clean-history claim. No stale prior value is reused and nothing is invented.
+export const SANCTUM_INF_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [
+  {
+    protocolId: "sanctum",
+    category: "tvl",
+    value: 152555981,
+    unit: "usd",
+    sourceName: "DefiLlama — Sanctum Infinity (INF) pool",
+    sourceUrl: "https://yields.llama.fi/chart/3075a746-bdd1-4aac-bcd5-b035abee2622",
+    confirmedAt: "2026-07-14T02:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Fresh INF pool TVL verified from the DefiLlama pool chart raw JSON; most-recent data point 2026-07-14T02:01:20.376Z. Pool-level TVL across the multi-LST basket."],
+  },
+  {
+    protocolId: "sanctum",
+    category: "current_apy",
+    value: 5.83868,
+    unit: "pct",
+    sourceName: "DefiLlama — Sanctum Infinity (INF) pool",
+    sourceUrl: "https://yields.llama.fi/chart/3075a746-bdd1-4aac-bcd5-b035abee2622",
+    confirmedAt: "2026-07-14T02:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Latest DefiLlama APY snapshot (data point 2026-07-14T02:01:20.376Z). Blended yield of the underlying LST basket plus pool fees; last-30 range ~5.75%-6.23%."],
+  },
+  {
+    protocolId: "sanctum",
+    category: "apy_30d",
+    value: 5.95,
+    unit: "pct",
+    sourceName: "DefiLlama — Sanctum Infinity (INF) pool",
+    sourceUrl: "https://yields.llama.fi/chart/3075a746-bdd1-4aac-bcd5-b035abee2622",
+    confirmedAt: "2026-07-14T02:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["30-day mean APY computed deterministically from the last 30 'apy' values of the DefiLlama pool chart raw JSON (min 5.74578%, max 6.22975%); mean 5.95%."],
+  },
+  {
+    protocolId: "sanctum",
+    category: "withdrawal_mechanics",
+    value: "INF is a shared-liquidity pool for LSTs, not a single stake account. Holders redeem via RemoveLiquidity — burn INF to withdraw a corresponding share of any underlying LST (or SOL) from the pool. This is instant (no forced unstaking delay), because the pool prices SOL value from on-chain state. Adding liquidity charges no fee; a liquidity-withdrawal fee applies (see direct_unstake_fee).",
+    unit: "text",
+    sourceName: "Sanctum Documentation — Infinity",
+    sourceUrl: "https://learn.sanctum.so/docs/technical-documentation/infinity",
+    confirmedAt: "2026-07-14T02:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Redemption MECHANISM per official Sanctum Infinity docs (RemoveLiquidity → share of an underlying LST/SOL, instant). Pool-level, not a per-LST unstake queue."],
+  },
+  {
+    protocolId: "sanctum",
+    category: "direct_unstake_time",
+    value: "INF is a pool, not a single LST, so there is no per-LST unstake cooldown for the holder: RemoveLiquidity redemption is instant (withdraw a share of an underlying LST or SOL immediately). If a holder redeems into a specific underlying LST and then unstakes THAT LST natively, that LST's own unstake mechanics/timing would apply separately at its own layer. Recorded as sourced epoch/text (14I dual-format) because INF has no comparable fixed direct-unstake hour basis.",
+    unit: "text",
+    sourceName: "Sanctum Documentation — Infinity",
+    sourceUrl: "https://learn.sanctum.so/docs/technical-documentation/infinity",
+    confirmedAt: "2026-07-14T02:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Text per the 14I dual-format. INF redemption is instant at the pool level; no fixed hours are invented. Any downstream single-LST unstake timing is that LST's own, not INF's."],
+  },
+  {
+    protocolId: "sanctum",
+    category: "direct_unstake_fee",
+    value: 0.2,
+    unit: "pct",
+    sourceName: "Sanctum Documentation — Infinity (fees)",
+    sourceUrl: "https://learn.sanctum.so/docs/technical-documentation/infinity",
+    confirmedAt: "2026-07-14T02:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["INF liquidity-withdrawal fee is 20bps (0.2%) per Sanctum Infinity docs; adding liquidity is free; pool fees use a 90/10 split (90% to reserves/LP appreciation, 10% to protocol). Swap fees vary by LST and are not a single published rate."],
+  },
+  {
+    protocolId: "sanctum",
+    category: "annual_management_fee",
+    value: 0,
+    unit: "pct",
+    sourceName: "Sanctum Documentation — LSTs / Infinity",
+    sourceUrl: "https://learn.sanctum.so/docs/technical-documentation/sanctum-lsts",
+    confirmedAt: "2026-07-14T02:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["No management/performance fee on staking rewards is stated for INF at the pool level; protocol revenue is the 10% share of the 90/10 pool-fee split (withdrawal/swap fees), not a fee on rewards. NOTE: each underlying LST held by INF carries its own fees at its own layer (e.g. Sanctum single-LST ~5% epoch fees, JupSOL's 5% inflation commission), which indirectly affect INF's blended yield but are not an INF-level management fee."],
+  },
+  {
+    protocolId: "sanctum",
+    category: "audit_security",
+    value: "Per Sanctum docs, the Infinity (INF) program has been audited 3 times (OtterSec, Sec3, and Neodyme), with reported issues remediated. Separately, the underlying Solana Labs SPL stake-pool program used by Sanctum LSTs has been audited by 5 firms (Halborn, Kudelski, OtterSec, Neodyme, Quantstamp). INF adds its own program surface (S Controller, Pricing Program, per-LST SOL Value Calculator programs) on top of the base stake pool.",
+    unit: "text",
+    sourceName: "Sanctum Documentation — Audits / Security",
+    sourceUrl: "https://learn.sanctum.so/legacy-docs/security/audits",
+    confirmedAt: "2026-07-14T02:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Infinity program audits (OtterSec/Sec3/Neodyme) + base SPL stake-pool audits (5 firms) per Sanctum docs. Point-in-time; audit history does not by itself ensure future safety, and INF's added program surface is broader than a single stake pool."],
+  },
+  {
+    protocolId: "sanctum",
+    category: "operational_risk",
+    value: "INF is a MULTI-LST shared-liquidity pool. Operational dependencies: (a) it HOLDS many underlying LSTs — all Sanctum LSTs plus non-Sanctum jitoSOL and bSOL, plus SOL/wSOL — so it inherits the aggregate risk of its components; (b) OVERLAP — its underlying exposure overlaps with the currently selected protocol (JitoSOL) and an existing review candidate (bSOL), so it is NOT independent diversification but partial exposure to the same assets plus pool risk; (c) dynamic allocation — excess SOL is staked to top-performing Sanctum LSTs and underperformers are unstaked (an active mechanism, not fixed weights); (d) it depends on Sanctum's S Controller, Pricing Program, and per-LST SOL Value Calculator programs for correct valuation/pricing.",
+    unit: "text",
+    sourceName: "Sanctum Documentation — Infinity",
+    sourceUrl: "https://learn.sanctum.so/docs/technical-documentation/infinity",
+    confirmedAt: "2026-07-14T02:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Sourced summary of pool composition, overlap, dynamic allocation, and program/valuation dependencies. Overlap is stated explicitly so no independent-diversification benefit is implied. Descriptive only — not an endorsement or safety claim."],
+  },
+  {
+    protocolId: "sanctum",
+    category: "incident_review",
+    value: "Point-in-time review (2026-07-14): no independent Sanctum/INF-specific incident, exploit, or postmortem was found during this review window, and the official docs do not disclose one. Sanctum states Infinity has run for over a year and that audit findings were remediated — this is a protocol statement, not an independent verification of clean history. This is a point-in-time finding, NOT a clean-history claim.",
+    unit: "text",
+    sourceName: "Sanctum Documentation — Security / Audits",
+    sourceUrl: "https://learn.sanctum.so/legacy-docs/security/audits",
+    confirmedAt: "2026-07-14T02:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Point-in-time finding, NOT a clean-history claim. No independent incident/postmortem obtained; the 'over a year without issues' / 'remediated' statements are Sanctum's own."],
+  },
+];
 
 export interface FreshEvidenceRecordsOptions {
   checkedAt?: string;
