@@ -1280,3 +1280,35 @@ This is the gate working as intended — a complete, well-audited candidate can 
 of the review-exposure bar. All five staged SOL LST candidates are now processed (4 approved for
 read-only review, INF blocked); the natural next step is the deterministic multi-candidate
 selector comparison across the approved review candidates.
+
+## Native SOL / Jupiter Native Stake baseline added — BLOCKED, incomplete (Step 14P)
+
+A **Native SOL / Jupiter Native Stake BASELINE** candidate is added before the selector
+comparison — deliberately as a **separate** module set
+([solNativeStakingBaselineEvidence.ts](./solNativeStakingBaselineEvidence.ts) /
+[RiskScore.ts](./solNativeStakingBaselineRiskScore.ts) /
+[ReadOnlyApproval.ts](./solNativeStakingBaselineReadOnlyApproval.ts)), because it is **not an
+LST and not JupSOL**: it is a native Solana **stake account** of delegated SOL (`protocolId
+"jupiter_native_stake"`, `assetSymbol "SOL"`, `candidateType "native_staking"`,
+`isLiquidStakingToken: false`, `splTokenMint: null`). **Detection distinction** (see
+[solNativeStakingBaselineEvidence.md](./solNativeStakingBaselineEvidence.md)): native staking
+is detected via **Solana stake accounts** (no SPL mint, not liquid by default, Staked Assets),
+whereas JupSOL is detected via an **SPL token mint** (liquid, DeFi-composable) — the two are
+never conflated.
+
+**Outcome: BLOCKED (incomplete evidence).** Founder-authorized collection recorded **7 of 10**
+categories from authoritative Jupiter FAQ docs + the Solana native-staking model (withdrawal
+mechanics; epoch-based unstake ~2 days; **5% validator commission** on inflation / 0% MEV —
+resolving a search-snippet "0% commission" conflict via the authoritative doc; 0% management
+fee; non-custodial security model; validator/delegation + lower-composability operational
+risk; point-in-time incident review). The **3 market categories** (delegated stake / current
+APY / 30-day APY) are **not published by Jupiter** and the validator stats page is JS-rendered,
+so they were left **missing** rather than invented or reused from JupSOL → `readyForRiskGate:
+false` → **no risk score** → **not approved** → **no product-facing UI**. The risk-score module
+still defines the native-adapted rubric mapping + qualitative rationale (not-an-LST,
+validator/delegation risk, epoch unstake timing, lower composability) so a score can be
+assigned once the market evidence is completed. Native staking's only UI presence is a
+clearly-labelled internal `/testing` BLOCKED card (`testing_native_stake_blocked`). JitoSOL
+remains the only selected protocol; mSOL/JupSOL/bSOL review behavior and INF's blocked state
+are unchanged; the selector comparison stays disabled. The baseline is now in place to compare
+the approved LST candidates against native staking once its evidence completes.

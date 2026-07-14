@@ -780,3 +780,30 @@ UI:** INF is NOT surfaced in Real Wallet / Demo / the approved review section an
 Its only UI presence is a clearly-labelled internal `/testing` BLOCKED evidence card. mSOL/JupSOL/
 bSOL review behavior unchanged; JitoSOL remains the only selected live protocol; no execution
 path anywhere.
+
+**Step 14P — Native SOL / Jupiter Native Stake baseline added (separate model), BLOCKED
+incomplete:** a native SOL staking BASELINE candidate is added — NOT an LST and NOT JupSOL. It
+is a native Solana stake account of delegated SOL (`protocolId "jupiter_native_stake"`,
+`assetSymbol "SOL"`, `candidateType "native_staking"`, `isLiquidStakingToken false`,
+`splTokenMint null`), with its own evidence model (`solNativeStakingBaselineEvidence.ts`) —
+detected via Solana stake accounts (no SPL mint), distinct from JupSOL (an SPL LST token).
+Founder-authorized collection (2026-07-14T02:45Z, `confirmedBy Ashot` / `founder`) recorded
+**7 of 10** categories from authoritative sources (Jupiter Stake FAQ
+`https://docs.jup.ag/user-docs/earn/stake-sol/faq.md` + the Solana native-staking model):
+`withdrawal_mechanics` (native stake account; deactivate → withdraw at epoch end;
+non-custodial), `unstake_time` (epoch text, ~2 days / end of epoch, no rewards during
+deactivation — no hours invented), `validator_commission` **5%** on inflation rewards / 0% MEV
+(**authoritative doc resolves a public search snippet that claimed "0% commission"**),
+`annual_management_fee` **0%** (you own the stake account; no pool/management fee),
+`security_model` (non-custodial; native stake account, NOT an SPL LST token like JupSOL; base
+Solana stake program), `operational_risk` (single-validator delegation, epoch lockup, lower
+DeFi composability than LSTs, not an LST), `incident_review` (point-in-time; base staking
+program, no slashing; not a clean-history claim). The **3 market categories**
+(`delegated_stake_or_tvl`, `current_apy`, `apy_30d`) are **MISSING** — Jupiter does not publish
+an exact native-staking APY / 30-day APY / delegated stake, and the validator stats page is
+JS-rendered (unverifiable via fetch), so they were left missing rather than invented or reused
+from JupSOL. `readyForRiskGate: false` → **no risk score** (the risk-score module defines the
+native-adapted rubric mapping + rationale but assigns nothing) → **read-only approval BLOCKED**
+(blocker `missing_risk_score`) → **no product-facing UI** (only a clearly-labelled internal
+`/testing` BLOCKED card). JitoSOL stays the only selected protocol; mSOL/JupSOL/bSOL review
+behavior and INF's blocked state are unchanged; no execution path anywhere.
