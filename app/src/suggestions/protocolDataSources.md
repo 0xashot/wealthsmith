@@ -827,3 +827,22 @@ evidence array, no transaction/signature path; `isLiquidStakingToken: false` / `
 null` throughout. No live fetch is wired into runtime (documented `fetchNativeValidatorMarketData`
 contract for a later backend/job). The native baseline stays blocked; JitoSOL selector,
 mSOL/JupSOL/bSOL review, and INF's blocked state are unchanged.
+
+**Step 14R — real validator market data for Jupiter Native Stake (still partial):** ran the
+14Q adapter against **real** data. Source: **Stakewiz** `GET api.stakewiz.com/validator/CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb`
+(identity `JUPiTERrZqgf1jUyR7dSkhMx4Kn2qJyekWsg3LT1h4b`, confirming Jupiter's validator).
+Obtained validator-specific: **activated (delegated) stake 12,500,954.43 SOL** (stake_weight
+2.91%), **current APY 5.23%** (`apy_estimate`; `staking_apy` 5.27%, `total_apy` 5.38%),
+**commission 500 bps = 5%** (corroborates the 14P Jupiter-FAQ value), not delinquent, epoch
+1001. Direct Solana RPC `getVoteAccounts` (api.mainnet-beta.solana.com) was **unreachable**
+(SSL_ERROR_SYSCALL) in this environment; Solana Compass exposes no public API (404); Stakewiz
+history endpoints 404 and its validator object has no APY-history array — so **no
+validator-specific 30-day APY series** was obtainable without a Validators.app token. Per the
+guardrails `apy_30d` was left **missing** (not invented, not JupSOL's, not network-wide), so
+`buildNativeValidatorMarketData` → **`partial`** (missing `apy30dPct`) and the conversion
+appended **nothing**. Native staking stays **7/10 blocked**: no score, no approval, no
+product-facing UI (only the internal `/testing` blocked card, updated to note the 14R finding).
+JupSOL remains a separate SPL LST candidate; native staking keeps `isLiquidStakingToken: false`
+/ `splTokenMint: null` / `assetSymbol "SOL"`. JitoSOL selector, mSOL/JupSOL/bSOL review, and
+INF's blocked state are unchanged; no execution path. Remaining blocker: the 30-day APY history
+(needs RPC access or a Validators.app token via a backend/job).

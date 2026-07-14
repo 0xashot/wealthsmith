@@ -1335,3 +1335,23 @@ updates live recommendations, and has no transaction/signature path; every recor
 — it does not live-fetch or fill the evidence array, so the native baseline stays **blocked**,
 JitoSOL stays the only selected protocol, and the LST candidates + INF are unchanged. A later
 backend/job can feed real payloads through the builder to complete the evidence.
+
+## Real validator data run for Jupiter Native Stake (Step 14R) — still PARTIAL
+
+14R drove the 14Q adapter with **real** validator data (Stakewiz, vote account
+`CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb` / identity `JUPiTERr…`): validator-specific
+**delegated stake ~12,500,954 SOL** and **current APY 5.23%** (commission 5%, corroborating
+14P) were obtained. But a validator-specific **30-day APY history is not publicly available**
+here — the direct Solana RPC `getVoteAccounts` host was unreachable in this environment, Solana
+Compass has no public API, and Stakewiz exposes only point APY estimates (no per-validator
+30-day series without a Validators.app token). Per the guardrails, `apy_30d` was **left
+missing** (not invented, not JupSOL's, not network-wide), so `buildNativeValidatorMarketData`
+returns **`partial`** and `convertNativeValidatorMarketDataToEvidenceInputs` produces **no**
+inputs. Nothing was appended → native evidence stays **7/10** → the baseline **remains
+blocked** (no score, no approval, no product-facing UI; only the internal `/testing` blocked
+card, now noting the 14R finding). The complete-path is proven by fixtures (a complete payload
+converts to all 3 records). JitoSOL stays the only selected protocol; mSOL/JupSOL/bSOL review
+and INF's blocked state are unchanged; no execution path anywhere. **Remaining blocker:** the
+validator-specific 30-day APY history — obtainable by a backend/job with Solana RPC access or a
+Validators.app token, which would then complete the evidence and unblock the deterministic
+score → approval → UI path.

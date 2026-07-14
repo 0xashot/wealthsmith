@@ -9853,6 +9853,148 @@ export function runNativeValidatorMarketDataFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 14R — complete Jupiter Native Stake using REAL validator market data via the 14Q
+ * adapter. Real data (Stakewiz, vote account CatzoSMUk…) gave validator-specific delegated
+ * stake (~12,500,954 SOL) and current APY (5.23%), but NO validator-specific 30-day APY
+ * history is publicly available (direct Solana RPC unreachable here; no per-validator 30-day
+ * series without a token). So the adapter reports PARTIAL, the conversion produces no
+ * evidence, and native staking STAYS BLOCKED (7/10, no records appended). These checks prove
+ * the real-data path, the complete-path gating, the native-vs-JupSOL safeguards, the blocked
+ * state, and that JitoSOL / mSOL / JupSOL / bSOL / INF are all unchanged.
+ */
+export function runNativeStakingRealMarketDataFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const VA = JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const FETCHED = "2026-07-14T03:00:00Z";
+  const CHECKED = "2026-07-14T03:10:00Z";
+  const STALE_FETCHED = "2026-07-10T03:00:00Z";
+  const NATIVE_CHECKED = "2026-07-14T02:50:00Z";
+
+  // REAL validator data captured this step (Stakewiz /validator/{vote}): activated_stake
+  // 12,500,954.43 SOL, apy_estimate 5.23, commission 500 bps (= 5%), not delinquent, no APY
+  // history array. Direct Solana RPC getVoteAccounts was unreachable, so the stake value
+  // (which Stakewiz reads on-chain) is carried in a getVoteAccounts-shaped envelope.
+  const realStake = 12_500_954.43;
+  const realRpc = { result: { current: [{ votePubkey: VA, activatedStake: Math.round(realStake * 1_000_000_000), commission: 5 }], delinquent: [] } };
+  const realStakewiz = [{ vote_identity: VA, apy_estimate: 5.23, staking_apy: 5.27, total_apy: 5.38 }]; // NO apy_history
+  // A hypothetical COMPLETE payload (with history) to prove the conversion path is ready.
+  const completeStakewiz = [{ vote_identity: VA, apy_estimate: 5.23, apy_history: Array.from({ length: 30 }, () => 5.2) }];
+
+  const mdReal = buildNativeValidatorMarketData({ rpcVoteAccountsResponse: realRpc, analyticsProvider: "stakewiz", analyticsPayload: realStakewiz, solPriceUsd: 180, fetchedAt: FETCHED, checkedAt: CHECKED });
+  const mdComplete = buildNativeValidatorMarketData({ rpcVoteAccountsResponse: realRpc, analyticsProvider: "stakewiz", analyticsPayload: completeStakewiz, solPriceUsd: 180, fetchedAt: FETCHED, checkedAt: CHECKED });
+  const mdStale = buildNativeValidatorMarketData({ rpcVoteAccountsResponse: realRpc, analyticsProvider: "stakewiz", analyticsPayload: completeStakewiz, solPriceUsd: 180, fetchedAt: STALE_FETCHED, checkedAt: CHECKED });
+
+  const convReal = convertNativeValidatorMarketDataToEvidenceInputs(mdReal);
+  const convComplete = convertNativeValidatorMarketDataToEvidenceInputs(mdComplete);
+  const convStale = convertNativeValidatorMarketDataToEvidenceInputs(mdStale);
+  const cByCat = (c: string) => convComplete.inputs.find((i) => i.category === c);
+
+  // 14R-A…F. Adapter used with real data; conversion gated on complete.
+  add("14R-A: native validator adapter is used to complete market evidence", mdReal.stakeSource === "solana_rpc_get_vote_accounts" && mdReal.activatedStakeSol === realStake && mdReal.currentApyPct === 5.23 && mdReal.status === "partial", `status=${mdReal.status} stake=${mdReal.activatedStakeSol} apy=${mdReal.currentApyPct}`);
+  add("14R-B: converted delegated_stake_or_tvl only when adapter status complete", cByCat("delegated_stake_or_tvl") != null && convReal.inputs.find((i) => i.category === "delegated_stake_or_tvl") == null, `complete=${cByCat("delegated_stake_or_tvl") != null}`);
+  add("14R-C: converted current_apy only when adapter status complete", cByCat("current_apy")?.value === 5.23 && convReal.inputs.find((i) => i.category === "current_apy") == null, `complete=${cByCat("current_apy") != null}`);
+  add("14R-D: converted apy_30d only when adapter status complete", cByCat("apy_30d")?.value === 5.2 && convReal.inputs.find((i) => i.category === "apy_30d") == null, `complete=${cByCat("apy_30d") != null}`);
+  add("14R-E: converted records are not created when adapter data is partial", convReal.converted === false && convReal.inputs.length === 0, `converted=${convReal.converted}`);
+  add("14R-F: converted records are not created when adapter data is stale", mdStale.status === "stale" && convStale.converted === false && convStale.inputs.length === 0, `status=${mdStale.status}`);
+
+  // 14R-G…L. Native-vs-JupSOL safeguards.
+  add("14R-G: native evidence does not use JupSOL APY", NATIVE_VALIDATOR_MARKET_DATA_USES_JUPSOL_APY === false && mdReal.apySource === "stakewiz" && /not jupsol apy/i.test((cByCat("current_apy")?.notes ?? []).join(" ")), "not jupsol apy");
+  add("14R-H: native evidence does not use JupSOL TVL", NATIVE_VALIDATOR_MARKET_DATA_USES_JUPSOL_TVL === false && /not jupsol tvl/i.test((cByCat("delegated_stake_or_tvl")?.notes ?? []).join(" ")), "not jupsol tvl");
+  {
+    const nw = parseNativeValidatorApyFromAnalytics("stakewiz", { network_apy: 6.8 });
+    add("14R-I: native evidence does not use network-wide APY to unblock", nw.networkWideOnly === true && nw.currentApyPct === undefined && /not jupsol|not network-wide/i.test((cByCat("apy_30d")?.notes ?? []).join(" ")), "not network-wide");
+  }
+  add("14R-J: native staking remains not an LST", mdReal.isLiquidStakingToken === false && NATIVE_STAKING_BASELINE_IDENTITY.isLiquidStakingToken === false, "not lst");
+  add("14R-K: native staking splTokenMint remains null", mdReal.splTokenMint === null && NATIVE_STAKING_BASELINE_IDENTITY.splTokenMint === null, "null");
+  add("14R-L: native staking assetSymbol remains SOL", mdReal.assetSymbol === "SOL" && NATIVE_STAKING_BASELINE_IDENTITY.assetSymbol === "SOL", "SOL");
+
+  // 14R-M…O. readyForRiskGate gating — still blocked (no records appended).
+  const summary = summarizeNativeSolStakeEvidence({ checkedAt: NATIVE_CHECKED });
+  add("14R-M: readyForRiskGate is true only if all 10 fresh accepted records exist", summary.acceptedCount === 7 && summary.readyForRiskGate === false, `accepted=${summary.acceptedCount}`);
+  add("14R-N: readyForRiskGate is false if market evidence remains incomplete", summary.marketDataComplete === false && summary.missingCategories.length === 3, `missing=${summary.missingCategories.length}`);
+  add("14R-O: readyForRiskGate is false if market evidence is stale", summarizeNativeSolStakeEvidence({ checkedAt: "2026-07-25T00:00:00Z" }).readyForRiskGate === false, "stale-false");
+
+  // 14R-P…AA. Scoring — none assigned (still incomplete); rubric + rationale defined.
+  const assignment = getNativeStakingBaselineRiskScoreAssignment({ checkedAt: NATIVE_CHECKED });
+  const scoreStatus = evaluateNativeStakingBaselineRiskScoreAssignmentStatus({ checkedAt: NATIVE_CHECKED });
+  add("14R-P: native staking risk score exists only if readyForRiskGate is true (still none)", SOL_NATIVE_STAKING_BASELINE_RISK_SCORE_EXISTS === true && assignment === null && scoreStatus.readyForRiskGate === false, `assignment=${assignment}`);
+  add("14R-Q: native staking risk score is between 0 and 10 (if assigned)", assignment === null || ((assignment.score as number) >= 0 && (assignment.score as number) <= 10), "conditional");
+  add("14R-R: native staking rubric defines dimension scores (6 dimensions)", getNativeStakingRubricDimensions().length === 6, `dims=${getNativeStakingRubricDimensions().length}`);
+  add("14R-S: every dimension score is between 0 and 10 (if assigned)", assignment === null || Object.values(assignment.dimensionScores).every((v) => v >= 0 && v <= 10), "conditional");
+  {
+    const weightSum = getNativeStakingRubricDimensions().reduce((s, d) => s + d.weight, 0);
+    const allSevens = computeNativeStakingWeightedScore({ audit_security: 7, maturity: 7, tvl_adoption: 7, withdrawal_fee_transparency: 7, operational_dependency_risk: 7, incident_history: 7 });
+    add("14R-T: weighted score matches rubric weights", weightSum === 100 && allSevens === 7, `weightSum=${weightSum} allSevens=${allSevens}`);
+  }
+  add("14R-U: score status is assigned_for_review (if assigned)", assignment === null || assignment.scoreStatus === "assigned_for_review", "conditional");
+  add("14R-V: risk rationale states native staking is not an LST", NATIVE_STAKING_RISK_RATIONALE.isNotLiquidStakingToken === true && /not a liquid staking token/i.test(NATIVE_STAKING_RISK_RATIONALE.notLstStatement), "present");
+  add("14R-W: risk rationale includes validator/delegation exposure", /validator|delegation/i.test(NATIVE_STAKING_RISK_RATIONALE.risks.join(" ")), "present");
+  add("14R-X: risk rationale includes epoch-based unstake timing", /epoch/i.test(NATIVE_STAKING_RISK_RATIONALE.risks.join(" ")), "present");
+  add("14R-Y: risk rationale includes lower DeFi composability than LSTs", /composability/i.test(NATIVE_STAKING_RISK_RATIONALE.risks.join(" ")), "present");
+  add("14R-Z: native staking score does not approve protocol selection", SOL_NATIVE_STAKING_BASELINE_RISK_SCORE_APPROVES_READ_ONLY_RECOMMENDATION === false && scoreStatus.approvedForReadOnlyRecommendation === false, "no approve");
+  add("14R-AA: native staking score does not enable transactions/signatures", SOL_NATIVE_STAKING_BASELINE_RISK_SCORE_ENABLES_TRANSACTIONS === false && SOL_NATIVE_STAKING_BASELINE_RISK_SCORE_REQUIRES_WALLET_SIGNATURE === false, "no tx/sig");
+
+  // 14R-AB…AH. Approval — still BLOCKED (no score).
+  const decision = getNativeStakingBaselineReadOnlyApprovalDecision({ checkedAt: NATIVE_CHECKED });
+  const apprStatus = evaluateNativeStakingBaselineReadOnlyApprovalStatus({ checkedAt: NATIVE_CHECKED });
+  const blocked = getNativeStakingBaselineBlockedReviewSummary({ checkedAt: NATIVE_CHECKED });
+  add("14R-AB: native staking approval exists only if score >= 7 (no score → none)", decision === null && apprStatus.blockers.includes("missing_risk_score"), `decision=${decision}`);
+  add("14R-AC: native staking approvedForReadOnlyRecommendation true only if gate passes (it does not)", apprStatus.approvedForReadOnlyRecommendation === false && blocked.approvedForReadOnlyRecommendation === false, `v=${apprStatus.approvedForReadOnlyRecommendation}`);
+  add("14R-AD: native staking approvedForProtocolSelection is false", decision === null && blocked.approvedForReviewExposure === false, "false");
+  add("14R-AE: native staking selectedByProtocolLogic is false", blocked.selectedByProtocolLogic === false && apprStatus.selectedByProtocolLogic === false, "false");
+  add("14R-AF: native staking currentWinner is false", blocked.currentWinner === false && apprStatus.currentWinner === false, "false");
+  add("14R-AG: native staking transactionsEnabled is false", blocked.transactionsEnabled === false && apprStatus.transactionsEnabled === false, "false");
+  add("14R-AH: native staking walletSignatureRequired is false", blocked.walletSignatureRequired === false && apprStatus.walletSignatureRequired === false, "false");
+
+  // 14R-AI…AO. Integration — native NOT surfaced (blocked); only /testing.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const stakingAlts = staking?.reviewDetails?.otherProtocolsToReview;
+  const demo = getDemoExactSolStakingReviewDetails();
+  const testingNative = getTestingPageFixtures().find((f) => f.id === "testing_native_stake_blocked");
+  const nativeInRealWallet = stakingAlts?.some((a) => a.protocolId === "jupiter_native_stake") ?? false;
+  const nativeInDemo = demo.otherProtocolsToReview?.some((a) => a.protocolId === "jupiter_native_stake") ?? false;
+  add("14R-AI: real-wallet staking selectedProtocolId remains Jito/JitoSOL", staking?.protocolSelection?.selectedProtocolId === "jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  add("14R-AJ: native staking appears only as a baseline to review (blocked; not in product review UI)", nativeInRealWallet === false && nativeInDemo === false, `rw=${nativeInRealWallet} demo=${nativeInDemo}`);
+  add("14R-AK: native staking is not selectedProtocolId", staking?.protocolSelection?.selectedProtocolId !== "jupiter_native_stake" && staking?.protocolSelection?.selectedProtocolName !== "Jupiter Native Stake", `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  add("14R-AL: native staking does not affect Top Pick ranking", !run.suggestions.some((s) => s.protocolSelection?.selectedProtocolName === "Jupiter Native Stake"), "no");
+  add("14R-AM: native staking does not affect engine ordering", run.suggestions.filter((s) => s.category === "staking").length === 1 && run.suggestions.every((s) => s.id !== "jupiter_native_stake"), `count=${run.suggestions.filter((s) => s.category === "staking").length}`);
+  add("14R-AN: Demo selected protocol remains JitoSOL", demo.protocolSelectionDisplay?.protocolName === "Jito" && demo.protocolSelectionDisplay?.assetSymbol === "JitoSOL", `name=${demo.protocolSelectionDisplay?.protocolName}`);
+  add("14R-AO: testing page includes native staking as a clearly-labelled BLOCKED fixture (incomplete)", testingNative != null && /blocked/i.test(testingNative?.card.title ?? "") && /incomplete/i.test(testingNative?.details.summary.reason ?? ""), `has=${testingNative != null}`);
+
+  // 14R-AP…AV. Guardrails + unchanged behavior.
+  {
+    const json = (JSON.stringify(mdReal) + JSON.stringify(convComplete) + JSON.stringify(blocked) + JSON.stringify(testingNative?.details)).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "stake(", "delegate(", "withdraw(", "swap(", "deposit(", "approve(", "execute("];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("14R-AP: no transaction/signature/stake/delegate/withdraw path exists", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  {
+    const copy = [blocked.statusLabel, blocked.notLstLabel, ...NATIVE_STAKING_RISK_RATIONALE.positives, ...NATIVE_STAKING_RISK_RATIONALE.risks, testingNative?.details.summary.reason, ...(testingNative?.details.limitations ?? []).map((l) => l.text)].filter(Boolean).join(" ").toLowerCase();
+    const forbidden = ["best", "safest", "winner", "guaranteed", "risk-free", "recommended", "stake now", "deposit now", "highest apy"];
+    const hits = forbidden.filter((w) => copy.includes(w));
+    add("14R-AQ: no forbidden claims appear in native staking UI/copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  add("14R-AR: no button says Stake/Delegate/Withdraw/Execute/Swap/Start staking/Approve", testingNative?.card.cta.label === "Review Details" && testingNative?.card.cta.executes_transaction === false && testingNative?.card.cta.requires_wallet_signature === false, `cta=${testingNative?.card.cta.label}`);
+  add("14R-AS: JitoSOL live behavior remains unchanged", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && toSuggestionCard(staking!).protocolName === "Jito", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  {
+    const msol = buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    const jup = buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    const bsol = buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    add("14R-AT: mSOL/JupSOL/bSOL review behavior remains unchanged", msol.riskScore === 7.4 && jup.riskScore === 7.65 && bsol.riskScore === 7.35, `m=${msol.riskScore} j=${jup.riskScore} b=${bsol.riskScore}`);
+  }
+  add("14R-AU: INF remains blocked", getInfReadOnlyApprovalDecision({ checkedAt: "2026-07-14T02:30:00Z" }) === null, "inf blocked");
+  add("14R-AV: UI explains final protocol selection happens later through deterministic protocol logic", /deterministic/i.test(testingNative?.details.summary.reason ?? "") && /final protocol selection will happen later/i.test(testingNative?.details.summary.reason ?? ""), "present");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -9922,6 +10064,7 @@ export function printFixtureResults(): void {
     ...runSolLstInfReviewExposureFixtureChecks(),
     ...runSolNativeStakingBaselineFixtureChecks(),
     ...runNativeValidatorMarketDataFixtureChecks(),
+    ...runNativeStakingRealMarketDataFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

@@ -581,7 +581,7 @@ const nativeStakeBlockedCandidate: TestingFixture = {
     title: "Native SOL Staking — Baseline (Blocked)",
     type: "stake_idle_sol",
     category: "staked_assets",
-    description: "Jupiter Native Stake — native SOL staking baseline (NOT a liquid staking token, not JupSOL). Market evidence incomplete; not cleared for review. Internal evidence view only.",
+    description: "Jupiter Native Stake — native SOL staking baseline (NOT a liquid staking token, not JupSOL). Market evidence still incomplete after the 14R adapter run (30-day APY history unavailable); not cleared for review. Internal evidence view only.",
     impact_text: "Baseline to review · evidence incomplete (no risk score)",
     severity: "info",
     extra: {
@@ -606,6 +606,7 @@ const nativeStakeBlockedCandidate: TestingFixture = {
       { kind: "review_only", text: `Not a liquid staking token — native stake account (delegated SOL), detected via Solana stake accounts, no SPL token mint. Distinct from JupSOL (an SPL LST token).` },
       { kind: "review_only", text: `Validator/delegation exposure + epoch-based unstake timing: ${nativeBlocked.mechanics?.unstakeTiming}` },
       { kind: "review_only", text: `Lower DeFi composability than LSTs. Validator commission ${nativeBlocked.mechanics?.validatorCommissionPct}% on inflation (0% MEV); no separate management fee.` },
+      { kind: "review_only", text: `Step 14R: validator-specific delegated stake (~12,500,954 SOL) and current APY (5.23%) were obtained via the native validator adapter (Stakewiz, vote account CatzoSMUk…). But no validator-specific 30-day APY history is publicly available (direct Solana RPC unreachable here; no per-validator 30-day series without a token), so market data is PARTIAL — not JupSOL APY/TVL, not network-wide — and the baseline stays blocked (no records appended).` },
       REVIEW_ONLY_LIMITATION,
     ],
     safetyNotes: [

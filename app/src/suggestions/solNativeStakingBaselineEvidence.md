@@ -104,3 +104,22 @@ evidence inputs **when the market data is complete and fresh** — but 14Q only 
 adapter (parsers/builder/bridge + fixtures) and does **not** fill this evidence array, so the
 baseline stays blocked. It never reuses JupSOL APY/TVL, never uses a network-wide APY, and
 never approves native staking.
+
+## Real-data run (Step 14R) — still PARTIAL, baseline stays blocked
+
+14R ran the adapter against **real** validator data for the Jupiter validator (vote account
+`CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb`, identity `JUPiTERr…`, via **Stakewiz**):
+
+- **delegated stake:** ~**12,500,954 SOL** (validator-specific, ~2.9% network weight) ✅
+- **current APY:** **5.23%** (Stakewiz `apy_estimate`; staking 5.27% / total 5.38%) ✅
+- **commission:** 5% (Stakewiz `commission` 500 bps — corroborates the 14P Jupiter-FAQ value) ✅
+- **30-day APY history:** ❌ **not available** — direct Solana RPC `getVoteAccounts` was
+  unreachable in this environment, Solana Compass exposes no public API, and Stakewiz publishes
+  only point APY estimates (no per-validator 30-day series without a Validators.app token).
+
+So `buildNativeValidatorMarketData` returns **`partial`** (missing `apy30dPct`), and per the
+adapter's all-or-nothing contract `convertNativeValidatorMarketDataToEvidenceInputs` returns
+**no** inputs. Nothing was appended, so the native evidence stays **7/10** and the baseline
+**remains blocked**. No value was invented, and JupSOL APY/TVL and network-wide APY were never
+used. A backend/job with Solana RPC access (or a Validators.app token) can complete the 30-day
+APY and, if `status === "complete"`, append the 3 converted records to unblock the pipeline.
