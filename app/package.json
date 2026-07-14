@@ -10,7 +10,9 @@
     "prebuild": "npm run tokens",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "market:refresh-staking": "node scripts/refresh-sol-staking-market-data.mjs"
+    "market:refresh-staking": "node scripts/refresh-sol-staking-market-data.mjs",
+    "market:publish-staking": "node scripts/publish-sol-staking-market-cache.mjs",
+    "market:refresh-and-publish-staking": "npm run market:refresh-staking && npm run market:publish-staking"
   },
   "dependencies": {
     "@hubbleprotocol/hubble-sdk": "^8.0.4",

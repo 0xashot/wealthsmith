@@ -621,6 +621,20 @@ import {
   type SolStakingSelectorOperationalReadiness,
 } from "./solStakingSelectorActivationGate";
 import {
+  SOL_STAKING_SELECTOR_PRESENTATION_SCHEMA_VERSION,
+} from "./solStakingSelectorPresentationTypes";
+import { evaluateSolStakingSelectorDisplayGate } from "./solStakingSelectorDisplayGate";
+import {
+  buildSolStakingSelectorPresentation,
+  buildSolStakingLeaderExplanation,
+} from "./solStakingSelectorPresentation";
+import {
+  SOL_STAKING_RUNTIME_DATA_SCHEMA_VERSION,
+  SOL_STAKING_RUNTIME_DATA_URL,
+  validateSolStakingRuntimeMarketPayload,
+  buildSolStakingRuntimeMarketPayload,
+} from "./solStakingSelectorRuntimeData";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -11016,6 +11030,203 @@ export function runSolStakingSelectorSensitivityFixtureChecks(): FixtureCheck[] 
   return checks;
 }
 
+export function runSolStakingSelectorPresentationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const CHECKED = "2026-07-14T03:00:00Z";
+  const FRESH = "2026-07-14T02:50:00Z";
+  const OLD = "2026-07-11T00:00:00Z";
+  const PLUS_48H = "2026-07-16T03:00:00Z";
+  const IDS = SOL_STAKING_MARKET_CANDIDATE_IDS;
+
+  const POOL = { jito: "0e7d0722-9054-4907-8593-567b353c0900", jupiter: "52bd72a7-9e81-4112-abb4-71673e8de9bf", marinade: "b3f93865-5ec8-4662-90a0-11808e0aa2bd", blazestake: "387d6732-59f0-4ae0-8a88-aba75a5cbe4a", sanctum: "3075a746-bdd1-4aac-bcd5-b035abee2622" };
+  const rec = (pool: string, apy: unknown, apyMean30d: unknown, tvlUsd: unknown) => ({ pool, chain: "Solana", symbol: "X", apy, apyMean30d, tvlUsd });
+  const dllValid = { status: "success", data: [rec(POOL.jito, 5.36, 5.45, 767950000), rec(POOL.jupiter, 5.67, 5.6, 409170000), rec(POOL.marinade, 9.0, 9.0, 184840000), rec(POOL.blazestake, 5.27, 5.32, 69750000), rec(POOL.sanctum, 5.84, 5.95, 152555981)] }; // mSOL leads (APY-dominant)
+  const dllJitoLeads = { status: "success", data: [rec(POOL.jito, 9.0, 9.0, 767950000), rec(POOL.jupiter, 4.0, 4.0, 409170000), rec(POOL.marinade, 4.0, 4.0, 184840000), rec(POOL.blazestake, 4.0, 4.0, 69750000), rec(POOL.sanctum, 4.0, 4.0, 152555981)] };
+  const VA = JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const IDENT = JUPITER_NATIVE_STAKE_IDENTITY;
+  const mkEpochs = (n: number, endEpoch: number, lastEndIso: string, apyBase = 0.054) => { const out: Record<string, unknown>[] = []; let end = Date.parse(lastEndIso); const twoDays = 2 * 86400_000; for (let k = 0; k < n; k++) { const start = end - twoDays; out.push({ epoch: endEpoch - k, apy: apyBase - k * 0.0004, activated_stake: 12_500_000_000_000_000, commission_effective: 5, epoch_start_at: new Date(start).toISOString(), epoch_end_at: new Date(end).toISOString() }); end = start; } return out; };
+  const marinadeValid = { validators: [{ vote_account: VA, identity: IDENT, epoch_stats: [{ epoch: 1001, apy: null, epoch_start_at: "2026-07-12T12:22:01Z", epoch_end_at: "2026-07-14T12:00:00Z" }, ...mkEpochs(16, 1000, "2026-07-12T12:22:01Z")] }] };
+  const stakewiz = [{ vote_identity: VA, identity: IDENT, activated_stake: 12_500_954.43, commission: 500, apy_estimate: 5.23, delinquent: false, epoch: 1001 }];
+
+  const mkPresentation = (dll: unknown, checkedAt: string, opts: { sw?: unknown; mar?: unknown; swFetched?: string; marFetched?: string; dllFetched?: string } = {}) => {
+    const cache = buildSolStakingMarketCache({ checkedAt, defiLlama: { payload: dll, fetchedAt: opts.dllFetched ?? FRESH }, stakewiz: { payload: opts.sw ?? stakewiz, fetchedAt: opts.swFetched ?? FRESH }, marinade: { payload: opts.mar ?? marinadeValid, fetchedAt: opts.marFetched ?? FRESH } });
+    const nset = buildNormalizedSolStakingCandidateSet(cache, { checkedAt });
+    const c = buildSolStakingSelectorComparison(nset, { checkedAt });
+    return { cache, nset, c, pres: buildSolStakingSelectorPresentation({ marketCache: cache, normalizedSet: nset, comparisonResult: c, checkedAt }) };
+  };
+
+  const fresh = mkPresentation(dllValid, CHECKED);
+  const jitoLead = mkPresentation(dllJitoLeads, CHECKED);
+  const pres = fresh.pres;
+  // Stale: a cache that WAS fresh, evaluated later via the display gate (restamped, not rebuilt).
+  const stalePres = buildSolStakingSelectorPresentation({ marketCache: fresh.cache, normalizedSet: fresh.nset, comparisonResult: fresh.c, checkedAt: PLUS_48H });
+
+  // 14Y-A…M. Display gate.
+  add("14Y-A: display gate exists", typeof evaluateSolStakingSelectorDisplayGate === "function" && fresh.pres.displayGate != null, "exists");
+  add("14Y-B: fresh valid complete comparison can display a leader", pres.status === "available" && pres.displayGate.canShowCurrentLeader === true && pres.topProtocol != null, `status=${pres.status}`);
+  add("14Y-C: history is not required for display", pres.displayGate.historicalCoverageRequiredForDisplay === false && pres.status === "available", "no history");
+  add("14Y-D: sensitivity pass is not required for display", pres.displayGate.sensitivityPassRequiredForDisplay === false, "no sensitivity");
+  add("14Y-E: human activation approval is not required for display", pres.displayGate.humanApprovalRequiredForDisplay === false && pres.displayGate.activationRequiredForDisplay === false, "no approval");
+  add("14Y-F: automatic activation remains required for selectedProtocolId changes", pres.selectedProtocolIdChanged === false && pres.displayGate.selectedProtocolIdChanged === false && pres.activationPerformed === false, "gated");
+  add("14Y-G: stale cache cannot display a current leader", stalePres.status === "stale" && stalePres.topProtocol === undefined, `status=${stalePres.status}`);
+  {
+    const badCache = { ...fresh.cache, schemaVersion: "9.9.9" };
+    const g = evaluateSolStakingSelectorDisplayGate({ marketCache: badCache as never, normalizedSet: fresh.nset, comparisonResult: fresh.c, checkedAt: CHECKED });
+    add("14Y-H: invalid cache cannot display a current leader", g.status === "invalid" && g.canShowCurrentLeader === false, "invalid");
+  }
+  add("14Y-I: missing runtime payload cannot display a current leader", buildSolStakingSelectorPresentation({ checkedAt: CHECKED }).status === "unavailable" && buildSolStakingSelectorPresentation({ checkedAt: CHECKED }).topProtocol === undefined, "unavailable");
+  {
+    const oneReady = mkPresentation(dllValid, CHECKED, { dllFetched: OLD }); // LSTs stale → only native ready
+    add("14Y-J: one eligible candidate cannot display a current leader", oneReady.c.eligibleCandidateIds.length === 1 && oneReady.pres.status === "insufficient_candidates" && oneReady.pres.topProtocol === undefined, `n=${oneReady.c.eligibleCandidateIds.length}`);
+  }
+  {
+    const zeroCache = buildSolStakingMarketCache({ checkedAt: CHECKED });
+    const zset = buildNormalizedSolStakingCandidateSet(zeroCache, { checkedAt: CHECKED });
+    const zc = buildSolStakingSelectorComparison(zset, { checkedAt: CHECKED });
+    const zp = buildSolStakingSelectorPresentation({ marketCache: zeroCache, normalizedSet: zset, comparisonResult: zc, checkedAt: CHECKED });
+    add("14Y-K: zero eligible candidates cannot display a current leader", zc.eligibleCandidateIds.length === 0 && zp.status === "insufficient_candidates" && zp.topProtocol === undefined, "zero");
+  }
+  add("14Y-L: at least two fresh candidates are required", pres.displayGate.eligibleCandidateCount >= 2 && pres.rankedCandidates.length >= 2, `n=${pres.displayGate.eligibleCandidateCount}`);
+  {
+    const mismatchCache = { ...fresh.cache, generatedAt: "2020-01-01T00:00:00Z" };
+    add("14Y-M: comparison/cache timestamp mismatch fails closed", evaluateSolStakingSelectorDisplayGate({ marketCache: mismatchCache, normalizedSet: fresh.nset, comparisonResult: fresh.c, checkedAt: CHECKED }).status === "invalid", "mismatch");
+  }
+
+  // 14Y-N…AD. Presentation.
+  add("14Y-N: rank 1 becomes topProtocol", pres.topProtocol?.candidateId === fresh.c.rankedCandidateIds[0] && pres.topProtocol?.rank === 1, `top=${pres.topProtocol?.candidateId}`);
+  add("14Y-O: rank 2 becomes runnerUp", pres.runnerUp?.candidateId === fresh.c.rankedCandidateIds[1] && pres.runnerUp?.rank === 2, `ru=${pres.runnerUp?.candidateId}`);
+  add("14Y-P: ranked candidates preserve Step 14W order", JSON.stringify(pres.rankedCandidates.map((c) => c.candidateId)) === JSON.stringify(fresh.c.rankedCandidateIds), "order");
+  add("14Y-Q: presentation does not recalculate ranking", pres.rankedCandidates.every((c, i) => c.rank === fresh.c.candidateResults[c.candidateId].rank && i + 1 === c.rank), "no recalc");
+  add("14Y-R: presentation preserves comparison scores exactly", pres.rankedCandidates.every((c) => c.comparisonScore === fresh.c.candidateResults[c.candidateId].totalScore), "scores");
+  add("14Y-S: presentation preserves score breakdown exactly", pres.topProtocol!.breakdown.reviewedRisk.contribution === fresh.c.candidateResults[pres.topProtocol!.candidateId].dimensions.reviewedRiskScore.weightedContribution, "breakdown");
+  add("14Y-T: presentation preserves current APY exactly", pres.topProtocol!.currentApyPct === fresh.c.candidateResults[pres.topProtocol!.candidateId].dimensions.currentApy.rawValue, "curApy");
+  add("14Y-U: presentation preserves 30-day APY exactly", pres.topProtocol!.apy30dPct === fresh.c.candidateResults[pres.topProtocol!.candidateId].dimensions.apy30d.rawValue, "apy30d");
+  add("14Y-V: presentation preserves reviewed risk score exactly", pres.topProtocol!.reviewedRiskScore === fresh.c.candidateResults[pres.topProtocol!.candidateId].dimensions.reviewedRiskScore.rawValue, "risk");
+  add("14Y-W: presentation preserves APY consistency exactly", pres.topProtocol!.absoluteApyDeltaPctPoints === fresh.c.candidateResults[pres.topProtocol!.candidateId].dimensions.apyStability.rawValue, "consistency");
+  add("14Y-X: top protocol is marked dynamic", pres.topProtocolIsDynamic === true && pres.topProtocolMayChange === true, "dynamic");
+  add("14Y-Y: presentation says it may change", /may change as market data refreshes/i.test(pres.disclosureText), "may change");
+  {
+    const allCopy = (pres.headline + pres.supportingText + pres.freshnessText + pres.disclosureText).toLowerCase();
+    add("14Y-Z: no best-protocol copy exists", !allCopy.includes("best protocol") && !allCopy.includes("best "), "no best");
+    add("14Y-AA: no safest-protocol copy exists", !allCopy.includes("safest") && !allCopy.includes("safe protocol"), "no safest");
+    add("14Y-AB: no guaranteed or risk-free copy exists", !allCopy.includes("guaranteed") && !allCopy.includes("risk-free") && !allCopy.includes("risk free"), "no guarantee");
+    add("14Y-AC: no recommended-protocol copy exists", !allCopy.includes("recommended") && !allCopy.includes("winner"), "no recommend");
+    add("14Y-AD: no confusion with suggestion-engine Top Pick exists", !allCopy.includes("top pick") && /top protocol to review/i.test(pres.headline), "distinct");
+  }
+
+  // 14Y-AE…AK. Explanation.
+  const exp = buildSolStakingLeaderExplanation(pres)!;
+  const exp2 = buildSolStakingLeaderExplanation(fresh.pres)!;
+  add("14Y-AE: leader explanation is deterministic", JSON.stringify(exp) === JSON.stringify(exp2), "deterministic");
+  add("14Y-AF: explanation uses only four scored dimensions", exp.items.length === 4 && exp.items.map((i) => i.dimension).join(",") === "reviewed_risk,apy_30d,current_apy,apy_consistency", "four dims");
+  add("14Y-AG: explanation shows exact weights", exp.items.find((i) => i.dimension === "reviewed_risk")!.weightPct === 50 && exp.items.find((i) => i.dimension === "apy_30d")!.weightPct === 30, "weights");
+  add("14Y-AH: explanation does not invent reasons", exp.usesOnlyScoredDimensions === true && exp.items.every((i) => i.contribution === fresh.c.candidateResults[pres.topProtocol!.candidateId].dimensions[i.dimension === "reviewed_risk" ? "reviewedRiskScore" : i.dimension === "apy_30d" ? "apy30d" : i.dimension === "current_apy" ? "currentApy" : "apyStability"].weightedContribution), "no invention");
+  {
+    const expJson = JSON.stringify(exp).toLowerCase();
+    add("14Y-AI: non-scored adoption is not presented as a reason for the score", !expJson.includes("tvl") && !expJson.includes("delegated stake") && !expJson.includes("adoption"), "no adoption");
+    add("14Y-AJ: non-scored fees are not presented as a reason for the score", !expJson.includes("management fee") && !expJson.includes("commission") && !expJson.includes("unstake fee"), "no fees");
+    add("14Y-AK: non-scored exit mechanics are not presented as a reason for the score", !expJson.includes("epoch") && !expJson.includes("liquidity") && !expJson.includes("exit"), "no exit");
+  }
+
+  // 14Y-AL…AV. Runtime payload + browser loader.
+  const payload = buildSolStakingRuntimeMarketPayload(fresh.cache, "2026-07-14T03:01:00Z");
+  add("14Y-AL: runtime payload schema version exists", SOL_STAKING_RUNTIME_DATA_SCHEMA_VERSION === "1.0.0" && payload.schemaVersion === "1.0.0", "1.0.0");
+  add("14Y-AM: runtime payload contains only sanitized cache data", Object.keys(payload).sort().join(",") === "marketCache,publishedAt,schemaVersion", Object.keys(payload).join(","));
+  {
+    const flat = JSON.stringify(payload);
+    add("14Y-AN: runtime payload contains no raw provider responses", !flat.includes("sourceResponses") && !flat.includes("rawPayload"), "sanitized");
+    add("14Y-AO: runtime payload contains no secret/environment data", !/"(apiKey|api_key|secret|token|env|authorization)"/i.test(flat), "no secrets");
+  }
+  add("14Y-AP: runtime validator rejects invalid schema", validateSolStakingRuntimeMarketPayload({ schemaVersion: "0.0.0", publishedAt: "2026-07-14T03:00:00Z", marketCache: fresh.cache }).valid === false && validateSolStakingRuntimeMarketPayload(payload).valid === true, "rejects");
+  add("14Y-AQ: runtime validator rejects invalid cache", validateSolStakingRuntimeMarketPayload({ schemaVersion: "1.0.0", publishedAt: "2026-07-14T03:00:00Z", marketCache: { schemaVersion: "bad", candidates: {} } }).valid === false, "rejects");
+  {
+    const hook = readIf("src/hooks/useSolStakingSelectorPresentation.ts");
+    add("14Y-AR: browser loader uses same-origin generated data", SOL_STAKING_RUNTIME_DATA_URL === "/generated/sol-staking-market-cache.json" && hook.includes("SOL_STAKING_RUNTIME_DATA_URL") && hook.includes("same-origin"), "same-origin");
+    add("14Y-AS: browser loader does not call DefiLlama", !hook.includes("yields.llama.fi"), "no defillama endpoint");
+    add("14Y-AT: browser loader does not call Stakewiz", !hook.includes("api.stakewiz.com"), "no stakewiz endpoint");
+    add("14Y-AU: browser loader does not call Marinade", !hook.includes("validators-api.marinade.finance") && !hook.includes("api.marinade.finance"), "no marinade endpoint");
+    add("14Y-AV: browser loader fails closed when the artifact is missing", hook.includes("unavailablePresentation") && hook.includes("AbortController"), "fail-closed");
+  }
+
+  // 14Y-AW…BC. Publisher.
+  const pkg = readIf("package.json");
+  const pubScript = readIf("scripts/publish-sol-staking-market-cache.mjs");
+  add("14Y-AW: market:publish-staking script exists", /"market:publish-staking"\s*:\s*"node scripts\/publish-sol-staking-market-cache\.mjs"/.test(pkg), "exists");
+  add("14Y-AX: market:refresh-and-publish-staking script exists", /"market:refresh-and-publish-staking"/.test(pkg) && pkg.includes("market:refresh-staking && npm run market:publish-staking"), "exists");
+  add("14Y-AY: publisher reads the Step 14U cache", pubScript.includes("sol-staking-market-data.json") === false && pubScript.includes("tmp") && pubScript.includes("sol-staking-market-data-cache.json"), "reads cache");
+  add("14Y-AZ: publisher writes atomically", pubScript.includes("renameSync") && pubScript.includes(".tmp"), "atomic");
+  add("14Y-BA: publisher excludes raw source responses", !pubScript.includes("sourceResponses:") && pubScript.includes("buildSolStakingRuntimeMarketPayload") && /Excluded/.test(pubScript), "excludes raw");
+  add("14Y-BB: publisher refuses stale input", pubScript.includes("MAX_AGE_HOURS") && /stale/i.test(pubScript), "refuses stale");
+  add("14Y-BC: generated runtime artifact is git-ignored", /public\/generated\/sol-staking-market-cache\.json/.test(readIf(".gitignore")), "ignored");
+
+  // 14Y-BD…BR. Product behavior (source + presentation).
+  const modal = readIf("src/components/SuggestionReviewModal.tsx");
+  const testing = readIf("src/pages/testingPageFixtures.ts");
+  add("14Y-BD: suggestion action/title remains unchanged", readIf("src/suggestions/stakingSuggestion.ts").includes("Put Idle SOL to Work") || testing.includes("Put Idle SOL to Work"), "unchanged");
+  add("14Y-BE: fresh comparison shows Top protocol to review right now", pres.headline === "Top protocol to review right now", pres.headline);
+  add("14Y-BF: top protocol card shows freshness", pres.freshnessText.startsWith("Updated ") && pres.freshnessText.length > 8, pres.freshnessText);
+  add("14Y-BG: top protocol card says the result may change", /may change/i.test(pres.disclosureText), "may change");
+  add("14Y-BH: review modal shows current leader", modal.includes("selectorPresentation") && /Current comparison/i.test(modal), "modal leader");
+  add("14Y-BI: review modal shows runner-up", modal.toLowerCase().includes("runnerup") || modal.includes("runnerUp") || /runner-up/i.test(modal), "runner-up");
+  add("14Y-BJ: review modal shows ranked eligible candidates", modal.includes("rankedCandidates"), "ranked");
+  add("14Y-BK: blocked INF is absent from user-facing ranking", pres.rankedCandidates.every((c) => c.candidateId !== IDS.sanctum), "no INF");
+  add("14Y-BL: Jupiter Native Stake appears when eligible", pres.rankedCandidates.some((c) => c.candidateId === IDS.jupiterNativeStake && c.tokenModelLabel === "Native stake account"), "native present");
+  add("14Y-BM: no contradictory Jito-current-top label appears when another protocol leads", pres.topProtocol!.candidateId === "marinade" && pres.leaderDiffersFromUnderlyingSelection === true && pres.currentUnderlyingSelectedProtocolId === "jito" && !/currently selected protocol: jito/i.test(pres.supportingText), "no contradiction");
+  add("14Y-BN: stale state hides the top designation", stalePres.topProtocol === undefined && /being refreshed/i.test(stalePres.headline), "hidden");
+  add("14Y-BO: unavailable state hides the top designation", buildSolStakingSelectorPresentation({ checkedAt: CHECKED }).topProtocol === undefined, "hidden");
+  add("14Y-BP: individual protocol review remains available when comparison is unavailable", readIf("src/suggestions/engineTypes.ts").includes("otherProtocolsToReview"), "still available");
+  add("14Y-BQ: Demo and Real Wallet use the same runtime result", testing.includes("useSolStakingSelectorPresentation") || readIf("src/pages/TestingPage.tsx").includes("useSolStakingSelectorPresentation") || modal.includes("selectorPresentation"), "shared");
+  add("14Y-BR: Demo does not hardcode a separate leader", !readIf("src/suggestions/demoExactSolStakingScenario.ts").includes("comparisonLeaderCandidateId:"), "no hardcode");
+
+  // 14Y-BS…BZ. Activation invariants.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const engineRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stakingSug = engineRun.suggestions.find((s) => s.category === "staking");
+  add("14Y-BS: selectedProtocolId remains Jito", stakingSug?.protocolSelection?.selectedProtocolId === "jito" && pres.currentUnderlyingSelectedProtocolId === "jito", "jito");
+  add("14Y-BT: selectedProtocolIdChanged remains false", pres.selectedProtocolIdChanged === false, "false");
+  add("14Y-BU: winnerActivated remains false", pres.topProtocol!.currentWinner === false && pres.topProtocol!.activated === false && pres.topProtocol!.selectedByProtocolLogic === false, "false");
+  add("14Y-BV: multi-protocol automatic selection remains disabled", engineRun.suggestions.filter((s) => s.category === "staking").length === 1, "disabled");
+  add("14Y-BW: Step 14X activation gate remains blocked", SOL_STAKING_SELECTOR_ACTIVATION_PERFORMED === false, "blocked");
+  add("14Y-BX: showing a leader does not imply activation", pres.status === "available" && pres.activationPerformed === false && pres.selectedProtocolIdChanged === false, "no activation");
+  add("14Y-BY: Top Pick remains unchanged", pres.topPickChanged === false && engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => s.protocolSelection?.selectedProtocolName !== "Jupiter Native Stake"), "unchanged");
+  add("14Y-BZ: engine ordering remains unchanged", pres.engineOrderingChanged === false && engineRun.suggestions.every((s) => s.id !== "jupiter_native_stake" && !s.id.startsWith("sol_staking")), "unchanged");
+
+  // 14Y-CA…CC. Execution invariants.
+  {
+    const j = JSON.stringify(pres).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "stake(", "delegate(", "withdraw(", "swap(", "deposit(", "approve(", "execute("];
+    add("14Y-CA: no transaction path exists", pres.transactionsEnabled === false && tokens.filter((t) => j.includes(t)).length === 0, "none");
+    add("14Y-CB: no signature path exists", pres.walletSignatureRequired === false && pres.topProtocol!.walletSignatureRequired === false, "none");
+    add("14Y-CC: no stake/delegate/withdraw/swap/deposit/approve/execute handler exists", tokens.filter((t) => j.includes(t)).length === 0, "none");
+  }
+
+  // 14Y-CD…CJ. Testing states.
+  add("14Y-CD: fresh mSOL-leader fixture renders", fresh.pres.status === "available" && fresh.pres.topProtocol?.candidateId === "marinade", `top=${fresh.pres.topProtocol?.candidateId}`);
+  add("14Y-CE: fresh Jito-leader fixture renders", jitoLead.pres.status === "available" && jitoLead.pres.topProtocol?.candidateId === "jito", `top=${jitoLead.pres.topProtocol?.candidateId}`);
+  add("14Y-CF: leader-change fixture updates the displayed leader", fresh.pres.topProtocol?.candidateId !== jitoLead.pres.topProtocol?.candidateId, `${fresh.pres.topProtocol?.candidateId} vs ${jitoLead.pres.topProtocol?.candidateId}`);
+  add("14Y-CG: stale fixture renders refresh copy", /being refreshed/i.test(stalePres.headline), "refresh copy");
+  add("14Y-CH: missing-artifact fixture renders unavailable copy", /unavailable/i.test(buildSolStakingSelectorPresentation({ checkedAt: CHECKED }).headline), "unavailable copy");
+  {
+    const g = evaluateSolStakingSelectorDisplayGate({ marketCache: { schemaVersion: "bad" } as never, normalizedSet: fresh.nset, comparisonResult: fresh.c, checkedAt: CHECKED });
+    add("14Y-CI: invalid-artifact fixture fails closed", g.status === "invalid" && g.canShowCurrentLeader === false, "fail-closed");
+  }
+  {
+    const nativeBoost = mkPresentation(dllValid, CHECKED, { sw: [{ ...stakewiz[0], apy_estimate: 12 }], mar: { validators: [{ vote_account: VA, identity: IDENT, epoch_stats: [{ epoch: 1001, apy: null, epoch_start_at: "2026-07-12T12:22:01Z", epoch_end_at: "2026-07-14T12:00:00Z" }, ...mkEpochs(16, 1000, "2026-07-12T12:22:01Z", 0.12)] }] } });
+    const nativeEntry = nativeBoost.pres.rankedCandidates.find((c) => c.candidateId === "jupiter_native_stake");
+    add("14Y-CJ: native-leader fixture preserves native token model", nativeEntry?.tokenModelLabel === "Native stake account" && nativeEntry?.candidateType === "native_staking" && (nativeBoost.pres.topProtocol?.candidateId === "jupiter_native_stake" ? nativeBoost.pres.topProtocol?.tokenModelLabel === "Native stake account" : true), `top=${nativeBoost.pres.topProtocol?.candidateId}`);
+  }
+
+  add("14Y-schema: presentation schema version is 1.0.0", SOL_STAKING_SELECTOR_PRESENTATION_SCHEMA_VERSION === "1.0.0" && pres.schemaVersion === "1.0.0", "1.0.0");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -11090,6 +11301,7 @@ export function printFixtureResults(): void {
     ...runSolStakingNormalizationFixtureChecks(),
     ...runSolStakingSelectorComparisonFixtureChecks(),
     ...runSolStakingSelectorSensitivityFixtureChecks(),
+    ...runSolStakingSelectorPresentationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

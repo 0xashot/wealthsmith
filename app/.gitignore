@@ -4,3 +4,5 @@ src/styles/tokens.generated.css
 *.local
 .DS_Store
 tmp/
+public/generated/sol-staking-market-cache.json
+public/generated/*.tmp

@@ -24,6 +24,40 @@ import { buildJupsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiq
 import { buildBsolReadOnlyReviewCandidateDisplay } from "../suggestions/solLiquidStakingBsolReadOnlyApproval";
 import { getInfBlockedReviewSummary } from "../suggestions/solLiquidStakingInfReadOnlyApproval";
 import { buildNativeStakingReviewCandidateDisplay } from "../suggestions/solNativeStakingBaselineReadOnlyApproval";
+import { buildSolStakingMarketCache } from "../suggestions/solStakingMarketDataRefresh";
+import { buildNormalizedSolStakingCandidateSet } from "../suggestions/solStakingCandidateNormalization";
+import { buildSolStakingSelectorComparison } from "../suggestions/solStakingSelectorComparison";
+import { buildSolStakingSelectorPresentation } from "../suggestions/solStakingSelectorPresentation";
+
+/**
+ * Step 14Y — a deterministic, INTERNAL fixture presentation of the current comparison leader.
+ * Built from a synthetic fresh market cache (no live fetch), so /testing can render the read-only
+ * "Current comparison" panel. Not real wallet data; not activation; selectedProtocolId unchanged.
+ */
+function buildTestingSelectorPresentation() {
+  const CHECKED = "2026-07-14T02:55:00Z";
+  const FETCHED = "2026-07-14T02:50:00Z";
+  const rec = (pool: string, apy: number, apy30d: number, tvlUsd: number) => ({ pool, chain: "Solana", symbol: "X", apy, apyMean30d: apy30d, tvlUsd });
+  const dll = { status: "success", data: [
+    rec("0e7d0722-9054-4907-8593-567b353c0900", 5.36, 5.45, 767950000),
+    rec("52bd72a7-9e81-4112-abb4-71673e8de9bf", 5.67, 5.6, 409170000),
+    rec("b3f93865-5ec8-4662-90a0-11808e0aa2bd", 9.0, 9.0, 184840000), // mSOL leads
+    rec("387d6732-59f0-4ae0-8a88-aba75a5cbe4a", 5.27, 5.32, 69750000),
+    rec("3075a746-bdd1-4aac-bcd5-b035abee2622", 5.84, 5.95, 152555981),
+  ] };
+  const VA = "CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb";
+  const IDENT = "JUPiTERrZqgf1jUyR7dSkhMx4Kn2qJyekWsg3LT1h4b";
+  const epochs: Record<string, unknown>[] = [];
+  let end = Date.parse("2026-07-12T12:22:01Z");
+  for (let k = 0; k < 16; k++) { const start = end - 2 * 86400_000; epochs.push({ epoch: 1000 - k, apy: 0.054 - k * 0.0004, activated_stake: 12_500_000_000_000_000, commission_effective: 5, epoch_start_at: new Date(start).toISOString(), epoch_end_at: new Date(end).toISOString() }); end = start; }
+  const marinade = { validators: [{ vote_account: VA, identity: IDENT, epoch_stats: [{ epoch: 1001, apy: null, epoch_start_at: "2026-07-12T12:22:01Z", epoch_end_at: "2026-07-14T12:00:00Z" }, ...epochs] }] };
+  const stakewiz = [{ vote_identity: VA, identity: IDENT, activated_stake: 12_500_954.43, commission: 500, apy_estimate: 5.23, delinquent: false, epoch: 1001 }];
+  const cache = buildSolStakingMarketCache({ checkedAt: CHECKED, defiLlama: { payload: dll, fetchedAt: FETCHED }, stakewiz: { payload: stakewiz, fetchedAt: FETCHED }, marinade: { payload: marinade, fetchedAt: FETCHED } });
+  const nset = buildNormalizedSolStakingCandidateSet(cache, { checkedAt: CHECKED });
+  const cmp = buildSolStakingSelectorComparison(nset, { checkedAt: CHECKED });
+  return buildSolStakingSelectorPresentation({ marketCache: cache, normalizedSet: nset, comparisonResult: cmp, checkedAt: CHECKED });
+}
+const TESTING_SELECTOR_PRESENTATION = buildTestingSelectorPresentation();
 
 /* ------------------------------------------------------------------ *
  * Route + safety flags (mirrors the internalPreviewFlags pattern).
@@ -505,6 +539,7 @@ const msolReviewCandidate: TestingFixture = {
       ...REVIEW_ONLY_NOTES,
     ],
     demoLabel: TESTING_PREVIEW_NOT_LIVE,
+    selectorPresentation: TESTING_SELECTOR_PRESENTATION,
     otherProtocolsToReview: [
       buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:50:00Z" }),
       buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:50:00Z" }),

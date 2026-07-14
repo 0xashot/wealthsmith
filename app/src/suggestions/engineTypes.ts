@@ -22,6 +22,7 @@
  * On Track state. Top Pick selection (top-pick-rules.md) runs after the core
  * suggestions and only ever marks `is_top_pick` on engine output.
  */
+import type { SolStakingSelectorPresentation } from "./solStakingSelectorPresentationTypes";
 
 /**
  * Suggestion categories. All are IMPLEMENTED with trigger logic (Steps 3–9H);
@@ -404,6 +405,13 @@ export interface SuggestionReviewDetails {
    * winner; there is no execution path.
    */
   otherProtocolsToReview?: ProtocolReviewCandidateDisplay[];
+  /**
+   * Optional READ-ONLY dynamic "Top protocol to review right now" (Step 14Y). A display of the
+   * current Step 14W comparison leader — never an activation, never changes selectedProtocolId,
+   * never the suggestion-engine Top Pick. Rendered only when the display gate is available; may
+   * change after each validated market refresh.
+   */
+  selectorPresentation?: SolStakingSelectorPresentation;
 }
 
 /**

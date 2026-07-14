@@ -1430,3 +1430,20 @@ operational readiness into an activation-review decision in strict gate order; e
 winner, no UI/Top-Pick/ordering change, no execution). Current real-cache outcome: leader mSOL is
 policy-robust but market-sensitive; activation is blocked on historical coverage (and operational
 readiness + human approval). Jito stays selected, INF stays blocked/unscored.
+
+## 14Y — "Top protocol to review right now" (read-only dynamic display)
+
+Surfaces the current Step 14W comparison leader to users as a READ-ONLY, DYNAMIC "Top protocol to
+review right now" (see [solStakingSelectorPresentation.md](./solStakingSelectorPresentation.md)). A
+separate DISPLAY gate (distinct from the Step 14X activation gate) shows the leader only when the
+comparison is complete, fresh (cache ≤24h), valid, and has ≥2 selector-ready candidates — it does
+NOT require historical coverage, sensitivity pass, operational readiness, or human approval (those
+gate automatic selectedProtocolId changes only). The browser fetches ONLY the sanitized same-origin
+`/generated/sol-staking-market-cache.json` (published by `npm run market:refresh-and-publish-staking`,
+git-ignored) — never public providers. The presentation consumes the exact Step 14W ranking
+(preserving scores/breakdown/APY/risk), with deterministic copy (never best/safest/guaranteed/
+recommended, never the engine "Top Pick"), a four-dimension "why it leads" explanation, and
+zero-weight adoption/fee/exit context. INF stays absent from the ranking; native appears when
+eligible. Rendered in the review modal's "Current comparison" section (browser-verified on /testing).
+No selectedProtocolId change, no product winner, no Top Pick/ordering change, no execution; JitoSOL
+stays the underlying selection and Step 14X activation stays blocked.

@@ -3621,3 +3621,21 @@
 .review-modal__market-row dt { font-size: 12px; color: var(--color-text-secondary, #5b6472); }
 .review-modal__market-row dd { margin: 0; font-size: 14px; font-weight: 700; color: var(--color-text-primary, #14181f); }
 @media (max-width: 420px) { .review-modal__market { grid-template-columns: 1fr; } }
+
+/* Step 14Y — read-only "Current comparison" (Top protocol to review right now). */
+.review-modal__comparison-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface-raised, #eef);
+  color: var(--color-text-secondary, #445);
+  font-size: var(--font-size-caption, 0.75rem);
+  font-weight: 600;
+}
+.review-modal__comparison-name { font-weight: 600; margin: 4px 0; }
+.review-modal__comparison-runnerup,
+.review-modal__comparison-freshness,
+.review-modal__comparison-context { color: var(--color-text-secondary, #667); font-size: var(--font-size-caption, 0.75rem); }
+.review-modal__comparison-ranking { margin: 8px 0; padding-left: 1.1rem; }
+.review-modal__comparison-rank-item { margin: 2px 0; }
+.review-modal__comparison-disclosure { color: var(--color-text-secondary, #667); font-size: var(--font-size-caption, 0.75rem); margin-top: 6px; }

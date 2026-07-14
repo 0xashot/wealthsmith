@@ -407,6 +407,52 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
             </a>
           )}
 
+          {/* READ-ONLY dynamic "Current comparison" — the Step 14Y presentation of the current
+              Step 14W comparison leader. Shown only when the display gate is available; it is not
+              activation, not the engine Top Pick, and never changes the selected protocol. */}
+          {details.selectorPresentation && (
+            <section className="review-modal__section review-modal__comparison" aria-label="Current comparison">
+              <h3 className="review-modal__section-title">Current comparison</h3>
+              {details.selectorPresentation.status === "available" && details.selectorPresentation.topProtocol ? (
+                <>
+                  <p className="review-modal__comparison-headline">{details.selectorPresentation.headline}</p>
+                  <p className="review-modal__comparison-support">{details.selectorPresentation.supportingText}</p>
+                  <div className="review-modal__comparison-top">
+                    <span className="review-modal__comparison-badge">Top protocol to review right now</span>
+                    <p className="review-modal__comparison-name">
+                      {details.selectorPresentation.topProtocol.protocolName} · {details.selectorPresentation.topProtocol.assetSymbol}
+                    </p>
+                    <dl className="review-modal__market">
+                      <div className="review-modal__market-row"><dt>Comparison score</dt><dd>{details.selectorPresentation.topProtocol.comparisonScore.toFixed(2)} / 10</dd></div>
+                      <div className="review-modal__market-row"><dt>Reviewed risk score</dt><dd>{details.selectorPresentation.topProtocol.reviewedRiskScore.toFixed(2)} / 10</dd></div>
+                      <div className="review-modal__market-row"><dt>Current APY</dt><dd>{details.selectorPresentation.topProtocol.currentApyPct}%</dd></div>
+                      <div className="review-modal__market-row"><dt>30-day APY</dt><dd>{details.selectorPresentation.topProtocol.apy30dPct}%</dd></div>
+                      <div className="review-modal__market-row"><dt>APY consistency</dt><dd>{details.selectorPresentation.topProtocol.absoluteApyDeltaPctPoints} pct-pt diff</dd></div>
+                    </dl>
+                    {details.selectorPresentation.runnerUp && (
+                      <p className="review-modal__comparison-runnerup">Current runner-up: {details.selectorPresentation.runnerUp.protocolName} · {details.selectorPresentation.runnerUp.assetSymbol} ({details.selectorPresentation.runnerUp.comparisonScore.toFixed(2)})</p>
+                    )}
+                  </div>
+                  <ol className="review-modal__comparison-ranking">
+                    {details.selectorPresentation.rankedCandidates.map((c) => (
+                      <li key={c.candidateId} className="review-modal__comparison-rank-item">
+                        {c.rank}. {c.protocolName} · {c.assetSymbol} — {c.comparisonScore.toFixed(2)}
+                        <span className="review-modal__comparison-context"> · {c.tokenModelLabel}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="review-modal__comparison-freshness">{details.selectorPresentation.freshnessText}</p>
+                  <p className="review-modal__comparison-disclosure">{details.selectorPresentation.disclosureText}</p>
+                </>
+              ) : (
+                <>
+                  <p className="review-modal__comparison-headline">{details.selectorPresentation.headline}</p>
+                  <p className="review-modal__comparison-support">{details.selectorPresentation.supportingText}</p>
+                </>
+              )}
+            </section>
+          )}
+
           {/* READ-ONLY "Other protocols to review" (Step 14L). Approved alternative
               candidates shown for review only — never the selected protocol/winner,
               and never an execution path. */}

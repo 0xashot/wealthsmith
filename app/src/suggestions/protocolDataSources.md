@@ -894,3 +894,16 @@ regression QA, product-copy review), and two human approvals — evaluated in st
 `ready_for_human_activation_review` still activates nothing. Real cache: leader mSOL is
 policy-robust, market-sensitive; blocked on historical coverage. See
 [solStakingSelectorActivationReview.md](./solStakingSelectorActivationReview.md).
+
+## 14Y — read-only comparison-leader presentation
+
+The current Step 14W comparison leader is published as a sanitized same-origin runtime artifact
+(`/generated/sol-staking-market-cache.json`; `schemaVersion` 1.0.0; only `{schemaVersion,
+publishedAt, marketCache}` — no sourceResponses/headers/secrets) via
+`npm run market:refresh-and-publish-staking`, and fetched by the browser same-origin only (never
+DefiLlama/Stakewiz/Marinade). A display gate (fresh + complete + ≥2 eligible, no history/sensitivity/
+human-approval requirement) drives a deterministic read-only "Top protocol to review right now"
+presentation that preserves the exact 14W scores and adds a four-dimension "why it leads"
+explanation. Dynamic (may change per refresh); not activation; selectedProtocolId unchanged; Step
+14X still gates automatic switching. See
+[solStakingSelectorPresentation.md](./solStakingSelectorPresentation.md).
