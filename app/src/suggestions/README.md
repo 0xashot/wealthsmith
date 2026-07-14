@@ -1312,3 +1312,26 @@ clearly-labelled internal `/testing` BLOCKED card (`testing_native_stake_blocked
 remains the only selected protocol; mSOL/JupSOL/bSOL review behavior and INF's blocked state
 are unchanged; the selector comparison stays disabled. The baseline is now in place to compare
 the approved LST candidates against native staking once its evidence completes.
+
+## Native validator market-data adapter (Step 14Q)
+
+The bridge for native staking's three missing market fields is
+[nativeValidatorMarketData.ts](./nativeValidatorMarketData.ts) — a **hybrid** adapter (Option
+C): **Solana RPC `getVoteAccounts`** is the source of truth for delegated stake + commission,
+and a **validator analytics provider** (Stakewiz → Solana Compass → Validators.app) supplies
+current + 30-day APY. It provides `parseJupiterNativeStakeVoteAccountFromGetVoteAccounts`
+(stake/commission; flags `vote_account_not_found` / `validator_delinquent`),
+`parseNativeValidatorApyFromAnalytics` (defensive, fixture-driven; computes the 30-day mean
+from the last ≤30 validator-specific history values; refuses a network-wide-only payload;
+fails safely on an unknown schema), `buildNativeValidatorMarketData` (combines them →
+`complete` / `partial` / `missing` / `stale`; `delegatedStakeUsd` only with a SOL price), a
+documented (un-wired) `fetchNativeValidatorMarketData` contract, and
+`convertNativeValidatorMarketDataToEvidenceInputs` (turns **complete** data into the 3 missing
+native evidence inputs). **Safeguards baked in:** never reuses JupSOL APY/TVL
+(`..._USES_JUPSOL_APY`/`..._USES_JUPSOL_TVL` false), never uses a network-wide APY to unblock
+the candidate, never approves native staking, never enables the selector comparison, never
+updates live recommendations, and has no transaction/signature path; every record keeps
+`isLiquidStakingToken: false` / `splTokenMint: null`. 14Q ships the **adapter + fixtures only**
+— it does not live-fetch or fill the evidence array, so the native baseline stays **blocked**,
+JitoSOL stays the only selected protocol, and the LST candidates + INF are unchanged. A later
+backend/job can feed real payloads through the builder to complete the evidence.

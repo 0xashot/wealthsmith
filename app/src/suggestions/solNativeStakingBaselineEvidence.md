@@ -92,3 +92,15 @@ selected, never the winner, and has no transaction/signature/stake/delegate/with
 A later step that records the three missing market categories (an authoritative Jupiter
 native-staking APY / 30-day APY / delegated stake) would flip `readyForRiskGate` to true,
 enabling the deterministic risk score → approval → UI-exposure path.
+
+## Market-data adapter (Step 14Q)
+
+The bridge for those three missing categories is the **native validator market-data adapter**,
+[nativeValidatorMarketData.md](./nativeValidatorMarketData.md) — a hybrid of Solana RPC
+`getVoteAccounts` (delegated stake + commission, source of truth) and a validator analytics
+provider (Stakewiz → Solana Compass → Validators.app) for current + 30-day APY. Its
+`convertNativeValidatorMarketDataToEvidenceInputs()` produces exactly the three missing native
+evidence inputs **when the market data is complete and fresh** — but 14Q only builds the
+adapter (parsers/builder/bridge + fixtures) and does **not** fill this evidence array, so the
+baseline stays blocked. It never reuses JupSOL APY/TVL, never uses a network-wide APY, and
+never approves native staking.

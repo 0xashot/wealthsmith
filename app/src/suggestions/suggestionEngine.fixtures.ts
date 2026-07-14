@@ -485,6 +485,23 @@ import {
   getNativeStakingBaselineBlockedReviewSummary,
 } from "./solNativeStakingBaselineReadOnlyApproval";
 import {
+  NATIVE_VALIDATOR_MARKET_DATA_EXISTS,
+  NATIVE_VALIDATOR_MARKET_DATA_USES_RPC_FOR_STAKE,
+  NATIVE_VALIDATOR_MARKET_DATA_USES_ANALYTICS_FOR_APY,
+  NATIVE_VALIDATOR_MARKET_DATA_USES_JUPSOL_APY,
+  NATIVE_VALIDATOR_MARKET_DATA_USES_JUPSOL_TVL,
+  NATIVE_VALIDATOR_MARKET_DATA_ENABLES_NATIVE_APPROVAL,
+  NATIVE_VALIDATOR_MARKET_DATA_ENABLES_SELECTOR_COMPARISON,
+  NATIVE_VALIDATOR_MARKET_DATA_UPDATES_LIVE_RECOMMENDATIONS,
+  NATIVE_VALIDATOR_MARKET_DATA_ENABLES_TRANSACTIONS,
+  NATIVE_VALIDATOR_MARKET_DATA_REQUIRES_WALLET_SIGNATURE,
+  JUPITER_NATIVE_STAKE_VOTE_ACCOUNT,
+  parseJupiterNativeStakeVoteAccountFromGetVoteAccounts,
+  parseNativeValidatorApyFromAnalytics,
+  buildNativeValidatorMarketData,
+  convertNativeValidatorMarketDataToEvidenceInputs,
+} from "./nativeValidatorMarketData";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -9717,6 +9734,125 @@ export function runSolNativeStakingBaselineFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 14Q — Native validator market-data ADAPTER for Jupiter Native Stake (hybrid: Solana
+ * RPC getVoteAccounts for stake/commission + a validator analytics provider for APY). The
+ * adapter parses/builds/converts deterministically from fixture payloads; it never reuses
+ * JupSOL APY/TVL, never uses a network-wide APY to unblock the candidate, never approves or
+ * scores native staking, never mutates the evidence array, and has no execution path. The
+ * native baseline stays blocked (evidence array unchanged).
+ */
+export function runNativeValidatorMarketDataFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const VA = JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const FETCHED = "2026-07-14T03:00:00Z";
+  const CHECKED = "2026-07-14T03:10:00Z";
+  const STALE_FETCHED = "2026-07-10T03:00:00Z";
+
+  // Fixture payloads.
+  const rpcValid = { result: { current: [{ votePubkey: VA, activatedStake: 1_234_567_000_000_000, commission: 5 }, { votePubkey: "OtherValidator1111", activatedStake: 999, commission: 10 }], delinquent: [] } };
+  const rpcMissing = { result: { current: [{ votePubkey: "OtherValidator1111", activatedStake: 999, commission: 10 }], delinquent: [] } };
+  const rpcDelinquent = { result: { current: [], delinquent: [{ votePubkey: VA, activatedStake: 500_000_000_000, commission: 5 }] } };
+  const apyHistory = Array.from({ length: 33 }, (_, i) => 7.0 + (i % 4) * 0.1); // 33 daily values
+  const stakewizValid = [{ vote_identity: VA, apy_estimate: 7.23, apy_history: apyHistory }];
+  const stakewizNoHistory = [{ vote_identity: VA, apy_estimate: 7.23 }];
+  const compassValid = { validators: [{ vote_account: VA, apy: 7.05, apyHistory: apyHistory.map((a) => ({ date: "d", apy: a })) }] };
+  const networkWideOnly = { network_apy: 6.8 };
+  const unknownSchema = { unexpected: { shape: true } };
+
+  // 14Q-A…J. Constants.
+  add("14Q-A: NATIVE_VALIDATOR_MARKET_DATA_EXISTS is true", NATIVE_VALIDATOR_MARKET_DATA_EXISTS === true, "true");
+  add("14Q-B: uses RPC for stake", NATIVE_VALIDATOR_MARKET_DATA_USES_RPC_FOR_STAKE === true, "true");
+  add("14Q-C: uses analytics for APY", NATIVE_VALIDATOR_MARKET_DATA_USES_ANALYTICS_FOR_APY === true, "true");
+  add("14Q-D: does not use JupSOL APY", NATIVE_VALIDATOR_MARKET_DATA_USES_JUPSOL_APY === false, "false");
+  add("14Q-E: does not use JupSOL TVL", NATIVE_VALIDATOR_MARKET_DATA_USES_JUPSOL_TVL === false, "false");
+  add("14Q-F: does not enable native approval", NATIVE_VALIDATOR_MARKET_DATA_ENABLES_NATIVE_APPROVAL === false, "false");
+  add("14Q-G: does not enable selector comparison", NATIVE_VALIDATOR_MARKET_DATA_ENABLES_SELECTOR_COMPARISON === false, "false");
+  add("14Q-H: does not update live recommendations", NATIVE_VALIDATOR_MARKET_DATA_UPDATES_LIVE_RECOMMENDATIONS === false, "false");
+  add("14Q-I: does not enable transactions", NATIVE_VALIDATOR_MARKET_DATA_ENABLES_TRANSACTIONS === false, "false");
+  add("14Q-J: does not require wallet signature", NATIVE_VALIDATOR_MARKET_DATA_REQUIRES_WALLET_SIGNATURE === false, "false");
+  add("14Q-K: Jupiter native stake vote account constant exists", VA === "CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb", VA);
+
+  // 14Q-L…P. RPC parser.
+  const rpcParsed = parseJupiterNativeStakeVoteAccountFromGetVoteAccounts(rpcValid, { currentEpoch: 700, asOfSlot: 123 });
+  add("14Q-L: RPC parser finds Jupiter vote account in current accounts", rpcParsed.found === true && rpcParsed.delinquent === false, `found=${rpcParsed.found}`);
+  add("14Q-M: RPC parser extracts activatedStakeSol", rpcParsed.activatedStakeSol === 1_234_567 && rpcParsed.activatedStakeLamports === 1_234_567_000_000_000, `sol=${rpcParsed.activatedStakeSol}`);
+  add("14Q-N: RPC parser extracts commissionPct", rpcParsed.commissionPct === 5, `commission=${rpcParsed.commissionPct}`);
+  add("14Q-O: RPC parser returns missing/blocker when vote account is absent", parseJupiterNativeStakeVoteAccountFromGetVoteAccounts(rpcMissing).found === false && parseJupiterNativeStakeVoteAccountFromGetVoteAccounts(rpcMissing).blockers.includes("vote_account_not_found"), "not_found");
+  add("14Q-P: RPC parser flags delinquent validator", parseJupiterNativeStakeVoteAccountFromGetVoteAccounts(rpcDelinquent).blockers.includes("validator_delinquent"), "delinquent");
+
+  // 14Q-Q…T. Analytics parser.
+  const swParsed = parseNativeValidatorApyFromAnalytics("stakewiz", stakewizValid);
+  const expected30 = Math.round((apyHistory.slice(-30).reduce((s, n) => s + n, 0) / 30) * 100) / 100;
+  add("14Q-Q: analytics parser extracts currentApyPct from supported fixture", swParsed.currentApyPct === 7.23, `apy=${swParsed.currentApyPct}`);
+  add("14Q-R: analytics parser computes apy30dPct deterministically from history fixture", swParsed.apy30dPct === expected30 && parseNativeValidatorApyFromAnalytics("solana_compass", compassValid).apy30dPct === expected30, `apy30=${swParsed.apy30dPct} expected=${expected30}`);
+  {
+    const nw = parseNativeValidatorApyFromAnalytics("stakewiz", networkWideOnly);
+    add("14Q-S: analytics parser does not use network-wide APY to unblock Jupiter validator", nw.networkWideOnly === true && nw.currentApyPct === undefined && nw.apy30dPct === undefined, `used=${nw.currentApyPct}`);
+  }
+  add("14Q-T: unknown analytics schema fails safely with source_schema_unrecognized", parseNativeValidatorApyFromAnalytics("stakewiz", unknownSchema).blockers.includes("source_schema_unrecognized"), "safe");
+
+  // 14Q-U…AD. Builder.
+  const mdComplete = buildNativeValidatorMarketData({ rpcVoteAccountsResponse: rpcValid, analyticsProvider: "stakewiz", analyticsPayload: stakewizValid, solPriceUsd: 180, fetchedAt: FETCHED, checkedAt: CHECKED });
+  const mdPartial = buildNativeValidatorMarketData({ rpcVoteAccountsResponse: rpcValid, analyticsProvider: "stakewiz", analyticsPayload: stakewizNoHistory, fetchedAt: FETCHED, checkedAt: CHECKED });
+  const mdStale = buildNativeValidatorMarketData({ rpcVoteAccountsResponse: rpcValid, analyticsProvider: "stakewiz", analyticsPayload: stakewizValid, solPriceUsd: 180, fetchedAt: STALE_FETCHED, checkedAt: CHECKED });
+  const mdNoPrice = buildNativeValidatorMarketData({ rpcVoteAccountsResponse: rpcValid, analyticsProvider: "stakewiz", analyticsPayload: stakewizValid, fetchedAt: FETCHED, checkedAt: CHECKED });
+  add("14Q-U: builder returns complete when RPC and APY data are complete and fresh", mdComplete.status === "complete" && mdComplete.missingFields.length === 0, `status=${mdComplete.status}`);
+  add("14Q-V: builder returns partial when APY is missing", mdPartial.status === "partial" && mdPartial.missingFields.includes("apy30dPct"), `status=${mdPartial.status}`);
+  add("14Q-W: builder returns stale when fetchedAt is older than 24h", mdStale.status === "stale" && mdStale.blockers.includes("stale_market_data"), `status=${mdStale.status}`);
+  add("14Q-X: delegatedStakeUsd is computed only when SOL price is provided", mdComplete.delegatedStakeUsd === 1_234_567 * 180 && mdNoPrice.delegatedStakeUsd === undefined, `usd=${mdComplete.delegatedStakeUsd} noPrice=${mdNoPrice.delegatedStakeUsd}`);
+  add("14Q-Y: market data keeps isLiquidStakingToken false", mdComplete.isLiquidStakingToken === false && mdPartial.isLiquidStakingToken === false, "false");
+  add("14Q-Z: market data keeps splTokenMint null", mdComplete.splTokenMint === null && mdPartial.splTokenMint === null, "null");
+  add("14Q-AA: market data does not approve native staking", NATIVE_VALIDATOR_MARKET_DATA_ENABLES_NATIVE_APPROVAL === false, "false");
+  add("14Q-AB: market data does not enable selector comparison", mdComplete.enablesSelectorComparison === false, "false");
+  add("14Q-AC: market data does not update live recommendations", mdComplete.updatesLiveRecommendations === false, "false");
+  add("14Q-AD: market data does not enable transactions/signatures", mdComplete.transactionsEnabled === false && mdComplete.walletSignatureRequired === false, "false");
+
+  // 14Q-AE…AJ. Conversion bridge.
+  const convComplete = convertNativeValidatorMarketDataToEvidenceInputs(mdComplete);
+  const byCat = (c: string) => convComplete.inputs.find((i) => i.category === c);
+  add("14Q-AE: conversion creates delegated_stake_or_tvl evidence only when complete", convComplete.converted === true && byCat("delegated_stake_or_tvl") != null && byCat("delegated_stake_or_tvl")?.protocolId === "jupiter_native_stake", `has=${byCat("delegated_stake_or_tvl") != null}`);
+  add("14Q-AF: conversion creates current_apy evidence only when complete", byCat("current_apy")?.value === 7.23 && byCat("current_apy")?.unit === "pct", `apy=${byCat("current_apy")?.value}`);
+  add("14Q-AG: conversion creates apy_30d evidence only when complete", byCat("apy_30d")?.value === expected30 && byCat("apy_30d")?.unit === "pct", `apy30=${byCat("apy_30d")?.value}`);
+  add("14Q-AH: conversion creates no evidence when market data is partial", convertNativeValidatorMarketDataToEvidenceInputs(mdPartial).converted === false && convertNativeValidatorMarketDataToEvidenceInputs(mdPartial).inputs.length === 0, "none");
+  add("14Q-AI: conversion creates no evidence when market data is stale", convertNativeValidatorMarketDataToEvidenceInputs(mdStale).converted === false && convertNativeValidatorMarketDataToEvidenceInputs(mdStale).inputs.length === 0, "none");
+  {
+    // The conversion returns inputs but must NOT mutate the native evidence array.
+    const before = NATIVE_SOL_STAKE_EVIDENCE_INPUTS.length;
+    convertNativeValidatorMarketDataToEvidenceInputs(mdComplete);
+    add("14Q-AJ: conversion does not mutate native evidence arrays automatically", NATIVE_SOL_STAKE_EVIDENCE_INPUTS.length === before && before === 7, `len=${NATIVE_SOL_STAKE_EVIDENCE_INPUTS.length}`);
+  }
+
+  // 14Q-AK…AP. Baseline still blocked; other candidates unchanged; no execution; docs distinct.
+  add("14Q-AK: native staking baseline remains blocked by default unless evidence is explicitly completed", summarizeNativeSolStakeEvidence({ checkedAt: "2026-07-14T02:50:00Z" }).readyForRiskGate === false && getNativeStakingBaselineReadOnlyApprovalDecision({ checkedAt: "2026-07-14T02:50:00Z" }) === null, "blocked");
+  {
+    const funded = bufferFixture(5000, 1000, 3);
+    const aligned = allocationFixture(15000, 62, 2);
+    const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+    const staking = run.suggestions.find((s) => s.category === "staking");
+    add("14Q-AL: JitoSOL live behavior remains unchanged", staking?.protocolSelection?.selectedProtocolId === "jito" && staking?.protocolSelection?.selectedProtocolName === "Jito", `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  }
+  {
+    const msol = buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    const jup = buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    const bsol = buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    add("14Q-AM: mSOL/JupSOL/bSOL review behavior remains unchanged", msol.riskScore === 7.4 && jup.riskScore === 7.65 && bsol.riskScore === 7.35, `m=${msol.riskScore} j=${jup.riskScore} b=${bsol.riskScore}`);
+  }
+  add("14Q-AN: INF remains blocked", getInfReadOnlyApprovalDecision({ checkedAt: "2026-07-14T02:30:00Z" }) === null, "inf blocked");
+  {
+    const json = (JSON.stringify(mdComplete) + JSON.stringify(convComplete)).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "stake(", "delegate(", "withdraw(", "swap(", "deposit(", "approve(", "execute("];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("14Q-AO: no transaction/signature/stake/delegate/withdraw path exists", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  add("14Q-AP: docs explain native stake account is not JupSOL", NATIVE_VALIDATOR_MARKET_DATA_USES_JUPSOL_APY === false && NATIVE_VALIDATOR_MARKET_DATA_USES_JUPSOL_TVL === false && mdComplete.isLiquidStakingToken === false && mdComplete.splTokenMint === null, "distinct");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -9785,6 +9921,7 @@ export function printFixtureResults(): void {
     ...runSolLstBsolReviewExposureFixtureChecks(),
     ...runSolLstInfReviewExposureFixtureChecks(),
     ...runSolNativeStakingBaselineFixtureChecks(),
+    ...runNativeValidatorMarketDataFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

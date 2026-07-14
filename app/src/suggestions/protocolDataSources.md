@@ -807,3 +807,23 @@ native-adapted rubric mapping + rationale but assigns nothing) → **read-only a
 (blocker `missing_risk_score`) → **no product-facing UI** (only a clearly-labelled internal
 `/testing` BLOCKED card). JitoSOL stays the only selected protocol; mSOL/JupSOL/bSOL review
 behavior and INF's blocked state are unchanged; no execution path anywhere.
+
+**Step 14Q — Native validator market-data adapter (Option C hybrid), adapter+fixtures only:**
+`nativeValidatorMarketData.ts` adds the plumbing to source native staking's three missing
+market fields. **Sources:** Solana RPC `getVoteAccounts` = source of truth for delegated
+(activated) stake + commission (vote account `CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb`);
+validator analytics (Stakewiz primary → Solana Compass fallback → Validators.app optional, no
+token required) for current + 30-day APY. Parsers: `parseJupiterNativeStakeVoteAccountFromGetVoteAccounts`
+(lamports→SOL, commission %, flags `vote_account_not_found`/`validator_delinquent`),
+`parseNativeValidatorApyFromAnalytics` (finds the validator by vote key, current APY + 30-day
+mean from the last ≤30 history values; a network-wide-only payload is recognized but **not**
+used to unblock; unknown schema → `source_schema_unrecognized`). `buildNativeValidatorMarketData`
+yields `complete`/`partial`/`missing`/`stale` (24h window; `delegatedStakeUsd` only with a SOL
+price) and `convertNativeValidatorMarketDataToEvidenceInputs` turns **complete** data into the
+3 missing native evidence inputs (delegated_stake_or_tvl / current_apy / apy_30d) with full
+source attribution. **Hard safeguards:** never reuses JupSOL APY/TVL, never uses network-wide
+APY, never approves/scores native staking, never enables selector comparison, never mutates the
+evidence array, no transaction/signature path; `isLiquidStakingToken: false` / `splTokenMint:
+null` throughout. No live fetch is wired into runtime (documented `fetchNativeValidatorMarketData`
+contract for a later backend/job). The native baseline stays blocked; JitoSOL selector,
+mSOL/JupSOL/bSOL review, and INF's blocked state are unchanged.
