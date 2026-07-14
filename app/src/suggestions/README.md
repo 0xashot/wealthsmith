@@ -1447,3 +1447,19 @@ zero-weight adoption/fee/exit context. INF stays absent from the ranking; native
 eligible. Rendered in the review modal's "Current comparison" section (browser-verified on /testing).
 No selectedProtocolId change, no product winner, no Top Pick/ordering change, no execution; JitoSOL
 stays the underlying selection and Step 14X activation stays blocked.
+
+## 14Z — Demo + Real Wallet comparison integration
+
+Wires the dynamic Step 14W comparison leader into the Demo and Real Wallet staking cards + review
+modal with a deterministic "Why this protocol currently leads" explanation (see
+[solStakingSelectorProductIntegration.md](./solStakingSelectorProductIntegration.md)). One
+`useSolStakingSelectorPresentation()` call at the shared `RealWalletSuggestionsRail` feeds both Demo
+(`sol_staking`) and Real Wallet the SAME presentation. The card shows a compact "Top protocol to
+review right now" summary; the modal shows the leader header, strongest advantages, trade-offs,
+"Compared with the runner-up" (exact score difference), non-scored "Other considerations", and the
+exact Step 14W ranking (INF excluded). `buildSolStakingLeaderComparisonExplanation` uses only the
+four scored dimensions with exact weights/contributions (leader − runner-up), deterministic
+(`aiGenerated: false`), and updates automatically when the leader/runner-up changes (works for mSOL/
+JupSOL/JitoSOL/bSOL/native leaders). Displayed protocol follows `topProtocol`, never
+`selectedProtocolId`; JitoSOL stays the internal default; no automatic switching, no Top Pick/order
+change, no execution. Browser-verified live on /testing (no console errors).

@@ -105,3 +105,13 @@ appears when eligible, labeled "Native stake account". JitoSOL remains the under
 selection; `leaderDiffersFromUnderlyingSelection` is informational only. No `selectedProtocolId`
 change, no product winner, no multi-protocol automatic selection, no Top Pick change, no engine
 ordering change, and no transaction/signature/execution path.
+
+## Step 14Z — Demo + Real Wallet integration
+
+The presentation now carries a deterministic `leaderExplanation` (leader vs runner-up on the four
+scored dimensions; see [solStakingSelectorProductIntegration.md](./solStakingSelectorProductIntegration.md)).
+`useSolStakingSelectorPresentation()` is called once at the shared `RealWalletSuggestionsRail`
+(used by both Demo `sol_staking` and Real Wallet), which injects the presentation into the staking
+card (`SolStakingComparisonSummary`) and the review modal (`SolStakingLeaderExplanation`). The
+displayed protocol follows `presentation.topProtocol` (never `selectedProtocolId`); JitoSOL stays
+the internal default and Step 14X still gates automatic switching.

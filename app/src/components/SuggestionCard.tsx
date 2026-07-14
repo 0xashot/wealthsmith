@@ -17,7 +17,9 @@
  */
 import Badge from "./Badge";
 import ButtonIcon from "./ButtonIcon";
+import SolStakingComparisonSummary from "./SolStakingComparisonSummary";
 import type { SuggestionCardState } from "../types/dashboard";
+import type { SolStakingSelectorPresentation } from "../suggestions/solStakingSelectorPresentationTypes";
 import shieldCheckUrl from "../../../assets/icons/ui/shield-check.svg";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
 import hubbleUrl from "../../../assets/icons/protocol/hubble.svg";
@@ -94,9 +96,20 @@ interface Props {
    * completion, no Top Pick change.
    */
   onReview?: (card: SuggestionCardState) => void;
+  /**
+   * Step 14Z — the current SOL staking comparison presentation. Rendered as a compact read-only
+   * "Top protocol to review right now" summary on the SOL staking card only. Never changes the
+   * suggestion title/action; never a leader when unavailable/stale.
+   */
+  stakingPresentation?: SolStakingSelectorPresentation;
 }
 
-export default function SuggestionCard({ card, onExternalHandoff, onReview }: Props) {
+/** The SOL idle-staking suggestion card (Demo uses category/type "staking"; connected uses "stake_idle_sol"/"staked_assets"). */
+function isSolStakingCard(card: SuggestionCardState): boolean {
+  return card.type === "stake_idle_sol" || card.type === "staking" || card.category === "staked_assets" || card.category === "staking";
+}
+
+export default function SuggestionCard({ card, onExternalHandoff, onReview, stakingPresentation }: Props) {
   const isLocked = card.status === "locked";
   // A below-minimum engine suggestion maps to status "disabled": render it the
   // same non-actionable way as a locked card (dimmed, disabled button, reason
@@ -154,6 +167,10 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview }: Pr
           </span>
         </p>
       )}
+
+      {/* Step 14Z — compact "Top protocol to review right now" summary (SOL staking card only,
+          available state only). Read-only; never changes the title/action or the CTA. */}
+      {isSolStakingCard(card) && <SolStakingComparisonSummary presentation={stakingPresentation} />}
 
       {nonActionable && card.disabled_reason_text && (
         <p className="suggestion-card__locked-reason">{card.disabled_reason_text}</p>

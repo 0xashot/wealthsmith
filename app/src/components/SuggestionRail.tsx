@@ -7,6 +7,7 @@
  */
 import SuggestionCard from "./SuggestionCard";
 import type { RightRailState, SuggestionCardState } from "../types/dashboard";
+import type { SolStakingSelectorPresentation } from "../suggestions/solStakingSelectorPresentationTypes";
 
 interface Props {
   rail: RightRailState;
@@ -15,6 +16,8 @@ interface Props {
   notice?: string;
   onExternalHandoff?: (card: SuggestionCardState) => void;
   onReview?: (card: SuggestionCardState) => void;
+  /** Step 14Z — current SOL staking comparison presentation, forwarded to the SOL staking card. */
+  stakingPresentation?: SolStakingSelectorPresentation;
 }
 
 export default function SuggestionRail({
@@ -23,6 +26,7 @@ export default function SuggestionRail({
   notice,
   onExternalHandoff,
   onReview,
+  stakingPresentation,
 }: Props) {
   return (
     <aside className="suggestion-rail" aria-label={railLabel}>
@@ -42,6 +46,7 @@ export default function SuggestionRail({
             card={card}
             onExternalHandoff={onExternalHandoff}
             onReview={onReview}
+            stakingPresentation={stakingPresentation}
           />
         ))}
       </div>

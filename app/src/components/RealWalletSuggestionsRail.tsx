@@ -17,6 +17,7 @@ import { useState } from "react";
 import SuggestionRail from "./SuggestionRail";
 import EmptyStateCard from "./EmptyStateCard";
 import SuggestionReviewModal from "./SuggestionReviewModal";
+import { useSolStakingSelectorPresentation } from "../hooks/useSolStakingSelectorPresentation";
 import type { RailSuggestions } from "../suggestions/useRailSuggestions";
 import type { RightRailState, SuggestionCardState } from "../types/dashboard";
 import {
@@ -36,6 +37,11 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
   // opening the modal never transacts, signs, or hands off to a protocol.
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Step 14Z — the CURRENT SOL staking comparison presentation, fetched once at this shared
+  // level from the same-origin runtime artifact (no external provider calls). Demo and Real
+  // Wallet consume the SAME presentation object. It never changes selectedProtocolId.
+  const { presentation: stakingPresentation } = useSolStakingSelectorPresentation();
+
   // Read-only "Review": open the details modal when the engine produced details
   // for this suggestion (all Step 10A suggestions do).
   const onReviewSuggestion = (card: SuggestionCardState) => {
@@ -44,9 +50,14 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
 
   const selectedDetails = selectedId ? rail?.reviewDetailsById[selectedId] : undefined;
   const selectedCard = selectedId ? rail?.cards.find((c) => c.id === selectedId) : undefined;
-  const reviewModal = selectedDetails ? (
+  // Inject the current comparison into the SOL staking suggestion's modal details (read-only).
+  const isStakingSelected = selectedCard != null && (selectedCard.type === "stake_idle_sol" || selectedCard.type === "staking" || selectedCard.category === "staked_assets" || selectedCard.category === "staking");
+  const detailsForModal = selectedDetails && isStakingSelected && stakingPresentation
+    ? { ...selectedDetails, selectorPresentation: stakingPresentation }
+    : selectedDetails;
+  const reviewModal = detailsForModal ? (
     <SuggestionReviewModal
-      details={selectedDetails}
+      details={detailsForModal}
       isTopPick={selectedCard?.is_top_pick === true}
       onClose={() => setSelectedId(null)}
     />
@@ -78,6 +89,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
           railLabel={railLabel}
           notice={rail.notice}
           onReview={onReviewSuggestion}
+          stakingPresentation={stakingPresentation}
         />
         {reviewModal}
       </>

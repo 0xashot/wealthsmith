@@ -907,3 +907,14 @@ presentation that preserves the exact 14W scores and adds a four-dimension "why 
 explanation. Dynamic (may change per refresh); not activation; selectedProtocolId unchanged; Step
 14X still gates automatic switching. See
 [solStakingSelectorPresentation.md](./solStakingSelectorPresentation.md).
+
+## 14Z — Demo/Real Wallet integration
+
+The current comparison leader + a deterministic leader-vs-runner-up explanation are rendered on the
+Demo and Real Wallet staking cards and review modal, driven by one shared
+`useSolStakingSelectorPresentation()` (same-origin artifact only). The explanation uses only the
+four scored dimensions (reviewed risk 50% / 30-day APY 30% / current APY 10% / APY consistency 10%)
+with exact contributions; non-scored TVL/stake/fees/exit/token appear as labeled "Other
+considerations". Displayed protocol follows the comparison leader (not selectedProtocolId); JitoSOL
+remains the internal default and Step 14X still gates activation. See
+[solStakingSelectorProductIntegration.md](./solStakingSelectorProductIntegration.md).

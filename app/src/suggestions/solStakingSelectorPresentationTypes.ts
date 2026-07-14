@@ -13,6 +13,7 @@
  * winner / recommended, and is never called the suggestion-engine "Top Pick".
  */
 import type { SolStakingSelectorComparisonResult } from "./solStakingSelectorTypes";
+import type { SolStakingLeaderExplanation as SolStakingLeaderComparisonExplanation } from "./solStakingLeaderExplanationTypes";
 
 export const SOL_STAKING_SELECTOR_PRESENTATION_SCHEMA_VERSION = "1.0.0";
 
@@ -115,6 +116,9 @@ export interface SolStakingSelectorPresentation {
   topProtocol?: SolStakingProtocolPresentationCandidate;
   runnerUp?: SolStakingProtocolPresentationCandidate;
   rankedCandidates: SolStakingProtocolPresentationCandidate[];
+
+  /** Step 14Z — the deterministic "Why this protocol currently leads" leader-vs-runner-up analysis. */
+  leaderExplanation?: SolStakingLeaderComparisonExplanation;
 
   currentUnderlyingSelectedProtocolId: string;
 

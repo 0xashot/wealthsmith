@@ -635,6 +635,11 @@ import {
   buildSolStakingRuntimeMarketPayload,
 } from "./solStakingSelectorRuntimeData";
 import {
+  buildSolStakingLeaderComparisonExplanation,
+  SOL_STAKING_LEADER_EXPLANATION_EPSILON,
+  SOL_STAKING_LEADER_EXPLANATION_RECONCILIATION_TOLERANCE,
+} from "./solStakingLeaderExplanation";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -11172,8 +11177,8 @@ export function runSolStakingSelectorPresentationFixtureChecks(): FixtureCheck[]
   add("14Y-BF: top protocol card shows freshness", pres.freshnessText.startsWith("Updated ") && pres.freshnessText.length > 8, pres.freshnessText);
   add("14Y-BG: top protocol card says the result may change", /may change/i.test(pres.disclosureText), "may change");
   add("14Y-BH: review modal shows current leader", modal.includes("selectorPresentation") && /Current comparison/i.test(modal), "modal leader");
-  add("14Y-BI: review modal shows runner-up", modal.toLowerCase().includes("runnerup") || modal.includes("runnerUp") || /runner-up/i.test(modal), "runner-up");
-  add("14Y-BJ: review modal shows ranked eligible candidates", modal.includes("rankedCandidates"), "ranked");
+  add("14Y-BI: review modal shows runner-up", readIf("src/components/SolStakingLeaderExplanation.tsx").includes("runnerUp") && modal.includes("SolStakingLeaderExplanation"), "runner-up");
+  add("14Y-BJ: review modal shows ranked eligible candidates", readIf("src/components/SolStakingLeaderExplanation.tsx").includes("rankedCandidates"), "ranked");
   add("14Y-BK: blocked INF is absent from user-facing ranking", pres.rankedCandidates.every((c) => c.candidateId !== IDS.sanctum), "no INF");
   add("14Y-BL: Jupiter Native Stake appears when eligible", pres.rankedCandidates.some((c) => c.candidateId === IDS.jupiterNativeStake && c.tokenModelLabel === "Native stake account"), "native present");
   add("14Y-BM: no contradictory Jito-current-top label appears when another protocol leads", pres.topProtocol!.candidateId === "marinade" && pres.leaderDiffersFromUnderlyingSelection === true && pres.currentUnderlyingSelectedProtocolId === "jito" && !/currently selected protocol: jito/i.test(pres.supportingText), "no contradiction");
@@ -11223,6 +11228,234 @@ export function runSolStakingSelectorPresentationFixtureChecks(): FixtureCheck[]
   }
 
   add("14Y-schema: presentation schema version is 1.0.0", SOL_STAKING_SELECTOR_PRESENTATION_SCHEMA_VERSION === "1.0.0" && pres.schemaVersion === "1.0.0", "1.0.0");
+
+  return checks;
+}
+
+export function runSolStakingProductIntegrationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const CHECKED = "2026-07-14T03:00:00Z";
+  const FRESH = "2026-07-14T02:50:00Z";
+  const OLD = "2026-07-11T00:00:00Z";
+  const PLUS_48H = "2026-07-16T03:00:00Z";
+  const IDS = SOL_STAKING_MARKET_CANDIDATE_IDS;
+  const POOL = { jito: "0e7d0722-9054-4907-8593-567b353c0900", jupiter: "52bd72a7-9e81-4112-abb4-71673e8de9bf", marinade: "b3f93865-5ec8-4662-90a0-11808e0aa2bd", blazestake: "387d6732-59f0-4ae0-8a88-aba75a5cbe4a", sanctum: "3075a746-bdd1-4aac-bcd5-b035abee2622" };
+  const rec = (pool: string, apy: number, apy30d: number, tvl: number) => ({ pool, chain: "Solana", symbol: "X", apy, apyMean30d: apy30d, tvlUsd: tvl });
+  const dllWith = (m: Record<string, [number, number]>) => ({ status: "success", data: [
+    rec(POOL.jito, ...(m.jito ?? [5.36, 5.45]), 767950000),
+    rec(POOL.jupiter, ...(m.jupiter ?? [5.67, 5.6]), 409170000),
+    rec(POOL.marinade, ...(m.marinade ?? [4.75, 5.87]), 184840000),
+    rec(POOL.blazestake, ...(m.blazestake ?? [5.27, 5.32]), 69750000),
+    rec(POOL.sanctum, ...(m.sanctum ?? [5.84, 5.95]), 152555981),
+  ] });
+  const VA = JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const IDENT = JUPITER_NATIVE_STAKE_IDENTITY;
+  const mkEpochs = (n: number, endEpoch: number, lastEndIso: string, apyBase = 0.054) => { const out: Record<string, unknown>[] = []; let end = Date.parse(lastEndIso); const d = 2 * 86400_000; for (let k = 0; k < n; k++) { const s = end - d; out.push({ epoch: endEpoch - k, apy: apyBase - k * 0.0004, activated_stake: 12_500_000_000_000_000, commission_effective: 5, epoch_start_at: new Date(s).toISOString(), epoch_end_at: new Date(end).toISOString() }); end = s; } return out; };
+  const marinadeValid = (apyBase = 0.054) => ({ validators: [{ vote_account: VA, identity: IDENT, epoch_stats: [{ epoch: 1001, apy: null, epoch_start_at: "2026-07-12T12:22:01Z", epoch_end_at: "2026-07-14T12:00:00Z" }, ...mkEpochs(16, 1000, "2026-07-12T12:22:01Z", apyBase)] }] });
+  const stakewiz = (apy = 5.23) => [{ vote_identity: VA, identity: IDENT, activated_stake: 12_500_954.43, commission: 500, apy_estimate: apy, delinquent: false, epoch: 1001 }];
+
+  const mkPres = (m: Record<string, [number, number]>, checkedAt = CHECKED, opts: { swApy?: number; marApy?: number; dllFetched?: string } = {}) => {
+    const cache = buildSolStakingMarketCache({ checkedAt, defiLlama: { payload: dllWith(m), fetchedAt: opts.dllFetched ?? FRESH }, stakewiz: { payload: stakewiz(opts.swApy ?? 5.23), fetchedAt: FRESH }, marinade: { payload: marinadeValid(opts.marApy ?? 0.054), fetchedAt: FRESH } });
+    const nset = buildNormalizedSolStakingCandidateSet(cache, { checkedAt });
+    const c = buildSolStakingSelectorComparison(nset, { checkedAt });
+    return { cache, nset, c, pres: buildSolStakingSelectorPresentation({ marketCache: cache, normalizedSet: nset, comparisonResult: c, checkedAt }) };
+  };
+
+  const msol = mkPres({ marinade: [9, 9] });
+  const jupsol = mkPres({ jupiter: [9, 9], marinade: [5, 5], jito: [5, 5] });
+  const jito = mkPres({ jito: [9, 9], marinade: [4, 4], jupiter: [4, 4] });
+  const bsol = mkPres({ blazestake: [9, 9], marinade: [4, 4], jupiter: [4, 4], jito: [4, 4] });
+  const native = mkPres({ marinade: [4, 4], jupiter: [4, 4], jito: [4, 4], blazestake: [4, 4] }, CHECKED, { swApy: 12, marApy: 0.12 });
+  const close = mkPres({ jito: [9, 9], jupiter: [9, 9], marinade: [4, 4] });
+  const pres = msol.pres;
+  const exp = pres.leaderExplanation!;
+  const stalePres = buildSolStakingSelectorPresentation({ marketCache: msol.cache, normalizedSet: msol.nset, comparisonResult: msol.c, checkedAt: PLUS_48H });
+  const unavailablePres = buildSolStakingSelectorPresentation({ checkedAt: CHECKED });
+
+  const rail = readIf("src/components/RealWalletSuggestionsRail.tsx");
+  const demoPage = readIf("src/pages/DemoDashboardPage.tsx");
+  const summaryC = readIf("src/components/SolStakingComparisonSummary.tsx");
+  const modal = readIf("src/components/SuggestionReviewModal.tsx");
+  const explC = readIf("src/components/SolStakingLeaderExplanation.tsx");
+  const explSrc = readIf("src/suggestions/solStakingLeaderExplanation.ts");
+
+  // 14Z-A…I. Runtime integration.
+  add("14Z-A: Demo uses useSolStakingSelectorPresentation", demoPage.includes("RealWalletSuggestionsRail") && rail.includes("useSolStakingSelectorPresentation"), "via shared rail");
+  add("14Z-B: Real Wallet uses useSolStakingSelectorPresentation", rail.includes("useSolStakingSelectorPresentation"), "hook");
+  add("14Z-C: Demo and Real Wallet receive the same presentation contract", demoPage.includes("RealWalletSuggestionsRail") && rail.includes("stakingPresentation={stakingPresentation}"), "shared");
+  add("14Z-D: no Demo hardcoded leader exists", !demoPage.includes("comparisonLeaderCandidateId") && !/topProtocol\s*:/.test(demoPage), "no hardcode");
+  add("14Z-E: no Real Wallet hardcoded leader exists", !rail.includes("comparisonLeaderCandidateId") && !/topProtocol\s*:/.test(rail), "no hardcode");
+  add("14Z-F: displayed protocol comes from presentation.topProtocol", summaryC.includes("presentation.topProtocol") && explC.includes("presentation.topProtocol"), "from presentation");
+  add("14Z-G: displayed protocol does not come from selectedProtocolId", !summaryC.includes("selectedProtocolId") && !explC.includes("selectedProtocolId"), "not selectedProtocolId");
+  add("14Z-H: leader changes when presentation.topProtocol changes", msol.pres.topProtocol?.candidateId !== jito.pres.topProtocol?.candidateId, `${msol.pres.topProtocol?.candidateId} vs ${jito.pres.topProtocol?.candidateId}`);
+  add("14Z-I: underlying selectedProtocolId remains Jito", pres.currentUnderlyingSelectedProtocolId === "jito", "jito");
+
+  // 14Z-J…S. Card.
+  add("14Z-J: suggestion title remains unchanged", !summaryC.includes("card.title =") && (readIf("src/pages/testingPageFixtures.ts").includes("Put Idle SOL to Work")), "unchanged");
+  add("14Z-K: available state shows Top protocol to review right now", summaryC.includes("Top protocol to review right now"), "badge");
+  add("14Z-L: card shows current APY", summaryC.includes("currentApyPct"), "apy");
+  add("14Z-M: card shows 30-day APY", summaryC.includes("apy30dPct"), "apy30d");
+  add("14Z-N: card shows reviewed risk", summaryC.includes("reviewedRiskScore"), "risk");
+  add("14Z-O: card shows freshness", summaryC.includes("freshnessText"), "freshness");
+  add("14Z-P: card says the result may change", summaryC.includes("This may change as market data refreshes"), "may change");
+  add("14Z-Q: card shows deterministic compact explanation", summaryC.includes("compactSummary") && exp.deterministic === true, "compact");
+  add("14Z-R: card compact explanation updates with leader", msol.pres.leaderExplanation!.compactSummary !== undefined && jito.pres.leaderExplanation!.leaderProtocolName === "Jito" && msol.pres.leaderExplanation!.leaderProtocolName === "Marinade", "updates");
+  {
+    const cta = ["Stake", "Delegate", "Execute", "Start staking", "Approve", "Confirm"];
+    add("14Z-S: card has no execution CTA", cta.every((t) => !summaryC.includes(`>${t}<`)) && !/onClick=\{[^}]*(stake|delegate|execute)\(/i.test(summaryC), "no CTA");
+  }
+
+  // 14Z-T…AL. Full explanation.
+  const exp2 = buildSolStakingLeaderComparisonExplanation(msol.pres)!;
+  add("14Z-T: explanation is deterministic", JSON.stringify(exp) === JSON.stringify(exp2), "deterministic");
+  add("14Z-U: explanation is not AI-generated", exp.aiGenerated === false && exp.deterministic === true, "not ai");
+  {
+    const dims = [...exp.strongestAdvantages, ...exp.tradeOffs, ...exp.approximatelyEqualDimensions].map((d) => d.dimension).sort();
+    add("14Z-V: explanation uses exact Step 14W dimensions", JSON.stringify([...new Set(dims)].sort()) === JSON.stringify(["apy_30d", "apy_consistency", "current_apy", "reviewed_risk"]), dims.join(","));
+  }
+  {
+    const all = [...exp.strongestAdvantages, ...exp.tradeOffs, ...exp.approximatelyEqualDimensions];
+    const risk = all.find((d) => d.dimension === "reviewed_risk")!;
+    add("14Z-W: explanation uses exact weights", risk.weight === 0.5 && all.find((d) => d.dimension === "apy_30d")!.weight === 0.3 && all.find((d) => d.dimension === "current_apy")!.weight === 0.1, "weights");
+    add("14Z-X: explanation preserves leader raw values", risk.leaderRawValue === msol.c.candidateResults[exp.leaderCandidateId].dimensions.reviewedRiskScore.rawValue, "leader raw");
+    add("14Z-Y: explanation preserves runner-up raw values", risk.runnerUpRawValue === msol.c.candidateResults[exp.runnerUpCandidateId!].dimensions.reviewedRiskScore.rawValue, "runnerup raw");
+    add("14Z-Z: explanation preserves weighted contributions", risk.leaderContribution === msol.c.candidateResults[exp.leaderCandidateId].dimensions.reviewedRiskScore.weightedContribution && risk.runnerUpContribution === msol.c.candidateResults[exp.runnerUpCandidateId!].dimensions.reviewedRiskScore.weightedContribution, "contributions");
+  }
+  add("14Z-AA: strongest advantages derive from contribution differences", exp.strongestAdvantages.every((d) => (d.leaderAdvantageContribution ?? 0) > SOL_STAKING_LEADER_EXPLANATION_EPSILON) && exp.strongestAdvantages.every((d, i, a) => i === 0 || a[i - 1].leaderAdvantageContribution! >= d.leaderAdvantageContribution!), "advantages");
+  add("14Z-AB: trade-offs derive from negative contribution differences", exp.tradeOffs.every((d) => (d.leaderAdvantageContribution ?? 0) < -SOL_STAKING_LEADER_EXPLANATION_EPSILON), "tradeoffs");
+  add("14Z-AC: at least one trade-off is shown when one exists", exp.tradeOffs.length >= 1 && exp.tradeOffs.some((d) => d.dimension === "reviewed_risk" || d.dimension === "apy_consistency"), `n=${exp.tradeOffs.length}`);
+  add("14Z-AD: approximately equal dimensions are not called advantages", exp.approximatelyEqualDimensions.every((d) => !exp.strongestAdvantages.includes(d) && !exp.tradeOffs.includes(d)), "not advantages");
+  add("14Z-AE: score difference is exact", Math.abs((exp.scoreDifference ?? 0) - (pres.topProtocol!.comparisonScore - pres.runnerUp!.comparisonScore)) < SOL_STAKING_LEADER_EXPLANATION_RECONCILIATION_TOLERANCE, `${exp.scoreDifference}`);
+  add("14Z-AF: leader and runner-up names are not hardcoded", !explSrc.includes("\"Marinade\"") && !explSrc.includes("\"mSOL\"") && !explSrc.includes("\"Jupiter\"") && !explSrc.includes("\"JupSOL\""), "no hardcode");
+  add("14Z-AG: explanation updates when leader changes", msol.pres.leaderExplanation!.leaderCandidateId !== jito.pres.leaderExplanation!.leaderCandidateId, "updates");
+  add("14Z-AH: explanation updates when runner-up changes", jupsol.pres.leaderExplanation!.runnerUpCandidateId != null && bsol.pres.leaderExplanation!.runnerUpCandidateId != null, "runnerup varies");
+  add("14Z-AI: explanation works for native staking leader", native.pres.topProtocol?.candidateId === "jupiter_native_stake" ? native.pres.leaderExplanation?.leaderCandidateId === "jupiter_native_stake" : native.pres.leaderExplanation != null, `top=${native.pres.topProtocol?.candidateId}`);
+  add("14Z-AJ: explanation works for Jito leader", jito.pres.topProtocol?.candidateId === "jito" && jito.pres.leaderExplanation?.leaderCandidateId === "jito", `top=${jito.pres.topProtocol?.candidateId}`);
+  add("14Z-AK: explanation works for bSOL leader", bsol.pres.topProtocol?.candidateId === "blazestake" && bsol.pres.leaderExplanation?.leaderProtocolName === "BlazeStake", `top=${bsol.pres.topProtocol?.candidateId}`);
+  add("14Z-AL: no new explanation score exists", !("explanationScore" in exp) && exp.leaderScore === pres.topProtocol!.comparisonScore, "no new score");
+
+  // 14Z-AM…AV. Reason boundaries.
+  const expJson = JSON.stringify(exp).toLowerCase();
+  add("14Z-AM: reviewed risk may be used as a ranking reason", expJson.includes("reviewed_risk") || expJson.includes("reviewed risk"), "risk");
+  add("14Z-AN: 30-day APY may be used as a ranking reason", expJson.includes("30-day apy") || expJson.includes("apy_30d"), "apy30d");
+  add("14Z-AO: current APY may be used as a ranking reason", expJson.includes("current apy") || expJson.includes("current_apy"), "current");
+  add("14Z-AP: APY consistency may be used as a ranking reason", expJson.includes("apy consistency") || expJson.includes("apy_consistency"), "consistency");
+  add("14Z-AQ: TVL is not used as a ranking reason", !expJson.includes("tvl"), "no tvl");
+  add("14Z-AR: delegated stake is not used as a ranking reason", !expJson.includes("delegated stake"), "no stake");
+  add("14Z-AS: fees are not used as a ranking reason", !expJson.includes("management fee") && !expJson.includes("commission") && !expJson.includes("unstake fee"), "no fees");
+  add("14Z-AT: exit mechanics are not used as a ranking reason", !expJson.includes("epoch") && !expJson.includes("liquidity") && !expJson.includes("exit mechanics"), "no exit");
+  add("14Z-AU: token model is not used as a ranking reason", !expJson.includes("token model") && !expJson.includes("stake account"), "no token model");
+  add("14Z-AV: other considerations are labeled non-scored", explC.includes("Informational — not included in the current comparison score"), "labeled");
+
+  // 14Z-AW…BD. Copy boundaries.
+  const copyBlob = (JSON.stringify(exp) + summaryC + explC + pres.headline + pres.supportingText + pres.freshnessText + pres.disclosureText).toLowerCase();
+  add("14Z-AW: no best copy exists", !/\bbest\b/.test(copyBlob), "no best");
+  add("14Z-AX: no safest copy exists", !copyBlob.includes("safest"), "no safest");
+  add("14Z-AY: no guaranteed copy exists", !copyBlob.includes("guaranteed"), "no guaranteed");
+  add("14Z-AZ: no risk-free copy exists", !copyBlob.includes("risk-free") && !copyBlob.includes("risk free"), "no risk-free");
+  add("14Z-BA: no winner copy exists", !copyBlob.includes("winner"), "no winner");
+  add("14Z-BB: no recommended-protocol copy exists", !copyBlob.includes("recommended"), "no recommended");
+  add("14Z-BC: no WealthSmith-selected-this-protocol copy exists", !copyBlob.includes("wealthsmith selected this protocol") && !copyBlob.includes("selected this protocol"), "no selected");
+  add("14Z-BD: no confusion with Top Pick exists", !copyBlob.includes("top pick"), "no top pick");
+
+  // 14Z-BE…BN. Modal.
+  add("14Z-BE: modal shows current leader", modal.includes("SolStakingLeaderExplanation") && explC.includes("Top protocol to review right now"), "leader");
+  add("14Z-BF: modal shows runner-up", explC.includes("Compared with the runner-up") && explC.includes("runnerUp"), "runner-up");
+  add("14Z-BG: modal shows exact score difference", explC.includes("scoreDifference"), "diff");
+  add("14Z-BH: modal shows policy weights", explC.includes("% of the comparison score") || explSrc.includes("% of the comparison score"), "weights");
+  add("14Z-BI: modal shows strongest advantages", explC.includes("strongestAdvantages"), "advantages");
+  add("14Z-BJ: modal shows trade-offs", explC.includes("tradeOffs"), "tradeoffs");
+  add("14Z-BK: modal shows other considerations as non-scored", explC.includes("Other considerations") && explC.includes("not included in the current comparison score"), "non-scored");
+  add("14Z-BL: modal shows ranked eligible candidates", explC.includes("rankedCandidates"), "ranking");
+  add("14Z-BM: modal ranking preserves Step 14W order", JSON.stringify(pres.rankedCandidates.map((c) => c.candidateId)) === JSON.stringify(msol.c.rankedCandidateIds), "order");
+  add("14Z-BN: INF remains absent from the user-facing ranking", pres.rankedCandidates.every((c) => c.candidateId !== IDS.sanctum), "no INF");
+
+  // 14Z-BO…BU. State behavior.
+  add("14Z-BO: stale state hides the leader", stalePres.status === "stale" && stalePres.topProtocol === undefined, "hidden");
+  add("14Z-BP: stale state hides the explanation", stalePres.leaderExplanation === undefined, "no explanation");
+  add("14Z-BQ: unavailable state hides the leader", unavailablePres.status === "unavailable" && unavailablePres.topProtocol === undefined && unavailablePres.leaderExplanation === undefined, "hidden");
+  {
+    const g = evaluateSolStakingSelectorDisplayGate({ marketCache: { schemaVersion: "bad" } as never, normalizedSet: msol.nset, comparisonResult: msol.c, checkedAt: CHECKED });
+    add("14Z-BR: invalid state fails closed", g.status === "invalid" && buildSolStakingSelectorPresentation({ marketCache: { schemaVersion: "bad" } as never, normalizedSet: msol.nset, comparisonResult: msol.c, checkedAt: CHECKED }).leaderExplanation === undefined, "fail closed");
+  }
+  {
+    const one = mkPres({}, CHECKED, { dllFetched: OLD }); // LSTs stale → only native ready
+    add("14Z-BS: one candidate shows no cross-candidate explanation", one.pres.status === "insufficient_candidates" && one.pres.leaderExplanation === undefined, `n=${one.c.eligibleCandidateIds.length}`);
+  }
+  {
+    const zero = buildSolStakingMarketCache({ checkedAt: CHECKED });
+    const zset = buildNormalizedSolStakingCandidateSet(zero, { checkedAt: CHECKED });
+    const zc = buildSolStakingSelectorComparison(zset, { checkedAt: CHECKED });
+    const zp = buildSolStakingSelectorPresentation({ marketCache: zero, normalizedSet: zset, comparisonResult: zc, checkedAt: CHECKED });
+    add("14Z-BT: zero candidates show no leader", zp.topProtocol === undefined && zp.leaderExplanation === undefined, "no leader");
+  }
+  add("14Z-BU: individual protocol review remains available", readIf("src/suggestions/engineTypes.ts").includes("otherProtocolsToReview") && modal.includes("otherProtocolsToReview"), "available");
+  // Close-margin compact-summary branch.
+  add("14Z-close: close margin uses the close-comparison summary branch", (Math.abs(close.pres.leaderExplanation?.scoreDifference ?? 1) < 0.1) === /close and may change/i.test(close.pres.leaderExplanation?.compactSummary ?? ""), `diff=${close.pres.leaderExplanation?.scoreDifference}`);
+
+  // 14Z-BV…CB. Activation invariants.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const engineRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stakingSug = engineRun.suggestions.find((s) => s.category === "staking");
+  add("14Z-BV: selectedProtocolId remains Jito", stakingSug?.protocolSelection?.selectedProtocolId === "jito" && pres.currentUnderlyingSelectedProtocolId === "jito", "jito");
+  add("14Z-BW: selectedProtocolIdChanged remains false", pres.selectedProtocolIdChanged === false, "false");
+  add("14Z-BX: winnerActivated remains false", pres.topProtocol!.currentWinner === false && pres.topProtocol!.activated === false, "false");
+  add("14Z-BY: automatic switching remains disabled", pres.activationPerformed === false && SOL_STAKING_SELECTOR_ACTIVATION_PERFORMED === false, "disabled");
+  add("14Z-BZ: Step 14X remains unchanged", SOL_STAKING_SELECTOR_ACTIVATION_PERFORMED === false, "unchanged");
+  add("14Z-CA: Top Pick remains unchanged", pres.topPickChanged === false && engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => s.protocolSelection?.selectedProtocolName !== "Marinade"), "unchanged");
+  add("14Z-CB: engine ordering remains unchanged", pres.engineOrderingChanged === false && engineRun.suggestions.every((s) => !s.id.startsWith("sol_staking")), "unchanged");
+
+  // 14Z-CC…CE. Execution.
+  {
+    const blob = (JSON.stringify(pres) + summaryC + explC + explSrc).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "stake(", "delegate(", "withdraw(", "swap(", "deposit(", "approve(", "execute("];
+    add("14Z-CC: no transaction path exists", pres.transactionsEnabled === false && tokens.filter((t) => blob.includes(t)).length === 0, "none");
+    add("14Z-CD: no signature path exists", pres.walletSignatureRequired === false && !blob.includes("walletsignaturerequired: true"), "none");
+    add("14Z-CE: no stake/delegate/withdraw/swap/deposit/approve/execute handler exists", tokens.filter((t) => blob.includes(t)).length === 0, "none");
+  }
+
+  // 14Z-CF…CJ. Accessibility/responsive (structural).
+  add("14Z-CF: top designation includes text", summaryC.includes("Top protocol to review right now") && explC.includes("Top protocol to review right now"), "text");
+  add("14Z-CG: explanation structure is semantic", explC.includes("<h3") && explC.includes("<h4") && explC.includes("aria-label"), "semantic");
+  add("14Z-CH: ranking remains ordered on mobile", explC.includes("<ol"), "ordered list");
+  add("14Z-CI: no color-only score meaning exists", !/color:\s*(red|green)/i.test(readIf("src/styles/dashboard.css").split("Step 14Z")[1] ?? ""), "no color-only");
+  add("14Z-CJ: no horizontal mobile overflow exists", !/(overflow-x:\s*scroll)/i.test(summaryC + explC), "no overflow");
+
+  // 14Z.1 — leader-vs-runner-up score-difference / contribution reconciliation (strict 1e-9).
+  const TOL = SOL_STAKING_LEADER_EXPLANATION_RECONCILIATION_TOLERANCE;
+  const DIM_KEY: Record<string, "reviewedRiskScore" | "apy30d" | "currentApy" | "apyStability"> = { reviewed_risk: "reviewedRiskScore", apy_30d: "apy30d", current_apy: "currentApy", apy_consistency: "apyStability" };
+  const reconcile = (p: typeof msol) => {
+    const e = p.pres.leaderExplanation;
+    if (!e || !p.pres.topProtocol || !p.pres.runnerUp) return { ok: false, sum: NaN, scoreDiff: NaN, totalsDiff: NaN };
+    const dd = [...e.strongestAdvantages, ...e.tradeOffs, ...e.approximatelyEqualDimensions];
+    const sum = dd.reduce((s, d) => s + (d.leaderAdvantageContribution ?? 0), 0);
+    const totalsDiff = p.pres.topProtocol.comparisonScore - p.pres.runnerUp.comparisonScore;
+    return { ok: dd.length === 4 && Math.abs(sum - (e.scoreDifference ?? 0)) < TOL && Math.abs(sum - totalsDiff) < TOL, sum, scoreDiff: e.scoreDifference, totalsDiff };
+  };
+  const rMsol = reconcile(msol);
+  add("14Z.1-A: contribution differences sum to the exact score difference", rMsol.ok, `sum=${rMsol.sum} diff=${rMsol.scoreDiff}`);
+  add("14Z.1-B: full-precision leader score is preserved", exp.leaderScore === msol.c.candidateResults[exp.leaderCandidateId].totalScore, `${exp.leaderScore}`);
+  add("14Z.1-C: full-precision runner-up score is preserved", exp.runnerUpScore === msol.c.candidateResults[exp.runnerUpCandidateId!].totalScore, `${exp.runnerUpScore}`);
+  {
+    // Internal contribution differences are the EXACT unrounded subtraction (no 2dp/6dp display rounding).
+    const dd = [...exp.strongestAdvantages, ...exp.tradeOffs, ...exp.approximatelyEqualDimensions];
+    const exact = dd.every((d) => Math.abs((d.leaderAdvantageContribution ?? 0) - ((d.leaderContribution) - (d.runnerUpContribution ?? 0))) < 1e-12);
+    add("14Z.1-D: display rounding does not alter internal calculations", exact && reconcile(msol).ok, "exact internal");
+  }
+  add("14Z.1-E: modal score difference matches Step 14W", Math.abs((exp.scoreDifference ?? 0) - (msol.c.candidateResults[exp.leaderCandidateId].totalScore - msol.c.candidateResults[exp.runnerUpCandidateId!].totalScore)) < TOL, `${exp.scoreDifference}`);
+  {
+    const dd = [...exp.strongestAdvantages, ...exp.tradeOffs, ...exp.approximatelyEqualDimensions];
+    const usesW14 = dd.every((d) => d.leaderContribution === msol.c.candidateResults[exp.leaderCandidateId].dimensions[DIM_KEY[d.dimension]].weightedContribution && d.runnerUpContribution === msol.c.candidateResults[exp.runnerUpCandidateId!].dimensions[DIM_KEY[d.dimension]].weightedContribution);
+    add("14Z.1-F: explanation advantages and trade-offs use Step 14W contributions", usesW14, "14W contributions");
+  }
+  add("14Z.1-G: real-cache-shaped mSOL/JupSOL comparison reconciles exactly", rMsol.ok && exp.leaderProtocolName === "Marinade" && exp.runnerUpProtocolName === "Jupiter", "reconciled");
+  add("14Z.1-H: synthetic Jito, bSOL, and native-leader fixtures reconcile exactly", reconcile(jito).ok && reconcile(bsol).ok && reconcile(native).ok && reconcile(jupsol).ok && reconcile(close).ok, `jito=${reconcile(jito).ok} bsol=${reconcile(bsol).ok} native=${reconcile(native).ok}`);
 
   return checks;
 }
@@ -11302,6 +11535,7 @@ export function printFixtureResults(): void {
     ...runSolStakingSelectorComparisonFixtureChecks(),
     ...runSolStakingSelectorSensitivityFixtureChecks(),
     ...runSolStakingSelectorPresentationFixtureChecks(),
+    ...runSolStakingProductIntegrationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

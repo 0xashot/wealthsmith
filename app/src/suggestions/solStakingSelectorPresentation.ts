@@ -9,6 +9,7 @@ import type { SolStakingMarketCache } from "./solStakingMarketDataTypes";
 import type { NormalizedSolStakingCandidateSet } from "./solStakingCandidateNormalizationTypes";
 import type { SolStakingSelectorComparisonResult, SolStakingSelectorCandidateResult } from "./solStakingSelectorTypes";
 import { evaluateSolStakingSelectorDisplayGate } from "./solStakingSelectorDisplayGate";
+import { buildSolStakingLeaderComparisonExplanation } from "./solStakingLeaderExplanation";
 import { JITOSOL_BETA_PROTOCOL_ID } from "./jitoSolBetaActivation";
 import {
   SOL_STAKING_SELECTOR_PRESENTATION_SCHEMA_VERSION,
@@ -164,7 +165,7 @@ export function buildSolStakingSelectorPresentation(input: BuildPresentationInpu
   const topProtocol = ranked[0];
   const runnerUp = ranked[1];
 
-  return shell({
+  const built = shell({
     headline: COPY.available.headline,
     supportingText: `${topProtocol.protocolName} currently leads WealthSmith's comparison based on fresh market data and the reviewed protocol policy.`,
     freshnessText: formatUpdated(comparisonGeneratedAt),
@@ -174,6 +175,9 @@ export function buildSolStakingSelectorPresentation(input: BuildPresentationInpu
     rankedCandidates: ranked,
     leaderDiffersFromUnderlyingSelection: topProtocol.candidateId !== currentUnderlyingSelectedProtocolId,
   });
+  // Attach the deterministic leader-vs-runner-up explanation (Step 14Z).
+  built.leaderExplanation = buildSolStakingLeaderComparisonExplanation(built);
+  return built;
 }
 
 /**
