@@ -102,3 +102,14 @@ validators endpoint, Solana Compass API), feeds the raw payloads through the bui
 `status === "complete"` — appends the converted inputs to complete the native evidence
 (unblocking the deterministic score → approval → UI-exposure path); or (b) proceed to a live
 market-data refresh layer for the already-approved LST candidates.
+
+## Rated provider (Step 14S)
+
+The `NativeValidatorApyProvider` union now includes **`rated`**, and this module adds
+`parseNativeValidatorApyFromRatedSummary(payload, options?)` — the parser for Rated's
+single-validator summary (validator-specific 30-day **delegator** APY, `window=30d`). The
+`NativeValidatorMarketData` type gained `currentApySource` + `apy30dSource` so a package can
+carry two different APY providers (Stakewiz current APY + Rated 30-day APY), and
+`convertNativeValidatorMarketDataToEvidenceInputs` now attributes each of the 3 records to its
+correct per-field source. The Stakewiz+Rated combine builder + the server-side fetch script
+live in [nativeValidatorRatedData.md](./nativeValidatorRatedData.md).

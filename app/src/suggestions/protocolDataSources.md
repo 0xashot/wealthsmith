@@ -846,3 +846,21 @@ JupSOL remains a separate SPL LST candidate; native staking keeps `isLiquidStaki
 / `splTokenMint: null` / `assetSymbol "SOL"`. JitoSOL selector, mSOL/JupSOL/bSOL review, and
 INF's blocked state are unchanged; no execution path. Remaining blocker: the 30-day APY history
 (needs RPC access or a Validators.app token via a backend/job).
+
+**Step 14S — Rated 30-day delegator APY adapter for Jupiter Native Stake (still blocked, one
+secret required):** adds the bridge to source the last missing native field (validator-specific
+30-day APY) from **Rated**. Source: `GET https://api.rated.network/v1/solana/validators/CatzoSMUkTRidT5DwBxAC2pEtnwMBTpkCepHkFgZDiqb/summary?window=30d`
+with `Authorization: Bearer $RATED_API_KEY`. Uses Rated **`delegatorApy`** (net of validator
+commission — NOT `validatorApy`), requires exact vote-account + `window=30d`, converts decimal
+ratios to percent (`0.0523 → 5.23%`), and rejects network-overview / mismatched payloads. A
+Stakewiz+Rated combine builder yields a `complete` package (`stakeSource stakewiz` /
+`currentApySource stakewiz` / `apy30dSource rated`) with a Rated-vs-Stakewiz stake cross-check.
+**Secret handling:** key read **only** from `process.env.RATED_API_KEY` (never
+`VITE_RATED_API_KEY`), never hardcoded/logged, server-side only (`scripts/fetch-rated-jupiter-native-stake.mjs`,
+`npm run native:fetch-rated`), sanitized output to git-ignored `tmp/`. **`RATED_API_KEY` was
+NOT set in this environment**, so no real Rated value was fetched, **nothing was invented**, and
+the native evidence stays **7/10 blocked** (no score, no approval, no product-facing UI). JupSOL
+remains a separate SPL LST; native keeps `isLiquidStakingToken false` / `splTokenMint null` /
+`assetSymbol "SOL"`. JitoSOL selector, mSOL/JupSOL/bSOL review, and INF's blocked state are
+unchanged; no execution path. Remaining blocker: configure `RATED_API_KEY` locally, run the
+fetch script, and append the 3 converted records to complete the evidence.

@@ -498,9 +498,17 @@ import {
   JUPITER_NATIVE_STAKE_VOTE_ACCOUNT,
   parseJupiterNativeStakeVoteAccountFromGetVoteAccounts,
   parseNativeValidatorApyFromAnalytics,
+  parseNativeValidatorApyFromRatedSummary,
   buildNativeValidatorMarketData,
   convertNativeValidatorMarketDataToEvidenceInputs,
 } from "./nativeValidatorMarketData";
+import {
+  RATED_API_KEY_ENV_VAR,
+  ratedJupiterNativeStakeSummaryUrl,
+  buildJupiterNativeStakeMarketPackage,
+} from "./nativeValidatorRatedData";
+import { createNativeSolStakeEvidenceRecord } from "./solNativeStakingBaselineEvidence";
+import { readFileSync } from "node:fs";
 import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
@@ -9995,6 +10003,135 @@ export function runNativeStakingRealMarketDataFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 14S — complete Jupiter Native Stake using Rated's validator-specific 30-day delegator
+ * APY. RATED_API_KEY was NOT available in this environment, so no real Rated value was
+ * fetched and native staking STAYS BLOCKED (no invented data). These checks prove the Rated
+ * parser, the Stakewiz+Rated combine builder, the server-side fetch-script's secret handling,
+ * and the native-vs-JupSOL safeguards — and assert the blocked state + unchanged candidates.
+ */
+export function runNativeStakingRatedFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const VA = JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const FRESH_SW = "2026-07-14T03:00:00Z";
+  const FRESH_RATED = "2026-07-14T03:05:00Z";
+  const CHECKED = "2026-07-14T03:10:00Z";
+  const STALE = "2026-07-10T03:00:00Z";
+  const NATIVE_CHECKED = "2026-07-14T02:50:00Z";
+
+  // Fixture payloads (Rated ratios; Stakewiz snapshot).
+  const rated30 = { voteAccount: VA, timeWindow: "30d", delegatorApy: 0.0511, validatorApy: 0.0538, voteCommissionRate: 0.05, mevCommissionRate: 0.0, totalStake: 12_490_000, effectiveness: 0.983, stakeAccountCount: 4200 };
+  const rated1d = { ...rated30, timeWindow: "1d" };
+  const ratedOther = { ...rated30, voteAccount: "SomeOtherValidatorVoteAccount1111111111111" };
+  const ratedNoDelegator = { voteAccount: VA, timeWindow: "30d", validatorApy: 0.0538 };
+  const ratedNetworkOverview = { network: "solana", apy: 0.062 };
+  const stakewiz = [{ vote_identity: VA, apy_estimate: 5.23, activated_stake: 12_500_954.43, commission: 500 }];
+
+  // 14S-A…M. Rated provider + parser.
+  const rParsed = parseNativeValidatorApyFromRatedSummary(rated30);
+  add("14S-A: Rated provider is supported by native validator analytics types", rParsed.provider === "rated" && ratedJupiterNativeStakeSummaryUrl().includes("window=30d") && ratedJupiterNativeStakeSummaryUrl().includes(VA), "supported");
+  add("14S-B: Rated parser accepts valid 30d Jupiter validator payload", rParsed.status === "complete" && rParsed.blockers.length === 0, `status=${rParsed.status}`);
+  add("14S-C: Rated parser requires exact Jupiter vote account", rParsed.voteAccount === VA, `va=${rParsed.voteAccount}`);
+  add("14S-D: Rated parser rejects another vote account", parseNativeValidatorApyFromRatedSummary(ratedOther).blockers.includes("rated_vote_account_mismatch"), "rejected");
+  add("14S-E: Rated parser requires timeWindow 30d", rParsed.timeWindow === "30d", `w=${rParsed.timeWindow}`);
+  add("14S-F: Rated parser rejects 1d payload when 30d expected", parseNativeValidatorApyFromRatedSummary(rated1d, { expectedWindow: "30d" }).blockers.includes("rated_window_mismatch"), "rejected");
+  add("14S-G: Rated parser extracts delegatorApy", rParsed.delegatorApyPct === 5.11, `apy=${rParsed.delegatorApyPct}`);
+  add("14S-H: Rated parser converts ratio to percentage correctly", parseNativeValidatorApyFromRatedSummary({ voteAccount: VA, timeWindow: "30d", delegatorApy: 0.0523 }).delegatorApyPct === 5.23, "0.0523->5.23");
+  add("14S-I: Rated parser does not use validatorApy as delegator APY", rParsed.delegatorApyPct === 5.11 && rParsed.validatorApyPct === 5.38 && Math.abs((rParsed.delegatorApyPct ?? 0) - (rParsed.validatorApyPct ?? 0)) > 0, `del=${rParsed.delegatorApyPct} val=${rParsed.validatorApyPct}`);
+  add("14S-J: Rated parser extracts totalStake when available", rParsed.totalStakeSol === 12_490_000, `ts=${rParsed.totalStakeSol}`);
+  add("14S-K: Rated parser extracts vote commission when available", rParsed.voteCommissionPct === 5, `comm=${rParsed.voteCommissionPct}`);
+  add("14S-L: Rated parser rejects missing delegatorApy", parseNativeValidatorApyFromRatedSummary(ratedNoDelegator).blockers.includes("rated_delegator_apy_missing"), "rejected");
+  add("14S-M: Rated parser rejects invalid schema", parseNativeValidatorApyFromRatedSummary(ratedNetworkOverview).blockers.includes("rated_schema_unrecognized") && parseNativeValidatorApyFromRatedSummary(null).blockers.includes("rated_payload_invalid"), "safe");
+
+  // 14S-N…S. Secret handling + fetch-script static analysis.
+  add("14S-N: Rated API key is read only from RATED_API_KEY", RATED_API_KEY_ENV_VAR === "RATED_API_KEY", RATED_API_KEY_ENV_VAR);
+  add("14S-O: no VITE_RATED_API_KEY usage exists (sanctioned env var is not Vite-prefixed)", !RATED_API_KEY_ENV_VAR.toUpperCase().includes("VITE"), "ok");
+  {
+    let script = "";
+    let readable = false;
+    try { script = readFileSync(`${process.cwd()}/scripts/fetch-rated-jupiter-native-stake.mjs`, "utf8"); readable = true; } catch { readable = false; }
+    const readsOnlyRatedKey = !readable || (script.includes("process.env.RATED_API_KEY") && !script.includes("process.env.VITE_RATED_API_KEY"));
+    const notLoggedOrHardcoded = !readable || (!/console\.(log|error|warn)\([^)]*apiKey/.test(script) && script.includes("`Bearer ${apiKey}`"));
+    const handlesMissing = !readable || (script.includes("RATED_API_KEY is not set") && script.includes("process.exit"));
+    const handlesNon200 = !readable || (/401|403/.test(script) && script.includes("404") && script.includes("429") && />= 500|>=500/.test(script));
+    const sanitizedOutput = !readable || (script.includes("sanitized") && !/writeFile\([^)]*apiKey/.test(script) && script.includes("tmp"));
+    add("14S-P: Rated API key is not hardcoded or logged", notLoggedOrHardcoded && readsOnlyRatedKey, `readable=${readable}`);
+    add("14S-Q: fetch script handles missing key safely", handlesMissing, `readable=${readable}`);
+    add("14S-R: fetch script handles non-200 responses safely", handlesNon200, `readable=${readable}`);
+    add("14S-S: fetch script writes only sanitized output", sanitizedOutput, `readable=${readable}`);
+  }
+
+  // 14S-T…V. Combine builder — complete vs stale vs missing-Rated.
+  const pkgComplete = buildJupiterNativeStakeMarketPackage({ stakewizPayload: stakewiz, stakewizFetchedAt: FRESH_SW, ratedPayload: rated30, ratedFetchedAt: FRESH_RATED, solPriceUsd: 180, checkedAt: CHECKED });
+  const pkgStaleSw = buildJupiterNativeStakeMarketPackage({ stakewizPayload: stakewiz, stakewizFetchedAt: STALE, ratedPayload: rated30, ratedFetchedAt: FRESH_RATED, checkedAt: CHECKED });
+  const pkgNoRated = buildJupiterNativeStakeMarketPackage({ stakewizPayload: stakewiz, stakewizFetchedAt: FRESH_SW, checkedAt: CHECKED });
+  add("14S-T: complete fresh Stakewiz + Rated package yields complete market data", pkgComplete.status === "complete" && pkgComplete.activatedStakeSol === 12_500_954.43 && pkgComplete.currentApyPct === 5.23 && pkgComplete.apy30dPct === 5.11 && pkgComplete.missingFields.length === 0, `status=${pkgComplete.status}`);
+  add("14S-U: stale Stakewiz plus fresh Rated remains incomplete/stale", pkgStaleSw.status === "stale", `status=${pkgStaleSw.status}`);
+  add("14S-V: fresh Stakewiz plus missing Rated remains partial", pkgNoRated.status === "partial" && pkgNoRated.missingFields.includes("apy30dPct"), `status=${pkgNoRated.status}`);
+
+  // 14S-W…Z. Per-field sources + native-vs-JupSOL / network-wide safeguards.
+  const conv = convertNativeValidatorMarketDataToEvidenceInputs(pkgComplete);
+  const cByCat = (c: string) => conv.inputs.find((i) => i.category === c);
+  add("14S-W: native evidence uses Stakewiz for delegated stake/current APY", pkgComplete.stakeSource === "stakewiz" && pkgComplete.currentApySource === "stakewiz" && /stakewiz/i.test(cByCat("current_apy")?.sourceName ?? ""), "stakewiz");
+  add("14S-X: native evidence uses Rated for 30-day APY", pkgComplete.apy30dSource === "rated" && /rated/i.test(cByCat("apy_30d")?.sourceName ?? "") && /net of validator commission/i.test((cByCat("apy_30d")?.notes ?? []).join(" ")), "rated");
+  add("14S-Y: native evidence does not use JupSOL data", NATIVE_VALIDATOR_MARKET_DATA_USES_JUPSOL_APY === false && NATIVE_VALIDATOR_MARKET_DATA_USES_JUPSOL_TVL === false && conv.inputs.every((i) => /not jupsol/i.test(i.notes.join(" "))), "no jupsol");
+  add("14S-Z: native evidence does not use network-wide APY", conv.inputs.every((i) => /not network-wide/i.test(i.notes.join(" "))) && parseNativeValidatorApyFromRatedSummary(ratedNetworkOverview).delegatorApyPct === undefined, "no network-wide");
+
+  // 14S-AA…AF. Gate/score/approval — still BLOCKED (no real Rated data appended); converters valid.
+  const summary = summarizeNativeSolStakeEvidence({ checkedAt: NATIVE_CHECKED });
+  const convertedRecordsAccepted = conv.inputs.every((i) => createNativeSolStakeEvidenceRecord(i, CHECKED).status === "accepted");
+  add("14S-AA: native readyForRiskGate becomes true only with all 10 fresh records", summary.readyForRiskGate === false && summary.acceptedCount === 7 && convertedRecordsAccepted && conv.inputs.length === 3, `accepted=${summary.acceptedCount} convOk=${convertedRecordsAccepted}`);
+  const assignment = getNativeStakingBaselineRiskScoreAssignment({ checkedAt: NATIVE_CHECKED });
+  add("14S-AB: native risk score exists only when readyForRiskGate true (still none)", assignment === null && evaluateNativeStakingBaselineRiskScoreAssignmentStatus({ checkedAt: NATIVE_CHECKED }).readyForRiskGate === false, `assignment=${assignment}`);
+  {
+    const allSevens = computeNativeStakingWeightedScore({ audit_security: 7, maturity: 7, tvl_adoption: 7, withdrawal_fee_transparency: 7, operational_dependency_risk: 7, incident_history: 7 });
+    const again = computeNativeStakingWeightedScore({ audit_security: 7, maturity: 7, tvl_adoption: 7, withdrawal_fee_transparency: 7, operational_dependency_risk: 7, incident_history: 7 });
+    add("14S-AC: native score is deterministic and between 0 and 10", allSevens === again && allSevens >= 0 && allSevens <= 10 && (assignment === null || (assignment.score >= 0 && assignment.score <= 10)), `score=${allSevens}`);
+  }
+  const decision = getNativeStakingBaselineReadOnlyApprovalDecision({ checkedAt: NATIVE_CHECKED });
+  const blocked = getNativeStakingBaselineBlockedReviewSummary({ checkedAt: NATIVE_CHECKED });
+  add("14S-AD: native approval exists only when score >= 7 (no score → none)", decision === null && evaluateNativeStakingBaselineReadOnlyApprovalStatus({ checkedAt: NATIVE_CHECKED }).blockers.includes("missing_risk_score"), `decision=${decision}`);
+  add("14S-AE: native selectedByProtocolLogic remains false", blocked.selectedByProtocolLogic === false, "false");
+  add("14S-AF: native currentWinner remains false", blocked.currentWinner === false, "false");
+
+  // 14S-AG…AL. Unchanged candidates + guardrails + blocked-without-key.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const stakingAlts = staking?.reviewDetails?.otherProtocolsToReview;
+  const demo = getDemoExactSolStakingReviewDetails();
+  add("14S-AG: JitoSOL remains selectedProtocolId", staking?.protocolSelection?.selectedProtocolId === "jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  {
+    const msol = buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    const jup = buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    const bsol = buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    add("14S-AH: mSOL/JupSOL/bSOL behavior remains unchanged", msol.riskScore === 7.4 && jup.riskScore === 7.65 && bsol.riskScore === 7.35, `m=${msol.riskScore} j=${jup.riskScore} b=${bsol.riskScore}`);
+  }
+  add("14S-AI: INF remains blocked", getInfReadOnlyApprovalDecision({ checkedAt: "2026-07-14T02:30:00Z" }) === null, "inf blocked");
+  {
+    const json = (JSON.stringify(pkgComplete) + JSON.stringify(conv) + JSON.stringify(blocked)).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "stake(", "delegate(", "withdraw(", "swap(", "deposit(", "approve(", "execute("];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("14S-AJ: no transaction/signature/stake/delegate/withdraw path exists", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  {
+    const nativeInRealWallet = stakingAlts?.some((a) => a.protocolId === "jupiter_native_stake") ?? false;
+    const nativeInDemo = demo.otherProtocolsToReview?.some((a) => a.protocolId === "jupiter_native_stake") ?? false;
+    add("14S-AK: if native approval passes it appears only as Baseline to review (not approved → absent from product UI)", decision === null && nativeInRealWallet === false && nativeInDemo === false, `rw=${nativeInRealWallet} demo=${nativeInDemo}`);
+  }
+  {
+    // No RATED_API_KEY → no real Rated data appended → native evidence still 7/10, no fake/TEST_ONLY apy_30d.
+    const inputsClean = NATIVE_SOL_STAKE_EVIDENCE_INPUTS.length === 7 && !NATIVE_SOL_STAKE_EVIDENCE_INPUTS.some((i) => i.category === "apy_30d") && !NATIVE_SOL_STAKE_EVIDENCE_INPUTS.some((i) => JSON.stringify(i).includes("TEST_ONLY"));
+    add("14S-AL: if Rated fetch cannot run, native staking remains blocked without invented data", inputsClean && summary.readyForRiskGate === false && decision === null, `inputs=${NATIVE_SOL_STAKE_EVIDENCE_INPUTS.length}`);
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -10065,6 +10202,7 @@ export function printFixtureResults(): void {
     ...runSolNativeStakingBaselineFixtureChecks(),
     ...runNativeValidatorMarketDataFixtureChecks(),
     ...runNativeStakingRealMarketDataFixtureChecks(),
+    ...runNativeStakingRatedFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

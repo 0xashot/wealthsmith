@@ -52,9 +52,10 @@ export type NativeValidatorMarketDataSource =
   | "stakewiz"
   | "solana_compass"
   | "validators_app"
+  | "rated"
   | "unavailable";
 
-export type NativeValidatorApyProvider = "stakewiz" | "solana_compass" | "validators_app";
+export type NativeValidatorApyProvider = "stakewiz" | "solana_compass" | "validators_app" | "rated";
 
 export type NativeValidatorMarketDataStatus = "complete" | "partial" | "missing" | "stale" | "source_error" | "unsupported";
 
@@ -79,8 +80,10 @@ export interface NativeValidatorMarketData {
   currentEpoch?: number;
   asOfSlot?: number;
 
-  stakeSource: "solana_rpc_get_vote_accounts";
+  stakeSource: "solana_rpc_get_vote_accounts" | "stakewiz";
   apySource?: NativeValidatorApyProvider;
+  currentApySource?: NativeValidatorApyProvider;
+  apy30dSource?: NativeValidatorApyProvider;
 
   fetchedAt: string;
   asOf?: string;
@@ -278,6 +281,109 @@ export function parseNativeValidatorApyFromAnalytics(
 }
 
 /* ------------------------------------------------------------------ *
+ * (4b) Rated parser — Step 14S. Validator-specific 30-day DELEGATOR APY from the Rated
+ * single-validator summary endpoint. Rated returns APY/commission as decimal ratios
+ * (0.0523 → 5.23%). This is validator-specific — NOT network-wide, NOT JupSOL, and it uses
+ * `delegatorApy` (net of commission), never `validatorApy`.
+ * ------------------------------------------------------------------ */
+export type RatedWindow = "1d" | "7d" | "30d" | "all";
+
+export interface RatedValidatorApyParseResult {
+  provider: "rated";
+  voteAccount?: string;
+  timeWindow?: string;
+  delegatorApyPct?: number;
+  validatorApyPct?: number;
+  voteCommissionPct?: number;
+  mevCommissionPct?: number;
+  totalStakeSol?: number;
+  effectivenessPct?: number;
+  stakeAccountCount?: number;
+  status: "complete" | "partial" | "invalid";
+  blockers: string[];
+  notes: string[];
+}
+
+const ratioToPct = (v: unknown): number | undefined => {
+  const n = num(v);
+  return n != null ? round2(n * 100) : undefined;
+};
+
+/**
+ * Parse a Rated single-validator summary payload for the Jupiter validator's 30-day
+ * delegator APY. Requires an exact vote-account match and the expected time window; converts
+ * decimal ratios to percentages; uses `delegatorApy` (never substitutes `validatorApy`);
+ * rejects network overviews / mismatched validator or window / missing delegator APY.
+ */
+export function parseNativeValidatorApyFromRatedSummary(
+  payload: unknown,
+  options: { expectedVoteAccount?: string; expectedWindow?: RatedWindow } = {},
+): RatedValidatorApyParseResult {
+  const expectedVoteAccount = options.expectedVoteAccount ?? JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const expectedWindow = options.expectedWindow ?? "30d";
+  const blockers: string[] = [];
+  const notes: string[] = [];
+
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { provider: "rated", status: "invalid", blockers: ["rated_payload_invalid"], notes: ["Rated payload is not an object."] };
+  }
+  const p = payload as Record<string, unknown>;
+  // A network overview payload (no per-validator voteAccount) is rejected outright.
+  const voteAccount = (p.voteAccount as string) ?? (p.vote_account as string);
+  if (typeof voteAccount !== "string") {
+    return { provider: "rated", status: "invalid", blockers: ["rated_schema_unrecognized"], notes: ["Rated payload has no voteAccount field (possible network overview) — rejected."] };
+  }
+  if (voteAccount !== expectedVoteAccount) {
+    return { provider: "rated", voteAccount, status: "invalid", blockers: ["rated_vote_account_mismatch"], notes: [`Rated voteAccount ${voteAccount} != expected Jupiter vote account.`] };
+  }
+  const timeWindow = (p.timeWindow as string) ?? (p.time_window as string) ?? (p.window as string);
+  if (timeWindow !== expectedWindow) {
+    return { provider: "rated", voteAccount, timeWindow, status: "invalid", blockers: ["rated_window_mismatch"], notes: [`Rated timeWindow '${timeWindow}' != expected '${expectedWindow}'.`] };
+  }
+
+  const rawDelegator = p.delegatorApy ?? p.delegator_apy;
+  if (rawDelegator === undefined || rawDelegator === null) {
+    return { provider: "rated", voteAccount, timeWindow, status: "invalid", blockers: ["rated_delegator_apy_missing"], notes: ["Rated delegatorApy missing."] };
+  }
+  const delegatorRatio = num(rawDelegator);
+  if (delegatorRatio == null || delegatorRatio < 0) {
+    return { provider: "rated", voteAccount, timeWindow, status: "invalid", blockers: ["rated_delegator_apy_invalid"], notes: ["Rated delegatorApy is not a finite, non-negative number."] };
+  }
+  const delegatorApyPct = round2(delegatorRatio * 100);
+  const validatorApyPct = ratioToPct(p.validatorApy ?? p.validator_apy);
+  const voteCommissionPct = ratioToPct(p.voteCommissionRate ?? p.vote_commission_rate);
+  const mevCommissionPct = ratioToPct(p.mevCommissionRate ?? p.mev_commission_rate);
+  const effectivenessPct = ratioToPct(p.effectiveness);
+  const stakeAccountCount = num(p.stakeAccountCount ?? p.stake_account_count);
+
+  const rawTotalStake = p.totalStake ?? p.total_stake;
+  let totalStakeSol: number | undefined;
+  if (rawTotalStake !== undefined && rawTotalStake !== null) {
+    const ts = num(rawTotalStake);
+    if (ts == null || ts < 0) blockers.push("rated_total_stake_invalid");
+    else totalStakeSol = ts;
+  }
+
+  notes.push(`Rated 30-day delegator APY ${delegatorApyPct}% (net of validator commission) for vote account ${voteAccount}. Validator-specific — not network-wide, not JupSOL.`);
+
+  return {
+    provider: "rated",
+    voteAccount,
+    timeWindow,
+    delegatorApyPct,
+    ...(validatorApyPct != null ? { validatorApyPct } : {}),
+    ...(voteCommissionPct != null ? { voteCommissionPct } : {}),
+    ...(mevCommissionPct != null ? { mevCommissionPct } : {}),
+    ...(totalStakeSol != null ? { totalStakeSol } : {}),
+    ...(effectivenessPct != null ? { effectivenessPct } : {}),
+    ...(stakeAccountCount != null ? { stakeAccountCount } : {}),
+    status: blockers.length === 0 ? "complete" : "partial",
+    blockers,
+    notes,
+  };
+}
+
+/* ------------------------------------------------------------------ *
  * (5) Builder — combine RPC stake/commission + analytics APY into one record.
  * ------------------------------------------------------------------ */
 export interface BuildNativeValidatorMarketDataInput {
@@ -363,6 +469,9 @@ export function buildNativeValidatorMarketData(input: BuildNativeValidatorMarket
 
     stakeSource: "solana_rpc_get_vote_accounts",
     ...(apy?.matchedValidator && input.analyticsProvider ? { apySource: input.analyticsProvider } : {}),
+    // Single-provider path: current + 30-day APY come from the same analytics provider.
+    ...(currentApyPct != null && input.analyticsProvider ? { currentApySource: input.analyticsProvider } : {}),
+    ...(apy30dPct != null && input.analyticsProvider ? { apy30dSource: input.analyticsProvider } : {}),
 
     fetchedAt: input.fetchedAt,
     asOf: checkedAt,
@@ -435,6 +544,7 @@ const APY_PROVIDER_LABEL: Record<NativeValidatorApyProvider, { name: string; url
   stakewiz: { name: "Stakewiz — Jupiter validator analytics", url: `https://stakewiz.com/validator/${JUPITER_NATIVE_STAKE_VOTE_ACCOUNT}` },
   solana_compass: { name: "Solana Compass — Jupiter validator", url: `https://solanacompass.com/validators/${JUPITER_NATIVE_STAKE_VOTE_ACCOUNT}` },
   validators_app: { name: "Validators.app — Jupiter validator", url: `https://www.validators.app/validators/${JUPITER_NATIVE_STAKE_VOTE_ACCOUNT}` },
+  rated: { name: "Rated — Jupiter validator 30-day summary (delegatorApy, window=30d)", url: `https://api.rated.network/v1/solana/validators/${JUPITER_NATIVE_STAKE_VOTE_ACCOUNT}/summary?window=30d` },
 };
 
 /**
@@ -462,11 +572,20 @@ export function convertNativeValidatorMarketDataToEvidenceInputs(
   const confirmedBy = options.confirmedBy ?? "Ashot";
   const reviewerRole = options.reviewerRole ?? "founder";
   const confirmedAt = marketData.fetchedAt;
-  const stakeName = options.stakeSourceName ?? "Solana RPC — getVoteAccounts (Jupiter validator)";
-  const stakeUrl = options.stakeSourceUrl ?? `solana:getVoteAccounts?voteAccount=${marketData.voteAccount}`;
-  const apyLabel = marketData.apySource ? APY_PROVIDER_LABEL[marketData.apySource] : { name: "Validator analytics provider", url: "" };
-  const apyName = options.apySourceName ?? apyLabel.name;
-  const apyUrl = options.apySourceUrl ?? apyLabel.url;
+  // Per-field source attribution: stake ← stakeSource, current APY ← currentApySource,
+  // 30-day APY ← apy30dSource (Rated in the 14S Stakewiz+Rated package).
+  const stakewizLabel = APY_PROVIDER_LABEL.stakewiz;
+  const stakeLabel = marketData.stakeSource === "stakewiz"
+    ? { name: "Stakewiz — Jupiter validator (activated stake)", url: stakewizLabel.url }
+    : { name: "Solana RPC — getVoteAccounts (Jupiter validator)", url: `solana:getVoteAccounts?voteAccount=${marketData.voteAccount}` };
+  const stakeName = options.stakeSourceName ?? stakeLabel.name;
+  const stakeUrl = options.stakeSourceUrl ?? stakeLabel.url;
+  const currentApyProvider = marketData.currentApySource ?? marketData.apySource;
+  const currentApyLabel = currentApyProvider ? APY_PROVIDER_LABEL[currentApyProvider] : { name: "Validator analytics provider", url: "" };
+  const apy30dProvider = marketData.apy30dSource ?? marketData.apySource;
+  const apy30dLabel = apy30dProvider ? APY_PROVIDER_LABEL[apy30dProvider] : { name: "Validator analytics provider", url: "" };
+  const currentApyName = options.apySourceName ?? currentApyLabel.name;
+  const currentApyUrl = options.apySourceUrl ?? currentApyLabel.url;
 
   const common = {
     protocolId: "jupiter_native_stake" as const,
@@ -487,25 +606,25 @@ export function convertNativeValidatorMarketDataToEvidenceInputs(
     unit: usePreferUsd ? "usd" : "sol",
     sourceName: stakeName,
     sourceUrl: stakeUrl,
-    notes: [`Validator activated (delegated) stake from Solana RPC getVoteAccounts (source of truth): ${marketData.activatedStakeSol} SOL${usePreferUsd ? ` (~$${marketData.delegatedStakeUsd} at the supplied SOL price)` : ""}. Not JupSOL TVL.`],
+    notes: [`Validator-specific Jupiter Native Stake data. Activated (delegated) stake ${marketData.activatedStakeSol} SOL${usePreferUsd ? ` (~$${marketData.delegatedStakeUsd} at the supplied SOL price)` : ""} from ${marketData.stakeSource}. Not JupSOL TVL. Not network-wide.`],
   };
   const currentApyInput: NativeSolStakeEvidenceInput = {
     ...common,
     category: "current_apy",
     value: marketData.currentApyPct as number,
     unit: "pct",
-    sourceName: apyName,
-    sourceUrl: apyUrl,
-    notes: [`Validator-specific current APY from ${marketData.apySource ?? "analytics"} for vote account ${marketData.voteAccount}. Not JupSOL APY; not a network-wide figure.`],
+    sourceName: currentApyName,
+    sourceUrl: currentApyUrl,
+    notes: [`Validator-specific Jupiter Native Stake data. Current APY from ${currentApyProvider ?? "analytics"} for vote account ${marketData.voteAccount}. Not JupSOL APY. Not network-wide Solana APY.`],
   };
   const apy30dInput: NativeSolStakeEvidenceInput = {
     ...common,
     category: "apy_30d",
     value: marketData.apy30dPct as number,
     unit: "pct",
-    sourceName: apyName,
-    sourceUrl: apyUrl,
-    notes: [`Validator-specific 30-day mean APY computed deterministically from ${marketData.apySource ?? "analytics"} history for vote account ${marketData.voteAccount}. Not JupSOL APY; not network-wide.`],
+    sourceName: options.apySourceName ?? apy30dLabel.name,
+    sourceUrl: options.apySourceUrl ?? apy30dLabel.url,
+    notes: [`Validator-specific Jupiter Native Stake data. ${apy30dProvider === "rated" ? "30-day delegator APY, net of validator commission, from Rated (window=30d)" : `30-day APY from ${apy30dProvider ?? "analytics"}`} for vote account ${marketData.voteAccount}. Not JupSOL APY or TVL. Not network-wide Solana APY.`],
   };
 
   return {

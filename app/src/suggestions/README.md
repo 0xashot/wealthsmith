@@ -1355,3 +1355,28 @@ and INF's blocked state are unchanged; no execution path anywhere. **Remaining b
 validator-specific 30-day APY history — obtainable by a backend/job with Solana RPC access or a
 Validators.app token, which would then complete the evidence and unblock the deterministic
 score → approval → UI path.
+
+## Rated 30-day delegator APY adapter for Jupiter Native Stake (Step 14S) — still BLOCKED
+
+14S adds the bridge to source native staking's last missing field (the validator-specific
+30-day APY) from **Rated**: a parser
+(`parseNativeValidatorApyFromRatedSummary` in [nativeValidatorMarketData.ts](./nativeValidatorMarketData.ts)),
+a Stakewiz+Rated combine builder + fetch script
+([nativeValidatorRatedData.ts](./nativeValidatorRatedData.ts) /
+[nativeValidatorRatedData.md](./nativeValidatorRatedData.md) /
+`scripts/fetch-rated-jupiter-native-stake.mjs`). The Rated summary
+(`GET api.rated.network/v1/solana/validators/{vote}/summary?window=30d`) is fetched
+**server-side only**: the key is read **only** from `process.env.RATED_API_KEY` (never
+`VITE_RATED_API_KEY`), never hardcoded, never logged, never in the browser bundle; output is
+sanitized to a git-ignored `tmp/` file. The parser is validator-specific — exact vote-account
+match + `window=30d`, uses **`delegatorApy`** (net of commission, never `validatorApy`),
+converts ratios → percent (`0.0523 → 5.23%`), and rejects network-overview / mismatched
+payloads. The combine builder attaches `stakeSource: "stakewiz"` / `currentApySource:
+"stakewiz"` / `apy30dSource: "rated"` and cross-checks Rated `totalStake` vs Stakewiz stake.
+**`RATED_API_KEY` was not available in this environment**, so no real Rated value was fetched
+and **nothing was invented** — the native evidence array stays **7/10** and the baseline
+**remains blocked** (no score, no approval, no product-facing UI). Fixtures prove the full
+path completes with a valid Rated payload. JitoSOL stays the only selected protocol;
+mSOL/JupSOL/bSOL review and INF's blocked state are unchanged; no execution path anywhere.
+**Remaining blocker:** the one environment secret `RATED_API_KEY` — configure it locally and
+run `npm run native:fetch-rated`, then append the 3 converted records to complete the evidence.
