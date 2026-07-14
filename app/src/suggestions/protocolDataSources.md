@@ -727,3 +727,28 @@ selection, no winner, no Top Pick/ordering change, no execution path; the base r
 Jito-only for the selector and JitoSOL remains the only selected live protocol. The combined
 non-mutating preview `getAllReadOnlyReviewApprovedSolLiquidStakingCandidates()` returns Jito +
 mSOL (unchanged) + JupSOL when fresh.
+
+**Step 14N — BlazeStake · bSOL run through the full read-only pipeline:** founder-authorized
+public-source fetches recorded **all 10** categories for bSOL. Market data from the DefiLlama
+bSOL pool `387d6732-59f0-4ae0-8a88-aba75a5cbe4a` (latest data point 2026-07-13T20:01Z): `tvl`
+67,130,773 usd, `current_apy` 5.59573%, `apy_30d` 5.34% (30-day mean computed deterministically
+from the last 30 daily `apy` values; range ~5.27–5.60%) — **fresh, not** the stale 14B values
+(~$69.75M / 5.27%). Mechanics/audit/operational from the official BlazeStake docs
+(`stake-docs.solblaze.org`): `withdrawal_mechanics` (instant reserve-pull unstake or delayed
+native-stake-account unstake); `direct_unstake_time` **text** (delayed unstake → native Solana
+stake account; ~2-3 day / epoch-boundary deactivation — mechanism from BlazeStake docs, timing
+basis from Solana's standard stake-deactivation cooldown, **no fixed hours invented** per the
+14I dual format); `direct_unstake_fee` 0.1% (instant and delayed both 0.1%); `annual_management_fee`
+0% ("Epoch fee: 0%", "Deposit fee: 0%"); `audit_security` (7 audits by 5 firms — Quantstamp,
+Neodyme ×4, Kudelski, Halborn, OtterSec); `operational_risk` (non-custodial, validator monitoring
++ human review, Solana-Foundation-overseen upgrade multisig, DeFi feature surface); `incident_review`
+(**point-in-time** — no independent bSOL incident found; the docs disclose none — **not** a
+clean-history claim). Nothing invented; no stale 14B value reused. bSOL is `readyForRiskGate: true`
+while fresh → **risk score 7.35/10** (`assigned_for_review`; lowest of the reviewed set, dragged
+by the smallest TVL, lifted by strong audits + transparent low fees) → **approved for read-only
+review** (score ≥ 7, risks acknowledged) → **surfaced in the review modal** alongside mSOL and
+JupSOL (fresh → `approved_for_review_exposure` + 7.35; stale → `stale_evidence`). Review-only
+throughout: no selection, no winner, no Top Pick/ordering change, no execution path; the base
+registry stays Jito-only for the selector and JitoSOL remains the only selected live protocol.
+The combined preview `getAllReadOnlyReviewApprovedSolLiquidStakingCandidates()` now returns Jito
++ mSOL + JupSOL (all unchanged) + bSOL when fresh.

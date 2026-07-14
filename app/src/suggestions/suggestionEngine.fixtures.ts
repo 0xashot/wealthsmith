@@ -371,6 +371,7 @@ import {
   getSolLstFreshEvidenceRiskGatePreview,
   summarizeSolLstFreshEvidenceRecordStatus,
   MARINADE_MSOL_FRESH_EVIDENCE_INPUTS,
+  BLAZESTAKE_BSOL_FRESH_EVIDENCE_INPUTS,
 } from "./solLiquidStakingFreshEvidenceRecords";
 import {
   SOL_LST_MSOL_RISK_SCORE_EXISTS,
@@ -417,6 +418,24 @@ import {
   getAllReadOnlyReviewApprovedSolLiquidStakingCandidates,
   buildJupsolReadOnlyReviewCandidateDisplay,
 } from "./solLiquidStakingJupsolReadOnlyApproval";
+import {
+  SOL_LST_BSOL_RISK_SCORE_EXISTS,
+  getBsolRiskScoreAssignment,
+  evaluateBsolRiskScoreAssignmentStatus,
+} from "./solLiquidStakingBsolRiskScore";
+import {
+  SOL_LST_BSOL_READ_ONLY_APPROVAL_EXISTS,
+  SOL_LST_BSOL_READ_ONLY_APPROVAL_SELECTS_PROTOCOL_WINNER,
+  SOL_LST_BSOL_READ_ONLY_APPROVAL_ENABLES_MULTI_PROTOCOL_SELECTION,
+  SOL_LST_BSOL_READ_ONLY_APPROVAL_UPDATES_LIVE_RECOMMENDATIONS,
+  SOL_LST_BSOL_READ_ONLY_APPROVAL_REPLACES_JITO,
+  SOL_LST_BSOL_READ_ONLY_APPROVAL_ENABLES_TRANSACTIONS,
+  SOL_LST_BSOL_READ_ONLY_APPROVAL_REQUIRES_WALLET_SIGNATURE,
+  isRiskScoreAboveReadOnlyThreshold as isBsolRiskScoreAboveReadOnlyThreshold,
+  getBsolReadOnlyApprovalDecision,
+  evaluateBsolReadOnlyApprovalStatus,
+  buildBsolReadOnlyReviewCandidateDisplay,
+} from "./solLiquidStakingBsolReadOnlyApproval";
 import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
@@ -9217,6 +9236,156 @@ export function runSolLstJupsolReviewExposureFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 14N — BlazeStake · bSOL onboarded through the SAME gated read-only review
+ * pipeline as mSOL and JupSOL: complete+fresh evidence → risk score (7.35,
+ * assigned_for_review) → read-only review approval (score >= 7) → UI exposure as an
+ * alternative to review in Real Wallet, Demo, and /testing. Every check confirms bSOL is
+ * NOT selected, NOT the winner, NOT replacing JitoSOL/mSOL/JupSOL, and has NO execution
+ * path — and that mSOL and JupSOL review behavior is unchanged.
+ */
+export function runSolLstBsolReviewExposureFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) =>
+    checks.push({ name, pass, detail });
+
+  const FRESH = "2026-07-13T20:30:00Z";
+  const STALE = "2026-07-20T00:00:00Z";
+  const fresh = buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: FRESH });
+  const stale = buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: STALE });
+  const freshCopy = [fresh.roleLabel, fresh.statusLabel, fresh.sourceStatusLabel, fresh.mechanics?.unstakeTiming, fresh.evidence?.auditSecurity, fresh.evidence?.operationalRisk, fresh.evidence?.incidentReview, fresh.externalReviewLink?.label]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  const stakingAlts = staking?.reviewDetails?.otherProtocolsToReview;
+  const bsolAlt = stakingAlts?.find((a) => a.protocolId === "blazestake");
+  const demo = getDemoExactSolStakingReviewDetails();
+  const demoBsol = demo.otherProtocolsToReview?.find((a) => a.protocolId === "blazestake");
+  const testingMsol = getTestingPageFixtures().find((f) => f.id === "testing_msol_review");
+  const testingBsol = testingMsol?.details.otherProtocolsToReview?.find((a) => a.protocolId === "blazestake");
+
+  const bsolInputs = BLAZESTAKE_BSOL_FRESH_EVIDENCE_INPUTS;
+  // 14N-A…J. Evidence inputs are well-formed and run through the intake.
+  add("14N-A: bSOL evidence inputs exist", bsolInputs.length > 0, `count=${bsolInputs.length}`);
+  add("14N-B: every bSOL input uses protocolId blazestake", bsolInputs.every((i) => i.protocolId === "blazestake"), `n=${bsolInputs.length}`);
+  add("14N-C: no bSOL input uses TEST_ONLY", !bsolInputs.some((i) => JSON.stringify(i).includes("TEST_ONLY")), "clean");
+  add("14N-D: every bSOL input has sourceName", bsolInputs.every((i) => !!i.sourceName && i.sourceName.trim() !== ""), "ok");
+  add("14N-E: every bSOL input has sourceUrl", bsolInputs.every((i) => !!i.sourceUrl && i.sourceUrl.trim() !== ""), "ok");
+  add("14N-F: every bSOL input has confirmedAt", bsolInputs.every((i) => !!i.confirmedAt && !Number.isNaN(Date.parse(i.confirmedAt))), "ok");
+  add("14N-G: every bSOL input has confirmedBy", bsolInputs.every((i) => i.confirmedBy === "Ashot"), "ok");
+  add("14N-H: every bSOL input has reviewerRole", bsolInputs.every((i) => i.reviewerRole === "founder"), "ok");
+  add("14N-I: every bSOL input has notes", bsolInputs.every((i) => Array.isArray(i.notes) && i.notes.length > 0), "ok");
+  {
+    const recs = bsolInputs.map((i) => createSolLstFreshEvidenceRecord(i, FRESH));
+    add("14N-J: every bSOL input is processed through createSolLstFreshEvidenceRecord", recs.length === bsolInputs.length && recs.every((r, idx) => r.category === bsolInputs[idx].category && r.status === "accepted"), `records=${recs.length}`);
+  }
+
+  // 14N-K…M. readyForRiskGate gating.
+  const bsolSummary = getSolLstFreshEvidenceSummaries({ checkedAt: FRESH }).find((s) => s.protocolId === "blazestake");
+  add("14N-K: bSOL readyForRiskGate is true only if all 10 fresh accepted records exist", bsolSummary?.acceptedCount === 10 && bsolSummary?.readyForRiskGate === true && (bsolSummary?.blockers.length ?? 1) === 0, `accepted=${bsolSummary?.acceptedCount} ready=${bsolSummary?.readyForRiskGate}`);
+  {
+    const nineRecords = bsolInputs.slice(0, 9).map((i) => createSolLstFreshEvidenceRecord(i, FRESH));
+    const nine = summarizeSolLstFreshEvidenceRecords(nineRecords, FRESH).find((s) => s.protocolId === "blazestake");
+    add("14N-L: bSOL readyForRiskGate is false if incomplete", nine?.readyForRiskGate === false && (nine?.acceptedCount ?? 0) < 10, `ready=${nine?.readyForRiskGate} accepted=${nine?.acceptedCount}`);
+  }
+  add("14N-M: bSOL readyForRiskGate is false if stale", getSolLstFreshEvidenceSummaries({ checkedAt: STALE }).find((s) => s.protocolId === "blazestake")?.readyForRiskGate === false, `stale-ready=${getSolLstFreshEvidenceSummaries({ checkedAt: STALE }).find((s) => s.protocolId === "blazestake")?.readyForRiskGate}`);
+
+  // 14N-N…U. Risk score, only from complete+fresh evidence.
+  const scoreAssignment = getBsolRiskScoreAssignment({ checkedAt: FRESH });
+  const scoreStatus = evaluateBsolRiskScoreAssignmentStatus({ checkedAt: FRESH });
+  add("14N-N: bSOL risk score exists only if readyForRiskGate is true", SOL_LST_BSOL_RISK_SCORE_EXISTS === true && scoreAssignment != null && getBsolRiskScoreAssignment({ checkedAt: STALE }) === null, `fresh=${scoreAssignment != null} stale=${getBsolRiskScoreAssignment({ checkedAt: STALE })}`);
+  add("14N-O: bSOL risk score is between 0 and 10", (scoreAssignment?.score ?? -1) >= 0 && (scoreAssignment?.score ?? 11) <= 10, `v=${scoreAssignment?.score}`);
+  add("14N-P: bSOL score has dimension scores", scoreAssignment?.dimensionScores != null && Object.keys(scoreAssignment?.dimensionScores ?? {}).length === 6, `keys=${Object.keys(scoreAssignment?.dimensionScores ?? {}).length}`);
+  add("14N-Q: every bSOL dimension score is between 0 and 10", Object.values(scoreAssignment?.dimensionScores ?? {}).every((v) => typeof v === "number" && v >= 0 && v <= 10), "ok");
+  {
+    const rubricDims = getProtocolRiskRubricDimensions();
+    const idMap: Record<ProtocolRiskRubricDimensionId, keyof NonNullable<typeof scoreAssignment>["dimensionScores"]> = {
+      audit_security: "auditSecurity",
+      maturity: "maturityAdoption",
+      tvl_adoption: "tvlLiquidity",
+      withdrawal_fee_transparency: "withdrawalFeeTransparency",
+      operational_dependency_risk: "operationalDependency",
+      incident_history: "incidentHistory",
+    };
+    const totalW = rubricDims.reduce((s, d) => s + d.weight, 0);
+    const recomputed = Math.round((rubricDims.reduce((s, d) => s + (scoreAssignment?.dimensionScores[idMap[d.id]] ?? 0) * d.weight, 0) / totalW) * 100) / 100;
+    add("14N-R: weighted score matches rubric weights", recomputed === scoreAssignment?.score && recomputed === 7.35, `recomputed=${recomputed} score=${scoreAssignment?.score}`);
+  }
+  add("14N-S: bSOL score status is assigned_for_review", scoreAssignment?.scoreStatus === "assigned_for_review", `v=${scoreAssignment?.scoreStatus}`);
+  add("14N-T: bSOL score does not approve protocol selection", scoreAssignment?.approvedForReadOnlyRecommendation === false && scoreAssignment?.selectedByProtocolLogic === false && scoreAssignment?.currentWinner === false && scoreStatus.approvedForReadOnlyRecommendation === false, "no approve/select/win");
+  add("14N-U: bSOL score enables no transactions/signatures", scoreAssignment?.transactionsEnabled === false && scoreAssignment?.walletSignatureRequired === false, "no tx/sig");
+
+  // 14N-V…AB. Read-only review approval, only when score >= 7 and gates pass.
+  const decision = getBsolReadOnlyApprovalDecision({ checkedAt: FRESH });
+  const apprStatus = evaluateBsolReadOnlyApprovalStatus({ checkedAt: FRESH });
+  add("14N-V: bSOL read-only approval exists only if score >= 7", SOL_LST_BSOL_READ_ONLY_APPROVAL_EXISTS === true && decision?.decision === "approved_for_read_only_review" && (decision?.basis.riskScore ?? 0) >= 7 && isBsolRiskScoreAboveReadOnlyThreshold(decision?.basis.riskScore ?? 0) && getBsolReadOnlyApprovalDecision({ checkedAt: STALE }) === null, `score=${decision?.basis.riskScore}`);
+  add("14N-W: bSOL approvedForReadOnlyRecommendation true only if approval gate passes", apprStatus.approvedForReadOnlyRecommendation === true && evaluateBsolReadOnlyApprovalStatus({ checkedAt: STALE }).approvedForReadOnlyRecommendation === false, `fresh=${apprStatus.approvedForReadOnlyRecommendation}`);
+  add("14N-X: bSOL approvedForProtocolSelection is false", decision?.approvalScope.approvedForProtocolSelection === false && decision?.approvalScope.enablesMultiProtocolSelection === false, "false");
+  add("14N-Y: bSOL selectedByProtocolLogic is false", decision?.approvalScope.selectedByProtocolLogic === false && fresh.selectedByProtocolLogic === false, "false");
+  add("14N-Z: bSOL currentWinner is false", decision?.approvalScope.currentWinner === false && fresh.currentWinner === false, "false");
+  add("14N-AA: bSOL transactionsEnabled is false", decision?.approvalScope.transactionsEnabled === false && (fresh.transactionsEnabled as boolean) === false, "false");
+  add("14N-AB: bSOL walletSignatureRequired is false", decision?.approvalScope.walletSignatureRequired === false && (fresh.walletSignatureRequired as boolean) === false, "false");
+
+  // Display content sanity (fresh + stale).
+  add("14N-AB2: fresh bSOL display is approved_for_review_exposure with 7.35 + sourced data", fresh.reviewState === "approved_for_review_exposure" && fresh.riskScore === 7.35 && fresh.marketData?.tvlUsd === 67130773 && fresh.marketData?.apyPct === 5.59573 && fresh.marketData?.apy30dPct === 5.34 && fresh.mechanics?.directUnstakeFeePct === 0.1 && fresh.mechanics?.annualManagementFeePct === 0 && /epoch|2-3 days|stake account/i.test(fresh.mechanics?.unstakeTiming ?? ""), `state=${fresh.reviewState} score=${fresh.riskScore}`);
+  add("14N-AB3: stale bSOL is stale_evidence with no presented market data", stale.reviewState === "stale_evidence" && stale.statusLabel === "Evidence needs refresh" && stale.marketData === undefined, `v=${stale.reviewState}`);
+
+  // 14N-AC…AI. Integration: real wallet + demo.
+  add("14N-AC: real-wallet staking selectedProtocolId remains Jito/JitoSOL", staking?.protocolSelection?.selectedProtocolId === "jito" && staking?.protocolSelection?.selectedLstSymbol === "JitoSOL", `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  add("14N-AD: real-wallet staking includes bSOL only as an alternative protocol to review", bsolAlt != null && bsolAlt.roleLabel === "Alternative protocol to review" && bsolAlt.selectedByProtocolLogic === false, `alts=${stakingAlts?.length}`);
+  add("14N-AE: bSOL is not selectedProtocolId", staking?.protocolSelection?.selectedProtocolId !== "blazestake" && staking?.protocolSelection?.selectedProtocolName !== "BlazeStake", `id=${staking?.protocolSelection?.selectedProtocolId}`);
+  add("14N-AF: bSOL does not affect Top Pick ranking", !run.suggestions.some((s) => s.protocolSelection?.selectedProtocolName === "BlazeStake") && run.suggestions.filter((s) => s.is_top_pick).every((s) => s.protocolSelection?.selectedProtocolName !== "BlazeStake"), `bsolTopPick=${run.suggestions.some((s) => s.is_top_pick && s.protocolSelection?.selectedProtocolName === "BlazeStake")}`);
+  add("14N-AG: bSOL does not affect engine ordering", run.suggestions.filter((s) => s.category === "staking").length === 1 && run.suggestions.every((s) => s.id !== "blazestake"), `stakingCount=${run.suggestions.filter((s) => s.category === "staking").length}`);
+  add("14N-AH: Demo SOL staking scenario includes bSOL only if approved for read-only review", demoBsol != null && demoBsol.reviewState === "approved_for_review_exposure" && demoBsol.approvedForReviewExposure === true, `demoBsol=${demoBsol != null}`);
+  add("14N-AI: Demo selected protocol remains JitoSOL", demo.protocolSelectionDisplay?.protocolName === "Jito" && demo.protocolSelectionDisplay?.assetSymbol === "JitoSOL", `name=${demo.protocolSelectionDisplay?.protocolName}`);
+
+  // 14N-AJ. /testing.
+  add("14N-AJ: testing page includes bSOL review candidate (approved) via the review modal path", testingBsol != null && testingBsol.reviewState === "approved_for_review_exposure" && testingMsol?.card.cta.action === "review", `has=${testingBsol != null}`);
+
+  // 14N-AK…AM. Safety guardrails.
+  {
+    const json = (JSON.stringify(fresh) + JSON.stringify(demo.otherProtocolsToReview) + JSON.stringify(testingMsol?.details.otherProtocolsToReview) + JSON.stringify(stakingAlts)).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "swap(", "deposit(", "stake(", "approve(", "execute("];
+    const hits = tokens.filter((t) => json.includes(t));
+    add("14N-AK: no transaction/signature/swap/deposit/stake/approve/execute path for bSOL", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  {
+    const forbidden = ["best", "safest", "winner", "guaranteed", "risk-free", "recommended", "stake now", "deposit now", "highest apy"];
+    const hits = forbidden.filter((w) => freshCopy.includes(w));
+    add("14N-AL: no forbidden investment claims in bSOL UI/copy", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+  }
+  add("14N-AM: no button says Stake/Deposit/Execute/Swap/Start staking/Approve", testingMsol?.card.cta.label === "Review Details" && (fresh as { cta?: unknown }).cta === undefined && /^open blazestake staking page$/i.test(fresh.externalReviewLink?.label ?? ""), `cta=${testingMsol?.card.cta.label}`);
+
+  // 14N-AN…AP. JitoSOL live + mSOL/JupSOL review behavior unchanged.
+  add("14N-AN: JitoSOL live behavior remains unchanged", staking?.protocolSelection?.status === "selected" && staking?.protocolSelection?.selectedProtocolName === "Jito" && toSuggestionCard(staking!).protocolName === "Jito", `name=${staking?.protocolSelection?.selectedProtocolName}`);
+  {
+    const msol = buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: FRESH });
+    add("14N-AO: mSOL review behavior remains unchanged", msol.reviewState === "approved_for_review_exposure" && msol.riskScore === 7.4 && msol.protocolId === "marinade" && msol.selectedByProtocolLogic === false, `score=${msol.riskScore}`);
+  }
+  {
+    const jup = buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: FRESH });
+    add("14N-AP: JupSOL review behavior remains unchanged", jup.reviewState === "approved_for_review_exposure" && jup.riskScore === 7.65 && jup.protocolId === "jupiter" && jup.selectedByProtocolLogic === false, `score=${jup.riskScore}`);
+  }
+
+  // 14N-AQ. bSOL does not replace Jito/mSOL/JupSOL anywhere.
+  {
+    const combined = getAllReadOnlyReviewApprovedSolLiquidStakingCandidates({ checkedAt: FRESH });
+    const ids = combined.map((c) => c.protocolId);
+    const flagsSafe = SOL_LST_BSOL_READ_ONLY_APPROVAL_SELECTS_PROTOCOL_WINNER === false && SOL_LST_BSOL_READ_ONLY_APPROVAL_ENABLES_MULTI_PROTOCOL_SELECTION === false && SOL_LST_BSOL_READ_ONLY_APPROVAL_UPDATES_LIVE_RECOMMENDATIONS === false && SOL_LST_BSOL_READ_ONLY_APPROVAL_REPLACES_JITO === false && SOL_LST_BSOL_READ_ONLY_APPROVAL_ENABLES_TRANSACTIONS === false && SOL_LST_BSOL_READ_ONLY_APPROVAL_REQUIRES_WALLET_SIGNATURE === false;
+    add("14N-AQ: bSOL does not replace JitoSOL, mSOL, or JupSOL anywhere", flagsSafe && staking?.protocolSelection?.selectedProtocolName === "Jito" && ids.includes("jito") && ids.includes("marinade") && ids.includes("jupiter") && ids.includes("blazestake") && combined.find((c) => c.protocolId === "blazestake")?.riskScore === 7.35, `ids=${ids.join("/")}`);
+  }
+
+  // 14N-AR. Deterministic-selection copy (data proxy for the rendered modal).
+  add("14N-AR: UI explains final protocol selection happens later through deterministic protocol logic", /deterministic/i.test(testingMsol?.details.summary.reason ?? "") && /final protocol selection will happen later/i.test(testingMsol?.details.summary.reason ?? ""), "present");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -9282,6 +9451,7 @@ export function printFixtureResults(): void {
     ...runSolLstMsolReadOnlyApprovalFixtureChecks(),
     ...runSolLstMsolReviewExposureFixtureChecks(),
     ...runSolLstJupsolReviewExposureFixtureChecks(),
+    ...runSolLstBsolReviewExposureFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

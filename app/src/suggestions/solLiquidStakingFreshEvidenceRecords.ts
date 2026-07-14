@@ -310,7 +310,138 @@ export const JUPITER_JUPSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = 
     notes: ["Point-in-time finding, NOT a clean-history claim. No independent incident/postmortem obtained; the 'without exploits' statement is Jupiter's own."],
   },
 ];
-export const BLAZESTAKE_BSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [];
+// Step 14N — BlazeStake · bSOL. COMPLETE: all 10 categories verified from public
+// sources (founder-authorized fetch, 2026-07-13). Market data from the DefiLlama bSOL
+// pool (fresh, not the stale 14B values). Mechanics/fees/audits/operational from the
+// official BlazeStake docs (stake-docs.solblaze.org). `direct_unstake_time` recorded as
+// sourced EPOCH-BASED TEXT per the 14I dual-format: BlazeStake documents the
+// delayed-unstake MECHANISM (bSOL → native Solana stake account) but does not publish a
+// fixed hour figure, so the timing is described via the standard Solana stake-account
+// deactivation cooldown (completes at the epoch boundary, ~2-3 days) — no fixed hours are
+// invented. `incident_review` is a point-in-time finding, explicitly NOT a clean-history
+// claim. No stale 14B value is reused and nothing is invented.
+export const BLAZESTAKE_BSOL_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [
+  {
+    protocolId: "blazestake",
+    category: "tvl",
+    value: 67130773,
+    unit: "usd",
+    sourceName: "DefiLlama — BlazeStake bSOL pool",
+    sourceUrl: "https://yields.llama.fi/chart/387d6732-59f0-4ae0-8a88-aba75a5cbe4a",
+    confirmedAt: "2026-07-13T20:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Fresh bSOL TVL verified from the DefiLlama pool chart API; most-recent data point 2026-07-13T20:01:03.427Z. Not the stale 14B value (~$69.75M)."],
+  },
+  {
+    protocolId: "blazestake",
+    category: "current_apy",
+    value: 5.59573,
+    unit: "pct",
+    sourceName: "DefiLlama — BlazeStake bSOL pool",
+    sourceUrl: "https://yields.llama.fi/chart/387d6732-59f0-4ae0-8a88-aba75a5cbe4a",
+    confirmedAt: "2026-07-13T20:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Latest DefiLlama APY snapshot (data point 2026-07-13T20:01:03.427Z). The last-30 range was ~5.27%-5.60% (a recent uptick to 5.60%)."],
+  },
+  {
+    protocolId: "blazestake",
+    category: "apy_30d",
+    value: 5.34,
+    unit: "pct",
+    sourceName: "DefiLlama — BlazeStake bSOL pool",
+    sourceUrl: "https://yields.llama.fi/chart/387d6732-59f0-4ae0-8a88-aba75a5cbe4a",
+    confirmedAt: "2026-07-13T20:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["30-day mean APY computed deterministically from the last 30 'apy' values of the DefiLlama pool chart (min 5.27%, max 5.60%); mean 5.34%."],
+  },
+  {
+    protocolId: "blazestake",
+    category: "withdrawal_mechanics",
+    value: "Two unstake paths per BlazeStake docs: (a) Instant unstake pulls SOL from the stake pool reserves for a 0.1% fee; (b) Delayed unstake converts bSOL into a traditional (native) Solana stake account for a 0.1% fee, which the user then deactivates from their wallet and withdraws once the deactivation cooldown completes.",
+    unit: "text",
+    sourceName: "BlazeStake Documentation — Fees / Unstaking",
+    sourceUrl: "https://stake-docs.solblaze.org/",
+    confirmedAt: "2026-07-13T20:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Withdrawal MECHANISM per official BlazeStake docs (instant reserve-pull swap or delayed native-stake-account withdrawal)."],
+  },
+  {
+    protocolId: "blazestake",
+    category: "direct_unstake_time",
+    value: "Delayed (direct) unstake converts bSOL into a native Solana stake account; withdrawal completes after the standard Solana stake-deactivation cooldown, which finishes at the epoch boundary (approximately 2-3 days, since Solana epochs last ~2 days). Recorded as sourced epoch-based text — BlazeStake's docs state the native-stake-account mechanism but do not publish a fixed hour figure, so no fixed hours are claimed. Instant unstake is available immediately for a 0.1% fee.",
+    unit: "text",
+    sourceName: "BlazeStake Documentation — Unstaking",
+    sourceUrl: "https://stake-docs.solblaze.org/",
+    confirmedAt: "2026-07-13T20:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Epoch-based timing recorded as text per the 14I dual-format. Mechanism (delayed unstake → native stake account) is from BlazeStake docs; the ~2-3 day / epoch-boundary basis is Solana's standard stake-deactivation cooldown, not a BlazeStake-published fixed figure. No fixed-hour conversion is claimed."],
+  },
+  {
+    protocolId: "blazestake",
+    category: "direct_unstake_fee",
+    value: 0.1,
+    unit: "pct",
+    sourceName: "BlazeStake Documentation — Fees",
+    sourceUrl: "https://stake-docs.solblaze.org/",
+    confirmedAt: "2026-07-13T20:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["BlazeStake docs state a 0.1% delayed (direct) withdrawal fee (instant withdrawal is also 0.1%). Fee distribution: 50% SolBlaze DAO / 50% SolBlaze Team per docs."],
+  },
+  {
+    protocolId: "blazestake",
+    category: "annual_management_fee",
+    value: 0,
+    unit: "pct",
+    sourceName: "BlazeStake Documentation — Fees",
+    sourceUrl: "https://stake-docs.solblaze.org/",
+    confirmedAt: "2026-07-13T20:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["BlazeStake docs state 'Epoch fee: 0%' and 'Deposit fee: 0%' — no management/performance fee on staking rewards. Revenue comes from the 0.1% withdrawal fees instead."],
+  },
+  {
+    protocolId: "blazestake",
+    category: "audit_security",
+    value: "Per BlazeStake security docs, the bSOL stake-pool smart contract has been audited seven times by five separate organizations: Quantstamp, Neodyme (4 audits), Kudelski, Halborn, and OtterSec.",
+    unit: "text",
+    sourceName: "BlazeStake Documentation — Audits / Security",
+    sourceUrl: "https://stake-docs.solblaze.org/protocol/audits",
+    confirmedAt: "2026-07-13T20:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Audit statement from official BlazeStake security docs. Point-in-time; audit history does not by itself ensure future safety."],
+  },
+  {
+    protocolId: "blazestake",
+    category: "operational_risk",
+    value: "Operational dependencies per BlazeStake docs: pooled SOL is delegated across a validator set that is monitored by automated systems with human review; the design is non-custodial (the docs state that not even the pool operator can withdraw user-owned funds); and the smart-contract upgrade authority is governed by an ecosystem multisig overseen by the Solana Foundation. As an actively-developed DeFi protocol (BLZE rewards, custom liquidity), it also carries integration surface area.",
+    unit: "text",
+    sourceName: "BlazeStake Documentation — Security / Operations",
+    sourceUrl: "https://stake-docs.solblaze.org/",
+    confirmedAt: "2026-07-13T20:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Sourced summary of operational dependencies (validator monitoring, non-custodial design, Solana-Foundation-overseen upgrade multisig). Descriptive only — not an endorsement or safety claim."],
+  },
+  {
+    protocolId: "blazestake",
+    category: "incident_review",
+    value: "Point-in-time review (2026-07-13): no independent BlazeStake/bSOL-specific incident, exploit, or postmortem was found during this review window, and the official docs do not disclose one. This is a point-in-time finding, NOT a verified clean-history claim.",
+    unit: "text",
+    sourceName: "BlazeStake Documentation — Security",
+    sourceUrl: "https://stake-docs.solblaze.org/",
+    confirmedAt: "2026-07-13T20:15:00Z",
+    confirmedBy: "Ashot",
+    reviewerRole: "founder",
+    notes: ["Point-in-time finding, NOT a clean-history claim. No independent incident/postmortem obtained; the docs' security emphasis is the protocol's own statement."],
+  },
+];
 export const SANCTUM_INF_FRESH_EVIDENCE_INPUTS: SolLstFreshEvidenceInput[] = [];
 
 export interface FreshEvidenceRecordsOptions {

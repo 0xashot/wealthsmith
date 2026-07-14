@@ -1219,3 +1219,32 @@ registry stays Jito-only for the selector. The combined non-mutating preview
 `getAllReadOnlyReviewApprovedSolLiquidStakingCandidates()` returns Jito + mSOL (verbatim from
 the mSOL module, unchanged) + JupSOL when fresh. **JitoSOL remains the only selected protocol**
 and the multi-protocol selector comparison stays deferred.
+
+## BlazeStake · bSOL onboarded through the full read-only pipeline (Step 14N)
+
+BlazeStake · bSOL is run through the **same gated pipeline** as mSOL and JupSOL, end-to-end in
+one step: **(1) fresh evidence** — founder-authorized public-source fetches recorded **all 10**
+categories (DefiLlama bSOL pool `387d6732-…`: TVL ~$67.1M, current APY 5.59573%, 30-day mean
+5.34% — fresh, not the stale 14B values; BlazeStake docs: instant reserve-pull unstake **or**
+delayed unstake that converts bSOL to a native Solana stake account, `direct_unstake_time`
+recorded as epoch-based **text** — mechanism from BlazeStake docs, ~2-3 day / epoch-boundary
+basis from Solana's standard stake-deactivation cooldown, no fixed hours invented; 0.1%
+instant/delayed unstake fee; `annual_management_fee` 0% ("Epoch fee: 0%"); audited 7× by 5
+firms — Quantstamp, Neodyme ×4, Kudelski, Halborn, OtterSec; non-custodial + Solana-Foundation-
+overseen upgrade multisig operational risk; and a point-in-time incident review that is **not**
+a clean-history claim); **(2) risk score 7.35/10** (`assigned_for_review`, draft rubric) — see
+[solLiquidStakingBsolRiskScore.md](./solLiquidStakingBsolRiskScore.md), only assigned when
+evidence is complete + fresh (lowest of the reviewed set, dragged by the smallest TVL, lifted
+by strong audits + transparent low fees); **(3) read-only review approval** (score ≥ 7, risks
+acknowledged) — see
+[solLiquidStakingBsolReadOnlyApproval.md](./solLiquidStakingBsolReadOnlyApproval.md);
+**(4) UI exposure** via `buildBsolReadOnlyReviewCandidateDisplay({checkedAt})`, shown in the
+modal's "Other protocols to review" section **alongside mSOL and JupSOL** in real wallet, Demo,
+and `/testing` (fresh → `approved_for_review_exposure` with data + 7.35 score; stale →
+`stale_evidence`, no data). bSOL is **review-only**: it never becomes `selectedProtocolId`,
+never the winner, never affects Top Pick/ordering, has **no execution path**, and the base
+registry stays Jito-only for the selector. `getAllReadOnlyReviewApprovedSolLiquidStakingCandidates()`
+now returns Jito + mSOL + JupSOL (all unchanged) + bSOL when fresh (the bSOL entry is built by
+the bSOL module's `getBsolReviewApprovedCandidateEntry()`). **JitoSOL remains the only selected
+protocol** and the multi-protocol selector comparison stays deferred. (Sanctum · INF remains a
+staged candidate with no fresh evidence.)

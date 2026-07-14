@@ -27,6 +27,7 @@ import {
   getReadOnlyReviewApprovedSolLiquidStakingCandidates,
   type SolLstReviewApprovedCandidate,
 } from "./solLiquidStakingMsolReadOnlyApproval";
+import { getBsolReviewApprovedCandidateEntry } from "./solLiquidStakingBsolReadOnlyApproval";
 
 export const SOL_LST_JUPSOL_READ_ONLY_APPROVAL_EXISTS = true;
 export const SOL_LST_JUPSOL_READ_ONLY_APPROVAL_APPROVES_REVIEW_EXPOSURE = true;
@@ -242,6 +243,11 @@ export function getAllReadOnlyReviewApprovedSolLiquidStakingCandidates(options: 
       riskScoreStatus: "assigned_for_review",
     });
   }
+
+  // Step 14N — append bSOL (built by the bSOL module) when its read-only approval is
+  // active. Non-mutating; bSOL's registry status stays staged_candidate.
+  const bsolEntry = getBsolReviewApprovedCandidateEntry({ checkedAt });
+  if (bsolEntry) out.push(bsolEntry);
 
   return out;
 }

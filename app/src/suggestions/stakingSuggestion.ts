@@ -34,6 +34,7 @@ import {
 } from "./jitoSolBetaActivation";
 import { buildMsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingMsolReadOnlyApproval";
 import { buildJupsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingJupsolReadOnlyApproval";
+import { buildBsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingBsolReadOnlyApproval";
 import type { ProtocolSelection, ReviewSafetyNote, SuggestionReviewDetails } from "./engineTypes";
 
 /** Stable suggestion ID. */
@@ -142,13 +143,15 @@ export function deriveStakingSuggestion(
       // Read-only external handoff (Step 13J): a user-click link to Jito's staking
       // page in a new tab. Never auto-opened, never a transaction/signature.
       externalLink = getJitoSolExternalStakingLink();
-      // Read-only "alternatives to review" (Steps 14L/14M): approved mSOL and JupSOL are
-      // shown for review only alongside the selected JitoSOL. Neither is selected/winner
-      // and neither has an execution path. Freshness is relative to generation time; each
-      // display self-labels stale ("Evidence needs refresh") if its evidence has lapsed.
+      // Read-only "alternatives to review" (Steps 14L/14M/14N): approved mSOL, JupSOL, and
+      // bSOL are shown for review only alongside the selected JitoSOL. None is
+      // selected/winner and none has an execution path. Freshness is relative to
+      // generation time; each display self-labels stale ("Evidence needs refresh") if its
+      // evidence has lapsed.
       otherProtocolsToReview = [
         buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() }),
         buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() }),
+        buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() }),
       ];
       // Read-only recommendation copy — never implies a transaction/signature.
       safetyNotesOverride = [
