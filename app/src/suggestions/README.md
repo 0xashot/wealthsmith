@@ -1396,3 +1396,21 @@ normalized for diagnostics but never selector-ready. No selector score/weights/r
 `selectedProtocolId` change, no product UI, no execution. Real-cache QA: selector-ready = jito,
 jupiter, marinade, blazestake, jupiter_native_stake; excluded = sanctum. Next: 14W deterministic
 selector.
+
+## 14W — deterministic read-only SOL staking selector comparison
+
+An internal, comparison-only module (see
+[solStakingSelectorComparison.md](./solStakingSelectorComparison.md)) that scores the Step 14V
+selector-ready candidates under the explicit `balanced_safety_first_v1` policy: reviewed risk
+score 0.50 (used exactly, never recalculated), 30-day APY 0.30, current APY 0.10, APY stability
+0.10 (weights total 1.00). APY dimensions use midpoint cohort normalization with minimum
+meaningful ranges (0.25 / 0.10 pct pts) so narrow cohorts are not stretched to a full 0–10 spread;
+stability is a transparent consistency signal, not a risk score. Adoption, fees, exit, and token
+model stay zero-weight descriptive context (LST TVL vs native delegated stake never cross-type
+compared). Deterministic tie-break: total → risk → 30d APY → lower abs delta → current APY →
+canonical order. It identifies a "comparison leader" (rank 1) and NEVER activates it: no
+`selectedProtocolId` change, no product `currentWinner`, no multi-protocol selection, no
+UI/Top-Pick/engine-ordering change, no execution; JitoSOL stays selected, INF stays blocked.
+Real-cache QA leader = marinade (validated, independent recompute matches). Future activation is
+gated behind policy/result review, sensitivity analysis, a scheduled refresh job, explicit
+approval, regression QA, product-copy review, and a rollback plan.

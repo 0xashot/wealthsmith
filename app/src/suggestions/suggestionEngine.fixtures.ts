@@ -568,6 +568,27 @@ import {
   getSolStakingNormalizationDiagnostics,
 } from "./solStakingCandidateNormalization";
 import {
+  SOL_STAKING_SELECTOR_POLICY_ID,
+  SOL_STAKING_SELECTOR_POLICY_VERSION,
+  SOL_STAKING_SELECTOR_WEIGHTS,
+  SOL_STAKING_SELECTOR_POLICY,
+  SOL_STAKING_SELECTOR_MIN_APY_RANGE_PCT_POINTS,
+  validateSolStakingSelectorPolicy,
+} from "./solStakingSelectorPolicy";
+import {
+  SOL_STAKING_SELECTOR_UPDATES_PRODUCT_UI,
+  buildSolStakingSelectorComparison,
+  normalizeHigherIsBetter,
+  normalizeLowerIsBetter,
+  compareForRank,
+  decidingTieBreak,
+  validateSolStakingSelectorCandidateResult,
+  validateSolStakingSelectorComparisonResult,
+  getSolStakingSelectorComparisonDiagnostics,
+  explainSolStakingSelectorCandidate,
+  type SelectorRankable,
+} from "./solStakingSelectorComparison";
+import {
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_EXISTS,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_ENABLED,
   PROTOCOL_SOL_LST_SELECTOR_PREVIEW_INTERNAL_ONLY,
@@ -10506,6 +10527,250 @@ export function runSolStakingNormalizationFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+export function runSolStakingSelectorComparisonFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const CHECKED = "2026-07-14T03:00:00Z";
+  const FRESH = "2026-07-14T02:50:00Z";
+  const OLD = "2026-07-11T00:00:00Z";
+  const IDS = SOL_STAKING_MARKET_CANDIDATE_IDS;
+  const P = SOL_STAKING_SELECTOR_POLICY;
+
+  const POOL = {
+    jito: "0e7d0722-9054-4907-8593-567b353c0900",
+    jupiter: "52bd72a7-9e81-4112-abb4-71673e8de9bf",
+    marinade: "b3f93865-5ec8-4662-90a0-11808e0aa2bd",
+    blazestake: "387d6732-59f0-4ae0-8a88-aba75a5cbe4a",
+    sanctum: "3075a746-bdd1-4aac-bcd5-b035abee2622",
+  };
+  const rec = (pool: string, apy: unknown, apyMean30d: unknown, tvlUsd: unknown) => ({ pool, chain: "Solana", symbol: "X", apy, apyMean30d, tvlUsd });
+  const dllValid = { status: "success", data: [
+    rec(POOL.jito, 5.36, 5.45, 767950000),
+    rec(POOL.jupiter, 5.67, 5.6, 409170000),
+    rec(POOL.marinade, 4.75, 5.87, 184840000),
+    rec(POOL.blazestake, 5.27, 5.32, 69750000),
+    rec(POOL.sanctum, 5.84, 5.95, 152555981),
+  ] };
+  const dllNo30d = { status: "success", data: dllValid.data.map((d) => ({ ...d, apyMean30d: null })) };
+
+  const VA = JUPITER_NATIVE_STAKE_VOTE_ACCOUNT;
+  const IDENT = JUPITER_NATIVE_STAKE_IDENTITY;
+  const mkEpochs = (n: number, endEpoch: number, lastEndIso: string, apyBase = 0.054) => {
+    const out: Record<string, unknown>[] = [];
+    let end = Date.parse(lastEndIso);
+    const twoDays = 2 * 86400_000;
+    for (let k = 0; k < n; k++) { const start = end - twoDays; out.push({ epoch: endEpoch - k, apy: apyBase - k * 0.0004, activated_stake: 12_500_000_000_000_000, commission_effective: 5, epoch_start_at: new Date(start).toISOString(), epoch_end_at: new Date(end).toISOString() }); end = start; }
+    return out;
+  };
+  const marinadeValid = { validators: [{ vote_account: VA, identity: IDENT, epoch_stats: [{ epoch: 1001, apy: null, epoch_start_at: "2026-07-12T12:22:01Z", epoch_end_at: "2026-07-14T12:00:00Z" }, ...mkEpochs(16, 1000, "2026-07-12T12:22:01Z")] }] };
+  const stakewiz = [{ vote_identity: VA, identity: IDENT, activated_stake: 12_500_954.43, commission: 500, apy_estimate: 5.23, delinquent: false, epoch: 1001 }];
+
+  const freshCache = buildSolStakingMarketCache({ checkedAt: CHECKED, defiLlama: { payload: dllValid, fetchedAt: FRESH }, stakewiz: { payload: stakewiz, fetchedAt: FRESH }, marinade: { payload: marinadeValid, fetchedAt: FRESH } });
+  const set = buildNormalizedSolStakingCandidateSet(freshCache, { checkedAt: CHECKED });
+  const cmp = buildSolStakingSelectorComparison(set, { checkedAt: CHECKED });
+  const diag = getSolStakingSelectorComparisonDiagnostics(cmp);
+
+  // 14W-A…J. Policy.
+  add("14W-A: selector policy version exists", SOL_STAKING_SELECTOR_POLICY_VERSION === "1.0.0", SOL_STAKING_SELECTOR_POLICY_VERSION);
+  add("14W-B: policy ID exists", SOL_STAKING_SELECTOR_POLICY_ID === "balanced_safety_first_v1", SOL_STAKING_SELECTOR_POLICY_ID);
+  add("14W-C: risk weight is 0.50", SOL_STAKING_SELECTOR_WEIGHTS.reviewed_risk_score === 0.5, `${SOL_STAKING_SELECTOR_WEIGHTS.reviewed_risk_score}`);
+  add("14W-D: 30-day APY weight is 0.30", SOL_STAKING_SELECTOR_WEIGHTS.apy_30d === 0.3, `${SOL_STAKING_SELECTOR_WEIGHTS.apy_30d}`);
+  add("14W-E: current APY weight is 0.10", SOL_STAKING_SELECTOR_WEIGHTS.current_apy === 0.1, `${SOL_STAKING_SELECTOR_WEIGHTS.current_apy}`);
+  add("14W-F: APY stability weight is 0.10", SOL_STAKING_SELECTOR_WEIGHTS.apy_stability === 0.1, `${SOL_STAKING_SELECTOR_WEIGHTS.apy_stability}`);
+  add("14W-G: weights total exactly 1.00", Math.abs(Object.values(SOL_STAKING_SELECTOR_WEIGHTS).reduce((a, b) => a + b, 0) - 1) < 1e-9, "1.00");
+  add("14W-H: policy validator rejects invalid totals", validateSolStakingSelectorPolicy({ ...P, weights: { ...P.weights, apy_30d: 0.9 } }).valid === false, "rejected");
+  add("14W-I: policy validator rejects negative weights", validateSolStakingSelectorPolicy({ ...P, weights: { ...P.weights, current_apy: -0.1, apy_stability: 0.3 } }).valid === false && validateSolStakingSelectorPolicy(P).valid === true, "rejected");
+  add("14W-J: policy validator rejects unsupported dimensions", validateSolStakingSelectorPolicy({ ...P, weights: { ...P.weights, tvl: 0.0 } as never }).valid === false, "rejected");
+
+  // 14W-K…Q. Input gating.
+  add("14W-K: only selector-ready normalized candidates are scored", cmp.eligibleCandidateIds.every((id) => set.selectorReadyCandidateIds.includes(id)) && cmp.eligibleCandidateIds.length === set.selectorReadyCandidateIds.length, cmp.eligibleCandidateIds.join(","));
+  add("14W-L: INF is never scored", cmp.candidateResults[IDS.sanctum] === undefined && !cmp.eligibleCandidateIds.includes(IDS.sanctum), "not scored");
+  {
+    const staleCache = buildSolStakingMarketCache({ checkedAt: CHECKED, defiLlama: { payload: dllValid, fetchedAt: OLD }, stakewiz: { payload: stakewiz, fetchedAt: FRESH }, marinade: { payload: marinadeValid, fetchedAt: FRESH } });
+    const staleSet = buildNormalizedSolStakingCandidateSet(staleCache, { checkedAt: CHECKED });
+    const staleCmp = buildSolStakingSelectorComparison(staleSet, { checkedAt: CHECKED });
+    add("14W-M: stale candidates are never scored", staleCmp.candidateResults[IDS.marinade] === undefined && staleCmp.status === "insufficient_candidates", `status=${staleCmp.status}`);
+    add("14W-P: one ready candidate yields insufficient_candidates", staleCmp.status === "insufficient_candidates" && staleCmp.eligibleCandidateIds.length === 1, `ready=${staleCmp.eligibleCandidateIds.length}`);
+  }
+  {
+    const partialCache = buildSolStakingMarketCache({ checkedAt: CHECKED, defiLlama: { payload: dllNo30d, fetchedAt: FRESH }, stakewiz: { payload: stakewiz, fetchedAt: FRESH }, marinade: { payload: marinadeValid, fetchedAt: FRESH } });
+    const partialSet = buildNormalizedSolStakingCandidateSet(partialCache, { checkedAt: CHECKED });
+    const partialCmp = buildSolStakingSelectorComparison(partialSet, { checkedAt: CHECKED });
+    add("14W-N: partial candidates are never scored", partialCmp.candidateResults[IDS.marinade] === undefined, "not scored");
+  }
+  {
+    const emptyCache = buildSolStakingMarketCache({ checkedAt: CHECKED });
+    const emptySet = buildNormalizedSolStakingCandidateSet(emptyCache, { checkedAt: CHECKED });
+    const emptyCmp = buildSolStakingSelectorComparison(emptySet, { checkedAt: CHECKED });
+    add("14W-O: zero ready candidates yields no_ready_candidates", emptyCmp.status === "no_ready_candidates" && Object.keys(emptyCmp.candidateResults).length === 0, `status=${emptyCmp.status}`);
+  }
+  add("14W-Q: invalid normalized input yields invalid_input", buildSolStakingSelectorComparison({ ...set, winnerSelected: true } as never, { checkedAt: CHECKED }).status === "invalid_input", "invalid");
+
+  // 14W-R…U. Risk.
+  const rMar = cmp.candidateResults[IDS.marinade];
+  add("14W-R: reviewed risk score is copied exactly", rMar.dimensions.reviewedRiskScore.rawValue === 7.4 && rMar.dimensions.reviewedRiskScore.normalizedScore === 7.4, `risk=${rMar.dimensions.reviewedRiskScore.rawValue}`);
+  add("14W-S: reviewed risk score is not cohort-normalized", Object.values(cmp.candidateResults).every((c) => c.dimensions.reviewedRiskScore.normalizedScore === c.dimensions.reviewedRiskScore.rawValue), "exact");
+  add("14W-T: reviewed risk score is not recalculated", cmp.candidateResults[IDS.jito].dimensions.reviewedRiskScore.rawValue === 7.75 && cmp.candidateResults[IDS.jupiterNativeStake].dimensions.reviewedRiskScore.rawValue === 7.1, "from module");
+  add("14W-U: risk weighted contribution equals score × 0.50", rMar.dimensions.reviewedRiskScore.weightedContribution === Math.round(7.4 * 0.5 * 1e6) / 1e6, `${rMar.dimensions.reviewedRiskScore.weightedContribution}`);
+
+  // 14W-V…AA. Higher-is-better normalization.
+  {
+    const hi = normalizeHigherIsBetter([5, 6], { minimumRange: 0.25, precision: 6 });
+    add("14W-V: higher APY produces a higher normalized score", hi[1] > hi[0], `${hi.join(",")}`);
+    const eq = normalizeHigherIsBetter([5, 5], { minimumRange: 0.25, precision: 6 });
+    add("14W-W: equal APYs produce equal score 5", eq[0] === 5 && eq[1] === 5, `${eq.join(",")}`);
+    const narrow = normalizeHigherIsBetter([5.0, 5.1], { minimumRange: 0.25, precision: 6 });
+    add("14W-X: narrow APY range does not produce an artificial full 0-10 spread", narrow[0] === 3 && narrow[1] === 7 && (narrow[1] - narrow[0]) < 10, `${narrow.join(",")}`);
+    add("14W-Y: current APY uses the configured minimum range", SOL_STAKING_SELECTOR_MIN_APY_RANGE_PCT_POINTS === 0.25 && /0\.25/.test(cmp.candidateResults[IDS.jito].dimensions.currentApy.methodology), "0.25");
+    add("14W-Z: 30-day APY uses the configured minimum range", /0\.25/.test(cmp.candidateResults[IDS.jito].dimensions.apy30d.methodology), "0.25");
+    add("14W-AA: normalization remains between 0 and 10", Object.values(cmp.candidateResults).every((c) => [c.dimensions.apy30d, c.dimensions.currentApy].every((d) => d.normalizedScore >= 0 && d.normalizedScore <= 10)), "0-10");
+  }
+
+  // 14W-AB…AF. Lower-is-better normalization.
+  {
+    const lo = normalizeLowerIsBetter([0.1, 0.5], { minimumRange: 0.1, precision: 6 });
+    add("14W-AB: lower absolute APY delta produces a higher stability score", lo[0] > lo[1], `${lo.join(",")}`);
+    const eq = normalizeLowerIsBetter([0.2, 0.2], { minimumRange: 0.1, precision: 6 });
+    add("14W-AC: equal APY deltas produce equal score 5", eq[0] === 5 && eq[1] === 5, `${eq.join(",")}`);
+    const narrow = normalizeLowerIsBetter([0.10, 0.14], { minimumRange: 0.1, precision: 6 });
+    add("14W-AD: narrow delta range does not produce an artificial full spread", (Math.max(...narrow) - Math.min(...narrow)) < 10 && narrow[0] > narrow[1], `${narrow.join(",")}`);
+    add("14W-AE: stability score remains between 0 and 10", Object.values(cmp.candidateResults).every((c) => c.dimensions.apyStability.normalizedScore >= 0 && c.dimensions.apyStability.normalizedScore <= 10), "0-10");
+    add("14W-AF: stability is not labeled a risk score or guarantee", /not a risk score/i.test(rMar.dimensions.apyStability.methodology) && /guarantee/i.test(rMar.dimensions.apyStability.methodology), "labelled");
+  }
+
+  // 14W-AG…AO. Total score.
+  {
+    const c = rMar;
+    const sum = Math.round((c.dimensions.reviewedRiskScore.weightedContribution + c.dimensions.apy30d.weightedContribution + c.dimensions.currentApy.weightedContribution + c.dimensions.apyStability.weightedContribution) * 1e6) / 1e6;
+    add("14W-AG: total equals the four weighted contributions", c.totalScore === sum, `${c.totalScore} vs ${sum}`);
+    add("14W-AH: total remains between 0 and 10", Object.values(cmp.candidateResults).every((r) => r.totalScore >= 0 && r.totalScore <= 10), "0-10");
+    add("14W-AI: no hidden bonus exists", Object.values(cmp.candidateResults).every((r) => r.totalScore === Math.round((r.dimensions.reviewedRiskScore.weightedContribution + r.dimensions.apy30d.weightedContribution + r.dimensions.currentApy.weightedContribution + r.dimensions.apyStability.weightedContribution) * 1e6) / 1e6), "no bonus");
+    const jitoR = cmp.candidateResults[IDS.jito];
+    add("14W-AJ: no incumbent Jito bonus exists", jitoR.totalScore === Math.round((jitoR.dimensions.reviewedRiskScore.weightedContribution + jitoR.dimensions.apy30d.weightedContribution + jitoR.dimensions.currentApy.weightedContribution + jitoR.dimensions.apyStability.weightedContribution) * 1e6) / 1e6, "no incumbent bonus");
+    add("14W-AK: no LST bonus exists", cmp.candidateResults[IDS.jupiter].dimensions.reviewedRiskScore.normalizedScore === 7.65, "no lst bonus");
+    const nat = cmp.candidateResults[IDS.jupiterNativeStake];
+    add("14W-AL: no native-staking penalty exists", nat.totalScore === Math.round((nat.dimensions.reviewedRiskScore.weightedContribution + nat.dimensions.apy30d.weightedContribution + nat.dimensions.currentApy.weightedContribution + nat.dimensions.apyStability.weightedContribution) * 1e6) / 1e6, "no native penalty");
+    add("14W-AM: adoption contributes zero weight", c.context.adoption.usedInScore === false, "zero");
+    add("14W-AN: fees contribute zero weight", c.context.annualManagementFee.usedInScore === false && c.context.validatorCommission.usedInScore === false && c.context.directUnstakeFee.usedInScore === false, "zero");
+    add("14W-AO: exit mechanics contribute zero weight", c.context.exitModel.usedInScore === false, "zero");
+  }
+
+  // 14W-AP…AY. Ranking + tie-breaks.
+  add("14W-AP: higher total ranks first", diag.every((d, i) => i === 0 || diag[i - 1].totalScore >= d.totalScore - P.tieEpsilon), "sorted");
+  {
+    const rk = (over: Partial<SelectorRankable>): SelectorRankable => ({ totalScore: 5, reviewedRiskScore: 7, apy30d: 5, absApyDelta: 0.2, currentApy: 5, canonicalOrderIndex: 3, ...over });
+    const a = rk({}); const bRisk = rk({ reviewedRiskScore: 6 });
+    add("14W-AQ: equal total uses reviewed risk as first tie-break", compareForRank(a, bRisk, P.tieEpsilon) < 0 && decidingTieBreak(a, bRisk) === "reviewed_risk_score", "risk");
+    const b30 = rk({ apy30d: 4 });
+    add("14W-AR: next tie-break uses 30-day APY", compareForRank(a, b30, P.tieEpsilon) < 0 && decidingTieBreak(a, b30) === "apy_30d", "apy_30d");
+    const bStab = rk({ absApyDelta: 0.5 });
+    add("14W-AS: next tie-break uses lower absolute APY delta", compareForRank(a, bStab, P.tieEpsilon) < 0 && decidingTieBreak(a, bStab) === "apy_stability", "stability");
+    const bCur = rk({ currentApy: 4 });
+    add("14W-AT: next tie-break uses current APY", compareForRank(a, bCur, P.tieEpsilon) < 0 && decidingTieBreak(a, bCur) === "current_apy", "current");
+    const bCanon = rk({ canonicalOrderIndex: 5 });
+    add("14W-AU: final tie-break uses canonical order", compareForRank(a, bCanon, P.tieEpsilon) < 0 && decidingTieBreak(a, bCanon) === "canonical_order", "canonical");
+  }
+  {
+    const ranks = cmp.rankedCandidateIds.map((id) => cmp.candidateResults[id].rank).sort((x, y) => x - y);
+    add("14W-AV: ranks are contiguous and unique", ranks.every((r, i) => r === i + 1) && new Set(ranks).size === ranks.length, ranks.join(","));
+    add("14W-AW: ranked IDs match candidate result ranks", cmp.rankedCandidateIds.every((id, i) => cmp.candidateResults[id].rank === i + 1), "match");
+    add("14W-AX: comparison leader equals rank 1", cmp.comparisonLeaderCandidateId === cmp.rankedCandidateIds[0] && cmp.candidateResults[cmp.comparisonLeaderCandidateId!].rank === 1, `leader=${cmp.comparisonLeaderCandidateId}`);
+  }
+  {
+    const items: SelectorRankable[] = cmp.eligibleCandidateIds.map((id) => { const c = cmp.candidateResults[id]; return { totalScore: c.totalScore, reviewedRiskScore: c.dimensions.reviewedRiskScore.rawValue, apy30d: c.dimensions.apy30d.rawValue, absApyDelta: c.dimensions.apyStability.rawValue, currentApy: c.dimensions.currentApy.rawValue, canonicalOrderIndex: c.canonicalOrderIndex }; });
+    const fwd = [...items].sort((x, y) => compareForRank(x, y, P.tieEpsilon)).map((x) => x.canonicalOrderIndex);
+    const rev = [...items].reverse().sort((x, y) => compareForRank(x, y, P.tieEpsilon)).map((x) => x.canonicalOrderIndex);
+    add("14W-AY: input order does not change deterministic ranking", JSON.stringify(fwd) === JSON.stringify(rev), "stable");
+  }
+
+  // 14W-AZ…BI. Context.
+  add("14W-AZ: LST TVL is preserved as non-scored context", rMar.context.adoption.key === "tvl_usd" && rMar.context.adoption.comparisonScope === "lst_only" && rMar.context.adoption.usedInScore === false, "tvl context");
+  add("14W-BA: native delegated stake is preserved as non-scored context", cmp.candidateResults[IDS.jupiterNativeStake].context.adoption.key === "delegated_stake_sol" && cmp.candidateResults[IDS.jupiterNativeStake].context.adoption.comparisonScope === "native_only", "stake context");
+  add("14W-BB: validator commission is preserved separately", cmp.candidateResults[IDS.jupiterNativeStake].context.validatorCommission.value === 5 && cmp.candidateResults[IDS.jupiterNativeStake].context.validatorCommission.usedInScore === false, "separate");
+  add("14W-BC: management fee is preserved separately", rMar.context.annualManagementFee.value === 0 && rMar.context.annualManagementFee.usedInScore === false, "separate");
+  add("14W-BD: direct unstake fee is preserved separately", rMar.context.directUnstakeFee.value === 0.2 && rMar.context.directUnstakeFee.usedInScore === false, "separate");
+  add("14W-BE: exit model is preserved as descriptive context", rMar.context.exitModel.comparisonScope === "descriptive_only" && rMar.context.exitModel.usedInScore === false, "exit ctx");
+  add("14W-BF: token model is preserved as descriptive context", rMar.context.tokenModel.comparisonScope === "descriptive_only" && rMar.context.tokenModel.usedInScore === false, "token ctx");
+  {
+    const j = JSON.stringify(cmp).toLowerCase();
+    add("14W-BG: no synthetic adoption score exists", !j.includes("adoptionscore") && !j.includes("adoption_score"), "none");
+    add("14W-BH: no synthetic fee score exists", !j.includes("feescore") && !j.includes("fee_score"), "none");
+    add("14W-BI: no synthetic liquidity score exists", !j.includes("liquidityscore") && !j.includes("liquidity_score"), "none");
+  }
+
+  // 14W-BJ…BO. Result validation.
+  add("14W-BJ: candidate-result validator accepts a valid result", validateSolStakingSelectorCandidateResult(rMar).valid === true, "valid");
+  add("14W-BK: candidate-result validator rejects a mismatched total", validateSolStakingSelectorCandidateResult({ ...rMar, totalScore: rMar.totalScore + 1 }).valid === false, "rejected");
+  add("14W-BL: comparison validator accepts a valid result", validateSolStakingSelectorComparisonResult(cmp).valid === true, "valid");
+  add("14W-BM: comparison validator rejects a non-rank-1 leader", validateSolStakingSelectorComparisonResult({ ...cmp, comparisonLeaderCandidateId: cmp.rankedCandidateIds[1] }).valid === false, "rejected");
+  add("14W-BN: comparison validator rejects a scored excluded candidate", validateSolStakingSelectorComparisonResult({ ...cmp, excludedCandidateIds: [...cmp.excludedCandidateIds, cmp.rankedCandidateIds[0]] }).valid === false, "rejected");
+  add("14W-BO: comparison validator rejects enabled activation flags", validateSolStakingSelectorComparisonResult({ ...cmp, winnerActivated: true } as never).valid === false, "rejected");
+
+  // 14W-BP…BY. Product invariants.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const engineRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stakingSug = engineRun.suggestions.find((s) => s.category === "staking");
+  add("14W-BP: current selected protocol remains Jito", cmp.currentSelectedCandidateId === "jito" && stakingSug?.protocolSelection?.selectedProtocolId === "jito", `sel=${cmp.currentSelectedCandidateId}`);
+  add("14W-BQ: selectedProtocolIdChanged is false", cmp.selectedProtocolIdChanged === false, "false");
+  add("14W-BR: winnerActivated is false", cmp.winnerActivated === false && Object.values(cmp.candidateResults).every((c) => c.activated === false && c.currentWinner === false), "false");
+  add("14W-BS: multi-protocol selection remains disabled", cmp.multiProtocolSelectionEnabled === false && engineRun.suggestions.filter((s) => s.category === "staking").length === 1, "disabled");
+  add("14W-BT: Top Pick remains unchanged", cmp.topPickChanged === false && engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => s.protocolSelection?.selectedProtocolName !== "Jupiter Native Stake"), "unchanged");
+  add("14W-BU: engine ordering remains unchanged", cmp.engineOrderingChanged === false && engineRun.suggestions.every((s) => s.id !== "jupiter_native_stake" && !s.id.startsWith("sol_staking")), "unchanged");
+  {
+    const prodFiles = ["src/suggestions/stakingSuggestion.ts", "src/suggestions/suggestionReviewDetails.ts", "src/components/SuggestionReviewModal.tsx", "src/suggestions/demoExactSolStakingScenario.ts"];
+    const anyImport = prodFiles.some((f) => readIf(f).includes("solStakingSelector"));
+    add("14W-BV: no product-facing selector import exists", anyImport === false, "no import");
+  }
+  add("14W-BW: no product UI update exists", SOL_STAKING_SELECTOR_UPDATES_PRODUCT_UI === false, "false");
+  {
+    const msol = buildMsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    const jup = buildJupsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    const bsol = buildBsolReadOnlyReviewCandidateDisplay({ checkedAt: "2026-07-14T02:30:00Z" });
+    add("14W-BX: Jito/mSOL/JupSOL/bSOL/native review behavior remains unchanged", msol.riskScore === 7.4 && jup.riskScore === 7.65 && bsol.riskScore === 7.35 && stakingSug?.protocolSelection?.selectedProtocolName === "Jito", "unchanged");
+  }
+  add("14W-BY: INF remains blocked", getInfReadOnlyApprovalDecision({ checkedAt: "2026-07-14T02:30:00Z" }) === null && cmp.candidateResults[IDS.sanctum] === undefined, "blocked");
+
+  // 14W-BZ…CB. Execution invariants.
+  {
+    const j = JSON.stringify(cmp).toLowerCase();
+    const tokens = ["sendtransaction", "signmessage", "signtransaction", "signalltransactions", "stake(", "delegate(", "withdraw(", "swap(", "deposit(", "approve(", "execute("];
+    add("14W-BZ: no transaction path exists", cmp.transactionsEnabled === false && tokens.filter((t) => j.includes(t)).length === 0, "none");
+    add("14W-CA: no signature path exists", cmp.walletSignatureRequired === false && Object.values(cmp.candidateResults).every((c) => c.walletSignatureRequired === false), "none");
+    add("14W-CB: no stake/delegate/withdraw/swap/deposit/approve/execute handler exists", tokens.filter((t) => j.includes(t)).length === 0, "none");
+  }
+
+  // 14W-CC…CF. Cache QA (synthetic fresh + stale) + independent recompute.
+  add("14W-CC: fresh cache produces a complete comparison when at least two candidates are ready", cmp.status === "complete" && cmp.eligibleCandidateIds.length >= 2, `n=${cmp.eligibleCandidateIds.length}`);
+  {
+    const allStaleCache = buildSolStakingMarketCache({ checkedAt: CHECKED, defiLlama: { payload: dllValid, fetchedAt: OLD }, stakewiz: { payload: stakewiz, fetchedAt: OLD }, marinade: { payload: marinadeValid, fetchedAt: OLD } });
+    const allStaleSet = buildNormalizedSolStakingCandidateSet(allStaleCache, { checkedAt: CHECKED });
+    const allStaleCmp = buildSolStakingSelectorComparison(allStaleSet, { checkedAt: CHECKED });
+    add("14W-CD: stale cache does not force comparison", allStaleCmp.status !== "complete", `status=${allStaleCmp.status}`);
+  }
+  {
+    // Independent recompute of the leader from the formula.
+    const items = cmp.eligibleCandidateIds.map((id) => { const c = cmp.candidateResults[id]; return { id, risk: c.dimensions.reviewedRiskScore.rawValue, a30: c.dimensions.apy30d.rawValue, cur: c.dimensions.currentApy.rawValue, ad: c.dimensions.apyStability.rawValue, idx: c.canonicalOrderIndex }; });
+    const rd = (n: number) => Math.round(n * 1e6) / 1e6;
+    const h30 = normalizeHigherIsBetter(items.map((x) => x.a30), { minimumRange: P.minApyRangePctPoints, precision: 6 });
+    const hcur = normalizeHigherIsBetter(items.map((x) => x.cur), { minimumRange: P.minApyRangePctPoints, precision: 6 });
+    const lstab = normalizeLowerIsBetter(items.map((x) => x.ad), { minimumRange: P.minStabilityRangePctPoints, precision: 6 });
+    const totals = items.map((x, i) => ({ id: x.id, t: rd(rd(x.risk * 0.5) + rd(h30[i] * 0.3) + rd(hcur[i] * 0.1) + rd(lstab[i] * 0.1)) }));
+    const indieLeader = [...totals].sort((x, y) => y.t - x.t)[0].id;
+    add("14W-CE: cache leader is produced by the formula, not hardcoded", indieLeader === cmp.comparisonLeaderCandidateId, `indie=${indieLeader} result=${cmp.comparisonLeaderCandidateId}`);
+    add("14W-CF: independent recomputation matches the result", items.every((x, i) => cmp.candidateResults[x.id].totalScore === totals[i].t), "matches");
+  }
+
+  // explain helper smoke.
+  add("14W-explain: explain helper returns diagnostics without product copy", (explainSolStakingSelectorCandidate(cmp, cmp.comparisonLeaderCandidateId!)?.rank === 1), "explain");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -10578,6 +10843,7 @@ export function printFixtureResults(): void {
     ...runNativeStakingMarinadeFixtureChecks(),
     ...runSolStakingMarketRefreshFixtureChecks(),
     ...runSolStakingNormalizationFixtureChecks(),
+    ...runSolStakingSelectorComparisonFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

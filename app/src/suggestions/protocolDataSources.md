@@ -871,3 +871,14 @@ from the existing score modules (not recalculated); fees stay separate (no synth
 adoption units stay distinct (USD TVL vs SOL delegated stake, never interchangeable). No scoring,
 ranking, winner, weights, UI, or execution. See
 [solStakingCandidateNormalization.md](./solStakingCandidateNormalization.md).
+
+## 14W — read-only selector comparison
+
+Deterministic comparison over the Step 14V selector-ready candidates under
+`balanced_safety_first_v1` (reviewed risk 0.50 used exactly + 30-day APY 0.30 + current APY 0.10 +
+APY stability 0.10; total 1.00). Only cross-candidate comparable metrics are scored; adoption/fees/
+exit/token model remain zero-weight descriptive context (no cross-type TVL-vs-stake or fee
+comparison). Produces a transparent per-dimension breakdown, a deterministic ranking (canonical
+order as final tie-break), and a "comparison leader" — with NO activation: `selectedProtocolId`
+unchanged, no product winner, no UI/Top-Pick/ordering change, no execution, INF never scored. See
+[solStakingSelectorComparison.md](./solStakingSelectorComparison.md).
