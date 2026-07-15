@@ -832,6 +832,33 @@ import {
 import { getYieldStrategyRegistryDiagnostics } from "./yieldStrategyRegistryDiagnostics";
 import { YIELD_STRATEGY_REGISTRY_EXISTS as YIELD_REGISTRY_FLAG } from "./investmentTargetRegistry";
 import {
+  YIELD_STRATEGY_MARKET_DATA_SCHEMA_VERSION,
+  YIELD_STRATEGY_MARKET_DATA_POLICY_ID,
+  YIELD_STRATEGY_MARKET_DATA_POLICY_VERSION,
+  type YieldStrategyMarketDataInput,
+} from "./yieldStrategyMarketDataTypes";
+import {
+  YIELD_STRATEGY_MARKET_DATA_MAX_AGE_MS,
+  YIELD_STRATEGY_BUFFER_LANE_MAX_AGE_MS,
+  YIELD_SUPPORTED_WITHDRAWAL_STATUSES,
+  getYieldStrategyMarketDataPolicy,
+  evaluateMarketFreshness,
+  isApyDefinitionSufficientForComparison,
+} from "./yieldStrategyMarketDataPolicy";
+import {
+  YIELD_STRATEGY_MARKET_DATA_EXISTS as YIELD_MARKET_DATA_FLAG_CONST,
+  buildYieldStrategyMarketDataSet,
+  buildEmptyApprovedYieldStrategyMarketDataSet,
+  listYieldStrategyMarketSnapshots,
+  getYieldStrategyMarketSnapshot,
+  getApprovedYieldStrategyMarketSnapshots,
+  getMarketReadyYieldStrategySnapshots,
+  validateYieldStrategyMarketSnapshot,
+  validateYieldStrategyMarketDataSet,
+} from "./yieldStrategyMarketData";
+import { getYieldStrategyMarketDataDiagnostics } from "./yieldStrategyMarketDataDiagnostics";
+import { YIELD_STRATEGY_MARKET_DATA_EXISTS as YIELD_MARKET_DATA_FLAG } from "./investmentTargetRegistry";
+import {
   STABLE_YIELD_POLICY_EXISTS,
   STABLE_YIELD_REGISTRY_EXISTS,
   STABLE_YIELD_COMPARISON_EXISTS,
@@ -14060,6 +14087,118 @@ export function runYieldStrategyRegistryFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 16C — Stable Yield market-data layer fixtures (16C-A…AD). Verifies the versioned freshness/
+ * validity policy, the registry→market-data join, exact identity + APY-meaning + TVL + liquidity/
+ * withdrawal preservation, freshness (buffer lane stricter), provenance, the empty-approved state, the
+ * fail-closed validators, the coverage diagnostics, and that nothing downstream is enabled.
+ */
+export function runYieldStrategyMarketDataFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const checkedAt = "2026-07-15T00:00:00.000Z";
+  const set = buildEmptyApprovedYieldStrategyMarketDataSet(checkedAt);
+  const snaps = listYieldStrategyMarketSnapshots(set);
+  const diag = getYieldStrategyMarketDataDiagnostics(set);
+  const policy = getYieldStrategyMarketDataPolicy();
+  const registryOrder = listYieldStrategies().map((e) => e.strategyId);
+  const s0 = getYieldStrategyMarketSnapshot(set, "kamino_steakhouse_usdc")!;
+  const lending = getYieldStrategyMarketSnapshot(set, "kamino_usdc_lending")!;
+
+  // A SYNTHETIC complete+approved snapshot — a validator UNIT fixture only; NOT added to the registry
+  // (no dummy approved vault, no fabricated registry product). Proves the "when approved" path works.
+  const synthetic = {
+    ...s0,
+    lifecycle: "approved",
+    address: "SYNTHETIC_TEST_ONLY",
+    status: "complete",
+    approvedForMarketData: true,
+    marketDataComplete: true,
+    marketDataFresh: true,
+    eligibleForFutureComparison: true,
+    blockers: [] as string[],
+    supportedLane: "safety_buffer_yield",
+    riskLane: "buffer_eligible",
+    apy: { status: "fresh", apyDefinition: "net", apyWindow: "current", currentApyPct: 5.2, netApyPct: 5.2, definitionSufficientForComparison: true, notes: [] },
+    tvl: { status: "fresh", tvlUsd: 1_000_000, currency: "USD", notes: [] },
+    liquidity: { status: "fresh", withdrawalStatus: "instant_currently_available", liquidityConfidence: "explicit_source", notes: [] },
+    provenance: { kind: "documented_source", sourceId: "unit_source", browserFetched: false, present: true },
+  };
+
+  // 16C-A…E. Versions + policy + flag.
+  add("16C-A: market-data schema version exists", YIELD_STRATEGY_MARKET_DATA_SCHEMA_VERSION === "1.0.0" && set.schemaVersion === "1.0.0", YIELD_STRATEGY_MARKET_DATA_SCHEMA_VERSION);
+  add("16C-B: market-data policy ID/version exist", YIELD_STRATEGY_MARKET_DATA_POLICY_ID === "yield_strategy_market_data_v1" && YIELD_STRATEGY_MARKET_DATA_POLICY_VERSION === "1.0.0" && policy.policyId === YIELD_STRATEGY_MARKET_DATA_POLICY_ID, YIELD_STRATEGY_MARKET_DATA_POLICY_ID);
+  add("16C-C: YIELD_STRATEGY_MARKET_DATA_EXISTS is enabled (module + registry flag)", YIELD_MARKET_DATA_FLAG_CONST === true && YIELD_MARKET_DATA_FLAG === true, "exists");
+  add("16C-D: freshness is versioned; excess lane 60m, Safety Buffer lane stricter 15m", YIELD_STRATEGY_MARKET_DATA_MAX_AGE_MS === 60 * 60 * 1000 && YIELD_STRATEGY_BUFFER_LANE_MAX_AGE_MS === 15 * 60 * 1000 && YIELD_STRATEGY_BUFFER_LANE_MAX_AGE_MS < YIELD_STRATEGY_MARKET_DATA_MAX_AGE_MS, `${YIELD_STRATEGY_MARKET_DATA_MAX_AGE_MS}/${YIELD_STRATEGY_BUFFER_LANE_MAX_AGE_MS}`);
+  add("16C-E: the market-data set validates", validateYieldStrategyMarketDataSet(set).valid === true, "valid");
+
+  // 16C-F…H. Registry join + identity + lane metadata.
+  add("16C-F: candidate order equals registry order (no metric reordering); every product present", JSON.stringify(set.canonicalCandidateOrder) === JSON.stringify(registryOrder) && snaps.length === registryOrder.length && snaps.length === 5, `${snaps.length}`);
+  add("16C-G: exact registry identity is preserved (id/name/protocol/type/asset/lane)", s0.strategyId === "kamino_steakhouse_usdc" && s0.displayName === "Kamino Steakhouse USDC" && s0.protocolId === "kamino" && s0.strategyType === "managed_vault" && s0.principalAsset === "USDC" && s0.supportedLane === "excess_usdc_yield", "identity");
+  add("16C-H: lane-compatibility metadata is preserved (never selected); a lending buffer product is a buffer candidate", lending.laneCompatibility.bufferLaneCandidate === true && s0.laneCompatibility.bufferLaneCandidate === false && lending.laneCompatibility.bufferLaneFreshnessMaxAgeMs === YIELD_STRATEGY_BUFFER_LANE_MAX_AGE_MS, "lane metadata");
+
+  // 16C-I…K. Zero-approved empty state.
+  add("16C-I: the approved candidate set is empty (no product is approved yet)", set.emptyApprovedSet === true && set.approvedCandidateIds.length === 0 && getApprovedYieldStrategyMarketSnapshots(set).length === 0, "0 approved");
+  add("16C-J: every snapshot is unavailable/documentation-only; market-ready set is empty", snaps.every((s) => s.status === "unavailable" && s.approvedForMarketData === false && s.eligibleForFutureComparison === false) && set.marketReadyCandidateIds.length === 0 && getMarketReadyYieldStrategySnapshots(set).length === 0, "empty-allowed");
+  add("16C-K: non-approved products carry NO market values and are blocked as product_not_approved", snaps.every((s) => s.apy.currentApyPct === undefined && s.tvl.tvlUsd === undefined && s.blockers.includes("product_not_approved") && s.provenance.present === false), "no values");
+
+  // 16C-L…M. No auto-approval; input guards.
+  {
+    const withInputs = buildYieldStrategyMarketDataSet({ checkedAt, inputs: [{ strategyId: "kamino_steakhouse_usdc", sourceId: "s", fetchedAt: checkedAt, apy: { currentApyPct: 5, apyDefinition: "net", apyWindow: "current" }, tvlUsd: 1000 } as YieldStrategyMarketDataInput] });
+    const s = getYieldStrategyMarketSnapshot(withInputs, "kamino_steakhouse_usdc")!;
+    add("16C-L: injecting market data for a documentation_required product NEVER promotes/approves it", s.status === "unavailable" && s.approvedForMarketData === false && withInputs.emptyApprovedSet === true && s.apy.currentApyPct === undefined, "not promoted");
+  }
+  {
+    const noise = buildYieldStrategyMarketDataSet({ checkedAt, inputs: [{ strategyId: "does_not_exist" }, { strategyId: "kamino_usdc_lending" }, { strategyId: "kamino_usdc_lending" }] as YieldStrategyMarketDataInput[] });
+    add("16C-M: unknown and duplicate market-data inputs are ignored (fail closed with notes)", noise.notes.some((n) => n.startsWith("ignored_unknown_input")) && noise.notes.some((n) => n.startsWith("ignored_duplicate_input")), "guarded");
+  }
+
+  // 16C-N…O. APY meaning preserved (net/gross vs unknown), never collapsed.
+  add("16C-N: only net/gross APY is comparison-sufficient; unknown/estimated/variable are not", isApyDefinitionSufficientForComparison("net") && isApyDefinitionSufficientForComparison("gross") && !isApyDefinitionSufficientForComparison("unknown") && !isApyDefinitionSufficientForComparison("estimated") && !isApyDefinitionSufficientForComparison("variable"), "definition");
+  add("16C-O: a net APY is preserved as net (sufficient); an unknown APY is preserved, not dropped", synthetic.apy.apyDefinition === "net" && synthetic.apy.definitionSufficientForComparison === true && validateYieldStrategyMarketSnapshot({ ...synthetic, apy: { ...synthetic.apy, apyDefinition: "unknown", definitionSufficientForComparison: false } }).valid === true, "preserved");
+
+  // 16C-P. TVL preserved / negative rejected.
+  add("16C-P: exact TVL is preserved; a negative/non-finite TVL is rejected", synthetic.tvl.tvlUsd === 1_000_000 && validateYieldStrategyMarketSnapshot({ ...synthetic, tvl: { ...synthetic.tvl, tvlUsd: -5 } }).errors.includes("invalid_tvl_value"), "tvl");
+
+  // 16C-Q. Liquidity/withdrawal explicit + supported.
+  add("16C-Q: withdrawal state is explicit and first-class; an unknown state is never treated as instant", (YIELD_SUPPORTED_WITHDRAWAL_STATUSES as readonly string[]).includes("instant_currently_available") && s0.liquidity.withdrawalStatus === "unknown" && s0.liquidity.liquidityConfidence === "unknown", "explicit");
+
+  // 16C-R…T. Freshness (missing/fresh/stale/future) + buffer lane stricter.
+  add("16C-R: freshness is explicit: missing timestamp → missing; same-instant → fresh; 2h old (60m bound) → stale", evaluateMarketFreshness(undefined, checkedAt, YIELD_STRATEGY_MARKET_DATA_MAX_AGE_MS).status === "missing" && evaluateMarketFreshness(checkedAt, checkedAt, YIELD_STRATEGY_MARKET_DATA_MAX_AGE_MS).status === "fresh" && evaluateMarketFreshness("2026-07-14T22:00:00.000Z", checkedAt, YIELD_STRATEGY_MARKET_DATA_MAX_AGE_MS).status === "stale", "freshness");
+  add("16C-S: a timestamp in the future beyond skew is invalid (no silent refresh)", evaluateMarketFreshness("2026-07-15T01:00:00.000Z", checkedAt, YIELD_STRATEGY_MARKET_DATA_MAX_AGE_MS).status === "invalid", "future invalid");
+  add("16C-T: the Safety Buffer lane is stricter — 30m-old data is fresh for excess but stale for buffer", evaluateMarketFreshness("2026-07-14T23:30:00.000Z", checkedAt, YIELD_STRATEGY_MARKET_DATA_MAX_AGE_MS).status === "fresh" && evaluateMarketFreshness("2026-07-14T23:30:00.000Z", checkedAt, YIELD_STRATEGY_BUFFER_LANE_MAX_AGE_MS).status === "stale", "stricter buffer");
+
+  // 16C-U…Z. Validators fail closed.
+  add("16C-U: a valid unavailable snapshot validates; a well-formed complete approved snapshot validates", validateYieldStrategyMarketSnapshot(s0).valid === true && validateYieldStrategyMarketSnapshot(synthetic).valid === true, "valid");
+  add("16C-V: a non-approved snapshot carrying market values is rejected", validateYieldStrategyMarketSnapshot({ ...s0, apy: { ...s0.apy, currentApyPct: 5 } }).errors.includes("non_approved_carries_market_values"), "rejected");
+  add("16C-W: an enabled capability flag or a browser-fetched provenance is rejected", validateYieldStrategyMarketSnapshot({ ...s0, comparisonEvaluated: true }).valid === false && validateYieldStrategyMarketSnapshot({ ...s0, provenance: { ...s0.provenance, browserFetched: true } }).valid === false, "rejected");
+  add("16C-X: a fabricated approval (approvedForMarketData without approved lifecycle + address) is rejected", validateYieldStrategyMarketSnapshot({ ...s0, approvedForMarketData: true }).errors.includes("approved_market_data_without_approved_lifecycle"), "rejected");
+  add("16C-Y: an eligible snapshot that is not complete is rejected", validateYieldStrategyMarketSnapshot({ ...synthetic, status: "partial" }).errors.includes("eligible_without_complete"), "rejected");
+  add("16C-Z: a buffer-lane eligible snapshot without instant liquidity is rejected", validateYieldStrategyMarketSnapshot({ ...synthetic, liquidity: { ...synthetic.liquidity, withdrawalStatus: "withdrawal_required" } }).errors.includes("buffer_lane_eligible_without_instant_liquidity"), "rejected");
+
+  // 16C-AA. Set validator fails closed.
+  add("16C-AA: the set validator rejects order drift, market-ready-without-approval, and an inconsistent empty flag", validateYieldStrategyMarketDataSet({ ...set, canonicalCandidateOrder: [...set.canonicalCandidateOrder].reverse() }).errors.includes("canonical_order_altered") && validateYieldStrategyMarketDataSet({ ...set, marketReadyCandidateIds: ["kamino_usdc_lending"] }).errors.some((e) => e.startsWith("market_ready_without_approval")) && validateYieldStrategyMarketDataSet({ ...set, emptyApprovedSet: false }).errors.includes("empty_approved_flag_inconsistent"), "fail closed");
+
+  // 16C-AB. Diagnostics: coverage only, no comparison.
+  add("16C-AB: diagnostics report coverage counts, the empty-approved state, and no leader/winner/ranking", diag.registeredCandidates === snaps.length && diag.approvedCandidates === 0 && diag.emptyApprovedSet === true && diag.byStatus.unavailable === snaps.length && diag.marketReadyCandidates === 0 && diag.comparisonEvaluated === false && diag.rankingCalculated === false && diag.leaderSelected === false && diag.suggestionGenerated === false, "coverage only");
+
+  // 16C-AC…AD. No downstream execution / no product import.
+  {
+    const blob = ["yieldStrategyMarketDataTypes", "yieldStrategyMarketDataPolicy", "yieldStrategyMarketData", "yieldStrategyMarketDataDiagnostics"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+    const forbidden = ["sendtransaction", "signtransaction", "fetch(", "fetchapy", "fetchtvl", "buy(", "swap(", "deposit(", "usequery", "useeffect"];
+    add("16C-AC: no fetch/execution/React path exists in the market-data files", snaps.every((s) => s.comparisonEvaluated === false && s.transactionsEnabled === false && s.walletSignatureRequired === false) && set.comparisonEvaluated === false && set.leaderSelected === false && forbidden.filter((h) => blob.includes(h)).length === 0, "read-only");
+  }
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    add("16C-AD: no product-facing file imports the Stable Yield market-data layer", prodFiles.every((f) => !/yieldStrategyMarketData/.test(readIf(f))), "no product import");
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -14148,6 +14287,7 @@ export function printFixtureResults(): void {
     ...runContributionFinalizationFixtureChecks(),
     ...runStableYieldPolicyFixtureChecks(),
     ...runYieldStrategyRegistryFixtureChecks(),
+    ...runYieldStrategyMarketDataFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

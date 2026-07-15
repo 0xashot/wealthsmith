@@ -940,3 +940,18 @@ backend-normalized portfolio USD, or a same-origin runtime payload. It adds NO d
 from React/components, invents no timestamp or provenance, and rejects fixture quotes in real_wallet
 mode. Growth plans require a fresh (≤60 min), approved-source, same-origin/backend-normalized quote;
 the Safety Buffer plan needs no SOL price.
+
+## 16C — Stable Yield market-data source contract
+
+Stable Yield market data (Step 16C) uses a validated per-product CONTRACT, not a new fetcher
+(`yield_strategy_market_data_v1`). Market data is **injected** into `buildYieldStrategyMarketDataSet`
+as documented inputs keyed by the 16B registry `strategyId` — nothing is fetched here, and never from
+React (`browserFetched: false` is required; a browser-fetched provider value is rejected). A product
+only carries market data when it is `approved` **and** has a documented exact address; every value
+preserves its source's APY definition/window, exact TVL (USD), and explicit withdrawal state, with
+provenance (`sourceId`/`sourceLabel`/`sourceUrl`) and freshness. Freshness: Excess-USDC lane ≤60 min
+(the stricter canonical price bound), Safety-Buffer lane ≤15 min. **No stable-yield data source is
+wired yet** — no 16B product is approved with a documented address, so the approved candidate set is
+empty and every snapshot is a documentation-only `unavailable` state. When exact products are
+documented + approved (a later step), their inputs will normalize through this same contract. See
+[yieldStrategyMarketData.md](./yieldStrategyMarketData.md).

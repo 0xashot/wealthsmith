@@ -1672,3 +1672,19 @@ duplicate ids/addresses/doc-ids, unsupported/forbidden protocols, unknown lifecy
 approved product missing documentation/URL/asset, and the buffer lane on a non-buffer-eligible type.
 Diagnostics are inventory counts only. `YIELD_STRATEGY_REGISTRY_EXISTS`/`STABLE_YIELD_REGISTRY_EXISTS =
 true`; market-data/comparison/detection/suggestions/UI/testing/execution stay `false`.
+
+## 16C — Stable Yield market-data layer
+
+The deterministic live-market contract ([yieldStrategyMarketData.md](./yieldStrategyMarketData.md),
+`yield_strategy_market_data_v1`). It joins the 16B registry (candidate identity) to injected, documented
+market-data inputs and produces one per-product snapshot: APY (definition + window preserved, never
+collapsed; only net/gross is comparison-sufficient), TVL (exact USD), liquidity/withdrawal (explicit
+`withdrawalStatus`, never inferred), fees (each separate), plus freshness + provenance
+(`browserFetched: false`; never fetched from React). Versioned freshness: excess lane 60m (the stricter
+canonical price bound), Safety-Buffer lane stricter still at 15m. **The approved candidate set is empty**
+— no 16B product is `approved`, so every snapshot is a documentation-only `unavailable` state,
+`emptyApprovedSet = true`, and market-ready is empty; injecting data for a `documentation_required`
+product never promotes it. Validators fail closed on fabricated approval, browser-fetched provenance,
+non-approved products carrying values, order drift, and negative/non-finite magnitudes. Diagnostics are
+coverage counts only. `YIELD_STRATEGY_MARKET_DATA_EXISTS = true`; comparison/eligibility/detection/
+suggestions/UI/testing/execution stay `false`.

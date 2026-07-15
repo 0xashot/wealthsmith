@@ -63,7 +63,13 @@ export const STABLE_YIELD_POLICY_EXISTS = true;
 // the documented Kamino/Raydium/Meteora/Hubble scope). Everything downstream stays disabled.
 export const STABLE_YIELD_REGISTRY_EXISTS = true;
 export const YIELD_STRATEGY_REGISTRY_EXISTS = true;
+// Step 16C — the deterministic Stable Yield market-data layer now exists (per-approved-product APY /
+// TVL / liquidity / withdrawal snapshots with freshness + provenance, joined from the 16B registry).
+// It compares nothing, ranks nothing, suggests nothing, and reads nothing from React; the approved
+// candidate set is empty until documented products are promoted. Everything downstream stays disabled.
+export const YIELD_STRATEGY_MARKET_DATA_EXISTS = true;
 export const STABLE_YIELD_COMPARISON_EXISTS = false;
+export const STABLE_YIELD_ELIGIBILITY_EXISTS = false;
 export const STABLE_YIELD_WALLET_DETECTION_EXISTS = false;
 export const STABLE_YIELD_SUGGESTIONS_EXIST = false;
 export const STABLE_YIELD_UI_ENABLED = false;
