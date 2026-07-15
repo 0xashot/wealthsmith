@@ -930,3 +930,13 @@ finite, >0, from an approved source, with valid provenance/timestamps, not futur
 small skew, and ≤60 minutes old (`SOL_CONTRIBUTION_PRICE_MAX_AGE_MS`). Browser-fetched external-
 provider prices are rejected. USDC funding uses the existing normalized USD valuation (not hardcoded
 $1). See [contributionPlanningPolicies.md](./contributionPlanningPolicies.md).
+
+## 15H — contribution price provenance in product integration
+
+The Step 15H price adapter (`contributionPriceAdapter.ts`) builds the Step 15C contribution price
+quote from the EXISTING canonical price infrastructure only — the internal token-price service
+(`wallet/tokenPrices.ts`, source id `token_price_service`, behind which DefiLlama/Jupiter sit),
+backend-normalized portfolio USD, or a same-origin runtime payload. It adds NO direct provider call
+from React/components, invents no timestamp or provenance, and rejects fixture quotes in real_wallet
+mode. Growth plans require a fresh (≤60 min), approved-source, same-origin/backend-normalized quote;
+the Safety Buffer plan needs no SOL price.

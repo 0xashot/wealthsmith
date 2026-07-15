@@ -1589,3 +1589,24 @@ source is used — no mixed funding, no alternative plan, no residual routing. O
 calendar date; no product-facing import; product behavior unchanged.
 `CONTRIBUTION_PLANNING_EXISTS`/`DCA_PLAN_GENERATION_EXISTS`/`CONTRIBUTION_PLAN_*_EXISTS = true`;
 suggestion / product-facing target-selection / execution flags stay `false` until Step 15H.
+
+## 15H — contribution/DCA product integration (engine layer)
+
+Connects the 15A–15G pipeline to the product ([contributionPlanIntegration.md](./contributionPlanIntegration.md)).
+`buildContributionPlanPipeline` runs 15B→15G from canonical state via three fail-closed adapters
+(portfolio → reuses the canonical total + `deriveStableValue` + `duplicateExposure` SOL grouping, no
+double-count; liquidity → only canonically-classified `liquid_now` USDC; price → internal
+token-price service, 60-min freshness, no browser fetch), then `buildContributionPlanSuggestion` maps
+a ready plan to an `EngineSuggestion` carrying a structured payload (buffer→existing buffer family;
+stable/growth→`dca` with one primary reason; funding source is context).
+`mergeContributionPlanSuggestion` dedups (one buffer, one DCA — legacy DCA dropped); ordering/Top
+Pick reuse `CATEGORY_PRIORITY`/`selectTopPick` (buffer override absolute; Rebalance/Capital
+Efficiency outrank DCA). Deterministic card copy (`contributionPlanPresentation`) + shared-modal
+review sections (`contributionPlanReviewDetails`, relative "Start/Day 5/9/14" schedule, exact
+read-only notice) consume the payload — the UI never recalculates. Plan id stabilized (snapshot
+identity, not `checkedAt`). 30 `/testing` scenarios run the real pipeline. Real Wallet never falls
+back to fixtures; blocked/stale plans are suppressed. `DCA_SUGGESTION_ENABLED`,
+`CONTRIBUTION_TARGET_SELECTION_ENABLED`, `CONTRIBUTION_PLAN_UPDATES_PRODUCT_OUTPUT`,
+`CONTRIBUTION_PLAN_GENERATES_SUGGESTION`, and the integration/UI/pipeline flags are `true`; execution/
+automation/calendar-date flags stay `false`. Shared React card/modal + `/testing` route + Demo/Real
+hooks + browser validation are the follow-up.

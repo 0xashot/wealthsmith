@@ -87,7 +87,17 @@ export type SuggestionReasonCode =
   | "missing_apy_data"
   | "duplicate_exposure"
   | "concentration_risk"
-  | "unsupported_protocol_review";
+  | "unsupported_protocol_review"
+  // contribution / plan-backed DCA (Step 15H — deterministic contribution-plan pipeline)
+  | "stable_target_underweight"
+  | "growth_target_underweight"
+  | "stale_price"
+  | "unavailable_price"
+  | "stale_liquidity"
+  | "liquidity_unknown"
+  | "explicit_amount_required"
+  | "multiple_targets"
+  | "invalid_data";
 
 /**
  * What the suggestion offers the user in MVP.

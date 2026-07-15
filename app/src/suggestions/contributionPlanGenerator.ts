@@ -47,10 +47,27 @@ function fnv1a(str: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-/** Stable plan id from the semantic financial inputs (NOT generatedAt). */
-function buildPlanId(purpose: string, fundingSourceId: string, targetId: string, amount: ContributionPlanAmount, priorityCheckedAt: string, fundingCheckedAt: string): string {
+/**
+ * Stable plan id from the CANONICAL FINANCIAL identity — never `generatedAt` and never the
+ * refresh-prone `checkedAt` (Step 15H: an ordinary UI rerender that only bumps checkedAt must not
+ * mint a new card id). Uses policy versions + purpose + funding source + target + amount cents +
+ * the allocation snapshot id/version + the contribution-frequency result identity. A genuinely
+ * different portfolio snapshot (a new `sourceSnapshotId`/version) intentionally changes the id.
+ */
+function buildPlanId(
+  purpose: string,
+  fundingSourceId: string,
+  targetId: string,
+  amount: ContributionPlanAmount,
+  allocationGapResult: ContributionAllocationGapAnalysisResult | null | undefined,
+  priority: ContributionPriorityDecision,
+  funding: ContributionFundingSelectionResult,
+  frequencyNormalization: ContributionFrequencyNormalizationResult | undefined,
+): string {
   const amountKey = amount.kind === "exact" ? `e:${amount.exactAmountCents}` : `r:${amount.minimumAmountCents}-${amount.maximumAmountCents}`;
-  return `plan_${fnv1a([CONTRIBUTION_PLAN_POLICY_VERSION, purpose, fundingSourceId, targetId, amountKey, priorityCheckedAt, fundingCheckedAt].join("|"))}`;
+  const snapKey = allocationGapResult ? `${allocationGapResult.sourceSnapshotId ?? ""}:${allocationGapResult.sourcePortfolioVersion ?? ""}` : "no-snapshot";
+  const freqKey = frequencyNormalization ? `${frequencyNormalization.schemaVersion}:${frequencyNormalization.canonicalFrequencyId ?? ""}` : "no-freq";
+  return `plan_${fnv1a([CONTRIBUTION_PLAN_POLICY_VERSION, priority.policyVersion, funding.policyVersion, purpose, fundingSourceId, targetId, amountKey, snapKey, freqKey].join("|"))}`;
 }
 
 export interface BuildContributionPlanInput {
@@ -239,7 +256,7 @@ export function buildContributionPlan(input: BuildContributionPlanInput): Contri
   const status: "ready_exact" | "ready_range" = amount.kind === "range" ? "ready_range" : "ready_exact";
   const fundingTiming = primaryOpt.timing;
   const plan: ContributionPlan = {
-    planId: buildPlanId(purpose, primaryId, targetId, amount, priority.checkedAt, funding.checkedAt),
+    planId: buildPlanId(purpose, primaryId, targetId, amount, input.allocationGapResult, priority, funding, input.frequencyNormalization),
     schemaVersion: CONTRIBUTION_PLAN_SCHEMA_VERSION,
     policyId: CONTRIBUTION_PLAN_POLICY_ID,
     policyVersion: CONTRIBUTION_PLAN_POLICY_VERSION,

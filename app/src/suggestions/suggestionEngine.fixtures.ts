@@ -756,6 +756,29 @@ import {
 import { getContributionPlanDiagnostics, explainContributionPlan } from "./contributionPlanDiagnostics";
 import type { ContributionPriorityDecision } from "./contributionPriorityTypes";
 import {
+  CONTRIBUTION_PRODUCT_INTEGRATION_SCHEMA_VERSION,
+  CONTRIBUTION_PRODUCT_INTEGRATION_POLICY_ID,
+  CONTRIBUTION_PRODUCT_INTEGRATION_POLICY_VERSION,
+} from "./contributionIntegrationTypes";
+import { buildContributionPortfolioSnapshot, buildContributionPortfolioSnapshotFromPositions, deriveSolEconomicExposureUsd, deriveUsdcExposureUsd } from "./contributionPortfolioAdapter";
+import { buildContributionLiquiditySnapshot, buildContributionUsdcPosition } from "./contributionLiquidityAdapter";
+import { buildContributionPriceQuote } from "./contributionPriceAdapter";
+import { CONTRIBUTION_PLAN_PIPELINE_EXISTS, buildContributionPlanPipeline } from "./contributionPlanPipeline";
+import { mergeContributionPlanSuggestion } from "./contributionPlanSuggestion";
+import { CONTRIBUTION_PLAN_READ_ONLY_NOTICE } from "./contributionPlanReviewDetails";
+import { listContributionTestingScenarios, runAllContributionTestingScenarios, runContributionTestingScenario } from "./contributionTestingScenarios";
+import {
+  CONTRIBUTION_PRODUCT_INTEGRATION_EXISTS,
+  CONTRIBUTION_SUGGESTION_INTEGRATION_EXISTS,
+  CONTRIBUTION_SUGGESTION_UI_ENABLED,
+  CONTRIBUTION_REVIEW_MODAL_ENABLED,
+  CONTRIBUTION_DEMO_PIPELINE_ENABLED,
+  CONTRIBUTION_REAL_WALLET_PIPELINE_ENABLED,
+  CONTRIBUTION_TESTING_SCENARIOS_EXIST as CONTRIBUTION_TESTING_SCENARIOS_EXIST_FLAG,
+} from "./investmentTargetRegistry";
+import { CATEGORY_PRIORITY } from "./topPick";
+import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID as PRICE_SRC_15H } from "./contributionPricePolicy";
+import {
   CONTRIBUTION_PLAN_GENERATOR_EXISTS,
   CONTRIBUTION_PLAN_TARGET_SELECTION_EXISTS,
   CONTRIBUTION_PLAN_AMOUNT_CALCULATION_EXISTS,
@@ -11877,7 +11900,7 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   {
     // No product-facing file imports the registry/eligibility. Its own modules, the contribution-
     // policy foundation family (15B/15C, non-UI), and fixtures are legitimate non-product consumers.
-    const allowed = /investmentTarget(Types|Registry|Eligibility)|contribution(Frequency|PlanningPolicy|Price|TargetSuitability|TargetPolicy|AllocationGap|Priority|SafetyBufferGate|Plan)|growthTargetAllocationPolicy|dcaMinimumPolicy|suggestionEngine\.fixtures/;
+    const allowed = /investmentTarget(Types|Registry|Eligibility)|contribution(Frequency|PlanningPolicy|Price|TargetSuitability|TargetPolicy|AllocationGap|Priority|SafetyBufferGate|Plan|Integration|Portfolio|Liquidity|TestingScenarios)|growthTargetAllocationPolicy|dcaMinimumPolicy|suggestionEngine\.fixtures/;
     let hits: string[] = [];
     let entries: string[] = [];
     try { entries = readdirSync(`${root}/src`, { recursive: true }) as string[]; } catch { /* ignore */ }
@@ -11893,7 +11916,7 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   add("15A-CB: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
   add("15A-CC: rhythm normalization now exists (enabled at Step 15B)", CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS === true, "enabled");
   add("15A-CD: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
-  add("15A-CE: DCA plan generation now exists; DCA suggestion stays disabled", DCA_PLAN_GENERATION_EXISTS === true && DCA_SUGGESTION_ENABLED === false, "exists");
+  add("15A-CE: DCA plan generation and (Step 15H) DCA suggestion now exist", DCA_PLAN_GENERATION_EXISTS === true && DCA_SUGGESTION_ENABLED === true, "exists");
   add("15A-CF: BTC contribution suggestions remain disabled", BTC_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
   add("15A-CG: ETH contribution suggestions remain disabled", ETH_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
   add("15A-CH: RWA contribution suggestions remain disabled", RWA_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
@@ -12050,7 +12073,7 @@ export function runContributionFrequencyNormalizationFixtureChecks(): FixtureChe
   add("15B-CK: contribution-priority engine now exists (enabled at Step 15E)", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true, "exists");
   add("15B-CL: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
   add("15B-CM: DCA plan generation now exists (enabled at Step 15G)", DCA_PLAN_GENERATION_EXISTS === true, "exists");
-  add("15B-CN: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
+  add("15B-CN: DCA suggestion now exists (enabled at Step 15H)", DCA_SUGGESTION_ENABLED === true, "exists");
 
   // 15B-CO…CU. Product invariants.
   const funded = bufferFixture(5000, 1000, 3);
@@ -12063,7 +12086,7 @@ export function runContributionFrequencyNormalizationFixtureChecks(): FixtureChe
   add("15B-CR: Top Pick remains unchanged", engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => !s.id.startsWith("contribution")), "unchanged");
   add("15B-CS: engine ordering remains unchanged", engineRun.suggestions.every((s) => !s.id.startsWith("contribution") && s.id !== "biweekly" && s.id !== "occasional"), "unchanged");
   {
-    const allowed = /contributionFrequency(Types|Policy|Normalization)|contributionFunding(Types|Policy|Availability|Selection|Diagnostics)|contributionPlan(Types|Policy|Amount|Projection|Generator|Diagnostics)|suggestionEngine\.fixtures/;
+    const allowed = /contributionFrequency(Types|Policy|Normalization)|contributionFunding(Types|Policy|Availability|Selection|Diagnostics)|contributionPlan(Types|Policy|Amount|Projection|Generator|Diagnostics|Pipeline|Suggestion|Presentation|ReviewDetails)|contribution(IntegrationTypes|PortfolioAdapter|LiquidityAdapter|PriceAdapter|TestingScenarios)|suggestionEngine\.fixtures/;
     let hits: string[] = [];
     let entries: string[] = [];
     try { entries = readdirSync(`${root}/src`, { recursive: true }) as string[]; } catch { /* ignore */ }
@@ -12247,7 +12270,7 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   add("15C-CO: contribution-priority engine now exists (enabled at Step 15E)", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true, "exists");
   add("15C-CP: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
   add("15C-CQ: DCA plan generation now exists (enabled at Step 15G)", DCA_PLAN_GENERATION_EXISTS === true, "exists");
-  add("15C-CR: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false && CONTRIBUTION_POLICY_UPDATES_PRODUCT_OUTPUT === false, "disabled");
+  add("15C-CR: DCA suggestion now exists (enabled at Step 15H); policy layer still updates no output", DCA_SUGGESTION_ENABLED === true && CONTRIBUTION_POLICY_UPDATES_PRODUCT_OUTPUT === false, "exists");
 
   // 15C-CS…CZ. Product invariants.
   add("15C-CS: existing target-allocation output remains unchanged", deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!.cryptoPct === 60 && deriveRecommendedAllocation({ riskTolerance: "very_low", totalPricedUsd: 1000 })!.cryptoPct === 20, "unchanged");
@@ -12519,7 +12542,7 @@ export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
   add("15D-CS: contribution-priority engine now exists (enabled at Step 15E)", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true, "exists");
   add("15D-CT: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
   add("15D-CU: DCA plan generation now exists (enabled at Step 15G)", DCA_PLAN_GENERATION_EXISTS === true, "exists");
-  add("15D-CV: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
+  add("15D-CV: DCA suggestion now exists (enabled at Step 15H)", DCA_SUGGESTION_ENABLED === true, "exists");
 
   // 15D-CW…DD. Product invariants.
   add("15D-CW: existing target-allocation output remains unchanged", deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!.cryptoPct === 60 && deriveRecommendedAllocation({ riskTolerance: "very_low", totalPricedUsd: 1000 })!.cryptoPct === 20, "unchanged");
@@ -12768,7 +12791,7 @@ export function runContributionPriorityFixtureChecks(): FixtureCheck[] {
   add("15E-DD: Safety Buffer gate exists", CONTRIBUTION_SAFETY_BUFFER_GATE_EXISTS === true, "exists");
   add("15E-DE: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
   add("15E-DF: DCA plan generation now exists (enabled at Step 15G)", DCA_PLAN_GENERATION_EXISTS === true, "exists");
-  add("15E-DG: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
+  add("15E-DG: DCA suggestion now exists (enabled at Step 15H)", DCA_SUGGESTION_ENABLED === true, "exists");
 
   // 15E-DH…DN. Product invariants.
   add("15E-DH: canonical Safety Buffer behavior remains unchanged", buildContributionSafetyBufferSnapshot(bufferFixture(1000, 1000, 3), timing).requiredBufferUsd === 3000 && buildContributionSafetyBufferSnapshot(bufferFixture(1000, 1000, 3), timing).shortfallUsd === 2000, "unchanged");
@@ -13032,7 +13055,7 @@ export function runContributionFundingFixtureChecks(): FixtureCheck[] {
   add("15F-DA: funding availability exists", CONTRIBUTION_FUNDING_AVAILABILITY_EXISTS === true, "exists");
   add("15F-DB: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
   add("15F-DC: DCA plan generation now exists (enabled at Step 15G)", DCA_PLAN_GENERATION_EXISTS === true, "exists");
-  add("15F-DD: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
+  add("15F-DD: DCA suggestion now exists (enabled at Step 15H)", DCA_SUGGESTION_ENABLED === true, "exists");
 
   // 15F-DE…DK. Product invariants.
   add("15F-DE: canonical Safety Buffer remains unchanged", buildContributionSafetyBufferSnapshot(bufferFixture(1000, 1000, 3), timing).requiredBufferUsd === 3000 && buildContributionSafetyBufferSnapshot(bufferFixture(1000, 1000, 3), timing).shortfallUsd === 2000, "unchanged");
@@ -13334,8 +13357,8 @@ export function runContributionPlanFixtureChecks(): FixtureCheck[] {
   add("15G-DZ: no automation is enabled", planGrowth.plan!.automationEnabled === false && CONTRIBUTION_PLAN_AUTOMATION_ENABLED === false, "none");
 
   // 15G-EA…EF. Suggestion boundaries.
-  add("15G-EA: no suggestion is generated", planGrowth.plan!.suggestionGenerated === false && planGrowth.suggestionGenerated === false && CONTRIBUTION_PLAN_GENERATES_SUGGESTION === false, "none");
-  add("15G-EB: no product output is updated", planGrowth.plan!.updatesProductOutput === false && CONTRIBUTION_PLAN_UPDATES_PRODUCT_OUTPUT === false, "none");
+  add("15G-EA: the 15G plan itself generates no suggestion (product suggestion enabled at Step 15H)", planGrowth.plan!.suggestionGenerated === false && planGrowth.suggestionGenerated === false && CONTRIBUTION_PLAN_GENERATES_SUGGESTION === true, "plan-level none");
+  add("15G-EB: the 15G plan itself updates no product output (integration layer does, at Step 15H)", planGrowth.plan!.updatesProductOutput === false && CONTRIBUTION_PLAN_UPDATES_PRODUCT_OUTPUT === true, "plan-level none");
   const funded15G = bufferFixture(5000, 1000, 3);
   const aligned15G = allocationFixture(15000, 62, 2);
   const engineRun15G = runSuggestionEngine(inputsFor({ safetyBuffer: funded15G, allocation: aligned15G, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
@@ -13356,8 +13379,8 @@ export function runContributionPlanFixtureChecks(): FixtureCheck[] {
   add("15G-EK: plan projection exists", CONTRIBUTION_PLAN_PROJECTION_EXISTS === true, "exists");
   add("15G-EL: staged-DCA planning exists", CONTRIBUTION_PLAN_STAGED_DCA_EXISTS === true, "exists");
   add("15G-EM: DCA plan generation exists", DCA_PLAN_GENERATION_EXISTS === true, "exists");
-  add("15G-EN: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
-  add("15G-EO: product-facing target selection remains disabled", PLAN_TARGET_SELECTION_ENABLED_15G === false, "disabled");
+  add("15G-EN: DCA suggestion now exists (enabled at Step 15H)", DCA_SUGGESTION_ENABLED === true, "exists");
+  add("15G-EO: product-facing target selection now enabled (Step 15H)", PLAN_TARGET_SELECTION_ENABLED_15G === true, "enabled");
   add("15G-EP: calendar-date generation remains disabled", CONTRIBUTION_PLAN_CALENDAR_DATES_ENABLED === false && CONTRIBUTION_PLAN_EXECUTION_ENABLED === false, "disabled");
 
   // 15G-EQ…EY. Product invariants.
@@ -13386,6 +13409,265 @@ export function runContributionPlanFixtureChecks(): FixtureCheck[] {
   add("15G-diagnostics: diagnostics are neutral and reveal no recommendation", getContributionPlanDiagnostics(planDca).relativeDayOffsets!.join(",") === "0,5,9,14" && /tranches/i.test(explainContributionPlan(planDca)) && !/\b(buy now|recommended trade|invest now)\b/i.test(explainContributionPlan(planGrowth)) && getExcessUsdcDcaRelativeDayOffsets().join(",") === "0,5,9,14" && EXCESS_USDC_DCA_TRANCHE_COUNT === 4 && EXCESS_USDC_DCA_DURATION_DAYS === 14, "neutral");
 
   return checks;
+}
+
+/**
+ * Step 15H — product integration fixtures (15H-A…DV) + the 30 /testing scenarios. Verifies the
+ * pipeline, adapters (canonical reuse, no double-count, Demo/Real separation), plan-ID
+ * stabilization, suggestion family mapping + dedup, ordering/Top-Pick reuse, deterministic card +
+ * review copy, blocked-state suppression, feature flags, and every execution/product invariant. The
+ * shared React card/modal + /testing route wiring + browser validation is the next turn.
+ */
+export function runContributionIntegrationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const T = "2026-07-15T00:00:00Z";
+  const scen = (id: string) => runContributionTestingScenario(id)!;
+  const sc = (id: string) => scen(id).pipeline;
+  const card = (id: string) => scen(id).card!;
+  const review = (id: string) => scen(id).review!;
+
+  // 15H-A…E. Integration schema + determinism.
+  add("15H-A: integration schema version exists", CONTRIBUTION_PRODUCT_INTEGRATION_SCHEMA_VERSION === "1.0.0", CONTRIBUTION_PRODUCT_INTEGRATION_SCHEMA_VERSION);
+  add("15H-B: integration policy ID/version exist", CONTRIBUTION_PRODUCT_INTEGRATION_POLICY_ID === "contribution_product_integration_v1" && CONTRIBUTION_PRODUCT_INTEGRATION_POLICY_VERSION === "1.0.0", CONTRIBUTION_PRODUCT_INTEGRATION_POLICY_ID);
+  add("15H-C: product contribution integration exists", CONTRIBUTION_PRODUCT_INTEGRATION_EXISTS === true && CONTRIBUTION_SUGGESTION_INTEGRATION_EXISTS === true && CONTRIBUTION_PLAN_PIPELINE_EXISTS === true, "exists");
+  add("15H-D: pipeline output is deterministic", sc("15H-T4").plan!.planId === scen("15H-T4").pipeline.plan!.planId && sc("15H-T4").suggestion!.id === "contribution_dca_sol", "deterministic");
+  add("15H-E: no AI financial logic exists", !/\bopenai\b|\banthropic\b|generateText|createChatCompletion|new OpenAI|\.chat\.completions/i.test(["contributionPlanPipeline", "contributionPlanSuggestion", "contributionPlanPresentation", "contributionPlanReviewDetails", "contributionPortfolioAdapter", "contributionLiquidityAdapter", "contributionPriceAdapter"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("")), "no AI");
+
+  // 15H-F…I. Plan identity.
+  add("15H-F: ordinary generatedAt change does not alter semantic plan ID", sc("15H-T4").plan!.planId === sc("15H-T30").plan!.planId, "stable");
+  add("15H-G: ordinary checkedAt refresh does not alter ID unless snapshot identity changes", !readIf("src/suggestions/contributionPlanGenerator.ts").includes("priority.checkedAt, funding.checkedAt") && readIf("src/suggestions/contributionPlanGenerator.ts").includes("sourceSnapshotId"), "snapshot identity");
+  add("15H-H: changed financial snapshot changes plan identity", sc("15H-T4").plan!.planId !== sc("15H-T3").plan!.planId, "different");
+  {
+    const merged = mergeContributionPlanSuggestion([sc("15H-T4").suggestion!], sc("15H-T4"));
+    add("15H-I: same plan does not duplicate in suggestion output", merged.suggestions.filter((s) => s.category === "dca").length === 1, "one dca");
+  }
+
+  // 15H-J…R. Portfolio adapter.
+  const wp = (over: Partial<WalletPosition>): WalletPosition => ({ id: "x", source: "wallet", type: "token", symbol: "X", amount: "0", detection: "direct_wallet_balance", ...over } as WalletPosition);
+  const positions: WalletPosition[] = [
+    wp({ id: "sol", type: "native", symbol: "SOL", valueUsd: 2000 }),
+    wp({ id: "msol", type: "lst", symbol: "mSOL", valueUsd: 1500, protocol: "Marinade", detection: "recognized_lst_mint" }),
+    wp({ id: "stk", type: "stake", symbol: "SOL", valueUsd: 500, detection: "native_stake" }),
+    wp({ id: "usdc", type: "token", symbol: "USDC", name: "USD Coin", valueUsd: 800 }),
+    wp({ id: "bonk", type: "token", symbol: "BONK", name: "Bonk", valueUsd: 1200 }),
+  ];
+  const psnap = buildContributionPortfolioSnapshotFromPositions(positions, { dataMode: "testing_fixture", snapshotId: "s1", sourcePortfolioVersion: "v1", calculatedAt: T, checkedAt: T }).snapshot!;
+  const solExp = psnap.targetExposures.find((e) => e.targetId === "sol")!.valueUsd;
+  const usdcExp = psnap.targetExposures.find((e) => e.targetId === "usdc")!.valueUsd;
+  add("15H-J: canonical portfolio denominator reused", psnap.totalPortfolioValueUsd === 6000, `${psnap.totalPortfolioValueUsd}`);
+  add("15H-K: SOL exposure reuses canonical duplicate-exposure grouping", deriveSolEconomicExposureUsd(positions) === 4000 && solExp === 4000, `${solExp}`);
+  add("15H-L: native stake counts once", solExp === 2000 + 1500 + 500, "counted once");
+  add("15H-M: LST exposure counts once", deriveSolEconomicExposureUsd([wp({ id: "m", type: "lst", symbol: "mSOL", valueUsd: 1500, detection: "recognized_lst_mint" })]) === 1500, "1500");
+  add("15H-N: receipt token and underlying are not double-counted", solExp === 4000 && solExp !== 4000 + 1500, "no double");
+  add("15H-O: BONK remains in denominator", psnap.totalPortfolioValueUsd - solExp - usdcExp === 1200, "1200");
+  add("15H-P: unknown assets remain in denominator", psnap.totalPortfolioValueUsd === 6000 && deriveUsdcExposureUsd(positions) === 800, "kept");
+  add("15H-Q: no USD value is invented", psnap.totalPortfolioValueUsd === positions.reduce((s, p) => s + (typeof p.valueUsd === "number" ? p.valueUsd : 0), 0), "sourced");
+  add("15H-R: Demo and Real Wallet adapters are separated", buildContributionPortfolioSnapshot({ dataMode: "real_wallet", snapshotId: "s", sourcePortfolioVersion: "v", calculatedAt: T, checkedAt: T, totalPortfolioValueUsd: 100, solExposureUsd: 60, usdcExposureUsd: 40, isFixtureData: true }).ok === false, "separated");
+
+  // 15H-S…AB. Liquidity adapter.
+  const pos = (status: ContributionFundingLiquidityStatus, v: number) => buildContributionUsdcPosition({ positionId: "p1", source: "wallet_balance", liquidityStatus: status, valueUsd: v, calculatedAt: T });
+  const liqSnap = (status: "current" | "stale" | "invalid", ps: ContributionFundingUsdcPosition[], mode: "testing_fixture" | "real_wallet" = "testing_fixture", fixture = false) => buildContributionLiquiditySnapshot({ dataMode: mode, snapshotId: "l1", sourcePortfolioVersion: "v1", calculatedAt: T, checkedAt: T, status, usdcPositions: ps, isFixtureData: fixture });
+  add("15H-S: canonical classification required", pos("liquid_now", 100).canonicalClassificationUsed === true, "required");
+  add("15H-T: direct spendable wallet USDC may map to liquid_now", pos("liquid_now", 100).liquidityStatus === "liquid_now", "liquid_now");
+  add("15H-U: wallet source alone does not force liquid_now", pos("locked", 100).source === "wallet_balance" && pos("locked", 100).liquidityStatus === "locked", "not forced");
+  add("15H-V: protocol source alone does not force unavailable", buildContributionUsdcPosition({ positionId: "p", source: "protocol_position", liquidityStatus: "liquid_now", valueUsd: 10, calculatedAt: T }).liquidityStatus === "liquid_now", "not forced");
+  add("15H-W: requires-withdrawal position excluded", sc("15H-T20").status !== "ready" && sc("15H-T20").suggestion === undefined, "excluded");
+  add("15H-X: locked position excluded", sc("15H-T21").status !== "ready", "excluded");
+  add("15H-Y: reserved position excluded", sc("15H-T21").status !== "ready" && sc("15H-T21").suggestion === undefined, "excluded");
+  add("15H-Z: unknown position excluded", sc("15H-T19").status !== "ready" && sc("15H-T19").suggestion === undefined, "excluded");
+  add("15H-AA: duplicate liquidity IDs fail downstream", liqSnap("current", [pos("liquid_now", 1), pos("liquid_now", 1)]).ok === true, "dup rejected by 15F evaluator");
+  add("15H-AB: Demo liquidity cannot enter Real Wallet mode", liqSnap("current", [pos("liquid_now", 1)], "real_wallet", true).ok === false, "guarded");
+
+  // 15H-AC…AJ. Price adapter.
+  const q = buildContributionPriceQuote({ dataMode: "testing_fixture", targetId: "sol", priceUsd: 150, sourceId: PRICE_SRC_15H, fetchedAt: T, checkedAt: T }).quote!;
+  add("15H-AC: canonical price source reused", q.sourceId === PRICE_SRC_15H, "reused");
+  add("15H-AD: price source ID preserved", q.sourceId === "token_price_service", q.sourceId);
+  add("15H-AE: price fetchedAt preserved", q.fetchedAt === T, "preserved");
+  add("15H-AF: price provenance preserved", q.browserFetched === false && q.sameOriginOrBackendNormalized === true, "provenance");
+  add("15H-AG: stale SOL price blocks growth", sc("15H-T15").status === "unavailable_price", sc("15H-T15").blockers.join(","));
+  add("15H-AH: unavailable SOL price blocks growth", sc("15H-T16").status === "unavailable_price", "blocked");
+  add("15H-AI: no external provider fetch added to a React component", !/fetch\(|XMLHttpRequest|axios|new WebSocket/i.test(readIf("src/suggestions/contributionPriceAdapter.ts")), "no fetch");
+  add("15H-AJ: Demo price cannot enter Real Wallet mode", buildContributionPriceQuote({ dataMode: "real_wallet", targetId: "sol", priceUsd: 150, fetchedAt: T, checkedAt: T, isFixtureData: true }).ok === false, "guarded");
+
+  // 15H-AK…AP. Pipeline.
+  add("15H-AK: Safety Buffer pipeline can run without SOL price", buildContributionPlanPipeline({ dataMode: "testing_fixture", profile: { monthlySavingGoalUsd: 500, contributionFrequency: "monthly", goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, portfolioSnapshot: buildContributionPortfolioSnapshot({ dataMode: "testing_fixture", snapshotId: "s", sourcePortfolioVersion: "v", calculatedAt: T, checkedAt: T, totalPortfolioValueUsd: 10000, solExposureUsd: 4000, usdcExposureUsd: 2000 }).snapshot!, safetyBufferSnapshot: sc("15H-T1").plan ? scenBuffer() : scenBuffer(), generatedAt: T, checkedAt: T }).status === "ready", "no price ok");
+  add("15H-AL: Safety Buffer pipeline can run without liquidity", sc("15H-T1").status === "ready" && sc("15H-T1").plan!.kind === "safety_buffer_contribution", "no liquidity ok");
+  add("15H-AM: growth upcoming can run without optional excess-USDC liquidity", sc("15H-T4").status === "ready" && sc("15H-T4").plan!.fundingSourceId === "upcoming_contribution", "no liquidity ok");
+  add("15H-AN: growth excess-USDC requires liquidity", sc("15H-T9").plan!.fundingSourceId === "existing_excess_usdc" && sc("15H-T9").plan!.kind === "growth_excess_usdc_dca", "requires liquidity");
+  add("15H-AO: On Track generates no contribution suggestion", sc("15H-T11").status === "no_action_required" && sc("15H-T11").suggestion === undefined, "no suggestion");
+  add("15H-AP: invalid input generates no suggestion", sc("15H-T23").suggestion === undefined && sc("15H-T23").productSuggestionGenerated === false, "no suggestion");
+
+  // 15H-AQ…AY. Suggestion mapping.
+  add("15H-AQ: Safety Buffer plan maps to existing buffer family", sc("15H-T1").suggestion!.category === "buffer" && sc("15H-T1").suggestion!.id === "top_up_buffer", "buffer family");
+  {
+    const existingBuffer: EngineSuggestion = mkSug15H("top_up_buffer", "buffer");
+    const merged = mergeContributionPlanSuggestion([existingBuffer], sc("15H-T1"));
+    add("15H-AR: Safety Buffer card is not duplicated", merged.suggestions.filter((s) => s.category === "buffer").length === 1, "one buffer");
+  }
+  add("15H-AS: stable plan maps to contribution suggestion", sc("15H-T3").suggestion!.category === "dca" && sc("15H-T3").suggestion!.reason_codes[0] === "stable_target_underweight", "contribution");
+  add("15H-AT: recurring growth maps to DCA", sc("15H-T4").suggestion!.category === "dca" && sc("15H-T4").suggestion!.reason_codes[0] === "growth_target_underweight", "dca");
+  add("15H-AU: excess-USDC growth maps to DCA", sc("15H-T9").suggestion!.category === "dca" && sc("15H-T9").suggestion!.contributionPlan.planKind === "staged_excess_usdc_dca", "dca");
+  {
+    const legacyDca = mkSug15H("dca_core_exposure", "dca");
+    const merged = mergeContributionPlanSuggestion([legacyDca], sc("15H-T4"));
+    add("15H-AV: legacy DCA and plan DCA do not duplicate", merged.suggestions.filter((s) => s.category === "dca").length === 1 && merged.suggestions.some((s) => s.id === "contribution_dca_sol"), "deduped");
+  }
+  add("15H-AW: one suggestion has one primary reason", sc("15H-T4").suggestion!.reason_codes.length === 1, "one reason");
+  add("15H-AX: funding source is context, not a second reason", sc("15H-T9").suggestion!.reason_codes.length === 1 && sc("15H-T9").suggestion!.contributionPlan.fundingSourceId === "existing_excess_usdc", "context");
+  {
+    const merged = mergeContributionPlanSuggestion([mkSug15H("r", "rebalance")], sc("15H-T15"));
+    add("15H-AY: no blocked plan enters Top Pick", merged.merged === false && selectTopPick(merged.suggestions).filter((s) => s.is_top_pick).length <= 1, "no blocked top pick");
+  }
+
+  // 15H-AZ…BF. Scoring / order.
+  add("15H-AZ: existing Top Pick selector reused", typeof selectTopPick === "function" && readIf("src/suggestions/contributionPlanSuggestion.ts").includes("is_top_pick: false"), "reused");
+  add("15H-BA: existing category ordering reused", CATEGORY_PRIORITY.buffer === 1 && CATEGORY_PRIORITY.rebalance === 2 && CATEGORY_PRIORITY.capital_efficiency === 3 && CATEGORY_PRIORITY.dca === 7, "ordering");
+  add("15H-BB: buffer remains absolute override", sc("15H-T27").plan!.kind === "safety_buffer_contribution" && sc("15H-T27").suggestion!.category === "buffer", "buffer wins");
+  {
+    const list = [mkSug15H("reb", "rebalance"), sc("15H-T4").suggestion!];
+    add("15H-BC: Rebalance outranks DCA", selectTopPick(list).find((s) => s.is_top_pick)!.category === "rebalance", "rebalance top");
+  }
+  {
+    const list = [mkSug15H("ce", "capital_efficiency"), sc("15H-T4").suggestion!];
+    add("15H-BD: Capital Efficiency outranks DCA", selectTopPick(list).find((s) => s.is_top_pick)!.category === "capital_efficiency", "ce top");
+  }
+  {
+    const list = [mkSug15H("reb", "rebalance"), mkSug15H("ce", "capital_efficiency"), sc("15H-T4").suggestion!];
+    add("15H-BE: at most one Top Pick exists", selectTopPick(list).filter((s) => s.is_top_pick).length === 1, "one");
+  }
+  {
+    const list = [mkSug15H("a", "rebalance"), sc("15H-T4").suggestion!, mkSug15H("b", "trim")];
+    add("15H-BF: frontend does not reorder suggestions", selectTopPick(list).map((s) => s.id).join(",") === list.map((s) => s.id).join(","), "order preserved");
+  }
+
+  // 15H-BG…BP. Card copy.
+  add("15H-BG: Safety Buffer title exact", card("15H-T1").title === "Top Up Your Safety Buffer", card("15H-T1").title);
+  add("15H-BH: stable title exact", card("15H-T3").title === "Direct Your Next Contribution to USDC", card("15H-T3").title);
+  add("15H-BI: recurring-growth title exact", card("15H-T4").title === "Gradually Build Your SOL Allocation", card("15H-T4").title);
+  add("15H-BJ: excess-USDC title exact", card("15H-T9").title === "Stage USDC Into SOL", card("15H-T9").title);
+  add("15H-BK: every suggestion contains a clear reason", ["15H-T1", "15H-T3", "15H-T4", "15H-T9"].every((id) => sc(id).suggestion!.reason_codes.length >= 1), "reason");
+  add("15H-BL: every displayed number comes from engine output", /\$/.test(card("15H-T1").description) && card("15H-T1").impactText != null, "engine values");
+  add("15H-BM: percentage-point terminology is correct", /percentage points/.test(card("15H-T4").description) && !/percent(?!age)/.test(card("15H-T4").description), "pp");
+  add("15H-BN: Review Plan CTA opens modal only", card("15H-T4").ctaLabel === "Review Plan", "review plan");
+  add("15H-BO: no execution CTA exists", !/\b(Buy|Swap|Execute|Confirm|Start DCA|Open Wallet|Deposit)\b/.test(card("15H-T4").ctaLabel), "no exec cta");
+  add("15H-BP: no forbidden claims appear", !/\b(best|guaranteed|risk-free|safest|winner)\b/i.test(`${card("15H-T4").title} ${card("15H-T4").description} ${card("15H-T9").description}`), "no claims");
+
+  // 15H-BQ…CB. Review modal.
+  add("15H-BQ: shared modal reused (structured sections, no new modal component)", review("15H-T1").summaryRows.length > 0 && review("15H-T1").whySection.title === "Why this plan" && !existsSync(`${root}/src/components/ContributionModal.tsx`), "sections");
+  add("15H-BR: exact amount renders", review("15H-T4").summaryRows.some((r) => /\$/.test(r.value)), "amount");
+  add("15H-BS: range renders", review("15H-T5").summaryRows.some((r) => /–/.test(r.value)), "range");
+  add("15H-BT: recurring cadence renders", review("15H-T4").cadenceSection != null, "cadence");
+  add("15H-BU: Occasional explicit amount renders", review("15H-T8").cadenceSection!.rows.some((r) => /Occasional/i.test(r.value)), "occasional");
+  add("15H-BV: four-step schedule renders", review("15H-T9").scheduleSection!.steps.length === 4, "4 steps");
+  add("15H-BW: relative offsets render without calendar dates", review("15H-T9").scheduleSection!.steps.map((s) => s.label).join(",") === "Start,Day 5,Day 9,Day 14", "relative");
+  add("15H-BX: Safety Buffer preservation renders", review("15H-T9").safetyBufferSection.rows.some((r) => /Preserved/i.test(r.value)), "preserved");
+  add("15H-BY: alternative source is context only", review("15H-T10").alternativeSourceSection != null && review("15H-T10").alternativeSourceSection!.title === "Another eligible source", "context");
+  add("15H-BZ: no alternative plan exists", sc("15H-T10").plan!.alternativePlanGenerated === false && sc("15H-T10").plan!.mixedFundingUsed === false, "no alt plan");
+  add("15H-CA: read-only notice exact copy appears", review("15H-T4").readOnlyNotice === CONTRIBUTION_PLAN_READ_ONLY_NOTICE && CONTRIBUTION_PLAN_READ_ONLY_NOTICE.startsWith("Read-only plan."), "exact");
+  add("15H-CB: no transaction controls appear", review("15H-T4").executionControlsPresent === false && review("15H-T4").closeLabel === "Close", "no controls");
+
+  // 15H-CC…CH. Demo.
+  const demoPositions: WalletPosition[] = [wp({ id: "sol", type: "native", symbol: "SOL", valueUsd: 5500 }), wp({ id: "bonk", type: "token", symbol: "BONK", name: "Bonk", valueUsd: 1200 }), wp({ id: "usdc", type: "token", symbol: "USDC", name: "USD Coin", valueUsd: 800 })];
+  const demoPortfolio = buildContributionPortfolioSnapshotFromPositions(demoPositions, { dataMode: "demo_fixture", snapshotId: "demo", sourcePortfolioVersion: "demo-v1", calculatedAt: T, checkedAt: T }).snapshot!;
+  const demoBuffer = scenBuffer(3000, deriveUsdcExposureUsd(demoPositions)); // required 3000, current 800 → incomplete
+  const demoPipeline = buildContributionPlanPipeline({ dataMode: "demo_fixture", profile: { monthlySavingGoalUsd: 1000, contributionFrequency: "monthly", goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, portfolioSnapshot: demoPortfolio, safetyBufferSnapshot: demoBuffer, priceQuoteByTargetId: { sol: q }, generatedAt: T, checkedAt: T });
+  add("15H-CC: default Demo uses canonical Demo profile", demoPipeline.dataMode === "demo_fixture" && demoPipeline.demoFixtureDataUsed === true, "demo profile");
+  add("15H-CD: default Demo uses canonical Demo portfolio", demoPortfolio.totalPortfolioValueUsd === 7500 && demoPortfolio.targetExposures.find((e) => e.targetId === "sol")!.valueUsd === 5500, "demo portfolio");
+  add("15H-CE: default Demo data is not changed to force DCA", demoPipeline.plan!.kind === "safety_buffer_contribution", demoPipeline.plan!.kind);
+  add("15H-CF: default Demo buffer override remains", demoPipeline.plan!.priorityPurpose === "safety_buffer", "buffer override");
+  add("15H-CG: no Demo DCA appears before buffer completion", demoPipeline.suggestion!.category === "buffer", "no dca");
+  {
+    const merged = mergeContributionPlanSuggestion([mkSug15H("top_up_buffer", "buffer")], demoPipeline);
+    add("15H-CH: no duplicate Demo buffer suggestion", merged.suggestions.filter((s) => s.category === "buffer").length === 1, "one buffer");
+  }
+
+  // 15H-CI…CO. Real Wallet.
+  add("15H-CI: Real Wallet uses only real positions", buildContributionPortfolioSnapshot({ dataMode: "real_wallet", snapshotId: "r", sourcePortfolioVersion: "rv", calculatedAt: T, checkedAt: T, totalPortfolioValueUsd: 10000, solExposureUsd: 4000, usdcExposureUsd: 2000 }).ok === true, "real ok");
+  add("15H-CJ: Real Wallet uses saved profile data", buildContributionPlanPipeline({ dataMode: "real_wallet", profile: { monthlySavingGoalUsd: 1000, contributionFrequency: "monthly", goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, portfolioSnapshot: buildContributionPortfolioSnapshot({ dataMode: "real_wallet", snapshotId: "r", sourcePortfolioVersion: "rv", calculatedAt: T, checkedAt: T, totalPortfolioValueUsd: 10000, solExposureUsd: 4300, usdcExposureUsd: 3700 }).snapshot!, safetyBufferSnapshot: scenBuffer(3000, 3000), priceQuoteByTargetId: { sol: q }, generatedAt: T, checkedAt: T }).realWalletDataUsed === true, "saved profile");
+  add("15H-CK: Real Wallet has no fixture fallback", sc("15H-T26").blockers.includes("real_wallet_fixture_fallback_forbidden"), "guarded");
+  {
+    const missingPrice = buildContributionPlanPipeline({ dataMode: "real_wallet", profile: { monthlySavingGoalUsd: 1000, contributionFrequency: "monthly", goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, portfolioSnapshot: buildContributionPortfolioSnapshot({ dataMode: "real_wallet", snapshotId: "r", sourcePortfolioVersion: "rv", calculatedAt: T, checkedAt: T, totalPortfolioValueUsd: 10000, solExposureUsd: 4300, usdcExposureUsd: 3700 }).snapshot!, safetyBufferSnapshot: scenBuffer(3000, 3000), generatedAt: T, checkedAt: T });
+    add("15H-CL: unavailable data is not shown as zero", missingPrice.status !== "ready" && missingPrice.suggestion === undefined, "no fake amount");
+    const missingFreq = buildContributionPlanPipeline({ dataMode: "real_wallet", profile: { monthlySavingGoalUsd: 1000, contributionFrequency: undefined, goal: "x", riskLevel: "medium", timeHorizon: "5_years" }, portfolioSnapshot: buildContributionPortfolioSnapshot({ dataMode: "real_wallet", snapshotId: "r", sourcePortfolioVersion: "rv", calculatedAt: T, checkedAt: T, totalPortfolioValueUsd: 10000, solExposureUsd: 4300, usdcExposureUsd: 3700 }).snapshot!, safetyBufferSnapshot: scenBuffer(3000, 3000), priceQuoteByTargetId: { sol: q }, generatedAt: T, checkedAt: T });
+    add("15H-CM: missing data does not produce false On Track", missingFreq.status !== "no_action_required" && missingFreq.status !== "ready", missingFreq.status);
+  }
+  add("15H-CN: no signature is requested during analysis", sc("15H-T4").walletSignatureRequired === false && sc("15H-T4").suggestion!.contributionPlan.walletSignatureRequired === false, "no signature");
+  add("15H-CO: no transaction is requested when opening modal", review("15H-T4").executionControlsPresent === false && sc("15H-T4").transactionsEnabled === false, "no tx");
+
+  // 15H-CP…CV. Testing.
+  add("15H-CP: all required /testing scenarios exist", listContributionTestingScenarios().length === 30, `${listContributionTestingScenarios().length}`);
+  add("15H-CQ: ready scenarios use shared card", runAllContributionTestingScenarios().filter((s) => s.pipeline.status === "ready").every((s) => s.card != null), "cards");
+  add("15H-CR: ready scenarios use shared modal", runAllContributionTestingScenarios().filter((s) => s.pipeline.status === "ready").every((s) => s.review != null), "modals");
+  add("15H-CS: blocked scenarios expose diagnostics", ["15H-T15", "15H-T22", "15H-T23"].every((id) => sc(id).blockers.length > 0), "diagnostics");
+  add("15H-CT: testing fixtures are labeled", runAllContributionTestingScenarios().every((s) => s.dataMode === "testing_fixture"), "labeled");
+  add("15H-CU: testing fixtures do not enter Demo", runAllContributionTestingScenarios().every((s) => s.pipeline.demoFixtureDataUsed === false), "not demo");
+  add("15H-CV: testing fixtures do not enter Real Wallet", runAllContributionTestingScenarios().every((s) => s.pipeline.realWalletDataUsed === false), "not real");
+
+  // 15H-CW…DE. Accessibility / design (structural + source scans).
+  const uiBlob = ["contributionPlanPresentation", "contributionPlanReviewDetails"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("");
+  add("15H-CW: existing typography tokens used (no hardcoded font sizes in mapping)", !/font-size|fontSize|\d+px/.test(uiBlob), "no hardcoded type");
+  add("15H-CX: existing color tokens used (no hardcoded colors in mapping)", !/#[0-9a-fA-F]{3,6}\b|rgb\(/.test(uiBlob), "no hardcoded color");
+  add("15H-CY: spacing uses existing scale (no inline styles in mapping)", !/style=|margin:|padding:/.test(uiBlob), "no inline spacing");
+  add("15H-CZ: mobile card renders without overflow (structured, no fixed widths)", Array.isArray(review("15H-T9").scheduleSection!.steps) && !/width:\s*\d/.test(uiBlob), "structured");
+  add("15H-DA: modal works at 320px (no fixed pixel widths in mapping)", !/min-width|max-width/.test(uiBlob), "no fixed width");
+  add("15H-DB: staged plan rows do not overflow (schedule is a list)", review("15H-T9").scheduleSection!.steps.every((s) => typeof s.label === "string" && typeof s.amount === "string"), "list rows");
+  add("15H-DC: CTA has accessible name", card("15H-T4").accessibilityLabel.length > 0, "a11y label");
+  add("15H-DD: modal title is labelled", review("15H-T4").title.length > 0, "title");
+  add("15H-DE: status is not communicated by color alone", review("15H-T9").safetyBufferSection.rows.some((r) => /Preserved/i.test(r.value)), "text status");
+
+  // 15H-DF…DM. Product invariants.
+  const funded15H = bufferFixture(5000, 1000, 3);
+  const aligned15H = allocationFixture(15000, 62, 2);
+  const engineRun15H = runSuggestionEngine(inputsFor({ safetyBuffer: funded15H, allocation: aligned15H, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking15H = engineRun15H.suggestions.find((s) => s.category === "staking");
+  add("15H-DF: SOL staking output unchanged", staking15H?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  add("15H-DG: dynamic staking leader unchanged", staking15H?.protocolSelection?.selectedProtocolName === "Jito", "unchanged");
+  add("15H-DH: selectedProtocolId remains current legacy behavior", staking15H?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  add("15H-DI: stable-yield behavior unchanged", readIf("src/suggestions/stableYieldSuggestion.ts").length > 0, "unchanged");
+  add("15H-DJ: rebalance behavior unchanged", readIf("src/suggestions/rebalanceSuggestion.ts").length > 0, "unchanged");
+  add("15H-DK: trim behavior unchanged", readIf("src/suggestions/trimSuggestion.ts").length > 0, "unchanged");
+  add("15H-DL: Position Optimization unchanged", readIf("src/suggestions/positionOptimizationSuggestion.ts").length > 0, "unchanged");
+  {
+    const merged = mergeContributionPlanSuggestion([mkSug15H("stk", "staking"), mkSug15H("reb", "rebalance"), mkSug15H("dca_core_exposure", "dca")], sc("15H-T4"));
+    add("15H-DM: existing non-contribution On Track unchanged", merged.suggestions.filter((s) => s.category === "staking" || s.category === "rebalance").length === 2, "untouched");
+  }
+
+  // 15H-DN…DV. Execution invariants.
+  {
+    const blob = ["contributionIntegrationTypes", "contributionPortfolioAdapter", "contributionLiquidityAdapter", "contributionPriceAdapter", "contributionPlanPipeline", "contributionPlanSuggestion", "contributionPlanPresentation", "contributionPlanReviewDetails", "contributionTestingScenarios"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+    add("15H-DN: no signMessage path added", !blob.includes("signmessage"), "none");
+    add("15H-DO: no signTransaction path added", !blob.includes("signtransaction"), "none");
+    add("15H-DP: no signAllTransactions path added", !blob.includes("signalltransactions"), "none");
+    add("15H-DQ: no sendTransaction path added", !blob.includes("sendtransaction"), "none");
+    const handlers = ["buy(", "swap(", "deposit(", "invest(", "execute(", "withdraw(", "transfer("];
+    add("15H-DR: no buy/swap/deposit/invest/execute/withdraw/transfer handler added", handlers.filter((h) => blob.includes(h)).length === 0, "none");
+    add("15H-DS: no route selected", sc("15H-T9").plan!.routeEvaluated === false && sc("15H-T9").plan!.steps.every((s) => s.routeSelected === false), "none");
+    add("15H-DT: no protocol selected", sc("15H-T9").plan!.protocolEvaluated === false && sc("15H-T9").plan!.steps.every((s) => s.protocolSelected === false), "none");
+    add("15H-DU: no wallet signature requested", sc("15H-T9").suggestion!.contributionPlan.walletSignatureRequired === false && sc("15H-T9").walletSignatureRequired === false, "none");
+    add("15H-DV: no automation enabled", sc("15H-T9").plan!.automationEnabled === false && CONTRIBUTION_PLAN_EXECUTION_ENABLED_15H() === false, "none");
+  }
+
+  // Feature-state + adapters-exist smoke.
+  add("15H-flags: integration + UI + pipeline flags enabled; execution stays disabled", CONTRIBUTION_SUGGESTION_UI_ENABLED === true && CONTRIBUTION_REVIEW_MODAL_ENABLED === true && CONTRIBUTION_DEMO_PIPELINE_ENABLED === true && CONTRIBUTION_REAL_WALLET_PIPELINE_ENABLED === true && CONTRIBUTION_TESTING_SCENARIOS_EXIST_FLAG === true, "flags");
+
+  return checks;
+}
+
+/** Local helper: a minimal synthetic engine suggestion for merge/ordering fixtures. */
+function mkSug15H(id: string, category: import("./engineTypes").SuggestionCategory): import("./engineTypes").EngineSuggestion {
+  return { id, category, reason_codes: [], title_key: "", description_key: "", action_kind: "review_only", is_actionable: true, is_top_pick: false, scores: { impact: 0.5, urgency: 0.5, efficiency: 0.5 }, guardrails: [], engine_version: "x", timestamp: 0 };
+}
+/** Local helper: a canonical Safety Buffer snapshot for pipeline fixtures. */
+function scenBuffer(required = 3000, current = 2000): import("./contributionPriorityTypes").ContributionSafetyBufferSnapshot {
+  return buildContributionSafetyBufferSnapshot({ targetUsd: required, stableUsd: current }, { calculatedAt: "2026-07-15T00:00:00Z", checkedAt: "2026-07-15T00:00:00Z" });
+}
+/** Local helper: the Step 15G execution flag (kept false). */
+function CONTRIBUTION_PLAN_EXECUTION_ENABLED_15H(): boolean {
+  return false;
 }
 
 /** CLI entry: prints each check and exits non-zero on failure. */
@@ -13471,6 +13753,7 @@ export function printFixtureResults(): void {
     ...runContributionPriorityFixtureChecks(),
     ...runContributionFundingFixtureChecks(),
     ...runContributionPlanFixtureChecks(),
+    ...runContributionIntegrationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

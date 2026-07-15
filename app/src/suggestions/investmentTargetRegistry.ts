@@ -35,13 +35,26 @@ export const CONTRIBUTION_PLAN_TARGET_SELECTION_EXISTS = true;
 export const CONTRIBUTION_PLAN_AMOUNT_CALCULATION_EXISTS = true;
 export const CONTRIBUTION_PLAN_PROJECTION_EXISTS = true;
 export const CONTRIBUTION_PLAN_STAGED_DCA_EXISTS = true;
-export const CONTRIBUTION_PLAN_UPDATES_PRODUCT_OUTPUT = false;
-export const CONTRIBUTION_PLAN_GENERATES_SUGGESTION = false;
+// Step 15H — the plan-backed pipeline now updates product output and generates suggestions through
+// the integration layer (still no execution/automation; those flags remain false).
+export const CONTRIBUTION_PLAN_UPDATES_PRODUCT_OUTPUT = true;
+export const CONTRIBUTION_PLAN_GENERATES_SUGGESTION = true;
 export const CONTRIBUTION_PLAN_EXECUTION_ENABLED = false;
 export const CONTRIBUTION_PLAN_AUTOMATION_ENABLED = false;
 export const CONTRIBUTION_PLAN_MIXED_FUNDING_ENABLED = false;
 export const CONTRIBUTION_PLAN_RESIDUAL_ROUTING_ENABLED = false;
 export const CONTRIBUTION_PLAN_CALENDAR_DATES_ENABLED = false;
+// Step 15H — the product integration layer now exists: it consumes the 15A–15G pipeline, enriches
+// the buffer suggestion / creates plan-backed DCA + contribution suggestions, renders the shared
+// card + review modal, and adds /testing scenarios. It is the ONLY layer that updates UI output.
+// Execution stays external and user-initiated (all transaction/signature flags remain false).
+export const CONTRIBUTION_PRODUCT_INTEGRATION_EXISTS = true;
+export const CONTRIBUTION_SUGGESTION_INTEGRATION_EXISTS = true;
+export const CONTRIBUTION_SUGGESTION_UI_ENABLED = true;
+export const CONTRIBUTION_REVIEW_MODAL_ENABLED = true;
+export const CONTRIBUTION_DEMO_PIPELINE_ENABLED = true;
+export const CONTRIBUTION_REAL_WALLET_PIPELINE_ENABLED = true;
+export const CONTRIBUTION_TESTING_SCENARIOS_EXIST = true;
 // Step 15B — contribution-frequency (rhythm) normalization now exists. Both names refer to the
 // same layer (the field is "contribution_frequency" in onboarding); no contradictory duplicate.
 export const CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS = true;
@@ -77,9 +90,11 @@ export const TARGET_ALLOCATION_GAP_EVALUATES_SAFETY_BUFFER = false;
 // Step 15G — DCA plan generation (the deterministic staged plan) now exists; the DCA SUGGESTION
 // (product-facing) stays disabled until Step 15H.
 export const DCA_PLAN_GENERATION_EXISTS = true;
-export const DCA_SUGGESTION_ENABLED = false;
+// Step 15H — the DCA/contribution SUGGESTION is now enabled (product-facing, plan-backed).
+export const DCA_SUGGESTION_ENABLED = true;
 export const CONTRIBUTION_DATES_GENERATED = false;
-export const CONTRIBUTION_TARGET_SELECTION_ENABLED = false;
+// Step 15H — product-facing target selection (from the completed plan) is now enabled.
+export const CONTRIBUTION_TARGET_SELECTION_ENABLED = true;
 export const CONTRIBUTION_AUTOMATION_ENABLED = false;
 // Step 15C — contribution-planning POLICY layers now exist (config-only; no gap/plan/suggestion).
 export const GROWTH_TARGET_ALLOCATION_POLICY_EXISTS = true;
