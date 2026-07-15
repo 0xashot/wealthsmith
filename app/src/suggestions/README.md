@@ -1641,3 +1641,19 @@ receipts never qualify; unknown → excluded). Flags: `CONTRIBUTION_DEMO_PIPELIN
 `…_REAL_WALLET_PIPELINE_ENABLED` truthfully `true`; execution/automation/live-price/dates/mixed-funding/
 residual flags `false`. **Step 15 is product-complete for the read-only MVP** (pending connected-wallet
 manual QA, which needs a live wallet).
+
+## 16A — Stable USDC Yield policy foundation
+
+The deterministic, versioned POLICY layer for the new Stable USDC Yield family
+([stableYieldPolicies.md](./stableYieldPolicies.md)). Policy ONLY — no registry, market data,
+eligibility, comparison, detection, plan/suggestion, UI, or execution. Stable Yield is a Capital
+Efficiency intent (improves returns on idle USDC, never raises risk) with two lanes that both require
+a COMPLETE Safety Buffer: `stable_buffer_yield_v1` (conservative, immediately-liquid, stable-USD only)
+and `stable_excess_yield_v1` (liquid USDC above the buffer). Five generic strategy types (lending →
+buffer-eligible; managed_vault / staking_like_vault / stable_liquidity_strategy → excess-only;
+future_other → unapproved) with a documented protocol scope (Kamino/Raydium/Meteora/Hubble; Save/
+Marginfi/Drift/Loopscale forbidden). A 10-reason suppression vocabulary, an existing-position policy
+(visible; suggestion needs additional eligible USDC; detection not implemented), and deterministic
+allowance diagnostics. Intended priority Buffer > Rebalance > Stable Yield > Contribution/DCA is
+documented but engine ordering (`topPick.ts`) is unchanged. `STABLE_YIELD_POLICY_EXISTS = true`; all
+downstream flags `false`.

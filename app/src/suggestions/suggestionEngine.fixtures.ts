@@ -795,6 +795,37 @@ import {
 } from "./investmentTargetRegistry";
 import type { WalletPosition as WP15H } from "../wallet/walletPosition";
 import {
+  STABLE_YIELD_POLICY_SCHEMA_VERSION,
+  STABLE_YIELD_POLICY_ID,
+  STABLE_YIELD_POLICY_VERSION,
+  STABLE_BUFFER_YIELD_POLICY_ID,
+  STABLE_EXCESS_YIELD_POLICY_ID,
+} from "./stableYieldPolicyTypes";
+import {
+  STABLE_YIELD_SUPPORTED_PROTOCOLS,
+  STABLE_YIELD_FORBIDDEN_PROTOCOLS,
+  STABLE_YIELD_INTENDED_PRIORITY_ORDER,
+  STABLE_YIELD_SUPPRESSION_REASONS,
+  getStableYieldPolicy,
+  getStableYieldStrategyTypes,
+  getStableYieldStrategyDefinition,
+  getStableYieldLanePolicy,
+  validateStableYieldPolicy,
+  validateStableYieldStrategyDefinition,
+  validateStableYieldLanePolicy,
+} from "./stableYieldPolicy";
+import { getStableYieldPolicyDiagnostics, buildStableYieldAllowanceResult, explainStableYieldAllowance } from "./stableYieldPolicyDiagnostics";
+import {
+  STABLE_YIELD_POLICY_EXISTS,
+  STABLE_YIELD_REGISTRY_EXISTS,
+  STABLE_YIELD_COMPARISON_EXISTS,
+  STABLE_YIELD_WALLET_DETECTION_EXISTS,
+  STABLE_YIELD_SUGGESTIONS_EXIST,
+  STABLE_YIELD_UI_ENABLED,
+  STABLE_YIELD_TESTING_EXISTS,
+  STABLE_YIELD_EXECUTION_ENABLED,
+} from "./investmentTargetRegistry";
+import {
   CONTRIBUTION_PLAN_GENERATOR_EXISTS,
   CONTRIBUTION_PLAN_TARGET_SELECTION_EXISTS,
   CONTRIBUTION_PLAN_AMOUNT_CALCULATION_EXISTS,
@@ -13869,6 +13900,77 @@ function CONTRIBUTION_PLAN_EXECUTION_ENABLED_15H(): boolean {
   return false;
 }
 
+/**
+ * Step 16A — Stable USDC Yield policy foundation fixtures (16A-A…AB). Verifies the versions, the
+ * two-lane architecture, the strategy taxonomy + risk lanes, the documented protocol scope, the
+ * suppression vocabulary, the existing-position policy, the intended priority (engine ordering
+ * unchanged), the allowance diagnostics, the validators, and that nothing downstream exists yet.
+ */
+export function runStableYieldPolicyFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const policy = getStableYieldPolicy();
+  const strategies = getStableYieldStrategyTypes();
+  const bufferLane = getStableYieldLanePolicy("safety_buffer_yield");
+  const excessLane = getStableYieldLanePolicy("excess_usdc_yield");
+
+  // 16A-A…F. Versions + policy shape.
+  add("16A-A: schema version exists", STABLE_YIELD_POLICY_SCHEMA_VERSION === "1.0.0" && policy.schemaVersion === "1.0.0", STABLE_YIELD_POLICY_SCHEMA_VERSION);
+  add("16A-B: policy ID/version exist", STABLE_YIELD_POLICY_ID === "stable_yield_policy_v1" && STABLE_YIELD_POLICY_VERSION === "1.0.0", STABLE_YIELD_POLICY_ID);
+  add("16A-C: buffer and excess lane policy IDs exist", STABLE_BUFFER_YIELD_POLICY_ID === "stable_buffer_yield_v1" && STABLE_EXCESS_YIELD_POLICY_ID === "stable_excess_yield_v1", `${STABLE_BUFFER_YIELD_POLICY_ID}/${STABLE_EXCESS_YIELD_POLICY_ID}`);
+  add("16A-D: STABLE_YIELD_POLICY_EXISTS is enabled; downstream stays disabled", STABLE_YIELD_POLICY_EXISTS === true && STABLE_YIELD_REGISTRY_EXISTS === false && STABLE_YIELD_COMPARISON_EXISTS === false && STABLE_YIELD_WALLET_DETECTION_EXISTS === false && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "policy only");
+  add("16A-E: the Stable Yield policy validates", validateStableYieldPolicy().valid === true, "valid");
+  add("16A-F: Stable Yield is a Capital Efficiency suggestion family", policy.suggestionFamily === "capital_efficiency", policy.suggestionFamily);
+
+  // 16A-G…I. Two-lane architecture.
+  add("16A-G: two separate lanes exist (Safety Buffer + Excess USDC)", policy.lanes.map((l) => l.lane).join(",") === "safety_buffer_yield,excess_usdc_yield", policy.lanes.map((l) => l.lane).join(","));
+  add("16A-H: both lanes require a complete Safety Buffer", bufferLane.requiresCompleteSafetyBuffer === true && excessLane.requiresCompleteSafetyBuffer === true, "requires complete buffer");
+  add("16A-I: the buffer lane is stable-USD only with no volatile/leveraged/unsupported exposure", bufferLane.allowedResultingExposures.join(",") === "stable_usd" && bufferLane.volatileExposureAllowed === false && bufferLane.leveragedExposureAllowed === false && bufferLane.unsupportedAssetsAllowed === false, "conservative");
+
+  // 16A-J…M. Strategy taxonomy + risk lanes.
+  add("16A-J: the strategy taxonomy has the five deterministic types", strategies.map((s) => s.strategyType).join(",") === "lending,managed_vault,staking_like_vault,stable_liquidity_strategy,future_other", strategies.map((s) => s.strategyType).join(","));
+  add("16A-K: lending is buffer-eligible (conservative, immediately-liquid, stable-USD)", getStableYieldStrategyDefinition("lending")!.eligibleLanes.includes("safety_buffer_yield") && getStableYieldStrategyDefinition("lending")!.defaultRiskLane === "buffer_eligible" && getStableYieldStrategyDefinition("lending")!.riskProfile === "conservative_stable", "buffer_eligible");
+  add("16A-L: managed/staking-like/stable-liquidity strategies are excess-USDC only", ["managed_vault", "staking_like_vault", "stable_liquidity_strategy"].every((t) => { const s = getStableYieldStrategyDefinition(t as "managed_vault")!; return s.eligibleLanes.length === 1 && s.eligibleLanes[0] === "excess_usdc_yield" && s.defaultRiskLane === "excess_only"; }), "excess_only");
+  add("16A-M: future_other is unapproved with no lanes", (() => { const s = getStableYieldStrategyDefinition("future_other")!; return s.eligibleLanes.length === 0 && s.activationSuppressionReasons.includes("yield_strategy_not_approved") && s.riskProfile === "unsupported"; })(), "unapproved");
+
+  // 16A-N…P. Protocol scope + priority.
+  add("16A-N: supported protocol scope is exactly Kamino/Raydium/Meteora/Hubble", STABLE_YIELD_SUPPORTED_PROTOCOLS.join(",") === "kamino,raydium,meteora,hubble", STABLE_YIELD_SUPPORTED_PROTOCOLS.join(","));
+  add("16A-O: forbidden protocols (Save/Marginfi/Drift/Loopscale) are never in scope", STABLE_YIELD_FORBIDDEN_PROTOCOLS.join(",") === "save,marginfi,drift,loopscale" && !["save", "marginfi", "drift", "loopscale"].some((f) => (STABLE_YIELD_SUPPORTED_PROTOCOLS as readonly string[]).includes(f)), "out of scope");
+  add("16A-P: intended priority is Buffer > Rebalance > Stable Yield > Contribution/DCA", STABLE_YIELD_INTENDED_PRIORITY_ORDER.indexOf("safety_buffer") === 0 && STABLE_YIELD_INTENDED_PRIORITY_ORDER.indexOf("rebalance") < STABLE_YIELD_INTENDED_PRIORITY_ORDER.indexOf("stable_yield") && STABLE_YIELD_INTENDED_PRIORITY_ORDER.indexOf("stable_yield") < STABLE_YIELD_INTENDED_PRIORITY_ORDER.indexOf("contribution_dca"), "intended order");
+  add("16A-Q: engine CATEGORY_PRIORITY is unchanged in 16A", CATEGORY_PRIORITY.buffer === 1 && CATEGORY_PRIORITY.rebalance === 2 && CATEGORY_PRIORITY.capital_efficiency === 3 && CATEGORY_PRIORITY.stable_yield === 6 && CATEGORY_PRIORITY.dca === 7, "unchanged");
+
+  // 16A-R…S. Suppression vocabulary + existing positions.
+  add("16A-R: the suppression vocabulary defines the ten reasons", STABLE_YIELD_SUPPRESSION_REASONS.length === 10 && STABLE_YIELD_SUPPRESSION_REASONS.includes("safety_buffer_incomplete") && STABLE_YIELD_SUPPRESSION_REASONS.includes("no_eligible_capital") && STABLE_YIELD_SUPPRESSION_REASONS.includes("unknown_withdrawal_behavior"), `${STABLE_YIELD_SUPPRESSION_REASONS.length}`);
+  add("16A-S: existing positions remain visible; a suggestion needs additional eligible USDC; detection is not implemented", policy.existingPositionPolicy.existingPositionsRemainVisible === true && policy.existingPositionPolicy.suggestionRequiresAdditionalEligibleUsdc === true && policy.existingPositionPolicy.detectionImplemented === false, "existing policy");
+
+  // 16A-T…W. Allowance diagnostics.
+  add("16A-T: allowance is suppressed while the Safety Buffer is incomplete", buildStableYieldAllowanceResult({ safetyBufferComplete: false }).status === "suppressed" && buildStableYieldAllowanceResult({ safetyBufferComplete: false }).suppressionReasons.includes("safety_buffer_incomplete"), "suppressed");
+  add("16A-U: allowance is allowed once the Safety Buffer is complete with no suppression", buildStableYieldAllowanceResult({ safetyBufferComplete: true }).status === "allowed" && buildStableYieldAllowanceResult({ safetyBufferComplete: true }).bufferLaneApplicable === true && buildStableYieldAllowanceResult({ safetyBufferComplete: true }).excessLaneApplicable === true, "allowed");
+  add("16A-V: a supplied suppression reason keeps the result suppressed", buildStableYieldAllowanceResult({ safetyBufferComplete: true, suppressionReasons: ["no_eligible_capital"] }).status === "suppressed", "suppressed");
+  add("16A-W: diagnostics are deterministic and produce no recommendation", getStableYieldPolicyDiagnostics().lanes.join(",") === "safety_buffer_yield,excess_usdc_yield" && buildStableYieldAllowanceResult({ safetyBufferComplete: true }).recommendationGenerated === false && !/\b(buy|deposit now|recommended|best|guaranteed|apy)\b/i.test(explainStableYieldAllowance(buildStableYieldAllowanceResult({ safetyBufferComplete: true }))), "no recommendation");
+
+  // 16A-X…Y. Validators fail closed.
+  add("16A-X: a strategy with an enabled capability flag is rejected", validateStableYieldStrategyDefinition({ ...getStableYieldStrategyDefinition("lending"), suggestionGenerated: true } as never).valid === false, "rejected");
+  add("16A-Y: a buffer-lane strategy that is not conservative/liquid/stable is rejected", validateStableYieldStrategyDefinition({ ...getStableYieldStrategyDefinition("lending"), resultingExposure: "volatile" } as never).valid === false && validateStableYieldLanePolicy({ ...bufferLane, volatileExposureAllowed: true } as never).valid === false, "rejected");
+
+  // 16A-Z…AB. No downstream / no execution / no product import.
+  {
+    const blob = ["stableYieldPolicyTypes", "stableYieldPolicy", "stableYieldPolicyDiagnostics"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+    const handlers = ["sendtransaction", "signtransaction", "buy(", "swap(", "deposit(", "fetch(", "fetchapy", "fetchtvl"];
+    add("16A-Z: no registry / market-data / execution path exists in the policy files", policy.registryExists === false && policy.comparisonExists === false && policy.suggestionsExist === false && policy.executionEnabled === false && handlers.filter((h) => blob.includes(h)).length === 0, "policy only");
+  }
+  add("16A-AA: no protocol/vault registry is created in 16A", !existsSync(`${root}/src/suggestions/stableYieldRegistry.ts`) && !existsSync(`${root}/src/suggestions/stableYieldMarketData.ts`), "no registry");
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    add("16A-AB: no product-facing file imports the Stable Yield policy", prodFiles.every((f) => !/stableYieldPolicy/.test(readIf(f))), "no product import");
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -13955,6 +14057,7 @@ export function printFixtureResults(): void {
     ...runContributionIntegrationFixtureChecks(),
     ...runContributionUiTurnFixtureChecks(),
     ...runContributionFinalizationFixtureChecks(),
+    ...runStableYieldPolicyFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

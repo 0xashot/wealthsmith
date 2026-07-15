@@ -55,6 +55,17 @@ export const CONTRIBUTION_REVIEW_MODAL_ENABLED = true;
 export const CONTRIBUTION_DEMO_PIPELINE_ENABLED = true;
 export const CONTRIBUTION_REAL_WALLET_PIPELINE_ENABLED = true;
 export const CONTRIBUTION_TESTING_SCENARIOS_EXIST = true;
+// Step 16A — the deterministic Stable USDC Yield POLICY foundation now exists (lanes, strategy
+// taxonomy, protocol scope, suppression vocabulary). Everything downstream stays disabled: no
+// registry, comparison, wallet/protocol detection, market data, suggestions, UI, /testing, execution.
+export const STABLE_YIELD_POLICY_EXISTS = true;
+export const STABLE_YIELD_REGISTRY_EXISTS = false;
+export const STABLE_YIELD_COMPARISON_EXISTS = false;
+export const STABLE_YIELD_WALLET_DETECTION_EXISTS = false;
+export const STABLE_YIELD_SUGGESTIONS_EXIST = false;
+export const STABLE_YIELD_UI_ENABLED = false;
+export const STABLE_YIELD_TESTING_EXISTS = false;
+export const STABLE_YIELD_EXECUTION_ENABLED = false;
 // Step 15B — contribution-frequency (rhythm) normalization now exists. Both names refer to the
 // same layer (the field is "contribution_frequency" in onboarding); no contradictory duplicate.
 export const CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS = true;
