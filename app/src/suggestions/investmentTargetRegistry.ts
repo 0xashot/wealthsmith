@@ -82,7 +82,18 @@ export const STABLE_YIELD_PRODUCT_LEVEL_LANE_POLICY_EXISTS = true;
 export const STABLE_YIELD_ELIGIBILITY_UPDATES_PRODUCT_OUTPUT = false;
 export const STABLE_YIELD_ELIGIBILITY_EVALUATES_CAPITAL = false;
 export const STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER = false;
-export const STABLE_YIELD_COMPARISON_EXISTS = false;
+// Step 16E — the deterministic comparison engine now exists (per-lane six-dimension weighted scoring,
+// deterministic ordering, material-tie detection, weight-sensitivity analysis, and a comparison leader
+// only when stable). It compares only exact 16D-eligible products, separates buffer/excess, and reads
+// no wallet/capital; production is empty (no eligible candidates). Downstream stays disabled.
+export const YIELD_STRATEGY_COMPARISON_EXISTS = true;
+export const YIELD_STRATEGY_SCORING_EXISTS = true;
+export const YIELD_STRATEGY_SENSITIVITY_EXISTS = true;
+export const STABLE_YIELD_COMPARISON_EXISTS = true;
+export const STABLE_YIELD_COMPARISON_EVALUATES_WALLET = false;
+export const STABLE_YIELD_COMPARISON_EVALUATES_CAPITAL = false;
+export const STABLE_YIELD_COMPARISON_GENERATES_PLANS = false;
+export const STABLE_YIELD_COMPARISON_UPDATES_PRODUCT_OUTPUT = false;
 export const STABLE_YIELD_WALLET_DETECTION_EXISTS = false;
 export const STABLE_YIELD_PLANS_EXIST = false;
 export const STABLE_YIELD_SUGGESTIONS_EXIST = false;

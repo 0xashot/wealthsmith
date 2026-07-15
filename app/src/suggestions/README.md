@@ -1725,3 +1725,25 @@ verified audit, USDC-only, no leverage, `bufferUseReviewed`, instant withdrawal,
 TVL/liquidity floors) must still pass on the exact product. No product is promoted — production stays
 `documentation_required` with empty eligibility. Marker flag
 `STABLE_YIELD_PRODUCT_LEVEL_LANE_POLICY_EXISTS = true`; all other feature-state truth is unchanged.
+
+## 16E — Stable Yield comparison engine
+
+The deterministic comparison engine ([yieldStrategyComparison.md](./yieldStrategyComparison.md),
+`yield_strategy_comparison_v1` + `yield_strategy_scoring_v1` + `yield_strategy_sensitivity_v1`). It
+scores the exact 16D-eligible products of one lane on **six dimensions** — `risk_quality`,
+`withdrawal_liquidity`, `net_yield`, `market_depth`, `user_cost`, `data_quality` — with lane-specific v1
+weights (buffer 35/30/15/10/5/5, excess 25/20/25/15/10/5, each totalling 100; priority
+Safety > Yield > Cost > Convenience). Buffer and excess are compared **separately** (no cross-lane
+ranking). Risk = reviewed `riskScore×10` (never brand/APY/name); net-yield uses one comparable **net**
+basis (gross converts only with deterministic fee inputs; unknown basis withholds the leader; **no APY
+minimum, no earnings**); market-depth = log10(exact-product TVL); user-cost counts only fees **not**
+already in net APY (no double-count); data-quality = provenance + freshness (reusing 16C's provenance
+vocab). Ordering is score-descending with canonical registry order only for genuine ties; a ≤1.00-point
+top-two gap is a **material tie** (leader withheld), and a **±10% weight-sensitivity** check withholds
+the leader if it changes under any scenario — a leader is named only as `highest_stable_score`. A single
+eligible candidate returns `single_eligible_candidate` (only_eligible_candidate); **production is empty**
+(`empty_eligible_set`, no leaders, set validates). These scale/tie/sensitivity choices intentionally
+differ from the SOL selector (0–10 / epsilon / retention) — documented because Stable Yield deploys
+principal. Hubble gets no protocol penalty and its `documentation_required` entry is unscored.
+`YIELD_STRATEGY_COMPARISON_EXISTS`/`STABLE_YIELD_COMPARISON_EXISTS = true`; wallet/plans/suggestions/UI/
+testing/execution stay `false`.

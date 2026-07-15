@@ -901,6 +901,39 @@ import {
   STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER,
   STABLE_YIELD_PRODUCT_LEVEL_LANE_POLICY_EXISTS,
 } from "./investmentTargetRegistry";
+import {
+  YIELD_STRATEGY_COMPARISON_SCHEMA_VERSION,
+  YIELD_STRATEGY_SCORING_POLICY_ID,
+  YIELD_STRATEGY_SENSITIVITY_POLICY_ID,
+} from "./yieldStrategyComparisonTypes";
+import {
+  YIELD_STRATEGY_BUFFER_WEIGHTS,
+  YIELD_STRATEGY_EXCESS_WEIGHTS,
+  YIELD_STRATEGY_COMPARISON_MATERIAL_TIE_THRESHOLD,
+  getYieldStrategyComparisonPolicy,
+  validateYieldStrategyComparisonPolicy,
+} from "./yieldStrategyComparisonPolicy";
+import {
+  YIELD_STRATEGY_COMPARISON_EXISTS as CMP_FLAG_CONST,
+  compareYieldStrategiesForLane,
+  buildYieldStrategyComparisonSet,
+  buildProductionYieldStrategyComparisonSet,
+  validateYieldStrategyComparisonCandidate,
+  validateYieldStrategyLaneComparison,
+  validateYieldStrategyComparisonSet,
+} from "./yieldStrategyComparison";
+import { runYieldStrategyComparisonSensitivity } from "./yieldStrategyComparisonSensitivity";
+import { getYieldStrategyComparisonDiagnostics, explainYieldStrategyComparison } from "./yieldStrategyComparisonDiagnostics";
+import {
+  YIELD_STRATEGY_COMPARISON_EXISTS as CMP_FLAG_REG,
+  YIELD_STRATEGY_SCORING_EXISTS,
+  YIELD_STRATEGY_SENSITIVITY_EXISTS,
+  STABLE_YIELD_COMPARISON_EVALUATES_WALLET,
+  STABLE_YIELD_COMPARISON_EVALUATES_CAPITAL,
+  STABLE_YIELD_COMPARISON_GENERATES_PLANS,
+  STABLE_YIELD_COMPARISON_UPDATES_PRODUCT_OUTPUT,
+} from "./investmentTargetRegistry";
+import type { YieldStrategyComparisonLane as CMP_Lane, YieldStrategyLaneComparison as CMP_Lane_Result } from "./yieldStrategyComparisonTypes";
 import type { YieldStrategyRegistryEntry as ELIG_Entry } from "./yieldStrategyRegistryTypes";
 import type { YieldStrategyMarketSnapshot as ELIG_Snap, YieldStrategyMarketDataSet as ELIG_MarketSet, YieldApyData as ELIG_Apy, YieldLiquidityData as ELIG_Liq } from "./yieldStrategyMarketDataTypes";
 import {
@@ -13999,7 +14032,7 @@ export function runStableYieldPolicyFixtureChecks(): FixtureCheck[] {
   add("16A-A: schema version exists", STABLE_YIELD_POLICY_SCHEMA_VERSION === "1.0.0" && policy.schemaVersion === "1.0.0", STABLE_YIELD_POLICY_SCHEMA_VERSION);
   add("16A-B: policy ID/version exist", STABLE_YIELD_POLICY_ID === "stable_yield_policy_v1" && STABLE_YIELD_POLICY_VERSION === "1.0.0", STABLE_YIELD_POLICY_ID);
   add("16A-C: buffer and excess lane policy IDs exist", STABLE_BUFFER_YIELD_POLICY_ID === "stable_buffer_yield_v1" && STABLE_EXCESS_YIELD_POLICY_ID === "stable_excess_yield_v1", `${STABLE_BUFFER_YIELD_POLICY_ID}/${STABLE_EXCESS_YIELD_POLICY_ID}`);
-  add("16A-D: STABLE_YIELD_POLICY_EXISTS is enabled; comparison/detection/suggestions/UI/testing/execution stay disabled (registry enabled at 16B)", STABLE_YIELD_POLICY_EXISTS === true && STABLE_YIELD_REGISTRY_EXISTS === true && STABLE_YIELD_COMPARISON_EXISTS === false && STABLE_YIELD_WALLET_DETECTION_EXISTS === false && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "policy + registry");
+  add("16A-D: STABLE_YIELD_POLICY_EXISTS is enabled; wallet-detection/suggestions/UI/testing/execution stay disabled (comparison enabled at 16E)", STABLE_YIELD_POLICY_EXISTS === true && STABLE_YIELD_REGISTRY_EXISTS === true && STABLE_YIELD_WALLET_DETECTION_EXISTS === false && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "policy + registry");
   add("16A-E: the Stable Yield policy validates", validateStableYieldPolicy().valid === true, "valid");
   add("16A-F: Stable Yield is a Capital Efficiency suggestion family", policy.suggestionFamily === "capital_efficiency", policy.suggestionFamily);
 
@@ -14294,7 +14327,7 @@ export function runYieldStrategyEligibilityFixtureChecks(): FixtureCheck[] {
   add("16D-B: risk-review schema/version exist", YIELD_STRATEGY_RISK_REVIEW_SCHEMA_VERSION === "1.0.0" && YIELD_STRATEGY_RISK_REVIEW_POLICY_ID === "yield_strategy_risk_review_v1", YIELD_STRATEGY_RISK_REVIEW_POLICY_ID);
   add("16D-C: eligibility policy validates and reuses canonical thresholds", validateYieldStrategyEligibilityPolicy(policy).valid === true, "valid");
   add("16D-D: eligibility + risk-review feature flags are true", ELIG_FLAG_CONST === true && ELIG_FLAG_REG === true && STABLE_YIELD_ELIGIBILITY_EXISTS === true && YIELD_STRATEGY_RISK_REVIEW_EXISTS === true, "enabled");
-  add("16D-E: comparison remains false", STABLE_YIELD_COMPARISON_EXISTS === false && STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER === false, "no comparison");
+  add("16D-E: the eligibility layer itself selects no leader (comparison is a separate 16E layer)", STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER === false, "no leader in 16D");
 
   // 16D-F…J. Production empty state.
   add("16D-F: current production registry still has zero approved products", getApprovedYieldStrategies().length === 0, "0 approved");
@@ -14504,12 +14537,294 @@ export function runYieldStrategyProductLaneFixtureChecks(): FixtureCheck[] {
   add("16D1-S: current production eligibility remains empty_approved_set", prodSet.status === "empty_approved_set" && prodSet.emptyApprovedSet === true, prodSet.status);
   add("16D1-T: no production lifecycle or address changes (all documentation_required, no address)", listYieldStrategies().every((e) => e.lifecycle === "documentation_required" && e.address === undefined), "unchanged");
   // 16D1-U…Z. No downstream capability introduced.
-  add("16D1-U: no comparison is performed", evbV().comparisonPerformed === false && STABLE_YIELD_COMPARISON_EXISTS === false, "no comparison");
+  add("16D1-U: the eligibility result performs no comparison", evbV().comparisonPerformed === false, "no comparison");
   add("16D1-V: no leader is selected", evbV().leaderSelected === false && STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER === false, "no leader");
   add("16D1-W: no wallet balances or existing positions are consumed", evbV().userCapitalEvaluated === false && prodSet.walletPositionsEvaluated === false, "no wallet");
   add("16D1-X: no amount, plan or suggestion is generated", evbV().amountCalculated === false && evbV().planGenerated === false && evbV().suggestionGenerated === false && STABLE_YIELD_PLANS_EXIST === false && STABLE_YIELD_SUGGESTIONS_EXIST === false, "no amount/plan/suggestion");
   add("16D1-Y: no UI is added", STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false, "no UI");
   add("16D1-Z: no transaction or signature path exists", evbV().transactionsEnabled === false && evbV().walletSignatureRequired === false && STABLE_YIELD_EXECUTION_ENABLED === false, "read-only");
+
+  return checks;
+}
+
+/**
+ * Step 16E — Stable Yield comparison fixtures (16E-A…CV). Verifies the versioned scoring/sensitivity
+ * policy, the six-dimension weighted scorecards, deterministic ordering, material-tie + weight-
+ * sensitivity leader-withholding, lane separation, net-APY basis rules, fee double-count prevention,
+ * single-candidate + empty-production behavior, Hubble scope, and that nothing downstream is enabled.
+ */
+export function runYieldStrategyComparisonFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const T = "2026-07-16T00:00:00.000Z";
+
+  interface Spec {
+    id: string; protocolId?: string; strategyType?: string; riskScore?: number;
+    apyDefinition?: "net" | "gross"; netApyPct?: number; grossApyPct?: number;
+    tvlUsd?: number; withdrawalStatus?: string; withdrawalDelayHours?: number; withdrawalQueueActive?: boolean;
+    availableLiquidityUsd?: number; availableLiquidityRatio?: number; liquidityConfidence?: string;
+    provenanceKind?: string; browserFetched?: boolean; ageMs?: number; fetchedAt?: string; snapStatus?: string;
+    managementFeePct?: number; performanceFeePct?: number; withdrawalFeePct?: number; feeModel?: string;
+    exposure?: string; custody?: string; audit?: string; tier?: string; leverage?: boolean | "unknown"; operational?: string;
+    bufferReviewed?: boolean; excessReviewed?: boolean; compatibleIds?: string[]; supportedLane?: string; riskLane?: string; lifecycle?: string; displayName?: string;
+  }
+  const OFF = { marketDataEvaluated: false, eligibilityEvaluated: false, comparisonEvaluated: false, suggestionGenerated: false, transactionsEnabled: false, walletSignatureRequired: false } as const;
+  const mkEntry = (lane: CMP_Lane, s: Spec): ELIG_Entry => ({
+    schemaVersion: "1.0.0", registryVersion: "1.0.0", strategyId: s.id, displayName: s.displayName ?? `Synthetic ${s.id}`,
+    protocolId: (s.protocolId ?? "kamino") as ELIG_Entry["protocolId"], protocolDisplayName: "Kamino",
+    strategyType: (s.strategyType ?? "lending") as ELIG_Entry["strategyType"], principalAsset: "USDC",
+    supportedLane: (s.supportedLane ?? (lane === "buffer" ? "safety_buffer_yield" : "excess_usdc_yield")) as ELIG_Entry["supportedLane"],
+    riskLane: (s.riskLane ?? (lane === "buffer" ? "buffer_eligible" : "excess_only")) as ELIG_Entry["riskLane"],
+    lifecycle: (s.lifecycle ?? "approved") as ELIG_Entry["lifecycle"], officialUrl: "https://app.kamino.finance", address: `ADDR_${s.id}`,
+    ...OFF, notes: [],
+  });
+  const mkSnap = (lane: CMP_Lane, s: Spec): ELIG_Snap => ({
+    schemaVersion: "1.0.0", policyVersion: "1.0.0", strategyId: s.id, displayName: s.displayName ?? s.id,
+    protocolId: (s.protocolId ?? "kamino") as ELIG_Snap["protocolId"], protocolDisplayName: "Kamino",
+    strategyType: (s.strategyType ?? "lending") as ELIG_Snap["strategyType"], principalAsset: "USDC",
+    supportedLane: (s.supportedLane ?? (lane === "buffer" ? "safety_buffer_yield" : "excess_usdc_yield")) as ELIG_Snap["supportedLane"],
+    riskLane: (s.riskLane ?? (lane === "buffer" ? "buffer_eligible" : "excess_only")) as ELIG_Snap["riskLane"], lifecycle: "approved", address: `ADDR_${s.id}`,
+    status: (s.snapStatus ?? "complete") as ELIG_Snap["status"],
+    apy: { status: "fresh", apyDefinition: (s.apyDefinition ?? "net") as ELIG_Apy["apyDefinition"], apyWindow: "current",
+      currentApyPct: s.netApyPct ?? s.grossApyPct ?? 5,
+      ...((s.apyDefinition ?? "net") === "net" ? { netApyPct: s.netApyPct ?? 5 } : {}),
+      ...((s.apyDefinition) === "gross" ? { grossApyPct: s.grossApyPct ?? 6 } : {}),
+      definitionSufficientForComparison: true, notes: [] },
+    tvl: { status: "fresh", tvlUsd: s.tvlUsd ?? 2_000_000, currency: "USD", notes: [] },
+    liquidity: { status: "fresh", withdrawalStatus: (s.withdrawalStatus ?? "instant_currently_available") as ELIG_Liq["withdrawalStatus"],
+      ...(s.availableLiquidityUsd !== undefined ? { availableLiquidityUsd: s.availableLiquidityUsd } : { availableLiquidityUsd: 500_000 }),
+      ...(s.availableLiquidityRatio !== undefined ? { availableLiquidityRatio: s.availableLiquidityRatio } : {}),
+      ...(s.withdrawalDelayHours !== undefined ? { withdrawalDelayHours: s.withdrawalDelayHours } : {}),
+      withdrawalQueueActive: s.withdrawalQueueActive ?? false, liquidityConfidence: (s.liquidityConfidence ?? "explicit_source") as ELIG_Liq["liquidityConfidence"], notes: [] },
+    fees: { status: "fresh", feeModel: (s.feeModel ?? "management_fee") as ELIG_Snap["fees"]["feeModel"],
+      ...(s.managementFeePct !== undefined ? { managementFeePct: s.managementFeePct } : {}),
+      ...(s.performanceFeePct !== undefined ? { performanceFeePct: s.performanceFeePct } : {}),
+      ...(s.withdrawalFeePct !== undefined ? { withdrawalFeePct: s.withdrawalFeePct } : {}), notes: [] },
+    laneCompatibility: { supportedLane: (lane === "buffer" ? "safety_buffer_yield" : "excess_usdc_yield") as ELIG_Snap["supportedLane"], riskLane: (lane === "buffer" ? "buffer_eligible" : "excess_only") as ELIG_Snap["riskLane"], bufferLaneCandidate: lane === "buffer", excessLaneCandidate: true, bufferLaneFreshnessMaxAgeMs: 900000, excessLaneFreshnessMaxAgeMs: 3600000, bufferLaneRequiresInstantLiquidity: true, bufferLaneRequiresDefinedWithdrawal: true, notes: [] },
+    sourceId: "src", sourceLabel: "Src",
+    provenance: { kind: (s.provenanceKind ?? "documented_source") as ELIG_Snap["provenance"]["kind"], sourceId: "src", browserFetched: (s.browserFetched ?? false) as false, present: (s.provenanceKind ?? "documented_source") !== "none" },
+    fetchedAt: s.fetchedAt ?? T, checkedAt: T, maximumAgeMs: lane === "buffer" ? 900000 : 3600000, ageMs: s.ageMs ?? 0,
+    warnings: [], blockers: [], approvedForMarketData: true, marketDataComplete: true, marketDataFresh: true, eligibleForFutureComparison: true, ...OFF, rankingCalculated: false, leaderSelected: false, updatesProductOutput: false,
+  });
+  const mkReview = (s: Spec): ELIG_Review => ({
+    schemaVersion: "1.0.0", policyId: "yield_strategy_risk_review_v1", policyVersion: "1.0.0", reviewId: `rev_${s.id}`, reviewVersion: "1.0.0",
+    strategyId: s.id, protocolId: s.protocolId ?? "kamino", address: `ADDR_${s.id}`, reviewedAt: "2026-07-01T00:00:00.000Z", validUntil: "2026-12-31T00:00:00.000Z",
+    reviewStatus: "approved", operationalStatus: (s.operational ?? "active") as ELIG_Review["operationalStatus"], principalAssetId: "USDC",
+    resultingExposure: (s.exposure ?? "usdc_only") as ELIG_Review["resultingExposure"], custodyModel: (s.custody ?? "non_custodial") as ELIG_Review["custodyModel"], auditStatus: (s.audit ?? "verified") as ELIG_Review["auditStatus"], auditReferences: [],
+    leverageUsed: (s.leverage ?? false) as ELIG_Review["leverageUsed"], smartContractRiskTier: (s.tier ?? "conservative") as ELIG_Review["smartContractRiskTier"], riskScore: s.riskScore ?? 8,
+    compatibleUserRiskProfileIds: s.compatibleIds ?? ["very_low", "low", "medium", "high", "very_high"], bufferUseReviewed: s.bufferReviewed ?? true, excessUseReviewed: s.excessReviewed ?? true, notes: [],
+    comparisonPerformed: false, leaderSelected: false, amountCalculated: false, suggestionGenerated: false, transactionsEnabled: false, walletSignatureRequired: false,
+  });
+  const compareLane = (lane: CMP_Lane, specs: Spec[], userRisk: string | undefined = "medium"): CMP_Lane_Result => {
+    const entries = specs.map((s) => mkEntry(lane, s));
+    const snapshots: Record<string, ELIG_Snap> = {};
+    specs.forEach((s) => { snapshots[s.id] = mkSnap(lane, s); });
+    const marketSet = { snapshots } as unknown as ELIG_MarketSet;
+    const reviews = specs.map(mkReview);
+    const eligSet = buildYieldStrategyEligibilitySet({ registry: entries, marketDataSet: marketSet, riskReviews: reviews, userRiskProfileId: userRisk, checkedAt: T });
+    return compareYieldStrategiesForLane({ lane, eligibilitySet: eligSet, marketDataSet: marketSet, riskReviews: reviews, checkedAt: T });
+  };
+  const dimOf = (cmp: CMP_Lane_Result, id: string, dim: string) => cmp.candidateScorecards.find((c) => c.strategyId === id)!.dimensions.find((d) => d.dimension === dim)!;
+  const cardOf = (cmp: CMP_Lane_Result, id: string) => cmp.candidateScorecards.find((c) => c.strategyId === id)!;
+  const policy = getYieldStrategyComparisonPolicy();
+  const marketSet0 = buildEmptyApprovedYieldStrategyMarketDataSet(T);
+  const prodCmp = buildProductionYieldStrategyComparisonSet(marketSet0, T);
+  const cmpBlob = ["yieldStrategyComparisonTypes", "yieldStrategyComparisonPolicy", "yieldStrategyComparison", "yieldStrategyComparisonSensitivity", "yieldStrategyComparisonDiagnostics"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+
+  // ---- Versions + policy ----
+  add("16E-A: comparison schema/version exist", YIELD_STRATEGY_COMPARISON_SCHEMA_VERSION === "1.0.0" && policy.policyId === "yield_strategy_comparison_v1", policy.policyId);
+  add("16E-B: scoring policy exists", YIELD_STRATEGY_SCORING_POLICY_ID === "yield_strategy_scoring_v1", YIELD_STRATEGY_SCORING_POLICY_ID);
+  add("16E-C: sensitivity policy exists", YIELD_STRATEGY_SENSITIVITY_POLICY_ID === "yield_strategy_sensitivity_v1", YIELD_STRATEGY_SENSITIVITY_POLICY_ID);
+  add("16E-D: buffer weights total 100", Object.values(YIELD_STRATEGY_BUFFER_WEIGHTS).reduce((a, b) => a + b, 0) === 100, `${Object.values(YIELD_STRATEGY_BUFFER_WEIGHTS).reduce((a, b) => a + b, 0)}`);
+  add("16E-E: excess weights total 100", Object.values(YIELD_STRATEGY_EXCESS_WEIGHTS).reduce((a, b) => a + b, 0) === 100, `${Object.values(YIELD_STRATEGY_EXCESS_WEIGHTS).reduce((a, b) => a + b, 0)}`);
+  add("16E-F: every required dimension present exactly once; policy validates", validateYieldStrategyComparisonPolicy(policy).valid === true, "valid");
+  add("16E-G: comparison feature flag is true", CMP_FLAG_CONST === true && CMP_FLAG_REG === true && STABLE_YIELD_COMPARISON_EXISTS === true && YIELD_STRATEGY_SCORING_EXISTS === true && YIELD_STRATEGY_SENSITIVITY_EXISTS === true, "enabled");
+  add("16E-H: wallet/detection/plans/suggestions/UI/execution flags remain false", STABLE_YIELD_WALLET_DETECTION_EXISTS === false && STABLE_YIELD_PLANS_EXIST === false && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "false");
+
+  // ---- Production empty ----
+  add("16E-I: production registry still has zero approved products", getApprovedYieldStrategies().length === 0, "0 approved");
+  add("16E-J: production eligibility remains empty_approved_set", buildProductionYieldStrategyEligibilitySet(marketSet0, T).status === "empty_approved_set", "empty");
+  add("16E-K: production comparison set validates", validateYieldStrategyComparisonSet(prodCmp).valid === true, "valid");
+  add("16E-L: buffer comparison returns empty_eligible_set", prodCmp.bufferComparison.status === "empty_eligible_set", prodCmp.bufferComparison.status);
+  add("16E-M: excess comparison returns empty_eligible_set", prodCmp.excessComparison.status === "empty_eligible_set", prodCmp.excessComparison.status);
+  add("16E-N: no production leader is selected", prodCmp.bufferComparisonLeaderStrategyId === undefined && prodCmp.excessComparisonLeaderStrategyId === undefined, "no leader");
+  add("16E-O: no production address or market value is invented", listYieldStrategies().every((e) => e.address === undefined) && prodCmp.emptyApprovedSet === true, "clean");
+
+  // ---- Eligibility boundary ----
+  add("16E-P: only eligible_for_comparison candidates are scored", compareLane("buffer", [{ id: "p1" }]).candidateScorecards.every((c) => c.eligibleForComparison === true), "eligible only");
+  add("16E-Q: a blocked 16D candidate (unknown withdrawal) is not scored", compareLane("buffer", [{ id: "q1", withdrawalStatus: "unknown" }]).status === "empty_eligible_set", "blocked");
+  add("16E-R: an ineligible candidate (documentation_required) is not scored", compareLane("buffer", [{ id: "r1", lifecycle: "documentation_required" }]).candidateScorecards.length === 0, "ineligible");
+  add("16E-S: candidate identity mismatch is not eligible/scored", compareLane("buffer", [{ id: "s1", exposure: "stablecoin_pair" }]).status === "empty_eligible_set", "blocked");
+  add("16E-T: excess-only strategy is not scored in the buffer lane", compareLane("buffer", [{ id: "t1", supportedLane: "excess_usdc_yield", riskLane: "excess_only" }]).candidateScorecards.length === 0, "no buffer");
+  add("16E-U: a buffer candidate does not appear in the excess comparison unless independently eligible there", (() => { const set = buildYieldStrategyComparisonSet({ eligibilitySet: buildYieldStrategyEligibilitySet({ registry: [mkEntry("buffer", { id: "u1" })], marketDataSet: { snapshots: { u1: mkSnap("buffer", { id: "u1" }) } } as unknown as ELIG_MarketSet, riskReviews: [mkReview({ id: "u1" })], userRiskProfileId: "medium", checkedAt: T }), marketDataSet: { snapshots: { u1: mkSnap("buffer", { id: "u1" }) } } as unknown as ELIG_MarketSet, riskReviews: [mkReview({ id: "u1" })], checkedAt: T }); return set.bufferComparison.candidateScorecards.every((c) => c.lane === "buffer") && set.excessComparison.candidateScorecards.every((c) => c.lane === "excess"); })(), "lane separation");
+  add("16E-V: excess-only candidate cannot be inserted into the buffer comparison", compareLane("buffer", [{ id: "v1", riskLane: "excess_only", supportedLane: "excess_usdc_yield" }]).candidateScorecards.length === 0, "no buffer");
+
+  // ---- Score construction ----
+  const two = compareLane("buffer", [{ id: "a", riskScore: 9, tvlUsd: 5_000_000, availableLiquidityUsd: 800_000, netApyPct: 7 }, { id: "b", riskScore: 7.5, tvlUsd: 1_500_000, availableLiquidityUsd: 200_000, netApyPct: 5 }]);
+  add("16E-W: each dimension score stays 0–100", two.candidateScorecards.every((c) => c.dimensions.every((d) => d.normalizedScore >= 0 && d.normalizedScore <= 100)), "0–100");
+  add("16E-X: weighted contributions sum to total score", two.candidateScorecards.every((c) => Math.abs(c.dimensions.reduce((s, d) => s + d.weightedContribution, 0) - c.totalScore) < 1e-6), "sum");
+  add("16E-Y: total score stays 0–100", two.candidateScorecards.every((c) => c.totalScore >= 0 && c.totalScore <= 100), "0–100");
+  add("16E-Z: score precision is deterministic", JSON.stringify(compareLane("buffer", [{ id: "a", riskScore: 9 }, { id: "b", riskScore: 8 }]).candidateScorecards.map((c) => c.totalScore)) === JSON.stringify(compareLane("buffer", [{ id: "a", riskScore: 9 }, { id: "b", riskScore: 8 }]).candidateScorecards.map((c) => c.totalScore)), "deterministic");
+  add("16E-AA: candidate order is deterministic", JSON.stringify(two.orderedStrategyIds) === JSON.stringify(compareLane("buffer", [{ id: "a", riskScore: 9, tvlUsd: 5_000_000, availableLiquidityUsd: 800_000, netApyPct: 7 }, { id: "b", riskScore: 7.5, tvlUsd: 1_500_000, availableLiquidityUsd: 200_000, netApyPct: 5 }]).orderedStrategyIds), "stable");
+  {
+    const ab = compareLane("buffer", [{ id: "a", riskScore: 9 }, { id: "b", riskScore: 8 }]);
+    const ba = compareLane("buffer", [{ id: "b", riskScore: 8 }, { id: "a", riskScore: 9 }]);
+    add("16E-AB: input ordering does not alter score or result", cardOf(ab, "a").totalScore === cardOf(ba, "a").totalScore && ab.comparisonLeaderStrategyId === ba.comparisonLeaderStrategyId, "order-independent");
+  }
+
+  // ---- Risk dimension ----
+  add("16E-AC: higher reviewed risk score → higher risk-quality score", dimOf(compareLane("buffer", [{ id: "x", riskScore: 9 }]), "x", "risk_quality").normalizedScore > dimOf(compareLane("buffer", [{ id: "y", riskScore: 7 }]), "y", "risk_quality").normalizedScore, "9>7");
+  add("16E-AD: protocol name does not affect risk score", dimOf(compareLane("buffer", [{ id: "x", riskScore: 8, protocolId: "kamino" }]), "x", "risk_quality").normalizedScore === dimOf(compareLane("buffer", [{ id: "y", riskScore: 8, protocolId: "raydium" }]), "y", "risk_quality").normalizedScore, "brand-independent");
+  add("16E-AE: user risk tolerance does not increase product-quality score", dimOf(compareLane("excess", [{ id: "x", riskScore: 8 }], "very_high"), "x", "risk_quality").normalizedScore === dimOf(compareLane("excess", [{ id: "x", riskScore: 8 }], "low"), "x", "risk_quality").normalizedScore, "user-independent");
+  add("16E-AF: risk tier is not double-counted after eligibility", dimOf(compareLane("excess", [{ id: "x", riskScore: 8, tier: "conservative" }]), "x", "risk_quality").normalizedScore === dimOf(compareLane("excess", [{ id: "y", riskScore: 8, tier: "elevated" }]), "y", "risk_quality").normalizedScore, "tier-independent");
+
+  // ---- Liquidity dimension ----
+  {
+    const c = compareLane("excess", [{ id: "inst", withdrawalStatus: "instant_currently_available" }, { id: "part", withdrawalStatus: "partial_currently_available" }]);
+    add("16E-AG: instant withdrawal scores above partial when both are excess eligible", dimOf(c, "inst", "withdrawal_liquidity").normalizedScore > dimOf(c, "part", "withdrawal_liquidity").normalizedScore, "instant>partial");
+  }
+  {
+    const c = compareLane("excess", [{ id: "short", withdrawalStatus: "withdrawal_required", withdrawalDelayHours: 12 }, { id: "long", withdrawalStatus: "withdrawal_required", withdrawalDelayHours: 120 }]);
+    add("16E-AH: shorter delay scores above longer delay", dimOf(c, "short", "withdrawal_liquidity").normalizedScore > dimOf(c, "long", "withdrawal_liquidity").normalizedScore, "short>long");
+  }
+  {
+    const c = compareLane("buffer", [{ id: "hi", availableLiquidityUsd: 900_000 }, { id: "lo", availableLiquidityUsd: 150_000 }]);
+    add("16E-AI: higher explicit available liquidity scores above lower liquidity", dimOf(c, "hi", "withdrawal_liquidity").normalizedScore > dimOf(c, "lo", "withdrawal_liquidity").normalizedScore, "hi>lo");
+  }
+  {
+    const c = compareLane("buffer", [{ id: "bigtvl", tvlUsd: 50_000_000, availableLiquidityUsd: 120_000 }, { id: "bigliq", tvlUsd: 1_100_000, availableLiquidityUsd: 900_000 }]);
+    add("16E-AJ: TVL does not substitute for liquidity", dimOf(c, "bigliq", "withdrawal_liquidity").normalizedScore > dimOf(c, "bigtvl", "withdrawal_liquidity").normalizedScore, "liquidity independent");
+  }
+  {
+    const c = compareLane("buffer", [{ id: "hiapy", netApyPct: 20, availableLiquidityUsd: 120_000 }, { id: "hiliq", netApyPct: 3, availableLiquidityUsd: 900_000 }]);
+    add("16E-AK: APY does not substitute for liquidity", dimOf(c, "hiliq", "withdrawal_liquidity").normalizedScore > dimOf(c, "hiapy", "withdrawal_liquidity").normalizedScore, "liquidity independent");
+  }
+  add("16E-AL: unknown liquidity cannot be scored", compareLane("buffer", [{ id: "u", liquidityConfidence: "unknown", availableLiquidityUsd: undefined }]).status === "empty_eligible_set", "not scored");
+
+  // ---- Yield dimension ----
+  add("16E-AM: net APY is used directly", cardOf(compareLane("buffer", [{ id: "n", apyDefinition: "net", netApyPct: 5 }]), "n").apyBasis === "net" && cardOf(compareLane("buffer", [{ id: "n", apyDefinition: "net", netApyPct: 5 }]), "n").canonicalNetApyPct === 5, "net direct");
+  add("16E-AN: net APY is not charged recurring fees twice", cardOf(compareLane("buffer", [{ id: "n", apyDefinition: "net", netApyPct: 5, managementFeePct: 2, withdrawalFeePct: 0 }]), "n").incrementalUserCostBps === 0, "no double count");
+  add("16E-AO: gross APY converts to net only with deterministic fee inputs", cardOf(compareLane("buffer", [{ id: "g", apyDefinition: "gross", grossApyPct: 6, managementFeePct: 1 }]), "g").apyBasis === "gross_converted" && cardOf(compareLane("buffer", [{ id: "g", apyDefinition: "gross", grossApyPct: 6, managementFeePct: 1 }]), "g").canonicalNetApyPct === 5, "converted");
+  add("16E-AP: gross APY is never compared directly against net (gross-without-fees withholds leader)", compareLane("buffer", [{ id: "g", apyDefinition: "gross", grossApyPct: 6, feeModel: "spread_or_amm_fee" }, { id: "n", apyDefinition: "net", netApyPct: 5 }]).status === "leader_withheld_incomparable_data", "no mix");
+  add("16E-AQ: unknown/incomparable APY basis prevents leader selection", compareLane("excess", [{ id: "g", apyDefinition: "gross", grossApyPct: 6, feeModel: "spread_or_amm_fee" }, { id: "n", apyDefinition: "net", netApyPct: 5 }]).comparisonLeaderStrategyId === undefined, "no leader");
+  add("16E-AR: equal APYs produce neutral equal APY scores", (() => { const c = compareLane("buffer", [{ id: "a", netApyPct: 5 }, { id: "b", netApyPct: 5 }]); return dimOf(c, "a", "net_yield").normalizedScore === 50 && dimOf(c, "b", "net_yield").normalizedScore === 50; })(), "neutral 50");
+  add("16E-AS: single candidate receives neutral relative APY score", dimOf(compareLane("buffer", [{ id: "solo", netApyPct: 12 }]), "solo", "net_yield").normalizedScore === 50, "neutral 50");
+  {
+    const c = compareLane("buffer", [{ id: "hiapy", riskScore: 7, netApyPct: 9, tvlUsd: 1_000_000, availableLiquidityUsd: 120_000 }, { id: "safe", riskScore: 10, netApyPct: 5, tvlUsd: 50_000_000, availableLiquidityUsd: 900_000 }]);
+    add("16E-AT: higher APY alone does not guarantee the buffer leader", c.comparisonLeaderStrategyId === "safe", `${c.comparisonLeaderStrategyId}`);
+  }
+
+  // ---- Market depth ----
+  {
+    const c = compareLane("buffer", [{ id: "big", tvlUsd: 20_000_000 }, { id: "small", tvlUsd: 1_200_000 }]);
+    add("16E-AU: higher exact-product TVL → higher market-depth score", dimOf(c, "big", "market_depth").normalizedScore > dimOf(c, "small", "market_depth").normalizedScore, "big>small");
+  }
+  {
+    const c = compareLane("buffer", [{ id: "lo", tvlUsd: 1_000_000 }, { id: "mid", tvlUsd: 10_000_000 }, { id: "hi", tvlUsd: 1_000_000_000 }]);
+    add("16E-AV: log normalization prevents extreme TVL from linearly dominating", dimOf(c, "mid", "market_depth").normalizedScore > 10, `mid=${dimOf(c, "mid", "market_depth").normalizedScore}`);
+  }
+  add("16E-AW: protocol-wide unrelated TVL is not used (exact-product TVL only)", dimOf(compareLane("buffer", [{ id: "x", tvlUsd: 3_333_333 }]), "x", "market_depth").rawValues.tvlUsd === 3_333_333, "exact tvl");
+  add("16E-AX: equal TVL produces neutral equal depth scores", (() => { const c = compareLane("buffer", [{ id: "a", tvlUsd: 4_000_000 }, { id: "b", tvlUsd: 4_000_000 }]); return dimOf(c, "a", "market_depth").normalizedScore === 50 && dimOf(c, "b", "market_depth").normalizedScore === 50; })(), "neutral 50");
+
+  // ---- Cost ----
+  {
+    const c = compareLane("buffer", [{ id: "cheap", withdrawalFeePct: 0 }, { id: "pricey", withdrawalFeePct: 0.5 }]);
+    add("16E-AY: lower explicit incremental user cost scores higher", dimOf(c, "cheap", "user_cost").normalizedScore > dimOf(c, "pricey", "user_cost").normalizedScore, "cheap>pricey");
+  }
+  add("16E-AZ: fees already reflected in net APY are not counted again", cardOf(compareLane("buffer", [{ id: "m", apyDefinition: "net", netApyPct: 5, managementFeePct: 3, performanceFeePct: 10, withdrawalFeePct: 0 }]), "m").incrementalUserCostBps === 0, "0 incremental");
+  add("16E-BA: zero incremental user fee is handled", cardOf(compareLane("buffer", [{ id: "z", withdrawalFeePct: 0 }]), "z").incrementalUserCostBps === 0 && cardOf(compareLane("buffer", [{ id: "z", withdrawalFeePct: 0 }]), "z").status === "scored", "zero cost ok");
+  add("16E-BB: unclear fee semantics (feeModel unknown) prevent leader selection (not eligible)", compareLane("buffer", [{ id: "u", feeModel: "unknown" }]).status === "empty_eligible_set", "blocked");
+
+  // ---- Data quality ----
+  {
+    const c = compareLane("buffer", [{ id: "api", provenanceKind: "documented_source" }, { id: "fallback", provenanceKind: "same_origin_runtime_payload" }]);
+    add("16E-BC: protocol API/SDK provenance scores above registry fallback", dimOf(c, "api", "data_quality").normalizedScore > dimOf(c, "fallback", "data_quality").normalizedScore, "api>fallback");
+  }
+  {
+    const c = compareLane("excess", [{ id: "fresh", ageMs: 0 }, { id: "old", ageMs: 3_400_000 }]);
+    add("16E-BD: fresher valid data scores above older valid data", dimOf(c, "fresh", "data_quality").normalizedScore > dimOf(c, "old", "data_quality").normalizedScore, "fresh>old");
+  }
+  add("16E-BE: browser-fetched data cannot be scored", compareLane("buffer", [{ id: "b", browserFetched: true }]).status === "empty_eligible_set", "blocked");
+  add("16E-BF: stale data cannot be scored", compareLane("buffer", [{ id: "s", fetchedAt: "2026-07-15T20:00:00.000Z" }]).status === "empty_eligible_set", "blocked");
+
+  // ---- Lane behavior ----
+  add("16E-BG: buffer comparison uses buffer weights", dimOf(compareLane("buffer", [{ id: "x" }, { id: "y", riskScore: 7.5 }]), "x", "risk_quality").weight === 35, "35");
+  add("16E-BH: excess comparison uses excess weights", dimOf(compareLane("excess", [{ id: "x" }, { id: "y", riskScore: 7.5 }]), "x", "risk_quality").weight === 25, "25");
+  {
+    const c = compareLane("buffer", [{ id: "hiapy", riskScore: 7, netApyPct: 9, tvlUsd: 1_000_000, availableLiquidityUsd: 120_000 }, { id: "safe", riskScore: 10, netApyPct: 5, tvlUsd: 50_000_000, availableLiquidityUsd: 900_000 }]);
+    add("16E-BI: higher-yield but meaningfully weaker-risk candidate may lose the buffer comparison", c.comparisonLeaderStrategyId === "safe", `${c.comparisonLeaderStrategyId}`);
+  }
+  {
+    const c = compareLane("excess", [{ id: "yield", riskScore: 8, netApyPct: 9, tvlUsd: 6_000_000, availableLiquidityUsd: 600_000 }, { id: "other", riskScore: 8, netApyPct: 5, tvlUsd: 5_000_000, availableLiquidityUsd: 600_000 }]);
+    add("16E-BJ: higher-yield candidate may lead excess when risk/liquidity remain competitive", c.comparisonLeaderStrategyId === "yield", `${c.comparisonLeaderStrategyId}`);
+  }
+  {
+    const set = buildYieldStrategyComparisonSet({ eligibilitySet: buildYieldStrategyEligibilitySet({ registry: [mkEntry("buffer", { id: "bk1" })], marketDataSet: { snapshots: { bk1: mkSnap("buffer", { id: "bk1" }) } } as unknown as ELIG_MarketSet, riskReviews: [mkReview({ id: "bk1" })], userRiskProfileId: "medium", checkedAt: T }), marketDataSet: { snapshots: { bk1: mkSnap("buffer", { id: "bk1" }) } } as unknown as ELIG_MarketSet, riskReviews: [mkReview({ id: "bk1" })], checkedAt: T });
+    add("16E-BK: no cross-lane shared ranking exists", set.bufferComparison.candidateScorecards.every((c) => c.lane === "buffer") && set.excessComparison.candidateScorecards.every((c) => c.lane === "excess"), "separate");
+  }
+
+  // ---- Single candidate ----
+  const single = compareLane("buffer", [{ id: "only" }]);
+  add("16E-BL: one eligible candidate returns single_eligible_candidate", single.status === "single_eligible_candidate", single.status);
+  add("16E-BM: the only eligible candidate is returned as the comparison leader", single.comparisonLeaderStrategyId === "only", `${single.comparisonLeaderStrategyId}`);
+  add("16E-BN: leader-selection reason is only_eligible_candidate", single.leaderSelectionReason === "only_eligible_candidate", single.leaderSelectionReason);
+  add("16E-BO: no claim that it defeated alternatives is generated", !/best|winner|safest|defeat|beat/i.test(explainYieldStrategyComparison(single)), "no claim");
+
+  // ---- Tie behavior ----
+  const tieExact = compareLane("buffer", [{ id: "a" }, { id: "b" }]);
+  add("16E-BP: exact equal scores create a material tie", tieExact.tieAnalysis.materialTie === true && tieExact.tieAnalysis.scoreDifference === 0, "tie");
+  const tieNear = compareLane("buffer", [{ id: "a", riskScore: 8.0 }, { id: "b", riskScore: 7.9 }]);
+  add("16E-BQ: near-equal scores within threshold create a material tie", tieNear.tieAnalysis.materialTie === true && (tieNear.tieAnalysis.scoreDifference ?? 9) <= YIELD_STRATEGY_COMPARISON_MATERIAL_TIE_THRESHOLD, `${tieNear.tieAnalysis.scoreDifference}`);
+  add("16E-BR: material tie withholds the leader", tieExact.status === "leader_withheld_tie" && tieExact.comparisonLeaderStrategyId === undefined, "withheld");
+  add("16E-BS: registry order is used only for stable tied display order", JSON.stringify(tieExact.orderedStrategyIds) === JSON.stringify(["a", "b"]), tieExact.orderedStrategyIds.join(","));
+  add("16E-BT: registry order does not manufacture a leader", tieExact.comparisonLeaderStrategyId === undefined, "no leader");
+  add("16E-BU: APY is not used as an undocumented tie breaker", (() => { const c = compareLane("buffer", [{ id: "a", riskScore: 7, netApyPct: 9, availableLiquidityUsd: 100_000 }, { id: "b", riskScore: 10, netApyPct: 3, availableLiquidityUsd: 900_000 }]); return c.tieAnalysis.materialTie === true && c.comparisonLeaderStrategyId === undefined; })(), "no apy tiebreak");
+
+  // ---- Sensitivity ----
+  const stableCmp = compareLane("buffer", [{ id: "a", riskScore: 10 }, { id: "b", riskScore: 7 }]);
+  add("16E-BV: stable leader remains selected across approved perturbations", stableCmp.status === "complete" && stableCmp.sensitivityAnalysis.status === "stable" && stableCmp.comparisonLeaderStrategyId === "a", stableCmp.status);
+  add("16E-BW: changed leader under perturbation causes sensitivity failure", runYieldStrategyComparisonSensitivity({ candidates: [{ strategyId: "a", dimensionScores: { risk_quality: 100, withdrawal_liquidity: 100, net_yield: 100, market_depth: 100, user_cost: 100, data_quality: 100 } }, { strategyId: "b", dimensionScores: { risk_quality: 40, withdrawal_liquidity: 40, net_yield: 40, market_depth: 40, user_cost: 40, data_quality: 40 } }], baselineWeights: YIELD_STRATEGY_BUFFER_WEIGHTS, baselineLeaderStrategyId: "b" }).status === "unstable", "unstable");
+  add("16E-BX: material tie under perturbation causes sensitivity failure", runYieldStrategyComparisonSensitivity({ candidates: [{ strategyId: "a", dimensionScores: { risk_quality: 50, withdrawal_liquidity: 50, net_yield: 50, market_depth: 50, user_cost: 50, data_quality: 50 } }, { strategyId: "b", dimensionScores: { risk_quality: 50, withdrawal_liquidity: 50, net_yield: 50, market_depth: 50, user_cost: 50, data_quality: 50 } }], baselineWeights: YIELD_STRATEGY_BUFFER_WEIGHTS, baselineLeaderStrategyId: "a" }).status === "unstable", "tie unstable");
+  const unstableCmp = compareLane("buffer", [{ id: "a", riskScore: 8.0 }, { id: "b", riskScore: 7.7 }]);
+  add("16E-BY: unstable sensitivity withholds the leader", unstableCmp.status === "leader_withheld_sensitivity" && unstableCmp.comparisonLeaderStrategyId === undefined && unstableCmp.sensitivityAnalysis.status === "unstable", unstableCmp.status);
+  add("16E-BZ: single candidate sensitivity is not_applicable_single_candidate", single.sensitivityAnalysis.status === "not_applicable_single_candidate", single.sensitivityAnalysis.status);
+  add("16E-CA: empty set sensitivity is not_applicable_empty_set", prodCmp.bufferComparison.sensitivityAnalysis.status === "not_applicable_empty_set", prodCmp.bufferComparison.sensitivityAnalysis.status);
+
+  // ---- Leader language + status ----
+  add("16E-CB: selected leader uses highest_stable_score", stableCmp.leaderSelectionReason === "highest_stable_score", stableCmp.leaderSelectionReason);
+  add("16E-CC: tie uses none_material_tie", tieExact.leaderSelectionReason === "none_material_tie", tieExact.leaderSelectionReason);
+  add("16E-CD: sensitivity failure uses none_sensitivity_failed", unstableCmp.leaderSelectionReason === "none_sensitivity_failed", unstableCmp.leaderSelectionReason);
+  add("16E-CE: incomparable APY/fee semantics uses none_incomparable_data", compareLane("buffer", [{ id: "g", apyDefinition: "gross", grossApyPct: 6, feeModel: "spread_or_amm_fee" }, { id: "n", apyDefinition: "net", netApyPct: 5 }]).leaderSelectionReason === "none_incomparable_data", "reason");
+  add("16E-CF: no best/safest/winner/recommended language appears in explain/diagnostics", !/\b(best|safest|winner|recommended|guaranteed|risk-free|you should)\b/i.test([explainYieldStrategyComparison(stableCmp), explainYieldStrategyComparison(single), explainYieldStrategyComparison(tieExact), explainYieldStrategyComparison(unstableCmp), JSON.stringify(getYieldStrategyComparisonDiagnostics(stableCmp))].join(" ")), "clean language");
+
+  // ---- Hubble ----
+  add("16E-CG: Hubble remains in the documented registry", getYieldStrategiesByProtocol("hubble").length >= 1, "present");
+  add("16E-CH: Hubble receives no protocol-name penalty (no 'hubble' hardcode in comparison code)", !cmpBlob.includes("hubble"), "no penalty");
+  add("16E-CI: current Hubble entry remains unscored because it is documentation_required", getYieldStrategy("hubble_usdc_strategy")!.lifecycle === "documentation_required" && prodCmp.excessComparison.candidateScorecards.length === 0, "unscored");
+
+  // ---- Boundaries ----
+  add("16E-CJ: no wallet balance is consumed", stableCmp.walletPositionsEvaluated === false && prodCmp.walletPositionsEvaluated === false && !/getbalance|walletbalance|usewallet/.test(cmpBlob), "no wallet");
+  add("16E-CK: no existing position is detected", prodCmp.walletPositionsEvaluated === false && STABLE_YIELD_COMPARISON_EVALUATES_WALLET === false, "no positions");
+  add("16E-CL: no buffer surplus is calculated", !/surplus/.test(cmpBlob), "no surplus");
+  add("16E-CM: no eligible user capital is calculated", prodCmp.userCapitalEvaluated === false && STABLE_YIELD_COMPARISON_EVALUATES_CAPITAL === false, "no capital");
+  add("16E-CN: no amount is calculated", stableCmp.amountCalculated === false && prodCmp.amountCalculated === false, "no amount");
+  add("16E-CO: no expected earnings are calculated", !/expectedearnings|projectedearnings/.test(cmpBlob), "no earnings");
+  add("16E-CP: no plan is generated", prodCmp.planGenerated === false && STABLE_YIELD_COMPARISON_GENERATES_PLANS === false, "no plan");
+  add("16E-CQ: no suggestion is generated", prodCmp.suggestionGenerated === false && STABLE_YIELD_SUGGESTIONS_EXIST === false, "no suggestion");
+  add("16E-CR: no product output is updated", prodCmp.updatesProductOutput === false && STABLE_YIELD_COMPARISON_UPDATES_PRODUCT_OUTPUT === false, "no output");
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    add("16E-CS: no UI or /testing card is added (no product-facing import of comparison)", STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && prodFiles.every((f) => !/yieldStrategyComparison/.test(readIf(f))), "no UI");
+  }
+  add("16E-CT: no transaction path exists", stableCmp.transactionsEnabled === false && prodCmp.transactionsEnabled === false && STABLE_YIELD_EXECUTION_ENABLED === false, "read-only");
+  add("16E-CU: no signature path exists", stableCmp.walletSignatureRequired === false && prodCmp.walletSignatureRequired === false, "no signature");
+  add("16E-CV: no deposit/withdraw/swap/stake/execute handler exists", !/sendtransaction|signtransaction|deposit\(|withdraw\(|swap\(|stake\(|execute\(|fetch\(/.test(cmpBlob), "no handlers");
+
+  // ---- Validator integrity ----
+  add("16E-INT-A: a scored candidate + lane comparison validate", validateYieldStrategyComparisonCandidate(cardOf(two, "a")).valid === true && validateYieldStrategyLaneComparison(two).valid === true, "valid");
+  add("16E-INT-B: the full production comparison set validates", validateYieldStrategyComparisonSet(prodCmp).valid === true, "valid");
 
   return checks;
 }
@@ -14605,6 +14920,7 @@ export function printFixtureResults(): void {
     ...runYieldStrategyMarketDataFixtureChecks(),
     ...runYieldStrategyEligibilityFixtureChecks(),
     ...runYieldStrategyProductLaneFixtureChecks(),
+    ...runYieldStrategyComparisonFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

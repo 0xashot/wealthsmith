@@ -970,3 +970,15 @@ reviews today** (the store is empty). Eligibility reuses the canonical documente
 bounds; it invents no new numbers. No canonical product-review freshness max-age is documented, so
 expiry relies only on a review's explicit `validUntil`. See
 [yieldStrategyEligibility.md](./yieldStrategyEligibility.md).
+
+## 16E — Stable Yield comparison source boundary
+
+The comparison engine (Step 16E) introduces **no new data source**: it consumes only the 16C market
+snapshots + 16D risk reviews of already-eligible products, and reuses the 16C provenance vocabulary
+(`YieldMarketProvenanceKind`) for the data-quality dimension — `documented_source` (protocol API/SDK or
+official endpoint) is the primary tier, `backend_normalized` an approved-provider aggregation,
+`same_origin_runtime_payload` a fallback, `none`/browser-fetched invalid. It re-invents no thresholds
+(TVL/liquidity/withdrawal-hours from 12E `engineThresholds.ts`; freshness from 16C); its 0–100 scale,
+1.00-point material-tie band, and ±10% weight-sensitivity are the versioned `yield_strategy_*_v1`
+source of truth, deliberately distinct from the SOL selector's 0–10 / epsilon / retention framework
+because Stable Yield deploys principal. See [yieldStrategyComparison.md](./yieldStrategyComparison.md).
