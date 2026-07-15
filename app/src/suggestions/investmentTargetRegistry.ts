@@ -26,11 +26,17 @@ export { INVESTMENT_TARGET_SCHEMA_VERSION, INVESTMENT_TARGET_REGISTRY_VERSION } 
 export const INVESTMENT_TARGET_REGISTRY_EXISTS = true;
 
 export const CONTRIBUTION_PLANNING_EXISTS = false;
-export const CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS = false;
+// Step 15B — contribution-frequency (rhythm) normalization now exists. Both names refer to the
+// same layer (the field is "contribution_frequency" in onboarding); no contradictory duplicate.
+export const CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS = true;
+export const CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS = true;
 export const CONTRIBUTION_PRIORITY_ENGINE_EXISTS = false;
 export const TARGET_ALLOCATION_GAP_ENGINE_EXISTS = false;
 export const DCA_PLAN_GENERATION_EXISTS = false;
 export const DCA_SUGGESTION_ENABLED = false;
+export const CONTRIBUTION_DATES_GENERATED = false;
+export const CONTRIBUTION_TARGET_SELECTION_ENABLED = false;
+export const CONTRIBUTION_AUTOMATION_ENABLED = false;
 
 export const SOL_CONTRIBUTION_TARGET_MODELED = true;
 export const SOL_CONTRIBUTION_TARGET_ENABLED_FOR_MVP = true;

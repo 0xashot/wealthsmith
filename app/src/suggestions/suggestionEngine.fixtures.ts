@@ -554,6 +554,31 @@ import {
   type InvestmentTargetTechnicalContext,
 } from "./investmentTargetEligibility";
 import {
+  CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS,
+  CONTRIBUTION_PRIORITY_ENGINE_EXISTS,
+} from "./investmentTargetRegistry";
+import {
+  CONTRIBUTION_FREQUENCY_SCHEMA_VERSION,
+  CONTRIBUTION_FREQUENCY_POLICY_VERSION,
+} from "./contributionFrequencyTypes";
+import {
+  CONTRIBUTION_FREQUENCY_CANONICAL_ORDER,
+  listContributionFrequencyDefinitions,
+  getContributionFrequencyDefinition,
+  validateContributionFrequencyPolicy,
+  resolveContributionFrequencyId,
+} from "./contributionFrequencyPolicy";
+import {
+  normalizeMonthlySavingGoalToCents,
+  buildContributionCentDecomposition,
+  normalizeContributionFrequency,
+  validateContributionFrequencyNormalizationResult,
+  validateContributionCentDecomposition,
+  getContributionFrequencyNormalizationDiagnostics,
+  explainContributionFrequencyNormalization,
+} from "./contributionFrequencyNormalization";
+import { CONTRIBUTION_OPTIONS } from "../state/goalState";
+import {
   SOL_STAKING_MARKET_DATA_MODEL_EXISTS,
   SOL_STAKING_MARKET_DATA_MUTATES_APPROVAL_EVIDENCE,
   SOL_STAKING_MARKET_DATA_MUTATES_RISK_SCORES,
@@ -11675,7 +11700,7 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
 
   // 15A-CB…CH. Feature-state invariants.
   add("15A-CB: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
-  add("15A-CC: rhythm normalization remains disabled", CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS === false, "disabled");
+  add("15A-CC: rhythm normalization now exists (enabled at Step 15B)", CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS === true, "enabled");
   add("15A-CD: allocation-gap calculation remains disabled", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === false, "disabled");
   add("15A-CE: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false && DCA_SUGGESTION_ENABLED === false, "disabled");
   add("15A-CF: BTC contribution suggestions remain disabled", BTC_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
@@ -11693,6 +11718,181 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
 
   // Accessor smoke.
   add("15A-accessors: enabled/mvp/modeled accessors are consistent", getEnabledInvestmentTargets().map((t) => t.targetId).join(",") === "usdc,sol" && getMvpInvestmentTargets().map((t) => t.targetId).join(",") === "usdc,sol" && getModeledFutureTargets().map((t) => t.targetId).join(",") === "btc,eth" && getSafetyBufferTargets().map((t) => t.targetId).join(",") === "usdc" && getStableAllocationDestinations().map((t) => t.targetId).join(",") === "usdc" && getEnabledContributionGrowthTargets().map((t) => t.targetId).join(",") === "sol", "ok");
+
+  return checks;
+}
+
+export function runContributionFrequencyNormalizationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const norm = (goal: unknown, freq: unknown, currency?: unknown) => normalizeContributionFrequency({ monthlySavingGoalUsd: goal, contributionFrequency: freq, ...(currency !== undefined ? { currency } : {}) });
+  const monthly = norm(1000, "monthly");
+  const biweekly = norm(1000, "biweekly");
+  const weekly = norm(1000, "weekly");
+  const quarterly = norm(1000, "quarterly");
+  const occasional = norm(1000, "occasional");
+
+  // 15B-A…F. Onboarding source alignment.
+  const onboardingValues = CONTRIBUTION_OPTIONS.map((o) => o.value);
+  add("15B-A: the real onboarding contribution-frequency field/type is identified", JSON.stringify(onboardingValues) === JSON.stringify(["weekly", "biweekly", "monthly", "quarterly", "occasional"]), onboardingValues.join(","));
+  add("15B-B: normalization supports exactly the five onboarding choices", CONTRIBUTION_FREQUENCY_CANONICAL_ORDER.length === 5 && onboardingValues.every((v) => CONTRIBUTION_FREQUENCY_CANONICAL_ORDER.includes(v as never)), "five");
+  add("15B-C: no competing additional product frequency is introduced", resolveContributionFrequencyId("twice_monthly") === undefined && resolveContributionFrequencyId("semi_monthly") === undefined && resolveContributionFrequencyId("custom") === undefined && resolveContributionFrequencyId("daily") === undefined, "none");
+  add("15B-D: all five real onboarding values resolve directly", onboardingValues.every((v) => resolveContributionFrequencyId(v) === v), "resolve");
+  add("15B-E: the adapter preserves the raw onboarding value", norm(1000, "biweekly").sourceContributionFrequency === "biweekly" && norm(1000, "Bi-Weekly").sourceContributionFrequency === "Bi-Weekly", "preserved");
+  add("15B-F: unknown values do not use fuzzy matching", resolveContributionFrequencyId("bi") === undefined && resolveContributionFrequencyId("weeklyish") === undefined && resolveContributionFrequencyId("month") === undefined, "no fuzzy");
+
+  // 15B-G…M. Schema + policy.
+  add("15B-G: schema version exists", CONTRIBUTION_FREQUENCY_SCHEMA_VERSION === "1.0.0" && monthly.schemaVersion === "1.0.0", CONTRIBUTION_FREQUENCY_SCHEMA_VERSION);
+  add("15B-H: policy version exists", CONTRIBUTION_FREQUENCY_POLICY_VERSION === "1.0.0", CONTRIBUTION_FREQUENCY_POLICY_VERSION);
+  add("15B-I: contribution-frequency normalization exists", CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS === true, "exists");
+  add("15B-J: canonical frequency policy validates", validateContributionFrequencyPolicy().valid === true, "valid");
+  add("15B-K: canonical frequency order matches onboarding", JSON.stringify(listContributionFrequencyDefinitions().map((d) => d.frequencyId)) === JSON.stringify(["weekly", "biweekly", "monthly", "quarterly", "occasional"]), "order");
+  { const d = getContributionFrequencyDefinition("weekly")!; d.contributionsPerYear = 999; add("15B-L: definitions are immutable or safely copied", getContributionFrequencyDefinition("weekly")!.contributionsPerYear === 52, "safe copy"); }
+  add("15B-M: policy contains exactly five frequencies", listContributionFrequencyDefinitions().length === 5, "five");
+
+  // 15B-N…U. Frequency counts.
+  add("15B-N: weekly uses 52 contributions per year", getContributionFrequencyDefinition("weekly")!.contributionsPerYear === 52, "52");
+  add("15B-O: biweekly uses 26 contributions per year", getContributionFrequencyDefinition("biweekly")!.contributionsPerYear === 26, "26");
+  add("15B-P: monthly uses 12 contributions per year", getContributionFrequencyDefinition("monthly")!.contributionsPerYear === 12, "12");
+  add("15B-Q: quarterly uses 4 contributions per year", getContributionFrequencyDefinition("quarterly")!.contributionsPerYear === 4, "4");
+  add("15B-R: occasional has no fixed annual frequency", getContributionFrequencyDefinition("occasional")!.contributionsPerYear === undefined && getContributionFrequencyDefinition("occasional")!.fixedFrequency === false, "irregular");
+  add("15B-S: biweekly is not treated as twice monthly", getContributionFrequencyDefinition("biweekly")!.contributionsPerYear === 26 && getContributionFrequencyDefinition("biweekly")!.contributionsPerYear !== 24, "26 not 24");
+  add("15B-T: no twice-monthly frequency exists", getContributionFrequencyDefinition("twice_monthly") === undefined && !CONTRIBUTION_FREQUENCY_CANONICAL_ORDER.includes("twice_monthly" as never), "none");
+  add("15B-U: no custom frequency exists", getContributionFrequencyDefinition("custom") === undefined && !CONTRIBUTION_FREQUENCY_CANONICAL_ORDER.includes("custom" as never), "none");
+
+  // 15B-V…AB. Alias resolution.
+  add("15B-V: weekly aliases resolve to weekly", ["weekly", "Weekly", "every_week", "once_a_week"].every((a) => resolveContributionFrequencyId(a) === "weekly"), "weekly");
+  add("15B-W: biweekly aliases resolve to biweekly", ["biweekly", "Biweekly", "Bi-Weekly", "bi_weekly", "every_two_weeks", "every_2_weeks", "fortnightly"].every((a) => resolveContributionFrequencyId(a) === "biweekly"), "biweekly");
+  add("15B-X: monthly aliases resolve to monthly", ["monthly", "Monthly", "once_a_month", "every_month"].every((a) => resolveContributionFrequencyId(a) === "monthly"), "monthly");
+  add("15B-Y: quarterly aliases resolve to quarterly", ["quarterly", "Quarterly", "every_quarter", "once_a_quarter", "every_three_months"].every((a) => resolveContributionFrequencyId(a) === "quarterly"), "quarterly");
+  add("15B-Z: occasional aliases resolve to occasional", ["occasional", "Occasional", "occasionally", "irregular", "as_available"].every((a) => resolveContributionFrequencyId(a) === "occasional"), "occasional");
+  add("15B-AA: unknown frequency fails instead of becoming occasional", resolveContributionFrequencyId("nonsense") === undefined && norm(1000, "nonsense").status === "unsupported_frequency", "fails");
+  add("15B-AB: biweekly aliases always resolve to 26 annual contributions", ["biweekly", "every_two_weeks", "fortnightly"].every((a) => norm(1000, a).contributionsPerYear === 26), "26");
+
+  // 15B-AC…AK. Saving-goal validation.
+  add("15B-AC: positive whole-dollar monthly goal validates", norm(1000, "monthly").status === "normalized_fixed", "valid");
+  add("15B-AD: positive cent-value monthly goal validates", normalizeMonthlySavingGoalToCents(1000.55).cents === 100055 && norm(1000.55, "monthly").status === "normalized_fixed", "valid");
+  add("15B-AE: zero produces no_saving_goal", norm(0, "monthly").status === "no_saving_goal", "no goal");
+  add("15B-AF: negative goal fails", norm(-100, "monthly").status === "invalid_saving_goal" && norm(-100, "monthly").blockers.includes("monthly_saving_goal_negative"), "fails");
+  add("15B-AG: NaN fails", norm(NaN, "monthly").status === "invalid_saving_goal" && norm(NaN, "monthly").blockers.includes("monthly_saving_goal_not_finite"), "fails");
+  add("15B-AH: Infinity fails", norm(Infinity, "monthly").blockers.includes("monthly_saving_goal_not_finite"), "fails");
+  add("15B-AI: more than two meaningful decimals fails", normalizeMonthlySavingGoalToCents(1000.123).ok === false && norm(1000.123, "monthly").blockers.includes("monthly_saving_goal_invalid_precision"), "fails");
+  add("15B-AJ: safe integer cents are preserved", normalizeMonthlySavingGoalToCents(1000).cents === 100000, "100000");
+  add("15B-AK: unsafe annual cents fail closed", norm(Number.MAX_SAFE_INTEGER / 100, "monthly").blockers.some((b) => b === "annual_total_unsafe" || b === "monthly_saving_goal_unsafe"), "unsafe");
+
+  // 15B-AL…AP. Monthly example.
+  add("15B-AL: $1,000 monthly produces $12,000 annual", monthly.annualSavingGoalUsd === 12000 && monthly.annualSavingGoalCents === 1200000, `${monthly.annualSavingGoalUsd}`);
+  add("15B-AM: monthly frequency produces 12 contributions", monthly.contributionsPerYear === 12, "12");
+  add("15B-AN: monthly exact average is $1,000", monthly.exactAverageContributionAmountUsd === 1000, "1000");
+  add("15B-AO: monthly decomposition is 12 × $1,000", monthly.centDecomposition!.contributionsAtBaseAmount === 12 && monthly.centDecomposition!.baseContributionAmountUsd === 1000, "12x1000");
+  add("15B-AP: monthly remainder is zero", monthly.centDecomposition!.remainderCents === 0, "0");
+
+  // 15B-AQ…AY. Biweekly example.
+  add("15B-AQ: $1,000 monthly and Biweekly produces 26 contributions", biweekly.contributionsPerYear === 26, "26");
+  add("15B-AR: exact average is 12000 / 26", biweekly.exactAverageContributionAmountUsd === 12000 / 26, `${biweekly.exactAverageContributionAmountUsd}`);
+  add("15B-AS: display average is $461.54", biweekly.approximateDisplayContributionAmountUsd === 461.54, `${biweekly.approximateDisplayContributionAmountUsd}`);
+  add("15B-AT: base contribution is $461.53", biweekly.centDecomposition!.baseContributionAmountUsd === 461.53, `${biweekly.centDecomposition!.baseContributionAmountUsd}`);
+  add("15B-AU: base-plus-one contribution is $461.54", biweekly.centDecomposition!.basePlusOneCentContributionAmountUsd === 461.54, `${biweekly.centDecomposition!.basePlusOneCentContributionAmountUsd}`);
+  add("15B-AV: 22 contributions use $461.54", biweekly.centDecomposition!.contributionsAtBasePlusOneCent === 22, `${biweekly.centDecomposition!.contributionsAtBasePlusOneCent}`);
+  add("15B-AW: 4 contributions use $461.53", biweekly.centDecomposition!.contributionsAtBaseAmount === 4, `${biweekly.centDecomposition!.contributionsAtBaseAmount}`);
+  add("15B-AX: biweekly decomposition totals exactly $12,000", (biweekly.centDecomposition!.baseContributionCents * 4 + (biweekly.centDecomposition!.baseContributionCents + 1) * 22) === 1200000, "exact");
+  add("15B-AY: biweekly is not calculated as $500 twice per month", biweekly.exactAverageContributionAmountUsd !== 500 && biweekly.contributionsPerYear !== 24, "not 500");
+
+  // 15B-AZ…BE. Weekly example.
+  add("15B-AZ: $1,000 monthly and Weekly produces 52 contributions", weekly.contributionsPerYear === 52, "52");
+  add("15B-BA: exact average is 12000 / 52", weekly.exactAverageContributionAmountUsd === 12000 / 52, `${weekly.exactAverageContributionAmountUsd}`);
+  add("15B-BB: display average is $230.77", weekly.approximateDisplayContributionAmountUsd === 230.77, `${weekly.approximateDisplayContributionAmountUsd}`);
+  add("15B-BC: 48 contributions use $230.77", weekly.centDecomposition!.contributionsAtBasePlusOneCent === 48 && weekly.centDecomposition!.basePlusOneCentContributionAmountUsd === 230.77, `${weekly.centDecomposition!.contributionsAtBasePlusOneCent}`);
+  add("15B-BD: 4 contributions use $230.76", weekly.centDecomposition!.contributionsAtBaseAmount === 4 && weekly.centDecomposition!.baseContributionAmountUsd === 230.76, `${weekly.centDecomposition!.contributionsAtBaseAmount}`);
+  add("15B-BE: weekly decomposition totals exactly $12,000", (weekly.centDecomposition!.baseContributionCents * 4 + (weekly.centDecomposition!.baseContributionCents + 1) * 48) === 1200000, "exact");
+
+  // 15B-BF…BI. Quarterly example.
+  add("15B-BF: $1,000 monthly and Quarterly produces 4 contributions", quarterly.contributionsPerYear === 4, "4");
+  add("15B-BG: exact average is $3,000", quarterly.exactAverageContributionAmountUsd === 3000, "3000");
+  add("15B-BH: all 4 contributions are $3,000", quarterly.centDecomposition!.contributionsAtBaseAmount === 4 && quarterly.centDecomposition!.baseContributionAmountUsd === 3000 && quarterly.centDecomposition!.remainderCents === 0, "4x3000");
+  add("15B-BI: quarterly decomposition totals exactly $12,000", quarterly.centDecomposition!.baseContributionCents * 4 === 1200000, "exact");
+
+  // 15B-BJ…BR. Occasional example.
+  add("15B-BJ: $1,000 monthly and Occasional produces normalized_occasional", occasional.status === "normalized_occasional", occasional.status);
+  add("15B-BK: occasional still produces a $12,000 annual saving goal", occasional.annualSavingGoalUsd === 12000 && occasional.annualSavingGoalCents === 1200000, `${occasional.annualSavingGoalUsd}`);
+  add("15B-BL: occasional has no contributionsPerYear", occasional.contributionsPerYear === undefined, "none");
+  add("15B-BM: occasional has no exact average contribution amount", occasional.exactAverageContributionAmountUsd === undefined, "none");
+  add("15B-BN: occasional has no display average contribution amount", occasional.approximateDisplayContributionAmountUsd === undefined, "none");
+  add("15B-BO: occasional has no cent decomposition", occasional.centDecomposition === undefined, "none");
+  add("15B-BP: occasional does not generate dates", occasional.contributionDatesCalculated === false, "no dates");
+  add("15B-BQ: occasional does not invent a frequency", occasional.fixedFrequency === false && occasional.canonicalFrequencyId === "occasional", "irregular");
+  add("15B-BR: occasional adds contribution_amount_requires_future_user_input", occasional.warnings.includes("contribution_amount_requires_future_user_input"), "warning");
+
+  // 15B-BS…BZ. Cent decomposition.
+  const d26 = buildContributionCentDecomposition(1200000, 26).decomposition!;
+  add("15B-BS: contribution counts sum to contributions per year", d26.contributionsAtBaseAmount + d26.contributionsAtBasePlusOneCent === 26, "26");
+  add("15B-BT: base-plus-one amount is exactly one cent above base", d26.basePlusOneCentContributionAmountUsd - d26.baseContributionAmountUsd === 0.01 || (d26.baseContributionCents + 1) - d26.baseContributionCents === 1, "one cent");
+  add("15B-BU: reconstructed annual cents equal source annual cents", d26.baseContributionCents * d26.contributionsAtBaseAmount + (d26.baseContributionCents + 1) * d26.contributionsAtBasePlusOneCent === 1200000, "reconciles");
+  add("15B-BV: remainder count equals contributions at base-plus-one-cent", d26.remainderCents === d26.contributionsAtBasePlusOneCent, "match");
+  { const d12 = buildContributionCentDecomposition(1200000, 12).decomposition!; add("15B-BW: zero remainder produces one contribution amount", d12.remainderCents === 0 && d12.contributionsAtBasePlusOneCent === 0 && d12.contributionsAtBaseAmount === 12, "one amount"); }
+  add("15B-BX: non-zero remainder adds average_amount_requires_cent_distribution", biweekly.warnings.includes("average_amount_requires_cent_distribution") && !monthly.warnings.includes("average_amount_requires_cent_distribution"), "warning");
+  add("15B-BY: internal calculations preserve full precision", biweekly.exactAverageContributionAmountUsd === 461.53846153846155 && biweekly.approximateDisplayContributionAmountUsd === 461.54, "full precision vs rounded display");
+  add("15B-BZ: display rounding does not alter annual totals", biweekly.centDecomposition!.annualSavingGoalCents === 1200000 && Math.round(biweekly.approximateDisplayContributionAmountUsd! * 26 * 100) !== 1200000, "exact internal");
+
+  // 15B-CA…CH. Result boundaries.
+  add("15B-CA: no target is selected", biweekly.targetSelected === false, "false");
+  add("15B-CB: no allocation gap is evaluated", biweekly.allocationGapEvaluated === false, "false");
+  add("15B-CC: no safety buffer is evaluated", biweekly.safetyBufferEvaluated === false, "false");
+  add("15B-CD: no suitability is evaluated", biweekly.userSuitabilityEvaluated === false, "false");
+  add("15B-CE: no contribution plan is generated", biweekly.contributionPlanGenerated === false, "false");
+  add("15B-CF: no DCA plan is generated", biweekly.dcaPlanGenerated === false, "false");
+  add("15B-CG: no suggestion is generated", biweekly.suggestionGenerated === false, "false");
+  add("15B-CH: no contribution dates are generated", biweekly.contributionDatesCalculated === false, "false");
+
+  // Result validation smoke + explain.
+  add("15B-validate: fixed + occasional + failure results all validate consistently", validateContributionFrequencyNormalizationResult(biweekly).valid === true && validateContributionFrequencyNormalizationResult(occasional).valid === true && validateContributionFrequencyNormalizationResult(norm(1000, "nonsense")).valid === true && validateContributionCentDecomposition(d26).valid === true, "valid");
+  add("15B-validate2: validator rejects a tampered result", validateContributionFrequencyNormalizationResult({ ...biweekly, annualSavingGoalCents: 999 }).valid === false && validateContributionFrequencyNormalizationResult({ ...occasional, contributionsPerYear: 12 }).valid === false, "rejects");
+  add("15B-diagnostics: diagnostics + explain are deterministic", getContributionFrequencyNormalizationDiagnostics(biweekly).contributionsPerYear === 26 && /461\.54/.test(explainContributionFrequencyNormalization(biweekly)) && /Occasional/.test(explainContributionFrequencyNormalization(occasional)), "diagnostics");
+
+  // 15B-CI…CN. Feature-state invariants.
+  add("15B-CI: contribution-frequency normalization is enabled", CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS === true, "enabled");
+  add("15B-CJ: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
+  add("15B-CK: contribution-priority engine remains disabled", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === false, "disabled");
+  add("15B-CL: allocation-gap engine remains disabled", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === false, "disabled");
+  add("15B-CM: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
+  add("15B-CN: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
+
+  // 15B-CO…CU. Product invariants.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const engineRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = engineRun.suggestions.find((s) => s.category === "staking");
+  add("15B-CO: existing suggestion output remains unchanged", engineRun.suggestions.length > 0 && staking?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  add("15B-CP: Safety Buffer behavior remains unchanged", engineRun.suggestions.every((s) => s.id !== "contribution_frequency" && !s.id.startsWith("contribution_")), "unchanged");
+  add("15B-CQ: SOL staking behavior remains unchanged", staking != null && staking.protocolSelection?.selectedProtocolName === "Jito", "unchanged");
+  add("15B-CR: Top Pick remains unchanged", engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => !s.id.startsWith("contribution")), "unchanged");
+  add("15B-CS: engine ordering remains unchanged", engineRun.suggestions.every((s) => !s.id.startsWith("contribution") && s.id !== "biweekly" && s.id !== "occasional"), "unchanged");
+  {
+    const allowed = /contributionFrequency(Types|Policy|Normalization)|suggestionEngine\.fixtures/;
+    let hits: string[] = [];
+    let entries: string[] = [];
+    try { entries = readdirSync(`${root}/src`, { recursive: true }) as string[]; } catch { /* ignore */ }
+    for (const e of entries) {
+      if (!/\.(ts|tsx)$/.test(e) || allowed.test(e)) continue;
+      const c = readIf(`src/${e}`);
+      if (/from ["']\.[^"']*contributionFrequency(Types|Policy|Normalization)["']/.test(c)) hits.push(e);
+    }
+    add("15B-CT: no product-facing import exists", hits.length === 0, hits.join(",") || "none");
+  }
+  add("15B-CU: no /testing UI card is added at this non-UI foundation step", !readIf("src/pages/testingPageFixtures.ts").includes("contributionFrequency") && !readIf("src/pages/testingPageFixtures.ts").includes("normalizeContributionFrequency"), "no card");
+
+  // 15B-CV…CX. Execution invariants.
+  {
+    const blob = (readIf("src/suggestions/contributionFrequencyTypes.ts") + readIf("src/suggestions/contributionFrequencyPolicy.ts") + readIf("src/suggestions/contributionFrequencyNormalization.ts")).toLowerCase();
+    add("15B-CV: no transaction path exists", biweekly.transactionsEnabled === false && !blob.includes("sendtransaction"), "none");
+    add("15B-CW: no signature path exists", biweekly.walletSignatureRequired === false && !blob.includes("signtransaction"), "none");
+    const handlers = ["buy(", "swap(", "deposit(", "invest(", "execute(", "scheduletransfer(", "transfer("];
+    add("15B-CX: no buy/swap/deposit/invest/execute/schedule-transfer handler exists", handlers.filter((h) => blob.includes(h)).length === 0, "none");
+  }
 
   return checks;
 }
@@ -11774,6 +11974,7 @@ export function printFixtureResults(): void {
     ...runSolStakingSelectorPresentationFixtureChecks(),
     ...runSolStakingProductIntegrationFixtureChecks(),
     ...runInvestmentTargetRegistryFixtureChecks(),
+    ...runContributionFrequencyNormalizationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

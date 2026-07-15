@@ -1479,3 +1479,20 @@ source + fresh price + configured allocation/suitability/minimum policy keys) an
 never evaluates user suitability, computes an allocation gap/amount, or generates a suggestion. No
 product-facing file imports the registry; no execution/signatures. Contribution planning, rhythm
 normalization, allocation-gap, and DCA generation all remain disabled.
+
+## 15B — contribution-frequency normalization
+
+A deterministic, versioned, non-UI layer converting a monthly saving goal + the onboarding
+contribution frequency into an annual saving budget and (for fixed frequencies) an exact whole-cent
+per-contribution decomposition (see [contributionFrequencyNormalization.md](./contributionFrequencyNormalization.md)).
+Source of truth is onboarding (`state/goalState.ts` CONTRIBUTION_OPTIONS / `contribution_frequency`):
+weekly=52, biweekly=**26** (every two weeks, never twice-monthly/24), monthly=12, quarterly=4,
+occasional=irregular. Internal totals are integer cents (no premature rounding); the display average
+rounds to 2 decimals. Occasional yields `normalized_occasional` with the annual budget but no
+invented count/amount/dates. Fixed results with a remainder warn
+`average_amount_requires_cent_distribution`; occasional warns
+`contribution_amount_requires_future_user_input`. Fails closed on invalid goal/frequency/currency.
+No target selection, allocation gap, safety-buffer, suitability, plan, DCA, suggestion, dates, UI,
+or execution; no product-facing import. `CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS` /
+`CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS` = true; planning/priority/allocation-gap/DCA remain
+disabled.
