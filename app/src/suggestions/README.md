@@ -1688,3 +1688,26 @@ product never promotes it. Validators fail closed on fabricated approval, browse
 non-approved products carrying values, order drift, and negative/non-finite magnitudes. Diagnostics are
 coverage counts only. `YIELD_STRATEGY_MARKET_DATA_EXISTS = true`; comparison/eligibility/detection/
 suggestions/UI/testing/execution stay `false`.
+
+## 16D — Stable Yield eligibility & risk gates
+
+The deterministic eligibility layer ([yieldStrategyEligibility.md](./yieldStrategyEligibility.md),
+`yield_strategy_eligibility_v1` + `yield_strategy_risk_review_v1`). It answers only "may this **exact**
+product proceed to a later (16E) comparison for the buffer lane, the excess lane, both, or neither?" —
+never which is better, the leader, how much to allocate, or whether to suggest. It adds a **static risk
+review** contract (operational status, exposure, custody, audit, leverage, risk tier/score, user-risk
+compatibility) kept separate from identity (16B) and live data (16C), and runs a fixed 21-gate order
+that combines registry lifecycle + address, the 16A lane policy, the 16C market snapshot, and the
+review. Thresholds are **reused, never re-invented**: `MIN_PROTOCOL_TVL_USD` (1M), `MIN_PROTOCOL_RISK_
+SCORE` (7), `MAX_WITHDRAWAL_HOURS_FOR_{SAFETY_BUFFER,GENERAL_YIELD}` (24/168), `MIN_LIQUIDITY_USD` (100k)
+from 12E, plus the 16C 15m/60m freshness. The **buffer lane is strict** (usdc_only, conservative,
+non-custodial, verified audit, instant liquidity, no leverage/LP) and is never relaxed by a higher-risk
+user or a higher APY; the **excess lane** additionally requires the user's onboarding risk id
+(`very_low…very_high`) to be listed in the reviewed `compatibleUserRiskProfileIds`. APY is a readiness
+gate only — **no APY minimum, no ranking**. Liquidity and withdrawal are independent checks (neither
+inferred from the other, from TVL, from APY, or from a protocol name). Hubble stays documented and is
+not hardcoded ineligible; its `documentation_required` entry simply cannot pass. **Production has zero
+approved products, so the eligibility set is empty** (`empty_approved_set`) and there are no production
+risk reviews — synthetic candidates/reviews live only in fixtures. `YIELD_STRATEGY_ELIGIBILITY_EXISTS`/
+`YIELD_STRATEGY_RISK_REVIEW_EXISTS`/`STABLE_YIELD_ELIGIBILITY_EXISTS = true`; comparison/wallet-detection/
+plans/suggestions/UI/testing/execution stay `false`.

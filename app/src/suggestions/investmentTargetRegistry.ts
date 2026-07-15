@@ -68,9 +68,19 @@ export const YIELD_STRATEGY_REGISTRY_EXISTS = true;
 // It compares nothing, ranks nothing, suggests nothing, and reads nothing from React; the approved
 // candidate set is empty until documented products are promoted. Everything downstream stays disabled.
 export const YIELD_STRATEGY_MARKET_DATA_EXISTS = true;
+// Step 16D — the deterministic eligibility + static risk-review gates now exist (per-lane buffer/excess
+// eligibility over exact approved products, reusing the canonical 12E thresholds + 16C freshness). It
+// compares nothing, ranks nothing, selects no leader, consumes no wallet capital, and calculates no
+// amount; the approved set is empty in production, so eligibility is empty. Downstream stays disabled.
+export const YIELD_STRATEGY_RISK_REVIEW_EXISTS = true;
+export const YIELD_STRATEGY_ELIGIBILITY_EXISTS = true;
+export const STABLE_YIELD_ELIGIBILITY_EXISTS = true;
+export const STABLE_YIELD_ELIGIBILITY_UPDATES_PRODUCT_OUTPUT = false;
+export const STABLE_YIELD_ELIGIBILITY_EVALUATES_CAPITAL = false;
+export const STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER = false;
 export const STABLE_YIELD_COMPARISON_EXISTS = false;
-export const STABLE_YIELD_ELIGIBILITY_EXISTS = false;
 export const STABLE_YIELD_WALLET_DETECTION_EXISTS = false;
+export const STABLE_YIELD_PLANS_EXIST = false;
 export const STABLE_YIELD_SUGGESTIONS_EXIST = false;
 export const STABLE_YIELD_UI_ENABLED = false;
 export const STABLE_YIELD_TESTING_EXISTS = false;

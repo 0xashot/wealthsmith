@@ -955,3 +955,18 @@ wired yet** — no 16B product is approved with a documented address, so the app
 empty and every snapshot is a documentation-only `unavailable` state. When exact products are
 documented + approved (a later step), their inputs will normalize through this same contract. See
 [yieldStrategyMarketData.md](./yieldStrategyMarketData.md).
+
+## 16D — Stable Yield risk-review source boundary
+
+Stable Yield eligibility (Step 16D) reads a **static product RISK REVIEW** contract
+(`yield_strategy_risk_review_v1`) that is deliberately separate from identity (16B) and live market data
+(16C). A review records reviewed operational status, resulting exposure, custody model, audit status +
+references, leverage, smart-contract risk tier / score, and the compatible onboarding risk ids — sourced
+from documented due-diligence, never invented. A review's exact strategyId/protocolId/address must match
+the registry, and a review **may not approve an undocumented product**, so there are **no production risk
+reviews today** (the store is empty). Eligibility reuses the canonical documented thresholds
+(`engineThresholds.ts` 12E gates: `MIN_PROTOCOL_TVL_USD`, `MIN_PROTOCOL_RISK_SCORE`,
+`MAX_WITHDRAWAL_HOURS_FOR_SAFETY_BUFFER`/`_GENERAL_YIELD`, `MIN_LIQUIDITY_USD`) and the 16C freshness
+bounds; it invents no new numbers. No canonical product-review freshness max-age is documented, so
+expiry relies only on a review's explicit `validUntil`. See
+[yieldStrategyEligibility.md](./yieldStrategyEligibility.md).

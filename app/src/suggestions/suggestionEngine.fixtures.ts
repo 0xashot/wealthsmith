@@ -869,6 +869,40 @@ import {
   STABLE_YIELD_EXECUTION_ENABLED,
 } from "./investmentTargetRegistry";
 import {
+  YIELD_STRATEGY_ELIGIBILITY_SCHEMA_VERSION,
+  YIELD_STRATEGY_ELIGIBILITY_POLICY_ID,
+  YIELD_STRATEGY_ELIGIBILITY_POLICY_VERSION,
+  YIELD_STRATEGY_RISK_REVIEW_SCHEMA_VERSION,
+  YIELD_STRATEGY_RISK_REVIEW_POLICY_ID,
+  type YieldStrategyLaneEligibilityResult as ELIG_Result,
+  type YieldStrategyRiskReview as ELIG_Review,
+} from "./yieldStrategyEligibilityTypes";
+import {
+  getYieldStrategyEligibilityPolicy,
+  validateYieldStrategyEligibilityPolicy,
+} from "./yieldStrategyEligibilityPolicy";
+import { validateYieldStrategyRiskReview } from "./yieldStrategyRiskReview";
+import {
+  YIELD_STRATEGY_ELIGIBILITY_EXISTS as ELIG_FLAG_CONST,
+  evaluateYieldStrategyLaneEligibility,
+  buildYieldStrategyEligibilitySet,
+  buildProductionYieldStrategyEligibilitySet,
+  validateYieldStrategyLaneEligibilityResult,
+  validateYieldStrategyEligibilitySet,
+} from "./yieldStrategyEligibility";
+import { getYieldStrategyEligibilityDiagnostics, explainYieldStrategyLaneEligibility } from "./yieldStrategyEligibilityDiagnostics";
+import {
+  STABLE_YIELD_ELIGIBILITY_EXISTS,
+  YIELD_STRATEGY_ELIGIBILITY_EXISTS as ELIG_FLAG_REG,
+  YIELD_STRATEGY_RISK_REVIEW_EXISTS,
+  STABLE_YIELD_PLANS_EXIST,
+  STABLE_YIELD_ELIGIBILITY_UPDATES_PRODUCT_OUTPUT,
+  STABLE_YIELD_ELIGIBILITY_EVALUATES_CAPITAL,
+  STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER,
+} from "./investmentTargetRegistry";
+import type { YieldStrategyRegistryEntry as ELIG_Entry } from "./yieldStrategyRegistryTypes";
+import type { YieldStrategyMarketSnapshot as ELIG_Snap, YieldStrategyMarketDataSet as ELIG_MarketSet, YieldApyData as ELIG_Apy, YieldLiquidityData as ELIG_Liq } from "./yieldStrategyMarketDataTypes";
+import {
   CONTRIBUTION_PLAN_GENERATOR_EXISTS,
   CONTRIBUTION_PLAN_TARGET_SELECTION_EXISTS,
   CONTRIBUTION_PLAN_AMOUNT_CALCULATION_EXISTS,
@@ -14199,6 +14233,196 @@ export function runYieldStrategyMarketDataFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 16D — Stable Yield eligibility + risk-review fixtures (16D-A…CM). Verifies the versioned policy,
+ * the risk-review contract, per-lane buffer/excess gates over synthetic approved candidates (production
+ * stays empty), registry/market/risk gates, user-risk compatibility, Hubble scope, ordering, and that
+ * nothing downstream (comparison / capital / plan / suggestion / UI / execution) is enabled.
+ */
+export function runYieldStrategyEligibilityFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const T = "2026-07-16T00:00:00.000Z";
+
+  // ---- Synthetic factories (fixtures only — never touch the production registry / review store) ----
+  const mkApy = (over: Partial<ELIG_Apy> = {}): ELIG_Apy => ({ status: "fresh", apyDefinition: "net", apyWindow: "current", currentApyPct: 5, netApyPct: 5, definitionSufficientForComparison: true, notes: [], ...over });
+  const mkLiq = (over: Partial<ELIG_Liq> = {}): ELIG_Liq => ({ status: "fresh", withdrawalStatus: "instant_currently_available", availableLiquidityUsd: 500_000, liquidityConfidence: "explicit_source", withdrawalQueueActive: false, notes: [], ...over });
+  const mkEntry = (over: Partial<ELIG_Entry> = {}): ELIG_Entry => ({
+    schemaVersion: "1.0.0", registryVersion: "1.0.0", strategyId: "syn_lending", displayName: "Synthetic USDC Lending",
+    protocolId: "kamino", protocolDisplayName: "Kamino", strategyType: "lending", principalAsset: "USDC",
+    supportedLane: "safety_buffer_yield", riskLane: "buffer_eligible", lifecycle: "approved",
+    officialUrl: "https://app.kamino.finance", address: "SYNTH_ADDR_1",
+    marketDataEvaluated: false, eligibilityEvaluated: false, comparisonEvaluated: false, suggestionGenerated: false, transactionsEnabled: false, walletSignatureRequired: false, notes: [], ...over,
+  });
+  const mkSnap = (id: string, over: Partial<ELIG_Snap> = {}): ELIG_Snap => ({
+    schemaVersion: "1.0.0", policyVersion: "1.0.0", strategyId: id, displayName: "syn", protocolId: "kamino", protocolDisplayName: "Kamino",
+    strategyType: "lending", principalAsset: "USDC", supportedLane: "safety_buffer_yield", riskLane: "buffer_eligible", lifecycle: "approved", address: "SYNTH_ADDR_1",
+    status: "complete", apy: mkApy(), tvl: { status: "fresh", tvlUsd: 2_000_000, currency: "USD", notes: [] }, liquidity: mkLiq(),
+    fees: { status: "fresh", feeModel: "management_fee", managementFeePct: 0.1, notes: [] },
+    laneCompatibility: { supportedLane: "safety_buffer_yield", riskLane: "buffer_eligible", bufferLaneCandidate: true, excessLaneCandidate: true, bufferLaneFreshnessMaxAgeMs: 900000, excessLaneFreshnessMaxAgeMs: 3600000, bufferLaneRequiresInstantLiquidity: true, bufferLaneRequiresDefinedWithdrawal: true, notes: [] },
+    sourceId: "src", sourceLabel: "Src", provenance: { kind: "documented_source", sourceId: "src", browserFetched: false, present: true },
+    fetchedAt: T, checkedAt: T, maximumAgeMs: 900000, ageMs: 0, warnings: [], blockers: [],
+    approvedForMarketData: true, marketDataComplete: true, marketDataFresh: true, eligibleForFutureComparison: true,
+    comparisonEvaluated: false, eligibilityEvaluated: false, rankingCalculated: false, leaderSelected: false, suggestionGenerated: false, updatesProductOutput: false, transactionsEnabled: false, walletSignatureRequired: false, ...over,
+  });
+  const mkReview = (over: Partial<ELIG_Review> = {}): ELIG_Review => ({
+    schemaVersion: "1.0.0", policyId: "yield_strategy_risk_review_v1", policyVersion: "1.0.0", reviewId: "rev1", reviewVersion: "1.0.0",
+    strategyId: "syn_lending", protocolId: "kamino", address: "SYNTH_ADDR_1", reviewedAt: "2026-07-01T00:00:00.000Z", validUntil: "2026-12-31T00:00:00.000Z",
+    reviewStatus: "approved", operationalStatus: "active", principalAssetId: "USDC", resultingExposure: "usdc_only", custodyModel: "non_custodial", auditStatus: "verified", auditReferences: [],
+    leverageUsed: false, smartContractRiskTier: "conservative", riskScore: 8, compatibleUserRiskProfileIds: ["very_low", "low", "medium", "high", "very_high"],
+    bufferUseReviewed: true, excessUseReviewed: true, notes: [],
+    comparisonPerformed: false, leaderSelected: false, amountCalculated: false, suggestionGenerated: false, transactionsEnabled: false, walletSignatureRequired: false, ...over,
+  });
+
+  // Buffer / excess evaluator shorthands.
+  const evb = (entryOver: Partial<ELIG_Entry> = {}, revOver: Partial<ELIG_Review> = {}, snapOver: Partial<ELIG_Snap> = {}, userRiskProfileId?: string): ELIG_Result =>
+    evaluateYieldStrategyLaneEligibility({ lane: "buffer", registryEntry: mkEntry(entryOver), marketSnapshot: mkSnap("syn_lending", snapOver), riskReview: mkReview(revOver), userRiskProfileId, checkedAt: T });
+  const eve = (entryOver: Partial<ELIG_Entry> = {}, revOver: Partial<ELIG_Review> = {}, snapOver: Partial<ELIG_Snap> = {}, userRiskProfileId: string | undefined = "medium"): ELIG_Result =>
+    evaluateYieldStrategyLaneEligibility({ lane: "excess", registryEntry: mkEntry({ supportedLane: "excess_usdc_yield", riskLane: "excess_only", strategyType: "managed_vault", ...entryOver }), marketSnapshot: mkSnap("syn_lending", snapOver), riskReview: mkReview(revOver), userRiskProfileId, checkedAt: T });
+
+  const marketSet = buildEmptyApprovedYieldStrategyMarketDataSet(T);
+  const prodSet = buildProductionYieldStrategyEligibilitySet(marketSet, T);
+  const policy = getYieldStrategyEligibilityPolicy();
+  const eligBlob = ["yieldStrategyEligibilityTypes", "yieldStrategyRiskReview", "yieldStrategyEligibilityPolicy", "yieldStrategyEligibility", "yieldStrategyEligibilityDiagnostics"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+
+  // 16D-A…E. Schema / policy / flags.
+  add("16D-A: eligibility schema/version exist", YIELD_STRATEGY_ELIGIBILITY_SCHEMA_VERSION === "1.0.0" && YIELD_STRATEGY_ELIGIBILITY_POLICY_ID === "yield_strategy_eligibility_v1" && YIELD_STRATEGY_ELIGIBILITY_POLICY_VERSION === "1.0.0", YIELD_STRATEGY_ELIGIBILITY_POLICY_ID);
+  add("16D-B: risk-review schema/version exist", YIELD_STRATEGY_RISK_REVIEW_SCHEMA_VERSION === "1.0.0" && YIELD_STRATEGY_RISK_REVIEW_POLICY_ID === "yield_strategy_risk_review_v1", YIELD_STRATEGY_RISK_REVIEW_POLICY_ID);
+  add("16D-C: eligibility policy validates and reuses canonical thresholds", validateYieldStrategyEligibilityPolicy(policy).valid === true, "valid");
+  add("16D-D: eligibility + risk-review feature flags are true", ELIG_FLAG_CONST === true && ELIG_FLAG_REG === true && STABLE_YIELD_ELIGIBILITY_EXISTS === true && YIELD_STRATEGY_RISK_REVIEW_EXISTS === true, "enabled");
+  add("16D-E: comparison remains false", STABLE_YIELD_COMPARISON_EXISTS === false && STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER === false, "no comparison");
+
+  // 16D-F…J. Production empty state.
+  add("16D-F: current production registry still has zero approved products", getApprovedYieldStrategies().length === 0, "0 approved");
+  add("16D-G: production eligibility set returns empty_approved_set", prodSet.status === "empty_approved_set", prodSet.status);
+  add("16D-H: empty approved set is valid", validateYieldStrategyEligibilitySet(prodSet).valid === true && prodSet.emptyApprovedSet === true, "valid");
+  add("16D-I: no production product is silently promoted", prodSet.bufferEligibleStrategyIds.length === 0 && prodSet.excessEligibleStrategyIds.length === 0 && prodSet.bufferResults.length === 0 && prodSet.excessResults.length === 0, "empty");
+  add("16D-J: no address is fabricated in the production registry", listYieldStrategies().every((e) => e.address === undefined), "no addresses");
+
+  // 16D-K…Q. Registry gates.
+  add("16D-K: documentation_required cannot be eligible", evb({ lifecycle: "documentation_required" }).eligibleForComparison === false && evb({ lifecycle: "documentation_required" }).blockers.includes("strategy_not_approved"), "blocked");
+  add("16D-L: review lifecycle cannot be eligible", evb({ lifecycle: "review" }).eligibleForComparison === false, "blocked");
+  add("16D-M: deprecated cannot be eligible", evb({ lifecycle: "deprecated" }).eligibleForComparison === false && evb({ lifecycle: "deprecated" }).blockers.includes("lifecycle_not_active"), "blocked");
+  add("16D-N: disabled cannot be eligible", evb({ lifecycle: "disabled" }).eligibleForComparison === false, "blocked");
+  add("16D-O: approved exact synthetic product may proceed", evb().eligibleForComparison === true && evb().status === "eligible_for_comparison", "proceeds");
+  add("16D-P: missing address blocks", evb({ address: undefined }).blockers.includes("address_missing") && evb({ address: undefined }).eligibleForComparison === false, "blocked");
+  add("16D-Q: registry/review identity mismatch blocks", evb({}, { strategyId: "other_id" }).blockers.includes("review_identity_mismatch"), "blocked");
+
+  // 16D-R…AE. Risk-review gates.
+  const evbNoRev = evaluateYieldStrategyLaneEligibility({ lane: "buffer", registryEntry: mkEntry(), marketSnapshot: mkSnap("syn_lending"), riskReview: undefined, checkedAt: T });
+  add("16D-R: missing risk review blocks", evbNoRev.blockers.includes("risk_review_missing") && evbNoRev.eligibleForComparison === false, "blocked");
+  add("16D-S: incomplete review blocks", evb({}, { reviewStatus: "incomplete" }).blockers.includes("risk_review_invalid"), "blocked");
+  add("16D-T: expired review blocks when expiry exists", evb({}, { validUntil: "2026-01-01T00:00:00.000Z" }).blockers.includes("risk_review_stale"), "blocked");
+  add("16D-U: paused strategy blocks", evb({}, { operationalStatus: "paused" }).blockers.includes("strategy_paused"), "blocked");
+  add("16D-V: deprecated operational status blocks", evb({}, { operationalStatus: "deprecated" }).blockers.includes("strategy_deprecated"), "blocked");
+  add("16D-W: unknown operational status blocks", evb({}, { operationalStatus: "unknown" }).blockers.includes("operational_status_unknown"), "blocked");
+  add("16D-X: unknown custody blocks", evb({}, { custodyModel: "unknown" }).blockers.includes("custody_model_unknown"), "blocked");
+  add("16D-Y: custodial strategy fails the non-custodial requirement", evb({}, { custodyModel: "custodial" }).blockers.includes("non_custodial_requirement_not_met"), "blocked");
+  add("16D-Z: verified non-custodial review may pass", evb().custodyRequirementPassed === true && evb().auditRequirementPassed === true && evb().eligibleForComparison === true, "passes");
+  add("16D-AA: unknown audit blocks", evb({}, { auditStatus: "unknown" }).blockers.includes("audit_status_unknown"), "blocked");
+  add("16D-AB: missing required audit (none) blocks", evb({}, { auditStatus: "none" }).blockers.includes("audit_requirement_not_met"), "blocked");
+  add("16D-AC: unknown leverage blocks", evb({}, { leverageUsed: "unknown" }).blockers.includes("leverage_status_unknown"), "blocked");
+  add("16D-AD: leverage blocks buffer eligibility", evb({}, { leverageUsed: true }).blockers.includes("leverage_not_allowed") && evb({}, { leverageUsed: true }).blockers.includes("buffer_strategy_uses_leverage"), "blocked");
+  add("16D-AE: unknown exposure blocks", evb({}, { resultingExposure: "unknown" }).blockers.includes("resulting_exposure_unknown"), "blocked");
+
+  // 16D-AF…AU. Buffer lane.
+  add("16D-AF: conservative USDC-only lending synthetic candidate can pass buffer", evb().eligibleForComparison === true, "passes");
+  add("16D-AG: buffer strategy requires buffer_eligible risk lane", evb({ riskLane: "excess_only" }).blockers.includes("risk_lane_not_supported"), "blocked");
+  add("16D-AH: excess-only strategy cannot pass buffer lane", evb({ riskLane: "excess_only", supportedLane: "excess_usdc_yield" }).eligibleForComparison === false && evb({ riskLane: "excess_only", supportedLane: "excess_usdc_yield" }).status === "unsupported", "unsupported");
+  add("16D-AI: stablecoin-pair exposure cannot pass buffer lane", evb({}, { resultingExposure: "stablecoin_pair" }).blockers.includes("buffer_strategy_not_usdc_only"), "blocked");
+  add("16D-AJ: stable LP cannot pass buffer lane", evb({ strategyType: "stable_liquidity_strategy" }).blockers.includes("buffer_strategy_has_lp_exposure"), "blocked");
+  add("16D-AK: mixed exposure cannot pass buffer lane", evb({}, { resultingExposure: "mixed_asset" }).blockers.includes("buffer_strategy_not_usdc_only"), "blocked");
+  add("16D-AL: moderate risk tier cannot pass buffer lane", evb({}, { smartContractRiskTier: "moderate" }).blockers.includes("buffer_strategy_not_conservative"), "blocked");
+  add("16D-AM: elevated risk tier cannot pass buffer lane", evb({}, { smartContractRiskTier: "elevated" }).blockers.includes("buffer_strategy_not_conservative"), "blocked");
+  add("16D-AN: high-risk user does not relax buffer rules", evb({}, { smartContractRiskTier: "moderate" }, {}, "very_high").eligibleForComparison === false && evb({}, { smartContractRiskTier: "moderate" }, {}, "very_high").blockers.includes("buffer_strategy_not_conservative"), "not relaxed");
+  add("16D-AO: freshness uses the strict buffer threshold (30m old → stale)", evb({}, {}, { fetchedAt: "2026-07-15T23:30:00.000Z" }).blockers.includes("market_snapshot_stale"), "stale");
+  add("16D-AP: instant-current withdrawal passes when other requirements pass", evb().withdrawalRequirementPassed === true && evb().eligibleForComparison === true, "passes");
+  add("16D-AQ: partial withdrawal fails buffer lane", evb({}, {}, { liquidity: mkLiq({ withdrawalStatus: "partial_currently_available" }) }).blockers.includes("buffer_strategy_not_immediately_liquid"), "blocked");
+  add("16D-AR: withdrawal-required fails buffer lane", evb({}, {}, { liquidity: mkLiq({ withdrawalStatus: "withdrawal_required" }) }).blockers.includes("buffer_strategy_not_immediately_liquid"), "blocked");
+  add("16D-AS: queue possible fails buffer lane", evb({}, {}, { liquidity: mkLiq({ withdrawalStatus: "queue_possible" }) }).blockers.includes("buffer_strategy_not_immediately_liquid"), "blocked");
+  add("16D-AT: active queue fails buffer lane", evb({}, {}, { liquidity: mkLiq({ withdrawalQueueActive: true }) }).blockers.includes("withdrawal_queue_active"), "blocked");
+  add("16D-AU: unknown liquidity fails buffer lane", evb({}, {}, { liquidity: mkLiq({ liquidityConfidence: "unknown", availableLiquidityUsd: undefined }) }).blockers.includes("liquidity_confidence_insufficient"), "blocked");
+
+  // 16D-AV…BD. Excess lane.
+  add("16D-AV: approved compatible lending strategy may pass excess lane", eve({ strategyType: "lending", supportedLane: "safety_buffer_yield", riskLane: "buffer_eligible" }).eligibleForComparison === true, "passes");
+  add("16D-AW: approved managed vault may pass excess lane when policy-compatible", eve().eligibleForComparison === true, "passes");
+  add("16D-AX: approved stable liquidity strategy may pass excess when reviewed + user-risk compatible", eve({ strategyType: "stable_liquidity_strategy", riskLane: "excess_only" }, { resultingExposure: "stable_basket" }).eligibleForComparison === true, "passes");
+  add("16D-AY: future_other cannot pass", eve({ strategyType: "future_other" }).blockers.includes("strategy_type_not_supported") && eve({ strategyType: "future_other" }).status === "unsupported", "unsupported");
+  add("16D-AZ: user-risk incompatibility blocks", eve({}, { compatibleUserRiskProfileIds: ["very_low"] }).blockers.includes("user_risk_incompatible"), "blocked");
+  add("16D-BA: unknown/absent user risk blocks when required", evaluateYieldStrategyLaneEligibility({ lane: "excess", registryEntry: mkEntry({ supportedLane: "excess_usdc_yield", riskLane: "excess_only", strategyType: "managed_vault" }), marketSnapshot: mkSnap("syn_lending"), riskReview: mkReview(), checkedAt: T }).blockers.includes("user_risk_incompatible") && evaluateYieldStrategyLaneEligibility({ lane: "excess", registryEntry: mkEntry({ supportedLane: "excess_usdc_yield", riskLane: "excess_only", strategyType: "managed_vault" }), marketSnapshot: mkSnap("syn_lending"), riskReview: mkReview(), userRiskProfileId: "not_a_real_id", checkedAt: T }).blockers.includes("user_risk_incompatible"), "blocked");
+  add("16D-BB: freshness uses the excess threshold (30m old → still fresh; 90m → stale)", eve({}, {}, { fetchedAt: "2026-07-15T23:30:00.000Z" }).blockers.includes("market_snapshot_stale") === false && eve({}, {}, { fetchedAt: "2026-07-15T22:30:00.000Z" }).blockers.includes("market_snapshot_stale") === true, "excess bound");
+  add("16D-BC: withdrawal delay beyond canonical limit blocks", eve({}, {}, { liquidity: mkLiq({ withdrawalStatus: "withdrawal_required", withdrawalDelayHours: 200 }) }).blockers.includes("withdrawal_delay_exceeds_policy"), "blocked");
+  add("16D-BD: unknown withdrawal state blocks", eve({}, {}, { liquidity: mkLiq({ withdrawalStatus: "unknown" }) }).blockers.includes("withdrawal_status_unknown"), "blocked");
+
+  // 16D-BE…BR. Market-data gates.
+  add("16D-BE: missing market snapshot blocks", evaluateYieldStrategyLaneEligibility({ lane: "buffer", registryEntry: mkEntry(), marketSnapshot: undefined, riskReview: mkReview(), checkedAt: T }).blockers.includes("market_snapshot_missing"), "blocked");
+  add("16D-BF: partial snapshot blocks", evb({}, {}, { status: "partial" }).blockers.includes("market_snapshot_partial"), "blocked");
+  add("16D-BG: stale snapshot blocks", evb({}, {}, { status: "stale" }).blockers.includes("market_snapshot_stale"), "blocked");
+  add("16D-BH: invalid snapshot blocks", evb({}, {}, { status: "invalid" }).blockers.includes("market_snapshot_invalid"), "blocked");
+  add("16D-BI: missing provenance blocks", evb({}, {}, { provenance: { kind: "none", browserFetched: false, present: false } }).blockers.includes("market_provenance_missing"), "blocked");
+  add("16D-BJ: unknown APY definition blocks", evb({}, {}, { apy: mkApy({ apyDefinition: "unknown", definitionSufficientForComparison: false }) }).blockers.includes("apy_definition_unknown"), "blocked");
+  add("16D-BK: insufficient APY definition blocks", evb({}, {}, { apy: mkApy({ apyDefinition: "estimated", definitionSufficientForComparison: false }) }).blockers.includes("apy_definition_not_comparable"), "blocked");
+  add("16D-BL: no APY minimum is introduced (a tiny APY stays eligible)", evb({}, {}, { apy: mkApy({ currentApyPct: 0.01, netApyPct: 0.01 }) }).eligibleForComparison === true, "no min");
+  add("16D-BM: higher APY does not alter eligibility", evb({}, {}, { apy: mkApy({ currentApyPct: 0.01, netApyPct: 0.01 }) }).eligibleForComparison === evb({}, {}, { apy: mkApy({ currentApyPct: 50, netApyPct: 50 }) }).eligibleForComparison, "unchanged");
+  add("16D-BN: TVL below canonical minimum blocks", evb({}, {}, { tvl: { status: "fresh", tvlUsd: 999_999, currency: "USD", notes: [] } }).blockers.includes("tvl_below_minimum"), "blocked");
+  add("16D-BO: TVL exactly at minimum passes", evb({}, {}, { tvl: { status: "fresh", tvlUsd: 1_000_000, currency: "USD", notes: [] } }).tvlRequirementPassed === true && evb({}, {}, { tvl: { status: "fresh", tvlUsd: 1_000_000, currency: "USD", notes: [] } }).eligibleForComparison === true, "at min");
+  add("16D-BP: unknown liquidity blocks (excess)", eve({}, {}, { liquidity: mkLiq({ liquidityConfidence: "unknown" }) }).blockers.includes("liquidity_unknown"), "blocked");
+  add("16D-BQ: TVL does not substitute for liquidity", evb({}, {}, { tvl: { status: "fresh", tvlUsd: 9_000_000, currency: "USD", notes: [] }, liquidity: mkLiq({ availableLiquidityUsd: undefined }) }).blockers.includes("liquidity_missing") && evb({}, {}, { tvl: { status: "fresh", tvlUsd: 9_000_000, currency: "USD", notes: [] }, liquidity: mkLiq({ availableLiquidityUsd: undefined }) }).eligibleForComparison === false, "independent");
+  add("16D-BR: APY does not substitute for liquidity", evb({}, {}, { apy: mkApy({ currentApyPct: 20, netApyPct: 20 }), liquidity: mkLiq({ liquidityConfidence: "unknown", availableLiquidityUsd: undefined }) }).blockers.includes("liquidity_confidence_insufficient"), "independent");
+
+  // 16D-BS…BU. Hubble / documentation scope.
+  add("16D-BS: Hubble remains in the documented registry", getYieldStrategiesByProtocol("hubble").length >= 1, "present");
+  add("16D-BT: Hubble is not hardcoded deprecated/ineligible by the eligibility code", !eligBlob.includes("hubble"), "not hardcoded");
+  add("16D-BU: the current documentation_required Hubble entry remains ineligible", getYieldStrategy("hubble_usdc_strategy")!.lifecycle === "documentation_required" && !prodSet.excessEligibleStrategyIds.includes("hubble_usdc_strategy") && !prodSet.bufferEligibleStrategyIds.includes("hubble_usdc_strategy"), "ineligible");
+
+  // 16D-BV…CA. Ordering + no comparison.
+  {
+    const entA = mkEntry({ strategyId: "syn_a", address: "ADDR_A" });
+    const entB = mkEntry({ strategyId: "syn_b", address: "ADDR_B" });
+    const snapA = mkSnap("syn_a", { strategyId: "syn_a", address: "ADDR_A", apy: mkApy({ currentApyPct: 1, netApyPct: 1 }) });
+    const snapB = mkSnap("syn_b", { strategyId: "syn_b", address: "ADDR_B", apy: mkApy({ currentApyPct: 50, netApyPct: 50 }) });
+    const revA = mkReview({ reviewId: "rA", strategyId: "syn_a", address: "ADDR_A" });
+    const revB = mkReview({ reviewId: "rB", strategyId: "syn_b", address: "ADDR_B" });
+    const synMarketSet = { snapshots: { syn_a: snapA, syn_b: snapB } } as unknown as ELIG_MarketSet;
+    const synSet = buildYieldStrategyEligibilitySet({ registry: [entA, entB], marketDataSet: synMarketSet, riskReviews: [revA, revB], userRiskProfileId: "medium", checkedAt: T });
+    add("16D-BV: eligibility results preserve registry order", JSON.stringify(synSet.bufferResults.map((r) => r.strategyId)) === JSON.stringify(["syn_a", "syn_b"]), synSet.bufferResults.map((r) => r.strategyId).join(","));
+    add("16D-BW: eligible IDs preserve registry order", JSON.stringify(synSet.bufferEligibleStrategyIds) === JSON.stringify(["syn_a", "syn_b"]), synSet.bufferEligibleStrategyIds.join(","));
+    add("16D-BX: results are not sorted by APY (higher-APY syn_b stays second)", synSet.bufferResults[0].strategyId === "syn_a" && synSet.bufferResults[1].strategyId === "syn_b", "unsorted");
+    add("16D-BY: no score is calculated on results/diagnostics", !("score" in evb()) && Object.keys(getYieldStrategyEligibilityDiagnostics(synSet)).every((k) => !/score/i.test(k)), "no score");
+    add("16D-BZ: no rank is assigned", evb().rankAssigned === false && synSet.rankingPerformed === false, "no rank");
+    add("16D-CA: no leader is selected", evb().leaderSelected === false && synSet.leaderSelected === false && STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER === false, "no leader");
+  }
+
+  // 16D-CB…CJ. Boundaries.
+  add("16D-CB: no wallet balance is consumed", evb().userCapitalEvaluated === false && prodSet.walletPositionsEvaluated === false && !/getbalance|walletbalance|usewallet/.test(eligBlob), "no wallet");
+  add("16D-CC: no existing position is detected", prodSet.walletPositionsEvaluated === false && !/detectposition|existingposition\(/.test(eligBlob), "no positions");
+  add("16D-CD: no eligible capital is calculated", evb().amountCalculated === false && prodSet.amountCalculated === false && STABLE_YIELD_ELIGIBILITY_EVALUATES_CAPITAL === false, "no capital");
+  add("16D-CE: no Safety Buffer surplus is calculated", prodSet.userCapitalEvaluated === false && !/surplus/.test(eligBlob), "no surplus");
+  add("16D-CF: no expected earnings are calculated", !/expectedearnings|projectedearnings/.test(eligBlob), "no earnings");
+  add("16D-CG: no plan is generated", evb().planGenerated === false && prodSet.planGenerated === false && STABLE_YIELD_PLANS_EXIST === false, "no plan");
+  add("16D-CH: no suggestion is generated", evb().suggestionGenerated === false && prodSet.suggestionGenerated === false && STABLE_YIELD_SUGGESTIONS_EXIST === false, "no suggestion");
+  add("16D-CI: no product output is updated", prodSet.updatesProductOutput === false && STABLE_YIELD_ELIGIBILITY_UPDATES_PRODUCT_OUTPUT === false, "no output");
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    add("16D-CJ: no UI/testing card is added (no product-facing import of eligibility/risk-review)", STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && prodFiles.every((f) => !/yieldStrategyEligibility|yieldStrategyRiskReview/.test(readIf(f))), "no UI");
+  }
+
+  // 16D-CK…CM. Execution.
+  add("16D-CK: no transaction path exists", evb().transactionsEnabled === false && prodSet.transactionsEnabled === false && STABLE_YIELD_EXECUTION_ENABLED === false, "read-only");
+  add("16D-CL: no signature path exists", evb().walletSignatureRequired === false && prodSet.walletSignatureRequired === false, "no signature");
+  add("16D-CM: no deposit/withdraw/swap/stake/execute handler exists", !/sendtransaction|signtransaction|deposit\(|withdraw\(|swap\(|stake\(|execute\(|fetch\(/.test(eligBlob), "no handlers");
+
+  // Extra integrity: validators + risk-review contract + explain (no recommendation language).
+  add("16D-INT-A: a well-formed eligible result validates; a blocked result marked eligible is rejected", validateYieldStrategyLaneEligibilityResult(evb()).valid === true && validateYieldStrategyLaneEligibilityResult({ ...evb({ lifecycle: "review" }), eligibleForComparison: true }).valid === false, "validators");
+  add("16D-INT-B: the risk-review validator rejects a review for an undocumented registry product", validateYieldStrategyRiskReview(mkReview({ strategyId: "kamino_steakhouse_usdc" })).valid === false, "review guard");
+  add("16D-INT-C: explain uses no recommendation language", !/\b(best|safest|winner|recommended|use this)\b/i.test(explainYieldStrategyLaneEligibility(evb())) && !/\b(best|safest|winner|recommended|use this)\b/i.test(explainYieldStrategyLaneEligibility(evb({ lifecycle: "review" }))), "no reco");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -14288,6 +14512,7 @@ export function printFixtureResults(): void {
     ...runStableYieldPolicyFixtureChecks(),
     ...runYieldStrategyRegistryFixtureChecks(),
     ...runYieldStrategyMarketDataFixtureChecks(),
+    ...runYieldStrategyEligibilityFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
