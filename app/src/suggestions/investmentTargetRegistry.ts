@@ -75,6 +75,10 @@ export const YIELD_STRATEGY_MARKET_DATA_EXISTS = true;
 export const YIELD_STRATEGY_RISK_REVIEW_EXISTS = true;
 export const YIELD_STRATEGY_ELIGIBILITY_EXISTS = true;
 export const STABLE_YIELD_ELIGIBILITY_EXISTS = true;
+// Step 16D.1 — strategy TYPE describes mechanics; the exact registry riskLane + static risk review
+// determine Safety Buffer eligibility. A managed_vault TYPE no longer hardcoded excess-only; no product
+// is promoted (production stays documentation_required / empty eligibility).
+export const STABLE_YIELD_PRODUCT_LEVEL_LANE_POLICY_EXISTS = true;
 export const STABLE_YIELD_ELIGIBILITY_UPDATES_PRODUCT_OUTPUT = false;
 export const STABLE_YIELD_ELIGIBILITY_EVALUATES_CAPITAL = false;
 export const STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER = false;

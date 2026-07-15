@@ -32,16 +32,23 @@ Both lanes require a **complete** Safety Buffer before they may activate.
 Five deterministic strategy TYPES (no products/protocols assigned in 16A). Each documents its
 principal asset, resulting exposure, withdrawal model, liquidity model, fee model, and risk profile:
 
-| Type | Exposure | Withdrawal | Liquidity | Default lane |
-|---|---|---|---|---|
-| `lending` | stable_usd | immediate | liquid | **buffer_eligible** (both lanes) |
-| `managed_vault` | stable_usd | requires_withdrawal | semi_liquid | excess_only |
-| `staking_like_vault` | stable_usd | epoch_or_lockup | locked | excess_only |
-| `stable_liquidity_strategy` | stable_lp | requires_withdrawal | semi_liquid | excess_only |
-| `future_other` | unknown | unknown | unknown | unsupported (not approved) |
+| Type | Exposure | Withdrawal | Liquidity | Lanes the TYPE permits | Default lane |
+|---|---|---|---|---|---|
+| `lending` | stable_usd | immediate | liquid | buffer + excess | buffer_eligible |
+| `managed_vault` | stable_usd | requires_withdrawal | semi_liquid | **buffer + excess** (16D.1) | excess_only |
+| `staking_like_vault` | stable_usd | epoch_or_lockup | locked | excess only | excess_only |
+| `stable_liquidity_strategy` | stable_lp | requires_withdrawal | semi_liquid | excess only | excess_only |
+| `future_other` | unknown | unknown | unknown | none (not approved) | unsupported |
 
-Only a `lending`-shaped strategy (conservative, immediately-liquid, stable-USD) may serve the buffer
-lane; the validator enforces this. `future_other` carries no lanes and is never approved by 16A.
+**Strategy TYPE describes mechanics; the exact registry riskLane + reviewed exact-product metadata
+determine use-case eligibility (16D.1).** A TYPE may *permit* the buffer lane only when its principal
+stays pure stable-USD and it is not intrinsically locked/epoch-bound — so `stable_liquidity_strategy`
+(LP `stable_lp`) and `staking_like_vault` (epoch/locked) can never serve the buffer, while both
+`lending` and `managed_vault` may. Permitting the buffer lane is **not** automatic eligibility: a
+managed vault defaults to `excess_only`, and only an exact product becomes buffer-eligible when its
+registry riskLane, static risk review (conservative tier, non-custodial, verified audit, USDC-only, no
+leverage, `bufferUseReviewed`), and live market data (instant withdrawal, ≤15m-fresh, TVL/liquidity
+floors) all pass in Step 16D. `future_other` carries no lanes and is never approved by 16A.
 
 ### Risk lanes
 

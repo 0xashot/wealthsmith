@@ -20,6 +20,12 @@ bare protocol name. It reuses the Step 16A `StableYieldStrategyType` (`lending` 
 `staking_like_vault` / `stable_liquidity_strategy` / `future_other`) and risk lanes (`buffer_eligible`
 / `excess_only` / `unsupported`) verbatim — nothing is redefined.
 
+**Type ≠ lane (16D.1):** strategy type describes mechanics; the exact entry's `riskLane` (plus the 16D
+risk review + market data) decides use-case eligibility. Both `lending` and `managed_vault` TYPES may
+carry `riskLane: buffer_eligible`; `stable_liquidity_strategy` (LP) and `staking_like_vault`
+(locked/epoch) may not. Permitting the buffer lane is never automatic approval — every current product
+stays `documentation_required` with no address.
+
 ## Protocol scope
 
 Only the documented WealthSmith universe: **Kamino · Raydium · Meteora · Hubble**. Save, Marginfi,

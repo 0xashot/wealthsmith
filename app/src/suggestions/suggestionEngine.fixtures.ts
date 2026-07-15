@@ -899,6 +899,7 @@ import {
   STABLE_YIELD_ELIGIBILITY_UPDATES_PRODUCT_OUTPUT,
   STABLE_YIELD_ELIGIBILITY_EVALUATES_CAPITAL,
   STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER,
+  STABLE_YIELD_PRODUCT_LEVEL_LANE_POLICY_EXISTS,
 } from "./investmentTargetRegistry";
 import type { YieldStrategyRegistryEntry as ELIG_Entry } from "./yieldStrategyRegistryTypes";
 import type { YieldStrategyMarketSnapshot as ELIG_Snap, YieldStrategyMarketDataSet as ELIG_MarketSet, YieldApyData as ELIG_Apy, YieldLiquidityData as ELIG_Liq } from "./yieldStrategyMarketDataTypes";
@@ -14010,7 +14011,7 @@ export function runStableYieldPolicyFixtureChecks(): FixtureCheck[] {
   // 16A-J…M. Strategy taxonomy + risk lanes.
   add("16A-J: the strategy taxonomy has the five deterministic types", strategies.map((s) => s.strategyType).join(",") === "lending,managed_vault,staking_like_vault,stable_liquidity_strategy,future_other", strategies.map((s) => s.strategyType).join(","));
   add("16A-K: lending is buffer-eligible (conservative, immediately-liquid, stable-USD)", getStableYieldStrategyDefinition("lending")!.eligibleLanes.includes("safety_buffer_yield") && getStableYieldStrategyDefinition("lending")!.defaultRiskLane === "buffer_eligible" && getStableYieldStrategyDefinition("lending")!.riskProfile === "conservative_stable", "buffer_eligible");
-  add("16A-L: managed/staking-like/stable-liquidity strategies are excess-USDC only", ["managed_vault", "staking_like_vault", "stable_liquidity_strategy"].every((t) => { const s = getStableYieldStrategyDefinition(t as "managed_vault")!; return s.eligibleLanes.length === 1 && s.eligibleLanes[0] === "excess_usdc_yield" && s.defaultRiskLane === "excess_only"; }), "excess_only");
+  add("16A-L: staking-like + stable-liquidity are excess-only; managed_vault (16D.1) permits BOTH lanes but still defaults to excess", ["staking_like_vault", "stable_liquidity_strategy"].every((t) => { const s = getStableYieldStrategyDefinition(t as "managed_vault")!; return s.eligibleLanes.length === 1 && s.eligibleLanes[0] === "excess_usdc_yield" && s.defaultRiskLane === "excess_only"; }) && getStableYieldStrategyDefinition("managed_vault")!.eligibleLanes.includes("safety_buffer_yield") && getStableYieldStrategyDefinition("managed_vault")!.eligibleLanes.includes("excess_usdc_yield") && getStableYieldStrategyDefinition("managed_vault")!.defaultRiskLane === "excess_only", "product-level lane");
   add("16A-M: future_other is unapproved with no lanes", (() => { const s = getStableYieldStrategyDefinition("future_other")!; return s.eligibleLanes.length === 0 && s.activationSuppressionReasons.includes("yield_strategy_not_approved") && s.riskProfile === "unsupported"; })(), "unapproved");
 
   // 16A-N…P. Protocol scope + priority.
@@ -14423,6 +14424,96 @@ export function runYieldStrategyEligibilityFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 16D.1 — product-level lane policy fixtures (16D1-A…Z). Verifies that strategy TYPE describes
+ * mechanics while the exact registry riskLane + static risk review + live market data determine Safety
+ * Buffer eligibility: a managed_vault is no longer hardcoded excess-only, but never becomes buffer-
+ * eligible automatically; stable-liquidity + locked staking-like stay out of the buffer; production
+ * stays empty; nothing downstream is enabled.
+ */
+export function runYieldStrategyProductLaneFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const T = "2026-07-16T00:00:00.000Z";
+
+  const mkApy = (over: Partial<ELIG_Apy> = {}): ELIG_Apy => ({ status: "fresh", apyDefinition: "net", apyWindow: "current", currentApyPct: 5, netApyPct: 5, definitionSufficientForComparison: true, notes: [], ...over });
+  const mkLiq = (over: Partial<ELIG_Liq> = {}): ELIG_Liq => ({ status: "fresh", withdrawalStatus: "instant_currently_available", availableLiquidityUsd: 500_000, liquidityConfidence: "explicit_source", withdrawalQueueActive: false, notes: [], ...over });
+  // A synthetic EXACT managed vault reviewed for the buffer lane (fixtures only — never registered).
+  const mkVaultEntry = (over: Partial<ELIG_Entry> = {}): ELIG_Entry => ({
+    schemaVersion: "1.0.0", registryVersion: "1.0.0", strategyId: "syn_vault", displayName: "Synthetic Managed USDC Vault",
+    protocolId: "kamino", protocolDisplayName: "Kamino", strategyType: "managed_vault", principalAsset: "USDC",
+    supportedLane: "safety_buffer_yield", riskLane: "buffer_eligible", lifecycle: "approved", officialUrl: "https://app.kamino.finance", address: "SYNTH_VAULT_ADDR",
+    marketDataEvaluated: false, eligibilityEvaluated: false, comparisonEvaluated: false, suggestionGenerated: false, transactionsEnabled: false, walletSignatureRequired: false, notes: [], ...over,
+  });
+  const mkVaultSnap = (over: Partial<ELIG_Snap> = {}): ELIG_Snap => ({
+    schemaVersion: "1.0.0", policyVersion: "1.0.0", strategyId: "syn_vault", displayName: "syn", protocolId: "kamino", protocolDisplayName: "Kamino",
+    strategyType: "managed_vault", principalAsset: "USDC", supportedLane: "safety_buffer_yield", riskLane: "buffer_eligible", lifecycle: "approved", address: "SYNTH_VAULT_ADDR",
+    status: "complete", apy: mkApy(), tvl: { status: "fresh", tvlUsd: 2_000_000, currency: "USD", notes: [] }, liquidity: mkLiq(),
+    fees: { status: "fresh", feeModel: "management_fee", managementFeePct: 0.15, notes: [] },
+    laneCompatibility: { supportedLane: "safety_buffer_yield", riskLane: "buffer_eligible", bufferLaneCandidate: true, excessLaneCandidate: true, bufferLaneFreshnessMaxAgeMs: 900000, excessLaneFreshnessMaxAgeMs: 3600000, bufferLaneRequiresInstantLiquidity: true, bufferLaneRequiresDefinedWithdrawal: true, notes: [] },
+    sourceId: "src", sourceLabel: "Src", provenance: { kind: "documented_source", sourceId: "src", browserFetched: false, present: true },
+    fetchedAt: T, checkedAt: T, maximumAgeMs: 900000, ageMs: 0, warnings: [], blockers: [],
+    approvedForMarketData: true, marketDataComplete: true, marketDataFresh: true, eligibleForFutureComparison: true,
+    comparisonEvaluated: false, eligibilityEvaluated: false, rankingCalculated: false, leaderSelected: false, suggestionGenerated: false, updatesProductOutput: false, transactionsEnabled: false, walletSignatureRequired: false, ...over,
+  });
+  const mkVaultReview = (over: Partial<ELIG_Review> = {}): ELIG_Review => ({
+    schemaVersion: "1.0.0", policyId: "yield_strategy_risk_review_v1", policyVersion: "1.0.0", reviewId: "rv", reviewVersion: "1.0.0",
+    strategyId: "syn_vault", protocolId: "kamino", address: "SYNTH_VAULT_ADDR", reviewedAt: "2026-07-01T00:00:00.000Z", validUntil: "2026-12-31T00:00:00.000Z",
+    reviewStatus: "approved", operationalStatus: "active", principalAssetId: "USDC", resultingExposure: "usdc_only", custodyModel: "non_custodial", auditStatus: "verified", auditReferences: [],
+    leverageUsed: false, smartContractRiskTier: "conservative", riskScore: 8, compatibleUserRiskProfileIds: ["very_low", "low", "medium", "high", "very_high"],
+    bufferUseReviewed: true, excessUseReviewed: true, notes: [],
+    comparisonPerformed: false, leaderSelected: false, amountCalculated: false, suggestionGenerated: false, transactionsEnabled: false, walletSignatureRequired: false, ...over,
+  });
+  // Buffer / excess evaluators for the synthetic vault.
+  const evbV = (entryOver: Partial<ELIG_Entry> = {}, revOver: Partial<ELIG_Review> = {}, snapOver: Partial<ELIG_Snap> = {}, userRiskProfileId?: string): ELIG_Result =>
+    evaluateYieldStrategyLaneEligibility({ lane: "buffer", registryEntry: mkVaultEntry(entryOver), marketSnapshot: mkVaultSnap(snapOver), riskReview: mkVaultReview(revOver), userRiskProfileId, checkedAt: T });
+  const eveV = (entryOver: Partial<ELIG_Entry> = {}, revOver: Partial<ELIG_Review> = {}, snapOver: Partial<ELIG_Snap> = {}, userRiskProfileId: string | undefined = "medium"): ELIG_Result =>
+    evaluateYieldStrategyLaneEligibility({ lane: "excess", registryEntry: mkVaultEntry(entryOver), marketSnapshot: mkVaultSnap(snapOver), riskReview: mkVaultReview(revOver), userRiskProfileId, checkedAt: T });
+
+  const vaultDef = getStableYieldStrategyDefinition("managed_vault")!;
+  const marketSet = buildEmptyApprovedYieldStrategyMarketDataSet(T);
+  const prodSet = buildProductionYieldStrategyEligibilitySet(marketSet, T);
+
+  // 16D1-A. Managed vault is no longer universally hardcoded excess-only.
+  add("16D1-A: managed_vault TYPE permits both lanes; the correction flag is set; the registry no longer rejects managed_vault+buffer by type", vaultDef.eligibleLanes.includes("safety_buffer_yield") && vaultDef.eligibleLanes.includes("excess_usdc_yield") && STABLE_YIELD_PRODUCT_LEVEL_LANE_POLICY_EXISTS === true && !validateYieldStrategyEntry(mkVaultEntry({ lifecycle: "documentation_required" })).errors.includes("buffer_lane_on_unsupported_strategy_type"), "type ≠ lane");
+  // 16D1-B. Synthetic exact managed vault with buffer_eligible risk lane may enter buffer evaluation.
+  add("16D1-B: a synthetic exact managed vault with riskLane buffer_eligible enters buffer evaluation (not unsupported)", evbV().lane === "buffer" && evbV().status !== "unsupported" && evbV().registryApproved === true, evbV().status);
+  // 16D1-C. Conservative, audited, non-custodial, USDC-only managed vault with instant withdrawal passes.
+  add("16D1-C: a conservative/audited/non-custodial/USDC-only managed vault with instant withdrawal can pass the Safety Buffer lane", evbV().eligibleForComparison === true && evbV().status === "eligible_for_comparison", "passes");
+  // 16D1-D…K. The same managed vault fails when any strict buffer requirement fails.
+  add("16D1-D: the same managed vault fails when bufferUseReviewed is false", evbV({}, { bufferUseReviewed: false }).eligibleForComparison === false && evbV({}, { bufferUseReviewed: false }).blockers.includes("risk_review_invalid"), "blocked");
+  add("16D1-E: the same managed vault fails with stablecoin-pair exposure", evbV({}, { resultingExposure: "stablecoin_pair" }).blockers.includes("buffer_strategy_not_usdc_only"), "blocked");
+  add("16D1-F: the same managed vault fails with leverage", evbV({}, { leverageUsed: true }).blockers.includes("leverage_not_allowed"), "blocked");
+  add("16D1-G: the same managed vault fails with moderate risk tier", evbV({}, { smartContractRiskTier: "moderate" }).blockers.includes("buffer_strategy_not_conservative"), "blocked");
+  add("16D1-H: the same managed vault fails with unknown liquidity", evbV({}, {}, { liquidity: mkLiq({ liquidityConfidence: "unknown", availableLiquidityUsd: undefined }) }).blockers.includes("liquidity_confidence_insufficient"), "blocked");
+  add("16D1-I: the same managed vault fails with partial withdrawal", evbV({}, {}, { liquidity: mkLiq({ withdrawalStatus: "partial_currently_available" }) }).blockers.includes("buffer_strategy_not_immediately_liquid"), "blocked");
+  add("16D1-J: the same managed vault fails with an active queue", evbV({}, {}, { liquidity: mkLiq({ withdrawalQueueActive: true }) }).blockers.includes("withdrawal_queue_active"), "blocked");
+  add("16D1-K: the same managed vault fails when stale under the 15-minute rule", evbV({}, {}, { fetchedAt: "2026-07-15T23:30:00.000Z" }).blockers.includes("market_snapshot_stale"), "blocked");
+  // 16D1-L…M. Excess-only managed vault.
+  add("16D1-L: a managed vault marked excess_only cannot pass the buffer lane", evbV({ riskLane: "excess_only", supportedLane: "excess_usdc_yield" }).eligibleForComparison === false && evbV({ riskLane: "excess_only", supportedLane: "excess_usdc_yield" }).blockers.includes("risk_lane_not_supported"), "blocked");
+  add("16D1-M: a managed vault marked excess_only may still pass the excess lane", eveV({ riskLane: "excess_only", supportedLane: "excess_usdc_yield" }).eligibleForComparison === true, "passes");
+  // 16D1-N…O. Stable liquidity strategy.
+  add("16D1-N: a stable liquidity strategy cannot pass the buffer lane", evbV({ strategyType: "stable_liquidity_strategy" }, {}, { strategyType: "stable_liquidity_strategy" }).blockers.includes("buffer_strategy_has_lp_exposure") && evbV({ strategyType: "stable_liquidity_strategy" }, {}, { strategyType: "stable_liquidity_strategy" }).eligibleForComparison === false, "blocked");
+  add("16D1-O: a stable liquidity strategy may pass excess eligibility when all excess requirements pass", eveV({ strategyType: "stable_liquidity_strategy", riskLane: "excess_only", supportedLane: "excess_usdc_yield" }, { resultingExposure: "stable_basket" }, { strategyType: "stable_liquidity_strategy" }).eligibleForComparison === true, "passes");
+  // 16D1-P. Locked staking-like vault.
+  add("16D1-P: a locked staking-like vault cannot pass the buffer lane", evbV({ strategyType: "staking_like_vault" }, {}, { strategyType: "staking_like_vault", liquidity: mkLiq({ withdrawalStatus: "withdrawal_required" }) }).blockers.includes("buffer_strategy_not_immediately_liquid"), "blocked");
+  // 16D1-Q. Marketing copy does not change mechanics-based eligibility.
+  add("16D1-Q: marketing copy containing 'stake' does not change mechanics-based eligibility", evbV({ displayName: "Ultra Stake Yield Vault" }).eligibleForComparison === true && evbV({ displayName: "Plain Managed Vault" }).eligibleForComparison === true, "mechanics only");
+  // 16D1-R…T. Production unchanged.
+  add("16D1-R: current production registry still has zero approved products", getApprovedYieldStrategies().length === 0, "0 approved");
+  add("16D1-S: current production eligibility remains empty_approved_set", prodSet.status === "empty_approved_set" && prodSet.emptyApprovedSet === true, prodSet.status);
+  add("16D1-T: no production lifecycle or address changes (all documentation_required, no address)", listYieldStrategies().every((e) => e.lifecycle === "documentation_required" && e.address === undefined), "unchanged");
+  // 16D1-U…Z. No downstream capability introduced.
+  add("16D1-U: no comparison is performed", evbV().comparisonPerformed === false && STABLE_YIELD_COMPARISON_EXISTS === false, "no comparison");
+  add("16D1-V: no leader is selected", evbV().leaderSelected === false && STABLE_YIELD_ELIGIBILITY_SELECTS_LEADER === false, "no leader");
+  add("16D1-W: no wallet balances or existing positions are consumed", evbV().userCapitalEvaluated === false && prodSet.walletPositionsEvaluated === false, "no wallet");
+  add("16D1-X: no amount, plan or suggestion is generated", evbV().amountCalculated === false && evbV().planGenerated === false && evbV().suggestionGenerated === false && STABLE_YIELD_PLANS_EXIST === false && STABLE_YIELD_SUGGESTIONS_EXIST === false, "no amount/plan/suggestion");
+  add("16D1-Y: no UI is added", STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false, "no UI");
+  add("16D1-Z: no transaction or signature path exists", evbV().transactionsEnabled === false && evbV().walletSignatureRequired === false && STABLE_YIELD_EXECUTION_ENABLED === false, "read-only");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -14513,6 +14604,7 @@ export function printFixtureResults(): void {
     ...runYieldStrategyRegistryFixtureChecks(),
     ...runYieldStrategyMarketDataFixtureChecks(),
     ...runYieldStrategyEligibilityFixtureChecks(),
+    ...runYieldStrategyProductLaneFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

@@ -1711,3 +1711,17 @@ approved products, so the eligibility set is empty** (`empty_approved_set`) and 
 risk reviews — synthetic candidates/reviews live only in fixtures. `YIELD_STRATEGY_ELIGIBILITY_EXISTS`/
 `YIELD_STRATEGY_RISK_REVIEW_EXISTS`/`STABLE_YIELD_ELIGIBILITY_EXISTS = true`; comparison/wallet-detection/
 plans/suggestions/UI/testing/execution stay `false`.
+
+### 16D.1 — product-level lane policy
+
+Corrects a too-restrictive type-level rule: **strategy TYPE describes mechanics; the exact registry
+riskLane + reviewed exact-product metadata determine Safety Buffer eligibility.** `managed_vault` is no
+longer hardcoded excess-only — the 16A TYPE now permits both lanes (a TYPE may permit the buffer lane
+only when its principal is stable-USD and it is not intrinsically LP/locked/epoch, so
+`stable_liquidity_strategy` and `staking_like_vault` still cannot), and the 16B registry validator
+accordingly accepts `managed_vault` + `buffer_eligible`. A managed vault **never** becomes buffer-eligible
+automatically: it defaults to excess, and every strict 16D buffer gate (conservative tier, non-custodial,
+verified audit, USDC-only, no leverage, `bufferUseReviewed`, instant withdrawal, ≤15m freshness,
+TVL/liquidity floors) must still pass on the exact product. No product is promoted — production stays
+`documentation_required` with empty eligibility. Marker flag
+`STABLE_YIELD_PRODUCT_LEVEL_LANE_POLICY_EXISTS = true`; all other feature-state truth is unchanged.

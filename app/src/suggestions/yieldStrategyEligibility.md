@@ -26,6 +26,18 @@ Backed by:
 
 Comparison is **16E**, and it is not performed here.
 
+## Strategy type describes mechanics; the exact product determines the lane (16D.1)
+
+**Strategy TYPE describes how a product works; the exact registry riskLane and reviewed exact-product
+metadata determine which use-case lane it may enter.** A managed vault is therefore no longer hardcoded
+excess-only — a conservative, USDC-only, instantly liquid, non-custodial, audited managed vault **may**
+eventually be Safety-Buffer eligible, while a higher-risk managed vault stays excess-only. This never
+happens automatically: a managed vault defaults to `excess_only`, and buffer eligibility still requires
+the exact registry riskLane `buffer_eligible`, `bufferUseReviewed`, and **every** strict buffer gate
+below to pass. A stablecoin LP (`stable_liquidity_strategy`) remains excess-only (LP exposure), and a
+locked/epoch staking-like product remains excess-only (not instantly liquid). Eligibility depends on
+mechanics, never on a marketing word like "stake" or a protocol's name.
+
 ## Exact-product requirement
 
 Eligibility evaluates one **exact** product (one vault / market), never a protocol brand. A product must

@@ -89,11 +89,16 @@ const STRATEGY_TYPES: StableYieldStrategyDefinition[] = [
     liquidityModel: "semi_liquid",
     feeModel: "management_fee",
     riskProfile: "moderate_stable",
-    eligibleLanes: ["excess_usdc_yield"],
+    // Step 16D.1 — a managed vault is a STABLE-USD, non-locked mechanic, so the TYPE permits BOTH lanes.
+    // The buffer lane is NOT automatic: it defaults to excess, and an exact product only becomes
+    // buffer-eligible when its registry riskLane, static risk review (conservative / non-custodial /
+    // verified audit / USDC-only / no leverage / bufferUseReviewed) and live market data (instant
+    // withdrawal, ≥15m-fresh, TVL/liquidity floors) all pass in Step 16D. Type ≠ automatic lane.
+    eligibleLanes: ["safety_buffer_yield", "excess_usdc_yield"],
     defaultRiskLane: "excess_only",
     activationSuppressionReasons: [],
     ...flagsOff,
-    notes: ["A managed stable vault keeps a stable principal but may require a withdrawal step, so it defaults to the Excess-USDC lane only until a product review qualifies it for the buffer lane."],
+    notes: ["A managed stable vault keeps a stable USDC principal and is not intrinsically locked/epoch-bound, so the TYPE permits the Safety Buffer lane as well as Excess. It NEVER becomes buffer-eligible automatically: it defaults to Excess-USDC, and only an exact reviewed product (buffer_eligible riskLane + risk review + live instant-withdrawal market data) may qualify for the buffer lane in Step 16D."],
   },
   {
     schemaVersion: "1.0.0",
@@ -234,9 +239,14 @@ export function validateStableYieldStrategyDefinition(def: unknown): StableYield
   if (!flags) errors.push("capability_flag_enabled");
   if (!Array.isArray(d.eligibleLanes) || d.eligibleLanes.some((l) => l !== "safety_buffer_yield" && l !== "excess_usdc_yield")) errors.push("invalid_lane");
   if (d.activationSuppressionReasons.some((r) => !ALL_SUPPRESSION.has(r))) errors.push("unknown_suppression_reason");
-  // A strategy that can serve the buffer lane must be conservative, stable-USD, immediate, and liquid.
+  // Step 16D.1 — a TYPE may PERMIT the buffer lane only when its principal stays pure stable-USD and it
+  // is not intrinsically locked/epoch-bound (so LP `stable_lp` and locked/epoch types can never serve
+  // the buffer). This is a mechanics gate, NOT a per-product guarantee: the EXACT product's conservative
+  // risk tier and live instant withdrawal are enforced per-product by Step 16D, never hardcoded here.
   if (d.eligibleLanes.includes("safety_buffer_yield")) {
-    if (d.resultingExposure !== "stable_usd" || d.withdrawalModel !== "immediate" || d.liquidityModel !== "liquid" || d.riskProfile !== "conservative_stable") errors.push("buffer_lane_requires_conservative_liquid_stable");
+    if (d.resultingExposure !== "stable_usd") errors.push("buffer_lane_requires_stable_usd_exposure");
+    if (d.withdrawalModel === "epoch_or_lockup") errors.push("buffer_lane_forbids_epoch_or_lockup_type");
+    if (d.liquidityModel === "locked") errors.push("buffer_lane_forbids_locked_liquidity_type");
   }
   // The unapproved placeholder must carry no lanes and its non-approval reasons.
   if (d.strategyType === "future_other") {
