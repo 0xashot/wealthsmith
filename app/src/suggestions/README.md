@@ -1515,3 +1515,22 @@ rejected; USDC uses normalized valuation, not hardcoded $1. `contributionTargetP
 combines them → `ready_for_allocation_gap_evaluation` (activates nothing). SOL's registry keys
 migrated from `_v_future` to v1. No gap/amount/plan/suggestion/UI/execution; no product-facing
 import; product behavior unchanged.
+
+## 15D — contribution-planning allocation-gap engine
+
+The deterministic, versioned, asset-agnostic allocation-gap engine
+([contributionAllocationGapEngine.md](./contributionAllocationGapEngine.md)). It compares a canonical
+portfolio snapshot against the Step 15C target-allocation policy and computes, per mapped target:
+current USD exposure, current %, target %, signed pp gap, underweight/at-target/overweight
+classification, the reused 5-pp trigger, the static current-total USD gap, the internal-reallocation
+cap, and the external-contribution cap — plus a hypothetical projection only when an amount is
+explicitly supplied. `buildContributionAllocationGapAnalysis` reuses the canonical portfolio total as
+the denominator (unknown/non-target/BONK value stays in it), consumes already-aggregated economic
+exposure (SOL LSTs + native stake counted once; no double-counting), and fails closed on invalid
+totals, duplicate/negative/oversized exposures, invalid policies, or stale snapshots. The internal
+(total constant) and external (`(t·P − V)/(1 − t)`, total grows) gaps are distinct — the $10k/$4k/60%
+example yields $2,000 internal and $5,000 external. Empty portfolios return `empty_portfolio` (no
+divide-by-zero, no invented split). Caps are mathematical only — never "available"/"suggested". No
+ranking, no selection, no Safety Buffer/funding/frequency/amount/plan/suggestion; no product-facing
+import; product behavior unchanged. `TARGET_ALLOCATION_GAP_ENGINE_EXISTS = true`; the gap engine's
+product-output / target-selection / funding / Safety-Buffer flags stay `false`.

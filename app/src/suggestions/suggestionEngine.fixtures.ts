@@ -633,6 +633,37 @@ import {
   RWA_CONTRIBUTION_TARGET_ENABLED as RWA_ENABLED_15C,
 } from "./investmentTargetRegistry";
 import {
+  TARGET_ALLOCATION_GAP_UPDATES_PRODUCT_OUTPUT,
+  TARGET_ALLOCATION_GAP_SELECTS_TARGET,
+  TARGET_ALLOCATION_GAP_EVALUATES_FUNDING,
+  TARGET_ALLOCATION_GAP_EVALUATES_SAFETY_BUFFER,
+} from "./investmentTargetRegistry";
+import {
+  CONTRIBUTION_ALLOCATION_GAP_SCHEMA_VERSION,
+  CONTRIBUTION_ALLOCATION_GAP_POLICY_ID,
+  CONTRIBUTION_ALLOCATION_GAP_POLICY_VERSION,
+  type ContributionPortfolioAllocationSnapshot,
+  type ContributionPortfolioTargetExposure,
+} from "./contributionAllocationGapTypes";
+import {
+  CONTRIBUTION_ALLOCATION_PERCENTAGE_TOLERANCE,
+  CONTRIBUTION_ALLOCATION_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS,
+  classifyContributionAllocationGap,
+  validateContributionAllocationGapPolicy,
+} from "./contributionAllocationGapPolicy";
+import {
+  TARGET_ALLOCATION_GAP_ENGINE_EXISTS as GAP_ENGINE_EXISTS_15D,
+  buildContributionAllocationGapAnalysis,
+  computeExternalContributionToReachTarget,
+  projectContributionAllocationAfterHypotheticalIncrease,
+  validateContributionAllocationGapAnalysisResult,
+  validateContributionPortfolioAllocationSnapshot,
+  isEnabledGrowthContributionTarget,
+} from "./contributionAllocationGapEngine";
+import { getContributionAllocationGapDiagnostics, explainContributionTargetAllocationGap } from "./contributionAllocationGapDiagnostics";
+import type { GrowthTargetAllocationPolicyResult } from "./growthTargetAllocationPolicy";
+import type { InvestmentTargetHoldingSource } from "./investmentTargetTypes";
+import {
   SOL_STAKING_MARKET_DATA_MODEL_EXISTS,
   SOL_STAKING_MARKET_DATA_MUTATES_APPROVAL_EVIDENCE,
   SOL_STAKING_MARKET_DATA_MUTATES_RISK_SCORES,
@@ -11741,7 +11772,7 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   {
     // No product-facing file imports the registry/eligibility. Its own modules, the contribution-
     // policy foundation family (15B/15C, non-UI), and fixtures are legitimate non-product consumers.
-    const allowed = /investmentTarget(Types|Registry|Eligibility)|contribution(Frequency|PlanningPolicy|Price|TargetSuitability|TargetPolicy)|growthTargetAllocationPolicy|dcaMinimumPolicy|suggestionEngine\.fixtures/;
+    const allowed = /investmentTarget(Types|Registry|Eligibility)|contribution(Frequency|PlanningPolicy|Price|TargetSuitability|TargetPolicy|AllocationGap)|growthTargetAllocationPolicy|dcaMinimumPolicy|suggestionEngine\.fixtures/;
     let hits: string[] = [];
     let entries: string[] = [];
     try { entries = readdirSync(`${root}/src`, { recursive: true }) as string[]; } catch { /* ignore */ }
@@ -11756,7 +11787,7 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   // 15A-CB…CH. Feature-state invariants.
   add("15A-CB: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
   add("15A-CC: rhythm normalization now exists (enabled at Step 15B)", CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS === true, "enabled");
-  add("15A-CD: allocation-gap calculation remains disabled", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === false, "disabled");
+  add("15A-CD: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
   add("15A-CE: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false && DCA_SUGGESTION_ENABLED === false, "disabled");
   add("15A-CF: BTC contribution suggestions remain disabled", BTC_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
   add("15A-CG: ETH contribution suggestions remain disabled", ETH_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
@@ -11912,7 +11943,7 @@ export function runContributionFrequencyNormalizationFixtureChecks(): FixtureChe
   add("15B-CI: contribution-frequency normalization is enabled", CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS === true, "enabled");
   add("15B-CJ: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
   add("15B-CK: contribution-priority engine remains disabled", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === false, "disabled");
-  add("15B-CL: allocation-gap engine remains disabled", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === false, "disabled");
+  add("15B-CL: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
   add("15B-CM: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
   add("15B-CN: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
 
@@ -12107,7 +12138,7 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   add("15C-CK: SOL suitability policy exists", SOL_GROWTH_SUITABILITY_POLICY_EXISTS === true, "exists");
   add("15C-CL: contribution-price policy exists", CONTRIBUTION_PRICE_POLICY_EXISTS === true, "exists");
   add("15C-CM: policy-eligibility layer exists", CONTRIBUTION_TARGET_POLICY_ELIGIBILITY_EXISTS === true, "exists");
-  add("15C-CN: allocation-gap engine remains disabled", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === false, "disabled");
+  add("15C-CN: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
   add("15C-CO: contribution-priority engine remains disabled", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === false, "disabled");
   add("15C-CP: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
   add("15C-CQ: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
@@ -12142,6 +12173,279 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
 
   // Diagnostics smoke.
   add("15C-diagnostics: diagnostics are deterministic and reveal no recommendation", getGrowthTargetAllocationPolicyDiagnostics(alloc).growthBucketTargetPct === 60 && getContributionTargetPolicyEligibilityDiagnostics(combined).status === "ready_for_allocation_gap_evaluation" && RECOGNIZED_PROFILE_RISK_IDS.length === 5, "ok");
+
+  return checks;
+}
+
+/**
+ * Step 15D — allocation-gap engine fixtures (15D-A…DG). Verifies the canonical denominator,
+ * economic-exposure boundary, gap math, the internal-vs-external distinction, hypothetical
+ * projections, empty-portfolio handling, ordering (no ranking), growth-target readiness,
+ * future extensibility, result boundaries, feature/product invariants, and execution invariants.
+ */
+export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const GEN = "2026-07-15T00:00:00Z";
+  const CHK = "2026-07-15T00:00:00Z";
+  const CAL = "2026-07-15T00:00:00Z";
+  const solT = getInvestmentTarget("sol")!;
+  const usdcT = getInvestmentTarget("usdc")!;
+  const btcT = getInvestmentTarget("btc")!;
+  const ethT = getInvestmentTarget("eth")!;
+
+  const mkExp = (targetId: string, assetId: string, valueUsd: number, holdingSources: InvestmentTargetHoldingSource[] = ["connected_wallet"]): ContributionPortfolioTargetExposure => ({ targetId, assetId, valueUsd, holdingSources, valuationReady: true, notes: [] });
+  const mkSnap = (totalPortfolioValueUsd: number, exposures: ContributionPortfolioTargetExposure[], over: Partial<ContributionPortfolioAllocationSnapshot> = {}): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd, targetExposures: exposures, valuationStatus: "current", notes: [], ...over });
+
+  // 15C target-allocation policy (usdc 40, sol 60 via risk "medium").
+  const rec = deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!;
+  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+
+  // A READY SOL policy eligibility (reuses the 15C pipeline).
+  const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
+  const techElig = evaluateInvestmentTargetTechnicalEligibility(solT, techCtx);
+  const suit = evaluateContributionTargetSuitability(solT, { checkedAt: CHK, targetId: "sol", profile: { goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, targetAllocationResult: alloc });
+  const freshQuote = evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: CHK, checkedAt: CHK });
+  const readyElig = evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHK, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: suit, priceQuote: freshQuote, minimumPolicy: getDcaMinimumPolicy() });
+  const solReady = { sol: readyElig };
+
+  // Core scenario: $10,000 total, SOL $4,000 (40%), USDC $4,000 (40%), unmapped/BONK $2,000.
+  const snapCore = mkSnap(10000, [mkExp("usdc", usdcT.assetId, 4000), mkExp("sol", solT.assetId, 4000)]);
+  const aCore = buildContributionAllocationGapAnalysis({ snapshot: snapCore, targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+  const solCore = aCore.targetResults.find((t) => t.targetId === "sol")!;
+  const usdcCore = aCore.targetResults.find((t) => t.targetId === "usdc")!;
+
+  // 15D-A…F. Schema/policy + trigger reuse.
+  add("15D-A: schema version exists", CONTRIBUTION_ALLOCATION_GAP_SCHEMA_VERSION === "1.0.0" && aCore.schemaVersion === "1.0.0", CONTRIBUTION_ALLOCATION_GAP_SCHEMA_VERSION);
+  add("15D-B: policy ID/version exist", CONTRIBUTION_ALLOCATION_GAP_POLICY_ID === "contribution_allocation_gap_v1" && CONTRIBUTION_ALLOCATION_GAP_POLICY_VERSION === "1.0.0" && aCore.policyId === "contribution_allocation_gap_v1", CONTRIBUTION_ALLOCATION_GAP_POLICY_ID);
+  add("15D-C: allocation-gap engine exists", GAP_ENGINE_EXISTS_15D === true && typeof buildContributionAllocationGapAnalysis === "function", "exists");
+  add("15D-D: gap policy validates", validateContributionAllocationGapPolicy().valid === true, "valid");
+  add("15D-E: the 5-point trigger is reused from dcaMinimumPolicy", CONTRIBUTION_ALLOCATION_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS === 5 && CONTRIBUTION_ALLOCATION_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS === DCA_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS, "reused");
+  add("15D-F: no duplicate trigger constant exists", readIf("src/suggestions/contributionAllocationGapPolicy.ts").includes("DCA_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS") && !/UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS\s*=\s*\d/.test(readIf("src/suggestions/contributionAllocationGapPolicy.ts")), "no dup");
+
+  // 15D-G…M. Canonical denominator.
+  add("15D-G: canonical total portfolio value is used as denominator", aCore.totalPortfolioValueUsd === 10000 && solCore.totalPortfolioValueUsd === 10000, "10000");
+  add("15D-H: percentages are not calculated from only mapped targets", solCore.currentValueUsd === 4000 && aCore.mappedTargetValueUsd === 8000 && solCore.currentPct === 40, `${solCore.currentPct} (not 50)`);
+  add("15D-I: unknown/unsupported asset value remains in the denominator", aCore.unmappedOtherValueUsd === 2000, `${aCore.unmappedOtherValueUsd}`);
+  {
+    const snapReg = mkSnap(10000, [mkExp("usdc", usdcT.assetId, 4000), mkExp("sol", solT.assetId, 4000), mkExp("btc", btcT.assetId, 2000, ["manual_entry"])]);
+    const aReg = buildContributionAllocationGapAnalysis({ snapshot: snapReg, targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    add("15D-J: registered non-target value remains in the denominator", aReg.registeredNonTargetValueUsd === 2000 && aReg.targetResults.find((t) => t.targetId === "sol")!.currentPct === 40, `${aReg.registeredNonTargetValueUsd}`);
+    add("15D-K: mapped, registered non-target, and unmapped values reconcile to total", (aReg.mappedTargetValueUsd! + aReg.registeredNonTargetValueUsd! + aReg.unmappedOtherValueUsd!) === aReg.totalPortfolioValueUsd, "reconciles");
+    add("15D-R: disabled BTC exposure may remain in the denominator", aReg.status !== "invalid_input" && aReg.registeredNonTargetValueUsd === 2000, "kept");
+  }
+  {
+    const snapNeg = mkSnap(5000, [mkExp("usdc", usdcT.assetId, 4000), mkExp("sol", solT.assetId, 4000)]);
+    const aNeg = buildContributionAllocationGapAnalysis({ snapshot: snapNeg, targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    add("15D-L: materially negative unmapped value fails", aNeg.status === "invalid_input" && aNeg.blockers.includes("target_values_exceed_portfolio"), "fails");
+  }
+  {
+    const tinyTotal = 8000 - 5e-10;
+    const snapTiny = mkSnap(tinyTotal, [mkExp("usdc", usdcT.assetId, 4000), mkExp("sol", solT.assetId, 4000)]);
+    const aTiny = buildContributionAllocationGapAnalysis({ snapshot: snapTiny, targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    add("15D-M: a tiny floating error clamps unmapped to zero within tolerance", aTiny.status === "complete" && aTiny.unmappedOtherValueUsd === 0, "clamped");
+  }
+
+  // 15D-N…V. Exposure behavior.
+  add("15D-N: target exposure IDs are unique", validateContributionPortfolioAllocationSnapshot(snapCore).valid === true, "unique");
+  {
+    const aDup = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("sol", solT.assetId, 4000), mkExp("sol", solT.assetId, 1000)]), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    add("15D-N2: duplicate target exposure fails", aDup.status === "invalid_input" && aDup.blockers.includes("duplicate_target_value"), "fails");
+    const aNegExp = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("sol", solT.assetId, -5)]), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    add("15D-O: negative exposure fails", aNegExp.status === "invalid_input" && aNegExp.blockers.includes("target_value_negative"), "fails");
+    const aNaN = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("sol", solT.assetId, NaN)]), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    add("15D-P: NaN exposure fails", aNaN.status === "invalid_input" && aNaN.blockers.includes("target_value_invalid"), "fails");
+    const aBig = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("sol", solT.assetId, 20000)]), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    add("15D-Q: target exposure greater than total fails", aBig.status === "invalid_input" && aBig.blockers.includes("target_value_exceeds_portfolio"), "fails");
+  }
+  {
+    const snapEth = mkSnap(10000, [mkExp("usdc", usdcT.assetId, 4000), mkExp("sol", solT.assetId, 4500), mkExp("eth", ethT.assetId, 1500, ["manual_entry"])]);
+    const aEth = buildContributionAllocationGapAnalysis({ snapshot: snapEth, targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    add("15D-S: disabled ETH exposure may remain in the denominator", aEth.status !== "invalid_input" && aEth.registeredNonTargetValueUsd === 1500, "kept");
+  }
+  {
+    const snapProto = mkSnap(10000, [mkExp("usdc", usdcT.assetId, 6000), mkExp("sol", solT.assetId, 4000, ["protocol_position"])]);
+    const aProto = buildContributionAllocationGapAnalysis({ snapshot: snapProto, targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    const solProto = aProto.targetResults.find((t) => t.targetId === "sol")!;
+    add("15D-T: protocol-position exposure does not imply available funding", aProto.fundingAvailabilityEvaluated === false && solProto.fundingAvailabilityEvaluated === false && solProto.currentValueUsd === 4000, "no funding");
+    add("15D-U: staked SOL exposure can count toward SOL allocation via the canonical adapter", solProto.currentValueUsd === 4000 && solProto.currentPct === 40, "counts once");
+    add("15D-V: LST and underlying exposure are not double-counted by the gap engine", solProto.currentValueUsd === 4000 && !readIf("src/suggestions/contributionAllocationGapEngine.ts").includes("positions.reduce"), "single value");
+  }
+
+  // 15D-W…AD. Basic gap math + classification.
+  add("15D-W: $10,000 total and $4,000 SOL produces 40% current SOL allocation", solCore.currentPct === 40, "40%");
+  add("15D-X: 60% target produces a 20-point underweight gap", solCore.signedGapPercentagePoints === 20, "20pp");
+  add("15D-Y: 20-point gap meets the 5-point trigger", solCore.classification === "underweight_trigger_met" && solCore.underweightTriggerMet === true, "met");
+  add("15D-Z: 4-point underweight gap is below trigger", classifyContributionAllocationGap(56, 60).classification === "underweight_below_trigger", "below");
+  add("15D-AA: exactly 5 points meets the trigger", classifyContributionAllocationGap(55, 60).classification === "underweight_trigger_met", "met");
+  add("15D-AB: at-target within tolerance is classified at_target", classifyContributionAllocationGap(60 + CONTRIBUTION_ALLOCATION_PERCENTAGE_TOLERANCE / 2, 60).classification === "at_target" && usdcCore.classification === "at_target", "at_target");
+  add("15D-AC: overweight target is classified overweight", classifyContributionAllocationGap(70, 60).classification === "overweight", "overweight");
+  add("15D-AD: trigger does not run for overweight targets", classifyContributionAllocationGap(70, 60).underweightTriggerMet === false, "no trigger");
+
+  // BV scenario: $6,000 USDC / $4,000 SOL, targets 40/60.
+  const snapBV = mkSnap(10000, [mkExp("usdc", usdcT.assetId, 6000), mkExp("sol", solT.assetId, 4000)]);
+  const aBV = buildContributionAllocationGapAnalysis({ snapshot: snapBV, targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+  const solBV = aBV.targetResults.find((t) => t.targetId === "sol")!;
+  const usdcBV = aBV.targetResults.find((t) => t.targetId === "usdc")!;
+
+  // 15D-AE…AI. Static / current-total gap.
+  add("15D-AE: $10,000 × 60% produces a $6,000 current-total target value", solCore.staticTargetValueAtCurrentTotalUsd === 6000, "6000");
+  add("15D-AF: $4,000 current value produces a $2,000 signed static gap", solCore.signedStaticGapAtCurrentTotalUsd === 2000, "2000");
+  add("15D-AG: internal reallocation required is $2,000", solCore.internalReallocationUsdToReachTarget === 2000, "2000");
+  add("15D-AH: internal cap before overshoot is $2,000", solCore.maximumInternalReallocationIncreaseWithoutOvershootUsd === 2000, "2000");
+  add("15D-AI: overweight amount is calculated correctly", usdcBV.currentOverweightUsdAtCurrentTotal === 2000, "2000");
+
+  // 15D-AJ…AR. External-contribution math.
+  add("15D-AJ: external contribution uses the denominator-changing formula", solBV.externalContributionUsdToReachTarget === 5000 && solBV.internalReallocationUsdToReachTarget === 2000, "5000 vs 2000");
+  add("15D-AK: $10,000 total, $4,000 target value, and 60% target produces $5,000", computeExternalContributionToReachTarget(10000, 4000, 60).amount === 5000, "5000");
+  add("15D-AL: $5,000 external contribution reconstructs exactly 60%", ((4000 + 5000) / (10000 + 5000)) * 100 === 60, "60%");
+  add("15D-AM: static $2,000 gap is not incorrectly used as the external contribution gap", solBV.signedStaticGapAtCurrentTotalUsd === 2000 && solBV.externalContributionUsdToReachTarget === 5000, "distinct");
+  add("15D-AN: at-target produces a zero external cap", usdcCore.maximumExternalContributionIncreaseWithoutOvershootUsd === 0, "0");
+  add("15D-AO: overweight produces a zero external cap", usdcBV.maximumExternalContributionIncreaseWithoutOvershootUsd === 0, "0");
+  {
+    const alloc0 = buildGrowthTargetAllocationPolicyResult({ targetStablePct: 100, targetVolatilePct: 0, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+    const a0 = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(1000, [mkExp("usdc", usdcT.assetId, 1000), mkExp("sol", solT.assetId, 0)]), targetAllocationResult: alloc0, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    const sol0 = a0.targetResults.find((t) => t.targetId === "sol")!;
+    add("15D-AP: 0% target allows no increase", sol0.targetPct === 0 && sol0.maximumExternalContributionIncreaseWithoutOvershootUsd === 0 && sol0.maximumInternalReallocationIncreaseWithoutOvershootUsd === 0, "no increase");
+    const alloc100: GrowthTargetAllocationPolicyResult = { ...alloc, stableBucketTargetPct: 0, growthBucketTargetPct: 100, enabledGrowthTargetIds: ["sol"], singleEnabledGrowthTargetPolicyApplied: true, targetPctByInvestmentTargetId: { usdc: 0, sol: 100 } };
+    const a100 = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("sol", solT.assetId, 4000)]), targetAllocationResult: alloc100, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    const sol100 = a100.targetResults.find((t) => t.targetId === "sol")!;
+    add("15D-AQ: 100% underweight target reports no finite external solution", sol100.externalContributionUsdToReachTarget === undefined && sol100.blockers.includes("external_target_unreachable_at_100_percent"), "unreachable");
+  }
+  {
+    const ext = computeExternalContributionToReachTarget(10000, 4000, 55);
+    add("15D-AR: external calculations preserve full precision", ext.amount != null && Math.abs(ext.amount - 3333.3333333333335) < 1e-9 && !Number.isInteger(ext.amount), `${ext.amount}`);
+  }
+
+  // 15D-AS…BC. Hypothetical projections.
+  const projExt = projectContributionAllocationAfterHypotheticalIncrease({ currentValueUsd: 4000, totalPortfolioValueUsd: 10000, targetPct: 60 }, { targetId: "sol", mode: "external_contribution", amountUsd: 1000 });
+  const projInt = projectContributionAllocationAfterHypotheticalIncrease({ currentValueUsd: 4000, totalPortfolioValueUsd: 10000, targetPct: 60 }, { targetId: "sol", mode: "internal_reallocation", amountUsd: 1000 });
+  add("15D-AS: $1,000 external into a $4,000/$10,000 target produces 45.4545…%", projExt.valid && Math.abs(projExt.projection!.projectedTargetPct - 45.45454545454545) < 1e-9, `${projExt.projection?.projectedTargetPct}`);
+  add("15D-AT: $1,000 internal reallocation produces 50%", projInt.valid && projInt.projection!.projectedTargetPct === 50, "50%");
+  add("15D-AU: external projection increases total portfolio value", projExt.projection!.projectedTotalPortfolioValueUsd === 11000, "11000");
+  add("15D-AV: internal projection preserves total portfolio value", projInt.projection!.projectedTotalPortfolioValueUsd === 10000, "10000");
+  add("15D-AW: overshoot detection is deterministic", projectContributionAllocationAfterHypotheticalIncrease({ currentValueUsd: 4000, totalPortfolioValueUsd: 10000, targetPct: 60 }, { targetId: "sol", mode: "internal_reallocation", amountUsd: 3000 }).projection!.wouldOvershootTarget === true, "overshoot");
+  add("15D-AX: exact target amount is not marked overshoot", projectContributionAllocationAfterHypotheticalIncrease({ currentValueUsd: 4000, totalPortfolioValueUsd: 10000, targetPct: 60 }, { targetId: "sol", mode: "internal_reallocation", amountUsd: 2000 }).projection!.wouldOvershootTarget === false, "exact");
+  add("15D-AY: negative hypothetical amount fails", projectContributionAllocationAfterHypotheticalIncrease({ currentValueUsd: 4000, totalPortfolioValueUsd: 10000, targetPct: 60 }, { targetId: "sol", mode: "external_contribution", amountUsd: -5 }).valid === false, "fails");
+  add("15D-AZ: NaN hypothetical amount fails", projectContributionAllocationAfterHypotheticalIncrease({ currentValueUsd: 4000, totalPortfolioValueUsd: 10000, targetPct: 60 }, { targetId: "sol", mode: "external_contribution", amountUsd: NaN }).valid === false, "fails");
+  add("15D-BA: internal amount above non-target portfolio value fails", projectContributionAllocationAfterHypotheticalIncrease({ currentValueUsd: 4000, totalPortfolioValueUsd: 10000, targetPct: 60 }, { targetId: "sol", mode: "internal_reallocation", amountUsd: 7000 }).blockers.includes("hypothetical_amount_exceeds_non_target_value"), "fails");
+  add("15D-BB: projection does not evaluate funding availability", projExt.projection!.fundingAvailabilityEvaluated === false, "no funding");
+  add("15D-BC: projection does not select a source asset", projExt.projection!.sourceAssetSelected === false, "no source");
+
+  // 15D-BD…BI. Empty / negative portfolio.
+  const aEmpty = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(0, []), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+  add("15D-BD: zero portfolio returns empty_portfolio", aEmpty.status === "empty_portfolio" && aEmpty.emptyPortfolio === true, aEmpty.status);
+  add("15D-BE: empty portfolio does not divide by zero", aEmpty.targetResults.length === 0 && aEmpty.totalPortfolioValueUsd === 0, "safe");
+  add("15D-BF: empty portfolio does not calculate current percentages", aEmpty.currentAllocationCalculated === false, "no pct");
+  add("15D-BG: empty portfolio does not calculate single-target external gaps", aEmpty.targetResults.length === 0, "no gaps");
+  add("15D-BH: empty portfolio requires a future initial-allocation plan", aEmpty.blockers.includes("empty_portfolio_requires_initial_allocation_plan"), "requires plan");
+  add("15D-BI: negative portfolio total fails", buildContributionAllocationGapAnalysis({ snapshot: mkSnap(-100, []), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK }).blockers.includes("portfolio_total_negative"), "fails");
+
+  // 15D-BJ…BN. Ordering (no ranking).
+  const snapRank = mkSnap(10000, [mkExp("usdc", usdcT.assetId, 3500), mkExp("sol", solT.assetId, 4500)]);
+  const aRank = buildContributionAllocationGapAnalysis({ snapshot: snapRank, targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+  add("15D-BJ: target results preserve allocation-policy order", aCore.targetResults.map((t) => t.targetId).join(",") === Object.keys(alloc.targetPctByInvestmentTargetId).join(","), "usdc,sol");
+  add("15D-BK: underweight IDs preserve target-result order", aRank.underweightTargetIds.join(",") === "usdc,sol", aRank.underweightTargetIds.join(","));
+  add("15D-BL: trigger-met IDs preserve target-result order", aRank.triggerMetTargetIds.join(",") === "usdc,sol", aRank.triggerMetTargetIds.join(","));
+  add("15D-BM: the gap engine does not rank targets", aRank.underweightTargetIds[0] === "usdc" && (aRank.targetResults.find((t) => t.targetId === "sol")!.signedGapPercentagePoints as number) > (aRank.targetResults.find((t) => t.targetId === "usdc")!.signedGapPercentagePoints as number), "policy order");
+  add("15D-BN: the gap engine does not select the largest gap", aRank.targetSelected === false, "no selection");
+
+  // 15D-BO…BU. Growth readiness.
+  const aBlocked = buildContributionAllocationGapAnalysis({ snapshot: snapCore, targetAllocationResult: alloc, policyEligibilityByTargetId: {}, generatedAt: GEN, checkedAt: CHK });
+  add("15D-BO: ready SOL policy eligibility allows future growth-gap evaluation", solCore.eligibleForFutureGrowthContributionEvaluation === true && solCore.contributionTargetPolicyReady === true && aCore.status === "complete", "ready");
+  add("15D-BP: blocked SOL policy eligibility blocks the analysis", aBlocked.status === "blocked_policy_readiness" && aBlocked.blockers.includes("contribution_target_policy_not_ready"), aBlocked.status);
+  add("15D-BQ: USDC gap may be calculated but USDC is not marked as a growth contribution target", usdcCore.currentPct === 40 && usdcCore.eligibleForFutureGrowthContributionEvaluation === false, "context only");
+  add("15D-BR: BTC remains ineligible as a contribution target", isEnabledGrowthContributionTarget("btc") === false, "ineligible");
+  add("15D-BS: ETH remains ineligible as a contribution target", isEnabledGrowthContributionTarget("eth") === false, "ineligible");
+  add("15D-BT: RWA contribution targets remain disabled", RWA_ENABLED_15C === false && getInvestmentTarget("rwa") === undefined, "disabled");
+  add("15D-BU: calculated underweight does not mean selected", solCore.classification === "underweight_trigger_met" && solCore.targetSelected === false, "not selected");
+
+  // 15D-BV…CB. Worked portfolio scenarios.
+  add("15D-BV: $6,000 USDC / $4,000 SOL with 40/60 targets marks SOL underweight and USDC overweight", aBV.underweightTargetIds.includes("sol") && aBV.overweightTargetIds.includes("usdc"), "u/o");
+  add("15D-BW: internal SOL gap is $2,000", solBV.internalReallocationUsdToReachTarget === 2000, "2000");
+  add("15D-BX: external SOL gap is $5,000", solBV.externalContributionUsdToReachTarget === 5000, "5000");
+  {
+    const aAt = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("usdc", usdcT.assetId, 4000), mkExp("sol", solT.assetId, 6000)]), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    add("15D-BY: $4,000 USDC / $6,000 SOL with 40/60 targets marks both at target", aAt.atTargetIds.join(",") === "usdc,sol", aAt.atTargetIds.join(","));
+  }
+  {
+    const snapBonk = mkSnap(10000, [mkExp("usdc", usdcT.assetId, 4000), mkExp("sol", solT.assetId, 4000)]);
+    const aBonk = buildContributionAllocationGapAnalysis({ snapshot: snapBonk, targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+    add("15D-BZ: Demo-like SOL/USDC/BONK portfolio uses BONK in denominator", aBonk.unmappedOtherValueUsd === 2000 && aBonk.totalPortfolioValueUsd === 10000, "bonk in total");
+    add("15D-CA: BONK is not silently assigned to SOL", aBonk.targetResults.find((t) => t.targetId === "sol")!.currentValueUsd === 4000, "sol=4000");
+    add("15D-CB: existing non-target value can cause mapped targets to be underweight", aBonk.targetResults.find((t) => t.targetId === "sol")!.classification.startsWith("underweight"), "underweight");
+  }
+
+  // 15D-CC…CI. Future extensibility.
+  add("15D-CC: engine logic does not hardcode SOL", !/["']sol["']/.test(readIf("src/suggestions/contributionAllocationGapEngine.ts")), "generic");
+  {
+    const synthBtc: GrowthTargetAllocationPolicyResult = { ...alloc, stableBucketTargetPct: 40, growthBucketTargetPct: 60, enabledGrowthTargetIds: ["btc"], singleEnabledGrowthTargetPolicyApplied: true, targetPctByInvestmentTargetId: { usdc: 40, btc: 60 } };
+    const aBtc = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("usdc", usdcT.assetId, 4000), mkExp("btc", btcT.assetId, 3000, ["manual_entry"])]), targetAllocationResult: synthBtc, generatedAt: GEN, checkedAt: CHK });
+    const btcRes = aBtc.targetResults.find((t) => t.targetId === "btc")!;
+    add("15D-CD: engine can calculate a synthetic future BTC target from a supplied valid future allocation policy", aBtc.status === "complete" && btcRes.currentPct === 30 && btcRes.internalReallocationUsdToReachTarget === 3000 && btcRes.eligibleForFutureGrowthContributionEvaluation === false, "btc gap");
+    const synthEth: GrowthTargetAllocationPolicyResult = { ...alloc, stableBucketTargetPct: 40, growthBucketTargetPct: 60, enabledGrowthTargetIds: ["eth"], singleEnabledGrowthTargetPolicyApplied: true, targetPctByInvestmentTargetId: { usdc: 40, eth: 60 } };
+    const aEth2 = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("usdc", usdcT.assetId, 5000), mkExp("eth", ethT.assetId, 2000, ["manual_entry"])]), targetAllocationResult: synthEth, generatedAt: GEN, checkedAt: CHK });
+    add("15D-CE: engine can calculate a synthetic future ETH target", aEth2.targetResults.find((t) => t.targetId === "eth")!.targetPct === 60, "eth gap");
+    const synthRwa: GrowthTargetAllocationPolicyResult = { ...alloc, stableBucketTargetPct: 40, growthBucketTargetPct: 60, enabledGrowthTargetIds: ["treasury_note_2027"], singleEnabledGrowthTargetPolicyApplied: true, targetPctByInvestmentTargetId: { usdc: 40, treasury_note_2027: 60 } };
+    const aRwa = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("usdc", usdcT.assetId, 4000)]), targetAllocationResult: synthRwa, generatedAt: GEN, checkedAt: CHK });
+    const rwaRes = aRwa.targetResults.find((t) => t.targetId === "treasury_note_2027")!;
+    add("15D-CF: engine can calculate a synthetic specific RWA target", rwaRes.targetPct === 60 && rwaRes.currentValueUsd === 0 && rwaRes.internalReallocationUsdToReachTarget === 6000, "rwa gap");
+  }
+  add("15D-CG: manual-entry holding source is supported by the exposure type", validateContributionPortfolioAllocationSnapshot(mkSnap(1000, [mkExp("btc", btcT.assetId, 1000, ["manual_entry"])])).valid === true, "manual");
+  add("15D-CH: future-external-import holding source is supported", validateContributionPortfolioAllocationSnapshot(mkSnap(1000, [mkExp("btc", btcT.assetId, 1000, ["future_external_import"])])).valid === true, "import");
+  add("15D-CI: generic RWA production target remains forbidden", getInvestmentTarget("rwa") === undefined && getInvestmentTarget("generic_rwa") === undefined, "forbidden");
+
+  // 15D-CJ…CQ. Result boundaries.
+  add("15D-CJ: Safety Buffer is not evaluated", aCore.safetyBufferEvaluated === false && solCore.safetyBufferEvaluated === false, "no buffer");
+  add("15D-CK: funding source is not evaluated", aCore.fundingSourceEvaluated === false, "no source");
+  add("15D-CL: funding availability is not evaluated", aCore.fundingAvailabilityEvaluated === false, "no availability");
+  add("15D-CM: contribution frequency is not applied", aCore.contributionFrequencyApplied === false, "no frequency");
+  add("15D-CN: contribution amount is not calculated", aCore.contributionAmountCalculated === false && solCore.contributionAmountCalculated === false, "no amount");
+  add("15D-CO: no target is selected", aCore.targetSelected === false && solCore.targetSelected === false, "no selection");
+  add("15D-CP: no DCA plan is generated", aCore.dcaPlanGenerated === false, "no plan");
+  add("15D-CQ: no suggestion is generated", aCore.suggestionGenerated === false && solCore.suggestionGenerated === false, "no suggestion");
+
+  // 15D-CR…CV. Feature-state invariants.
+  add("15D-CR: allocation-gap engine exists", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true && TARGET_ALLOCATION_GAP_UPDATES_PRODUCT_OUTPUT === false && TARGET_ALLOCATION_GAP_SELECTS_TARGET === false && TARGET_ALLOCATION_GAP_EVALUATES_FUNDING === false && TARGET_ALLOCATION_GAP_EVALUATES_SAFETY_BUFFER === false, "exists");
+  add("15D-CS: contribution-priority engine remains disabled", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === false, "disabled");
+  add("15D-CT: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
+  add("15D-CU: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
+  add("15D-CV: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
+
+  // 15D-CW…DD. Product invariants.
+  add("15D-CW: existing target-allocation output remains unchanged", deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!.cryptoPct === 60 && deriveRecommendedAllocation({ riskTolerance: "very_low", totalPricedUsd: 1000 })!.cryptoPct === 20, "unchanged");
+  const funded15D = bufferFixture(5000, 1000, 3);
+  const aligned15D = allocationFixture(15000, 62, 2);
+  const engineRun15D = runSuggestionEngine(inputsFor({ safetyBuffer: funded15D, allocation: aligned15D, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking15D = engineRun15D.suggestions.find((s) => s.category === "staking");
+  add("15D-CX: existing suggestion output remains unchanged", engineRun15D.suggestions.length > 0 && staking15D?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  add("15D-CY: Safety Buffer behavior remains unchanged", engineRun15D.suggestions.every((s) => !s.id.startsWith("contribution_") && s.id !== "contribution_allocation_gap"), "unchanged");
+  add("15D-CZ: SOL staking remains unchanged", staking15D != null && staking15D.protocolSelection?.selectedProtocolName === "Jito", "unchanged");
+  add("15D-DA: Top Pick remains unchanged", engineRun15D.suggestions.filter((s) => s.is_top_pick).every((s) => !s.id.startsWith("contribution")), "unchanged");
+  add("15D-DB: engine ordering remains unchanged", engineRun15D.suggestions.every((s) => !s.id.startsWith("contribution") && s.id !== "sol" && s.id !== "usdc"), "unchanged");
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    const anyImport = prodFiles.some((f) => /contributionAllocationGap/.test(readIf(f)));
+    add("15D-DC: no product-facing import exists", anyImport === false, "no import");
+  }
+  add("15D-DD: no /testing card is added in this non-UI step", !readIf("src/pages/testingPageFixtures.ts").includes("contributionAllocationGap") && !readIf("src/pages/testingPageFixtures.ts").includes("buildContributionAllocationGapAnalysis"), "no card");
+
+  // 15D-DE…DG. Execution invariants.
+  {
+    const blob = ["contributionAllocationGapTypes", "contributionAllocationGapPolicy", "contributionAllocationGapEngine", "contributionAllocationGapDiagnostics"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+    add("15D-DE: no transaction path exists", !blob.includes("sendtransaction") && aCore.transactionsEnabled === false && solCore.transactionsEnabled === false, "none");
+    add("15D-DF: no signature path exists", !blob.includes("signtransaction") && aCore.walletSignatureRequired === false && solCore.walletSignatureRequired === false, "none");
+    const handlers = ["buy(", "swap(", "deposit(", "invest(", "execute(", "scheduletransfer("];
+    add("15D-DG: no buy/swap/deposit/invest/execute/schedule-transfer handler exists", handlers.filter((h) => blob.includes(h)).length === 0, "none");
+  }
+
+  // Validators + diagnostics smoke.
+  add("15D-validate: complete analysis validates and blocked analysis carries a blocker", validateContributionAllocationGapAnalysisResult(aCore).valid === true && validateContributionAllocationGapAnalysisResult(aBV).valid === true, "valid");
+  add("15D-diagnostics: diagnostics are neutral and reveal no recommendation", getContributionAllocationGapDiagnostics(aCore).targetOrder.join(",") === "usdc,sol" && /internal reallocation/i.test(explainContributionTargetAllocationGap(solCore)) && !/\b(buy|invest now|available to deploy|recommended amount|suggested amount)\b/i.test(explainContributionTargetAllocationGap(solCore)), "neutral");
 
   return checks;
 }
@@ -12225,6 +12529,7 @@ export function printFixtureResults(): void {
     ...runInvestmentTargetRegistryFixtureChecks(),
     ...runContributionFrequencyNormalizationFixtureChecks(),
     ...runContributionPlanningPolicyFixtureChecks(),
+    ...runContributionAllocationGapFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

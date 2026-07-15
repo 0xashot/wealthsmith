@@ -31,7 +31,13 @@ export const CONTRIBUTION_PLANNING_EXISTS = false;
 export const CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS = true;
 export const CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS = true;
 export const CONTRIBUTION_PRIORITY_ENGINE_EXISTS = false;
-export const TARGET_ALLOCATION_GAP_ENGINE_EXISTS = false;
+// Step 15D — the deterministic allocation-gap engine now exists (mathematical gaps/caps only; it
+// never selects a target, evaluates funding/the Safety Buffer, or changes product output).
+export const TARGET_ALLOCATION_GAP_ENGINE_EXISTS = true;
+export const TARGET_ALLOCATION_GAP_UPDATES_PRODUCT_OUTPUT = false;
+export const TARGET_ALLOCATION_GAP_SELECTS_TARGET = false;
+export const TARGET_ALLOCATION_GAP_EVALUATES_FUNDING = false;
+export const TARGET_ALLOCATION_GAP_EVALUATES_SAFETY_BUFFER = false;
 export const DCA_PLAN_GENERATION_EXISTS = false;
 export const DCA_SUGGESTION_ENABLED = false;
 export const CONTRIBUTION_DATES_GENERATED = false;
