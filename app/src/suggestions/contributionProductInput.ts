@@ -31,8 +31,13 @@ export interface ContributionProductResult {
 
 const EMPTY: ContributionProductResult = { suggestion: null, reviewById: {}, pipeline: null };
 
-/** A direct, spendable, wallet-held USDC token balance (never a protocol receipt / delegated / locked). */
-function isDirectWalletUsdc(p: WalletPosition): boolean {
+/**
+ * A direct, spendable, wallet-held USDC token balance. It is `liquid_now` ONLY through the canonical
+ * `detection === "direct_wallet_balance"` classification (a direct fungible SPL token balance of the
+ * analyzed wallet — never a protocol receipt (`type: "protocol"`), an LST (`type: "lst"`), a stake, or
+ * an unknown/renamed token). The USDC symbol alone never qualifies. Anything else is left `unknown`.
+ */
+export function isDirectWalletUsdc(p: WalletPosition): boolean {
   return p.type === "token" && p.symbol === "USDC" && p.name !== "Unknown token" && p.detection === "direct_wallet_balance" && typeof p.valueUsd === "number" && p.valueUsd > 0;
 }
 
@@ -41,7 +46,20 @@ function isDirectWalletUsdc(p: WalletPosition): boolean {
  * data is missing/unavailable — the caller then shows no contribution card (unrelated suggestions
  * are unaffected).
  */
-export function deriveContributionSuggestion(args: { dataMode: ContributionProductDataMode; positions: WalletPosition[]; pricedAsOf?: number | null; goal?: SavedGoal | null; buffer?: SafetyBuffer | null }): ContributionProductResult {
+export function deriveContributionSuggestion(args: {
+  dataMode: ContributionProductDataMode;
+  positions: WalletPosition[];
+  pricedAsOf?: number | null;
+  goal?: SavedGoal | null;
+  buffer?: SafetyBuffer | null;
+  /**
+   * Canonical price provenance for the growth (SOL) quote. Passed by the caller that can DEMONSTRATE
+   * the price came through the canonical token-price service (`token_price_service`). When absent, the
+   * quote is built without an approved source → the growth pipeline fails closed with
+   * `price_provenance_missing`; the Safety Buffer plan is unaffected. Never defaulted here.
+   */
+  priceProvenance?: { sourceId: string; browserFetched?: boolean };
+}): ContributionProductResult {
   const { dataMode, positions, pricedAsOf, goal, buffer } = args;
   if (!goal || pricedAsOf == null || !buffer) return EMPTY;
   const total = deriveValueBreakdown(positions).totalUsd;
@@ -60,7 +78,9 @@ export function deriveContributionSuggestion(args: { dataMode: ContributionProdu
   const solPos = positions.find((p) => (p.type === "native" || p.symbol === "SOL") && typeof p.priceUsd === "number");
   const priceQuoteByTargetId: Record<string, PriceQuote> = {};
   if (solPos && typeof solPos.priceUsd === "number") {
-    const pr = buildContributionPriceQuote({ dataMode, targetId: "sol", priceUsd: solPos.priceUsd, fetchedAt: iso, checkedAt: iso, isFixtureData: isFixture });
+    // Provenance is NEVER assumed from a bare priceUsd: without an explicit approved source the quote
+    // is built with sourceId "" → the evaluator flags `price_provenance_missing` and growth blocks.
+    const pr = buildContributionPriceQuote({ dataMode, targetId: "sol", priceUsd: solPos.priceUsd, sourceId: args.priceProvenance?.sourceId ?? "", fetchedAt: iso, checkedAt: iso, ...(args.priceProvenance?.browserFetched != null ? { browserFetched: args.priceProvenance.browserFetched } : {}), isFixtureData: isFixture });
     if (pr.quote) priceQuoteByTargetId.sol = pr.quote;
   }
 

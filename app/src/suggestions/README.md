@@ -1626,3 +1626,18 @@ no new modal). `/testing` renders all 30 scenarios through the shared card + mod
 (dev server): correct titles/tags, ready→card, blocked/On-Track→no card, T9 4-step $425 schedule, T5
 $461.53–$461.54 range, Escape/one-modal/`role=dialog`, no 375px overflow, staking modal unchanged,
 zero console errors. Remaining: wiring the Demo *dashboard* through the same `demo_fixture` path.
+
+### 15H finalization — Demo dashboard + provenance audit (Step 15 complete)
+
+The canonical Demo dashboard now runs the shared engine: `DemoDashboardPage` →
+`buildDemoContributionRail()` → `deriveRailSuggestions(dataMode: "demo_fixture")` against the pinned
+Demo profile/portfolio → one plan-backed Safety Buffer card (Top Pick, buffer override; no DCA).
+Browser-verified (Demo + /testing). Real Wallet price **provenance** is explicit:
+`deriveContributionSuggestion` never assumes it from a bare `priceUsd` — missing provenance →
+`price_provenance_missing` blocks growth (Safety Buffer unaffected, no false zero); `useRailSuggestions`
+passes `token_price_service` because real-wallet prices flow through `wallet/tokenPrices.ts`. Direct
+wallet USDC is `liquid_now` only via `detection === "direct_wallet_balance"` (symbol alone / protocol
+receipts never qualify; unknown → excluded). Flags: `CONTRIBUTION_DEMO_PIPELINE_ENABLED` /
+`…_REAL_WALLET_PIPELINE_ENABLED` truthfully `true`; execution/automation/live-price/dates/mixed-funding/
+residual flags `false`. **Step 15 is product-complete for the read-only MVP** (pending connected-wallet
+manual QA, which needs a live wallet).

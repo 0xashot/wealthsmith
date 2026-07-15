@@ -13,11 +13,9 @@
  * only shows the approved toast. Demo state does not persist into connected
  * mode (App switches modes, unmounting this page).
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { demoDashboardState as d } from "../state/demoDashboardState";
 import { demoSmithAiContent } from "../state/demoSmithAi";
-import { PROTOCOL_OPENED_TOAST } from "../state/approvedCopy";
-import type { SuggestionCardState } from "../types/dashboard";
 import GlobalNav from "../components/GlobalNav";
 import DemoBanner from "../components/DemoBanner";
 import PageHeader from "../components/PageHeader";
@@ -26,16 +24,17 @@ import FinancialSnapshot from "../components/FinancialSnapshot";
 import SafetyBufferCard from "../components/SafetyBufferCard";
 import ProjectedGrowthChart from "../components/ProjectedGrowthChart";
 import AllocationChart from "../components/AllocationChart";
-import SuggestionRail from "../components/SuggestionRail";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 import { buildDemoExactSolStakingRail } from "../suggestions/demoExactSolStakingScenario";
+import { buildDemoContributionRail } from "../suggestions/demoContributionScenario";
 
 type RightRailMode = "suggestions" | "ask_smith_ai";
 type DemoScenario = "default" | "sol_staking";
 
 interface Props {
-  pushToast: (message: string, helper?: string) => void;
+  /** Kept for the Props contract (App supplies it); the shared rail handles read-only review internally. */
+  pushToast?: (message: string, helper?: string) => void;
   onExitDemo: () => void;
   onConnectWallet: () => void;
   /** In-app demo page switch (Dashboard ↔ Portfolio). */
@@ -44,7 +43,6 @@ interface Props {
 }
 
 export default function DemoDashboardPage({
-  pushToast,
   onExitDemo,
   onConnectWallet,
   onNavigate,
@@ -56,28 +54,14 @@ export default function DemoDashboardPage({
   const [demoScenario, setDemoScenario] = useState<DemoScenario>("default");
   const askButtonRef = useRef<HTMLButtonElement>(null);
 
+  // Step 15H — the canonical Demo run through the SAME shared engine (demo_fixture). Buffer-incomplete
+  // → exactly one plan-backed Safety Buffer card (Top Pick), no SOL DCA. Rendered via the shared rail.
+  const demoContributionRail = useMemo(() => buildDemoContributionRail(), []);
+
   const openAskSmithAi = () => setRailMode("ask_smith_ai");
   const closeAskSmithAi = () => {
     setRailMode("suggestions");
     askButtonRef.current?.focus();
-  };
-
-  // Sample handoff: the card's anchor opens the fixture URL in a new tab.
-  // This handler only shows the approved non-execution toast.
-  const onExternalHandoff = () => {
-    pushToast(PROTOCOL_OPENED_TOAST);
-  };
-
-  // "Review" on the sample buffer Top Pick → its on-dashboard detail area,
-  // read-only. No execution/signature/completion/Top Pick change.
-  const onReviewSuggestion = (card: SuggestionCardState) => {
-    const targetId =
-      card.category === "safety_buffer" ? "safety-buffer" : `suggestion-${card.id}`;
-    const el = document.getElementById(targetId);
-    if (el) {
-      el.scrollIntoView({ block: "nearest" });
-      (el as HTMLElement).focus();
-    }
   };
 
   return (
@@ -137,11 +121,11 @@ export default function DemoDashboardPage({
                 railLabel={d.accessibility.right_rail_label}
               />
             ) : (
-              <SuggestionRail
-                rail={d.right_rail}
+              // Step 15H — the default Demo now runs the shared contribution engine (buffer-first),
+              // rendered through the shared rail/card/modal. Buffer override → one buffer card.
+              <RealWalletSuggestionsRail
+                rail={demoContributionRail}
                 railLabel={d.accessibility.right_rail_label}
-                onExternalHandoff={onExternalHandoff}
-                onReview={onReviewSuggestion}
               />
             )}
           </div>

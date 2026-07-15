@@ -6,12 +6,54 @@ source, projection, priority, Top-Pick eligibility, guardrails); the UI only map
 payload into approved templates and never recalculates. Read-only, non-custodial — no
 execution/signatures.
 
-> **Status.** Engine layer AND the UI wiring are complete. Real Wallet is wired end-to-end
-> (`deriveRailSuggestions` → `deriveContributionSuggestion` → `runSuggestionEngine(inputs, at,
-> contributionSuggestion)` → shared card + shared review modal). `/testing` renders all 30 scenarios
-> through the shared components and was browser-validated (see below). The Demo *dashboard* component
-> still uses its static scenario rail — wiring the canonical Demo profile/portfolio through the same
-> `deriveContributionSuggestion(dataMode: "demo_fixture", …)` path is the one remaining hook.
+> **Status — Step 15 product-complete (read-only MVP).** Engine layer, UI wiring, AND the Demo
+> dashboard are complete and browser-validated. Real Wallet: `deriveRailSuggestions(dataMode:
+> "real_wallet")` → `deriveContributionSuggestion` → `runSuggestionEngine(inputs, at,
+> contributionSuggestion)` → shared card + modal. Demo: `DemoDashboardPage` → `buildDemoContributionRail`
+> → the SAME `deriveRailSuggestions(dataMode: "demo_fixture")` against the canonical Demo state →
+> exactly one plan-backed Safety Buffer card (Top Pick, "Top Up Your Safety Buffer"), no SOL DCA.
+> `/testing` renders all 30 scenarios. Connected-wallet balance/modal QA was NOT performed (no
+> connected read-only wallet was available in this environment); all fail-closed integration paths are
+> complete (see the manual checklist below).
+
+## Demo dashboard wiring (Step 15H finalization)
+
+- `DemoDashboardPage` default scenario renders `RealWalletSuggestionsRail rail={buildDemoContributionRail()}`.
+- `demoContributionScenario.buildDemoContributionRail()` pins the canonical Demo profile
+  (Build Long-Term Wealth · Medium · 5-year · income $4,000 · expenses $1,000 · saving goal $1,000 ·
+  Monthly) and portfolio (SOL $5,500 · BONK $1,200 · USDC $800) and runs them through the SAME
+  `deriveRailSuggestions(dataMode: "demo_fixture")`. The canonical Demo is buffer-incomplete (3-month
+  $3,000 target vs $800 eligible → $2,200 shortfall), so the buffer override yields ONE plan-backed
+  buffer card (Top Pick). Browser-verified: card + modal show required $3,000 / current $800 / shortfall
+  $2,200 / contribution $1,000 / projected shortfall $1,200; Close only; no execution/wallet buttons; no
+  TEST FIXTURE badge; no horizontal overflow at 375px. The static `d.right_rail` (BONK trim, Kamino
+  yield) is intentionally superseded by the deterministic engine (buffer override).
+- Fixture isolation: `demoContributionScenario` imports NO /testing scenarios; adapters reject fixture
+  data in `real_wallet` mode; `demo_fixture` price/liquidity classification stays in the demo path.
+
+## Real Wallet price provenance (audit)
+
+Provenance is NEVER assumed from a bare `priceUsd`. `deriveContributionSuggestion` takes an explicit
+`priceProvenance.sourceId`; when absent the SOL quote is built with `sourceId: ""` → the evaluator flags
+`price_provenance_missing` and the GROWTH pipeline fails closed, while the Safety Buffer plan is
+unaffected and no false-zero is produced. `useRailSuggestions` passes `token_price_service` because
+real-wallet positions are priced exclusively through `wallet/tokenPrices.ts` (DefiLlama/Jupiter behind
+it) — a demonstrable provenance, not a fabricated one.
+
+## Direct-wallet USDC classification (audit)
+
+`isDirectWalletUsdc` classifies USDC `liquid_now` ONLY via the canonical `detection ===
+"direct_wallet_balance"` on a `type: "token"` USDC row (never a `protocol` receipt, an `lst`, a stake,
+or an unknown/renamed token). The USDC symbol alone never qualifies; anything else is left `unknown`
+and is excluded from excess-USDC funding. Upcoming-contribution plans remain usable when liquidity is
+unknown; existing-excess-USDC DCA requires explicit `liquid_now` USDC.
+
+## Connected-wallet manual QA checklist (not run in this environment)
+
+Connect a read-only wallet and confirm: real balances only (no fixtures/invented prices); unavailable
+data suppresses the plan (never shown as $0); no false On Track; unknown protocol USDC not counted as
+liquid; direct wallet USDC classified only via the canonical adapter; Review Plan requests no
+signature and prepares no transaction; opening/closing the modal changes no wallet state.
 
 ## UI wiring (Step 15H UI turn)
 

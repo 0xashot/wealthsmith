@@ -779,6 +779,21 @@ import {
 import { CATEGORY_PRIORITY, selectTopPick as selectTopPick15H } from "./topPick";
 import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID as PRICE_SRC_15H } from "./contributionPricePolicy";
 import { toSuggestionCard as toSuggestionCard15H } from "./toSuggestionCard";
+import { buildDemoContributionRail, DEMO_POSITIONS, DEMO_GOAL } from "./demoContributionScenario";
+import { buildDemoExactSolStakingRail as buildDemoStakingRail15H } from "./demoExactSolStakingScenario";
+import { deriveContributionSuggestion, isDirectWalletUsdc } from "./contributionProductInput";
+import {
+  CONTRIBUTION_DEMO_PIPELINE_ENABLED as DEMO_PIPELINE_FLAG,
+  CONTRIBUTION_REAL_WALLET_PIPELINE_ENABLED as REAL_WALLET_PIPELINE_FLAG,
+  CONTRIBUTION_PLAN_EXECUTION_ENABLED as PLAN_EXEC_FLAG,
+  CONTRIBUTION_PLAN_AUTOMATION_ENABLED as PLAN_AUTO_FLAG,
+  CONTRIBUTION_LIVE_PRICE_FETCH_ENABLED as LIVE_PRICE_FLAG,
+  CONTRIBUTION_DATES_GENERATED as DATES_FLAG,
+  CONTRIBUTION_PLAN_MIXED_FUNDING_ENABLED as MIXED_FUNDING_FLAG,
+  CONTRIBUTION_PLAN_RESIDUAL_ROUTING_ENABLED as RESIDUAL_FLAG,
+  CONTRIBUTION_AUTOMATION_ENABLED as CONTRIB_AUTO_FLAG,
+} from "./investmentTargetRegistry";
+import type { WalletPosition as WP15H } from "../wallet/walletPosition";
 import {
   CONTRIBUTION_PLAN_GENERATOR_EXISTS,
   CONTRIBUTION_PLAN_TARGET_SELECTION_EXISTS,
@@ -13714,7 +13729,7 @@ export function runContributionUiTurnFixtureChecks(): FixtureCheck[] {
   add("15H-UI-V: canonical Demo remains buffer-first", bufferRun(t1).suggestions.length === 1 && bufferRun(t1).suggestions[0].category === "buffer", "buffer first");
   add("15H-UI-W: Demo contains one buffer suggestion", bufferRun(t1).suggestions.filter((s) => s.category === "buffer").length === 1, "one buffer");
   add("15H-UI-X: Demo contains no pre-buffer SOL DCA", bufferRun(t1).suggestions.every((s) => s.category !== "dca"), "no dca");
-  add("15H-UI-Y: Real Wallet invokes the contribution pipeline with real mode", productInputSrc.includes('dataMode: "real_wallet"') || readIf("src/suggestions/useRailSuggestions.ts").includes('dataMode: "real_wallet"'), "real mode");
+  add("15H-UI-Y: Real Wallet invokes the contribution pipeline with real mode", readIf("src/suggestions/useRailSuggestions.ts").includes("deriveContributionSuggestion") && readIf("src/suggestions/useRailSuggestions.ts").includes('?? "real_wallet"'), "real mode");
   add("15H-UI-Z: Real Wallet imports no Demo/testing fixtures", !/demoDashboardState|testingPageFixtures|contributionTestingScenarios|demoFixture|buildDemo/.test(productInputSrc) && !/demoDashboardState|contributionTestingScenarios/.test(readIf("src/suggestions/useRailSuggestions.ts")), "no fixtures");
   add("15H-UI-AA: missing Real Wallet data produces no contribution suggestion", runContributionTestingScenario("15H-T15")!.pipeline.suggestion === undefined, "no suggestion");
   add("15H-UI-AB: missing Real Wallet data does not produce false On Track", runContributionTestingScenario("15H-T15")!.pipeline.status !== "no_action_required", "no false on track");
@@ -13757,6 +13772,86 @@ export function runContributionUiTurnFixtureChecks(): FixtureCheck[] {
   add("15H-UI-AX: no sendTransaction reference is added", !uiBlob.includes("sendtransaction"), "none");
   add("15H-UI-AY: no buy/swap/deposit/withdraw/transfer action is added", ["buy(", "swap(", "deposit(", "withdraw(", "transfer("].filter((h) => uiBlob.includes(h)).length === 0, "none");
   add("15H-UI-AZ: no direct browser price-provider fetch is added", !/fetch\(|xmlhttprequest|axios/i.test(priceAdapterSrc + productInputSrc), "no fetch");
+
+  return checks;
+}
+
+/**
+ * Step 15H finalization — verifies the canonical Demo dashboard consumes the deterministic pipeline
+ * (buffer-first, one buffer card, no DCA), fixture isolation, Real Wallet price-provenance behavior,
+ * direct-wallet USDC classification, feature-flag truthfulness, and no execution paths.
+ */
+export function runContributionFinalizationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const demoSrc = readIf("src/suggestions/demoContributionScenario.ts");
+  const demoPageSrc = readIf("src/pages/DemoDashboardPage.tsx");
+  const railSrc = readIf("src/suggestions/useRailSuggestions.ts");
+  const productInputSrc = readIf("src/suggestions/contributionProductInput.ts");
+
+  const rail = buildDemoContributionRail();
+  const bufferCards = rail.cards.filter((c) => c.category === "safety_buffer");
+  const T = "2026-07-15T00:00:00Z";
+  const T_MS = Date.UTC(2026, 6, 15, 0, 0, 0);
+  const wp = (o: Partial<WP15H>): WP15H => ({ id: "x", source: "wallet", type: "token", symbol: "X", amount: "0", detection: "direct_wallet_balance", ...o } as WP15H);
+
+  // 15H-FINAL-A…N. Demo dashboard wiring.
+  add("15H-FINAL-A: the actual Demo dashboard invokes deriveContributionSuggestion", demoPageSrc.includes("buildDemoContributionRail") && demoSrc.includes("deriveRailSuggestions") && railSrc.includes("deriveContributionSuggestion"), "invoked");
+  add("15H-FINAL-B: the Demo dashboard uses dataMode demo_fixture", demoSrc.includes('dataMode: "demo_fixture"'), "demo_fixture");
+  add("15H-FINAL-C: the canonical Demo profile remains unchanged", DEMO_GOAL.monthly_saving_goal === 1000 && DEMO_GOAL.contribution_frequency === "monthly" && DEMO_GOAL.risk_tolerance === "medium" && DEMO_GOAL.financial_goal === "build_long_term_wealth" && DEMO_GOAL.income_monthly === 4000 && DEMO_GOAL.expenses_monthly === 1000 && DEMO_GOAL.timeline === "5_years", "unchanged");
+  add("15H-FINAL-D: the canonical Demo portfolio remains unchanged", DEMO_POSITIONS.find((p) => p.symbol === "SOL")!.valueUsd === 5500 && DEMO_POSITIONS.find((p) => p.symbol === "BONK")!.valueUsd === 1200 && DEMO_POSITIONS.find((p) => p.symbol === "USDC")!.valueUsd === 800, "unchanged");
+  add("15H-FINAL-E: the Demo dashboard uses the shared engine invocation", demoSrc.includes("deriveRailSuggestions") && railSrc.includes("runSuggestionEngine"), "shared engine");
+  add("15H-FINAL-F: the Demo dashboard receives pre-sorted suggestions", rail.cards.filter((c) => c.is_top_pick).length === 1, "pre-sorted");
+  add("15H-FINAL-G: the Demo dashboard contains exactly one Safety Buffer suggestion", bufferCards.length === 1, `${bufferCards.length}`);
+  add("15H-FINAL-H: the Demo Safety Buffer suggestion is Top Pick", bufferCards[0]?.is_top_pick === true && bufferCards[0]?.title === "Top Up Your Safety Buffer", "top pick");
+  add("15H-FINAL-I: the Demo dashboard contains no SOL DCA while the buffer is incomplete", rail.cards.every((c) => c.tag !== "DCA" && c.category !== "dca" && !/dca/i.test(c.id)), "no dca");
+  add("15H-FINAL-J: the Demo dashboard contains no duplicate contribution suggestion", rail.cards.length === 1 && Object.keys(rail.contributionReviewById).length === 1, "one card");
+  add("15H-FINAL-K: unrelated Demo suggestions remain unchanged when not suppressed by the buffer override", buildDemoStakingRail15H().cards.length >= 1 && buildDemoStakingRail15H().cards[0].title.includes("Put Idle SOL"), "staking demo intact");
+  add("15H-FINAL-L: Demo fixture data cannot enter real_wallet mode", buildContributionPortfolioSnapshot({ dataMode: "real_wallet", snapshotId: "s", sourcePortfolioVersion: "v", calculatedAt: T, checkedAt: T, totalPortfolioValueUsd: 100, solExposureUsd: 60, usdcExposureUsd: 40, isFixtureData: true }).ok === false, "guarded");
+  add("15H-FINAL-M: testing fixture data cannot enter the Demo dashboard", !demoSrc.includes("contributionTestingScenarios") && !demoPageSrc.includes("contributionTestingScenarios"), "no testing import");
+  add("15H-FINAL-N: normal Demo UI does not show TEST FIXTURE", !demoPageSrc.includes("TEST FIXTURE") && !demoSrc.includes("TEST FIXTURE"), "no badge");
+
+  // 15H-FINAL-O…S. Real Wallet price provenance.
+  const rwQuote = buildContributionPriceQuote({ dataMode: "real_wallet", targetId: "sol", priceUsd: 150, sourceId: PRICE_SRC_15H, fetchedAt: T, checkedAt: T }).quote!;
+  const noProvQuote = buildContributionPriceQuote({ dataMode: "real_wallet", targetId: "sol", priceUsd: 150, sourceId: "", fetchedAt: T, checkedAt: T }).quote!;
+  add("15H-FINAL-O: Real Wallet sourced price preserves source ID", rwQuote.sourceId === "token_price_service", rwQuote.sourceId);
+  add("15H-FINAL-P: Real Wallet sourced price preserves provenance", rwQuote.browserFetched === false && rwQuote.sameOriginOrBackendNormalized === true, "provenance");
+  // Growth scenario: buffer complete + SOL underweight; without provenance → blocked.
+  const growthPositions: WP15H[] = [wp({ id: "u", type: "token", symbol: "USDC", name: "USD Coin", valueUsd: 9000 }), wp({ id: "s", type: "native", symbol: "SOL", valueUsd: 4300, priceUsd: 150 })];
+  const growthGoal = { ...DEMO_GOAL, expenses_monthly: 100 };
+  const completeBuffer = { stableUsd: 9000, targetUsd: 300, targetMonths: 3, coveragePct: 100, monthsCovered: 90, fullyFunded: true };
+  const noProv = deriveContributionSuggestion({ dataMode: "real_wallet", positions: growthPositions, pricedAsOf: T_MS, goal: growthGoal, buffer: completeBuffer });
+  const withProv = deriveContributionSuggestion({ dataMode: "real_wallet", positions: growthPositions, pricedAsOf: T_MS, goal: growthGoal, buffer: completeBuffer, priceProvenance: { sourceId: PRICE_SRC_15H } });
+  add("15H-FINAL-Q: a price with value and timestamp but no provenance blocks growth", noProvQuote.blockers.includes("price_provenance_missing") && noProv.suggestion === null && withProv.suggestion != null && withProv.suggestion!.category === "dca", "blocks growth");
+  // Buffer-incomplete without provenance still works.
+  const bufNoProv = deriveContributionSuggestion({ dataMode: "real_wallet", positions: DEMO_POSITIONS, pricedAsOf: T_MS, goal: DEMO_GOAL, buffer: { stableUsd: 800, targetUsd: 3000, targetMonths: 3, coveragePct: 26.67, monthsCovered: 0.8, fullyFunded: false } });
+  add("15H-FINAL-R: missing price provenance does not block Safety Buffer", bufNoProv.suggestion != null && bufNoProv.suggestion!.category === "buffer", "buffer works");
+  add("15H-FINAL-S: missing price provenance does not create a false zero", noProv.suggestion === null && noProv.pipeline?.status !== "ready", "no zero");
+
+  // 15H-FINAL-T…Y. Direct wallet USDC + liquidity.
+  add("15H-FINAL-T: direct wallet USDC is liquid only through canonical direct-balance classification", isDirectWalletUsdc(wp({ type: "token", symbol: "USDC", name: "USD Coin", detection: "direct_wallet_balance", valueUsd: 100 })) === true, "canonical");
+  add("15H-FINAL-U: USDC symbol alone does not produce liquid_now", isDirectWalletUsdc(wp({ type: "token", symbol: "USDC", name: "USD Coin", detection: "protocol_api", valueUsd: 100 })) === false, "not by symbol");
+  add("15H-FINAL-V: protocol receipt USDC does not become direct liquid USDC", isDirectWalletUsdc(wp({ type: "protocol", symbol: "USDC", name: "USD Coin", detection: "protocol_api", valueUsd: 100 })) === false, "not receipt");
+  add("15H-FINAL-W: unknown liquidity does not count toward excess USDC", runContributionTestingScenario("15H-T19")!.pipeline.plan === undefined && runContributionTestingScenario("15H-T19")!.pipeline.status !== "ready", "unknown excluded");
+  add("15H-FINAL-X: upcoming contribution remains usable when optional liquidity is unknown", runContributionTestingScenario("15H-T4")!.pipeline.status === "ready" && runContributionTestingScenario("15H-T4")!.pipeline.plan!.fundingSourceId === "upcoming_contribution", "upcoming ok");
+  add("15H-FINAL-Y: existing-excess-USDC DCA requires explicit current liquid USDC", runContributionTestingScenario("15H-T9")!.pipeline.plan!.fundingSourceId === "existing_excess_usdc" && runContributionTestingScenario("15H-T20")!.pipeline.plan === undefined, "requires liquid");
+
+  // 15H-FINAL-Z…AA. Feature-flag truthfulness.
+  add("15H-FINAL-Z: Demo pipeline feature flag is true only after dashboard wiring", DEMO_PIPELINE_FLAG === true && demoPageSrc.includes("buildDemoContributionRail"), "true + wired");
+  add("15H-FINAL-AA: Real Wallet feature flag reflects implementation, not claimed manual QA", REAL_WALLET_PIPELINE_FLAG === true && railSrc.includes("deriveContributionSuggestion") && PLAN_EXEC_FLAG === false && PLAN_AUTO_FLAG === false && LIVE_PRICE_FLAG === false && DATES_FLAG === false && MIXED_FUNDING_FLAG === false && RESIDUAL_FLAG === false && CONTRIB_AUTO_FLAG === false, "implementation");
+
+  // 15H-FINAL-AB…AF. Execution invariants over the finalization files.
+  {
+    const blob = [demoSrc, demoPageSrc, railSrc, productInputSrc].join("").toLowerCase();
+    add("15H-FINAL-AB: no signMessage reference is added", !blob.includes("signmessage"), "none");
+    add("15H-FINAL-AC: no signTransaction reference is added", !blob.includes("signtransaction"), "none");
+    add("15H-FINAL-AD: no signAllTransactions reference is added", !blob.includes("signalltransactions"), "none");
+    add("15H-FINAL-AE: no sendTransaction reference is added", !blob.includes("sendtransaction"), "none");
+    const handlers = ["buy(", "swap(", "deposit(", "withdraw(", "transfer("];
+    add("15H-FINAL-AF: no buy/swap/deposit/withdraw/transfer handler is added", handlers.filter((h) => blob.includes(h)).length === 0, "none");
+  }
 
   return checks;
 }
@@ -13859,6 +13954,7 @@ export function printFixtureResults(): void {
     ...runContributionPlanFixtureChecks(),
     ...runContributionIntegrationFixtureChecks(),
     ...runContributionUiTurnFixtureChecks(),
+    ...runContributionFinalizationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

@@ -36,6 +36,7 @@ import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
 import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 import { deriveContributionSuggestion } from "./contributionProductInput";
+import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID } from "./contributionPricePolicy";
 import type { ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
 
 /** Engine cards + partial-pricing notice for the right rail (engine order). */
@@ -69,8 +70,15 @@ export function deriveRailSuggestions(args: {
   positions: WalletPosition[];
   pricedAsOf?: number | null;
   goal?: SavedGoal | null;
+  /**
+   * Step 15H — data provenance. Defaults to `real_wallet` (the Dashboard/Portfolio path). The Demo
+   * dashboard passes `demo_fixture` so the SAME shared engine runs against the canonical Demo state
+   * with explicitly fixture-scoped price/liquidity classification.
+   */
+  dataMode?: "real_wallet" | "demo_fixture";
 }): RailSuggestionsData {
   const { positions, pricedAsOf, goal } = args;
+  const dataMode = args.dataMode ?? "real_wallet";
 
   const value = deriveValueBreakdown(positions);
 
@@ -115,7 +123,9 @@ export function deriveRailSuggestions(args: {
 
   // Step 15H — the deterministic plan-backed contribution suggestion from REAL wallet state (never
   // fixtures). Merged into the engine BEFORE its sort/Top-Pick pass so ordering is engine-owned.
-  const contribution = deriveContributionSuggestion({ dataMode: "real_wallet", positions, pricedAsOf, goal, buffer });
+  // Real-wallet positions are priced exclusively through the canonical token-price service
+  // (`wallet/tokenPrices.ts`), so `token_price_service` is a DEMONSTRABLE provenance (not fabricated).
+  const contribution = deriveContributionSuggestion({ dataMode, positions, pricedAsOf, goal, buffer, priceProvenance: { sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID } });
 
   const engineResult = runSuggestionEngine(
     buildSuggestionEngineInputs({
