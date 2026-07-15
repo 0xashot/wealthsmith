@@ -136,6 +136,15 @@ export interface SuggestionCardState {
   description: string;
   impact_text: string;
   disabled_reason_text?: string;
+  /**
+   * Step 15H — optional visible tag for plan-backed contribution suggestions
+   * ("Safety First" / "Allocation" / "DCA"). Engine-owned deterministic copy from
+   * contributionPlanPresentation; the card renders it as a neutral badge. Absent for
+   * every existing suggestion family.
+   */
+  tag?: string;
+  /** Step 15H — accessible CTA name for plan-backed cards (e.g. "Review plan: …"). */
+  accessibleCtaLabel?: string;
   cta: {
     label: string;
     action: string | null;

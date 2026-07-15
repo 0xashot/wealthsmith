@@ -19,6 +19,8 @@ import type { SuggestionCardState } from "../types/dashboard";
 import type { EngineSuggestion, SuggestionCategory } from "./engineTypes";
 import { SUGGESTION_COPY, SUGGESTIONS_PARTIAL_PRICING } from "../state/approvedCopy";
 import type { SuggestionReasonCode } from "./engineTypes";
+import type { ContributionPlanSuggestion } from "./contributionIntegrationTypes";
+import { buildContributionPlanCardPresentation } from "./contributionPlanPresentation";
 
 /** Whole-dollar USD (no cents), e.g. "$2,200". */
 const usd0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -75,9 +77,36 @@ const CARD_TYPE: Record<SuggestionCategory, string> = {
  * branch produces a valid card. CTA is ALWAYS non-transactional
  * (executes_transaction/requires_wallet_signature/completion_on_click = false).
  */
+/** True for a Step 15H plan-backed contribution suggestion (carries the structured payload). */
+function isContributionPlanSuggestion(s: EngineSuggestion): s is ContributionPlanSuggestion {
+  return "contributionPlan" in s && (s as ContributionPlanSuggestion).contributionPlan != null;
+}
+
 export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
   const disabled = s.action_kind === "disabled";
   const informational = s.action_kind === "informational";
+
+  // Step 15H — plan-backed contribution suggestions render deterministic engine copy from the
+  // presentation layer (title/description/impact/tag/accessible CTA). React never rebuilds these.
+  if (isContributionPlanSuggestion(s)) {
+    const p = buildContributionPlanCardPresentation(s.contributionPlan);
+    return {
+      id: s.id,
+      title: p.title,
+      type: CARD_TYPE[s.category],
+      category: CARD_CATEGORY[s.category],
+      badge: s.is_top_pick ? "Top Pick" : "",
+      is_top_pick: s.is_top_pick,
+      status: "active",
+      actionability: "actionable",
+      severity: s.category === "buffer" ? "high" : "info",
+      description: p.description,
+      impact_text: p.impactText ?? "",
+      tag: p.tag,
+      accessibleCtaLabel: p.accessibilityLabel,
+      cta: { label: p.ctaLabel, action: null, executes_transaction: false, requires_wallet_signature: false, completion_on_click: false },
+    };
+  }
 
   const actionability = disabled
     ? "disabled"

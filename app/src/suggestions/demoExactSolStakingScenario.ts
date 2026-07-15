@@ -235,6 +235,7 @@ export function buildDemoExactSolStakingRail(): RailSuggestions {
     available: true,
     cards: [card],
     reviewDetailsById: { [card.id]: getDemoExactSolStakingReviewDetails() },
+    contributionReviewById: {},
     notice: undefined,
   };
 }

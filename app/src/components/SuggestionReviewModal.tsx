@@ -23,9 +23,13 @@ import type {
   ReviewPositionRole,
   SuggestionReviewDetails,
 } from "../suggestions/engineTypes";
+import type { ContributionPlanReviewDetails } from "../suggestions/contributionPlanReviewDetails";
 
 interface Props {
-  details: SuggestionReviewDetails;
+  /** The engine review details (existing suggestion families). Optional when `contributionReview` is set. */
+  details?: SuggestionReviewDetails;
+  /** Step 15H — plan-backed contribution review sections. When present, the modal renders these. */
+  contributionReview?: ContributionPlanReviewDetails;
   isTopPick: boolean;
   onClose: () => void;
 }
@@ -85,7 +89,7 @@ function formatCalcValue(v: number, unit?: string): string {
   return `${num1(v)}${unit ? ` ${unit}` : ""}`;
 }
 
-export default function SuggestionReviewModal({ details, isTopPick, onClose }: Props) {
+export default function SuggestionReviewModal({ details, contributionReview, isTopPick, onClose }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -126,6 +130,101 @@ export default function SuggestionReviewModal({ details, isTopPick, onClose }: P
     }
   };
 
+  // Step 15H — plan-backed contribution review. Renders the deterministic engine sections through the
+  // SAME shared modal shell (no new modal component, no recalculation). Read-only; Close only.
+  if (contributionReview) {
+    const cr = contributionReview;
+    const rowList = (rows: { label: string; value: string }[], label: string) => (
+      <dl className="review-modal__rows" aria-label={label}>
+        {rows.map((r, i) => (
+          <div key={`${r.label}-${i}`} className="review-modal__row">
+            <dt>{r.label}</dt>
+            <dd>{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+    return (
+      <div className="modal-scrim" onClick={onClose}>
+        <div ref={dialogRef} className="modal review-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={reasonId} onKeyDown={onKeyDown} onClick={(e) => e.stopPropagation()}>
+          <div className="modal__header">
+            <div className="review-modal__heading">
+              <div className="review-modal__eyebrow">
+                <p className="review-modal__category">Contribution plan</p>
+                {isTopPick && <Badge label="Top Pick" tone="info" />}
+              </div>
+              <h2 id={titleId} className="modal__title">{cr.title}</h2>
+            </div>
+            <button ref={closeRef} type="button" className="modal__close" aria-label="Close review details" onClick={onClose}>
+              <ButtonIcon src={closeUrl} size={18} />
+            </button>
+          </div>
+          <div className="review-modal__body">
+            {cr.summaryRows.length > 0 && (
+              <section className="review-modal__section" aria-label="Summary">{rowList(cr.summaryRows, "Summary")}</section>
+            )}
+            <section className="review-modal__section" aria-label={cr.whySection.title}>
+              <h3 className="review-modal__section-title">{cr.whySection.title}</h3>
+              <p id={reasonId} className="modal__intro">{cr.whySection.body}</p>
+            </section>
+            {cr.cadenceSection && (
+              <section className="review-modal__section" aria-label={cr.cadenceSection.title}>
+                <h3 className="review-modal__section-title">{cr.cadenceSection.title}</h3>
+                {rowList(cr.cadenceSection.rows, cr.cadenceSection.title)}
+              </section>
+            )}
+            {cr.scheduleSection && (
+              <section className="review-modal__section" aria-label={cr.scheduleSection.title}>
+                <h3 className="review-modal__section-title">{cr.scheduleSection.title}</h3>
+                <ol className="review-modal__schedule">
+                  {cr.scheduleSection.steps.map((s, i) => (
+                    <li key={`${s.label}-${i}`} className="review-modal__schedule-step">
+                      <span className="review-modal__schedule-when">{s.label}</span>
+                      <span className="review-modal__schedule-amount">{s.amount}</span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            )}
+            {cr.allocationSection && (
+              <section className="review-modal__section" aria-label={cr.allocationSection.title}>
+                <h3 className="review-modal__section-title">{cr.allocationSection.title}</h3>
+                {rowList(cr.allocationSection.rows, cr.allocationSection.title)}
+              </section>
+            )}
+            <section className="review-modal__section" aria-label={cr.safetyBufferSection.title}>
+              <h3 className="review-modal__section-title">{cr.safetyBufferSection.title}</h3>
+              {rowList(cr.safetyBufferSection.rows, cr.safetyBufferSection.title)}
+            </section>
+            <section className="review-modal__section" aria-label={cr.fundingSection.title}>
+              <h3 className="review-modal__section-title">{cr.fundingSection.title}</h3>
+              {rowList(cr.fundingSection.rows, cr.fundingSection.title)}
+            </section>
+            {cr.alternativeSourceSection && (
+              <section className="review-modal__section" aria-label={cr.alternativeSourceSection.title}>
+                <h3 className="review-modal__section-title">{cr.alternativeSourceSection.title}</h3>
+                {rowList(cr.alternativeSourceSection.rows, cr.alternativeSourceSection.title)}
+              </section>
+            )}
+            {cr.unallocatedSection && (
+              <section className="review-modal__section" aria-label={cr.unallocatedSection.title}>
+                <h3 className="review-modal__section-title">{cr.unallocatedSection.title}</h3>
+                {rowList(cr.unallocatedSection.rows, cr.unallocatedSection.title)}
+              </section>
+            )}
+            <section className="review-modal__section review-modal__safety" aria-label="Read-only notice">
+              <p className="review-modal__readonly-notice">{cr.readOnlyNotice}</p>
+            </section>
+          </div>
+          <div className="review-modal__footer">
+            <button type="button" className="review-modal__close-action" onClick={onClose}>{cr.closeLabel}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!details) return null;
   const { summary, metrics, involvedAssets, involvedPositions, calculations, guardrailSummary, limitations, safetyNotes } = details;
 
   const guardrailGroups: {

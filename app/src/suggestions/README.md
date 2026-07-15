@@ -1610,3 +1610,19 @@ back to fixtures; blocked/stale plans are suppressed. `DCA_SUGGESTION_ENABLED`,
 `CONTRIBUTION_PLAN_GENERATES_SUGGESTION`, and the integration/UI/pipeline flags are `true`; execution/
 automation/calendar-date flags stay `false`. Shared React card/modal + `/testing` route + Demo/Real
 hooks + browser validation are the follow-up.
+
+### 15H UI turn — shared card/modal + /testing wired
+
+The plan-backed pipeline is now wired into the product UI. `runSuggestionEngine(inputs, generatedAt,
+contributionSuggestion?)` merges the plan suggestion (buffer→enriches buffer; dca→DCA slot,
+suppresses legacy) BEFORE the existing sort/`selectTopPick`. Real Wallet: `deriveRailSuggestions`
+builds it from live state via `contributionProductInput.deriveContributionSuggestion({ dataMode:
+"real_wallet" })` and returns `contributionReviewById`. `toSuggestionCard` renders plan-backed cards
+from `contributionPlanPresentation` (title/description/impact/**tag**/accessible CTA);
+`SuggestionCard` renders the tag badge + accessible CTA (no arithmetic). The shared
+`SuggestionReviewModal` gained an optional `contributionReview` prop rendering the review sections
+(semantic-list Start/Day 5/9/14 schedule, "Preserved" buffer, exact read-only notice, Close only —
+no new modal). `/testing` renders all 30 scenarios through the shared card + modal. **Browser-validated**
+(dev server): correct titles/tags, ready→card, blocked/On-Track→no card, T9 4-step $425 schedule, T5
+$461.53–$461.54 range, Escape/one-modal/`role=dialog`, no 375px overflow, staking modal unchanged,
+zero console errors. Remaining: wiring the Demo *dashboard* through the same `demo_fixture` path.

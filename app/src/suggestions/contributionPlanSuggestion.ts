@@ -14,8 +14,23 @@ import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
 import { getInvestmentTarget } from "./investmentTargetRegistry";
 import { BUFFER_SUGGESTION_ID } from "./bufferSuggestion";
+import { buildContributionPlanReviewDetails, type ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
 
 export const CONTRIBUTION_PLAN_SUGGESTION_EXISTS = true;
+
+/**
+ * Build the plan review-details map (id → sections) for every plan-backed suggestion in a merged
+ * list, so the shared review modal can render without recalculating. Non-plan suggestions are
+ * skipped (they carry the engine's own `reviewDetails`).
+ */
+export function buildContributionReviewDetailsById(suggestions: EngineSuggestion[]): Record<string, ContributionPlanReviewDetails> {
+  const out: Record<string, ContributionPlanReviewDetails> = {};
+  for (const s of suggestions) {
+    const cp = (s as ContributionPlanSuggestion).contributionPlan;
+    if (cp != null) out[s.id] = buildContributionPlanReviewDetails(cp);
+  }
+  return out;
+}
 
 interface KindMapping {
   category: SuggestionCategory;

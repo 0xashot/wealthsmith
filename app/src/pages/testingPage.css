@@ -100,3 +100,19 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Step 15H — contribution/DCA plan scenarios. */
+.testing-page__contrib { margin-top: 32px; display: flex; flex-direction: column; gap: 12px; }
+.testing-page__section-title { font-size: 20px; font-weight: 700; margin: 0; }
+.testing-page__contrib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.testing-page__contrib-cell { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-control-sm); background: var(--color-surface-card); }
+.testing-page__contrib-head { display: flex; align-items: center; gap: 8px; }
+.testing-page__badge { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 4px; background: var(--color-surface-main); color: var(--color-text-secondary); border: 1px solid var(--color-border-subtle); }
+.testing-page__contrib-id { font-weight: 700; }
+.testing-page__contrib-name { margin: 0; font-weight: 600; }
+.testing-page__contrib-diag { display: flex; flex-direction: column; gap: 2px; margin: 0; font-size: 13px; }
+.testing-page__contrib-diag > div { display: flex; justify-content: space-between; gap: 8px; }
+.testing-page__contrib-diag dt { color: var(--color-text-secondary); }
+.testing-page__contrib-diag dd { margin: 0; color: var(--color-text-primary); text-align: right; word-break: break-word; }
+.testing-page__contrib-planid { font-family: monospace; font-size: 11px; }
+.testing-page__contrib-noplan { margin: 0; font-size: 13px; color: var(--color-text-secondary); }

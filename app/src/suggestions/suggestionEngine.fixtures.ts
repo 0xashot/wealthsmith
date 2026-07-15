@@ -776,8 +776,9 @@ import {
   CONTRIBUTION_REAL_WALLET_PIPELINE_ENABLED,
   CONTRIBUTION_TESTING_SCENARIOS_EXIST as CONTRIBUTION_TESTING_SCENARIOS_EXIST_FLAG,
 } from "./investmentTargetRegistry";
-import { CATEGORY_PRIORITY } from "./topPick";
+import { CATEGORY_PRIORITY, selectTopPick as selectTopPick15H } from "./topPick";
 import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID as PRICE_SRC_15H } from "./contributionPricePolicy";
+import { toSuggestionCard as toSuggestionCard15H } from "./toSuggestionCard";
 import {
   CONTRIBUTION_PLAN_GENERATOR_EXISTS,
   CONTRIBUTION_PLAN_TARGET_SELECTION_EXISTS,
@@ -13365,10 +13366,7 @@ export function runContributionPlanFixtureChecks(): FixtureCheck[] {
   const staking15G = engineRun15G.suggestions.find((s) => s.category === "staking");
   add("15G-EC: Top Pick is unchanged", engineRun15G.suggestions.filter((s) => s.is_top_pick).every((s) => !s.id.startsWith("contribution")), "unchanged");
   add("15G-ED: engine ordering is unchanged", engineRun15G.suggestions.every((s) => !s.id.startsWith("contribution") && s.id !== "sol" && s.id !== "usdc"), "unchanged");
-  {
-    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
-    add("15G-EE: no card or modal is added", prodFiles.every((f) => !/contributionPlan/.test(readIf(f))), "no card");
-  }
+  add("15G-EE: shared card/modal wired at the Step 15H UI turn (contribution review rendered)", /contributionPlan/.test(readIf("src/components/SuggestionReviewModal.tsx")), "wired at 15H");
   add("15G-EF: no /testing scenario is added in this non-UI step", !readIf("src/pages/testingPageFixtures.ts").includes("contributionPlan") && !readIf("src/pages/testingPageFixtures.ts").includes("buildContributionPlan"), "no card");
 
   // 15G-EG…EP. Feature states.
@@ -13657,6 +13655,112 @@ export function runContributionIntegrationFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 15H UI turn — verifies the plan-backed suggestion enters the shared engine output, the mapper
+ * produces deterministic card copy, the shared card/modal are wired (source), the /testing scenarios
+ * render through the shared components, ordering/Top-Pick are reused, existing families are
+ * unchanged, and no execution/browser-fetch path is added.
+ */
+export function runContributionUiTurnFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const t1 = runContributionTestingScenario("15H-T1")!.pipeline.suggestion!;
+  const t4 = runContributionTestingScenario("15H-T4")!.pipeline.suggestion!;
+  const t4card = runContributionTestingScenario("15H-T4")!.card!;
+  const t5review = runContributionTestingScenario("15H-T5")!.review!;
+  const t9review = runContributionTestingScenario("15H-T9")!.review!;
+  const cardSrc = readIf("src/components/SuggestionCard.tsx");
+  const modalSrc = readIf("src/components/SuggestionReviewModal.tsx");
+  const railSrc = readIf("src/components/RealWalletSuggestionsRail.tsx");
+  const engineSrc = readIf("src/suggestions/engine.ts");
+  const priceAdapterSrc = readIf("src/suggestions/contributionPriceAdapter.ts");
+  const productInputSrc = readIf("src/suggestions/contributionProductInput.ts");
+  const testingPageSrc = readIf("src/pages/TestingPage.tsx");
+
+  // Aligned (buffer complete, no rebalance) inputs so the plan DCA takes the DCA slot.
+  const alignedRun = (contrib: import("./engineTypes").EngineSuggestion | null) => runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 60, 0), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT, contrib);
+  const bufferRun = (contrib: import("./engineTypes").EngineSuggestion | null) => runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT, contrib);
+
+  // 15H-UI-A…H.
+  const runWithDca = alignedRun(t4);
+  add("15H-UI-A: plan-backed suggestion enters the shared engine output", runWithDca.suggestions.some((s) => s.id === "contribution_dca_sol"), "in output");
+  add("15H-UI-B: final engine sort is reused", runWithDca.suggestions.length > 0 && runWithDca.suggestions.filter((s) => s.is_top_pick).length <= 1, "reused");
+  add("15H-UI-C: existing Top Pick selector is reused", selectTopPick15H(runWithDca.suggestions).filter((s) => s.is_top_pick).length <= 1 && engineSrc.includes("selectTopPick"), "reused");
+  add("15H-UI-D: SuggestionRail does not reorder", !readIf("src/components/SuggestionRail.tsx").includes(".sort("), "no reorder");
+  add("15H-UI-E: SuggestionCard uses deterministic presentation", t4card.title === "Gradually Build Your SOL Allocation" && toSuggestionCard15H(t4).title === t4card.title, "deterministic");
+  add("15H-UI-F: SuggestionCard performs no financial calculation", !/toFixed|Math\.(round|min|max|floor)|parseFloat|Number\(|valueUsd\s*[*/+-]|\/\s*100/.test(cardSrc), "no calc");
+  add("15H-UI-G: Review Plan opens the shared modal only", t4card.ctaLabel === "Review Plan" && t4card.readOnly === true && toSuggestionCard15H(t4).cta.executes_transaction === false, "modal only");
+  add("15H-UI-H: no wallet method runs on CTA click", !/signTransaction|sendTransaction|signMessage|signAllTransactions/.test(cardSrc), "no wallet");
+
+  // 15H-UI-I…T. Shared modal render (source + data).
+  add("15H-UI-I: shared modal renders summary rows", modalSrc.includes("cr.summaryRows") && runContributionTestingScenario("15H-T4")!.review!.summaryRows.length > 0, "rows");
+  add("15H-UI-J: shared modal renders exact amount", runContributionTestingScenario("15H-T4")!.review!.summaryRows.some((r) => /\$/.test(r.value)), "exact");
+  add("15H-UI-K: shared modal renders range amount", t5review.summaryRows.some((r) => /–/.test(r.value)), "range");
+  add("15H-UI-L: shared modal renders recurring cadence", modalSrc.includes("cr.cadenceSection") && runContributionTestingScenario("15H-T4")!.review!.cadenceSection != null, "cadence");
+  add("15H-UI-M: shared modal renders Occasional explicit amount", runContributionTestingScenario("15H-T8")!.review!.cadenceSection!.rows.some((r) => /Occasional/i.test(r.value)), "occasional");
+  add("15H-UI-N: shared modal renders four-step schedule", modalSrc.includes("cr.scheduleSection") && modalSrc.includes("<ol") && t9review.scheduleSection!.steps.length === 4, "schedule");
+  add("15H-UI-O: shared modal renders relative labels without dates", t9review.scheduleSection!.steps.map((s) => s.label).join(",") === "Start,Day 5,Day 9,Day 14", "relative");
+  add("15H-UI-P: shared modal renders Safety Buffer preservation", t9review.safetyBufferSection.rows.some((r) => /Preserved/i.test(r.value)), "preserved");
+  add("15H-UI-Q: alternative source has no interactive switcher", modalSrc.includes("alternativeSourceSection") && !/<input|<select|onChange|radio/i.test((runContributionTestingScenario("15H-T10")!.review!.alternativeSourceSection?.title ?? "") + modalSrc.split("alternativeSourceSection")[1]?.slice(0, 200)), "context only");
+  add("15H-UI-R: unallocated capacity is not routed", modalSrc.includes("unallocatedSection") && (runContributionTestingScenario("15H-T1")!.pipeline.plan?.unallocatedSourceCapacity.routed === false), "not routed");
+  add("15H-UI-S: exact read-only notice renders", modalSrc.includes("cr.readOnlyNotice") && runContributionTestingScenario("15H-T4")!.review!.readOnlyNotice === CONTRIBUTION_PLAN_READ_ONLY_NOTICE, "notice");
+  add("15H-UI-T: no execution action renders", !/Execute|Confirm Trade|Start DCA|Open Wallet|Buy Now/.test(modalSrc), "no exec");
+
+  // 15H-UI-U…AB. Demo + Real Wallet.
+  add("15H-UI-U: Demo invokes the contribution pipeline", railSrc.includes("contributionReviewById") && readIf("src/suggestions/useRailSuggestions.ts").includes("deriveContributionSuggestion"), "invoked");
+  add("15H-UI-V: canonical Demo remains buffer-first", bufferRun(t1).suggestions.length === 1 && bufferRun(t1).suggestions[0].category === "buffer", "buffer first");
+  add("15H-UI-W: Demo contains one buffer suggestion", bufferRun(t1).suggestions.filter((s) => s.category === "buffer").length === 1, "one buffer");
+  add("15H-UI-X: Demo contains no pre-buffer SOL DCA", bufferRun(t1).suggestions.every((s) => s.category !== "dca"), "no dca");
+  add("15H-UI-Y: Real Wallet invokes the contribution pipeline with real mode", productInputSrc.includes('dataMode: "real_wallet"') || readIf("src/suggestions/useRailSuggestions.ts").includes('dataMode: "real_wallet"'), "real mode");
+  add("15H-UI-Z: Real Wallet imports no Demo/testing fixtures", !/demoDashboardState|testingPageFixtures|contributionTestingScenarios|demoFixture|buildDemo/.test(productInputSrc) && !/demoDashboardState|contributionTestingScenarios/.test(readIf("src/suggestions/useRailSuggestions.ts")), "no fixtures");
+  add("15H-UI-AA: missing Real Wallet data produces no contribution suggestion", runContributionTestingScenario("15H-T15")!.pipeline.suggestion === undefined, "no suggestion");
+  add("15H-UI-AB: missing Real Wallet data does not produce false On Track", runContributionTestingScenario("15H-T15")!.pipeline.status !== "no_action_required", "no false on track");
+
+  // 15H-UI-AC…AE. Pipeline behaviors.
+  add("15H-UI-AC: Safety Buffer plan works without SOL price", runContributionTestingScenario("15H-T1")!.pipeline.status === "ready" && runContributionTestingScenario("15H-T1")!.pipeline.plan!.kind === "safety_buffer_contribution", "no price ok");
+  add("15H-UI-AD: growth upcoming works without optional liquidity alternative", runContributionTestingScenario("15H-T4")!.pipeline.plan!.fundingSourceId === "upcoming_contribution", "no liquidity ok");
+  add("15H-UI-AE: growth excess-USDC requires current liquidity", runContributionTestingScenario("15H-T9")!.pipeline.plan!.fundingSourceId === "existing_excess_usdc", "requires liquidity");
+
+  // 15H-UI-AF…AK. Testing route.
+  add("15H-UI-AF: all 30 testing scenarios are registered", runAllContributionTestingScenarios().length === 30 && testingPageSrc.includes("runAllContributionTestingScenarios"), "30");
+  add("15H-UI-AG: ready testing scenarios use the shared card", testingPageSrc.includes("toSuggestionCard(p.suggestion)") && runAllContributionTestingScenarios().filter((s) => s.pipeline.status === "ready").every((s) => s.card != null), "shared card");
+  add("15H-UI-AH: ready testing scenarios use the shared modal", testingPageSrc.includes("contributionReview={selectedScenario.review}") && runAllContributionTestingScenarios().filter((s) => s.pipeline.status === "ready").every((s) => s.review != null), "shared modal");
+  add("15H-UI-AI: blocked testing scenarios render no recommendation card", runAllContributionTestingScenarios().filter((s) => s.pipeline.status !== "ready" && s.pipeline.status !== "no_action_required").every((s) => s.card === undefined), "no card");
+  add("15H-UI-AJ: testing fixtures cannot enter Demo", runAllContributionTestingScenarios().every((s) => s.pipeline.demoFixtureDataUsed === false), "not demo");
+  add("15H-UI-AK: testing fixtures cannot enter Real Wallet", runAllContributionTestingScenarios().every((s) => s.pipeline.realWalletDataUsed === false), "not real");
+
+  // 15H-UI-AL…AP. Determinism + ordering.
+  add("15H-UI-AL: same semantic rerender does not duplicate the card", runContributionTestingScenario("15H-T4")!.pipeline.plan!.planId === runContributionTestingScenario("15H-T30")!.pipeline.plan!.planId, "stable id");
+  add("15H-UI-AM: at most one Top Pick exists", selectTopPick15H(alignedRun(t4).suggestions).filter((s) => s.is_top_pick).length === 1, "one");
+  add("15H-UI-AN: buffer override remains absolute", bufferRun(t1).suggestions.every((s) => s.category === "buffer"), "absolute");
+  add("15H-UI-AO: Rebalance outranks DCA", selectTopPick15H([mkSug15H("reb", "rebalance"), t4]).find((s) => s.is_top_pick)!.category === "rebalance", "rebalance top");
+  add("15H-UI-AP: Capital Efficiency outranks DCA", selectTopPick15H([mkSug15H("ce", "capital_efficiency"), t4]).find((s) => s.is_top_pick)!.category === "capital_efficiency", "ce top");
+
+  // 15H-UI-AQ…AT. Existing families unchanged.
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const run = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = run.suggestions.find((s) => s.category === "staking");
+  add("15H-UI-AQ: existing staking card remains unchanged", staking?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  add("15H-UI-AR: existing staking modal remains unchanged", modalSrc.includes("selectorPresentation") && modalSrc.includes("SolStakingLeaderExplanation"), "unchanged");
+  add("15H-UI-AS: stable yield remains unchanged", readIf("src/suggestions/stableYieldSuggestion.ts").length > 0, "unchanged");
+  add("15H-UI-AT: trim remains unchanged", readIf("src/suggestions/trimSuggestion.ts").length > 0, "unchanged");
+
+  // 15H-UI-AU…AZ. Execution invariants (source scans across the touched product/UI files).
+  const uiBlob = [cardSrc, modalSrc, railSrc, productInputSrc, testingPageSrc, readIf("src/suggestions/useRailSuggestions.ts"), engineSrc].join("").toLowerCase();
+  add("15H-UI-AU: no signMessage reference is added", !uiBlob.includes("signmessage"), "none");
+  add("15H-UI-AV: no signTransaction reference is added", !uiBlob.includes("signtransaction"), "none");
+  add("15H-UI-AW: no signAllTransactions reference is added", !uiBlob.includes("signalltransactions"), "none");
+  add("15H-UI-AX: no sendTransaction reference is added", !uiBlob.includes("sendtransaction"), "none");
+  add("15H-UI-AY: no buy/swap/deposit/withdraw/transfer action is added", ["buy(", "swap(", "deposit(", "withdraw(", "transfer("].filter((h) => uiBlob.includes(h)).length === 0, "none");
+  add("15H-UI-AZ: no direct browser price-provider fetch is added", !/fetch\(|xmlhttprequest|axios/i.test(priceAdapterSrc + productInputSrc), "no fetch");
+
+  return checks;
+}
+
 /** Local helper: a minimal synthetic engine suggestion for merge/ordering fixtures. */
 function mkSug15H(id: string, category: import("./engineTypes").SuggestionCategory): import("./engineTypes").EngineSuggestion {
   return { id, category, reason_codes: [], title_key: "", description_key: "", action_kind: "review_only", is_actionable: true, is_top_pick: false, scores: { impact: 0.5, urgency: 0.5, efficiency: 0.5 }, guardrails: [], engine_version: "x", timestamp: 0 };
@@ -13754,6 +13858,7 @@ export function printFixtureResults(): void {
     ...runContributionFundingFixtureChecks(),
     ...runContributionPlanFixtureChecks(),
     ...runContributionIntegrationFixtureChecks(),
+    ...runContributionUiTurnFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

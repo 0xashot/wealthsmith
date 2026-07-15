@@ -35,6 +35,8 @@ import { getSafetyBufferTargetMonths } from "../wallet/safetyBufferTarget";
 import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
 import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
+import { deriveContributionSuggestion } from "./contributionProductInput";
+import type { ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
 
 /** Engine cards + partial-pricing notice for the right rail (engine order). */
 export interface RailSuggestionsData {
@@ -44,6 +46,11 @@ export interface RailSuggestionsData {
    * modal renders these; cards themselves never carry them. Engine-owned.
    */
   reviewDetailsById: Record<string, SuggestionReviewDetails>;
+  /**
+   * Step 15H — plan-backed contribution review sections keyed by suggestion id. The shared review
+   * modal renders these for a plan-backed card; other cards use `reviewDetailsById`. Engine-owned.
+   */
+  contributionReviewById: Record<string, ContributionPlanReviewDetails>;
   notice?: string;
   /** True when the engine produced at least one card. */
   available: boolean;
@@ -106,6 +113,10 @@ export function deriveRailSuggestions(args: {
         }
       : null;
 
+  // Step 15H — the deterministic plan-backed contribution suggestion from REAL wallet state (never
+  // fixtures). Merged into the engine BEFORE its sort/Top-Pick pass so ordering is engine-owned.
+  const contribution = deriveContributionSuggestion({ dataMode: "real_wallet", positions, pricedAsOf, goal, buffer });
+
   const engineResult = runSuggestionEngine(
     buildSuggestionEngineInputs({
       positions,
@@ -115,7 +126,8 @@ export function deriveRailSuggestions(args: {
       safetyBuffer: buffer,
       allocation: allocationInput,
     }),
-    pricedAsOf ?? 0
+    pricedAsOf ?? 0,
+    contribution.suggestion
   );
   const cards = toSuggestionCards(engineResult.suggestions);
   // Engine-owned review details, keyed by the SAME stable suggestion id the
@@ -127,6 +139,7 @@ export function deriveRailSuggestions(args: {
   return {
     cards,
     reviewDetailsById,
+    contributionReviewById: contribution.reviewById,
     notice: warningsToNotice(engineResult.warnings),
     available: cards.length > 0,
   };
@@ -145,7 +158,7 @@ export function useRailSuggestions(args: {
   onSuggestions?: (data: RailSuggestions) => void;
 }): void {
   const { positions, pricedAsOf, goal, loading, onSuggestions } = args;
-  const { cards, reviewDetailsById, notice, available } = deriveRailSuggestions({
+  const { cards, reviewDetailsById, contributionReviewById, notice, available } = deriveRailSuggestions({
     positions,
     pricedAsOf,
     goal,
@@ -174,7 +187,7 @@ export function useRailSuggestions(args: {
     if (!onSuggestions) return;
     if (signature === lastSignature.current) return;
     lastSignature.current = signature;
-    onSuggestions({ cards, reviewDetailsById, notice, available, loading });
+    onSuggestions({ cards, reviewDetailsById, contributionReviewById, notice, available, loading });
     // Signature gates the update; card objects are intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, onSuggestions]);

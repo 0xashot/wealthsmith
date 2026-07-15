@@ -6,11 +6,40 @@ source, projection, priority, Top-Pick eligibility, guardrails); the UI only map
 payload into approved templates and never recalculates. Read-only, non-custodial — no
 execution/signatures.
 
-> **Status.** This step's ENGINE layer (adapters, pipeline, plan→suggestion mapping + dedup/merge,
-> presentation + review-details data, 30 /testing scenario runners, plan-ID stabilization, feature
-> flags, fixtures) is complete and verified (tokens/tsc/build/fixtures green). The shared React
-> card/modal wiring, the `/testing` route, the Demo/Real-Wallet hooks, and the required manual
-> browser validation are the follow-up.
+> **Status.** Engine layer AND the UI wiring are complete. Real Wallet is wired end-to-end
+> (`deriveRailSuggestions` → `deriveContributionSuggestion` → `runSuggestionEngine(inputs, at,
+> contributionSuggestion)` → shared card + shared review modal). `/testing` renders all 30 scenarios
+> through the shared components and was browser-validated (see below). The Demo *dashboard* component
+> still uses its static scenario rail — wiring the canonical Demo profile/portfolio through the same
+> `deriveContributionSuggestion(dataMode: "demo_fixture", …)` path is the one remaining hook.
+
+## UI wiring (Step 15H UI turn)
+
+- **Engine merge point:** `runSuggestionEngine(inputs, generatedAt, contributionSuggestion?)` merges a
+  `buffer`-category plan (enriches/replaces the buffer suggestion) or a `dca`-category plan (takes the
+  DCA slot, suppresses legacy DCA) BEFORE the existing sort + `selectTopPick`. The frontend receives
+  already-ordered output and never re-sorts.
+- **Real Wallet entry:** `useRailSuggestions.deriveRailSuggestions` builds the plan from live state via
+  `contributionProductInput.deriveContributionSuggestion({ dataMode: "real_wallet", … })` and returns
+  `contributionReviewById` alongside `reviewDetailsById`.
+- **Card:** `toSuggestionCard` detects a plan-backed suggestion (`"contributionPlan" in s`) and renders
+  deterministic copy from `buildContributionPlanCardPresentation` (title/description/impact/tag/accessible
+  CTA). `SuggestionCard.tsx` renders `card.tag` (neutral badge) and the accessible CTA name; it does no
+  arithmetic.
+- **Modal:** the shared `SuggestionReviewModal` gained an optional `contributionReview` prop; when set it
+  renders the `contributionPlanReviewDetails` sections (summary, why, cadence, a semantic-list 4-step
+  schedule with Start/Day 5/Day 9/Day 14, allocation impact, Safety Buffer, funding, alternative-source
+  context, unallocated context, exact read-only notice, Close). No new modal component.
+- **Direct wallet USDC** is classified `liquid_now` (`detection === "direct_wallet_balance"`); everything
+  else is omitted (not claimed liquid). **SOL price** comes from the sourced position `priceUsd` +
+  `pricedAsOf` (no browser fetch).
+- **Browser validation (dev server, /testing):** 30 scenarios render; T1 "Top Up Your Safety Buffer"
+  (Safety First), T3 "Direct Your Next Contribution to USDC" (Allocation), T4/T5 "Gradually Build Your SOL
+  Allocation" (DCA), T9 "Stage USDC Into SOL" (DCA); On Track (T11) and blocked (T15/T22) show no card.
+  The T9 modal shows the 4-step $425.00 schedule (Start/Day 5/Day 9/Day 14), Safety Buffer "Preserved",
+  the exact read-only notice, and Close only (no execution controls); the T5 modal shows the
+  "$461.53–$461.54" range. `role="dialog"`/`aria-modal`, Escape closes, one modal at a time. No
+  horizontal overflow at 375px; existing staking modal unchanged. Zero console errors.
 
 ## Modules
 

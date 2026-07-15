@@ -144,6 +144,8 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview, stak
         {!isTopPick && card.badge && (
           <Badge label={card.badge} tone={BADGE_TONES[card.badge] ?? "neutral"} />
         )}
+        {/* Step 15H — plan-backed contribution tag ("Safety First" / "Allocation" / "DCA"). */}
+        {card.tag && <Badge label={card.tag} tone="neutral" />}
         {card.demoLabel && <Badge label={card.demoLabel} tone="warning" />}
       </div>
 
@@ -204,6 +206,7 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview, stak
         <button
           type="button"
           className="suggestion-card__cta"
+          aria-label={card.accessibleCtaLabel ?? card.cta.label}
           onClick={() => onReview?.(card)}
         >
           {card.cta.label}

@@ -22,6 +22,8 @@ import {
   type TestingFixture,
   type TestingGroup,
 } from "./testingPageFixtures";
+import { runAllContributionTestingScenarios } from "../suggestions/contributionTestingScenarios";
+import { toSuggestionCard } from "../suggestions/toSuggestionCard";
 import "./testingPage.css";
 
 type Filter = "All" | TestingGroup;
@@ -37,6 +39,11 @@ export default function TestingPage() {
   const selected: TestingFixture | undefined = selectedId
     ? fixtures.find((f) => f.id === selectedId)
     : undefined;
+
+  // Step 15H — the 30 contribution/DCA scenarios, each running the REAL pipeline (no hand-built cards).
+  const contributionScenarios = useMemo(() => runAllContributionTestingScenarios(), []);
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
+  const selectedScenario = selectedScenarioId ? contributionScenarios.find((s) => s.id === selectedScenarioId) : undefined;
 
   return (
     <main className="testing-page">
@@ -78,6 +85,67 @@ export default function TestingPage() {
           details={selected.details}
           isTopPick={selected.card.is_top_pick === true}
           onClose={() => setSelectedId(null)}
+        />
+      )}
+
+      {/* Step 15H — contribution & DCA plan scenarios (T1–T30), real pipeline. */}
+      <section className="testing-page__contrib" aria-label="Contribution plan scenarios">
+        <h2 className="testing-page__section-title">Contribution &amp; DCA plans</h2>
+        <p className="testing-page__subtext">
+          Each scenario runs the real 15A–15H pipeline. Ready scenarios render the shared card and open
+          the shared review modal; blocked scenarios show deterministic diagnostics only — never a
+          recommendation card.
+        </p>
+        <div className="testing-page__contrib-grid">
+          {contributionScenarios.map((s) => {
+            const p = s.pipeline;
+            const ready = p.status === "ready" && p.suggestion != null;
+            const cp = p.suggestion?.contributionPlan;
+            const amount = cp
+              ? cp.amountKind === "exact"
+                ? `$${(cp.exactAmountUsd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : `$${(cp.minimumAmountUsd ?? 0).toFixed(2)}–$${(cp.maximumAmountUsd ?? 0).toFixed(2)}`
+              : "—";
+            return (
+              <div key={s.id} className="testing-page__contrib-cell">
+                <div className="testing-page__contrib-head">
+                  <span className="testing-page__badge">TEST FIXTURE</span>
+                  <span className="testing-page__contrib-id">{s.id}</span>
+                </div>
+                <p className="testing-page__contrib-name">{s.name}</p>
+                <dl className="testing-page__contrib-diag">
+                  <div><dt>Data mode</dt><dd>{p.dataMode}</dd></div>
+                  <div><dt>Pipeline</dt><dd>{p.status}</dd></div>
+                  <div><dt>Plan</dt><dd>{p.plan?.kind ?? p.planResult?.status ?? "—"}</dd></div>
+                  <div><dt>Suggestion</dt><dd>{p.suggestion ? p.suggestion.category : "none"}</dd></div>
+                  <div><dt>Purpose</dt><dd>{p.plan?.priorityPurpose ?? "—"}</dd></div>
+                  <div><dt>Source</dt><dd>{p.plan?.fundingSourceId ?? "—"}</dd></div>
+                  <div><dt>Alt sources</dt><dd>{p.plan?.alternativeFundingSourceIds.join(", ") || "—"}</dd></div>
+                  <div><dt>Target</dt><dd>{cp?.targetSymbol ?? "—"}</dd></div>
+                  <div><dt>Amount</dt><dd>{amount}</dd></div>
+                  <div><dt>Plan ID</dt><dd className="testing-page__contrib-planid">{p.plan?.planId ?? "—"}</dd></div>
+                  {p.blockers.length > 0 && <div><dt>Blockers</dt><dd>{p.blockers.join(", ")}</dd></div>}
+                </dl>
+                {ready && p.suggestion ? (
+                  <SuggestionCard card={toSuggestionCard(p.suggestion)} onReview={() => setSelectedScenarioId(s.id)} />
+                ) : (
+                  <p className="testing-page__contrib-noplan">
+                    {p.status === "no_action_required"
+                      ? "On Track — no contribution-allocation action is required. No recommendation card."
+                      : "Blocked — no recommendation card (see diagnostics above)."}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {selectedScenario?.review && (
+        <SuggestionReviewModal
+          contributionReview={selectedScenario.review}
+          isTopPick={selectedScenario.pipeline.suggestion?.is_top_pick === true}
+          onClose={() => setSelectedScenarioId(null)}
         />
       )}
     </main>

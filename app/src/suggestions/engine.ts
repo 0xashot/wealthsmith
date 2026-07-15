@@ -50,15 +50,24 @@ import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
  */
 export function runSuggestionEngine(
   inputs: SuggestionEngineInputs,
-  generatedAt: number = Date.now()
+  generatedAt: number = Date.now(),
+  /**
+   * Step 15H — an optional pre-built plan-backed contribution suggestion (from the deterministic
+   * 15A–15G pipeline). A `buffer`-category one enriches/replaces the generic Safety Buffer
+   * suggestion; a `dca`-category one takes the DCA slot and suppresses the legacy DCA. It is merged
+   * BEFORE the existing sort/Top-Pick pass, so the frontend receives already-ordered output.
+   */
+  contributionSuggestion?: EngineSuggestion | null
 ): SuggestionEngineResult {
   const warnings: SuggestionReasonCode[] = [];
   if (inputs.value.anyUnpriced) warnings.push("partial_pricing");
 
   const suggestions: EngineSuggestion[] = [];
+  const planBuffer = contributionSuggestion?.category === "buffer" ? contributionSuggestion : null;
+  const planDca = contributionSuggestion?.category === "dca" ? contributionSuggestion : null;
 
-  // 1) Safety Buffer first.
-  const buffer = deriveBufferSuggestion(inputs, generatedAt);
+  // 1) Safety Buffer first (plan-backed version enriches/replaces the generic one — one buffer card).
+  const buffer = planBuffer ?? deriveBufferSuggestion(inputs, generatedAt);
   if (buffer) suggestions.push(buffer);
 
   // 2) Buffer Override: an underfunded buffer suppresses every other rule.
@@ -82,7 +91,8 @@ export function runSuggestionEngine(
     if (!rebalance) {
       const stableYield = deriveStableYieldSuggestion(inputs, generatedAt);
       if (stableYield) candidates.push(stableYield);
-      const dca = deriveDcaSuggestion(inputs, generatedAt);
+      // Step 15H — prefer the plan-backed DCA; it suppresses the legacy DCA (one DCA per plan).
+      const dca = planDca ?? deriveDcaSuggestion(inputs, generatedAt);
       if (dca) candidates.push(dca);
     }
     // Position Optimization is the lowest-priority actionable candidate and may
