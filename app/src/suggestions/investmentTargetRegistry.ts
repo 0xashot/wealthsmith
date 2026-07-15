@@ -25,7 +25,23 @@ export { INVESTMENT_TARGET_SCHEMA_VERSION, INVESTMENT_TARGET_REGISTRY_VERSION } 
  * ------------------------------------------------------------------ */
 export const INVESTMENT_TARGET_REGISTRY_EXISTS = true;
 
-export const CONTRIBUTION_PLANNING_EXISTS = false;
+// Step 15G — the deterministic read-only contribution + DCA plan generator now exists (selects one
+// final target, calculates the final amount/range, stages existing-excess-USDC DCA, and projects
+// post-plan allocation/buffer). It generates NO suggestion, updates NO product output, and prepares
+// NO transaction/route/protocol. Product-facing target selection stays disabled until Step 15H.
+export const CONTRIBUTION_PLANNING_EXISTS = true;
+export const CONTRIBUTION_PLAN_GENERATOR_EXISTS = true;
+export const CONTRIBUTION_PLAN_TARGET_SELECTION_EXISTS = true;
+export const CONTRIBUTION_PLAN_AMOUNT_CALCULATION_EXISTS = true;
+export const CONTRIBUTION_PLAN_PROJECTION_EXISTS = true;
+export const CONTRIBUTION_PLAN_STAGED_DCA_EXISTS = true;
+export const CONTRIBUTION_PLAN_UPDATES_PRODUCT_OUTPUT = false;
+export const CONTRIBUTION_PLAN_GENERATES_SUGGESTION = false;
+export const CONTRIBUTION_PLAN_EXECUTION_ENABLED = false;
+export const CONTRIBUTION_PLAN_AUTOMATION_ENABLED = false;
+export const CONTRIBUTION_PLAN_MIXED_FUNDING_ENABLED = false;
+export const CONTRIBUTION_PLAN_RESIDUAL_ROUTING_ENABLED = false;
+export const CONTRIBUTION_PLAN_CALENDAR_DATES_ENABLED = false;
 // Step 15B — contribution-frequency (rhythm) normalization now exists. Both names refer to the
 // same layer (the field is "contribution_frequency" in onboarding); no contradictory duplicate.
 export const CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS = true;
@@ -58,7 +74,9 @@ export const TARGET_ALLOCATION_GAP_UPDATES_PRODUCT_OUTPUT = false;
 export const TARGET_ALLOCATION_GAP_SELECTS_TARGET = false;
 export const TARGET_ALLOCATION_GAP_EVALUATES_FUNDING = false;
 export const TARGET_ALLOCATION_GAP_EVALUATES_SAFETY_BUFFER = false;
-export const DCA_PLAN_GENERATION_EXISTS = false;
+// Step 15G — DCA plan generation (the deterministic staged plan) now exists; the DCA SUGGESTION
+// (product-facing) stays disabled until Step 15H.
+export const DCA_PLAN_GENERATION_EXISTS = true;
 export const DCA_SUGGESTION_ENABLED = false;
 export const CONTRIBUTION_DATES_GENERATED = false;
 export const CONTRIBUTION_TARGET_SELECTION_ENABLED = false;

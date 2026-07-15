@@ -735,6 +735,40 @@ import {
 } from "./investmentTargetRegistry";
 import { normalizeContributionFrequency as normFreq15F } from "./contributionFrequencyNormalization";
 import {
+  CONTRIBUTION_PLAN_SCHEMA_VERSION,
+  CONTRIBUTION_PLAN_POLICY_ID,
+  CONTRIBUTION_PLAN_POLICY_VERSION,
+  EXCESS_USDC_DCA_POLICY_ID,
+  EXCESS_USDC_DCA_POLICY_VERSION,
+} from "./contributionPlanTypes";
+import {
+  EXCESS_USDC_DCA_TRANCHE_COUNT,
+  EXCESS_USDC_DCA_DURATION_DAYS,
+  getExcessUsdcDcaRelativeDayOffsets,
+  validateContributionPlanPolicy,
+} from "./contributionPlanPolicy";
+import { buildExactPlanTranches, buildContributionPlanAmountFromSourceOption } from "./contributionPlanAmount";
+import {
+  CONTRIBUTION_PLAN_GENERATOR_EXISTS as PLAN_GEN_EXISTS_15G,
+  buildContributionPlan,
+  validateContributionPlanGenerationResult,
+} from "./contributionPlanGenerator";
+import { getContributionPlanDiagnostics, explainContributionPlan } from "./contributionPlanDiagnostics";
+import type { ContributionPriorityDecision } from "./contributionPriorityTypes";
+import {
+  CONTRIBUTION_PLAN_GENERATOR_EXISTS,
+  CONTRIBUTION_PLAN_TARGET_SELECTION_EXISTS,
+  CONTRIBUTION_PLAN_AMOUNT_CALCULATION_EXISTS,
+  CONTRIBUTION_PLAN_PROJECTION_EXISTS,
+  CONTRIBUTION_PLAN_STAGED_DCA_EXISTS,
+  CONTRIBUTION_PLAN_UPDATES_PRODUCT_OUTPUT,
+  CONTRIBUTION_PLAN_GENERATES_SUGGESTION,
+  CONTRIBUTION_PLAN_EXECUTION_ENABLED,
+  CONTRIBUTION_PLAN_AUTOMATION_ENABLED,
+  CONTRIBUTION_PLAN_CALENDAR_DATES_ENABLED,
+  CONTRIBUTION_TARGET_SELECTION_ENABLED as PLAN_TARGET_SELECTION_ENABLED_15G,
+} from "./investmentTargetRegistry";
+import {
   SOL_STAKING_MARKET_DATA_MODEL_EXISTS,
   SOL_STAKING_MARKET_DATA_MUTATES_APPROVAL_EVIDENCE,
   SOL_STAKING_MARKET_DATA_MUTATES_RISK_SCORES,
@@ -11843,7 +11877,7 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   {
     // No product-facing file imports the registry/eligibility. Its own modules, the contribution-
     // policy foundation family (15B/15C, non-UI), and fixtures are legitimate non-product consumers.
-    const allowed = /investmentTarget(Types|Registry|Eligibility)|contribution(Frequency|PlanningPolicy|Price|TargetSuitability|TargetPolicy|AllocationGap|Priority|SafetyBufferGate)|growthTargetAllocationPolicy|dcaMinimumPolicy|suggestionEngine\.fixtures/;
+    const allowed = /investmentTarget(Types|Registry|Eligibility)|contribution(Frequency|PlanningPolicy|Price|TargetSuitability|TargetPolicy|AllocationGap|Priority|SafetyBufferGate|Plan)|growthTargetAllocationPolicy|dcaMinimumPolicy|suggestionEngine\.fixtures/;
     let hits: string[] = [];
     let entries: string[] = [];
     try { entries = readdirSync(`${root}/src`, { recursive: true }) as string[]; } catch { /* ignore */ }
@@ -11856,10 +11890,10 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   }
 
   // 15A-CB…CH. Feature-state invariants.
-  add("15A-CB: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
+  add("15A-CB: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
   add("15A-CC: rhythm normalization now exists (enabled at Step 15B)", CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS === true, "enabled");
   add("15A-CD: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
-  add("15A-CE: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false && DCA_SUGGESTION_ENABLED === false, "disabled");
+  add("15A-CE: DCA plan generation now exists; DCA suggestion stays disabled", DCA_PLAN_GENERATION_EXISTS === true && DCA_SUGGESTION_ENABLED === false, "exists");
   add("15A-CF: BTC contribution suggestions remain disabled", BTC_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
   add("15A-CG: ETH contribution suggestions remain disabled", ETH_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
   add("15A-CH: RWA contribution suggestions remain disabled", RWA_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
@@ -12012,10 +12046,10 @@ export function runContributionFrequencyNormalizationFixtureChecks(): FixtureChe
 
   // 15B-CI…CN. Feature-state invariants.
   add("15B-CI: contribution-frequency normalization is enabled", CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS === true, "enabled");
-  add("15B-CJ: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
+  add("15B-CJ: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
   add("15B-CK: contribution-priority engine now exists (enabled at Step 15E)", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true, "exists");
   add("15B-CL: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
-  add("15B-CM: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
+  add("15B-CM: DCA plan generation now exists (enabled at Step 15G)", DCA_PLAN_GENERATION_EXISTS === true, "exists");
   add("15B-CN: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
 
   // 15B-CO…CU. Product invariants.
@@ -12029,7 +12063,7 @@ export function runContributionFrequencyNormalizationFixtureChecks(): FixtureChe
   add("15B-CR: Top Pick remains unchanged", engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => !s.id.startsWith("contribution")), "unchanged");
   add("15B-CS: engine ordering remains unchanged", engineRun.suggestions.every((s) => !s.id.startsWith("contribution") && s.id !== "biweekly" && s.id !== "occasional"), "unchanged");
   {
-    const allowed = /contributionFrequency(Types|Policy|Normalization)|contributionFunding(Types|Policy|Availability|Selection|Diagnostics)|suggestionEngine\.fixtures/;
+    const allowed = /contributionFrequency(Types|Policy|Normalization)|contributionFunding(Types|Policy|Availability|Selection|Diagnostics)|contributionPlan(Types|Policy|Amount|Projection|Generator|Diagnostics)|suggestionEngine\.fixtures/;
     let hits: string[] = [];
     let entries: string[] = [];
     try { entries = readdirSync(`${root}/src`, { recursive: true }) as string[]; } catch { /* ignore */ }
@@ -12211,8 +12245,8 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   add("15C-CM: policy-eligibility layer exists", CONTRIBUTION_TARGET_POLICY_ELIGIBILITY_EXISTS === true, "exists");
   add("15C-CN: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
   add("15C-CO: contribution-priority engine now exists (enabled at Step 15E)", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true, "exists");
-  add("15C-CP: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
-  add("15C-CQ: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
+  add("15C-CP: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
+  add("15C-CQ: DCA plan generation now exists (enabled at Step 15G)", DCA_PLAN_GENERATION_EXISTS === true, "exists");
   add("15C-CR: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false && CONTRIBUTION_POLICY_UPDATES_PRODUCT_OUTPUT === false, "disabled");
 
   // 15C-CS…CZ. Product invariants.
@@ -12483,8 +12517,8 @@ export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
   // 15D-CR…CV. Feature-state invariants.
   add("15D-CR: allocation-gap engine exists", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true && TARGET_ALLOCATION_GAP_UPDATES_PRODUCT_OUTPUT === false && TARGET_ALLOCATION_GAP_SELECTS_TARGET === false && TARGET_ALLOCATION_GAP_EVALUATES_FUNDING === false && TARGET_ALLOCATION_GAP_EVALUATES_SAFETY_BUFFER === false, "exists");
   add("15D-CS: contribution-priority engine now exists (enabled at Step 15E)", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true, "exists");
-  add("15D-CT: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
-  add("15D-CU: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
+  add("15D-CT: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
+  add("15D-CU: DCA plan generation now exists (enabled at Step 15G)", DCA_PLAN_GENERATION_EXISTS === true, "exists");
   add("15D-CV: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
 
   // 15D-CW…DD. Product invariants.
@@ -12732,8 +12766,8 @@ export function runContributionPriorityFixtureChecks(): FixtureCheck[] {
   // 15E-DC…DG. Feature-state invariants.
   add("15E-DC: contribution-priority engine exists", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true && CONTRIBUTION_PRIORITY_SELECTS_FUNDING_SOURCE === false && CONTRIBUTION_PRIORITY_CALCULATES_AMOUNT === false && CONTRIBUTION_PRIORITY_GENERATES_PLAN === false && CONTRIBUTION_PRIORITY_GENERATES_SUGGESTION === false, "exists");
   add("15E-DD: Safety Buffer gate exists", CONTRIBUTION_SAFETY_BUFFER_GATE_EXISTS === true, "exists");
-  add("15E-DE: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
-  add("15E-DF: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
+  add("15E-DE: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
+  add("15E-DF: DCA plan generation now exists (enabled at Step 15G)", DCA_PLAN_GENERATION_EXISTS === true, "exists");
   add("15E-DG: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
 
   // 15E-DH…DN. Product invariants.
@@ -12996,8 +13030,8 @@ export function runContributionFundingFixtureChecks(): FixtureCheck[] {
   // 15F-CZ…DD. Feature states.
   add("15F-CZ: funding-source selection exists", CONTRIBUTION_FUNDING_SOURCE_SELECTION_EXISTS === true, "exists");
   add("15F-DA: funding availability exists", CONTRIBUTION_FUNDING_AVAILABILITY_EXISTS === true, "exists");
-  add("15F-DB: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
-  add("15F-DC: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
+  add("15F-DB: contribution planning now exists (enabled at Step 15G)", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
+  add("15F-DC: DCA plan generation now exists (enabled at Step 15G)", DCA_PLAN_GENERATION_EXISTS === true, "exists");
   add("15F-DD: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
 
   // 15F-DE…DK. Product invariants.
@@ -13028,6 +13062,328 @@ export function runContributionFundingFixtureChecks(): FixtureCheck[] {
   // Validators + diagnostics smoke.
   add("15F-validate: buffer/stable/growth/on-track selections validate", validateContributionFundingSelectionResult(selBuffer).valid === true && validateContributionFundingSelectionResult(selStable).valid === true && validateContributionFundingSelectionResult(selBoth).valid === true && validateContributionFundingSelectionResult(selOnTrack).valid === true, "valid");
   add("15F-diagnostics: diagnostics are neutral and reveal no recommendation", getContributionFundingDiagnostics(selBoth).sourceOrder.join(",") === "upcoming_contribution,existing_excess_usdc" && /priority/i.test(explainContributionFundingSelection(selGrowth)) && !/\b(buy|invest now|available to deploy|recommended amount)\b/i.test(explainContributionFundingSelection(selGrowth)), "neutral");
+
+  return checks;
+}
+
+/**
+ * Step 15G — contribution + DCA plan generator fixtures (15G-A…EZ). Verifies deterministic plan
+ * generation, one-target selection, exact/range amounts + cent flooring, the four plan kinds, the
+ * staged four-tranche existing-excess-USDC DCA, projections, plan identity, extensibility, and all
+ * boundary/execution/product invariants.
+ */
+export function runContributionPlanFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const genSrc = readIf("src/suggestions/contributionPlanGenerator.ts");
+
+  const GEN = "2026-07-15T00:00:00Z";
+  const CHK = "2026-07-15T00:00:00Z";
+  const CAL = "2026-07-15T00:00:00Z";
+  const timing = { calculatedAt: CAL, checkedAt: CHK };
+  const solT = getInvestmentTarget("sol")!;
+  const usdcT = getInvestmentTarget("usdc")!;
+
+  const mkExp = (targetId: string, assetId: string, valueUsd: number): ContributionPortfolioTargetExposure => ({ targetId, assetId, valueUsd, holdingSources: ["connected_wallet"], valuationReady: true, notes: [] });
+  const mkSnap = (total: number, exposures: ContributionPortfolioTargetExposure[]): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd: total, targetExposures: exposures, valuationStatus: "current", notes: [] });
+  const rec = deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!;
+  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+  const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
+  const readyElig = evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHK, technicalEligibility: evaluateInvestmentTargetTechnicalEligibility(solT, techCtx), targetAllocationResult: alloc, suitabilityResult: evaluateContributionTargetSuitability(solT, { checkedAt: CHK, targetId: "sol", profile: { goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, targetAllocationResult: alloc }), priceQuote: evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: CHK, checkedAt: CHK }), minimumPolicy: getDcaMinimumPolicy() });
+  const solReady = { sol: readyElig };
+  const buildGap = (u: number, s: number, t: number) => buildContributionAllocationGapAnalysis({ snapshot: mkSnap(t, [mkExp("usdc", usdcT.assetId, u), mkExp("sol", solT.assetId, s)]), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+
+  const gapGrowth = buildGap(3700, 4300, 10000); // SOL ext cap 4250, int cap 1700
+  const gapStable = buildGap(3000, 7000, 10000); // USDC ext cap 1666.67
+  const gapOnTrack = buildGap(4000, 6000, 10000);
+  const sbIncomplete = buildContributionSafetyBufferSnapshot(bufferFixture(4000, 3000, 3), timing); // req 9000 cur 4000 short 5000
+  const sbComplete = buildContributionSafetyBufferSnapshot(bufferFixture(9000, 3000, 3), timing);
+  const sbSurplus = buildContributionSafetyBufferSnapshot(bufferFixture(12000, 3000, 3), timing); // surplus 3000
+
+  const prBuffer = buildContributionPriorityDecision({ safetyBufferResult: sbIncomplete, allocationGapResult: gapGrowth, generatedAt: GEN, checkedAt: CHK });
+  const prStable = buildContributionPriorityDecision({ safetyBufferResult: sbComplete, allocationGapResult: gapStable, generatedAt: GEN, checkedAt: CHK });
+  const prGrowth = buildContributionPriorityDecision({ safetyBufferResult: sbComplete, allocationGapResult: gapGrowth, generatedAt: GEN, checkedAt: CHK });
+  const prGrowthSurplus = buildContributionPriorityDecision({ safetyBufferResult: sbSurplus, allocationGapResult: gapGrowth, generatedAt: GEN, checkedAt: CHK });
+  const prOnTrack = buildContributionPriorityDecision({ safetyBufferResult: sbComplete, allocationGapResult: gapOnTrack, generatedAt: GEN, checkedAt: CHK });
+
+  const fnMonthly = normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "monthly" });
+  const fnQuarterly = normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "quarterly" });
+  const fnBiweekly = normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "biweekly" });
+  const fnWeekly = normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "weekly" });
+  const fnOccasional = normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "occasional" });
+
+  const mkPos = (positionId: string, liquidityStatus: ContributionFundingLiquidityStatus, valueUsd: number): ContributionFundingUsdcPosition => ({ positionId, source: "wallet_balance", liquidityStatus, valueUsd, calculatedAt: CAL, canonicalClassificationUsed: true, notes: [] });
+  const mkLiq = (positions: ContributionFundingUsdcPosition[]): ContributionFundingLiquiditySnapshot => ({ snapshotId: "liq-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", status: "current", usdcPositions: positions, canonicalLiquidityClassificationUsed: true, notes: [] });
+  const liq5000 = mkLiq([mkPos("p1", "liquid_now", 5000)]);
+
+  const fundingSel = (opts: Partial<Parameters<typeof buildContributionFundingSelection>[0]> & { priorityDecision: ContributionPriorityDecision }) => buildContributionFundingSelection({ generatedAt: GEN, checkedAt: CHK, ...opts });
+  const selBuffer = fundingSel({ priorityDecision: prBuffer, allocationGapResult: gapGrowth, frequencyNormalization: fnMonthly });
+  const selBufferBig = fundingSel({ priorityDecision: prBuffer, allocationGapResult: gapGrowth, explicitCurrentContributionAmountUsd: 8000 });
+  const selBufferRange = fundingSel({ priorityDecision: prBuffer, allocationGapResult: gapGrowth, frequencyNormalization: fnBiweekly });
+  const selStable = fundingSel({ priorityDecision: prStable, allocationGapResult: gapStable, frequencyNormalization: fnMonthly });
+  const selGrowth = fundingSel({ priorityDecision: prGrowth, allocationGapResult: gapGrowth, frequencyNormalization: fnMonthly });
+  const selGrowthBiweekly = fundingSel({ priorityDecision: prGrowth, allocationGapResult: gapGrowth, frequencyNormalization: fnBiweekly });
+  const selGrowthWeekly = fundingSel({ priorityDecision: prGrowth, allocationGapResult: gapGrowth, frequencyNormalization: fnWeekly });
+  const selGrowthQuarterly = fundingSel({ priorityDecision: prGrowth, allocationGapResult: gapGrowth, frequencyNormalization: fnQuarterly });
+  const selOccExplicit = fundingSel({ priorityDecision: prGrowth, allocationGapResult: gapGrowth, frequencyNormalization: fnOccasional, explicitCurrentContributionAmountUsd: 500 });
+  const selOccNone = fundingSel({ priorityDecision: prGrowth, allocationGapResult: gapGrowth, frequencyNormalization: fnOccasional });
+  const selBoth = fundingSel({ priorityDecision: prGrowthSurplus, allocationGapResult: gapGrowth, frequencyNormalization: fnMonthly, liquiditySnapshot: liq5000 });
+  const selDca = fundingSel({ priorityDecision: prGrowthSurplus, allocationGapResult: gapGrowth, explicitCurrentContributionAmountUsd: 30, liquiditySnapshot: liq5000 });
+  const selOnTrack = fundingSel({ priorityDecision: prOnTrack, allocationGapResult: gapOnTrack });
+
+  const plan = (pr: ContributionPriorityDecision, sel: ReturnType<typeof buildContributionFundingSelection>, gap: ReturnType<typeof buildContributionAllocationGapAnalysis> | undefined, fn?: ReturnType<typeof normFreq15F>, over: Record<string, unknown> = {}) => buildContributionPlan({ priorityDecision: pr, fundingSelection: sel, allocationGapResult: gap, frequencyNormalization: fn, generatedAt: GEN, checkedAt: CHK, ...over });
+  const planBuffer = plan(prBuffer, selBuffer, gapGrowth, fnMonthly);
+  const planBufferBig = plan(prBuffer, selBufferBig, gapGrowth);
+  const planBufferRange = plan(prBuffer, selBufferRange, gapGrowth, fnBiweekly);
+  const planBufferNoGap = plan(prBuffer, selBuffer, undefined, fnMonthly);
+  const planStable = plan(prStable, selStable, gapStable, fnMonthly);
+  const planGrowth = plan(prGrowth, selGrowth, gapGrowth, fnMonthly);
+  const planGrowth2 = plan(prGrowth, selGrowth, gapGrowth, fnMonthly);
+  const planGrowthDiffGen = buildContributionPlan({ priorityDecision: prGrowth, fundingSelection: selGrowth, allocationGapResult: gapGrowth, frequencyNormalization: fnMonthly, generatedAt: "2026-08-01T00:00:00Z", checkedAt: CHK });
+  const planGrowthRange = plan(prGrowth, selGrowthBiweekly, gapGrowth, fnBiweekly);
+  const planGrowthWeekly = plan(prGrowth, selGrowthWeekly, gapGrowth, fnWeekly);
+  const planGrowthQuarterly = plan(prGrowth, selGrowthQuarterly, gapGrowth, fnQuarterly);
+  const planOccExplicit = plan(prGrowth, selOccExplicit, gapGrowth, fnOccasional);
+  const planOccNone = plan(prGrowth, selOccNone, gapGrowth, fnOccasional);
+  const planBoth = plan(prGrowthSurplus, selBoth, gapGrowth, fnMonthly);
+  const planDca = buildContributionPlan({ priorityDecision: prGrowthSurplus, fundingSelection: selDca, allocationGapResult: gapGrowth, generatedAt: GEN, checkedAt: CHK });
+  const planOnTrack = buildContributionPlan({ priorityDecision: prOnTrack, fundingSelection: selOnTrack, allocationGapResult: gapOnTrack, generatedAt: GEN, checkedAt: CHK });
+
+  // Multiple-target + disabled-growth + future-target synthetics.
+  const prMulti = { ...prGrowth, priorityTargetIds: ["sol", "btc"], growthContext: { eligibleGrowthTargetIds: ["sol", "btc"], underweightGrowthTargetIds: ["sol", "btc"], triggerMetGrowthTargetIds: ["sol", "btc"], growthAllocationMayProceed: true } };
+  const planMulti = buildContributionPlan({ priorityDecision: prMulti, fundingSelection: selGrowth, allocationGapResult: gapGrowth, frequencyNormalization: fnMonthly, generatedAt: GEN, checkedAt: CHK });
+  const renameGap = (id: string) => ({ ...gapGrowth, targetResults: gapGrowth.targetResults.map((t) => (t.targetId === "sol" ? { ...t, targetId: id } : t)) });
+  const mkGrowthPr = (id: string) => ({ ...prGrowth, priorityTargetIds: [id], growthContext: { eligibleGrowthTargetIds: [id], underweightGrowthTargetIds: [id], triggerMetGrowthTargetIds: [id], growthAllocationMayProceed: true } });
+  const planFor = (id: string) => { const g = renameGap(id); const pr = mkGrowthPr(id); const sel = fundingSel({ priorityDecision: pr, allocationGapResult: g, frequencyNormalization: fnMonthly }); return buildContributionPlan({ priorityDecision: pr, fundingSelection: sel, allocationGapResult: g, frequencyNormalization: fnMonthly, generatedAt: GEN, checkedAt: CHK }); };
+  const planBtc = planFor("btc");
+  const planEth = planFor("eth");
+  const gapBtcDisabled = { ...gapGrowth, targetResults: gapGrowth.targetResults.map((t) => (t.targetId === "sol" ? { ...t, targetId: "btc", eligibleForFutureGrowthContributionEvaluation: false, contributionTargetPolicyReady: false } : t)) };
+  const prBtcDisabled = mkGrowthPr("btc");
+  const selBtcDisabled = fundingSel({ priorityDecision: prBtcDisabled, allocationGapResult: gapBtcDisabled, frequencyNormalization: fnMonthly });
+  const planBtcDisabled = buildContributionPlan({ priorityDecision: prBtcDisabled, fundingSelection: selBtcDisabled, allocationGapResult: gapBtcDisabled, frequencyNormalization: fnMonthly, generatedAt: GEN, checkedAt: CHK });
+  const prBufferBadTarget = { ...prBuffer, priorityTargetIds: ["sol"] };
+  const planBufferBadTarget = buildContributionPlan({ priorityDecision: prBufferBadTarget, fundingSelection: selBuffer, allocationGapResult: gapGrowth, frequencyNormalization: fnMonthly, generatedAt: GEN, checkedAt: CHK });
+
+  // 15G-A…G. Schema/policy.
+  add("15G-A: plan schema version exists", CONTRIBUTION_PLAN_SCHEMA_VERSION === "1.0.0" && planGrowth.schemaVersion === "1.0.0", CONTRIBUTION_PLAN_SCHEMA_VERSION);
+  add("15G-B: plan policy ID/version exist", CONTRIBUTION_PLAN_POLICY_ID === "contribution_plan_v1" && CONTRIBUTION_PLAN_POLICY_VERSION === "1.0.0", CONTRIBUTION_PLAN_POLICY_ID);
+  add("15G-C: staged-DCA policy ID/version exist", EXCESS_USDC_DCA_POLICY_ID === "excess_usdc_staged_dca_v1" && EXCESS_USDC_DCA_POLICY_VERSION === "1.0.0", EXCESS_USDC_DCA_POLICY_ID);
+  add("15G-D: contribution-plan generator exists", PLAN_GEN_EXISTS_15G === true && CONTRIBUTION_PLAN_GENERATOR_EXISTS === true, "exists");
+  add("15G-E: plan policy validates", validateContributionPlanPolicy().valid === true, "valid");
+  add("15G-F: plan generation is deterministic", planGrowth.plan!.planId === planGrowth2.plan!.planId, planGrowth.plan!.planId);
+  add("15G-G: no random ID generation exists", !/Math\.random|randomUUID|crypto\.getRandomValues|require\(["']uuid/.test(genSrc), "deterministic");
+
+  // 15G-H…M. Source behavior.
+  add("15G-H: the Step 15F primary source is used", planGrowth.plan!.fundingSourceId === selGrowth.primaryFundingSourceId && planGrowth.plan!.fundingSourceId === "upcoming_contribution", "primary used");
+  add("15G-I: an alternative source does not replace an eligible primary source", planBoth.plan!.fundingSourceId === "upcoming_contribution", "primary kept");
+  add("15G-J: alternative source IDs are preserved", planBoth.plan!.alternativeFundingSourceIds.includes("existing_excess_usdc"), "preserved");
+  add("15G-K: no alternative plan is generated", planBoth.plan!.alternativePlanGenerated === false, "none");
+  add("15G-L: sources are not combined", planBoth.plan!.mixedFundingUsed === false, "not combined");
+  add("15G-M: largest source capacity does not override primary source", planBoth.plan!.fundingSourceId === "upcoming_contribution" && (selBoth.sourceOptions.find((o) => o.sourceId === "existing_excess_usdc")!.cappedSourceCapacityUsd as number) > (planBoth.plan!.amount.exactAmountUsd as number), "order kept");
+
+  // 15G-N…V. Target selection.
+  add("15G-N: exactly one priority target can be selected", planGrowth.plan!.selectedTargetId === "sol" && planGrowth.finalTargetSelected === true, "one target");
+  add("15G-O: multiple targets fail closed", planMulti.status === "blocked_multiple_targets", planMulti.status);
+  add("15G-P: multiple targets are not split equally", planMulti.plan === undefined, "no plan");
+  add("15G-Q: multiple targets are not ranked", planMulti.plan === undefined && planMulti.blockers.includes("multiple_priority_targets_require_suballocation_policy"), "not ranked");
+  add("15G-R: largest gap is not used for target selection", planMulti.plan === undefined, "no selection");
+  add("15G-S: Safety Buffer target role is validated", planBuffer.plan!.selectedTargetId === "usdc" && planBufferBadTarget.status === "invalid_input" && planBufferBadTarget.blockers.includes("target_role_invalid"), "validated");
+  add("15G-T: stable target role is validated", planStable.plan!.selectedTargetId === "usdc", "validated");
+  add("15G-U: growth target role is validated", planGrowth.plan!.selectedTargetId === "sol", "validated");
+  add("15G-V: disabled growth target cannot be selected", planBtcDisabled.status === "invalid_input" && planBtcDisabled.blockers.includes("target_role_invalid"), "rejected");
+
+  // 15G-W…AE. Amount conversion.
+  const exactOpt = selGrowth.sourceOptions.find((o) => o.sourceId === "upcoming_contribution")!;
+  const cappedFracOpt = { ...exactOpt, status: "eligible_exact" as const, cappedSourceCapacityUsd: 1666.6666666666667, mathematicalPlanningCapUsd: 1666.6666666666667, grossSourceCapacityUsd: 5000, minimumPolicyApplied: "absolute_50" as const, minimumPassed: true };
+  add("15G-W: exact source capacity produces exact cents", buildContributionPlanAmountFromSourceOption(exactOpt).amount!.exactAmountCents === 100000, "100000");
+  add("15G-X: fractional-cent allocation cap is floored", buildContributionPlanAmountFromSourceOption(cappedFracOpt).amount!.exactAmountCents === 166666 && buildContributionPlanAmountFromSourceOption(cappedFracOpt).amount!.roundingMode === "floor_to_cents_for_cap", "166666");
+  add("15G-Y: cap-constrained amount is never rounded upward", buildContributionPlanAmountFromSourceOption(cappedFracOpt).amount!.exactAmountCents !== 166667, "not 166667");
+  add("15G-Z: plan amount does not exceed gross source capacity", (planGrowth.plan!.amount.exactAmountUsd as number) <= (exactOpt.grossSourceCapacityUsd as number) + 1e-9, "<=gross");
+  add("15G-AA: plan amount does not exceed allocation cap", (planGrowth.plan!.amount.exactAmountUsd as number) <= (planGrowth.plan!.amount.allocationCapUsd as number) + 1e-9, "<=cap");
+  add("15G-AB: the full eligible capped capacity is used", planGrowth.plan!.amount.exactAmountUsd === 1000 && planBufferBig.plan!.amount.exactAmountUsd === 5000, "full capped");
+  add("15G-AC: no arbitrary round-number reduction occurs", buildContributionPlanAmountFromSourceOption(cappedFracOpt).amount!.exactAmountCents === 166666, "not rounded to 1600");
+  add("15G-AD: unused capacity can be calculated", planBufferBig.plan!.unallocatedSourceCapacity.calculated === true && planBufferBig.plan!.unallocatedSourceCapacity.exactUnusedUsd === 3000, "3000");
+  add("15G-AE: unused capacity is not routed", planBufferBig.plan!.unallocatedSourceCapacity.routed === false && planBufferBig.plan!.residualRouted === false, "not routed");
+
+  // 15G-AF…AK. Range behavior.
+  add("15G-AF: biweekly source range remains $461.53–$461.54 when uncapped", planGrowthRange.plan!.amount.minimumAmountUsd === 461.53 && planGrowthRange.plan!.amount.maximumAmountUsd === 461.54, "range");
+  add("15G-AG: weekly source range remains $230.76–$230.77 when uncapped", planGrowthWeekly.plan!.amount.minimumAmountUsd === 230.76 && planGrowthWeekly.plan!.amount.maximumAmountUsd === 230.77, "range");
+  {
+    const collapseOpt = { ...exactOpt, status: "eligible_range" as const, capacityKind: "range" as const, minimumCappedSourceCapacityUsd: 461.535, maximumCappedSourceCapacityUsd: 461.539, maximumGrossSourceCapacityUsd: 461.54, mathematicalPlanningCapUsd: 500, minimumPolicyApplied: "absolute_50" as const, minimumPassed: true };
+    add("15G-AH: a cap may collapse a range into one exact cent amount", buildContributionPlanAmountFromSourceOption(collapseOpt).amount!.kind === "exact" && buildContributionPlanAmountFromSourceOption(collapseOpt).amount!.exactAmountCents === 46153, "collapsed");
+    const badRange = { ...exactOpt, status: "eligible_range" as const, minimumCappedSourceCapacityUsd: 100, maximumCappedSourceCapacityUsd: 50, minimumPolicyApplied: "none" as const };
+    add("15G-AI: range lower bound cannot exceed upper bound", buildContributionPlanAmountFromSourceOption(badRange).ok === false, "invalid");
+  }
+  add("15G-AJ: ready range does not claim an exact execution amount", planGrowthRange.status === "ready_range" && planGrowthRange.plan!.exactExecutionAmountResolved === false, "range");
+  add("15G-AK: ready exact requires an exact amount", planGrowth.status === "ready_exact" && planGrowth.plan!.exactExecutionAmountResolved === true && planGrowth.plan!.amount.kind === "exact", "exact");
+
+  // 15G-AL…AV. Safety Buffer plan.
+  add("15G-AL: incomplete buffer plus upcoming contribution creates safety_buffer_contribution", planBuffer.plan!.kind === "safety_buffer_contribution", planBuffer.plan!.kind);
+  add("15G-AM: Safety Buffer plan selects the canonical buffer target", planBuffer.plan!.selectedTargetId === "usdc", "usdc");
+  add("15G-AN: Safety Buffer plan uses no ordinary $50 minimum", planBuffer.plan!.amount.minimumPolicyApplied === "none", "none");
+  add("15G-AO: Safety Buffer amount is capped by shortfall", planBufferBig.plan!.amount.exactAmountUsd === 5000, "5000");
+  add("15G-AP: Safety Buffer plan requires no allocation-gap result", planBufferNoGap.status === "ready_exact" && planBufferNoGap.plan!.kind === "safety_buffer_contribution", "no gap needed");
+  add("15G-AQ: Safety Buffer plan contains one step", planBuffer.plan!.steps.length === 1, "1 step");
+  add("15G-AR: Safety Buffer plan has no four-tranche schedule", planBuffer.plan!.cadence.trancheCount == null, "no tranches");
+  add("15G-AS: projected eligible buffer is calculated correctly", planBuffer.plan!.projection.exact!.projectedEligibleBufferUsd === 5000, "5000");
+  add("15G-AT: projected shortfall is calculated correctly", planBuffer.plan!.projection.exact!.projectedBufferShortfallUsd === 4000, "4000");
+  add("15G-AU: a ranged contribution produces ranged buffer projections", planBufferRange.plan!.projection.kind === "range" && planBufferRange.plan!.projection.minimum != null && planBufferRange.plan!.projection.maximum != null, "ranged");
+  add("15G-AV: no amount beyond the buffer shortfall is routed", planBufferBig.plan!.amount.exactAmountUsd === 5000 && planBufferBig.plan!.residualRouted === false, "capped");
+
+  // 15G-AW…BE. Stable-allocation plan.
+  add("15G-AW: stable priority creates stable_allocation_contribution", planStable.plan!.kind === "stable_allocation_contribution", planStable.plan!.kind);
+  add("15G-AX: stable plan selects the stable target", planStable.plan!.selectedTargetId === "usdc", "usdc");
+  add("15G-AY: stable plan uses upcoming contribution", planStable.plan!.fundingSourceId === "upcoming_contribution", "upcoming");
+  add("15G-AZ: stable plan uses the external-contribution projection", (planStable.plan!.projection.exact!.projectedTotalPortfolioValueUsd as number) > (planStable.plan!.projection.exact!.sourceTotalPortfolioValueUsd as number), "external");
+  add("15G-BA: stable plan increases the portfolio denominator", planStable.plan!.projection.exact!.projectedTotalPortfolioValueUsd === 11000, "11000");
+  add("15G-BB: stable plan does not overshoot target", planStable.plan!.projection.exact!.wouldOvershootTarget === false, "no overshoot");
+  add("15G-BC: stable plan contains one step", planStable.plan!.steps.length === 1, "1 step");
+  add("15G-BD: stable plan is not split into four tranches", planStable.plan!.cadence.trancheCount == null && planStable.plan!.steps.length === 1, "no tranches");
+  add("15G-BE: existing USDC cannot be the source of the current USDC stable correction", planStable.plan!.fundingSourceId === "upcoming_contribution" && !planStable.plan!.alternativeFundingSourceIds.includes("existing_excess_usdc"), "no excess");
+
+  // 15G-BF…BR. Recurring growth plan.
+  add("15G-BF: growth priority plus upcoming source creates growth_recurring_contribution", planGrowth.plan!.kind === "growth_recurring_contribution", planGrowth.plan!.kind);
+  add("15G-BG: SOL is selected in the current single-target MVP case", planGrowth.plan!.selectedTargetId === "sol", "sol");
+  add("15G-BH: the user's contribution frequency is preserved", planGrowth.plan!.cadence.contributionFrequencyId === "monthly", "monthly");
+  add("15G-BI: monthly contribution produces one plan step", planGrowth.plan!.steps.length === 1 && planGrowth.plan!.amount.kind === "exact", "1 step");
+  add("15G-BJ: biweekly contribution produces one ranged plan step", planGrowthRange.plan!.steps.length === 1 && planGrowthRange.plan!.amount.kind === "range", "1 ranged");
+  add("15G-BK: weekly contribution produces one ranged plan step", planGrowthWeekly.plan!.steps.length === 1 && planGrowthWeekly.plan!.amount.kind === "range", "1 ranged");
+  add("15G-BL: quarterly contribution produces one plan step", planGrowthQuarterly.plan!.steps.length === 1 && planGrowthQuarterly.plan!.amount.exactAmountUsd === 3000, "3000");
+  add("15G-BM: Occasional with explicit amount produces one explicit-current-contribution step", planOccExplicit.plan!.steps.length === 1 && planOccExplicit.plan!.cadence.mode === "explicit_current_contribution", "explicit");
+  add("15G-BN: Occasional without explicit amount cannot reach a ready plan", planOccNone.status !== "ready_exact" && planOccNone.status !== "ready_range", planOccNone.status);
+  add("15G-BO: recurring contribution is not split into four extra tranches", planGrowth.plan!.steps.length === 1 && planGrowth.plan!.cadence.trancheCount == null, "not split");
+  add("15G-BP: recurring growth uses external-contribution projection", (planGrowth.plan!.projection.exact!.projectedTotalPortfolioValueUsd as number) > 10000, "external");
+  add("15G-BQ: external projection increases total portfolio value", planGrowth.plan!.projection.exact!.projectedTotalPortfolioValueUsd === 11000, "11000");
+  add("15G-BR: growth plan does not overshoot the target", planGrowth.plan!.projection.exact!.wouldOvershootTarget === false, "no overshoot");
+
+  // 15G-BS…CG. Existing-excess-USDC DCA.
+  add("15G-BS: growth priority plus excess-USDC primary creates growth_excess_usdc_dca", planDca.plan!.kind === "growth_excess_usdc_dca", planDca.plan!.kind);
+  add("15G-BT: source asset is USDC", planDca.plan!.sourceAssetId === usdcT.assetId, "usdc");
+  add("15G-BU: target is the growth target", planDca.plan!.selectedTargetId === "sol", "sol");
+  add("15G-BV: plan amount is exact", planDca.plan!.amount.kind === "exact" && planDca.plan!.amount.exactAmountUsd === 1700, "1700");
+  add("15G-BW: plan amount uses the internal-reallocation cap", planDca.plan!.amount.allocationCapUsd === 1700, "1700");
+  add("15G-BX: plan amount does not exceed excess liquid USDC", (planDca.plan!.amount.exactAmountUsd as number) <= 3000, "<=3000");
+  add("15G-BY: plan total already passes the $250 threshold", planDca.plan!.amount.minimumPolicyApplied === "excess_usdc_250" && (planDca.plan!.amount.exactAmountUsd as number) >= 250, ">=250");
+  add("15G-BZ: plan has exactly four tranches", planDca.plan!.steps.length === 4, "4");
+  add("15G-CA: plan duration is fourteen days", planDca.plan!.cadence.durationDays === 14, "14");
+  add("15G-CB: relative offsets are [0, 5, 9, 14]", (planDca.plan!.cadence.relativeDayOffsets ?? []).join(",") === "0,5,9,14", "offsets");
+  add("15G-CC: no actual calendar dates are generated", planDca.plan!.cadence.actualCalendarDatesGenerated === false && planDca.plan!.steps.every((s) => typeof s.relativeDayOffset === "number"), "relative only");
+  add("15G-CD: internal projection preserves total portfolio value", planDca.plan!.projection.exact!.projectedTotalPortfolioValueUsd === 10000, "10000");
+  add("15G-CE: target value increases by the exact plan total", planDca.plan!.projection.exact!.projectedTargetValueUsd === 6000, "6000");
+  add("15G-CF: projected target percentage does not overshoot", planDca.plan!.projection.exact!.wouldOvershootTarget === false && (planDca.plan!.projection.exact!.projectedTargetPct as number) <= 60 + 1e-9, "no overshoot");
+  add("15G-CG: projected eligible buffer remains at or above requirement", planDca.plan!.projection.exact!.safetyBufferPreserved === true, "preserved");
+
+  // 15G-CH…CQ. Tranche decomposition.
+  add("15G-CH: $1,000 produces four $250 tranches", buildExactPlanTranches(100000, 4).tranches!.join(",") === "25000,25000,25000,25000", "4x250");
+  add("15G-CI: $1,000.01 produces $250.01 + $250 + $250 + $250", buildExactPlanTranches(100001, 4).tranches!.join(",") === "25001,25000,25000,25000", "extra cent");
+  add("15G-CJ: extra cents go to the earliest tranche indices", buildExactPlanTranches(100002, 4).tranches!.join(",") === "25001,25001,25000,25000", "earliest");
+  add("15G-CK: tranche amounts sum exactly to total", buildExactPlanTranches(100001, 4).tranches!.reduce((s, c) => s + c, 0) === 100001, "sum");
+  add("15G-CL: largest and smallest tranche differ by at most one cent", (() => { const t = buildExactPlanTranches(100002, 4).tranches!; return Math.max(...t) - Math.min(...t) <= 1; })(), "<=1c");
+  add("15G-CM: every existing-excess DCA tranche is at least $50", planDca.plan!.steps.every((s) => (s.amount.exactAmountCents as number) >= 5000), ">=50");
+  add("15G-CN: a total that would produce a sub-$50 tranche fails closed", buildExactPlanTranches(19999, 4).ok === false && buildExactPlanTranches(19999, 4).error === "tranche_below_minimum", "fails");
+  add("15G-CO: no future SOL token amount is promised per tranche", planDca.plan!.steps.every((s) => !Object.keys(s).some((k) => /quantity|tokens?/i.test(k)) && s.amount.exactAmountUsd != null), "USD only");
+  add("15G-CP: no route is selected per tranche", planDca.plan!.steps.every((s) => s.routeSelected === false && s.protocolSelected === false), "no route");
+  add("15G-CQ: no transaction is created per tranche", planDca.plan!.steps.every((s) => s.transactionPrepared === false && s.transactionSubmitted === false), "no tx");
+
+  // 15G-CR…CZ. Projection behavior.
+  add("15G-CR: external projection uses denominator-changing math", planGrowth.plan!.projection.exact!.projectedTotalPortfolioValueUsd !== planGrowth.plan!.projection.exact!.sourceTotalPortfolioValueUsd, "changes");
+  add("15G-CS: internal projection keeps denominator constant", planDca.plan!.projection.exact!.projectedTotalPortfolioValueUsd === planDca.plan!.projection.exact!.sourceTotalPortfolioValueUsd, "constant");
+  add("15G-CT: exact plan produces exact projection", planGrowth.plan!.projection.kind === "exact" && planGrowth.plan!.projection.exact != null, "exact");
+  add("15G-CU: range plan produces lower and upper projections", planGrowthRange.plan!.projection.kind === "range" && planGrowthRange.plan!.projection.minimum != null && planGrowthRange.plan!.projection.maximum != null, "both");
+  add("15G-CV: maximum range projection cannot overshoot", planGrowthRange.plan!.projection.maximum!.wouldOvershootTarget === false, "no overshoot");
+  add("15G-CW: Safety Buffer projection uses dollar-floor math", planBuffer.plan!.projection.exact!.projectedEligibleBufferUsd != null && planBuffer.plan!.projection.exact!.projectedTargetPct == null, "dollar floor");
+  add("15G-CX: stable allocation projection uses percentage math", planStable.plan!.projection.exact!.projectedTargetPct != null, "percentage");
+  add("15G-CY: projection preserves full precision", Math.abs((planStable.plan!.projection.exact!.projectedTargetPct as number) - 36.36363636363637) < 1e-9, "precise");
+  add("15G-CZ: presentation rounding is not introduced", (planStable.plan!.projection.exact!.projectedTargetPct as number) !== 36.36, "not rounded");
+
+  // 15G-DA…DE. On Track.
+  add("15G-DA: On Track returns no_action_required", planOnTrack.status === "no_action_required", planOnTrack.status);
+  add("15G-DB: On Track contains no plan", planOnTrack.plan === undefined, "no plan");
+  add("15G-DC: On Track selects no target", planOnTrack.finalTargetSelected === false, "no target");
+  add("15G-DD: On Track calculates no amount", planOnTrack.finalPlanAmountCalculated === false, "no amount");
+  add("15G-DE: On Track produces no DCA schedule", planOnTrack.dcaPlanGenerated === false, "no dca");
+
+  // 15G-DF…DJ. Plan identity.
+  add("15G-DF: same semantic input produces the same plan ID", planGrowth.plan!.planId === planGrowth2.plan!.planId, "stable");
+  add("15G-DG: generatedAt does not unnecessarily alter plan identity", planGrowth.plan!.planId === planGrowthDiffGen.plan!.planId, "stable");
+  add("15G-DH: different target produces a different plan ID", planStable.plan!.planId !== planGrowth.plan!.planId, "different");
+  add("15G-DI: different funding source produces a different plan ID", planDca.plan!.planId !== planGrowth.plan!.planId, "different");
+  add("15G-DJ: different amount produces a different plan ID", planGrowthQuarterly.plan!.planId !== planGrowth.plan!.planId, "different");
+
+  // 15G-DK…DP. Future extensibility.
+  add("15G-DK: plan generator does not hardcode SOL in generic logic", !/["']sol["']/.test(genSrc), "generic");
+  add("15G-DL: future native BTC can become the selected growth target with valid policies", planBtc.status === "ready_exact" && planBtc.plan!.selectedTargetId === "btc", "btc");
+  add("15G-DM: future native ETH can become the selected growth target with valid policies", planEth.status === "ready_exact" && planEth.plan!.selectedTargetId === "eth", "eth");
+  add("15G-DN: future specific RWA can become a target with valid policies", genSrc.includes("contribution_growth_target"), "role-based");
+  add("15G-DO: generic RWA remains forbidden", getInvestmentTarget("rwa") === undefined && getInvestmentTarget("generic_rwa") === undefined, "forbidden");
+  add("15G-DP: future multiple targets require a versioned sub-allocation policy", planMulti.status === "blocked_multiple_targets", "sub-allocation");
+
+  // 15G-DQ…DZ. Execution boundaries.
+  add("15G-DQ: no route is evaluated", planGrowth.plan!.routeEvaluated === false, "none");
+  add("15G-DR: no protocol is evaluated", planGrowth.plan!.protocolEvaluated === false, "none");
+  add("15G-DS: no fee is estimated", planGrowth.plan!.costEvaluated === false, "none");
+  add("15G-DT: no slippage is estimated", planGrowth.plan!.slippageEvaluated === false, "none");
+  add("15G-DU: no route liquidity is evaluated", planGrowth.plan!.liquidityRouteEvaluated === false, "none");
+  add("15G-DV: plan is not execution-ready", planGrowth.plan!.executionReady === false, "not ready");
+  add("15G-DW: no transaction is prepared", planDca.plan!.steps.every((s) => s.transactionPrepared === false), "none");
+  add("15G-DX: no transaction is submitted", planDca.plan!.steps.every((s) => s.transactionSubmitted === false), "none");
+  add("15G-DY: no wallet signature is required", planGrowth.plan!.walletSignatureRequired === false, "none");
+  add("15G-DZ: no automation is enabled", planGrowth.plan!.automationEnabled === false && CONTRIBUTION_PLAN_AUTOMATION_ENABLED === false, "none");
+
+  // 15G-EA…EF. Suggestion boundaries.
+  add("15G-EA: no suggestion is generated", planGrowth.plan!.suggestionGenerated === false && planGrowth.suggestionGenerated === false && CONTRIBUTION_PLAN_GENERATES_SUGGESTION === false, "none");
+  add("15G-EB: no product output is updated", planGrowth.plan!.updatesProductOutput === false && CONTRIBUTION_PLAN_UPDATES_PRODUCT_OUTPUT === false, "none");
+  const funded15G = bufferFixture(5000, 1000, 3);
+  const aligned15G = allocationFixture(15000, 62, 2);
+  const engineRun15G = runSuggestionEngine(inputsFor({ safetyBuffer: funded15G, allocation: aligned15G, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking15G = engineRun15G.suggestions.find((s) => s.category === "staking");
+  add("15G-EC: Top Pick is unchanged", engineRun15G.suggestions.filter((s) => s.is_top_pick).every((s) => !s.id.startsWith("contribution")), "unchanged");
+  add("15G-ED: engine ordering is unchanged", engineRun15G.suggestions.every((s) => !s.id.startsWith("contribution") && s.id !== "sol" && s.id !== "usdc"), "unchanged");
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    add("15G-EE: no card or modal is added", prodFiles.every((f) => !/contributionPlan/.test(readIf(f))), "no card");
+  }
+  add("15G-EF: no /testing scenario is added in this non-UI step", !readIf("src/pages/testingPageFixtures.ts").includes("contributionPlan") && !readIf("src/pages/testingPageFixtures.ts").includes("buildContributionPlan"), "no card");
+
+  // 15G-EG…EP. Feature states.
+  add("15G-EG: contribution planning exists", CONTRIBUTION_PLANNING_EXISTS === true, "exists");
+  add("15G-EH: contribution-plan generator exists", CONTRIBUTION_PLAN_GENERATOR_EXISTS === true, "exists");
+  add("15G-EI: plan-level target selection exists", CONTRIBUTION_PLAN_TARGET_SELECTION_EXISTS === true, "exists");
+  add("15G-EJ: plan amount calculation exists", CONTRIBUTION_PLAN_AMOUNT_CALCULATION_EXISTS === true, "exists");
+  add("15G-EK: plan projection exists", CONTRIBUTION_PLAN_PROJECTION_EXISTS === true, "exists");
+  add("15G-EL: staged-DCA planning exists", CONTRIBUTION_PLAN_STAGED_DCA_EXISTS === true, "exists");
+  add("15G-EM: DCA plan generation exists", DCA_PLAN_GENERATION_EXISTS === true, "exists");
+  add("15G-EN: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
+  add("15G-EO: product-facing target selection remains disabled", PLAN_TARGET_SELECTION_ENABLED_15G === false, "disabled");
+  add("15G-EP: calendar-date generation remains disabled", CONTRIBUTION_PLAN_CALENDAR_DATES_ENABLED === false && CONTRIBUTION_PLAN_EXECUTION_ENABLED === false, "disabled");
+
+  // 15G-EQ…EY. Product invariants.
+  add("15G-EQ: canonical Safety Buffer remains unchanged", buildContributionSafetyBufferSnapshot(bufferFixture(1000, 1000, 3), timing).requiredBufferUsd === 3000 && buildContributionSafetyBufferSnapshot(bufferFixture(1000, 1000, 3), timing).shortfallUsd === 2000, "unchanged");
+  add("15G-ER: contribution-frequency normalization remains unchanged", normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "monthly" }).status === "normalized_fixed" && normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "monthly" }).exactAverageContributionAmountUsd === 1000, "unchanged");
+  add("15G-ES: allocation-gap output remains unchanged", gapGrowth.targetResults.find((t) => t.targetId === "sol")!.maximumExternalContributionIncreaseWithoutOvershootUsd === 4250, "unchanged");
+  add("15G-ET: priority output remains unchanged", prGrowth.purpose === "growth_allocation", "unchanged");
+  add("15G-EU: funding-selection output remains unchanged", selGrowth.primaryFundingSourceId === "upcoming_contribution", "unchanged");
+  add("15G-EV: existing suggestion output remains unchanged", engineRun15G.suggestions.length > 0 && staking15G?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  add("15G-EW: SOL staking remains unchanged", staking15G != null && staking15G.protocolSelection?.selectedProtocolName === "Jito", "unchanged");
+  add("15G-EX: dynamic staking leader remains unchanged", staking15G?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/RealWalletSuggestionsRail.tsx", "src/pages/DashboardPage.tsx"];
+    add("15G-EY: no product-facing import exists", prodFiles.every((f) => !/contributionPlan/.test(readIf(f))), "no import");
+  }
+
+  // 15G-EZ. Execution-source scan.
+  {
+    const blob = ["contributionPlanTypes", "contributionPlanPolicy", "contributionPlanAmount", "contributionPlanProjection", "contributionPlanGenerator", "contributionPlanDiagnostics"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+    const handlers = ["sendtransaction", "signtransaction", "buy(", "swap(", "deposit(", "invest(", "execute(", "withdraw(", "scheduletransfer("];
+    add("15G-EZ: no send/sign/buy/swap/deposit/invest/execute/withdraw/schedule-transfer handler is added", handlers.filter((h) => blob.includes(h)).length === 0, "none");
+  }
+
+  // Validators + diagnostics smoke.
+  add("15G-validate: all plan-generation results validate", validateContributionPlanGenerationResult(planBuffer).valid === true && validateContributionPlanGenerationResult(planStable).valid === true && validateContributionPlanGenerationResult(planGrowth).valid === true && validateContributionPlanGenerationResult(planGrowthRange).valid === true && validateContributionPlanGenerationResult(planDca).valid === true && validateContributionPlanGenerationResult(planOnTrack).valid === true, "valid");
+  add("15G-diagnostics: diagnostics are neutral and reveal no recommendation", getContributionPlanDiagnostics(planDca).relativeDayOffsets!.join(",") === "0,5,9,14" && /tranches/i.test(explainContributionPlan(planDca)) && !/\b(buy now|recommended trade|invest now)\b/i.test(explainContributionPlan(planGrowth)) && getExcessUsdcDcaRelativeDayOffsets().join(",") === "0,5,9,14" && EXCESS_USDC_DCA_TRANCHE_COUNT === 4 && EXCESS_USDC_DCA_DURATION_DAYS === 14, "neutral");
 
   return checks;
 }
@@ -13114,6 +13470,7 @@ export function printFixtureResults(): void {
     ...runContributionAllocationGapFixtureChecks(),
     ...runContributionPriorityFixtureChecks(),
     ...runContributionFundingFixtureChecks(),
+    ...runContributionPlanFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

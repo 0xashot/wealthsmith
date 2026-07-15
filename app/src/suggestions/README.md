@@ -1571,3 +1571,21 @@ Multiple targets are preserved without allocation. No final amount/target/residu
 no plan/suggestion; no product-facing import; product behavior unchanged.
 `CONTRIBUTION_FUNDING_SOURCE_SELECTION_EXISTS`/`…AVAILABILITY_EXISTS = true`; mixed/amount/residual/
 plan/suggestion/product-output flags stay `false`.
+
+## 15G — contribution + DCA plan generator
+
+The deterministic, read-only planning layer ([contributionPlanGenerator.md](./contributionPlanGenerator.md))
+that combines Steps 15B–15F into ONE structured plan. `buildContributionPlan` selects exactly one
+final target (fails closed on multiple — `blocked_multiple_targets`), uses the full Step 15F capped
+primary capacity (floors cap-constrained fractional cents so rounding can't overshoot), and emits one
+of four kinds: `safety_buffer_contribution` (min(capacity, shortfall), dollar-floor projection),
+`stable_allocation_contribution` / `growth_recurring_contribution` (one step, external projection;
+the onboarding cadence IS the DCA structure — not re-split), or `growth_excess_usdc_dca` (USDC→growth,
+exact total ≥ $250 staged into 4 tranches over 14 days at offsets [0,5,9,14], internal projection,
+Safety Buffer preserved). Projections reuse the Step 15D helper; ranges keep base…base+1¢ and the max
+bound never overshoots. Deterministic FNV-1a `planId` (excludes `generatedAt`). Only the primary
+source is used — no mixed funding, no alternative plan, no residual routing. On Track →
+`no_action_required`. No suggestion / route / protocol / fee / slippage / transaction / signature /
+calendar date; no product-facing import; product behavior unchanged.
+`CONTRIBUTION_PLANNING_EXISTS`/`DCA_PLAN_GENERATION_EXISTS`/`CONTRIBUTION_PLAN_*_EXISTS = true`;
+suggestion / product-facing target-selection / execution flags stay `false` until Step 15H.
