@@ -30,7 +30,16 @@ export const CONTRIBUTION_PLANNING_EXISTS = false;
 // same layer (the field is "contribution_frequency" in onboarding); no contradictory duplicate.
 export const CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS = true;
 export const CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS = true;
-export const CONTRIBUTION_PRIORITY_ENGINE_EXISTS = false;
+// Step 15E — the contribution-priority + Safety Buffer gate now exists (decides the priority
+// category only; reuses the canonical Safety Buffer, selects no funding source, calculates no
+// amount, generates no plan/suggestion, and changes no product output).
+export const CONTRIBUTION_PRIORITY_ENGINE_EXISTS = true;
+export const CONTRIBUTION_SAFETY_BUFFER_GATE_EXISTS = true;
+export const CONTRIBUTION_PRIORITY_UPDATES_PRODUCT_OUTPUT = false;
+export const CONTRIBUTION_PRIORITY_SELECTS_FUNDING_SOURCE = false;
+export const CONTRIBUTION_PRIORITY_CALCULATES_AMOUNT = false;
+export const CONTRIBUTION_PRIORITY_GENERATES_PLAN = false;
+export const CONTRIBUTION_PRIORITY_GENERATES_SUGGESTION = false;
 // Step 15D — the deterministic allocation-gap engine now exists (mathematical gaps/caps only; it
 // never selects a target, evaluates funding/the Safety Buffer, or changes product output).
 export const TARGET_ALLOCATION_GAP_ENGINE_EXISTS = true;

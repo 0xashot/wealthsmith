@@ -664,6 +664,40 @@ import { getContributionAllocationGapDiagnostics, explainContributionTargetAlloc
 import type { GrowthTargetAllocationPolicyResult } from "./growthTargetAllocationPolicy";
 import type { InvestmentTargetHoldingSource } from "./investmentTargetTypes";
 import {
+  CONTRIBUTION_PRIORITY_SCHEMA_VERSION,
+  CONTRIBUTION_PRIORITY_POLICY_ID,
+  CONTRIBUTION_PRIORITY_POLICY_VERSION,
+  type ContributionSafetyBufferSnapshot,
+} from "./contributionPriorityTypes";
+import {
+  CONTRIBUTION_PRIORITY_ORDER,
+  CONTRIBUTION_PRIORITY_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS,
+  validateContributionPriorityPolicy,
+} from "./contributionPriorityPolicy";
+import {
+  CONTRIBUTION_SAFETY_BUFFER_GATE_EXISTS,
+  CANONICAL_SAFETY_BUFFER_POLICY_ID,
+  CANONICAL_SAFETY_BUFFER_POLICY_VERSION,
+  buildContributionSafetyBufferSnapshot,
+  evaluateContributionSafetyBufferGate,
+  validateContributionSafetyBufferGateDecision,
+} from "./contributionSafetyBufferGate";
+import {
+  CONTRIBUTION_PRIORITY_ENGINE_EXISTS as PRIORITY_ENGINE_EXISTS_15E,
+  buildContributionPriorityDecision,
+  buildContributionStablePriorityContext,
+  buildContributionGrowthPriorityContext,
+  validateContributionPriorityDecision,
+} from "./contributionPriorityEngine";
+import { getContributionPriorityDiagnostics, explainContributionPriorityDecision } from "./contributionPriorityDiagnostics";
+import {
+  CONTRIBUTION_PRIORITY_UPDATES_PRODUCT_OUTPUT,
+  CONTRIBUTION_PRIORITY_SELECTS_FUNDING_SOURCE,
+  CONTRIBUTION_PRIORITY_CALCULATES_AMOUNT,
+  CONTRIBUTION_PRIORITY_GENERATES_PLAN,
+  CONTRIBUTION_PRIORITY_GENERATES_SUGGESTION,
+} from "./investmentTargetRegistry";
+import {
   SOL_STAKING_MARKET_DATA_MODEL_EXISTS,
   SOL_STAKING_MARKET_DATA_MUTATES_APPROVAL_EVIDENCE,
   SOL_STAKING_MARKET_DATA_MUTATES_RISK_SCORES,
@@ -11772,7 +11806,7 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   {
     // No product-facing file imports the registry/eligibility. Its own modules, the contribution-
     // policy foundation family (15B/15C, non-UI), and fixtures are legitimate non-product consumers.
-    const allowed = /investmentTarget(Types|Registry|Eligibility)|contribution(Frequency|PlanningPolicy|Price|TargetSuitability|TargetPolicy|AllocationGap)|growthTargetAllocationPolicy|dcaMinimumPolicy|suggestionEngine\.fixtures/;
+    const allowed = /investmentTarget(Types|Registry|Eligibility)|contribution(Frequency|PlanningPolicy|Price|TargetSuitability|TargetPolicy|AllocationGap|Priority|SafetyBufferGate)|growthTargetAllocationPolicy|dcaMinimumPolicy|suggestionEngine\.fixtures/;
     let hits: string[] = [];
     let entries: string[] = [];
     try { entries = readdirSync(`${root}/src`, { recursive: true }) as string[]; } catch { /* ignore */ }
@@ -11942,7 +11976,7 @@ export function runContributionFrequencyNormalizationFixtureChecks(): FixtureChe
   // 15B-CI…CN. Feature-state invariants.
   add("15B-CI: contribution-frequency normalization is enabled", CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS === true, "enabled");
   add("15B-CJ: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
-  add("15B-CK: contribution-priority engine remains disabled", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === false, "disabled");
+  add("15B-CK: contribution-priority engine now exists (enabled at Step 15E)", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true, "exists");
   add("15B-CL: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
   add("15B-CM: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
   add("15B-CN: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
@@ -12139,7 +12173,7 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   add("15C-CL: contribution-price policy exists", CONTRIBUTION_PRICE_POLICY_EXISTS === true, "exists");
   add("15C-CM: policy-eligibility layer exists", CONTRIBUTION_TARGET_POLICY_ELIGIBILITY_EXISTS === true, "exists");
   add("15C-CN: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
-  add("15C-CO: contribution-priority engine remains disabled", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === false, "disabled");
+  add("15C-CO: contribution-priority engine now exists (enabled at Step 15E)", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true, "exists");
   add("15C-CP: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
   add("15C-CQ: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
   add("15C-CR: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false && CONTRIBUTION_POLICY_UPDATES_PRODUCT_OUTPUT === false, "disabled");
@@ -12411,7 +12445,7 @@ export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
 
   // 15D-CR…CV. Feature-state invariants.
   add("15D-CR: allocation-gap engine exists", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true && TARGET_ALLOCATION_GAP_UPDATES_PRODUCT_OUTPUT === false && TARGET_ALLOCATION_GAP_SELECTS_TARGET === false && TARGET_ALLOCATION_GAP_EVALUATES_FUNDING === false && TARGET_ALLOCATION_GAP_EVALUATES_SAFETY_BUFFER === false, "exists");
-  add("15D-CS: contribution-priority engine remains disabled", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === false, "disabled");
+  add("15D-CS: contribution-priority engine now exists (enabled at Step 15E)", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true, "exists");
   add("15D-CT: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
   add("15D-CU: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
   add("15D-CV: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
@@ -12446,6 +12480,254 @@ export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
   // Validators + diagnostics smoke.
   add("15D-validate: complete analysis validates and blocked analysis carries a blocker", validateContributionAllocationGapAnalysisResult(aCore).valid === true && validateContributionAllocationGapAnalysisResult(aBV).valid === true, "valid");
   add("15D-diagnostics: diagnostics are neutral and reveal no recommendation", getContributionAllocationGapDiagnostics(aCore).targetOrder.join(",") === "usdc,sol" && /internal reallocation/i.test(explainContributionTargetAllocationGap(solCore)) && !/\b(buy|invest now|available to deploy|recommended amount|suggested amount)\b/i.test(explainContributionTargetAllocationGap(solCore)), "neutral");
+
+  return checks;
+}
+
+/**
+ * Step 15E — contribution-priority + Safety Buffer gate fixtures (15E-A…DQ). Verifies the priority
+ * order, canonical Safety Buffer reuse, the gate, buffer/stable/growth/on-track decisions, category
+ * priority over gap size, future extensibility, and all boundary/product/execution invariants.
+ */
+export function runContributionPriorityFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const engSrc = readIf("src/suggestions/contributionPriorityEngine.ts");
+  const gateSrc = readIf("src/suggestions/contributionSafetyBufferGate.ts");
+  const polSrc = readIf("src/suggestions/contributionPriorityPolicy.ts");
+
+  const GEN = "2026-07-15T00:00:00Z";
+  const CHK = "2026-07-15T00:00:00Z";
+  const CAL = "2026-07-15T00:00:00Z";
+  const timing = { calculatedAt: CAL, checkedAt: CHK };
+  const solT = getInvestmentTarget("sol")!;
+  const usdcT = getInvestmentTarget("usdc")!;
+
+  const mkExp = (targetId: string, assetId: string, valueUsd: number, holdingSources: InvestmentTargetHoldingSource[] = ["connected_wallet"]): ContributionPortfolioTargetExposure => ({ targetId, assetId, valueUsd, holdingSources, valuationReady: true, notes: [] });
+  const mkSnap = (total: number, exposures: ContributionPortfolioTargetExposure[]): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd: total, targetExposures: exposures, valuationStatus: "current", notes: [] });
+
+  const rec = deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!;
+  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+
+  const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
+  const techElig = evaluateInvestmentTargetTechnicalEligibility(solT, techCtx);
+  const suit = evaluateContributionTargetSuitability(solT, { checkedAt: CHK, targetId: "sol", profile: { goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, targetAllocationResult: alloc });
+  const freshQuote = evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: CHK, checkedAt: CHK });
+  const readyElig = evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHK, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: suit, priceQuote: freshQuote, minimumPolicy: getDcaMinimumPolicy() });
+  const solReady = { sol: readyElig };
+  const buildGap = (usdcVal: number, solVal: number, total: number) => buildContributionAllocationGapAnalysis({ snapshot: mkSnap(total, [mkExp("usdc", usdcT.assetId, usdcVal), mkExp("sol", solT.assetId, solVal)]), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+
+  // Canonical Safety Buffer snapshots (populated FROM bufferFixture — the canonical derivation).
+  const sbIncomplete = buildContributionSafetyBufferSnapshot(bufferFixture(4000, 3000, 3), timing); // required 9000, current 4000, shortfall 5000
+  const sbComplete = buildContributionSafetyBufferSnapshot(bufferFixture(9000, 3000, 3), timing); // required 9000, current 9000, shortfall 0
+  const sbTiny = buildContributionSafetyBufferSnapshot(bufferFixture(9000 - 5e-10, 3000, 3), timing);
+  const sbInvalid = buildContributionSafetyBufferSnapshot({ targetUsd: -100, stableUsd: 50 }, timing);
+  const sbBadShortfall: ContributionSafetyBufferSnapshot = { ...sbIncomplete, shortfallUsd: 999 };
+
+  // Allocation-gap scenarios.
+  const gapStableTrigger = buildGap(3000, 7000, 10000); // USDC 30% (gap 10, met); SOL 70% overweight
+  const gapGrowthTrigger = buildGap(3700, 4300, 10000); // USDC 37% (gap 3, below); SOL 43% (gap 17, met); BONK 2000
+  const gapOnTrack = buildGap(4000, 6000, 10000); // both at target
+  const gapBoth = buildGap(3000, 4500, 10000); // USDC 30% (gap 10 met); SOL 45% (gap 15 met); BONK 2500
+  const gapInvalid = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(-100, []), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+
+  // Decisions.
+  const decBuffer = buildContributionPriorityDecision({ safetyBufferResult: sbIncomplete, allocationGapResult: gapBoth, generatedAt: GEN, checkedAt: CHK });
+  const decStable = buildContributionPriorityDecision({ safetyBufferResult: sbComplete, allocationGapResult: gapStableTrigger, generatedAt: GEN, checkedAt: CHK });
+  const decGrowth = buildContributionPriorityDecision({ safetyBufferResult: sbComplete, allocationGapResult: gapGrowthTrigger, generatedAt: GEN, checkedAt: CHK });
+  const decOnTrack = buildContributionPriorityDecision({ safetyBufferResult: sbComplete, allocationGapResult: gapOnTrack, generatedAt: GEN, checkedAt: CHK });
+  const decBoth = buildContributionPriorityDecision({ safetyBufferResult: sbComplete, allocationGapResult: gapBoth, generatedAt: GEN, checkedAt: CHK });
+
+  // 15E-A…H. Schema/policy.
+  add("15E-A: schema version exists", CONTRIBUTION_PRIORITY_SCHEMA_VERSION === "1.0.0" && decStable.schemaVersion === "1.0.0", CONTRIBUTION_PRIORITY_SCHEMA_VERSION);
+  add("15E-B: policy ID/version exist", CONTRIBUTION_PRIORITY_POLICY_ID === "contribution_priority_v1" && CONTRIBUTION_PRIORITY_POLICY_VERSION === "1.0.0", CONTRIBUTION_PRIORITY_POLICY_ID);
+  add("15E-C: contribution-priority engine exists", PRIORITY_ENGINE_EXISTS_15E === true && CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true, "exists");
+  add("15E-D: Safety Buffer gate exists", CONTRIBUTION_SAFETY_BUFFER_GATE_EXISTS === true, "exists");
+  add("15E-E: priority policy validates", validateContributionPriorityPolicy().valid === true, "valid");
+  add("15E-F: priority order is exactly buffer → stable → growth → on_track", CONTRIBUTION_PRIORITY_ORDER.join(",") === "safety_buffer,stable_allocation,growth_allocation,on_track", CONTRIBUTION_PRIORITY_ORDER.join(","));
+  add("15E-G: the existing 5-point trigger is reused", CONTRIBUTION_PRIORITY_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS === 5 && CONTRIBUTION_PRIORITY_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS === DCA_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS, "reused");
+  add("15E-H: no duplicate allocation trigger is introduced", polSrc.includes("DCA_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS") && !/UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS\s*=\s*\d/.test(polSrc), "no dup");
+
+  // 15E-I…P. Canonical Safety Buffer reuse.
+  add("15E-I: the canonical Safety Buffer result is reused", sbIncomplete.canonicalCalculationUsed === true && sbIncomplete.sourcePolicyId === CANONICAL_SAFETY_BUFFER_POLICY_ID, "reused");
+  add("15E-J: no second buffer formula exists in Step 15E", !/monthlyExpenses|RISK_BUFFER_TARGET_MONTHS|\*\s*targetMonths/.test(gateSrc + engSrc + polSrc), "no formula");
+  add("15E-K: required buffer is preserved exactly", sbIncomplete.requiredBufferUsd === 9000, "9000");
+  add("15E-L: current eligible buffer is preserved exactly", sbIncomplete.currentEligibleBufferUsd === 4000, "4000");
+  add("15E-M: shortfall is preserved exactly", sbIncomplete.shortfallUsd === 5000, "5000");
+  add("15E-N: buffer source policy/version are preserved", sbIncomplete.sourcePolicyId === CANONICAL_SAFETY_BUFFER_POLICY_ID && sbIncomplete.sourcePolicyVersion === CANONICAL_SAFETY_BUFFER_POLICY_VERSION, "preserved");
+  add("15E-O: assets qualifying for buffer coverage are not redefined", !/STABLE_SYMBOLS|deriveStableValue|isStablecoin/.test(gateSrc + engSrc), "not redefined");
+  add("15E-P: buffer-month policy is not redefined", !/getSafetyBufferTargetMonths|RISK_BUFFER_TARGET_MONTHS/.test(gateSrc + engSrc), "not redefined");
+
+  // 15E-Q…AA. Safety Buffer gate.
+  add("15E-Q: positive shortfall produces incomplete gate", evaluateContributionSafetyBufferGate(sbIncomplete).status === "incomplete", "incomplete");
+  add("15E-R: zero shortfall produces complete gate", evaluateContributionSafetyBufferGate(sbComplete).status === "complete", "complete");
+  add("15E-S: tiny shortfall within tolerance produces complete gate", evaluateContributionSafetyBufferGate(sbTiny).status === "complete", "complete");
+  add("15E-T: invalid buffer input fails closed", evaluateContributionSafetyBufferGate(sbInvalid).status === "invalid", "invalid");
+  add("15E-U: shortfall must reconcile to max(0, required − current)", evaluateContributionSafetyBufferGate(sbBadShortfall).blockers.includes("safety_buffer_shortfall_inconsistent"), "reconcile");
+  add("15E-V: incomplete buffer blocks stable allocation", evaluateContributionSafetyBufferGate(sbIncomplete).stableAllocationAllowed === false, "blocked");
+  add("15E-W: incomplete buffer blocks growth allocation", evaluateContributionSafetyBufferGate(sbIncomplete).growthAllocationAllowed === false, "blocked");
+  add("15E-X: complete buffer allows lower-priority evaluation", evaluateContributionSafetyBufferGate(sbComplete).lowerPriorityEvaluationAllowed === true, "allowed");
+  add("15E-Y: gate calculates no contribution amount", evaluateContributionSafetyBufferGate(sbIncomplete).contributionAmountCalculated === false, "no amount");
+  add("15E-Z: gate calculates no residual amount", evaluateContributionSafetyBufferGate(sbIncomplete).residualAmountCalculated === false, "no residual");
+  add("15E-AA: gate selects no funding source", evaluateContributionSafetyBufferGate(sbIncomplete).fundingSourceSelected === false, "no funding");
+
+  // 15E-AB…AJ. Buffer-priority behavior.
+  add("15E-AB: incomplete buffer produces purpose safety_buffer", decBuffer.status === "complete" && decBuffer.purpose === "safety_buffer", decBuffer.purpose ?? "");
+  add("15E-AC: Safety Buffer purpose exposes exact shortfall context", decBuffer.safetyBufferPriorityShortfallUsd === 5000, `${decBuffer.safetyBufferPriorityShortfallUsd}`);
+  add("15E-AD: Safety Buffer purpose uses the canonical buffer target ID", decBuffer.priorityTargetIds.join(",") === "usdc", decBuffer.priorityTargetIds.join(","));
+  add("15E-AE: Safety Buffer suppresses stable priority", decBuffer.stableAllocationSuppressedBySafetyBuffer === true, "suppressed");
+  add("15E-AF: Safety Buffer suppresses growth priority", decBuffer.growthSuppressedBySafetyBuffer === true, "suppressed");
+  add("15E-AG: Safety Buffer priority does not require a valid allocation-gap result", buildContributionPriorityDecision({ safetyBufferResult: sbIncomplete, allocationGapResult: undefined, generatedAt: GEN, checkedAt: CHK }).purpose === "safety_buffer", "no gap needed");
+  add("15E-AH: invalid lower-priority gap cannot override an incomplete buffer", buildContributionPriorityDecision({ safetyBufferResult: sbIncomplete, allocationGapResult: gapInvalid, generatedAt: GEN, checkedAt: CHK }).purpose === "safety_buffer", "buffer wins");
+  add("15E-AI: Safety Buffer priority calculates no final amount", decBuffer.contributionAmountCalculated === false, "no amount");
+  add("15E-AJ: Safety Buffer priority routes no residual", decBuffer.residualAmountCalculated === false, "no residual");
+
+  // 15E-AK…AT. Stable context.
+  add("15E-AK: stable targets come from the registry", buildContributionStablePriorityContext(gapStableTrigger).context!.stableTargetIds.includes("usdc") && getStableAllocationDestinations().some((t) => t.targetId === "usdc"), "registry");
+  add("15E-AL: USDC is the current stable-allocation destination", getStableAllocationDestinations().map((t) => t.targetId).join(",") === "usdc", "usdc");
+  add("15E-AM: stable context preserves allocation-gap order", buildContributionStablePriorityContext(gapStableTrigger).context!.stableTargetIds.join(",") === gapStableTrigger.targetResults.filter((t) => t.targetId === "usdc").map((t) => t.targetId).join(","), "order");
+  add("15E-AN: stable percentages are not recalculated", engSrc.includes("underweightTriggerMet") && !engSrc.includes("currentPct ="), "reused");
+  add("15E-AO: stable target below 5 points does not meet trigger", buildContributionStablePriorityContext(gapGrowthTrigger).context!.triggerMetStableTargetIds.length === 0, "below");
+  add("15E-AP: stable target at exactly 5 points meets trigger", buildContributionStablePriorityContext(buildGap(3500, 4500, 10000)).context!.triggerMetStableTargetIds.join(",") === "usdc", "met");
+  add("15E-AQ: stable target above 5 points meets trigger", buildContributionStablePriorityContext(gapStableTrigger).context!.triggerMetStableTargetIds.join(",") === "usdc", "met");
+  add("15E-AR: stable target at target does not meet trigger", buildContributionStablePriorityContext(gapOnTrack).context!.triggerMetStableTargetIds.length === 0, "no trigger");
+  add("15E-AS: stable target overweight does not meet underweight trigger", buildContributionStablePriorityContext(buildGap(5000, 5000, 10000)).context!.triggerMetStableTargetIds.length === 0, "no trigger");
+  {
+    const usdcRes = gapStableTrigger.targetResults.find((t) => t.targetId === "usdc")!;
+    const solRes = gapStableTrigger.targetResults.find((t) => t.targetId === "sol")!;
+    const twoStableGap = { ...gapStableTrigger, targetResults: [usdcRes, { ...usdcRes, targetId: "usdt" }, solRes] };
+    const at = buildContributionStablePriorityContext(twoStableGap, { stableDestinationIds: ["usdc", "usdt"] });
+    add("15E-AT: multiple stable destinations without sub-allocation fail closed", at.context === null && at.blockers.includes("multiple_stable_targets_require_suballocation_policy"), "fail closed");
+  }
+
+  // 15E-AU…AZ. Stable priority.
+  add("15E-AU: complete buffer plus stable trigger produces stable_allocation", decStable.purpose === "stable_allocation" && decStable.primaryTargetCategory === "stable_asset", decStable.purpose ?? "");
+  add("15E-AV: stable priority target IDs match trigger-met stable targets", decStable.priorityTargetIds.join(",") === (decStable.stableContext?.triggerMetStableTargetIds.join(",") ?? "") && decStable.priorityTargetIds.join(",") === "usdc", decStable.priorityTargetIds.join(","));
+  add("15E-AW: stable priority overrides growth even when growth has a larger gap", decBoth.purpose === "stable_allocation" && (gapBoth.targetResults.find((t) => t.targetId === "sol")!.signedGapPercentagePoints as number) > (gapBoth.targetResults.find((t) => t.targetId === "usdc")!.signedGapPercentagePoints as number), "stable wins");
+  add("15E-AX: stable priority overrides growth even when growth has a larger USD gap", decBoth.purpose === "stable_allocation" && (gapBoth.targetResults.find((t) => t.targetId === "sol")!.signedStaticGapAtCurrentTotalUsd as number) > (gapBoth.targetResults.find((t) => t.targetId === "usdc")!.signedStaticGapAtCurrentTotalUsd as number), "stable wins");
+  add("15E-AY: stable priority does not calculate an amount", decStable.contributionAmountCalculated === false, "no amount");
+  add("15E-AZ: stable priority does not select a funding source", decStable.fundingSourceSelected === false, "no funding");
+
+  // 15E-BA…BK. Growth context.
+  add("15E-BA: growth targets come from the enabled registry list", buildContributionGrowthPriorityContext(gapGrowthTrigger).eligibleGrowthTargetIds.includes("sol"), "registry");
+  add("15E-BB: SOL is the current enabled growth target", getEnabledContributionGrowthTargets().map((t) => t.targetId).join(",") === "sol", "sol");
+  add("15E-BC: growth context preserves allocation-policy order", buildContributionGrowthPriorityContext(gapGrowthTrigger).eligibleGrowthTargetIds.join(",") === "sol", "order");
+  add("15E-BD: growth percentages are not recalculated", !engSrc.includes("currentPct ="), "reused");
+  add("15E-BE: growth target requires policy readiness", buildContributionGrowthPriorityContext(buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("usdc", usdcT.assetId, 4000), mkExp("sol", solT.assetId, 5000)]), targetAllocationResult: alloc, policyEligibilityByTargetId: {}, generatedAt: GEN, checkedAt: CHK })).eligibleGrowthTargetIds.length === 0, "requires ready");
+  add("15E-BF: disabled growth target is excluded", getEnabledContributionGrowthTargets().every((t) => t.targetId !== "btc" && t.targetId !== "eth"), "excluded");
+  add("15E-BG: underweight growth below 5 points does not meet trigger", buildContributionGrowthPriorityContext(buildGap(4000, 5700, 10000)).triggerMetGrowthTargetIds.length === 0, "below");
+  add("15E-BH: growth at exactly 5 points meets trigger", buildContributionGrowthPriorityContext(buildGap(4000, 5500, 10000)).triggerMetGrowthTargetIds.join(",") === "sol", "met");
+  add("15E-BI: growth above 5 points meets trigger", buildContributionGrowthPriorityContext(buildGap(4000, 5000, 10000)).triggerMetGrowthTargetIds.join(",") === "sol", "met");
+  add("15E-BJ: at-target growth does not meet trigger", buildContributionGrowthPriorityContext(gapOnTrack).triggerMetGrowthTargetIds.length === 0, "no trigger");
+  add("15E-BK: overweight growth does not meet trigger", buildContributionGrowthPriorityContext(gapStableTrigger).triggerMetGrowthTargetIds.length === 0, "no trigger");
+
+  // 15E-BL…BR. Growth priority.
+  add("15E-BL: complete buffer plus no stable trigger plus growth trigger produces growth_allocation", decGrowth.purpose === "growth_allocation" && decGrowth.primaryTargetCategory === "growth_asset", decGrowth.purpose ?? "");
+  add("15E-BM: growth priority IDs match eligible trigger-met targets", decGrowth.priorityTargetIds.join(",") === (decGrowth.growthContext?.triggerMetGrowthTargetIds.join(",") ?? "") && decGrowth.priorityTargetIds.join(",") === "sol", decGrowth.priorityTargetIds.join(","));
+  {
+    const solGrowthRes = gapGrowthTrigger.targetResults.find((t) => t.targetId === "sol")!;
+    const multiGap = { ...gapGrowthTrigger, targetResults: [solGrowthRes, { ...solGrowthRes, targetId: "btc", assetId: "bitcoin:native" }] };
+    const gMulti = buildContributionGrowthPriorityContext(multiGap, { enabledGrowthTargetIds: ["sol", "btc"] });
+    add("15E-BN: growth priority does not rank targets", gMulti.eligibleGrowthTargetIds.join(",") === "sol,btc", gMulti.eligibleGrowthTargetIds.join(","));
+    add("15E-BO: growth priority does not select the largest gap", decGrowth.targetSelected === false && gMulti.triggerMetGrowthTargetIds.join(",") === "sol,btc", "no selection");
+  }
+  add("15E-BP: growth priority does not calculate an amount", decGrowth.contributionAmountCalculated === false, "no amount");
+  add("15E-BQ: growth priority does not select a funding source", decGrowth.fundingSourceSelected === false, "no funding");
+  add("15E-BR: growth priority does not generate a DCA plan", decGrowth.dcaPlanGenerated === false, "no plan");
+
+  // 15E-BS…BW. On Track.
+  add("15E-BS: complete buffer with no stable or growth trigger produces on_track", decOnTrack.purpose === "on_track" && decOnTrack.primaryTargetCategory === "none", decOnTrack.purpose ?? "");
+  add("15E-BT: On Track has an empty priorityTargetIds list", decOnTrack.priorityTargetIds.length === 0, "empty");
+  add("15E-BU: On Track does not generate a suggestion", decOnTrack.suggestionGenerated === false, "no suggestion");
+  add("15E-BV: On Track refers only to contribution-allocation priority", /contribution-allocation/i.test(explainContributionPriorityDecision(decOnTrack)), "scoped");
+  add("15E-BW: On Track does not suppress unrelated future suggestion families", decOnTrack.lowerPriorityEvaluationSuppressed === false, "no suppression");
+
+  // 15E-BX…CD. Priority conflict scenarios.
+  add("15E-BX: Buffer incomplete + stable underweight + growth underweight → buffer", buildContributionPriorityDecision({ safetyBufferResult: sbIncomplete, allocationGapResult: gapBoth, generatedAt: GEN, checkedAt: CHK }).purpose === "safety_buffer", "buffer");
+  add("15E-BY: Buffer complete + stable underweight + growth underweight → stable", decBoth.purpose === "stable_allocation", "stable");
+  add("15E-BZ: Buffer complete + stable below trigger + growth underweight → growth", decGrowth.purpose === "growth_allocation", "growth");
+  add("15E-CA: Buffer complete + stable at target + growth at target → on_track", decOnTrack.purpose === "on_track", "on_track");
+  add("15E-CB: Non-target BONK can make both mapped targets underweight; stable still has priority", (gapBoth.unmappedOtherValueUsd as number) > 0 && decBoth.purpose === "stable_allocation", "stable");
+  add("15E-CC: largest gap does not override category order", decBoth.purpose === "stable_allocation", "category wins");
+  add("15E-CD: largest USD amount does not override category order", decBoth.purpose === "stable_allocation", "category wins");
+
+  // 15E-CE…CK. Future extensibility.
+  add("15E-CE: engine logic does not hardcode SOL", !/["']sol["']/.test(engSrc), "generic");
+  add("15E-CF: engine logic identifies stable destinations by registry role", engSrc.includes("getStableAllocationDestinations"), "role");
+  {
+    const solGrowthRes = gapGrowthTrigger.targetResults.find((t) => t.targetId === "sol")!;
+    const gBtc = buildContributionGrowthPriorityContext({ ...gapGrowthTrigger, targetResults: [solGrowthRes, { ...solGrowthRes, targetId: "btc", assetId: "bitcoin:native" }] }, { enabledGrowthTargetIds: ["sol", "btc"] });
+    add("15E-CG: a future enabled BTC target can appear in growth context with valid policies", gBtc.eligibleGrowthTargetIds.includes("btc") && gBtc.triggerMetGrowthTargetIds.includes("btc"), "btc");
+    const gEth = buildContributionGrowthPriorityContext({ ...gapGrowthTrigger, targetResults: [solGrowthRes, { ...solGrowthRes, targetId: "eth", assetId: "ethereum:native" }] }, { enabledGrowthTargetIds: ["sol", "eth"] });
+    add("15E-CH: a future enabled ETH target can appear in growth context with valid policies", gEth.eligibleGrowthTargetIds.includes("eth"), "eth");
+    const gRwa = buildContributionGrowthPriorityContext({ ...gapGrowthTrigger, targetResults: [solGrowthRes, { ...solGrowthRes, targetId: "treasury_note_2027" }] }, { enabledGrowthTargetIds: ["sol", "treasury_note_2027"] });
+    add("15E-CI: a future specific RWA target can appear with valid policies", gRwa.eligibleGrowthTargetIds.includes("treasury_note_2027"), "rwa");
+    add("15E-CK: multiple valid growth targets preserve policy order without ranking", gBtc.eligibleGrowthTargetIds.join(",") === "sol,btc", gBtc.eligibleGrowthTargetIds.join(","));
+  }
+  add("15E-CJ: generic RWA remains forbidden", getInvestmentTarget("rwa") === undefined && getInvestmentTarget("generic_rwa") === undefined, "forbidden");
+
+  // 15E-CL…CQ. Contribution-frequency boundary.
+  add("15E-CL: contribution frequency is not consumed", !/from ["']\.\/contributionFrequency/.test(engSrc + gateSrc) && decGrowth.contributionFrequencyApplied === false, "not consumed");
+  add("15E-CM: weekly amount is not calculated", !/weekly/i.test(engSrc + gateSrc), "no weekly");
+  add("15E-CN: biweekly amount is not calculated", !/biweekly/i.test(engSrc + gateSrc), "no biweekly");
+  add("15E-CO: monthly amount is not calculated", !/monthly/i.test(engSrc + gateSrc), "no monthly");
+  add("15E-CP: quarterly amount is not calculated", !/quarterly/i.test(engSrc + gateSrc), "no quarterly");
+  add("15E-CQ: occasional amount is not inferred", !/occasional/i.test(engSrc + gateSrc), "no occasional");
+
+  // 15E-CR…CW. Funding boundary.
+  add("15E-CR: upcoming contribution is not selected", !engSrc.includes("upcoming_contribution") && decGrowth.fundingSourceSelected === false, "not selected");
+  add("15E-CS: existing excess USDC is not selected", !engSrc.includes("existing_excess_usdc"), "not selected");
+  add("15E-CT: excess USDC is not calculated", decGrowth.excessUsdcCalculated === false, "not calculated");
+  add("15E-CU: funding availability is not evaluated", decGrowth.fundingAvailabilityEvaluated === false, "not evaluated");
+  add("15E-CV: no liquid balance is labeled available", !/\bavailable\b/i.test(engSrc), "none");
+  add("15E-CW: no residual amount is calculated", decGrowth.residualAmountCalculated === false, "none");
+
+  // 15E-CX…DB. Result boundaries.
+  add("15E-CX: no target is finally selected", decGrowth.targetSelected === false && decStable.targetSelected === false, "not selected");
+  add("15E-CY: no contribution amount is calculated", decGrowth.contributionAmountCalculated === false, "no amount");
+  add("15E-CZ: no DCA plan is generated", decGrowth.dcaPlanGenerated === false, "no plan");
+  add("15E-DA: no suggestion is generated", decGrowth.suggestionGenerated === false, "no suggestion");
+  add("15E-DB: no product output is updated", decGrowth.updatesProductOutput === false && CONTRIBUTION_PRIORITY_UPDATES_PRODUCT_OUTPUT === false, "no update");
+
+  // 15E-DC…DG. Feature-state invariants.
+  add("15E-DC: contribution-priority engine exists", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === true && CONTRIBUTION_PRIORITY_SELECTS_FUNDING_SOURCE === false && CONTRIBUTION_PRIORITY_CALCULATES_AMOUNT === false && CONTRIBUTION_PRIORITY_GENERATES_PLAN === false && CONTRIBUTION_PRIORITY_GENERATES_SUGGESTION === false, "exists");
+  add("15E-DD: Safety Buffer gate exists", CONTRIBUTION_SAFETY_BUFFER_GATE_EXISTS === true, "exists");
+  add("15E-DE: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
+  add("15E-DF: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
+  add("15E-DG: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
+
+  // 15E-DH…DN. Product invariants.
+  add("15E-DH: canonical Safety Buffer behavior remains unchanged", buildContributionSafetyBufferSnapshot(bufferFixture(1000, 1000, 3), timing).requiredBufferUsd === 3000 && buildContributionSafetyBufferSnapshot(bufferFixture(1000, 1000, 3), timing).shortfallUsd === 2000, "unchanged");
+  const funded15E = bufferFixture(5000, 1000, 3);
+  const aligned15E = allocationFixture(15000, 62, 2);
+  const engineRun15E = runSuggestionEngine(inputsFor({ safetyBuffer: funded15E, allocation: aligned15E, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking15E = engineRun15E.suggestions.find((s) => s.category === "staking");
+  add("15E-DI: existing suggestion output remains unchanged", engineRun15E.suggestions.length > 0 && staking15E?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  add("15E-DJ: SOL staking remains unchanged", staking15E != null && staking15E.protocolSelection?.selectedProtocolName === "Jito", "unchanged");
+  add("15E-DK: Top Pick remains unchanged", engineRun15E.suggestions.filter((s) => s.is_top_pick).every((s) => !s.id.startsWith("contribution")), "unchanged");
+  add("15E-DL: engine ordering remains unchanged", engineRun15E.suggestions.every((s) => !s.id.startsWith("contribution") && s.id !== "sol" && s.id !== "usdc"), "unchanged");
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    const anyImport = prodFiles.some((f) => /contributionPriority|contributionSafetyBufferGate/.test(readIf(f)));
+    add("15E-DM: no product-facing import exists", anyImport === false, "no import");
+  }
+  add("15E-DN: no /testing card is added in this non-UI step", !readIf("src/pages/testingPageFixtures.ts").includes("contributionPriority") && !readIf("src/pages/testingPageFixtures.ts").includes("buildContributionPriorityDecision"), "no card");
+
+  // 15E-DO…DQ. Execution invariants.
+  {
+    const blob = ["contributionPriorityTypes", "contributionPriorityPolicy", "contributionSafetyBufferGate", "contributionPriorityEngine", "contributionPriorityDiagnostics"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+    add("15E-DO: no transaction path exists", !blob.includes("sendtransaction") && decGrowth.transactionsEnabled === false, "none");
+    add("15E-DP: no signature path exists", !blob.includes("signtransaction") && decGrowth.walletSignatureRequired === false, "none");
+    const handlers = ["buy(", "swap(", "deposit(", "invest(", "execute(", "scheduletransfer("];
+    add("15E-DQ: no buy/swap/deposit/invest/execute/schedule-transfer handler exists", handlers.filter((h) => blob.includes(h)).length === 0, "none");
+  }
+
+  // Validators + diagnostics smoke.
+  add("15E-validate: buffer/stable/growth/on-track decisions validate", validateContributionPriorityDecision(decBuffer).valid === true && validateContributionPriorityDecision(decStable).valid === true && validateContributionPriorityDecision(decGrowth).valid === true && validateContributionPriorityDecision(decOnTrack).valid === true && validateContributionSafetyBufferGateDecision(evaluateContributionSafetyBufferGate(sbComplete)).valid === true, "valid");
+  add("15E-diagnostics: diagnostics are neutral and reveal no recommendation", getContributionPriorityDiagnostics(decBuffer).priorityOrder.join(",") === "safety_buffer,stable_allocation,growth_allocation,on_track" && /priority/i.test(explainContributionPriorityDecision(decStable)) && !/\b(buy|invest now|recommended amount|available to deploy)\b/i.test(explainContributionPriorityDecision(decGrowth)), "neutral");
 
   return checks;
 }
@@ -12530,6 +12812,7 @@ export function printFixtureResults(): void {
     ...runContributionFrequencyNormalizationFixtureChecks(),
     ...runContributionPlanningPolicyFixtureChecks(),
     ...runContributionAllocationGapFixtureChecks(),
+    ...runContributionPriorityFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

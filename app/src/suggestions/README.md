@@ -1534,3 +1534,21 @@ divide-by-zero, no invented split). Caps are mathematical only — never "availa
 ranking, no selection, no Safety Buffer/funding/frequency/amount/plan/suggestion; no product-facing
 import; product behavior unchanged. `TARGET_ALLOCATION_GAP_ENGINE_EXISTS = true`; the gap engine's
 product-output / target-selection / funding / Safety-Buffer flags stay `false`.
+
+## 15E — contribution-priority + Safety Buffer gate
+
+The deterministic priority gate ([contributionPriorityEngine.md](./contributionPriorityEngine.md))
+that decides the single purpose category — Safety Buffer → stable allocation → growth allocation →
+On Track — before any amount or funding source is chosen. `buildContributionPriorityDecision` reuses
+the canonical WealthSmith Safety Buffer (risk-based months × expenses, `deriveSafetyBuffer`) through
+a narrow adapter (`buildContributionSafetyBufferSnapshot`; recomputes nothing, redefines no
+qualifying asset). An incomplete buffer always overrides and suppresses stable/growth (exposing only
+the canonical shortfall — $5,000 in the $9,000/$4,000 example) and does not require a valid
+allocation-gap result. When complete, a stable target (USDC) meeting the reused 5-pt trigger takes
+priority over growth (SOL) even when growth has a larger gap; growth proceeds only when no stable
+target triggers; otherwise On Track (internal state, no card). Stable/growth targets are discovered
+by registry ROLE (not hardcoded ids), so future BTC/ETH/RWA work once enabled; multiple stable
+destinations without a versioned sub-allocation policy fail closed. No contribution frequency,
+funding source, excess-USDC, amount, residual, target selection, DCA plan, or suggestion; no
+product-facing import; product behavior unchanged. `CONTRIBUTION_PRIORITY_ENGINE_EXISTS = true`,
+`CONTRIBUTION_SAFETY_BUFFER_GATE_EXISTS = true`; funding/amount/plan/suggestion flags stay `false`.
