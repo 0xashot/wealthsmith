@@ -1657,3 +1657,18 @@ Marginfi/Drift/Loopscale forbidden). A 10-reason suppression vocabulary, an exis
 allowance diagnostics. Intended priority Buffer > Rebalance > Stable Yield > Contribution/DCA is
 documented but engine ordering (`topPick.ts`) is unchanged. `STABLE_YIELD_POLICY_EXISTS = true`; all
 downstream flags `false`.
+
+## 16B — Yield Strategy Registry (USDC MVP)
+
+The deterministic catalog of EXACT yield products ([yieldStrategyRegistry.md](./yieldStrategyRegistry.md))
+— generic (`yield_strategy_registry_v1`, supports future assets; MVP `principalAsset = USDC`), not a
+USDC-only class. It answers "what products exist?", never "which is better?" (no comparison/scoring/
+ranking/APY/TVL). Five entries across the documented scope (Kamino Steakhouse USDC, Kamino USDC Lending,
+Raydium/Meteora/Hubble Stable USDC Strategy), reusing the 16A strategy types + risk lanes. **No address
+is fabricated** — the repo documents no exact vault/market addresses (Kamino resolves via SDK at
+runtime; Raydium/Meteora have no manage URL; Hubble is a USDH CDP), so every product is
+`documentation_required` with `address: undefined`; none is `approved` yet. Validators reject
+duplicate ids/addresses/doc-ids, unsupported/forbidden protocols, unknown lifecycle/type/lane, an
+approved product missing documentation/URL/asset, and the buffer lane on a non-buffer-eligible type.
+Diagnostics are inventory counts only. `YIELD_STRATEGY_REGISTRY_EXISTS`/`STABLE_YIELD_REGISTRY_EXISTS =
+true`; market-data/comparison/detection/suggestions/UI/testing/execution stay `false`.

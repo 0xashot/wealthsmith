@@ -59,7 +59,10 @@ export const CONTRIBUTION_TESTING_SCENARIOS_EXIST = true;
 // taxonomy, protocol scope, suppression vocabulary). Everything downstream stays disabled: no
 // registry, comparison, wallet/protocol detection, market data, suggestions, UI, /testing, execution.
 export const STABLE_YIELD_POLICY_EXISTS = true;
-export const STABLE_YIELD_REGISTRY_EXISTS = false;
+// Step 16B — the generic Yield Strategy Registry now exists (catalog of exact USDC products across
+// the documented Kamino/Raydium/Meteora/Hubble scope). Everything downstream stays disabled.
+export const STABLE_YIELD_REGISTRY_EXISTS = true;
+export const YIELD_STRATEGY_REGISTRY_EXISTS = true;
 export const STABLE_YIELD_COMPARISON_EXISTS = false;
 export const STABLE_YIELD_WALLET_DETECTION_EXISTS = false;
 export const STABLE_YIELD_SUGGESTIONS_EXIST = false;

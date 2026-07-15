@@ -816,6 +816,22 @@ import {
 } from "./stableYieldPolicy";
 import { getStableYieldPolicyDiagnostics, buildStableYieldAllowanceResult, explainStableYieldAllowance } from "./stableYieldPolicyDiagnostics";
 import {
+  YIELD_STRATEGY_REGISTRY_SCHEMA_VERSION,
+  YIELD_STRATEGY_REGISTRY_VERSION,
+  YIELD_STRATEGY_REGISTRY_POLICY_ID,
+} from "./yieldStrategyRegistryTypes";
+import {
+  YIELD_STRATEGY_REGISTRY_EXISTS as YIELD_REGISTRY_EXISTS_CONST,
+  listYieldStrategies,
+  getYieldStrategy,
+  getYieldStrategiesByProtocol,
+  getApprovedYieldStrategies,
+  validateYieldStrategyEntry,
+  validateYieldStrategyRegistry,
+} from "./yieldStrategyRegistry";
+import { getYieldStrategyRegistryDiagnostics } from "./yieldStrategyRegistryDiagnostics";
+import { YIELD_STRATEGY_REGISTRY_EXISTS as YIELD_REGISTRY_FLAG } from "./investmentTargetRegistry";
+import {
   STABLE_YIELD_POLICY_EXISTS,
   STABLE_YIELD_REGISTRY_EXISTS,
   STABLE_YIELD_COMPARISON_EXISTS,
@@ -13921,7 +13937,7 @@ export function runStableYieldPolicyFixtureChecks(): FixtureCheck[] {
   add("16A-A: schema version exists", STABLE_YIELD_POLICY_SCHEMA_VERSION === "1.0.0" && policy.schemaVersion === "1.0.0", STABLE_YIELD_POLICY_SCHEMA_VERSION);
   add("16A-B: policy ID/version exist", STABLE_YIELD_POLICY_ID === "stable_yield_policy_v1" && STABLE_YIELD_POLICY_VERSION === "1.0.0", STABLE_YIELD_POLICY_ID);
   add("16A-C: buffer and excess lane policy IDs exist", STABLE_BUFFER_YIELD_POLICY_ID === "stable_buffer_yield_v1" && STABLE_EXCESS_YIELD_POLICY_ID === "stable_excess_yield_v1", `${STABLE_BUFFER_YIELD_POLICY_ID}/${STABLE_EXCESS_YIELD_POLICY_ID}`);
-  add("16A-D: STABLE_YIELD_POLICY_EXISTS is enabled; downstream stays disabled", STABLE_YIELD_POLICY_EXISTS === true && STABLE_YIELD_REGISTRY_EXISTS === false && STABLE_YIELD_COMPARISON_EXISTS === false && STABLE_YIELD_WALLET_DETECTION_EXISTS === false && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "policy only");
+  add("16A-D: STABLE_YIELD_POLICY_EXISTS is enabled; comparison/detection/suggestions/UI/testing/execution stay disabled (registry enabled at 16B)", STABLE_YIELD_POLICY_EXISTS === true && STABLE_YIELD_REGISTRY_EXISTS === true && STABLE_YIELD_COMPARISON_EXISTS === false && STABLE_YIELD_WALLET_DETECTION_EXISTS === false && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "policy + registry");
   add("16A-E: the Stable Yield policy validates", validateStableYieldPolicy().valid === true, "valid");
   add("16A-F: Stable Yield is a Capital Efficiency suggestion family", policy.suggestionFamily === "capital_efficiency", policy.suggestionFamily);
 
@@ -13966,6 +13982,79 @@ export function runStableYieldPolicyFixtureChecks(): FixtureCheck[] {
   {
     const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
     add("16A-AB: no product-facing file imports the Stable Yield policy", prodFiles.every((f) => !/stableYieldPolicy/.test(readIf(f))), "no product import");
+  }
+
+  return checks;
+}
+
+/**
+ * Step 16B — Yield Strategy Registry fixtures (16B-A…AB). Verifies the generic registry schema/
+ * versions, the documented protocol scope, exact-product entries (never fabricated addresses),
+ * strategy-type/risk-lane reuse from 16A, lifecycle, the validators (dup/scope/lifecycle/approval/
+ * buffer-lane), the inventory diagnostics (no comparison), and that nothing downstream exists yet.
+ */
+export function runYieldStrategyRegistryFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const all = listYieldStrategies();
+  const diag = getYieldStrategyRegistryDiagnostics();
+  const kaminoLending = getYieldStrategy("kamino_usdc_lending")!;
+  const steakhouse = getYieldStrategy("kamino_steakhouse_usdc")!;
+
+  // 16B-A…E. Schema + versions + flag.
+  add("16B-A: registry schema version exists", YIELD_STRATEGY_REGISTRY_SCHEMA_VERSION === "1.0.0" && all[0].schemaVersion === "1.0.0", YIELD_STRATEGY_REGISTRY_SCHEMA_VERSION);
+  add("16B-B: registry version exists", YIELD_STRATEGY_REGISTRY_VERSION === "1.0.0" && all[0].registryVersion === "1.0.0", YIELD_STRATEGY_REGISTRY_VERSION);
+  add("16B-C: registry policy ID exists", YIELD_STRATEGY_REGISTRY_POLICY_ID === "yield_strategy_registry_v1", YIELD_STRATEGY_REGISTRY_POLICY_ID);
+  add("16B-D: YIELD_STRATEGY_REGISTRY_EXISTS is enabled", YIELD_REGISTRY_EXISTS_CONST === true && YIELD_REGISTRY_FLAG === true, "exists");
+  add("16B-E: the registry validates", validateYieldStrategyRegistry().valid === true, "valid");
+
+  // 16B-F…H. Generic architecture + USDC MVP.
+  add("16B-F: the registry is generic (not a USDC-only class) but the MVP asset is USDC", all.every((e) => e.principalAsset === "USDC") && !readIf("src/suggestions/yieldStrategyRegistry.ts").includes("StableUsdcRegistry"), "generic/USDC");
+  add("16B-G: no future non-USDC asset entries exist (no BTC/ETH/USDY)", all.every((e) => e.principalAsset === "USDC"), "USDC only");
+  add("16B-H: entries are exact products, never bare protocol names", all.every((e) => e.strategyId !== e.protocolId && e.displayName !== e.protocolDisplayName), "exact products");
+
+  // 16B-I…K. Protocol scope.
+  add("16B-I: only documented protocols appear (Kamino/Raydium/Meteora/Hubble)", all.every((e) => ["kamino", "raydium", "meteora", "hubble"].includes(e.protocolId)), all.map((e) => e.protocolId).join(","));
+  add("16B-J: forbidden protocols never appear (Save/Marginfi/Drift/Loopscale/Solend)", all.every((e) => !["save", "marginfi", "drift", "loopscale", "solend"].includes(e.protocolId as string)), "none");
+  add("16B-K: each documented protocol has at least one product", ["kamino", "raydium", "meteora", "hubble"].every((p) => getYieldStrategiesByProtocol(p).length >= 1), "covered");
+
+  // 16B-L…N. Addresses never fabricated.
+  add("16B-L: no product fabricates an on-chain address (all undefined until documented)", all.every((e) => e.address === undefined), "no addresses");
+  add("16B-M: undocumented products are lifecycle documentation_required", all.every((e) => e.lifecycle === "documentation_required"), "documentation_required");
+  add("16B-N: no approved product exists yet (none has a documented address)", getApprovedYieldStrategies().length === 0, "0 approved");
+
+  // 16B-O…Q. Strategy types + risk lanes reused from 16A.
+  add("16B-O: strategy types are reused from Step 16A (no redefinition)", all.every((e) => ["lending", "managed_vault", "staking_like_vault", "stable_liquidity_strategy", "future_other"].includes(e.strategyType)) && !readIf("src/suggestions/yieldStrategyRegistryTypes.ts").includes('"lending" | "managed_vault"'), "reused");
+  add("16B-P: risk lanes are reused from Step 16A", all.every((e) => ["buffer_eligible", "excess_only", "unsupported"].includes(e.riskLane)), "reused");
+  add("16B-Q: a lending product may be buffer-lane; a liquidity strategy is excess-only", kaminoLending.supportedLane === "safety_buffer_yield" && kaminoLending.riskLane === "buffer_eligible" && getYieldStrategy("raydium_stable_usdc_strategy")!.supportedLane === "excess_usdc_yield", "lanes");
+
+  // 16B-R…S. Lifecycle + Kamino product identity.
+  add("16B-R: the lifecycle vocabulary is honored (all six values valid; only documentation_required used now)", validateYieldStrategyEntry({ ...steakhouse, lifecycle: "made_up" } as never).valid === false && validateYieldStrategyEntry({ ...steakhouse, lifecycle: "future" } as never).valid === true, "lifecycle");
+  add("16B-S: the Kamino Steakhouse USDC product is documented by name with the official URL", steakhouse.displayName === "Kamino Steakhouse USDC" && steakhouse.officialUrl === "https://app.kamino.finance" && steakhouse.address === undefined, "documented");
+
+  // 16B-T…X. Validators fail closed.
+  add("16B-T: duplicate strategy ids are rejected", validateYieldStrategyRegistry([steakhouse, { ...steakhouse }]).errors.includes("duplicate_strategy_ids"), "rejected");
+  add("16B-U: duplicate addresses are rejected", validateYieldStrategyRegistry([{ ...steakhouse, address: "addr1" }, { ...kaminoLending, address: "addr1" }]).errors.includes("duplicate_addresses"), "rejected");
+  add("16B-V: an unsupported protocol id is rejected", validateYieldStrategyEntry({ ...steakhouse, protocolId: "solend" } as never).valid === false, "rejected");
+  add("16B-W: an approved product without documentation/official URL/asset is rejected", validateYieldStrategyEntry({ ...steakhouse, lifecycle: "approved", documentationUrl: undefined, officialUrl: undefined } as never).valid === false && validateYieldStrategyEntry({ ...steakhouse, lifecycle: "approved", documentationUrl: undefined } as never).errors.includes("approved_without_documentation"), "rejected");
+  add("16B-X: the buffer lane on an unsupported strategy type is rejected", validateYieldStrategyEntry({ ...steakhouse, strategyType: "staking_like_vault", supportedLane: "safety_buffer_yield" } as never).errors.includes("buffer_lane_on_unsupported_strategy_type"), "rejected");
+
+  // 16B-Y…Z. Diagnostics (inventory, no comparison).
+  add("16B-Y: diagnostics report inventory counts per protocol/asset/type/lane/lifecycle", diag.registeredProducts === all.length && diag.byProtocol.kamino === 2 && diag.byAsset.USDC === all.length && diag.byLifecycle.documentation_required === all.length && diag.byLifecycle.approved === 0, "inventory");
+  add("16B-Z: diagnostics contain no comparison/scoring/ranking fields", diag.comparisonEvaluated === false && diag.marketDataEvaluated === false && diag.suggestionGenerated === false && Object.keys(diag).every((k) => !/score|rank|apy|tvl|leader|better|recommend/i.test(k)), "inventory only");
+
+  // 16B-AA…AB. No downstream / no product import.
+  {
+    const blob = ["yieldStrategyRegistryTypes", "yieldStrategyRegistry", "yieldStrategyRegistryDiagnostics"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+    const forbidden = ["sendtransaction", "signtransaction", "fetch(", "fetchapy", "fetchtvl", "buy(", "swap(", "deposit("];
+    add("16B-AA: no market-data/comparison/execution path exists in the registry files", all.every((e) => e.marketDataEvaluated === false && e.eligibilityEvaluated === false && e.comparisonEvaluated === false && e.suggestionGenerated === false && e.transactionsEnabled === false) && forbidden.filter((h) => blob.includes(h)).length === 0, "registry only");
+  }
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    add("16B-AB: no product-facing file imports the Yield Strategy Registry", prodFiles.every((f) => !/yieldStrategyRegistry/.test(readIf(f))), "no product import");
   }
 
   return checks;
@@ -14058,6 +14147,7 @@ export function printFixtureResults(): void {
     ...runContributionUiTurnFixtureChecks(),
     ...runContributionFinalizationFixtureChecks(),
     ...runStableYieldPolicyFixtureChecks(),
+    ...runYieldStrategyRegistryFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
