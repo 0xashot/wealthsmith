@@ -37,6 +37,14 @@ export const DCA_SUGGESTION_ENABLED = false;
 export const CONTRIBUTION_DATES_GENERATED = false;
 export const CONTRIBUTION_TARGET_SELECTION_ENABLED = false;
 export const CONTRIBUTION_AUTOMATION_ENABLED = false;
+// Step 15C — contribution-planning POLICY layers now exist (config-only; no gap/plan/suggestion).
+export const GROWTH_TARGET_ALLOCATION_POLICY_EXISTS = true;
+export const DCA_MINIMUM_POLICY_EXISTS = true;
+export const SOL_GROWTH_SUITABILITY_POLICY_EXISTS = true;
+export const CONTRIBUTION_PRICE_POLICY_EXISTS = true;
+export const CONTRIBUTION_TARGET_POLICY_ELIGIBILITY_EXISTS = true;
+export const CONTRIBUTION_LIVE_PRICE_FETCH_ENABLED = false;
+export const CONTRIBUTION_POLICY_UPDATES_PRODUCT_OUTPUT = false;
 
 export const SOL_CONTRIBUTION_TARGET_MODELED = true;
 export const SOL_CONTRIBUTION_TARGET_ENABLED_FOR_MVP = true;
@@ -111,12 +119,12 @@ const REGISTRY: InvestmentTargetDefinition[] = [
     canFundContributionPlan: false,
     canServeAsSafetyBuffer: false,
     canReceiveStableAllocation: false,
-    // Price required for contribution planning; the SOURCE is not wired yet (context supplies it),
-    // freshness uses the documented MVP default.
-    priceRequirements: { priceRequiredForContributionPlanning: true, maximumPriceAgeMs: INVESTMENT_TARGET_DEFAULT_PRICE_MAX_AGE_MS },
-    allocationRequirements: { targetAllocationRequired: true, allocationPolicyKey: "growth_target_allocation_v_future", maximumOvershootAllowed: false },
-    minimumRequirements: { minimumPolicyKey: "dca_minimum_v_future" },
-    suitabilityPolicyKey: "sol_growth_suitability_v_future",
+    // Step 15C — real versioned policy keys + canonical internal price source (token_price_service,
+    // i.e. wallet/tokenPrices.ts; providers sit behind it, never called from React for planning).
+    priceRequirements: { priceRequiredForContributionPlanning: true, maximumPriceAgeMs: INVESTMENT_TARGET_DEFAULT_PRICE_MAX_AGE_MS, configuredPriceSourceId: "token_price_service" },
+    allocationRequirements: { targetAllocationRequired: true, allocationPolicyKey: "growth_target_allocation_v1", maximumOvershootAllowed: false },
+    minimumRequirements: { minimumPolicyKey: "dca_minimum_v1" },
+    suitabilityPolicyKey: "sol_growth_suitability_v1",
     executionStatus: "read_only_only",
     transactionsEnabled: false,
     walletSignatureRequired: false,

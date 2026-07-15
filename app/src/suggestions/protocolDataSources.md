@@ -918,3 +918,15 @@ with exact contributions; non-scored TVL/stake/fees/exit/token appear as labeled
 considerations". Displayed protocol follows the comparison leader (not selectedProtocolId); JitoSOL
 remains the internal default and Step 14X still gates activation. See
 [solStakingSelectorProductIntegration.md](./solStakingSelectorProductIntegration.md).
+
+## 15C — contribution-planning price contract
+
+Contribution-planning pricing (Step 15C) uses a validated price CONTRACT, not a new fetcher. Approved
+non-browser sources in order: (1) backend-normalized portfolio/token USD valuation, (2) the canonical
+internal token-price service `wallet/tokenPrices.ts` (source id `token_price_service`; DefiLlama
+`coins.llama.fi` + Jupiter `lite-api.jup.ag` sit BEHIND it and are never called from React for
+contribution pricing), (3) a same-origin sanitized runtime payload. SOL contribution price must be
+finite, >0, from an approved source, with valid provenance/timestamps, not future-dated beyond a
+small skew, and ≤60 minutes old (`SOL_CONTRIBUTION_PRICE_MAX_AGE_MS`). Browser-fetched external-
+provider prices are rejected. USDC funding uses the existing normalized USD valuation (not hardcoded
+$1). See [contributionPlanningPolicies.md](./contributionPlanningPolicies.md).

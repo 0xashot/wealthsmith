@@ -578,6 +578,60 @@ import {
   explainContributionFrequencyNormalization,
 } from "./contributionFrequencyNormalization";
 import { CONTRIBUTION_OPTIONS } from "../state/goalState";
+import { deriveRecommendedAllocation } from "../wallet/recommendedAllocation";
+import { SOL_MINT as PRICE_SOL_MINT } from "../wallet/tokenPrices";
+import { MIN_DCA_SUGGESTION_USD, SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
+import {
+  CONTRIBUTION_PLANNING_POLICY_SCHEMA_VERSION,
+  GROWTH_TARGET_ALLOCATION_POLICY_ID,
+  GROWTH_TARGET_ALLOCATION_POLICY_VERSION,
+  DCA_MINIMUM_POLICY_ID,
+  DCA_MINIMUM_POLICY_VERSION,
+  SOL_GROWTH_SUITABILITY_POLICY_ID,
+  SOL_GROWTH_SUITABILITY_POLICY_VERSION,
+  CONTRIBUTION_PRICE_POLICY_ID,
+  CONTRIBUTION_PRICE_POLICY_VERSION,
+} from "./contributionPlanningPolicyTypes";
+import {
+  buildGrowthTargetAllocationPolicyResult,
+  validateGrowthTargetAllocationPolicyResult,
+  getGrowthTargetAllocationPolicyDiagnostics,
+} from "./growthTargetAllocationPolicy";
+import {
+  DCA_ABSOLUTE_MINIMUM_SUGGESTION_USD,
+  DCA_EXCESS_USDC_TRIGGER_USD,
+  DCA_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS,
+  DCA_MAX_TARGET_OVERSHOOT_PERCENTAGE_POINTS,
+  DCA_QUARTER_PERCENT_RULE_ENFORCED,
+  getDcaMinimumPolicy,
+  evaluateDcaAmountAgainstMinimumPolicy,
+} from "./dcaMinimumPolicy";
+import {
+  SOL_CONTRIBUTION_PRICE_MAX_AGE_MS,
+  CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID,
+  evaluateContributionPriceQuote,
+  validateContributionPriceQuote,
+} from "./contributionPricePolicy";
+import {
+  evaluateContributionTargetSuitability,
+  RECOGNIZED_PROFILE_RISK_IDS,
+} from "./contributionTargetSuitability";
+import {
+  evaluateContributionTargetPolicyEligibility,
+  validateContributionTargetPolicyEligibility,
+  getContributionTargetPolicyEligibilityDiagnostics,
+} from "./contributionTargetPolicyEligibility";
+import {
+  GROWTH_TARGET_ALLOCATION_POLICY_EXISTS,
+  DCA_MINIMUM_POLICY_EXISTS,
+  SOL_GROWTH_SUITABILITY_POLICY_EXISTS,
+  CONTRIBUTION_PRICE_POLICY_EXISTS,
+  CONTRIBUTION_TARGET_POLICY_ELIGIBILITY_EXISTS,
+  CONTRIBUTION_POLICY_UPDATES_PRODUCT_OUTPUT,
+  BTC_CONTRIBUTION_TARGET_ENABLED as BTC_ENABLED_15C,
+  ETH_CONTRIBUTION_TARGET_ENABLED as ETH_ENABLED_15C,
+  RWA_CONTRIBUTION_TARGET_ENABLED as RWA_ENABLED_15C,
+} from "./investmentTargetRegistry";
 import {
   SOL_STAKING_MARKET_DATA_MODEL_EXISTS,
   SOL_STAKING_MARKET_DATA_MUTATES_APPROVAL_EVIDENCE,
@@ -11543,9 +11597,9 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
     checkedAt: CHECKED,
     availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"],
     priceStatusByTargetId: { sol: { available: true, fetchedAt: FRESH }, usdc: { available: true, fetchedAt: FRESH }, btc: { available: true, fetchedAt: FRESH }, eth: { available: true, fetchedAt: FRESH } },
-    configuredAllocationPolicyKeys: ["growth_target_allocation_v_future"],
-    configuredMinimumPolicyKeys: ["dca_minimum_v_future"],
-    configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v_future"],
+    configuredAllocationPolicyKeys: ["growth_target_allocation_v1"],
+    configuredMinimumPolicyKeys: ["dca_minimum_v1"],
+    configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"],
     approvedTargetIds: [],
   };
 
@@ -11685,8 +11739,9 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   add("15A-BY: Top Pick remains unchanged", engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => s.id !== "sol" && s.id !== "usdc" && s.id !== "btc" && s.id !== "eth"), "unchanged");
   add("15A-BZ: engine ordering remains unchanged", engineRun.suggestions.every((s) => !s.id.startsWith("investment_target") && s.id !== "sol" && s.id !== "btc" && s.id !== "eth"), "unchanged");
   {
-    // No product-facing file imports the registry/eligibility (only its own modules, fixtures, docs).
-    const allowed = /investmentTarget(Types|Registry|Eligibility)|suggestionEngine\.fixtures/;
+    // No product-facing file imports the registry/eligibility. Its own modules, the contribution-
+    // policy foundation family (15B/15C, non-UI), and fixtures are legitimate non-product consumers.
+    const allowed = /investmentTarget(Types|Registry|Eligibility)|contribution(Frequency|PlanningPolicy|Price|TargetSuitability|TargetPolicy)|growthTargetAllocationPolicy|dcaMinimumPolicy|suggestionEngine\.fixtures/;
     let hits: string[] = [];
     let entries: string[] = [];
     try { entries = readdirSync(`${root}/src`, { recursive: true }) as string[]; } catch { /* ignore */ }
@@ -11897,6 +11952,200 @@ export function runContributionFrequencyNormalizationFixtureChecks(): FixtureChe
   return checks;
 }
 
+export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const CHECKED = "2026-07-14T03:00:00Z";
+  const FRESH = "2026-07-14T02:50:00Z";
+  const STALE = "2026-07-14T01:30:00Z"; // 90 min before → stale (>60 min)
+  const FUTURE = "2026-07-14T04:00:00Z";
+  const sol = getInvestmentTarget("sol")!;
+  const usdc = getInvestmentTarget("usdc")!;
+  const btc = getInvestmentTarget("btc")!;
+
+  // Existing engine → adapter (prompt example: 40/60 → usdc 40, sol 60 via risk "medium").
+  const rec = deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!; // cryptoPct 60, stablePct 40
+  const allocInput = { targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION };
+  const alloc = buildGrowthTargetAllocationPolicyResult(allocInput);
+  const minimumPolicy = getDcaMinimumPolicy();
+  const solTechCtx: InvestmentTargetTechnicalContext = {
+    checkedAt: CHECKED,
+    availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"],
+    priceStatusByTargetId: { sol: { available: true, fetchedAt: FRESH } },
+    configuredAllocationPolicyKeys: ["growth_target_allocation_v1"],
+    configuredMinimumPolicyKeys: ["dca_minimum_v1"],
+    configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"],
+    approvedTargetIds: [],
+  };
+  const techElig = evaluateInvestmentTargetTechnicalEligibility(sol, solTechCtx);
+  const suitCtx = { checkedAt: CHECKED, targetId: "sol", profile: { goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, targetAllocationResult: alloc };
+  const suit = evaluateContributionTargetSuitability(sol, suitCtx);
+  const freshQuote = evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: FRESH, checkedAt: CHECKED });
+  const combined = evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: suit, priceQuote: freshQuote, minimumPolicy });
+
+  // 15C-A…F. Policy IDs and versions.
+  add("15C-A: shared schema version exists", CONTRIBUTION_PLANNING_POLICY_SCHEMA_VERSION === "1.0.0", CONTRIBUTION_PLANNING_POLICY_SCHEMA_VERSION);
+  add("15C-B: growth-allocation policy ID/version exist", GROWTH_TARGET_ALLOCATION_POLICY_ID === "growth_target_allocation_v1" && GROWTH_TARGET_ALLOCATION_POLICY_VERSION === "1.0.0", GROWTH_TARGET_ALLOCATION_POLICY_ID);
+  add("15C-C: DCA minimum policy ID/version exist", DCA_MINIMUM_POLICY_ID === "dca_minimum_v1" && DCA_MINIMUM_POLICY_VERSION === "1.0.0", DCA_MINIMUM_POLICY_ID);
+  add("15C-D: SOL suitability policy ID/version exist", SOL_GROWTH_SUITABILITY_POLICY_ID === "sol_growth_suitability_v1" && SOL_GROWTH_SUITABILITY_POLICY_VERSION === "1.0.0", SOL_GROWTH_SUITABILITY_POLICY_ID);
+  add("15C-E: contribution-price policy ID/version exist", CONTRIBUTION_PRICE_POLICY_ID === "contribution_price_freshness_v1" && CONTRIBUTION_PRICE_POLICY_VERSION === "1.0.0", CONTRIBUTION_PRICE_POLICY_ID);
+  add("15C-F: no enabled SOL _v_future policy key remains", sol.allocationRequirements.allocationPolicyKey === "growth_target_allocation_v1" && sol.minimumRequirements.minimumPolicyKey === "dca_minimum_v1" && sol.suitabilityPolicyKey === "sol_growth_suitability_v1" && !JSON.stringify(sol).includes("_v_future"), "migrated");
+
+  // 15C-G…P. Existing allocation reuse.
+  add("15C-G: the current target-allocation engine is reused", typeof deriveRecommendedAllocation === "function" && alloc.sourceEngineVersion === SUGGESTION_ENGINE_VERSION, "reused");
+  add("15C-H: no duplicate allocation matrix exists in the new modules", !readIf("src/suggestions/growthTargetAllocationPolicy.ts").includes("very_low") && !readIf("src/suggestions/growthTargetAllocationPolicy.ts").includes("RISK_TARGET") && !/cryptoPct\s*:\s*\d/.test(readIf("src/suggestions/growthTargetAllocationPolicy.ts")), "no matrix");
+  add("15C-I: stable target is preserved exactly", alloc.stableBucketTargetPct === rec.stablePct && alloc.stableBucketTargetPct === 40, `${alloc.stableBucketTargetPct}`);
+  add("15C-J: volatile/growth target is preserved exactly", alloc.growthBucketTargetPct === rec.cryptoPct && alloc.growthBucketTargetPct === 60, `${alloc.growthBucketTargetPct}`);
+  add("15C-K: stable plus growth equals 100 within tolerance", Math.abs(alloc.stableBucketTargetPct + alloc.growthBucketTargetPct - 100) < 1e-9, "100");
+  add("15C-L: source engine version is preserved", alloc.sourceEngineVersion === SUGGESTION_ENGINE_VERSION, alloc.sourceEngineVersion);
+  { const frac = buildGrowthTargetAllocationPolicyResult({ targetStablePct: 40.123, targetVolatilePct: 59.877, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }); add("15C-M: the policy does not round engine output", frac.stableBucketTargetPct === 40.123 && frac.growthBucketTargetPct === 59.877, "unrounded"); }
+  add("15C-N: USDC receives the stable bucket for MVP contribution planning", alloc.targetPctByInvestmentTargetId.usdc === 40, `${alloc.targetPctByInvestmentTargetId.usdc}`);
+  add("15C-O: SOL receives the growth bucket while it is the only enabled growth target", alloc.targetPctByInvestmentTargetId.sol === 60, `${alloc.targetPctByInvestmentTargetId.sol}`);
+  add("15C-P: no allocation gap is calculated", alloc.allocationGapEvaluated === false && validateGrowthTargetAllocationPolicyResult(alloc).valid === true, "no gap");
+
+  // 15C-Q…W. Single-target + future extensibility.
+  add("15C-Q: SOL is the only enabled growth target", getEnabledContributionGrowthTargets().map((t) => t.targetId).join(",") === "sol", "sol only");
+  add("15C-R: single-enabled-target mapping is explicitly marked", alloc.singleEnabledGrowthTargetPolicyApplied === true && alloc.futureGrowthSuballocationRequired === false, "marked");
+  {
+    const multi = buildGrowthTargetAllocationPolicyResult(allocInput, { enabledGrowthTargetIds: ["sol", "btc"] });
+    add("15C-S: enabling a second growth target without sub-allocation policy fails closed", multi.status === "invalid" && multi.blockers.includes("multiple_growth_targets_require_suballocation_policy"), "fail closed");
+    add("15C-T: the system does not divide the growth bucket equally automatically", Object.keys(multi.targetPctByInvestmentTargetId).length === 0 && multi.futureGrowthSuballocationRequired === true, "no equal split");
+  }
+  add("15C-U: BTC remains disabled", btc.lifecycleStatus === "modeled_not_enabled" && BTC_ENABLED_15C === false, "disabled");
+  add("15C-V: ETH remains disabled", getInvestmentTarget("eth")!.lifecycleStatus === "modeled_not_enabled" && ETH_ENABLED_15C === false, "disabled");
+  add("15C-W: RWA contribution targets remain disabled", RWA_ENABLED_15C === false, "disabled");
+
+  // 15C-X…Z. Safety Buffer boundaries.
+  add("15C-X: Safety Buffer is documented as a separate floor", alloc.safetyBufferIsSeparateFloor === true && /separate.*(floor|requirement)/i.test(readIf("src/suggestions/contributionPlanningPolicies.md") + readIf("src/suggestions/growthTargetAllocationPolicy.ts")), "separate floor");
+  add("15C-Y: Safety Buffer is not evaluated in 15C", alloc.safetyBufferEvaluated === false && suit.safetyBufferEvaluated === false && combined.safetyBufferEvaluated === false, "not evaluated");
+  add("15C-Z: no volatile deployment is approved by 15C", alloc.userContributionEvaluated === false && combined.contributionAmountCalculated === false && combined.targetSelected === false, "no deployment");
+
+  // 15C-AA…AL. Minimum policy.
+  add("15C-AA: absolute minimum is $50", DCA_ABSOLUTE_MINIMUM_SUGGESTION_USD === 50 && DCA_ABSOLUTE_MINIMUM_SUGGESTION_USD === MIN_DCA_SUGGESTION_USD, "50 (reused)");
+  add("15C-AB: a $30 upcoming contribution fails the minimum", evaluateDcaAmountAgainstMinimumPolicy(30, "upcoming_contribution").status === "below_absolute_minimum", "fails");
+  add("15C-AC: a $50 upcoming contribution passes the absolute minimum", evaluateDcaAmountAgainstMinimumPolicy(50, "upcoming_contribution").status === "passes_absolute_minimum", "passes");
+  add("15C-AD: existing excess-USDC trigger is $250", DCA_EXCESS_USDC_TRIGGER_USD === 250, "250");
+  add("15C-AE: $249.99 excess USDC fails the excess trigger", evaluateDcaAmountAgainstMinimumPolicy(249.99, "existing_excess_usdc").status === "below_excess_usdc_trigger", "fails");
+  add("15C-AF: $250 excess USDC passes the excess trigger", evaluateDcaAmountAgainstMinimumPolicy(250, "existing_excess_usdc").status === "passes_excess_usdc_trigger", "passes");
+  add("15C-AG: underweight trigger is 5 percentage points", DCA_UNDERWEIGHT_TRIGGER_PERCENTAGE_POINTS === 5, "5");
+  add("15C-AH: maximum overshoot is zero", DCA_MAX_TARGET_OVERSHOOT_PERCENTAGE_POINTS === 0, "0");
+  add("15C-AI: minimum evaluation does not evaluate the buffer", evaluateDcaAmountAgainstMinimumPolicy(100, "upcoming_contribution").safetyBufferEvaluated === false, "no buffer");
+  add("15C-AJ: minimum evaluation does not evaluate an allocation gap", evaluateDcaAmountAgainstMinimumPolicy(100, "upcoming_contribution").allocationGapEvaluated === false, "no gap");
+  add("15C-AK: minimum evaluation does not generate a plan", evaluateDcaAmountAgainstMinimumPolicy(100, "upcoming_contribution").planGenerated === false, "no plan");
+  add("15C-AL: the ambiguous 0.25% rule is not silently reinterpreted", DCA_QUARTER_PERCENT_RULE_ENFORCED === false && minimumPolicy.quarterPercentRuleEnforced === false && minimumPolicy.absoluteMinimumSuggestionUsd === 50, "not enforced");
+
+  // 15C-AM…BA. Price policy.
+  add("15C-AM: SOL contribution price freshness policy exists", CONTRIBUTION_PRICE_POLICY_EXISTS === true, "exists");
+  add("15C-AN: maximum age is 60 minutes or the stricter canonical existing policy", SOL_CONTRIBUTION_PRICE_MAX_AGE_MS === 60 * 60 * 1000, `${SOL_CONTRIBUTION_PRICE_MAX_AGE_MS}`);
+  add("15C-AO: fresh SOL price validates", freshQuote.status === "fresh" && validateContributionPriceQuote(freshQuote).valid === true, "fresh");
+  add("15C-AP: missing SOL price fails", evaluateContributionPriceQuote(undefined).blockers.includes("price_missing"), "missing");
+  add("15C-AQ: unavailable SOL price fails", evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: null, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: FRESH, checkedAt: CHECKED }).blockers.includes("price_unavailable"), "unavailable");
+  add("15C-AR: zero price fails", evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 0, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: FRESH, checkedAt: CHECKED }).blockers.includes("price_invalid"), "zero");
+  add("15C-AS: negative price fails", evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: -1, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: FRESH, checkedAt: CHECKED }).blockers.includes("price_invalid"), "negative");
+  add("15C-AT: NaN price fails", evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: NaN, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: FRESH, checkedAt: CHECKED }).blockers.includes("price_invalid"), "nan");
+  add("15C-AU: stale price fails", evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: STALE, checkedAt: CHECKED }).status === "stale", "stale");
+  add("15C-AV: future timestamp fails beyond clock-skew tolerance", evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: FUTURE, checkedAt: CHECKED }).blockers.includes("price_timestamp_in_future"), "future");
+  add("15C-AW: missing source provenance fails", evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: "", fetchedAt: FRESH, checkedAt: CHECKED }).blockers.includes("price_provenance_missing"), "no provenance");
+  add("15C-AX: unapproved source fails", evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: "coingecko", fetchedAt: FRESH, checkedAt: CHECKED }).blockers.includes("price_source_unapproved"), "unapproved");
+  add("15C-AY: browser-fetched external price is rejected", evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: FRESH, checkedAt: CHECKED, browserFetched: true }).blockers.includes("price_source_unapproved"), "rejected");
+  add("15C-AZ: same-origin/backend-normalized price is accepted", freshQuote.browserFetched === false && freshQuote.sameOriginOrBackendNormalized === true && freshQuote.status === "fresh", "accepted");
+  add("15C-BA: USDC is not blindly hardcoded to $1 when normalized valuation exists", !/usdc[^\n]*===?\s*1\b/i.test(readIf("src/suggestions/contributionPricePolicy.ts")) && /normalized/i.test(readIf("src/suggestions/contributionPricePolicy.ts")), "not hardcoded");
+
+  // 15C-BB…BP. SOL suitability.
+  add("15C-BB: SOL suitability consumes the existing allocation result", suit.growthTargetPct === alloc.targetPctByInvestmentTargetId.sol, `${suit.growthTargetPct}`);
+  add("15C-BC: SOL does not use a duplicate risk matrix", !readIf("src/suggestions/contributionTargetSuitability.ts").includes("RISK_TARGET") && !/cryptoPct\s*:\s*\d/.test(readIf("src/suggestions/contributionTargetSuitability.ts")), "no matrix");
+  add("15C-BD: recognized profile plus positive growth target can pass suitability", suit.status === "suitable_for_gap_evaluation" && suit.suitableForAllocationGapEvaluation === true, suit.status);
+  add("15C-BE: invalid goal fails", evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, goal: "made_up_goal" } }).status === "invalid_profile", "invalid goal");
+  add("15C-BF: invalid risk fails", evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, riskLevel: "ultra" } }).status === "invalid_profile", "invalid risk");
+  add("15C-BG: invalid horizon fails", evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, timeHorizon: "100_years" } }).status === "invalid_profile", "invalid horizon");
+  {
+    const zeroGrowth = buildGrowthTargetAllocationPolicyResult({ targetStablePct: 100, targetVolatilePct: 0, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+    add("15C-BH: zero growth target fails suitability", evaluateContributionTargetSuitability(sol, { ...suitCtx, targetAllocationResult: zeroGrowth }).status === "not_suitable", "not suitable");
+  }
+  add("15C-BI: disabled target fails suitability", evaluateContributionTargetSuitability(btc, { ...suitCtx, targetId: "btc" }).status === "target_disabled", "disabled");
+  {
+    const vlRec = deriveRecommendedAllocation({ riskTolerance: "very_low", totalPricedUsd: 1000 })!; // crypto 20
+    const vlAlloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: vlRec.stablePct, targetVolatilePct: vlRec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+    add("15C-BJ: Very Low risk is not independently banned when the engine returns positive growth allocation", vlAlloc.targetPctByInvestmentTargetId.sol === 20 && evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, riskLevel: "very_low" }, targetAllocationResult: vlAlloc }).status === "suitable_for_gap_evaluation", "not banned");
+  }
+  add("15C-BK: Six-month horizon is not independently banned when the engine returns positive growth allocation", evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, timeHorizon: "6_months" } }).status === "suitable_for_gap_evaluation", "not banned");
+  add("15C-BL: Big Purchase goal is not independently banned when the engine returns positive growth allocation", evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, goal: "save_for_big_purchase" } }).status === "suitable_for_gap_evaluation", "not banned");
+  add("15C-BM: suitability does not evaluate the Safety Buffer", suit.safetyBufferEvaluated === false, "no buffer");
+  add("15C-BN: suitability does not calculate a gap", suit.allocationGapEvaluated === false, "no gap");
+  add("15C-BO: suitability does not calculate an amount", suit.contributionAmountCalculated === false, "no amount");
+  add("15C-BP: suitability does not generate a suggestion", suit.suggestionGenerated === false && suit.targetSelectedForSuggestion === false, "no suggestion");
+
+  // 15C-BQ…CB. Combined policy eligibility.
+  add("15C-BQ: complete synthetic SOL context reaches ready_for_allocation_gap_evaluation", combined.status === "ready_for_allocation_gap_evaluation" && combined.readyForAllocationGapEvaluation === true && validateContributionTargetPolicyEligibility(combined).valid === true, combined.status);
+  add("15C-BR: technical-readiness failure blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: evaluateInvestmentTargetTechnicalEligibility(sol, { ...solTechCtx, priceStatusByTargetId: {} }), targetAllocationResult: alloc, suitabilityResult: suit, priceQuote: freshQuote, minimumPolicy }).status === "blocked_technical_readiness", "blocked");
+  add("15C-BS: invalid allocation policy blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: buildGrowthTargetAllocationPolicyResult({ targetStablePct: 50, targetVolatilePct: 40, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }), suitabilityResult: suit, priceQuote: freshQuote, minimumPolicy }).status === "blocked_target_allocation", "blocked");
+  add("15C-BT: suitability failure blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, goal: "bad" } }), priceQuote: freshQuote, minimumPolicy }).status === "blocked_suitability", "blocked");
+  add("15C-BU: missing price blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: suit, minimumPolicy }).status === "blocked_price", "blocked");
+  add("15C-BV: stale price blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: suit, priceQuote: evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: STALE, checkedAt: CHECKED }), minimumPolicy }).status === "blocked_price", "blocked");
+  add("15C-BW: invalid minimum policy blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: suit, priceQuote: freshQuote, minimumPolicy: { ...minimumPolicy, absoluteMinimumSuggestionUsd: 999 } as never }).status === "blocked_minimum_policy", "blocked");
+  add("15C-BX: ready status still does not evaluate the buffer", combined.safetyBufferEvaluated === false, "no buffer");
+  add("15C-BY: ready status still does not calculate a gap", combined.allocationGapEvaluated === false, "no gap");
+  add("15C-BZ: ready status still does not choose SOL for a suggestion", combined.targetSelected === false, "not selected");
+  add("15C-CA: ready status still does not generate a DCA plan", combined.planGenerated === false, "no plan");
+  add("15C-CB: ready status still does not generate a suggestion", combined.suggestionGenerated === false && combined.contributionFrequencyApplied === false, "no suggestion");
+
+  // 15C-CC…CH. Registry integration.
+  add("15C-CC: SOL uses growth_target_allocation_v1", sol.allocationRequirements.allocationPolicyKey === "growth_target_allocation_v1", "v1");
+  add("15C-CD: SOL uses dca_minimum_v1", sol.minimumRequirements.minimumPolicyKey === "dca_minimum_v1", "v1");
+  add("15C-CE: SOL uses sol_growth_suitability_v1", sol.suitabilityPolicyKey === "sol_growth_suitability_v1", "v1");
+  add("15C-CF: SOL uses the canonical price source ID", sol.priceRequirements.configuredPriceSourceId === "token_price_service" && sol.priceRequirements.configuredPriceSourceId === CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, "token_price_service");
+  add("15C-CG: USDC remains the funding source", getContributionFundingSources().some((t) => t.targetId === "usdc") && usdc.canFundContributionPlan === true, "funding");
+  add("15C-CH: USDC remains excluded as a growth DCA target", getEnabledContributionGrowthTargets().every((t) => t.targetId !== "usdc"), "excluded");
+
+  // 15C-CI…CR. Feature states.
+  add("15C-CI: growth-allocation policy exists", GROWTH_TARGET_ALLOCATION_POLICY_EXISTS === true, "exists");
+  add("15C-CJ: DCA minimum policy exists", DCA_MINIMUM_POLICY_EXISTS === true, "exists");
+  add("15C-CK: SOL suitability policy exists", SOL_GROWTH_SUITABILITY_POLICY_EXISTS === true, "exists");
+  add("15C-CL: contribution-price policy exists", CONTRIBUTION_PRICE_POLICY_EXISTS === true, "exists");
+  add("15C-CM: policy-eligibility layer exists", CONTRIBUTION_TARGET_POLICY_ELIGIBILITY_EXISTS === true, "exists");
+  add("15C-CN: allocation-gap engine remains disabled", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === false, "disabled");
+  add("15C-CO: contribution-priority engine remains disabled", CONTRIBUTION_PRIORITY_ENGINE_EXISTS === false, "disabled");
+  add("15C-CP: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
+  add("15C-CQ: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
+  add("15C-CR: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false && CONTRIBUTION_POLICY_UPDATES_PRODUCT_OUTPUT === false, "disabled");
+
+  // 15C-CS…CZ. Product invariants.
+  add("15C-CS: existing target-allocation output remains unchanged", deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!.cryptoPct === 60 && deriveRecommendedAllocation({ riskTolerance: "very_low", totalPricedUsd: 1000 })!.cryptoPct === 20, "unchanged");
+  const funded = bufferFixture(5000, 1000, 3);
+  const aligned = allocationFixture(15000, 62, 2);
+  const engineRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking = engineRun.suggestions.find((s) => s.category === "staking");
+  add("15C-CT: existing suggestion output remains unchanged", engineRun.suggestions.length > 0 && staking?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  add("15C-CU: Safety Buffer behavior remains unchanged", engineRun.suggestions.every((s) => !s.id.startsWith("contribution_") && s.id !== "growth_target_allocation"), "unchanged");
+  add("15C-CV: SOL staking remains unchanged", staking != null && staking.protocolSelection?.selectedProtocolName === "Jito", "unchanged");
+  add("15C-CW: Top Pick remains unchanged", engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => !s.id.startsWith("contribution")), "unchanged");
+  add("15C-CX: engine ordering remains unchanged", engineRun.suggestions.every((s) => !s.id.startsWith("contribution") && s.id !== "sol" && s.id !== "usdc"), "unchanged");
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    const anyImport = prodFiles.some((f) => /contributionPlanningPolicy|growthTargetAllocationPolicy|dcaMinimumPolicy|contributionPricePolicy|contributionTargetSuitability|contributionTargetPolicyEligibility/.test(readIf(f)));
+    add("15C-CY: no product-facing import exists", anyImport === false, "no import");
+  }
+  add("15C-CZ: no /testing card is added for this non-UI policy step", !readIf("src/pages/testingPageFixtures.ts").includes("growthTargetAllocationPolicy") && !readIf("src/pages/testingPageFixtures.ts").includes("contributionTargetPolicy"), "no card");
+
+  // 15C-DA…DC. Execution invariants.
+  {
+    const blob = ["contributionPlanningPolicyTypes", "growthTargetAllocationPolicy", "dcaMinimumPolicy", "contributionPricePolicy", "contributionTargetSuitability", "contributionTargetPolicyEligibility"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+    add("15C-DA: no transaction path exists", !blob.includes("sendtransaction") && alloc.transactionsEnabled === false && combined.transactionsEnabled === false, "none");
+    add("15C-DB: no signature path exists", !blob.includes("signtransaction") && alloc.walletSignatureRequired === false && combined.walletSignatureRequired === false, "none");
+    const handlers = ["buy(", "swap(", "deposit(", "invest(", "execute(", "scheduletransfer("];
+    add("15C-DC: no buy/swap/deposit/invest/execute/schedule-transfer handler exists", handlers.filter((h) => blob.includes(h)).length === 0, "none");
+  }
+
+  // Diagnostics smoke.
+  add("15C-diagnostics: diagnostics are deterministic and reveal no recommendation", getGrowthTargetAllocationPolicyDiagnostics(alloc).growthBucketTargetPct === 60 && getContributionTargetPolicyEligibilityDiagnostics(combined).status === "ready_for_allocation_gap_evaluation" && RECOGNIZED_PROFILE_RISK_IDS.length === 5, "ok");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -11975,6 +12224,7 @@ export function printFixtureResults(): void {
     ...runSolStakingProductIntegrationFixtureChecks(),
     ...runInvestmentTargetRegistryFixtureChecks(),
     ...runContributionFrequencyNormalizationFixtureChecks(),
+    ...runContributionPlanningPolicyFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

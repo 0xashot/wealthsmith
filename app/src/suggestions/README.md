@@ -1496,3 +1496,22 @@ No target selection, allocation gap, safety-buffer, suitability, plan, DCA, sugg
 or execution; no product-facing import. `CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS` /
 `CONTRIBUTION_FREQUENCY_NORMALIZATION_EXISTS` = true; planning/priority/allocation-gap/DCA remain
 disabled.
+
+## 15C — contribution-planning policies (allocation / minimum / suitability / price)
+
+Deterministic, versioned POLICY layers configuring the Step 15A registry so a later allocation-gap
+engine can evaluate a target (see [contributionPlanningPolicies.md](./contributionPlanningPolicies.md)).
+`growthTargetAllocationPolicy` reuses the EXISTING engine `wallet/recommendedAllocation.ts`
+(`deriveRecommendedAllocation`, risk-based; no matrix duplicated), mapping stable bucket → USDC and
+growth bucket → the single enabled growth target (SOL); fails closed on >1 growth target without a
+sub-allocation policy. `dcaMinimumPolicy` formalizes $50 absolute minimum (= `MIN_DCA_SUGGESTION_USD`),
+$250 excess-USDC trigger, 5pp underweight, 0 overshoot; the older "0.25% of portfolio" reference has
+no canonical implementation and is NOT enforced. `contributionTargetSuitability` reuses the
+allocation result (no duplicate risk matrix; Very Low / 6-month / Big Purchase are reflected through
+allocation, not independent bans) → `suitable_for_gap_evaluation` (never "buy SOL").
+`contributionPricePolicy` defines a price contract + 60-min freshness with approved non-browser
+sources (canonical `token_price_service` = `wallet/tokenPrices.ts`); browser-provider prices
+rejected; USDC uses normalized valuation, not hardcoded $1. `contributionTargetPolicyEligibility`
+combines them → `ready_for_allocation_gap_evaluation` (activates nothing). SOL's registry keys
+migrated from `_v_future` to v1. No gap/amount/plan/suggestion/UI/execution; no product-facing
+import; product behavior unchanged.
