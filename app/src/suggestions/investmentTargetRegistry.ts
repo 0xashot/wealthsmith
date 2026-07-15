@@ -40,6 +40,17 @@ export const CONTRIBUTION_PRIORITY_SELECTS_FUNDING_SOURCE = false;
 export const CONTRIBUTION_PRIORITY_CALCULATES_AMOUNT = false;
 export const CONTRIBUTION_PRIORITY_GENERATES_PLAN = false;
 export const CONTRIBUTION_PRIORITY_GENERATES_SUGGESTION = false;
+// Step 15F — the deterministic funding-source selection + availability layer now exists (identifies
+// the primary/alternative source and each source's mathematical capacity; selects no target,
+// calculates no final amount, routes no residual, generates no plan/suggestion, changes no output).
+export const CONTRIBUTION_FUNDING_SOURCE_SELECTION_EXISTS = true;
+export const CONTRIBUTION_FUNDING_AVAILABILITY_EXISTS = true;
+export const CONTRIBUTION_FUNDING_UPDATES_PRODUCT_OUTPUT = false;
+export const CONTRIBUTION_FUNDING_MIXED_SOURCES_ENABLED = false;
+export const CONTRIBUTION_FUNDING_CALCULATES_FINAL_AMOUNT = false;
+export const CONTRIBUTION_FUNDING_ROUTES_RESIDUAL = false;
+export const CONTRIBUTION_FUNDING_GENERATES_PLAN = false;
+export const CONTRIBUTION_FUNDING_GENERATES_SUGGESTION = false;
 // Step 15D — the deterministic allocation-gap engine now exists (mathematical gaps/caps only; it
 // never selects a target, evaluates funding/the Safety Buffer, or changes product output).
 export const TARGET_ALLOCATION_GAP_ENGINE_EXISTS = true;

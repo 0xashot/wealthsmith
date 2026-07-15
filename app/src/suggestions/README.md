@@ -1552,3 +1552,22 @@ destinations without a versioned sub-allocation policy fail closed. No contribut
 funding source, excess-USDC, amount, residual, target selection, DCA plan, or suggestion; no
 product-facing import; product behavior unchanged. `CONTRIBUTION_PRIORITY_ENGINE_EXISTS = true`,
 `CONTRIBUTION_SAFETY_BUFFER_GATE_EXISTS = true`; funding/amount/plan/suggestion flags stay `false`.
+
+## 15F — contribution funding-source selection + availability
+
+The deterministic funding layer ([contributionFundingSelection.md](./contributionFundingSelection.md))
+that decides, for the Step 15E priority, which source is usable and each source's mathematical
+capacity. `buildContributionFundingSelection` prefers the **upcoming contribution** (from the Step
+15B normalization — exact for zero-remainder fixed frequencies, a base…base+1¢ range otherwise,
+requires-explicit for Occasional; or an explicit current amount) over **existing excess USDC**
+(growth-only alternative). Liquidity uses a narrow adapter classified upstream — only `liquid_now`
+USDC counts; protocol/locked/reserved/unavailable/unknown do not. Excess above the buffer is
+`min(liquidNow, max(0, currentEligible − required))` (never `liquid − required`), preserving canonical
+coverage. Upcoming capacity is capped by the Step 15D external cap (or the buffer shortfall) and the
+$50 minimum; existing excess by the internal cap and the $250 threshold. Ranges that straddle the
+minimum → `requires_exact_amount`. Source order (never largest capacity) picks the primary; existing
+excess is the alternative when both qualify; sources are never combined; On Track selects none.
+Multiple targets are preserved without allocation. No final amount/target/residual/tranches/dates,
+no plan/suggestion; no product-facing import; product behavior unchanged.
+`CONTRIBUTION_FUNDING_SOURCE_SELECTION_EXISTS`/`…AVAILABILITY_EXISTS = true`; mixed/amount/residual/
+plan/suggestion/product-output flags stay `false`.

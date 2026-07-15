@@ -698,6 +698,43 @@ import {
   CONTRIBUTION_PRIORITY_GENERATES_SUGGESTION,
 } from "./investmentTargetRegistry";
 import {
+  CONTRIBUTION_FUNDING_SCHEMA_VERSION,
+  CONTRIBUTION_FUNDING_POLICY_ID,
+  CONTRIBUTION_FUNDING_POLICY_VERSION,
+  type ContributionFundingLiquiditySnapshot,
+  type ContributionFundingUsdcPosition,
+  type ContributionFundingLiquidityStatus,
+} from "./contributionFundingTypes";
+import {
+  CONTRIBUTION_FUNDING_SOURCE_ORDER,
+  CONTRIBUTION_MIXED_FUNDING_ALLOWED,
+  validateContributionFundingPolicy,
+} from "./contributionFundingPolicy";
+import {
+  CONTRIBUTION_FUNDING_AVAILABILITY_EXISTS as FUNDING_AVAIL_EXISTS_15F,
+  evaluateUpcomingContributionFunding,
+  evaluateExistingExcessUsdcFunding,
+  evaluateContributionFundingLiquiditySnapshot,
+  calculateExcessLiquidUsdcAboveSafetyBuffer,
+} from "./contributionFundingAvailability";
+import {
+  CONTRIBUTION_FUNDING_SOURCE_SELECTION_EXISTS as FUNDING_SELECT_EXISTS_15F,
+  buildContributionFundingSelection,
+  validateContributionFundingSelectionResult,
+} from "./contributionFundingSelection";
+import { getContributionFundingDiagnostics, explainContributionFundingSelection } from "./contributionFundingDiagnostics";
+import {
+  CONTRIBUTION_FUNDING_SOURCE_SELECTION_EXISTS,
+  CONTRIBUTION_FUNDING_AVAILABILITY_EXISTS,
+  CONTRIBUTION_FUNDING_UPDATES_PRODUCT_OUTPUT,
+  CONTRIBUTION_FUNDING_MIXED_SOURCES_ENABLED,
+  CONTRIBUTION_FUNDING_CALCULATES_FINAL_AMOUNT,
+  CONTRIBUTION_FUNDING_ROUTES_RESIDUAL,
+  CONTRIBUTION_FUNDING_GENERATES_PLAN,
+  CONTRIBUTION_FUNDING_GENERATES_SUGGESTION,
+} from "./investmentTargetRegistry";
+import { normalizeContributionFrequency as normFreq15F } from "./contributionFrequencyNormalization";
+import {
   SOL_STAKING_MARKET_DATA_MODEL_EXISTS,
   SOL_STAKING_MARKET_DATA_MUTATES_APPROVAL_EVIDENCE,
   SOL_STAKING_MARKET_DATA_MUTATES_RISK_SCORES,
@@ -11992,7 +12029,7 @@ export function runContributionFrequencyNormalizationFixtureChecks(): FixtureChe
   add("15B-CR: Top Pick remains unchanged", engineRun.suggestions.filter((s) => s.is_top_pick).every((s) => !s.id.startsWith("contribution")), "unchanged");
   add("15B-CS: engine ordering remains unchanged", engineRun.suggestions.every((s) => !s.id.startsWith("contribution") && s.id !== "biweekly" && s.id !== "occasional"), "unchanged");
   {
-    const allowed = /contributionFrequency(Types|Policy|Normalization)|suggestionEngine\.fixtures/;
+    const allowed = /contributionFrequency(Types|Policy|Normalization)|contributionFunding(Types|Policy|Availability|Selection|Diagnostics)|suggestionEngine\.fixtures/;
     let hits: string[] = [];
     let entries: string[] = [];
     try { entries = readdirSync(`${root}/src`, { recursive: true }) as string[]; } catch { /* ignore */ }
@@ -12732,6 +12769,269 @@ export function runContributionPriorityFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 15F — funding-source selection + availability fixtures (15F-A…DN). Verifies source order,
+ * canonical liquidity classification, upcoming-contribution (exact/range/occasional/explicit),
+ * minimum behavior, Safety Buffer / stable / growth source rules, the buffer-surplus + excess-USDC
+ * formulas, allocation caps, deterministic primary/alternative selection, and all boundaries.
+ */
+export function runContributionFundingFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const availSrc = readIf("src/suggestions/contributionFundingAvailability.ts");
+  const selSrc = readIf("src/suggestions/contributionFundingSelection.ts");
+
+  const GEN = "2026-07-15T00:00:00Z";
+  const CHK = "2026-07-15T00:00:00Z";
+  const CAL = "2026-07-15T00:00:00Z";
+  const timing = { calculatedAt: CAL, checkedAt: CHK };
+  const solT = getInvestmentTarget("sol")!;
+  const usdcT = getInvestmentTarget("usdc")!;
+
+  const mkExp = (targetId: string, assetId: string, valueUsd: number): ContributionPortfolioTargetExposure => ({ targetId, assetId, valueUsd, holdingSources: ["connected_wallet"], valuationReady: true, notes: [] });
+  const mkSnap = (total: number, exposures: ContributionPortfolioTargetExposure[]): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd: total, targetExposures: exposures, valuationStatus: "current", notes: [] });
+
+  const rec = deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!;
+  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+  const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
+  const techElig = evaluateInvestmentTargetTechnicalEligibility(solT, techCtx);
+  const suit = evaluateContributionTargetSuitability(solT, { checkedAt: CHK, targetId: "sol", profile: { goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, targetAllocationResult: alloc });
+  const freshQuote = evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: CHK, checkedAt: CHK });
+  const readyElig = evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHK, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: suit, priceQuote: freshQuote, minimumPolicy: getDcaMinimumPolicy() });
+  const solReady = { sol: readyElig };
+  const buildGap = (usdcVal: number, solVal: number, total: number) => buildContributionAllocationGapAnalysis({ snapshot: mkSnap(total, [mkExp("usdc", usdcT.assetId, usdcVal), mkExp("sol", solT.assetId, solVal)]), targetAllocationResult: alloc, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
+
+  const gapGrowth = buildGap(3700, 4300, 10000); // SOL external cap 4250, internal cap 1700
+  const gapStable = buildGap(3000, 7000, 10000); // USDC external cap 1666.67
+  const gapOnTrack = buildGap(4000, 6000, 10000);
+  const gapSmall = buildGap(400, 400, 1000); // SOL internal cap 200 (<250), external 500
+
+  const sbIncomplete = buildContributionSafetyBufferSnapshot(bufferFixture(4000, 3000, 3), timing); // req 9000 cur 4000 short 5000
+  const sbComplete = buildContributionSafetyBufferSnapshot(bufferFixture(9000, 3000, 3), timing); // req 9000 cur 9000 surplus 0
+  const sbSurplus = buildContributionSafetyBufferSnapshot(bufferFixture(12000, 3000, 3), timing); // req 9000 cur 12000 surplus 3000
+
+  const prBuffer = buildContributionPriorityDecision({ safetyBufferResult: sbIncomplete, allocationGapResult: gapGrowth, generatedAt: GEN, checkedAt: CHK });
+  const prStable = buildContributionPriorityDecision({ safetyBufferResult: sbComplete, allocationGapResult: gapStable, generatedAt: GEN, checkedAt: CHK });
+  const prGrowth = buildContributionPriorityDecision({ safetyBufferResult: sbComplete, allocationGapResult: gapGrowth, generatedAt: GEN, checkedAt: CHK });
+  const prGrowthSurplus = buildContributionPriorityDecision({ safetyBufferResult: sbSurplus, allocationGapResult: gapGrowth, generatedAt: GEN, checkedAt: CHK });
+  const prGrowthSmall = buildContributionPriorityDecision({ safetyBufferResult: sbSurplus, allocationGapResult: gapSmall, generatedAt: GEN, checkedAt: CHK });
+  const prOnTrack = buildContributionPriorityDecision({ safetyBufferResult: sbComplete, allocationGapResult: gapOnTrack, generatedAt: GEN, checkedAt: CHK });
+
+  const fnMonthly = normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "monthly" });
+  const fnQuarterly = normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "quarterly" });
+  const fnBiweekly = normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "biweekly" });
+  const fnWeekly = normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "weekly" });
+  const fnOccasional = normFreq15F({ monthlySavingGoalUsd: 1000, contributionFrequency: "occasional" });
+  const fnStraddle = normFreq15F({ monthlySavingGoalUsd: 216.66, contributionFrequency: "weekly" }); // base 49.99, +1¢ 50.00
+  const fnSmall = normFreq15F({ monthlySavingGoalUsd: 100, contributionFrequency: "weekly" }); // 23.07–23.08
+
+  const mkPos = (positionId: string, liquidityStatus: ContributionFundingLiquidityStatus, valueUsd: number, source: ContributionFundingUsdcPosition["source"] = "wallet_balance"): ContributionFundingUsdcPosition => ({ positionId, source, liquidityStatus, valueUsd, calculatedAt: CAL, canonicalClassificationUsed: true, notes: [] });
+  const mkLiq = (positions: ContributionFundingUsdcPosition[], status: ContributionFundingLiquiditySnapshot["status"] = "current"): ContributionFundingLiquiditySnapshot => ({ snapshotId: "liq-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", status, usdcPositions: positions, canonicalLiquidityClassificationUsed: true, notes: [] });
+  const liq5000 = mkLiq([mkPos("p1", "liquid_now", 5000)]);
+  const liq1000 = mkLiq([mkPos("p1", "liquid_now", 1000)]);
+  const liq10000 = mkLiq([mkPos("p1", "liquid_now", 10000)]);
+  const liq250 = mkLiq([mkPos("p1", "liquid_now", 250)]);
+  const liq24999 = mkLiq([mkPos("p1", "liquid_now", 249.99)]);
+  const liqMixed = mkLiq([mkPos("p1", "liquid_now", 5000), mkPos("p2", "locked", 2000), mkPos("p3", "reserved", 1000), mkPos("p4", "requires_withdrawal", 500), mkPos("p5", "unavailable", 300), mkPos("p6", "unknown", 200)]);
+  const liqProtoLiquid = mkLiq([mkPos("p1", "liquid_now", 4000, "protocol_position")]);
+  const liqProtoNonLiquid = mkLiq([mkPos("p1", "requires_withdrawal", 4000, "protocol_position")]);
+
+  const selBuffer = buildContributionFundingSelection({ priorityDecision: prBuffer, allocationGapResult: gapGrowth, frequencyNormalization: fnMonthly, generatedAt: GEN, checkedAt: CHK });
+  const selStable = buildContributionFundingSelection({ priorityDecision: prStable, allocationGapResult: gapStable, frequencyNormalization: fnMonthly, generatedAt: GEN, checkedAt: CHK });
+  const selGrowth = buildContributionFundingSelection({ priorityDecision: prGrowth, allocationGapResult: gapGrowth, frequencyNormalization: fnMonthly, generatedAt: GEN, checkedAt: CHK });
+  const selBoth = buildContributionFundingSelection({ priorityDecision: prGrowthSurplus, allocationGapResult: gapGrowth, frequencyNormalization: fnMonthly, liquiditySnapshot: liq5000, generatedAt: GEN, checkedAt: CHK });
+  const selExistingPrimary = buildContributionFundingSelection({ priorityDecision: prGrowthSurplus, allocationGapResult: gapGrowth, explicitCurrentContributionAmountUsd: 30, liquiditySnapshot: liq5000, generatedAt: GEN, checkedAt: CHK });
+  const selOnTrack = buildContributionFundingSelection({ priorityDecision: prOnTrack, allocationGapResult: gapOnTrack, generatedAt: GEN, checkedAt: CHK });
+
+  // 15F-A…G. Schema/policy.
+  add("15F-A: schema version exists", CONTRIBUTION_FUNDING_SCHEMA_VERSION === "1.0.0" && selGrowth.schemaVersion === "1.0.0", CONTRIBUTION_FUNDING_SCHEMA_VERSION);
+  add("15F-B: policy ID/version exist", CONTRIBUTION_FUNDING_POLICY_ID === "contribution_funding_selection_v1" && CONTRIBUTION_FUNDING_POLICY_VERSION === "1.0.0", CONTRIBUTION_FUNDING_POLICY_ID);
+  add("15F-C: funding-source selection exists", FUNDING_SELECT_EXISTS_15F === true && CONTRIBUTION_FUNDING_SOURCE_SELECTION_EXISTS === true, "exists");
+  add("15F-D: funding-availability layer exists", FUNDING_AVAIL_EXISTS_15F === true && CONTRIBUTION_FUNDING_AVAILABILITY_EXISTS === true, "exists");
+  add("15F-E: funding policy validates", validateContributionFundingPolicy().valid === true, "valid");
+  add("15F-F: source order is upcoming contribution before existing excess USDC", CONTRIBUTION_FUNDING_SOURCE_ORDER.join(",") === "upcoming_contribution,existing_excess_usdc", CONTRIBUTION_FUNDING_SOURCE_ORDER.join(","));
+  add("15F-G: mixed funding is disabled", CONTRIBUTION_MIXED_FUNDING_ALLOWED === false && CONTRIBUTION_FUNDING_MIXED_SOURCES_ENABLED === false && selBoth.mixedFundingSelected === false, "disabled");
+
+  // 15F-H…T. Liquidity classification.
+  add("15F-H: canonical liquidity classification is required", evaluateContributionFundingLiquiditySnapshot(liq5000).valid === true && evaluateContributionFundingLiquiditySnapshot(mkLiq([{ ...mkPos("p1", "liquid_now", 1000), canonicalClassificationUsed: false } as unknown as ContributionFundingUsdcPosition])).valid === false, "required");
+  add("15F-I: position IDs are unique", evaluateContributionFundingLiquiditySnapshot(mkLiq([mkPos("p1", "liquid_now", 1000), mkPos("p1", "liquid_now", 1000)])).blockers.includes("duplicate_liquidity_position"), "unique");
+  add("15F-J: liquid-now wallet USDC counts", evaluateContributionFundingLiquiditySnapshot(liq5000).liquidUsdcAvailableNowUsd === 5000, "5000");
+  add("15F-K: liquid-now protocol USDC counts only when canonically classified liquid-now", evaluateContributionFundingLiquiditySnapshot(liqProtoLiquid).liquidUsdcAvailableNowUsd === 4000 && evaluateContributionFundingLiquiditySnapshot(liqProtoNonLiquid).liquidUsdcAvailableNowUsd === 0, "conditional");
+  add("15F-L: requires-withdrawal USDC does not count", evaluateContributionFundingLiquiditySnapshot(liqProtoNonLiquid).liquidUsdcAvailableNowUsd === 0, "excluded");
+  add("15F-M: locked USDC does not count", evaluateContributionFundingLiquiditySnapshot(liqMixed).liquidUsdcAvailableNowUsd === 5000 && evaluateContributionFundingLiquiditySnapshot(liqMixed).lockedUsd === 2000, "excluded");
+  add("15F-N: reserved USDC does not count", evaluateContributionFundingLiquiditySnapshot(liqMixed).reservedUsd === 1000, "excluded");
+  add("15F-O: unavailable USDC does not count", evaluateContributionFundingLiquiditySnapshot(liqMixed).unavailableUsd === 300, "excluded");
+  add("15F-P: unknown-availability USDC does not count", evaluateContributionFundingLiquiditySnapshot(liqMixed).unknownUsd === 200, "excluded");
+  add("15F-Q: negative position value fails", evaluateContributionFundingLiquiditySnapshot(mkLiq([mkPos("p1", "liquid_now", -5)])).valid === false, "fails");
+  add("15F-R: NaN position value fails", evaluateContributionFundingLiquiditySnapshot(mkLiq([mkPos("p1", "liquid_now", NaN)])).valid === false, "fails");
+  add("15F-S: stale liquidity snapshot fails closed", evaluateContributionFundingLiquiditySnapshot(mkLiq([mkPos("p1", "liquid_now", 1000)], "stale")).blockers.includes("liquidity_snapshot_stale"), "stale");
+  add("15F-T: invalid liquidity snapshot fails closed", evaluateContributionFundingLiquiditySnapshot(mkLiq([mkPos("p1", "liquid_now", 1000)], "invalid")).valid === false, "invalid");
+
+  const upG = (extra: Partial<Parameters<typeof evaluateUpcomingContributionFunding>[0]>) => evaluateUpcomingContributionFunding({ priorityDecision: prGrowth, allocationGapResult: gapGrowth, checkedAt: CHK, ...extra });
+
+  // 15F-U…X. Upcoming fixed exact.
+  add("15F-U: monthly $1,000 produces exact $1,000 source capacity", upG({ frequencyNormalization: fnMonthly }).grossSourceCapacityUsd === 1000 && upG({ frequencyNormalization: fnMonthly }).capacityKind === "exact", "1000");
+  add("15F-V: quarterly $3,000 produces exact $3,000 source capacity", upG({ frequencyNormalization: fnQuarterly }).grossSourceCapacityUsd === 3000, "3000");
+  add("15F-W: explicit current contribution amount overrides normalized estimate", upG({ frequencyNormalization: fnMonthly, explicitCurrentContributionAmountUsd: 777 }).grossSourceCapacityUsd === 777, "777");
+  add("15F-X: explicit amount is not treated as already transferred", upG({ explicitCurrentContributionAmountUsd: 777 }).warnings.some((w) => /NOT been transferred/i.test(w)), "not transferred");
+
+  // 15F-Y…AB. Upcoming fixed range.
+  add("15F-Y: biweekly without explicit amount produces a $461.53–$461.54 range", upG({ frequencyNormalization: fnBiweekly }).minimumGrossSourceCapacityUsd === 461.53 && upG({ frequencyNormalization: fnBiweekly }).maximumGrossSourceCapacityUsd === 461.54, "range");
+  add("15F-Z: weekly without explicit amount produces a $230.76–$230.77 range", upG({ frequencyNormalization: fnWeekly }).minimumGrossSourceCapacityUsd === 230.76 && upG({ frequencyNormalization: fnWeekly }).maximumGrossSourceCapacityUsd === 230.77, "range");
+  add("15F-AA: no dated contribution receives the extra cent", upG({ frequencyNormalization: fnBiweekly }).exactCurrentAmountKnown === false && upG({ frequencyNormalization: fnBiweekly }).capacityKind === "range", "no cent choice");
+  add("15F-AB: range does not invent an exact amount", upG({ frequencyNormalization: fnBiweekly }).grossSourceCapacityUsd === undefined, "no exact");
+
+  // 15F-AC…AF. Occasional.
+  add("15F-AC: Occasional without explicit amount requires explicit amount", upG({ frequencyNormalization: fnOccasional }).status === "requires_explicit_amount", "requires");
+  add("15F-AD: Occasional does not invent a source capacity", upG({ frequencyNormalization: fnOccasional }).grossSourceCapacityUsd === undefined && upG({ frequencyNormalization: fnOccasional }).minimumGrossSourceCapacityUsd === undefined, "no capacity");
+  add("15F-AE: Occasional with explicit amount becomes exact", upG({ frequencyNormalization: fnOccasional, explicitCurrentContributionAmountUsd: 500 }).capacityKind === "exact" && upG({ frequencyNormalization: fnOccasional, explicitCurrentContributionAmountUsd: 500 }).grossSourceCapacityUsd === 500, "exact");
+  add("15F-AF: invalid explicit amount fails", upG({ explicitCurrentContributionAmountUsd: 50.123 }).status === "blocked_invalid_data" && upG({ explicitCurrentContributionAmountUsd: 50.123 }).blockers.includes("contribution_amount_invalid"), "fails");
+
+  // 15F-AG…AL. Minimum range behavior.
+  add("15F-AG: exact $49.99 fails the $50 minimum for stable/growth", upG({ explicitCurrentContributionAmountUsd: 49.99 }).status === "ineligible_below_minimum", "fails");
+  add("15F-AH: exact $50 passes", upG({ explicitCurrentContributionAmountUsd: 50 }).status === "eligible_exact", "passes");
+  add("15F-AI: range $49.99–$50 requires exact resolution", upG({ frequencyNormalization: fnStraddle }).status === "requires_exact_amount", "requires exact");
+  add("15F-AJ: range entirely above $50 passes", upG({ frequencyNormalization: fnBiweekly }).status === "eligible_range", "passes");
+  add("15F-AK: range entirely below $50 fails", upG({ frequencyNormalization: fnSmall }).status === "ineligible_below_minimum", "fails");
+  add("15F-AL: Safety Buffer funding is not suppressed by the $50 minimum", evaluateUpcomingContributionFunding({ priorityDecision: prBuffer, frequencyNormalization: fnSmall, checkedAt: CHK }).status.startsWith("eligible") && evaluateUpcomingContributionFunding({ priorityDecision: prBuffer, frequencyNormalization: fnSmall, checkedAt: CHK }).minimumPolicyApplied === "none", "not suppressed");
+
+  // 15F-AM…AR. Safety Buffer source behavior.
+  const upBuffer = (extra: Partial<Parameters<typeof evaluateUpcomingContributionFunding>[0]>) => evaluateUpcomingContributionFunding({ priorityDecision: prBuffer, checkedAt: CHK, ...extra });
+  add("15F-AM: Safety Buffer priority evaluates upcoming contribution", upBuffer({ frequencyNormalization: fnMonthly }).sourceCapacityCalculated === true, "evaluated");
+  add("15F-AN: Safety Buffer source is capped at exact shortfall", upBuffer({ explicitCurrentContributionAmountUsd: 8000 }).cappedSourceCapacityUsd === 5000 && upBuffer({ explicitCurrentContributionAmountUsd: 8000 }).mathematicalPlanningCapUsd === 5000, "5000");
+  add("15F-AO: Safety Buffer priority applies no ordinary DCA minimum", upBuffer({ frequencyNormalization: fnMonthly }).minimumPolicyApplied === "none", "none");
+  add("15F-AP: existing excess USDC is not applicable while buffer incomplete", evaluateExistingExcessUsdcFunding({ priorityDecision: prBuffer, allocationGapResult: gapGrowth, liquiditySnapshot: liq5000, checkedAt: CHK }).status === "ineligible_not_applicable", "not applicable");
+  add("15F-AQ: no excess USDC is claimed while buffer incomplete", selBuffer.excessUsdcCalculated === false, "no excess");
+  add("15F-AR: no amount above the shortfall is routed", upBuffer({ explicitCurrentContributionAmountUsd: 8000 }).cappedSourceCapacityUsd === 5000 && upBuffer({ explicitCurrentContributionAmountUsd: 8000 }).residualAmountCalculated === false, "capped");
+
+  // 15F-AS…AX. Stable-allocation source behavior.
+  const upStable = (extra: Partial<Parameters<typeof evaluateUpcomingContributionFunding>[0]>) => evaluateUpcomingContributionFunding({ priorityDecision: prStable, allocationGapResult: gapStable, checkedAt: CHK, ...extra });
+  add("15F-AS: stable priority evaluates upcoming contribution", upStable({ frequencyNormalization: fnMonthly }).sourceCapacityCalculated === true, "evaluated");
+  add("15F-AT: stable upcoming contribution uses the external allocation cap", Math.abs((upStable({ frequencyNormalization: fnMonthly }).mathematicalPlanningCapUsd as number) - 1666.6666666666667) < 1e-9, "external cap");
+  add("15F-AU: stable upcoming contribution applies the $50 minimum", upStable({ frequencyNormalization: fnMonthly }).minimumPolicyApplied === "absolute_50" && upStable({ explicitCurrentContributionAmountUsd: 30 }).status === "ineligible_below_minimum", "$50");
+  add("15F-AV: existing USDC cannot correct a USDC stable-allocation shortfall", evaluateExistingExcessUsdcFunding({ priorityDecision: prStable, allocationGapResult: gapStable, liquiditySnapshot: liq5000, checkedAt: CHK }).blockers.includes("same_asset_cannot_correct_allocation"), "same asset");
+  add("15F-AW: stable priority selects no excess-USDC source", selStable.primaryFundingSourceId === "upcoming_contribution" && !selStable.alternativeFundingSourceIds.includes("existing_excess_usdc"), "no excess");
+  add("15F-AX: no stable residual is routed", selStable.residualAmountCalculated === false, "no residual");
+
+  // 15F-AY…BH. Buffer surplus and excess USDC.
+  const ex5000 = calculateExcessLiquidUsdcAboveSafetyBuffer({ liquiditySnapshot: liq5000, priorityDecision: prGrowthSurplus });
+  add("15F-AY: canonical buffer surplus equals max(0, current eligible − required)", ex5000.canonicalBufferSurplusUsd === 3000, "3000");
+  add("15F-AZ: excess liquid USDC equals min(liquid-now USDC, canonical surplus)", ex5000.excessLiquidUsdcAboveBufferUsd === 3000, "3000");
+  add("15F-BA: excess USDC never exceeds liquid-now USDC", (ex5000.excessLiquidUsdcAboveBufferUsd as number) <= (ex5000.liquidUsdcAvailableNowUsd as number), "<=liquid");
+  add("15F-BB: excess USDC never exceeds canonical buffer surplus", (ex5000.excessLiquidUsdcAboveBufferUsd as number) <= (ex5000.canonicalBufferSurplusUsd as number), "<=surplus");
+  add("15F-BC: projected buffer after maximum use remains at or above required", (ex5000.projectedEligibleBufferAfterMaximumExcessUseUsd as number) >= 9000, "9000");
+  add("15F-BD: $12,000 eligible / $9,000 required / $5,000 liquid produces $3,000 excess", ex5000.excessLiquidUsdcAboveBufferUsd === 3000, "3000");
+  add("15F-BE: $12,000 eligible / $9,000 required / $1,000 liquid produces $1,000 excess", calculateExcessLiquidUsdcAboveSafetyBuffer({ liquiditySnapshot: liq1000, priorityDecision: prGrowthSurplus }).excessLiquidUsdcAboveBufferUsd === 1000, "1000");
+  add("15F-BF: $9,000 eligible / $9,000 required produces zero excess", calculateExcessLiquidUsdcAboveSafetyBuffer({ liquiditySnapshot: liq5000, priorityDecision: prGrowth }).excessLiquidUsdcAboveBufferUsd === 0, "0");
+  {
+    const ex10000 = calculateExcessLiquidUsdcAboveSafetyBuffer({ liquiditySnapshot: liq10000, priorityDecision: prGrowthSurplus });
+    add("15F-BG: the engine does not incorrectly calculate liquid USDC minus required buffer", ex10000.excessLiquidUsdcAboveBufferUsd === 3000 && ex10000.excessLiquidUsdcAboveBufferUsd !== (10000 - 9000), "3000 not 1000");
+    const exNonLiquid = calculateExcessLiquidUsdcAboveSafetyBuffer({ liquiditySnapshot: liq1000, priorityDecision: prGrowthSurplus });
+    add("15F-BH: non-liquid eligible buffer positions may support the floor without becoming funding", exNonLiquid.canonicalBufferSurplusUsd === 3000 && exNonLiquid.liquidUsdcAvailableNowUsd === 1000 && exNonLiquid.excessLiquidUsdcAboveBufferUsd === 1000, "floor vs funding");
+  }
+
+  // 15F-BI…BT. Growth sources.
+  add("15F-BI: growth priority may use upcoming contribution", upG({ frequencyNormalization: fnMonthly }).status === "eligible_exact", "eligible");
+  add("15F-BJ: upcoming contribution uses the external-contribution cap", upG({ frequencyNormalization: fnMonthly }).mathematicalPlanningCapUsd === 4250, "4250");
+  add("15F-BK: upcoming contribution applies the $50 minimum", upG({ frequencyNormalization: fnMonthly }).minimumPolicyApplied === "absolute_50" && upG({ explicitCurrentContributionAmountUsd: 30 }).status === "ineligible_below_minimum", "$50");
+  add("15F-BL: upcoming contribution timing is expected_future", upG({ frequencyNormalization: fnMonthly }).timing === "expected_future", "expected_future");
+  const exG = (liq: ContributionFundingLiquiditySnapshot, pr = prGrowthSurplus, gap = gapGrowth) => evaluateExistingExcessUsdcFunding({ priorityDecision: pr, allocationGapResult: gap, liquiditySnapshot: liq, checkedAt: CHK });
+  add("15F-BM: growth priority may use existing excess USDC", exG(liq5000).status === "eligible_exact", "eligible");
+  add("15F-BN: existing excess USDC uses the internal-reallocation cap", exG(liq5000).mathematicalPlanningCapUsd === 1700, "1700");
+  add("15F-BO: existing excess USDC applies the $250 threshold", exG(liq5000).minimumPolicyApplied === "excess_usdc_250", "$250");
+  add("15F-BP: $249.99 capped excess fails", exG(liq24999).status === "ineligible_below_minimum", "fails");
+  add("15F-BQ: $250 capped excess passes", exG(liq250).status === "eligible_exact", "passes");
+  add("15F-BR: existing excess timing is available_now", exG(liq5000).timing === "available_now", "available_now");
+  add("15F-BS: existing excess preserves the Safety Buffer", exG(liq5000).safetyBufferPreserved === true, "preserved");
+  add("15F-BT: protocol-deposited but non-liquid USDC is not used", exG(liqProtoNonLiquid).status === "ineligible_below_minimum", "not used");
+
+  // 15F-BU…CB. Source selection.
+  add("15F-BU: eligible upcoming contribution is primary", selGrowth.primaryFundingSourceId === "upcoming_contribution", selGrowth.primaryFundingSourceId ?? "");
+  add("15F-BV: eligible existing excess USDC becomes an alternative when upcoming is eligible", selBoth.primaryFundingSourceId === "upcoming_contribution" && selBoth.alternativeFundingSourceIds.includes("existing_excess_usdc"), "alternative");
+  add("15F-BW: existing excess becomes primary when upcoming is ineligible", selExistingPrimary.primaryFundingSourceId === "existing_excess_usdc", selExistingPrimary.primaryFundingSourceId ?? "");
+  add("15F-BX: largest source capacity does not override source order", selBoth.primaryFundingSourceId === "upcoming_contribution" && (selBoth.sourceOptions.find((o) => o.sourceId === "existing_excess_usdc")!.cappedSourceCapacityUsd as number) > (selBoth.sourceOptions.find((o) => o.sourceId === "upcoming_contribution")!.grossSourceCapacityUsd as number), "order kept");
+  add("15F-BY: sources are never combined", selBoth.mixedFundingSelected === false && selBoth.mixedFundingAllowed === false, "not combined");
+  add("15F-BZ: no source selected when both are ineligible", buildContributionFundingSelection({ priorityDecision: prGrowth, allocationGapResult: gapGrowth, explicitCurrentContributionAmountUsd: 30, liquiditySnapshot: liq5000, generatedAt: GEN, checkedAt: CHK }).status === "no_eligible_source", "none");
+  add("15F-CA: On Track selects no source", selOnTrack.status === "no_action_required" && selOnTrack.primaryFundingSourceId === undefined, "no source");
+  add("15F-CB: On Track evaluates no corrective capacity", selOnTrack.sourceOptions.length === 0 && selOnTrack.sourceSelected === false, "no capacity");
+
+  // 15F-CC…CG. Allocation caps.
+  add("15F-CC: upcoming source capacity cannot exceed external target cap", upG({ explicitCurrentContributionAmountUsd: 999999 }).cappedSourceCapacityUsd === 4250, "4250");
+  add("15F-CD: existing excess source capacity cannot exceed internal target cap", exG(liq10000).cappedSourceCapacityUsd === 1700, "1700");
+  add("15F-CE: a cap below the applicable minimum makes the source ineligible", exG(liq5000, prGrowthSmall, gapSmall).status === "ineligible_below_minimum" && exG(liq5000, prGrowthSmall, gapSmall).mathematicalPlanningCapUsd === 200, "ineligible");
+  add("15F-CF: source capacity above the cap is capped without residual routing", upG({ explicitCurrentContributionAmountUsd: 999999 }).cappedSourceCapacityUsd === 4250 && upG({ explicitCurrentContributionAmountUsd: 999999 }).warnings.includes("source_capacity_exceeds_priority_cap") && upG({ explicitCurrentContributionAmountUsd: 999999 }).residualAmountCalculated === false, "capped");
+  add("15F-CG: exact-target cap is not treated as overshoot", upG({ explicitCurrentContributionAmountUsd: 4250 }).status === "eligible_exact" && upG({ explicitCurrentContributionAmountUsd: 4250 }).cappedSourceCapacityUsd === 4250, "exact ok");
+
+  // 15F-CH…CL. Multiple-target behavior.
+  const prMulti = { ...prGrowthSurplus, priorityTargetIds: ["sol", "btc"], growthContext: { eligibleGrowthTargetIds: ["sol", "btc"], underweightGrowthTargetIds: ["sol", "btc"], triggerMetGrowthTargetIds: ["sol", "btc"], growthAllocationMayProceed: true } };
+  const selMulti = buildContributionFundingSelection({ priorityDecision: prMulti, allocationGapResult: gapGrowth, frequencyNormalization: fnMonthly, liquiditySnapshot: liq5000, generatedAt: GEN, checkedAt: CHK });
+  add("15F-CH: multiple priority target IDs are preserved in policy order", selMulti.priorityTargetIds.join(",") === "sol,btc", selMulti.priorityTargetIds.join(","));
+  add("15F-CI: funding source may be identified without allocating across targets", selMulti.sourceOptions.find((o) => o.sourceId === "upcoming_contribution")!.grossSourceCapacityUsd === 1000 && selMulti.targetAllocationAcrossIdsCalculated === false, "identified");
+  add("15F-CJ: multiple targets are not split equally", selMulti.blockers.includes("multiple_priority_targets_require_plan_allocation"), "no split");
+  add("15F-CK: no final target is selected", selMulti.finalTargetSelected === false, "no target");
+  add("15F-CL: target allocation across IDs remains false", selMulti.targetAllocationAcrossIdsCalculated === false, "false");
+
+  // 15F-CM…CQ. Future extensibility.
+  const mkGrowthPr = (targetId: string) => ({ ...prGrowthSurplus, priorityTargetIds: [targetId], growthContext: { eligibleGrowthTargetIds: [targetId], underweightGrowthTargetIds: [targetId], triggerMetGrowthTargetIds: [targetId], growthAllocationMayProceed: true } });
+  const renameGap = (targetId: string) => ({ ...gapGrowth, targetResults: gapGrowth.targetResults.map((t) => (t.targetId === "sol" ? { ...t, targetId } : t)) });
+  add("15F-CM: funding logic does not hardcode SOL", !/["']sol["']/.test(availSrc + selSrc), "generic");
+  add("15F-CN: future BTC growth priority may consume the same source model", evaluateUpcomingContributionFunding({ priorityDecision: mkGrowthPr("btc"), frequencyNormalization: fnMonthly, allocationGapResult: renameGap("btc"), checkedAt: CHK }).status === "eligible_exact", "btc");
+  add("15F-CO: future ETH growth priority may consume the same source model", evaluateUpcomingContributionFunding({ priorityDecision: mkGrowthPr("eth"), frequencyNormalization: fnMonthly, allocationGapResult: renameGap("eth"), checkedAt: CHK }).status === "eligible_exact", "eth");
+  add("15F-CP: future specific RWA growth priority may consume the same source model", evaluateUpcomingContributionFunding({ priorityDecision: mkGrowthPr("treasury_note_2027"), frequencyNormalization: fnMonthly, allocationGapResult: renameGap("treasury_note_2027"), checkedAt: CHK }).status === "eligible_exact", "rwa");
+  add("15F-CQ: generic RWA remains forbidden", getInvestmentTarget("rwa") === undefined && getInvestmentTarget("generic_rwa") === undefined, "forbidden");
+
+  // 15F-CR…CY. Boundaries.
+  add("15F-CR: no final contribution amount is calculated", selGrowth.finalContributionAmountCalculated === false && CONTRIBUTION_FUNDING_CALCULATES_FINAL_AMOUNT === false, "no amount");
+  add("15F-CS: no residual amount is calculated", selGrowth.residualAmountCalculated === false && CONTRIBUTION_FUNDING_ROUTES_RESIDUAL === false, "no residual");
+  add("15F-CT: no DCA tranches are generated", !/tranche/i.test(availSrc + selSrc) && selGrowth.dcaPlanGenerated === false, "no tranches");
+  add("15F-CU: no contribution dates are generated", !/scheduletransfer|contributiondate|scheduleddate/i.test(availSrc + selSrc), "no dates");
+  add("15F-CV: no final target is selected", selGrowth.finalTargetSelected === false, "no target");
+  add("15F-CW: no DCA plan is generated", selGrowth.dcaPlanGenerated === false && CONTRIBUTION_FUNDING_GENERATES_PLAN === false, "no plan");
+  add("15F-CX: no suggestion is generated", selGrowth.suggestionGenerated === false && CONTRIBUTION_FUNDING_GENERATES_SUGGESTION === false, "no suggestion");
+  add("15F-CY: no product output is updated", selGrowth.updatesProductOutput === false && CONTRIBUTION_FUNDING_UPDATES_PRODUCT_OUTPUT === false, "no update");
+
+  // 15F-CZ…DD. Feature states.
+  add("15F-CZ: funding-source selection exists", CONTRIBUTION_FUNDING_SOURCE_SELECTION_EXISTS === true, "exists");
+  add("15F-DA: funding availability exists", CONTRIBUTION_FUNDING_AVAILABILITY_EXISTS === true, "exists");
+  add("15F-DB: contribution planning remains disabled", CONTRIBUTION_PLANNING_EXISTS === false, "disabled");
+  add("15F-DC: DCA plan generation remains disabled", DCA_PLAN_GENERATION_EXISTS === false, "disabled");
+  add("15F-DD: DCA suggestion remains disabled", DCA_SUGGESTION_ENABLED === false, "disabled");
+
+  // 15F-DE…DK. Product invariants.
+  add("15F-DE: canonical Safety Buffer remains unchanged", buildContributionSafetyBufferSnapshot(bufferFixture(1000, 1000, 3), timing).requiredBufferUsd === 3000 && buildContributionSafetyBufferSnapshot(bufferFixture(1000, 1000, 3), timing).shortfallUsd === 2000, "unchanged");
+  const funded15F = bufferFixture(5000, 1000, 3);
+  const aligned15F = allocationFixture(15000, 62, 2);
+  const engineRun15F = runSuggestionEngine(inputsFor({ safetyBuffer: funded15F, allocation: aligned15F, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const staking15F = engineRun15F.suggestions.find((s) => s.category === "staking");
+  add("15F-DF: existing suggestion output remains unchanged", engineRun15F.suggestions.length > 0 && staking15F?.protocolSelection?.selectedProtocolId === "jito", "unchanged");
+  add("15F-DG: SOL staking remains unchanged", staking15F != null && staking15F.protocolSelection?.selectedProtocolName === "Jito", "unchanged");
+  add("15F-DH: Top Pick remains unchanged", engineRun15F.suggestions.filter((s) => s.is_top_pick).every((s) => !s.id.startsWith("contribution")), "unchanged");
+  add("15F-DI: engine ordering remains unchanged", engineRun15F.suggestions.every((s) => !s.id.startsWith("contribution") && s.id !== "sol" && s.id !== "usdc"), "unchanged");
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    add("15F-DJ: no product-facing import exists", prodFiles.every((f) => !/contributionFunding/.test(readIf(f))), "no import");
+  }
+  add("15F-DK: no /testing card is added in this non-UI step", !readIf("src/pages/testingPageFixtures.ts").includes("contributionFunding") && !readIf("src/pages/testingPageFixtures.ts").includes("buildContributionFundingSelection"), "no card");
+
+  // 15F-DL…DN. Execution invariants.
+  {
+    const blob = ["contributionFundingTypes", "contributionFundingPolicy", "contributionFundingAvailability", "contributionFundingSelection", "contributionFundingDiagnostics"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+    add("15F-DL: no transaction path exists", !blob.includes("sendtransaction") && selGrowth.transactionsEnabled === false, "none");
+    add("15F-DM: no signature path exists", !blob.includes("signtransaction") && selGrowth.walletSignatureRequired === false, "none");
+    const handlers = ["buy(", "swap(", "deposit(", "invest(", "execute(", "withdraw(", "scheduletransfer("];
+    add("15F-DN: no buy/swap/deposit/invest/execute/withdraw/schedule-transfer handler exists", handlers.filter((h) => blob.includes(h)).length === 0, "none");
+  }
+
+  // Validators + diagnostics smoke.
+  add("15F-validate: buffer/stable/growth/on-track selections validate", validateContributionFundingSelectionResult(selBuffer).valid === true && validateContributionFundingSelectionResult(selStable).valid === true && validateContributionFundingSelectionResult(selBoth).valid === true && validateContributionFundingSelectionResult(selOnTrack).valid === true, "valid");
+  add("15F-diagnostics: diagnostics are neutral and reveal no recommendation", getContributionFundingDiagnostics(selBoth).sourceOrder.join(",") === "upcoming_contribution,existing_excess_usdc" && /priority/i.test(explainContributionFundingSelection(selGrowth)) && !/\b(buy|invest now|available to deploy|recommended amount)\b/i.test(explainContributionFundingSelection(selGrowth)), "neutral");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -12813,6 +13113,7 @@ export function printFixtureResults(): void {
     ...runContributionPlanningPolicyFixtureChecks(),
     ...runContributionAllocationGapFixtureChecks(),
     ...runContributionPriorityFixtureChecks(),
+    ...runContributionFundingFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
