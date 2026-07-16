@@ -1106,6 +1106,24 @@ import { getProposedRiskRubricV1, getApprovedRiskRubricV1, computeRubricV1Hash, 
 import { listAuthorizedReviewers, authorizeReviewerAction, PROPOSED_REVIEWER_RECORDS, SEPARATION_OF_DUTIES_POLICY, RISK_SEPARATION_OF_DUTIES_POLICY_APPROVED, PRODUCT_OWNER_REVIEWER_ID, type RiskReviewerRecord } from "./riskReviewerRegistry";
 import { buildSteakhouseReviewerWorksheet, getRiskScoreMigrationReport, WORKSHEET_REJECTED_PRODUCTS } from "./steakhouseReviewerWorksheet";
 import { INTERNAL_TESTING_FLAG, isTestingPageEnabled } from "../pages/internalTestingRoute";
+import { type DimensionEvidenceState, CLOSURE_BINDING, CLOSURE_EVIDENCE_CUTOFF_AT, AUTHORITY_EVIDENCE, AUTHORITY_PERMISSIONS, RESERVE_EXPOSURE, AUDIT_LINKAGE, WITHDRAWAL_SEMANTICS, INCIDENT_REVIEW, DEPOSIT_STATE, DIMENSION_READINESS, evaluateReviewReadiness, KAMINO_QUESTIONNAIRE, RAISED_DIAGNOSTICS } from "./steakhouseEvidenceClosure";
+import {
+  STEAKHOUSE_ADMIN_AUTHORITY_EVIDENCE_EXISTS,
+  STEAKHOUSE_AUTHORITY_PERMISSION_MATRIX_EXISTS,
+  STEAKHOUSE_RESERVE_EXPOSURE_SNAPSHOT_EXISTS,
+  STEAKHOUSE_AUDIT_LINKAGE_ASSESSMENT_EXISTS,
+  STEAKHOUSE_WITHDRAWAL_SEMANTICS_ARTIFACT_EXISTS,
+  STEAKHOUSE_INCIDENT_REVIEW_ARTIFACT_EXISTS,
+  STEAKHOUSE_DEPOSIT_STATE_ASSESSMENT_EXISTS,
+  STEAKHOUSE_REVIEW_READINESS_EVALUATOR_EXISTS,
+  KAMINO_OUTREACH_QUESTIONNAIRE_EXISTS,
+  STEAKHOUSE_ADMIN_CONTROLS_FULLY_VERIFIED,
+  STEAKHOUSE_AUDIT_TO_DEPLOYMENT_LINKAGE_VERIFIED,
+  STEAKHOUSE_WITHDRAWAL_MODEL_COMPLETE,
+  STEAKHOUSE_INCIDENT_REVIEW_COMPLETE,
+  STEAKHOUSE_EVIDENCE_COMPLETE,
+  STEAKHOUSE_READY_FOR_HUMAN_SCORING,
+} from "./investmentTargetRegistry";
 import { listQualitativeRiskDisclosures, disclosureLeaksNumericSignal, RISK_SCORE_FORBIDDEN_SURFACES, RISK_SCORE_FORBIDDEN_FIELDS, RISK_SUITABILITY_SCORE_LABEL } from "./riskScoreExposurePolicy";
 import { MIN_PROTOCOL_RISK_SCORE } from "./engineThresholds";
 import {
@@ -16752,6 +16770,105 @@ export function runInternalTestingRouteFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+
+/**
+ * Step 16H-L — Steakhouse evidence closure. Deterministic and OFFLINE: the artifacts are committed
+ * records of live reads; these checks read the records, never the chain.
+ */
+export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const VAULT = "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E";
+  const HIGH_YIELD = "BEEfo7xwgK2ZP13Pxo7qqTPzAteKJmXjVWtMWcXSvbn2";
+  const TESTING_VAULT = "JDmkiqvtyAqAsqrLGDgVH2GesbRAAMJCoQtqiyWx82bF";
+  const src = readIf("src/suggestions/steakhouseEvidenceClosure.ts");
+  const readiness = evaluateReviewReadiness();
+
+  // ---- Identity binding ----
+  add("16H-L-A: every artifact binds the exact vault / share mint / program", CLOSURE_BINDING.vaultAddress === VAULT && CLOSURE_BINDING.sharesMint === "7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS" && CLOSURE_BINDING.programId === "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd" && RESERVE_EXPOSURE.vaultAddress === VAULT && WITHDRAWAL_SEMANTICS.vaultAddress === VAULT && DEPOSIT_STATE.vaultAddress === VAULT, "bound");
+  add("16H-L-B: no sibling / High Yield / Testing vault appears in any artifact", !src.includes(HIGH_YIELD) && !src.includes(TESTING_VAULT), "exact only");
+  add("16H-L-C: artifacts are versioned and carry an evidence cutoff", RESERVE_EXPOSURE.version.length > 0 && AUDIT_LINKAGE.version.length > 0 && WITHDRAWAL_SEMANTICS.version.length > 0 && INCIDENT_REVIEW.cutoffAt === CLOSURE_EVIDENCE_CUTOFF_AT && RESERVE_EXPOSURE.evidenceCutoffAt === CLOSURE_EVIDENCE_CUTOFF_AT, "versioned");
+
+  // ---- Authority evidence ----
+  add("16H-L-D: the upgrade authority address + owner program are preserved verbatim", (() => { const a = AUTHORITY_EVIDENCE.find((x) => x.role === "program_upgrade_authority")!; return a.address === "GzFgdRJXmawPhGeBsyRCDLx4jAKPsvbUqoqitzppkzkW" && a.ownerProgram === "11111111111111111111111111111111"; })(), "preserved");
+  add("16H-L-E: NO authority is called a multisig — every one is EOA or PDA on the evidence", AUTHORITY_EVIDENCE.every((a) => a.controlModel !== "onchain_multisig") && AUTHORITY_EVIDENCE.filter((a) => a.ownerProgram === "11111111111111111111111111111111").every((a) => a.controlModel === "externally_owned_account_single_key"), "no multisig claimed");
+  add("16H-L-F: the on-chain limit is stated — MPC/off-chain custody is NOT ruled out", AUTHORITY_EVIDENCE.every((a) => a.doesNotProve.length > 0) && /MPC|indistinguishable/i.test(AUTHORITY_EVIDENCE[0].doesNotProve), "limit stated");
+  add("16H-L-G: no timelock is inferred — every authority is timelockStatus unknown", AUTHORITY_EVIDENCE.every((a) => a.timelockStatus === "unknown"), "not inferred");
+  add("16H-L-H: program / vault-admin / allocation-admin are kept SEPARATE, not merged", (() => { const roles = AUTHORITY_EVIDENCE.map((a) => a.role); return roles.includes("program_upgrade_authority") && roles.includes("vault_admin_authority") && roles.includes("allocation_admin") && new Set(AUTHORITY_EVIDENCE.map((a) => a.address)).size === AUTHORITY_EVIDENCE.length; })(), "separate");
+  add("16H-L-I: the permission matrix is source-bound and claims NO control is proven", AUTHORITY_PERMISSIONS.length >= 8 && AUTHORITY_PERMISSIONS.every((p) => p.controlProven === false), "unproven control");
+  add("16H-L-J: deposit/withdrawal pause powers are recorded as NOT supported by the source", AUTHORITY_PERMISSIONS.filter((p) => /pause or restrict/i.test(p.power)).every((p) => p.supportedByProgramSource === false && p.heldBy === "unknown"), "no pause power");
+  add("16H-L-K: the GlobalConfig withdrawal-penalty authority is recorded as a distinct surface", AUTHORITY_PERMISSIONS.some((p) => p.heldBy === "kamino_global_config" && /withdrawal penalty/i.test(p.power)), "global config");
+
+  // ---- Reserve exposure ----
+  add("16H-L-L: the reserve list is deterministic and slot-bound", RESERVE_EXPOSURE.reserves.length === 4 && RESERVE_EXPOSURE.sourceSlot === "433291120" && RESERVE_EXPOSURE.activeSlots === 4 && RESERVE_EXPOSURE.totalSlots === 25, "4 of 25");
+  add("16H-L-M: every reserve's liquidity mint is verified canonical USDC", RESERVE_EXPOSURE.reserves.every((r) => r.liquidityMintIsCanonicalUsdc === true && r.liquidityMint === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), "all USDC");
+  add("16H-L-N: market names come from the OFFICIAL list; an unresolved market stays null", (() => { const named = RESERVE_EXPOSURE.reserves.filter((r) => r.marketName !== null); const unnamed = RESERVE_EXPOSURE.reserves.filter((r) => r.marketName === null); return named.length === 3 && named.some((r) => r.marketName === "JLP Market") && named.some((r) => r.marketName === "SOL/BTC Market") && named.some((r) => r.marketName === "Bitcoin Market") && unnamed.length === 1; })(), "3 named, 1 null");
+  add("16H-L-O: allocation is PROVEN dynamic (weights drifted between two reads, no user action)", RESERVE_EXPOSURE.allocationIsDynamic === true && /changed between reads with no user action/i.test(RESERVE_EXPOSURE.allocationDriftEvidence), "proven dynamic");
+  add("16H-L-P: the snapshot does not imply a permanent allocation", RESERVE_EXPOSURE.invalidationTriggers.length >= 3 && RESERVE_EXPOSURE.invalidationTriggers.some((t) => /allocation change/i.test(t)), "non-permanent");
+  add("16H-L-Q: the snapshot assigns NO risk score to any reserve", !/riskScore|score:|riskBand/.test(JSON.stringify(RESERVE_EXPOSURE)), "no scores");
+  add("16H-L-R: reserves are NOT treated as equivalent just because all supply USDC", /NOT equivalent|different collateral|credit risk/i.test(src), "not equivalent");
+  add("16H-L-S: the unresolved reserve-level gaps are preserved, not glossed", RESERVE_EXPOSURE.unresolved.length >= 3 && RESERVE_EXPOSURE.unresolved.some((u) => /collateral|liquidation/i.test(u)), "preserved");
+
+  // ---- Audit linkage ----
+  add("16H-L-T: linkage is classified unverified_linkage (no audited commit published)", AUDIT_LINKAGE.result === "unverified_linkage" && AUDIT_LINKAGE.audits.every((a) => a.auditedCommit === null), "unverified");
+  add("16H-L-U: a report date / matching program name is explicitly NOT accepted as linkage", /not linkage|chronological consistency is a hypothesis/i.test(AUDIT_LINKAGE.reasoning), "not linkage");
+  add("16H-L-V: no reproducible build or verified program hash is claimed", AUDIT_LINKAGE.deployedEvidence.reproducibleBuildAvailable === false && AUDIT_LINKAGE.deployedEvidence.programHashVerified === false, "not claimed");
+  add("16H-L-W: the exact evidence request to resolve linkage is recorded", AUDIT_LINKAGE.whatWouldResolveIt.length >= 4 && AUDIT_LINKAGE.whatWouldResolveIt.some((x) => /commit/i.test(x)) && AUDIT_LINKAGE.whatWouldResolveIt.some((x) => /reproducible|hash/i.test(x)), "recorded");
+  add("16H-L-X: a program upgrade invalidates the linkage assessment", AUDIT_LINKAGE.invalidationTriggers.some((t) => /upgrade/i.test(t)), "invalidates");
+
+  // ---- Withdrawal ----
+  add("16H-L-Y: instant withdrawal is NOT claimed", /NOT PROVEN/.test(WITHDRAWAL_SEMANTICS.instantWithdrawalClaim) && /must not be claimed/i.test(WITHDRAWAL_SEMANTICS.instantWithdrawalClaim), "not claimed");
+  add("16H-L-Z: reserve-liquidity dependency is represented", /depends on liquidity in the underlying reserves/i.test(WITHDRAWAL_SEMANTICS.instantWithdrawalClaim), "represented");
+  add("16H-L-AA: the SDK's queued-withdrawal model is represented", WITHDRAWAL_SEMANTICS.sdkModels.some((m) => /queuedForWithdrawalForReserves/.test(m)), "queue modeled");
+  add("16H-L-AB: the withdrawal PENALTY is captured, and noted as outside the net APY", WITHDRAWAL_SEMANTICS.programGuarantees.some((g) => /WITHDRAWAL PENALTY/.test(g)) && WITHDRAWAL_SEMANTICS.unresolved.some((u) => /net APY does NOT include/i.test(u)), "penalty captured");
+  add("16H-L-AC: the minimum withdrawal is recorded exactly", WITHDRAWAL_SEMANTICS.minWithdrawRaw === "1000" && WITHDRAWAL_SEMANTICS.minWithdrawUsdc === 0.001, "0.001 USDC");
+  add("16H-L-AD: farm-staked share behaviour is preserved as unresolved", WITHDRAWAL_SEMANTICS.unresolved.some((u) => /farm-staked/i.test(u)), "unresolved");
+
+  // ---- Incident review ----
+  add("16H-L-AE: 'no incident found' is NOT recorded as a clean history", INCIDENT_REVIEW.state === "review_incomplete" && /NOT.*clean record|not a clean record/i.test(INCIDENT_REVIEW.absenceInterpretation), "not clean");
+  add("16H-L-AF: the review scope AND the un-reviewed scope are both documented", INCIDENT_REVIEW.scopeReviewed.length >= 2 && INCIDENT_REVIEW.scopeNotReviewed.length >= 4, "scoped");
+  add("16H-L-AG: the review cutoff is preserved and staleness invalidates it", INCIDENT_REVIEW.cutoffAt.length > 0 && INCIDENT_REVIEW.invalidationTriggers.some((t) => /cutoff|stale/i.test(t)), "cutoff");
+
+  // ---- Deposit state ----
+  add("16H-L-AH: the program MECHANISM finding and CURRENT availability are separate answers", DEPOSIT_STATE.programMechanismFinding === "verified_no_explicit_deposit_state_control" && DEPOSIT_STATE.currentAvailability === "unknown", "separated");
+  add("16H-L-AI: capacity does NOT imply enabled; a readable account does NOT imply enabled", DEPOSIT_STATE.mustNotInfer.some((m) => /verified_uncapped does NOT mean verified_enabled/.test(m)) && DEPOSIT_STATE.mustNotInfer.some((m) => /account read does NOT mean deposits are enabled/i.test(m)), "no inference");
+  add("16H-L-AJ: the absence of a pause flag does NOT prove a deposit would succeed", DEPOSIT_STATE.mustNotInfer.some((m) => /absence of a pause flag does NOT prove/i.test(m)), "no inference");
+  add("16H-L-AK: every explicit deposit-state control is recorded as absent from the source", Object.values(DEPOSIT_STATE.explicitStateControls).every((v) => v === false), "none exist");
+  add("16H-L-AL: the exhaustive deposit failure conditions are enumerated from the source", DEPOSIT_STATE.depositFailureConditions.length >= 5 && DEPOSIT_STATE.depositFailureConditions.some((c) => /VaultDepositCapReached/.test(c)) && DEPOSIT_STATE.depositFailureConditions.some((c) => /DepositAmountBelowMinimum/.test(c)), "enumerated");
+  add("16H-L-AM: NO transaction was constructed or simulated", DEPOSIT_STATE.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction|buildTransaction|TransactionMessage/.test(src), "none");
+
+  // ---- Readiness evaluator ----
+  add("16H-L-AN: the readiness result is blocked_pending_protocol_confirmation", readiness.result === "blocked_pending_protocol_confirmation" && readiness.protocolConfirmationRequired.length > 0, readiness.result);
+  add("16H-L-AO: missing evidence NEVER produces `unsuitable` (only a verified disqualifier does)", evaluateReviewReadiness({ dimensions: DIMENSION_READINESS.map((d) => ({ ...d, state: "blocked" as const, mandatoryBlockerPresent: true })) }).result === "blocked_pending_protocol_confirmation", "blocked not unsuitable");
+  add("16H-L-AP: a VERIFIED disqualifying condition produces `unsuitable`", evaluateReviewReadiness({ verifiedDisqualifyingCondition: "verified: the vault requires the user to take on debt" }).result === "unsuitable_to_continue_review", "unsuitable");
+  add("16H-L-AQ: complete mandatory evidence produces `ready_for_human_scoring`", evaluateReviewReadiness({ dimensions: DIMENSION_READINESS.map((d) => ({ ...d, state: "complete" as const, mandatoryBlockerPresent: false })) }).result === "ready_for_human_scoring", "ready");
+  add("16H-L-AR: a non-mandatory gap alone produces `conditionally_ready`", evaluateReviewReadiness({ dimensions: DIMENSION_READINESS.map((d, i) => ({ ...d, state: (i === 0 ? "partial" : "complete") as DimensionEvidenceState, mandatoryBlockerPresent: false })) }).result === "conditionally_ready_for_human_scoring", "conditional");
+  add("16H-L-AS: stale evidence blocks scoring", evaluateReviewReadiness({ dimensions: DIMENSION_READINESS.map((d, i) => ({ ...d, state: (i === 0 ? "stale" : "complete") as DimensionEvidenceState, mandatoryBlockerPresent: false })) }).result === "blocked_pending_protocol_confirmation", "stale blocks");
+  add("16H-L-AT: readiness assigns NO score, signs off NOTHING, approves NOTHING", !("score" in readiness) && !("riskBand" in readiness) && !("approved" in readiness) && !/riskScore|weightedScore|aggregate/.test(JSON.stringify(readiness)), "no scores");
+  add("16H-L-AU: every rubric dimension has an evidence state", DIMENSION_READINESS.length === 12 && DIMENSION_READINESS.every((d) => ["complete", "partial", "blocked", "stale", "not_applicable"].includes(d.state)), "12 dims");
+  add("16H-L-AV: gaps genuinely CLOSED are recorded as resolved, not left pessimistic", (() => { const sc = DIMENSION_READINESS.find((d) => d.dimension === "strategy_complexity")!; const op = DIMENSION_READINESS.find((d) => d.dimension === "operational_dependency_risk")!; return sc.mandatoryBlockerPresent === false && /RESOLVED/.test(sc.detail) && op.state === "complete"; })(), "resolved recorded");
+
+  // ---- Questionnaire ----
+  add("16H-L-AW: the questionnaire binds the exact product and is NOT claimed as sent", KAMINO_QUESTIONNAIRE.sent === false && KAMINO_QUESTIONNAIRE.bindsTo.vault === VAULT && KAMINO_QUESTIONNAIRE.bindsTo.program === "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd", "not sent");
+  add("16H-L-AX: it covers all six required areas and stays short enough to send", (() => { const ids = KAMINO_QUESTIONNAIRE.sections.map((s) => s.id); return ids.length === 6 && KAMINO_QUESTIONNAIRE.sections.every((s) => s.questions.length <= 2 && s.questions.length >= 1); })(), "6 sections");
+  add("16H-L-AY: no Kamino confirmation is fabricated anywhere", !/Kamino confirmed|per Kamino|Kamino stated|they confirmed/i.test(src), "none fabricated");
+
+  // ---- Flags ----
+  add("16H-L-AZ: artifact-exists flags are true; every conclusion flag is FALSE", [STEAKHOUSE_ADMIN_AUTHORITY_EVIDENCE_EXISTS, STEAKHOUSE_AUTHORITY_PERMISSION_MATRIX_EXISTS, STEAKHOUSE_RESERVE_EXPOSURE_SNAPSHOT_EXISTS, STEAKHOUSE_AUDIT_LINKAGE_ASSESSMENT_EXISTS, STEAKHOUSE_WITHDRAWAL_SEMANTICS_ARTIFACT_EXISTS, STEAKHOUSE_INCIDENT_REVIEW_ARTIFACT_EXISTS, STEAKHOUSE_DEPOSIT_STATE_ASSESSMENT_EXISTS, STEAKHOUSE_REVIEW_READINESS_EVALUATOR_EXISTS, KAMINO_OUTREACH_QUESTIONNAIRE_EXISTS].every((f) => f === true) && [STEAKHOUSE_ADMIN_CONTROLS_FULLY_VERIFIED, STEAKHOUSE_AUDIT_TO_DEPLOYMENT_LINKAGE_VERIFIED, STEAKHOUSE_WITHDRAWAL_MODEL_COMPLETE, STEAKHOUSE_INCIDENT_REVIEW_COMPLETE, STEAKHOUSE_EVIDENCE_COMPLETE, STEAKHOUSE_READY_FOR_HUMAN_SCORING].every((f) => f === false), "accurate");
+  add("16H-L-BA: diagnostics are raised and are internal-only (never user copy)", RAISED_DIAGNOSTICS.length >= 10 && RAISED_DIAGNOSTICS.includes("protocol_confirmation_required") && !RAISED_DIAGNOSTICS.includes("verified_disqualifying_condition") && ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx"].every((f) => !readIf(f).includes("steakhouseEvidenceClosure")), "internal");
+
+  // ---- Safety: nothing moved ----
+  add("16H-L-BB: the worksheet remains completely unscored and unsigned", (() => { const w = buildSteakhouseReviewerWorksheet(); return w.rows.every((r) => r.reviewerScore === null && r.reviewerRationale === null && r.reviewerConfidence === null && r.reviewerId === null) && w.overallScore === null && w.signoff === null && w.productApproved === false; })(), "unscored");
+  add("16H-L-BC: capacity remains verified_uncapped and was NOT reclassified", (() => { const c = JSON.parse(readIf("public/generated/stable-yield-market-cache.json")); return c.capacityState === "verified_uncapped" && c.capacitySourceCommit === "1d146d7087a76edbbadc14d848ae14295c0745a4" && STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === true; })(), "unchanged");
+  add("16H-L-BD: production approved-product count is zero and no card renders", getApprovedYieldStrategies().length === 0 && (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: "2026-07-16T15:00:00.000Z" }); return r.decision?.status === "no_plan" && r.suggestion === null; })() && SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
+  add("16H-L-BE: Demo remains unchanged", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+  add("16H-L-BF: no execution / signature / external CTA was added", !/sendTransaction|signTransaction|window\.open|deposit\(|withdraw\(|approved:\s*true/.test(src), "read-only");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -16859,6 +16976,7 @@ export function printFixtureResults(): void {
     ...runRiskGovernanceFixtureChecks(),
     ...runRiskGovernanceDecisionFixtureChecks(),
     ...runInternalTestingRouteFixtureChecks(),
+    ...runSteakhouseEvidenceClosureFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

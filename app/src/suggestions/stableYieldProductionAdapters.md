@@ -560,3 +560,91 @@ scope change. **APY changes alone never invalidate the risk score** (there is no
 `evidence_complete` ≠ `rubric score complete` ≠ `human signoff complete` ≠ `eligible for approval review`
 ≠ `approved`. All are false or absent here. Production still returns `no_plan` and renders no card; Demo
 unchanged; capacity fail-closed; buffer-yield minimum still undefined.
+
+---
+
+# 16H-L — Steakhouse evidence closure
+
+Closed every gap that primary sources could close, and preserved the rest precisely.
+Backed by [`steakhouseEvidenceClosure.ts`](./steakhouseEvidenceClosure.ts). Live read-only mainnet
+evidence, cutoff **2026-07-16T12:40Z**, slot **433291120**.
+
+**Readiness: `blocked_pending_protocol_confirmation`.** No score assigned, worksheet still empty,
+product still unapproved, production still renders no card.
+
+## Gaps CLOSED
+
+**Authority control model — resolved, and it matters.** Each authority account's *owner program* is the
+decisive evidence: a Squads multisig is owned by the Squads program; a governance authority by SPL
+Governance; a PDA by its program. All three privileged authorities are owned by the **System Program
+with zero data bytes** — plain keypair accounts:
+
+| Role | Address | Owner | Model |
+|---|---|---|---|
+| Program upgrade authority | `GzFgdRJXmaw…` | System Program | **EOA — no on-chain multisig** |
+| Vault admin | `9ceRgz…` | System Program | **EOA — no on-chain multisig** |
+| Allocation admin | `CuEC7J…` (~11.9 SOL) | System Program | **EOA — no on-chain multisig** |
+| Base vault authority | `AyY6VC…` | (uninitialised) | PDA signing authority |
+
+> **The limit of this evidence, stated plainly:** this proves there is no *on-chain* multisig gating
+> these keys. It does **not** prove a single human holds them — an off-chain MPC/threshold arrangement
+> (Fireblocks, Turnkey, a shared HSM) is **indistinguishable from a single keypair on-chain**. Only
+> Kamino can settle that, which is why this is `blocked`, not `unsuitable`.
+
+**Reserve exposure — enumerated.** 4 active of 25 slots, all supplying canonical USDC:
+
+| Reserve | Market | Share |
+|---|---|---|
+| `D6q6wuQ…` | **SOL/BTC Market** | 69.37% |
+| `Ga4rZyt…` | **JLP Market** | 29.37% |
+| `Atj6URE…` | *(unresolved)* | 1.26% |
+| `9FRZvAs…` | **Bitcoin Market** | 0% (inactive) |
+
+> **The vault holds only USDC — but it *lends* that USDC into markets whose borrowers post JLP, SOL/BTC
+> and Bitcoin as collateral.** The credit risk is exposure to those collateral markets: if collateral
+> collapses and liquidations fail, the USDC suppliers bear the bad debt. Four USDC reserves are **not**
+> equivalent.
+
+**Allocation is dynamic — now proven, not asserted.** Weights moved between two reads with no user
+action: 16H-J (slot 433263778) `23.0 / 74.2 / 1.8 / 1.0` → 16H-L (slot 433291120) `29.37 / 69.37 / 0 /
+1.26`. A snapshot is a point in time, not a commitment.
+
+**Deposit-state mechanism — resolved.** An exhaustive search of the reviewed source for
+pause/enabled/halt/shutdown/emergency/status returns **zero hits**: the program has **no deposit-state
+control**. A deposit can fail only on cap reached, below minimum, zero shares, a shares-out slippage
+guard, or ordinary account/CPI failure. **But that answers a different question than "will a deposit
+succeed now?"** — the absence of a switch is not proof the light is on, and Kamino could still restrict
+deposits operationally or by upgrading the program (which one key can do). Current availability stays
+`unknown`. No transaction was constructed or simulated.
+
+## Gap OPENED — a third fee
+
+`get_withdrawal_penalty(vault, global_config, amount)` = `max(amount × penalty_bps / FULL_BPS,
+penalty_lamports)`. This is an **exit cost sourced partly from a protocol-level `GlobalConfig`**, and the
+SDK's net APY does **not** include it. Our earlier "fees are already inside the net APY" was true of
+management and performance fees only. **Current penalty value: unresolved** — the GlobalConfig account
+was not read.
+
+## Gaps REMAINING (each needs Kamino)
+
+`audit_deployment_linkage_unverified` — no audited commit is published, and the bytecode changed ~2 days
+before the cutoff. A matching program name and a plausible date are **not** linkage.
+`withdrawal_model_incomplete` — queue conditions, partial fulfilment, farm-staked behaviour, penalty
+value. **Instant liquidity is not proven.**
+`incident_review_incomplete` — no official incident/postmortem index located. **A null result from an
+incomplete search is missing evidence, not a clean record.**
+`upgrade_authority_control_unknown` · `allocation_admin_control_unknown` · `deposit_state_unknown` ·
+`reserve_market_identity_unknown` (4th reserve) · `oracle_dependency_unknown` (collateral-side).
+
+## Readiness rule
+
+`unsuitable_to_continue_review` requires **verified evidence of a disqualifying condition** — missing
+evidence can never produce it, however much is missing. That distinction is enforced in
+`evaluateReviewReadiness()` and fixture-locked: forcing every dimension to `blocked` still yields
+`blocked_pending_protocol_confirmation`.
+
+## Kamino questionnaire
+
+Six sections, ≤2 questions each, every one bound to the exact vault/share mint/program:
+upgrade & governance · vault & allocation admin · audit linkage · withdrawals · deposit state ·
+incidents. Ready to send. **Not sent.**

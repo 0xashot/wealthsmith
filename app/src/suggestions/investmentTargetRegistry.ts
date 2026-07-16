@@ -284,6 +284,25 @@ export const STEAKHOUSE_RISK_SCORE_ASSIGNED = false;
 export const STEAKHOUSE_HUMAN_REVIEW_COMPLETE = false;
 export const STEAKHOUSE_RISK_SIGNOFF_COMPLETE = false;
 export const STEAKHOUSE_ELIGIBLE_FOR_PRODUCT_APPROVAL = false;
+// Step 16H-L — Steakhouse evidence closure. ARTIFACTS exist (true); the CONCLUSIONS they would need
+// to support remain false, because the evidence does not support them. An artifact existing is never
+// a reason to flip a positive flag.
+export const STEAKHOUSE_ADMIN_AUTHORITY_EVIDENCE_EXISTS = true;
+export const STEAKHOUSE_AUTHORITY_PERMISSION_MATRIX_EXISTS = true;
+export const STEAKHOUSE_RESERVE_EXPOSURE_SNAPSHOT_EXISTS = true;
+export const STEAKHOUSE_AUDIT_LINKAGE_ASSESSMENT_EXISTS = true;
+export const STEAKHOUSE_WITHDRAWAL_SEMANTICS_ARTIFACT_EXISTS = true;
+export const STEAKHOUSE_INCIDENT_REVIEW_ARTIFACT_EXISTS = true;
+export const STEAKHOUSE_DEPOSIT_STATE_ASSESSMENT_EXISTS = true;
+export const STEAKHOUSE_REVIEW_READINESS_EVALUATOR_EXISTS = true;
+export const KAMINO_OUTREACH_QUESTIONNAIRE_EXISTS = true;
+// The evidence does NOT resolve these. Each needs a Kamino confirmation.
+export const STEAKHOUSE_ADMIN_CONTROLS_FULLY_VERIFIED = false;
+export const STEAKHOUSE_AUDIT_TO_DEPLOYMENT_LINKAGE_VERIFIED = false;
+export const STEAKHOUSE_WITHDRAWAL_MODEL_COMPLETE = false;
+export const STEAKHOUSE_INCIDENT_REVIEW_COMPLETE = false;
+export const STEAKHOUSE_EVIDENCE_COMPLETE = false;
+export const STEAKHOUSE_READY_FOR_HUMAN_SCORING = false;
 export const STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS = false;
 export const STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST = false;
 export const STABLE_YIELD_PRODUCTION_CARD_AVAILABLE = false;
