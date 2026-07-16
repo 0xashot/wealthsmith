@@ -175,11 +175,18 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     productAddress: "D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59",
     apySource: "Kamino official SDK (klend-sdk) reserve/market state",
     apySourceRef: "klend-sdk:reserve state",
-    apySelectedField: "STILL UNRESOLVED (16H-N.1): the exact reserve is now bound, but supply APY is not a field on reserve state. It must be derived from borrowRateCurve + utilization + protocolTakeRatePct, or sourced from an official endpoint. Identity resolution deliberately did not attempt this.",
-    apyUnitInterpretation: "unverified",
-    apySourceTimestampField: "reserve state read slot time",
+    apySelectedField: "16H-N.2 RESOLVED for BASE supply APY: KaminoReserve.totalSupplyAPY(slot) — official SDK, calculation authority A. Units verified (SDK decimal_ratio -> repository percentage_points). Parity: exact match against calculateAPYFromAPR(calculateSupplyAPR(slot, referralFeeBps)), absolute difference 0. TOTAL supply APY remains NULL — farmCollateral is SET so a supplier farm exists, and it is unevaluated. See klendReserveApyDerivation.ts.",
+    // 16H-N.2: VERIFIED as `percent`. The SDK returns decimal_ratio; the repository's canonical unit
+    // is percentage_points; conversion happens at exactly one boundary (ratioToPercent). APR and APY
+    // are distinct SDK methods held in distinct fields. Compounding is per-slot:
+    // (1 + apr/SLOTS_PER_YEAR)^SLOTS_PER_YEAR - 1, SLOTS_PER_YEAR = 63,072,000, verified from
+    // dist/classes/utils.js:170. Full detail: klendReserveApyDerivation.RATE_SEMANTICS.
+    apyUnitInterpretation: "percent",    apySourceTimestampField: "reserve state read slot time",
     apyFreshnessPolicy: "16C canonical max age (1h); source time authoritative",
-    apyAdapterState: "no_adapter",
+    // 16H-N.2: the adapter exists and its source is verified against the official SDK with exact
+    // parity. This state is for the BASE rate the adapter produces; TOTAL APY is still null because a
+    // configured supplier farm is unevaluated — carried as a first-class blocker below.
+    apyAdapterState: "adapter_implemented_source_verified",
     capacitySource: undefined,
     capacityFieldOrFormula: undefined,
     capacityAdapterState: "no_adapter",
@@ -194,9 +201,15 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     // 16H-N.1: `blocked_identity` is RESOLVED — the exact reserve is bound. The evidence model
     // separates identity blockers from market-data blockers, so the primary blocker MOVES rather than
     // staying stale. Leaving `blocked_identity` would assert something now false.
-    primaryBlocker: "blocked_apy_unit",
+    // 16H-N.2: blocked_apy_unit RESOLVED (units + APR/APY semantics + compounding verified, parity
+    // exact). Primary moves to the next real unresolved stage in the model's own sequence. The reward
+    // gap has NO state in StableYieldEvidencePrimaryStatus and none was invented — it is carried
+    // explicitly below rather than silently dropped.
+    primaryBlocker: "blocked_capacity",
     blockers: [
-      "blocked_apy_unit (PRIMARY, 16H-N.1): identity is resolved, but supply APY is NOT a field on klend reserve state. It must be derived from borrowRateCurve + utilization + protocolTakeRatePct, or sourced from an official endpoint — until then no net-vs-gross unit can be declared and no APY adapter exists.",
+      "blocked_capacity (PRIMARY, 16H-N.2): depositLimit and supplied are readable from reserve state, but no capacity adapter derives remaining capacity for this product.",
+      "rewards_configured_but_unresolved (16H-N.2, NOT a modelled primary state): reserve.farmCollateral is SET (JAvnB9AKtgPsTEoKmn24Bq64UMoYcrtWtq42HHBdsPkh), so a supplier farm EXISTS. getRewardYields requires a KaminoPrices map; an empty map returns [] which is NOT evidence of absence. rewardApyPct and totalSupplyApyPct are therefore NULL and definitionSufficientForComparison is false. baseSupplyApyPct (3.178951% at slot 433344510) IS verified. STATE-MODEL GAP: StableYieldEvidencePrimaryStatus has no reward-resolution state; per 16H-N.2 none was invented.",
+      "RESOLVED at 16H-N.2 (retained for provenance, no longer blocking) — blocked_apy_unit: supply APY is genuinely not a stored field on reserve state, so the blocker was accurate. It is resolved by calculation authority A: KaminoReserve.totalSupplyAPY(slot), units decimal_ratio -> percentage_points, per-slot compounding verified from SDK source, parity exact (absolute difference 0) against calculateAPYFromAPR(calculateSupplyAPR(...)). Calculation version 1.0.0, slot 433344510, 2026-07-16T20:42:52Z.",
       "capacity_adapter_missing: depositLimit and supplied are readable from reserve state, but no capacity adapter derives remaining capacity for this product.",
       "deposit_availability_blocked: reserve status/emergencyMode are readable, but no availability adapter evaluates them and the 16H-L.1 read-only deposit-state policy has not been applied to this reserve.",
       NO_RISK,
