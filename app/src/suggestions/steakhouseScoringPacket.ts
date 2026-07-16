@@ -115,6 +115,9 @@ export const EVIDENCE_REFS = {
   CAPACITY: "kaminoVaultCapacitySemantics.resolveKvaultDepositCapacity",
   MARKET_DATA: "stableYieldMarketCache.cacheRecordToMarketDataInput",
   NET_APY_MATH: "yieldStrategyMarketData.computeNetAPR",
+  /** Added in the 16H-M.2 reassessment: per-reserve oracle config read on-chain. */
+  RESERVE_ORACLE_CONFIG: "steakhouseIncidentEvidence.RESERVE_ORACLE_CONFIG",
+  SCOPE_ORACLE_SECURITY: "kamino.com/docs/security/oracles (Scope: providers, staleness, deviation, TWAP/EWMA, price bands)",
   READINESS: "steakhouseEvidenceClosure.DIMENSION_READINESS",
   HUMAN_VERIFICATION: "steakhouseEvidenceVerification.STEAKHOUSE_EVIDENCE_VERIFICATION",
 } as const;

@@ -655,3 +655,53 @@ export const INCIDENT_RUBRIC_MAPPINGS: IncidentRubricMapping[] = [
     isRubricDefinedBlocker: false,
   },
 ];
+
+/* ------------------------------------------------------------------ *
+ * Reserve oracle configuration (added by the 16H-M.2 reassessment)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Read on-chain per reserve. This exists because the initial automated assessment scored oracle_risk
+ * on an incomplete search — Kamino's /docs/security/oracles pages were never read, and the reserves'
+ * own oracle config was never pulled. Both are now recorded.
+ *
+ * WHY THIS COUNTS AS RESERVE-LEVEL EVIDENCE rather than a protocol-wide claim: every value below was
+ * read from the reserve accounts themselves. The price band (lower 98 / upper 101, exp 2 → $0.98-$1.01)
+ * independently CORROBORATES Kamino's documented "±1% from $1.00" band, so the documentation and the
+ * chain agree. That agreement is what licenses citing the docs for mechanisms (TWAP/EWMA smoothing,
+ * cross-provider consensus) that are not individually readable from reserve state.
+ *
+ * WHAT REMAINS UNVERIFIED: the collateral-side oracle configuration for each lending market. That is
+ * the material gap, because this vault's loss path runs through borrower-collateral mispricing rather
+ * than USDC mispricing.
+ */
+export const RESERVE_ORACLE_CONFIG = {
+  version: "1.0.0",
+  sourceSlot: INCIDENT_EVIDENCE_SLOT,
+  evidenceCutoffAt: INCIDENT_EVIDENCE_CUTOFF_AT,
+  scopeFeed: "3t4JZcueEzTbVP6kLxXrL3VpWx45jDer4eqysweBchNH",
+  priceChain: [13],
+  twapChain: [10],
+  providersBehindScope: ["Chainlink Data Streams", "Pyth Pro"],
+  providersSource: "kamino.com/docs/security/oracles — documented, not individually readable from reserve state",
+  perReserve: [
+    { market: "SOL/BTC Market", reserve: "D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59", maxAgePriceSeconds: 180, maxAgeTwapSeconds: 240, maxTwapDivergenceBps: 300, priceBandLower: 0.98, priceBandUpper: 1.01 },
+    { market: "JLP Market", reserve: "Ga4rZytCpq1unD4DbEJ5bkHeUz9g3oh9AAFEi6vSauXp", maxAgePriceSeconds: 180, maxAgeTwapSeconds: 240, maxTwapDivergenceBps: 300, priceBandLower: 0.98, priceBandUpper: 1.01 },
+    { market: "Maple Market", reserve: "Atj6UREVWa7WxbF2EMKNyfmYUY1U1txughe2gjhcPDCo", maxAgePriceSeconds: 300, maxAgeTwapSeconds: 300, maxTwapDivergenceBps: 300, priceBandLower: 0.98, priceBandUpper: 1.01 },
+    { market: "Bitcoin Market", reserve: "9FRZvAsjDJ6WM8BJ2S45h9PoDCLAq8DNY9zZDX7MyGzT", maxAgePriceSeconds: 180, maxAgeTwapSeconds: 240, maxTwapDivergenceBps: 300, priceBandLower: 0.98, priceBandUpper: 1.05 },
+  ],
+  rubricMandatoryEvidenceStatus: {
+    oracleProvidersActuallyUsed: "verified — Scope feed + chain read per reserve; the two upstream networks are documented",
+    staleAgeHandling: "verified — maxAgePriceSeconds / maxAgeTwapSeconds read per reserve",
+    deviationConfidenceHandling: "verified — maxTwapDivergenceBps and the price-band heuristic read per reserve",
+  },
+  documentedMechanismsNotIndividuallyVerified: [
+    "TWAP / EWMA smoothing behaviour (documented; twapChain [10] is configured on every reserve, but the smoothing maths was not re-derived)",
+    "Cross-provider consensus and automatic fallback between Chainlink and Pyth (documented at /docs/security/oracles)",
+    "Scope's own three dedicated audits and the double-audited Multi-Price Oracle System (documented; commit linkage not established, same limitation as every other Kamino audit)",
+  ],
+  unverified: [
+    "Collateral-side oracle configuration for each lending market — the prices that drive the liquidations determining whether the vault's loans are repaid.",
+  ],
+  marketingClaimNotUsed: "The /docs/security/oracles page states '0 Oracle Exploits'. That is an unscoped claim of the same class as the '0 Incidents' post and was NOT used as evidence.",
+} as const;
