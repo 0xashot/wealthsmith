@@ -8,6 +8,7 @@
 import type { EngineSuggestion, SuggestionGuardrail, SuggestionReasonCode } from "./engineTypes";
 import { SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
 import type { YieldStrategyPlan, YieldStrategyPlanDecision } from "./yieldStrategyPlanTypes";
+import { validateYieldStrategyPlan } from "./yieldStrategyPlan";
 import {
   YIELD_STRATEGY_SUGGESTION_ID_PREFIX,
   YIELD_STRATEGY_SUGGESTION_POLICY_ID,
@@ -146,6 +147,36 @@ export function buildStableYieldPlanSuggestion(decision: YieldStrategyPlanDecisi
   }
 
   const plan = decision.selectedPlan;
+
+  // Step 16H-F fail-closed: never convert a plan whose own identity/amount is corrupted (`unstable_plan_id`
+  // proves the id no longer matches its material inputs), nor a decision whose mirrored summary fields
+  // disagree with the selected plan. Conflicting duplicates are REJECTED, never silently resolved in
+  // favour of one side. 16G builds these consistently; this guards a tampered/malformed decision.
+  const planIntegrity = validateYieldStrategyPlan(plan);
+  const mirrorsAgree =
+    decision.planCount === 1 &&
+    decision.selectedLane === plan.lane &&
+    decision.selectedStrategyId === plan.strategyId &&
+    decision.selectedAmountUsd === plan.amountUsd &&
+    decision.selectedAmountCents === plan.amountCents;
+  if (!planIntegrity.valid || !mirrorsAgree) {
+    return {
+      suggestion: null,
+      meta: null,
+      diagnostic: {
+        ...diagnosticBase,
+        emitted: false,
+        suppressionStage: "suggestion_conversion",
+        reason: !planIntegrity.valid ? `invalid_source_plan:${planIntegrity.errors.join("/")}` : "decision_plan_mismatch",
+        selectedLane: plan.lane,
+        lane: plan.lane,
+        actionable: false,
+        topPickEligible: false,
+        sourcePlanId: plan.planId,
+      },
+    };
+  }
+
   const meta = buildMeta(plan, options.apyProvenance);
   const id = stableYieldSuggestionId(plan.planId);
 

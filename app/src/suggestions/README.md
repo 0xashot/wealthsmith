@@ -1873,3 +1873,30 @@ drawer + four disclosures, Escape-close/focus-restore, no console errors, no ove
 plan-backed card while unrelated suggestions render. Flags `STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS`/
 `_REAL_WALLET_INTEGRATION_EXISTS`/`_SHARED_PRODUCT_ORCHESTRATION_EXISTS`/`_PRODUCT_ORCHESTRATION_EXISTS =
 true`; Smith-AI/external-CTA/execution/signature `false`.
+
+### Step 16H-F — Stable Yield release gate (current status)
+
+Stable Yield is **release-ready and read-only**. The canonical status, in one place:
+
+- **Read-only / non-custodial.** The only CTA is "Review Strategy", which opens the shared review drawer.
+  No execution, transaction, signature, deposit, withdrawal, switching, migration, custody, external
+  protocol CTA, or deep link exists anywhere in the Stable Yield surface (statically gated by the release
+  checks). `readOnly` / `externalManagementRequired` are true; `executesTransaction` /
+  `requiresWalletSignature` / `opensExternalUrl` / `completionOnClick` are false.
+- **Demo** has exactly ONE synthetic scenario ("Stable Yield Demo") using a demo-only approved product; it
+  renders exactly one card through the full pipeline.
+- **Production has no approved Stable Yield product**, so Real Wallet is *wired but renders no card today*
+  (`no_plan`). That is the correct, expected production state — not a defect.
+- **One plan → one Stable Yield suggestion.** Both lanes rank under the canonical `stable_yield`
+  category (priority 6, below buffer/rebalance/capital_efficiency); the lane is metadata only.
+- **16G selects the exact amount.** The UI performs no financial logic — it renders 16H-B strings only.
+- **Smith AI is deferred.** No Stable Yield suggestion context reaches the chat UI, and no LLM-generated
+  Stable Yield copy exists — all copy is deterministic and owned by 16H-B. Stable Yield explanatory
+  content is handled in the separate **Qdrant knowledge-base workstream**; Step 16H touched no Qdrant file
+  or Smith AI prompt. `STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS` stays false.
+- **Execution remains out of scope** for the entire 16H series.
+
+16H-F reconciled seven stale flags (aliases left `false` after the UI shipped) and hardened
+`buildStableYieldPlanSuggestion` to fail closed on a corrupted source plan / a decision whose mirrored
+fields conflict with its selected plan. The `runStableYieldReleaseGateFixtureChecks` block asserts the
+whole release contract. See [yieldStrategyPlanPresentation.md](./yieldStrategyPlanPresentation.md#16h-f--release-gate-and-the-smith-ai--qdrant-deferral).

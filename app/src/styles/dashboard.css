@@ -3705,6 +3705,13 @@
   color: var(--color-text-primary);
   font-weight: 600;
   text-align: right;
+  /*
+   * A row value may be a long unbroken technical identifier (e.g. a 43-char product address), which
+   * offers no natural break opportunity. Flex items default to `min-width: auto`, so without these the
+   * value cannot shrink and overflows the dialog at narrow widths. Wrap it instead.
+   */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .review-modal__schedule {
   list-style: none;

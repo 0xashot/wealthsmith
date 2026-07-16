@@ -1,8 +1,9 @@
 # Stable Yield Suggestion Integration (Step 16H-A)
 
 Converts a **Step 16G ready plan** into a deterministic, read-only Suggestion Engine suggestion
-(category `stable_yield`) and wires it into engine ordering + Top Pick. **Engine-only** — no card, review
-modal, Demo/Real-Wallet UI, or Smith AI yet (later 16H steps).
+(category `stable_yield`) and wires it into engine ordering + Top Pick. This step is **engine-only**; the
+card + review modal ship at 16H-C and the Demo/Real-Wallet product surfaces at 16H-D. Smith AI stays
+deferred to the Qdrant knowledge-base workstream (see `yieldStrategyPlanPresentation.md`).
 
 Backed by:
 - [`yieldStrategyPlanSuggestionTypes.ts`](./yieldStrategyPlanSuggestionTypes.ts) — versions, the metadata contract, the diagnostic.
@@ -75,18 +76,29 @@ production registry is never mutated. Fixtures inject synthetic approved product
 
 ## Feature flags
 
-True: `STABLE_YIELD_SUGGESTIONS_EXIST`, `STABLE_YIELD_SUGGESTION_CONTRACT_EXISTS`,
+True at 16H-A: `STABLE_YIELD_SUGGESTIONS_EXIST`, `STABLE_YIELD_SUGGESTION_CONTRACT_EXISTS`,
 `STABLE_YIELD_PLAN_TO_SUGGESTION_EXISTS`, `STABLE_YIELD_SUGGESTION_PARTICIPATES_IN_ORDERING`,
-`STABLE_YIELD_SUGGESTION_TOP_PICK_ELIGIBLE`. False: card / review modal / UI integration / Demo UI /
-Real-Wallet UI / Smith-AI / execution / transaction construction / signature flow. (The **plan** layer
-still generates no suggestion — the converter does — so `STABLE_YIELD_PLAN_GENERATES_SUGGESTION` stays
-false.)
+`STABLE_YIELD_SUGGESTION_TOP_PICK_ELIGIBLE`. Always false: Smith-AI / execution / transaction
+construction / signature flow. (The **plan** layer still generates no suggestion — the converter does —
+so `STABLE_YIELD_PLAN_GENERATES_SUGGESTION` stays false.)
 
-## Remaining 16H work
+The card / review-modal / UI-integration / Demo-UI / Real-Wallet-UI flags were false *at this step* and
+legitimately flipped **true** at 16H-C/16H-D once that UI shipped; 16H-F reconciled them so no two flags
+contradict. See `yieldStrategyPlanPresentation.md` for the current release state.
 
-- **16H-B** — shared suggestion card + review modal rendering of `stableYieldPlan` (the card mapper).
-- Demo Mode + Real Wallet wiring; `/testing` scenarios.
-- Smith AI explanation keyed off the reason codes (never generating suggestions).
+## Fail-closed on a corrupted source plan (16H-F)
+
+Before converting, `buildStableYieldPlanSuggestion` validates the **incoming** decision: a plan whose
+`planId` no longer matches its material inputs suppresses as `invalid_source_plan:…unstable_plan_id`, and
+a decision whose mirrored `selectedAmountUsd/Cents` / `selectedStrategyId` / `selectedLane` / `planCount`
+disagree with its `selectedPlan` suppresses as `decision_plan_mismatch`. Conflicting duplicates are
+rejected, never silently resolved.
+
+## Later 16H steps (shipped)
+
+- **16H-B/16H-C** — deterministic presentation, then the shared card + review modal rendering.
+- **16H-D** — Demo Mode + Real Wallet wiring; `/testing` scenarios.
+- Smith AI explanation keyed off the reason codes — **deferred** to the Qdrant workstream.
 
 ## Flow
 

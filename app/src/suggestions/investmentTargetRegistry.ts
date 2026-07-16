@@ -139,11 +139,19 @@ export const STABLE_YIELD_SUGGESTION_CONTRACT_EXISTS = true;
 export const STABLE_YIELD_PLAN_TO_SUGGESTION_EXISTS = true;
 export const STABLE_YIELD_SUGGESTION_PARTICIPATES_IN_ORDERING = true;
 export const STABLE_YIELD_SUGGESTION_TOP_PICK_ELIGIBLE = true;
-export const STABLE_YIELD_SUGGESTION_CARD_EXISTS = false;
-export const STABLE_YIELD_SUGGESTION_REVIEW_MODAL_EXISTS = false;
-export const STABLE_YIELD_SUGGESTION_UI_INTEGRATION_EXISTS = false;
-export const STABLE_YIELD_SUGGESTION_DEMO_UI_EXISTS = false;
-export const STABLE_YIELD_SUGGESTION_REAL_WALLET_UI_EXISTS = false;
+// Step 16H-F — these five are ALIASES of the canonical 16H-C/16H-D flags below and were left `false`
+// after the UI actually shipped. Reconciled to the real behavior so no two flags contradict:
+//   _SUGGESTION_CARD_EXISTS         ≡ STABLE_YIELD_RENDERED_CARD_EXISTS
+//   _SUGGESTION_REVIEW_MODAL_EXISTS ≡ STABLE_YIELD_RENDERED_REVIEW_MODAL_EXISTS
+//   _SUGGESTION_UI_INTEGRATION_EXISTS ≡ STABLE_YIELD_SHARED_CARD_MAPPER_EXISTS + _REVIEW_UI_EXISTS
+//   _SUGGESTION_DEMO_UI_EXISTS      ≡ STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS
+//   _SUGGESTION_REAL_WALLET_UI_EXISTS ≡ STABLE_YIELD_REAL_WALLET_INTEGRATION_EXISTS
+// Prefer the canonical names in new code.
+export const STABLE_YIELD_SUGGESTION_CARD_EXISTS = true;
+export const STABLE_YIELD_SUGGESTION_REVIEW_MODAL_EXISTS = true;
+export const STABLE_YIELD_SUGGESTION_UI_INTEGRATION_EXISTS = true;
+export const STABLE_YIELD_SUGGESTION_DEMO_UI_EXISTS = true;
+export const STABLE_YIELD_SUGGESTION_REAL_WALLET_UI_EXISTS = true;
 export const STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS = false;
 export const STABLE_YIELD_SUGGESTION_EXECUTION_EXISTS = false;
 export const STABLE_YIELD_SUGGESTION_TRANSACTION_CONSTRUCTION_EXISTS = false;
@@ -180,8 +188,12 @@ export const STABLE_YIELD_SHARED_PRODUCT_ORCHESTRATION_EXISTS = true;
 export const STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS = false;
 export const STABLE_YIELD_EXECUTES_TRANSACTION = false;
 export const STABLE_YIELD_REQUIRES_WALLET_SIGNATURE = false;
-export const STABLE_YIELD_UI_ENABLED = false;
-export const STABLE_YIELD_TESTING_EXISTS = false;
+// Step 16H-F — reconciled. The Stable Yield UI genuinely ships (16H-C rendered card + review drawer,
+// 16H-D Demo/Real-Wallet product surfaces) and a dedicated /testing section exists, so leaving these
+// `false` contradicted STABLE_YIELD_RENDERED_CARD_EXISTS / _TESTING_VISUAL_FIXTURES_EXIST. They describe
+// UI EXISTENCE, not execution — execution stays disabled below and is asserted independently.
+export const STABLE_YIELD_UI_ENABLED = true;
+export const STABLE_YIELD_TESTING_EXISTS = true;
 export const STABLE_YIELD_EXECUTION_ENABLED = false;
 // Step 15B — contribution-frequency (rhythm) normalization now exists. Both names refer to the
 // same layer (the field is "contribution_frequency" in onboarding); no contradictory duplicate.

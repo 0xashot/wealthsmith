@@ -209,8 +209,35 @@ Flags true: `STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS`, `STABLE_YIELD_REAL_WALL
 `STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS`, `STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS`,
 `STABLE_YIELD_EXECUTES_TRANSACTION`, `STABLE_YIELD_REQUIRES_WALLET_SIGNATURE`.
 
-## Remaining UI work
+## 16H-F — release gate, and the Smith AI / Qdrant deferral
 
-- Smith AI explanation keyed off the reason codes (never generating copy or suggestions).
+Step 16H-F is the end-to-end acceptance audit. It added no product capability; it reconciled flags,
+hardened two fail-closed gaps, and added the `runStableYieldReleaseGateFixtureChecks` acceptance block.
+
+**Smith AI Stable Yield chat integration is explicitly NOT part of Step 16H — it is deferred.**
+
+- No Stable Yield suggestion context is passed into the chat UI today.
+- No LLM-generated Stable Yield card or review copy exists anywhere; **all** Stable Yield UI copy is
+  deterministic and owned by 16H-B (`yieldStrategyPlanPresentation.ts` templates).
+- Stable Yield explanatory/knowledge content is handled separately in the **Qdrant knowledge-base
+  workstream**, not here. Step 16H changed no Qdrant file and no Smith AI prompt.
+- A future Smith AI integration may consume engine-approved suggestion *facts* (reason codes + the 16H-B
+  view model) but must never generate suggestions, select products, or compute amounts. That work is
+  outside the current release scope.
+- `STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS` stays **false** and is asserted false by the release gate.
+
+### Fail-closed hardening added at 16H-F
+
+`buildStableYieldPlanSuggestion` now validates its **incoming** decision before converting (previously it
+validated only the suggestion it produced): a plan whose `planId` no longer matches its material inputs
+(`unstable_plan_id`) fails closed as `invalid_source_plan:…`, and a decision whose mirrored summary
+fields (`selectedAmountUsd/Cents`, `selectedStrategyId`, `selectedLane`, `planCount`) disagree with its
+`selectedPlan` fails closed as `decision_plan_mismatch`. Conflicting duplicate values are **rejected**,
+never silently resolved in favour of one side.
+
+## Remaining work (non-blocking, outside 16H)
+
 - Real-wallet Stable Yield data adapters (16C market data, 16D risk reviews, capacity) — until wired,
   production correctly shows no card.
+- Production product approval + the canonical buffer-yield minimum policy.
+- Smith AI explanation keyed off the reason codes — via the Qdrant workstream (see above).
