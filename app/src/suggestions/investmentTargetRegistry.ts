@@ -195,6 +195,29 @@ export const STABLE_YIELD_REQUIRES_WALLET_SIGNATURE = false;
 export const STABLE_YIELD_UI_ENABLED = true;
 export const STABLE_YIELD_TESTING_EXISTS = true;
 export const STABLE_YIELD_EXECUTION_ENABLED = false;
+// Step 16H-G — the PRODUCTION data-adapter layer + evidence package. Real, exercised code (a strict
+// Kamino vault-state parser, exact-address identity resolution, freshness validation, capacity
+// normalization, structured diagnostics, versioned evidence manifests, a readiness matrix, and a
+// developer-only probe) — not empty interfaces. The adapters feed the canonical 16C join.
+//
+// They approve NOTHING. Every registry entry is still `documentation_required` with `address:
+// undefined`, so every candidate fails closed at identity (`missing_product_address`) and production
+// still emits no suggestion and renders no card. Approval is Step 16H-H; the canonical buffer-yield
+// minimum remains a separate, undefined policy step.
+export const STABLE_YIELD_PRODUCTION_ADAPTER_CONTRACT_EXISTS = true;
+export const STABLE_YIELD_PRODUCTION_IDENTITY_ADAPTERS_EXIST = true;
+export const STABLE_YIELD_PRODUCTION_FRESHNESS_VALIDATION_EXISTS = true;
+export const STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_NORMALIZATION_EXISTS = true;
+export const STABLE_YIELD_PRODUCTION_EVIDENCE_MANIFESTS_EXIST = true;
+export const STABLE_YIELD_PRODUCTION_ADAPTER_DIAGNOSTICS_EXIST = true;
+export const STABLE_YIELD_PRODUCTION_ORCHESTRATION_CONSUMES_ADAPTERS = true;
+export const STABLE_YIELD_PRODUCTION_SOURCE_PROBE_EXISTS = true;
+// Hard false until an explicit, evidence-backed review says otherwise.
+export const STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS = false;
+export const STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST = false;
+export const STABLE_YIELD_PRODUCTION_CARD_AVAILABLE = false;
+export const STABLE_YIELD_BUFFER_YIELD_MINIMUM_EXISTS = false;
+export const STABLE_YIELD_QDRANT_INTEGRATION_EXISTS = false;
 // Step 15B — contribution-frequency (rhythm) normalization now exists. Both names refer to the
 // same layer (the field is "contribution_frequency" in onboarding); no contradictory duplicate.
 export const CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS = true;

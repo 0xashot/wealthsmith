@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "market:refresh-staking": "node scripts/refresh-sol-staking-market-data.mjs",
     "market:publish-staking": "node scripts/publish-sol-staking-market-cache.mjs",
-    "market:refresh-and-publish-staking": "npm run market:refresh-staking && npm run market:publish-staking"
+    "market:refresh-and-publish-staking": "npm run market:refresh-staking && npm run market:publish-staking",
+    "probe:stable-yield": "node scripts/probe-stable-yield-sources.mjs"
   },
   "dependencies": {
     "@hubbleprotocol/hubble-sdk": "^8.0.4",

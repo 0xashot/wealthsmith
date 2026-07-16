@@ -1056,7 +1056,27 @@ import {
   YIELD_STRATEGY_PRODUCT_CAPACITY_EXISTS,
   YIELD_STRATEGY_PLAN_EXISTS,
 } from "./investmentTargetRegistry";
-import { deriveStableYieldPlanSuggestion, STABLE_YIELD_PRODUCT_ORCHESTRATION_EXISTS } from "./stableYieldProductInput";
+import { deriveStableYieldPlanSuggestion, STABLE_YIELD_PRODUCT_ORCHESTRATION_EXISTS, buildProductionStableYieldMarketInputs } from "./stableYieldProductInput";
+import { CANONICAL_USDC_MINT as SYG_USDC_MINT } from "./stableYieldProductionAdapterTypes";
+import { resolveStableYieldProductIdentity, selectSourceRecordByExactAddress } from "./stableYieldProductionIdentity";
+import { parseKaminoVaultRecord } from "./stableYieldSourceParsers";
+import { buildKaminoMarketDataInput, buildKaminoCapacity, validateProductionFreshness } from "./stableYieldProductionAdapters";
+import { listStableYieldEvidenceManifests, listCandidatesReadyForReview, buildStableYieldReadinessMatrix, STABLE_YIELD_APPROVAL_READINESS_MATRIX_EXISTS } from "./stableYieldProductionEvidence";
+import {
+  STABLE_YIELD_PRODUCTION_ADAPTER_CONTRACT_EXISTS,
+  STABLE_YIELD_PRODUCTION_IDENTITY_ADAPTERS_EXIST,
+  STABLE_YIELD_PRODUCTION_FRESHNESS_VALIDATION_EXISTS,
+  STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_NORMALIZATION_EXISTS,
+  STABLE_YIELD_PRODUCTION_EVIDENCE_MANIFESTS_EXIST,
+  STABLE_YIELD_PRODUCTION_ADAPTER_DIAGNOSTICS_EXIST,
+  STABLE_YIELD_PRODUCTION_ORCHESTRATION_CONSUMES_ADAPTERS,
+  STABLE_YIELD_PRODUCTION_SOURCE_PROBE_EXISTS,
+  STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS,
+  STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST,
+  STABLE_YIELD_PRODUCTION_CARD_AVAILABLE,
+  STABLE_YIELD_BUFFER_YIELD_MINIMUM_EXISTS,
+  STABLE_YIELD_QDRANT_INTEGRATION_EXISTS,
+} from "./investmentTargetRegistry";
 import { buildDemoStableYieldRail, buildDemoStableYieldDecision, DEMO_STABLE_YIELD_POSITIONS, DEMO_STABLE_YIELD_GOAL, DEMO_STABLE_YIELD_PRICED_AS_OF } from "./demoStableYieldScenario";
 import { deriveRailSuggestions as SY_deriveRail } from "./useRailSuggestions";
 import { deriveSafetyBuffer as SY_deriveBuffer } from "../wallet/walletSummary";
@@ -15971,6 +15991,127 @@ export function runStableYieldReleaseGateFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 16H-G — PRODUCTION Stable Yield data adapters + evidence readiness. Fully deterministic and
+ * OFFLINE: every "source response" below is a local literal. No check performs a network request.
+ */
+export function runStableYieldProductionAdapterFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const CHECKED_AT = "2026-07-16T00:00:00.000Z";
+  const FRESH_TS = "2026-07-16T00:00:00.000Z";
+  const ADDR = "So11111111111111111111111111111111111111112"; // a real-shaped base58 address (fixture only)
+  const OTHER_ADDR = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
+  const kaminoEntry = listYieldStrategies().find((e) => e.strategyId === "kamino_steakhouse_usdc")!;
+  /** The same entry WITH a documented address — used ONLY to exercise post-identity stages offline. */
+  const addressed = { ...kaminoEntry, address: ADDR };
+  const rec = (over: Record<string, unknown> = {}) => ({ productAddress: ADDR, assetMint: SYG_USDC_MINT, chain: "solana_mainnet", protocolId: "kamino", netApy: 0.0515, sourceTimestamp: FRESH_TS, ...over });
+
+  // ---- Candidate inventory ----
+  const registry = listYieldStrategies();
+  add("16H-G-A: the production candidate set is exactly the registry (5 candidates, none approved)", registry.length === 5 && getApprovedYieldStrategies().length === 0, `${registry.length} candidates`);
+  add("16H-G-B: EVERY production candidate lacks a documented exact address (the universal blocker)", registry.every((e) => e.address === undefined) && registry.every((e) => e.lifecycle === "documentation_required"), "all undefined");
+  add("16H-G-C: an evidence manifest exists for every candidate, and none is ready or approved", listStableYieldEvidenceManifests().length === 5 && listCandidatesReadyForReview().length === 0 && listStableYieldEvidenceManifests().every((m) => m.readiness !== "ready_for_review"), "0 ready");
+
+  // ---- Identity: exact-address matching only ----
+  add("16H-G-D: a real candidate fails closed on missing_product_address (nothing to bind to)", (() => { const r = resolveStableYieldProductIdentity({ entry: kaminoEntry, claim: { productAddress: ADDR }, sourceAdapterId: "t" }); return !r.verified && r.reason === "missing_product_address"; })(), "missing_product_address");
+  add("16H-G-E: an exact address match verifies identity", (() => { const r = resolveStableYieldProductIdentity({ entry: addressed, claim: { productAddress: ADDR, assetMint: SYG_USDC_MINT, chain: "solana_mainnet", protocolId: "kamino" }, sourceAdapterId: "t" }); return r.verified && r.identity.productAddress === ADDR; })(), "verified");
+  add("16H-G-F: a wrong address is rejected (no same-protocol fallback)", (() => { const r = resolveStableYieldProductIdentity({ entry: addressed, claim: { productAddress: OTHER_ADDR, protocolId: "kamino" }, sourceAdapterId: "t" }); return !r.verified && r.reason === "product_identity_mismatch"; })(), "mismatch");
+  add("16H-G-G: a matching product NAME never substitutes for an address (name-only match rejected)", (() => { const r = resolveStableYieldProductIdentity({ entry: addressed, claim: { productName: "Steakhouse USDC", protocolId: "kamino" }, sourceAdapterId: "t" }); return !r.verified && r.reason === "product_not_found"; })(), "name rejected");
+  add("16H-G-H: a protocol-only claim is rejected (protocol name is not identity)", (() => { const r = resolveStableYieldProductIdentity({ entry: addressed, claim: { protocolId: "kamino" }, sourceAdapterId: "t" }); return !r.verified; })(), "protocol rejected");
+  add("16H-G-I: a wrong chain is rejected", (() => { const r = resolveStableYieldProductIdentity({ entry: addressed, claim: { productAddress: ADDR, chain: "ethereum_mainnet" }, sourceAdapterId: "t" }); return !r.verified && r.reason === "wrong_chain"; })(), "wrong_chain");
+  add("16H-G-J: a non-USDC principal mint is rejected", (() => { const r = resolveStableYieldProductIdentity({ entry: addressed, claim: { productAddress: ADDR, assetMint: OTHER_ADDR }, sourceAdapterId: "t" }); return !r.verified && r.reason === "wrong_asset"; })(), "wrong_asset");
+  add("16H-G-K: zero source records → product_not_found; two matching → duplicate_product_match (never pick one)", (() => { const none = selectSourceRecordByExactAddress({ entry: addressed, records: [{ productAddress: OTHER_ADDR }] }); const dup = selectSourceRecordByExactAddress({ entry: addressed, records: [{ productAddress: ADDR }, { productAddress: ADDR }] }); return !none.ok && none.reason === "product_not_found" && !dup.ok && dup.reason === "duplicate_product_match"; })(), "found/dup");
+
+  // ---- APY parsing + units ----
+  add("16H-G-L: a valid fraction APY normalizes to percent with no 100× error", (() => { const p = parseKaminoVaultRecord(rec(), "fraction"); return p.ok && p.value.netApyPct === 5.15; })(), "5.15%");
+  add("16H-G-M: the same number read as percent stays percent (unit is declared, never guessed)", (() => { const p = parseKaminoVaultRecord(rec({ netApy: 5.15 }), "percent"); return p.ok && p.value.netApyPct === 5.15; })(), "5.15%");
+  add("16H-G-N: a fraction misread as percent would 100×-error — the declared unit prevents it", (() => { const asFrac = parseKaminoVaultRecord(rec({ netApy: 0.0515 }), "fraction"); const asPct = parseKaminoVaultRecord(rec({ netApy: 0.0515 }), "percent"); return asFrac.ok && asPct.ok && asFrac.value.netApyPct === 5.15 && asPct.value.netApyPct === 0.0515; })(), "unit-explicit");
+  add("16H-G-O: zero APY is a valid value (not a failure)", (() => { const p = parseKaminoVaultRecord(rec({ netApy: 0 }), "fraction"); return p.ok && p.value.netApyPct === 0; })(), "0%");
+  add("16H-G-P: a negative APY is rejected (unsupported by the contract)", (() => { const p = parseKaminoVaultRecord(rec({ netApy: -0.01 }), "fraction"); return !p.ok && p.reason === "negative_rate_unsupported"; })(), "rejected");
+  add("16H-G-Q: a non-finite APY is rejected", (() => { const a = parseKaminoVaultRecord(rec({ netApy: Number.NaN }), "fraction"); const b = parseKaminoVaultRecord(rec({ netApy: Number.POSITIVE_INFINITY }), "fraction"); return !a.ok && !b.ok; })(), "rejected");
+  add("16H-G-R: a missing APY is rejected (never 0)", (() => { const r2 = rec(); delete (r2 as Record<string, unknown>).netApy; const p = parseKaminoVaultRecord(r2, "fraction"); return !p.ok && p.reason === "missing_field"; })(), "rejected");
+  add("16H-G-S: a string APY ('5.2%') is rejected, never string-parsed", (() => { const p = parseKaminoVaultRecord(rec({ netApy: "5.2%" }), "fraction"); return !p.ok && p.reason === "numeric_field_arrived_as_string"; })(), "rejected");
+  add("16H-G-T: null is never coerced to zero", (() => { const p = parseKaminoVaultRecord(rec({ netApy: null }), "fraction"); return !p.ok && p.reason === "null_is_not_zero"; })(), "rejected");
+  add("16H-G-U: an implausible stable APY (>100%) fails closed rather than reaching planning", (() => { const p = parseKaminoVaultRecord(rec({ netApy: 12 }), "fraction"); return !p.ok && p.reason === "implausible_rate_for_stable_yield"; })(), "rejected");
+  add("16H-G-V: a schema change (non-object / missing address) is rejected", (() => { const a = parseKaminoVaultRecord("not-an-object", "fraction"); const r2 = rec(); delete (r2 as Record<string, unknown>).productAddress; const b = parseKaminoVaultRecord(r2, "fraction"); return !a.ok && !b.ok; })(), "rejected");
+
+  // ---- Freshness (source time authoritative) ----
+  add("16H-G-W: a missing source timestamp is rejected (never treated as fresh)", (() => { const r2 = rec(); delete (r2 as Record<string, unknown>).sourceTimestamp; const p = parseKaminoVaultRecord(r2, "fraction"); return !p.ok && p.reason === "missing_timestamp"; })(), "rejected");
+  add("16H-G-X: stale / future / negative-age source data fails closed", (() => { const stale = validateProductionFreshness({ sourceTimestamp: "2026-07-15T00:00:00.000Z", checkedAt: CHECKED_AT }); const future = validateProductionFreshness({ sourceTimestamp: "2026-07-17T00:00:00.000Z", checkedAt: CHECKED_AT }); return !stale.ok && stale.status === "stale" && !future.ok && future.status === "future_dated"; })(), "stale/future");
+  add("16H-G-Y: a fresh source timestamp passes", validateProductionFreshness({ sourceTimestamp: "2026-07-15T23:30:00.000Z", checkedAt: CHECKED_AT }).ok === true, "fresh");
+  add("16H-G-Z: a recent FETCH of stale upstream data is still stale (fetch time is not authority)", (() => { const r = buildKaminoMarketDataInput({ entry: addressed, raw: rec({ sourceTimestamp: "2026-07-01T00:00:00.000Z" }), checkedAt: CHECKED_AT, fetchedAt: CHECKED_AT }); return r.output === undefined && r.diagnostic.freshnessStatus === "stale" && r.diagnostic.planningSafe === false; })(), "stale");
+
+  // ---- Market adapter end-to-end ----
+  add("16H-G-AA: a real candidate produces NO market input (blocked at identity)", (() => { const r = buildKaminoMarketDataInput({ entry: kaminoEntry, raw: rec(), checkedAt: CHECKED_AT }); return r.output === undefined && r.diagnostic.identityReason === "missing_product_address" && r.diagnostic.stage === "identity_validation" && r.diagnostic.planningSafe === false; })(), "blocked");
+  add("16H-G-AB: an addressed candidate + valid record yields a canonical 16C input with provenance", (() => { const r = buildKaminoMarketDataInput({ entry: addressed, raw: rec(), checkedAt: CHECKED_AT }); return r.diagnostic.planningSafe === true && r.output?.apy?.netApyPct === 5.15 && r.output?.browserFetched === false && r.output?.provenanceKind === "backend_normalized" && r.output?.sourceId === "kamino_vault_state_v1" && r.output?.fetchedAt === FRESH_TS; })(), "normalized");
+  add("16H-G-AC: the adapter never emits output when not planning-safe (no partial defaults)", [buildKaminoMarketDataInput({ entry: kaminoEntry, raw: rec(), checkedAt: CHECKED_AT }), buildKaminoMarketDataInput({ entry: addressed, raw: rec({ netApy: -1 }), checkedAt: CHECKED_AT })].every((r) => r.diagnostic.planningSafe === false && r.output === undefined), "no output");
+  add("16H-G-AD: browserFetched is always false (the browser may never call a yield provider)", buildKaminoMarketDataInput({ entry: addressed, raw: rec(), checkedAt: CHECKED_AT }).output?.browserFetched === false, "false");
+
+  // ---- Capacity ----
+  add("16H-G-AE: explicit cap − deposited yields exact remaining capacity", (() => { const r = buildKaminoCapacity({ entry: addressed, raw: rec({ depositCapUsd: 1_000_000, depositedUsd: 250_000 }), checkedAt: CHECKED_AT }); return r.output?.capacityMode === "explicit_remaining_capacity" && r.output.remainingDepositCapacityUsd === 750_000; })(), "750000");
+  add("16H-G-AF: an ABSENT cap is 'unknown', never verified_uncapped (absence is not evidence)", (() => { const r = buildKaminoCapacity({ entry: addressed, raw: rec(), checkedAt: CHECKED_AT }); return r.output?.capacityMode === "unknown" && r.diagnostic.planningSafe === false && r.diagnostic.reason === "no_explicit_cap_evidence_absence_is_not_uncapped"; })(), "unknown");
+  add("16H-G-AG: cap === deposited → product_full", buildKaminoCapacity({ entry: addressed, raw: rec({ depositCapUsd: 500_000, depositedUsd: 500_000 }), checkedAt: CHECKED_AT }).output?.capacityMode === "product_full", "product_full");
+  add("16H-G-AH: an explicit deposits-disabled flag → deposits_paused", buildKaminoCapacity({ entry: addressed, raw: rec({ depositsEnabled: false, depositCapUsd: 1_000, depositedUsd: 0 }), checkedAt: CHECKED_AT }).output?.capacityMode === "deposits_paused", "paused");
+  add("16H-G-AI: a negative remainder (conflicting cap/usage) is rejected, never clamped", (() => { const r = buildKaminoCapacity({ entry: addressed, raw: rec({ depositCapUsd: 100, depositedUsd: 500 }), checkedAt: CHECKED_AT }); return r.output === undefined && r.diagnostic.reason === "negative_remaining_capacity_conflicting_cap_and_usage"; })(), "rejected");
+  add("16H-G-AJ: the capacity adapter CANNOT emit verified_uncapped (no source asserts it)", !readIf("src/suggestions/stableYieldProductionAdapters.ts").includes("capacityMode: \"verified_uncapped\""), "never emitted");
+  add("16H-G-AK: TVL / withdrawal-liquidity are never read as capacity", (() => { const src = readIf("src/suggestions/stableYieldProductionAdapters.ts"); const cap = (src.split("export function buildKaminoCapacity")[1] ?? ""); return !/tvl|withdrawalLiquidity|liquidityUsd/i.test(cap) && !/Infinity|Number\.MAX/.test(cap); })(), "clean");
+  add("16H-G-AL: capacity identity is enforced (a mismatched record yields no capacity)", buildKaminoCapacity({ entry: addressed, raw: rec({ productAddress: OTHER_ADDR }), checkedAt: CHECKED_AT }).output === undefined, "blocked");
+
+  // ---- Minimum / maximum ----
+  add("16H-G-AM: no product minimum or maximum is invented for any candidate", listStableYieldEvidenceManifests().every((m) => m.productMinimumUsd === undefined && m.productMaximumUsd === undefined), "none invented");
+  add("16H-G-AN: WealthSmith's $250 excess threshold never appears as a protocol minimum", !/250/.test(JSON.stringify(listStableYieldEvidenceManifests().map((m) => ({ min: m.productMinimumUsd, max: m.productMaximumUsd })))), "not reused");
+  add("16H-G-AO: no canonical buffer-yield minimum is defined by this step", STABLE_YIELD_BUFFER_YIELD_MINIMUM_EXISTS === false, "false");
+
+  // ---- Risk ----
+  add("16H-G-AP: incomplete risk evidence blocks readiness for every candidate", listStableYieldEvidenceManifests().every((m) => m.riskReviewState !== "evidence_complete" && m.missingRiskItems.length > 0) && buildStableYieldReadinessMatrix().every((r) => r.riskReviewEvidence === false), "blocked");
+  add("16H-G-AQ: no adapter computes, assigns, or mutates a risk score", (() => { const blob = ["stableYieldProductionAdapters.ts", "stableYieldProductionIdentity.ts", "stableYieldSourceParsers.ts", "stableYieldProductionEvidence.ts"].map((f) => readIf(`src/suggestions/${f}`)).join("").toLowerCase(); return !/riskscore\s*=|assignrisk|setrisk|computerisk/.test(blob); })(), "no risk math");
+
+  // ---- Orchestration ----
+  add("16H-G-AR: production orchestration consumes canonical adapter output (not raw responses)", readIf("src/suggestions/stableYieldProductInput.ts").includes("buildProductionStableYieldMarketInputs") && readIf("src/suggestions/stableYieldProductInput.ts").includes("buildYieldStrategyMarketDataSet"), "wired");
+  add("16H-G-AS: a raw source record supplied to production yields NO market input (identity blocks it)", buildProductionStableYieldMarketInputs({ checkedAt: CHECKED_AT, sourceRecords: { kamino_steakhouse_usdc: rec() } }).inputs.length === 0, "0 inputs");
+  add("16H-G-AT: that rejection is diagnosed, not silent", (() => { const d = buildProductionStableYieldMarketInputs({ checkedAt: CHECKED_AT, sourceRecords: { kamino_steakhouse_usdc: rec() } }).diagnostics; return d.length === 1 && d[0].identityReason === "missing_product_address" && d[0].planningSafe === false; })(), "diagnosed");
+  add("16H-G-AU: production STILL returns no_plan and no suggestion after the adapter wiring", (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: CHECKED_AT }); return r.decision?.status === "no_plan" && r.suggestion === null; })(), "no_plan");
+  add("16H-G-AV: production still renders NO Stable Yield card", SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
+  add("16H-G-AW: Demo behaviour is unchanged by this step (still exactly one card, $500, 5.15%)", (() => { const rail = buildDemoStableYieldRail(); const sy = rail.cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+
+  // ---- Demo / production isolation ----
+  add("16H-G-AX: Demo data cannot satisfy a production adapter (demo address is not a candidate)", buildProductionStableYieldMarketInputs({ checkedAt: CHECKED_AT, sourceRecords: { demo_usdc_yield_vault: rec({ productAddress: "DemoUsdcYieldVaultAddr111111111111111111111" }) } }).inputs.length === 0, "rejected");
+  add("16H-G-AY: no adapter module imports the Demo scenario", ["stableYieldProductionAdapters.ts", "stableYieldProductionIdentity.ts", "stableYieldSourceParsers.ts", "stableYieldProductionEvidence.ts"].every((f) => !readIf(`src/suggestions/${f}`).includes("demoStableYieldScenario")), "isolated");
+
+  // ---- Boundary: no React, no network, no execution, no approval ----
+  {
+    const blob = ["stableYieldProductionAdapters.ts", "stableYieldProductionIdentity.ts", "stableYieldSourceParsers.ts", "stableYieldProductionEvidence.ts", "stableYieldProductionAdapterTypes.ts"].map((f) => readIf(`src/suggestions/${f}`)).join("").toLowerCase();
+    add("16H-G-AZ: the adapter layer performs no retrieval and contains no React (fetch is probe-only)", !/\bfetch\(|axios|xmlhttprequest|from "react"|usestate/.test(blob), "offline+no react");
+    add("16H-G-BA: the adapter layer adds no execution / transaction / signature / external CTA", !/sendtransaction|signtransaction|signmessage|window\.open|deposit\(|withdraw\(|migrate\(/.test(blob), "read-only");
+    add("16H-G-BB: no adapter selects a product, amount, lane, leader, or Top Pick", !/selectleader|selecttoppick|is_top_pick|selectedamount|choosebest/.test(blob), "no selection");
+    add("16H-G-BC: no adapter approves a product or mutates the registry", !/lifecycle\s*=\s*"approved"|registry\.push|\.lifecycle\s*=/.test(blob), "no approval");
+  }
+  add("16H-G-BD: the readiness matrix hard-codes approved=false for every candidate", buildStableYieldReadinessMatrix().every((r) => r.approved === false), "approved=false");
+  add("16H-G-BE: 'adapter implemented' is tracked separately from 'source verified' and 'approved'", (() => { const m = listStableYieldEvidenceManifests().find((x) => x.strategyId === "kamino_steakhouse_usdc")!; const row = buildStableYieldReadinessMatrix().find((r) => r.strategyId === "kamino_steakhouse_usdc")!; return m.apyAdapterState === "adapter_implemented_source_unverified" && row.apyAdapter === true && row.readyForExplicitReview === false && row.approved === false; })(), "distinguished");
+
+  // ---- Flags ----
+  add("16H-G-BF: the 16H-G adapter flags are true", [STABLE_YIELD_PRODUCTION_ADAPTER_CONTRACT_EXISTS, STABLE_YIELD_PRODUCTION_IDENTITY_ADAPTERS_EXIST, STABLE_YIELD_PRODUCTION_FRESHNESS_VALIDATION_EXISTS, STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_NORMALIZATION_EXISTS, STABLE_YIELD_PRODUCTION_EVIDENCE_MANIFESTS_EXIST, STABLE_YIELD_PRODUCTION_ADAPTER_DIAGNOSTICS_EXIST, STABLE_YIELD_PRODUCTION_ORCHESTRATION_CONSUMES_ADAPTERS, STABLE_YIELD_PRODUCTION_SOURCE_PROBE_EXISTS, STABLE_YIELD_APPROVAL_READINESS_MATRIX_EXISTS].every((f) => f === true), "true");
+  add("16H-G-BG: approval / approved-products / card-available / buffer-minimum / Qdrant flags are false", [STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS, STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST, STABLE_YIELD_PRODUCTION_CARD_AVAILABLE, STABLE_YIELD_BUFFER_YIELD_MINIMUM_EXISTS, STABLE_YIELD_QDRANT_INTEGRATION_EXISTS, STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS].every((f) => f === false), "false");
+
+  // ---- Probe safety ----
+  {
+    const probe = readIf("scripts/probe-stable-yield-sources.mjs");
+    // "approved" appears in the probe's REPORT text ("approved: 0 (approval is Step 16H-H)"), so match
+    // actual mutation/planning code rather than the word.
+    add("16H-G-BH: the probe exists, is developer-only, and never approves / mutates / plans", probe.length > 0 && !/lifecycle\s*[:=]|registry\.push|buildYieldStrategyPlanDecision\(|buildStableYieldPlanSuggestion\(/.test(probe), "safe");
+    add("16H-G-BI: the probe refuses to run with credentials present and redacts addresses", probe.includes("FORBIDDEN_SECRETS") && probe.includes("redactAddress"), "no secrets");
+    // Needle built from fragments so this check does not match its own source text.
+    const netNeedles = ["await " + "fetch(", "https://" + "api.", "createSolanaRpc" + "("];
+    add("16H-G-BJ: no deterministic fixture check performs a network request", netNeedles.every((n) => !readIf("src/suggestions/suggestionEngine.fixtures.ts").includes(n)), "offline");
+  }
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -16070,6 +16211,7 @@ export function printFixtureResults(): void {
     ...runYieldStrategyPlanUiFixtureChecks(),
     ...runStableYieldProductIntegrationFixtureChecks(),
     ...runStableYieldReleaseGateFixtureChecks(),
+    ...runStableYieldProductionAdapterFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

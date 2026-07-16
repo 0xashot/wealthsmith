@@ -23,7 +23,10 @@ import type { StableYieldReviewPresentation } from "./yieldStrategyPlanPresentat
 import { listYieldStrategies } from "./yieldStrategyRegistry";
 import { buildYieldStrategyEligibilitySet } from "./yieldStrategyEligibility";
 import { buildYieldStrategyComparisonSet } from "./yieldStrategyComparison";
-import { buildEmptyApprovedYieldStrategyMarketDataSet } from "./yieldStrategyMarketData";
+import { buildEmptyApprovedYieldStrategyMarketDataSet, buildYieldStrategyMarketDataSet } from "./yieldStrategyMarketData";
+import type { YieldStrategyMarketDataInput } from "./yieldStrategyMarketDataTypes";
+import { buildKaminoMarketDataInput } from "./stableYieldProductionAdapters";
+import type { StableYieldAdapterDiagnostic } from "./stableYieldProductionAdapterTypes";
 import { buildYieldStrategyPositionSet } from "./yieldStrategyPositionEngine";
 import { buildYieldStrategyEligibleCapitalSnapshot } from "./yieldStrategyEligibleCapital";
 import { buildYieldStrategyPlanDecision } from "./yieldStrategyPlan";
@@ -58,12 +61,52 @@ export interface DeriveStableYieldSuggestionResult {
 }
 
 /**
- * The PRODUCTION Stable Yield decision — runs the real 16E→16G layers over the production registry with
- * empty market/risk/capacity data. No approved product → no leader → `no_plan`. Never Demo data.
+ * Step 16H-G — collect canonical PRODUCTION market-data inputs from the adapter layer.
+ *
+ * `sourceRecords` are already-retrieved, pre-normalized source payloads keyed by strategyId. Stage A
+ * (retrieval) is NOT performed here: the 16C contract pins `browserFetched: false`, so the browser may
+ * never call a yield-data provider. Records can only arrive from the developer-only Node probe or a
+ * future backend job — neither of which feeds runtime today, so the default is none.
+ *
+ * Every record still runs the full adapter (parse → exact identity → freshness → normalize). Only
+ * `planningSafe` output is returned; a rejected record contributes NOTHING (never a partial default).
+ * Raw source payloads never reach the planner — only canonical `YieldStrategyMarketDataInput`s do.
  */
-function buildProductionStableYieldDecision(checkedAt: string): YieldStrategyPlanDecision {
+export function buildProductionStableYieldMarketInputs(args: { checkedAt: string; sourceRecords?: Record<string, unknown> }): {
+  inputs: YieldStrategyMarketDataInput[];
+  diagnostics: StableYieldAdapterDiagnostic[];
+} {
+  const { checkedAt, sourceRecords } = args;
+  const inputs: YieldStrategyMarketDataInput[] = [];
+  const diagnostics: StableYieldAdapterDiagnostic[] = [];
+
+  for (const entry of listYieldStrategies()) {
+    const raw = sourceRecords?.[entry.strategyId];
+    if (raw === undefined) continue; // No record supplied → nothing to adapt. Never a synthesized default.
+    // Only Kamino has an implemented source adapter; other protocols document no exact product at all.
+    if (entry.protocolId !== "kamino") continue;
+    const result = buildKaminoMarketDataInput({ entry, raw, checkedAt });
+    diagnostics.push(result.diagnostic);
+    if (result.diagnostic.planningSafe && result.output) inputs.push(result.output);
+  }
+  return { inputs, diagnostics };
+}
+
+/**
+ * The PRODUCTION Stable Yield decision — runs the real 16E→16G layers over the production registry,
+ * now fed by the Step 16H-G adapter layer via the canonical 16C join.
+ *
+ * Today this still resolves to `no_plan`, for a documented reason: every registry entry is
+ * `documentation_required` with `address: undefined`, so (a) no source record can be bound to an exact
+ * product and (b) the 16C join only builds a real snapshot for an APPROVED entry with a documented
+ * address. Approval is Step 16H-H's job, not this layer's. Never Demo data.
+ */
+function buildProductionStableYieldDecision(checkedAt: string, sourceRecords?: Record<string, unknown>): YieldStrategyPlanDecision {
   const registry = listYieldStrategies();
-  const marketDataSet = buildEmptyApprovedYieldStrategyMarketDataSet(checkedAt);
+  const { inputs } = buildProductionStableYieldMarketInputs({ checkedAt, sourceRecords });
+  // The canonical registry↔market join. With no inputs this is equivalent to the empty-approved set,
+  // but it is now the REAL join, so a future approved product + adapter record flows through unchanged.
+  const marketDataSet = inputs.length > 0 ? buildYieldStrategyMarketDataSet({ checkedAt, inputs }) : buildEmptyApprovedYieldStrategyMarketDataSet(checkedAt);
   const eligibilitySet = buildYieldStrategyEligibilitySet({ registry, marketDataSet, riskReviews: [], checkedAt });
   const comparisonSet = buildYieldStrategyComparisonSet({ eligibilitySet, marketDataSet, riskReviews: [], checkedAt });
   const positionSet = buildYieldStrategyPositionSet({ ownerAddress: PROD_OWNER, checkedAt, positions: [] });

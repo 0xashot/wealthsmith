@@ -1900,3 +1900,37 @@ Stable Yield is **release-ready and read-only**. The canonical status, in one pl
 `buildStableYieldPlanSuggestion` to fail closed on a corrupted source plan / a decision whose mirrored
 fields conflict with its selected plan. The `runStableYieldReleaseGateFixtureChecks` block asserts the
 whole release contract. See [yieldStrategyPlanPresentation.md](./yieldStrategyPlanPresentation.md#16h-f--release-gate-and-the-smith-ai--qdrant-deferral).
+
+### Step 16H-G — production data adapters + evidence readiness
+
+The production data-adapter layer and the evidence package for a later explicit approval decision. It
+**approves no product**, defines **no buffer-yield minimum**, and production still renders **no card**.
+Full detail: [stableYieldProductionAdapters.md](./stableYieldProductionAdapters.md).
+
+**Headline finding: all 5 production candidates are blocked on one thing — no exact product address is
+documented.** Every registry entry is `documentation_required` with `address: undefined`. Adapters bind
+source data to products by exact address only, so there is nothing to bind to and no query to make; every
+candidate fails closed at `identity_validation` with `missing_product_address`, and the probe issues zero
+network requests. That is the correct result and the first task of Step 16H-H.
+
+Five separable stages — retrieval (developer-only Node probe; never the browser, since 16C pins
+`browserFetched: false`) → strict source parse → canonical normalize → identity/unit/freshness validate →
+the existing 16C→16G pipeline. Implemented: the adapter contract + diagnostics, exact-address identity
+resolution (name/ticker/protocol/fuzzy/position matching all rejected — a product *name* is not an
+identity), a strict Kamino vault-state parser, market/APY + capacity adapters, freshness validation
+(source time authoritative; a fresh fetch of stale upstream data is still stale), versioned evidence
+manifests, the readiness matrix, and `npm run probe:stable-yield`.
+
+Capacity never uses TVL or withdrawal liquidity — they answer different questions (TVL says what is
+already deposited; a full and an uncapped product report identical TVL). An absent cap is `unknown`,
+never `verified_uncapped`; the Kamino adapter cannot emit `verified_uncapped` at all, because vault state
+asserts no such thing. No product minimum/maximum is invented, and WealthSmith's $250 excess threshold is
+never a protocol minimum.
+
+`adapter implemented` ≠ `source verified` ≠ `evidence complete` ≠ **approved**. `approved` is hard-coded
+false and unrepresentable in the readiness type. Flags true: `STABLE_YIELD_PRODUCTION_ADAPTER_CONTRACT_EXISTS`,
+`_IDENTITY_ADAPTERS_EXIST`, `_FRESHNESS_VALIDATION_EXISTS`, `_DEPOSIT_STATE_NORMALIZATION_EXISTS`,
+`_EVIDENCE_MANIFESTS_EXIST`, `_ADAPTER_DIAGNOSTICS_EXIST`, `_ORCHESTRATION_CONSUMES_ADAPTERS`,
+`_SOURCE_PROBE_EXISTS`, `STABLE_YIELD_APPROVAL_READINESS_MATRIX_EXISTS`. False:
+`_PRODUCT_APPROVAL_EXISTS`, `_APPROVED_PRODUCTS_EXIST`, `_CARD_AVAILABLE`,
+`STABLE_YIELD_BUFFER_YIELD_MINIMUM_EXISTS`, `STABLE_YIELD_QDRANT_INTEGRATION_EXISTS`.

@@ -1008,3 +1008,34 @@ capital and never serializes Infinity. The plan reuses the canonical `DCA_EXCESS
 and the Step-15 cents-floor + `fnv1a` plan-ID architecture; no Safety-Buffer-Yield deposit minimum is
 documented, so the buffer lane fails closed rather than reusing the contribution $50. See
 [yieldStrategyPlan.md](./yieldStrategyPlan.md).
+
+## 16H-G — Stable Yield PRODUCTION source adapters
+
+The production data-adapter layer that would supply real values to the 16C/16G contracts above. Full
+detail: [stableYieldProductionAdapters.md](./stableYieldProductionAdapters.md).
+
+**Current state: no production Stable Yield source is queried, because no candidate has a documented
+exact product address.** All five registry candidates are `documentation_required` with
+`address: undefined`; adapters bind data by exact address only, so every candidate fails closed at
+`identity_validation` (`missing_product_address`) and the developer probe (`npm run probe:stable-yield`)
+issues **zero network requests**. No product is approved and production renders no card.
+
+| Source | Tier | Candidate | Status |
+|---|---|---|---|
+| Kamino official SDK (`@kamino-finance/klend-sdk`) vault state | official protocol SDK | `kamino_steakhouse_usdc` | adapter implemented; **source schema unverified** (net-APY unit not confirmed live); blocked on address |
+| Kamino official SDK reserve/market state | official protocol SDK | `kamino_usdc_lending` | no adapter — no exact reserve/market address documented |
+| — | — | `raydium_stable_usdc_strategy` | no adapter — in-scope protocol, no identified product |
+| — | — | `meteora_stable_usdc_strategy` | no adapter — in-scope protocol, no identified product |
+| — | — | `hubble_usdc_strategy` | unsupported — documented as a USDH CDP, not a USDC deposit venue (no name-based penalty; no risk score assigned) |
+
+Source hierarchy: official API → official SDK/on-chain → official documented endpoint → an approved
+provider already used by WealthSmith → no adapter. No marketing-copy scraping; no unreviewed aggregator
+as a silent source of truth. Retrieval never happens in the browser (16C pins `browserFetched: false`) or
+in deterministic code — only in the developer-only Node probe, which reads no credentials and redacts
+addresses. APY units are declared per source, never inferred from magnitude; the source's own timestamp
+is authoritative, so a fresh fetch of stale upstream data is still stale. No approved-fallback value is
+minted from a live observation.
+
+**Infrastructure blocker:** no backend/refresh job exists to deliver `browserFetched: false` normalized
+Stable Yield data to runtime. The precedent is the local Node job + published cache used for SOL staking
+(`refresh-sol-staking-market-data.mjs` → `publish-sol-staking-market-cache.mjs`).
