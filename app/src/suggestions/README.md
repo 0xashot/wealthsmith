@@ -1810,3 +1810,40 @@ still emits none (no approved product → `no_plan`). Flags: `STABLE_YIELD_SUGGE
 `STABLE_YIELD_SUGGESTION_CONTRACT_EXISTS`/`_PLAN_TO_SUGGESTION_EXISTS`/`_PARTICIPATES_IN_ORDERING`/
 `_TOP_PICK_ELIGIBLE = true`; card/modal/UI/Demo/Real-Wallet/Smith-AI/execution/transaction/signature
 `false`.
+
+## 16H-B — Stable Yield presentation contract & copy mapping
+
+Deterministic **card + review view models** for a 16H-A suggestion
+([yieldStrategyPlanPresentation.md](./yieldStrategyPlanPresentation.md), `yield_strategy_presentation_v1`)
+— **formatting only**, no React. `buildStableYieldPlanPresentation(suggestion)` maps the `stableYieldPlan`
+metadata into fixed title/description templates (keyed on lane × action mode), formatted amounts/APY/
+projections from **supplied values only** (raw kept alongside), canonical disclosures, and a read-only
+`"Review Strategy"` CTA intent (`open_stable_yield_review` — never a URL/transaction/signature). APY
+states: `live_protocol_api`/`approved_fallback`/`provided`/`unavailable` (source never inferred);
+capacity: `explicit_remaining_capacity`/`verified_uncapped` only (never "unlimited"). It re-evaluates
+nothing, calculates no amount/APY/earnings, decides no Top Pick, and **fails closed** (no view model + a
+diagnostic) on any contract breach (invalid lane/action/funding/amount, missing identity/projection,
+execution flags, false read-only/external-management, unsupported capacity mode). Production null →
+no presentation. Flags: `STABLE_YIELD_CARD_PRESENTATION_CONTRACT_EXISTS`/`_REVIEW_PRESENTATION_CONTRACT_
+EXISTS`/`_DETERMINISTIC_COPY_MAPPING_EXISTS`/`_PRESENTATION_VALIDATION_EXISTS`/`_REVIEW_ONLY_CTA_INTENT_
+EXISTS = true`; rendered card/modal, `/testing` visual fixtures, Demo/Real-Wallet/Smith-AI, execution
+`false`.
+
+## 16H-C — Stable Yield card + review UI
+
+Renders the 16H-B view models through the **canonical shared UI**. `toSuggestionCard` gains a
+`stableYieldPlan` branch → `SuggestionCardState` (via `buildStableYieldPlanPresentation`), rendered by
+`<SuggestionCard>`; `SuggestionReviewModal` gains a `stableYieldReview` prop rendering six read-only
+sections (Recommendation / Strategy / Why this fits your plan / Before and after / Yield and capacity /
+Important information) through the same accessible modal shell (role=dialog, aria-modal, focus trap,
+Escape, focus restore). `stableYieldTestingFixtures.ts` injects 16 card + 11 review + 4 fail-closed
+deterministic fixtures (built from synthetic 16G decisions — the registry is never mutated) into a
+dedicated **Stable Yield** `/testing` section. The "Review Strategy" CTA opens the drawer only —
+`executes_transaction`/`requires_wallet_signature`/`opens_external_url`/`completion_on_click` all false;
+no external protocol URL, deposit, or signature. React computes no finance (integrity-scanned: no
+planner/leader/capital/APY/`usdToPlanCents` imports in UI). Verified in-browser (desktop + 320px):
+distinct copy, APY/Top-Pick states, drawer open/Escape-close/focus-restore, capacity never "unlimited",
+no overflow. Production renders no card (no approved product). Flags: `STABLE_YIELD_RENDERED_CARD_EXISTS`/
+`_RENDERED_REVIEW_MODAL_EXISTS`/`_TESTING_VISUAL_FIXTURES_EXIST`/`_SHARED_CARD_MAPPER_EXISTS`/`_REVIEW_UI_
+EXISTS`/`_ACCESSIBILITY_BEHAVIOR_EXISTS = true`; Demo/Real-Wallet/Smith-AI/external-CTA/execution/
+transaction/signature `false`.

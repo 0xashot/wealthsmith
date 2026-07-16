@@ -148,6 +148,28 @@ export const STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS = false;
 export const STABLE_YIELD_SUGGESTION_EXECUTION_EXISTS = false;
 export const STABLE_YIELD_SUGGESTION_TRANSACTION_CONSTRUCTION_EXISTS = false;
 export const STABLE_YIELD_SUGGESTION_SIGNATURE_FLOW_EXISTS = false;
+// Step 16H-B — deterministic card + review PRESENTATION contracts + copy mapping now exist (view models
+// only; no React). Defines exactly what future UI may render, with a read-only "Review Strategy" CTA
+// intent (no execution URL / transaction / signature). No rendered card/modal, /testing visual fixtures,
+// Demo/Real-Wallet UI, or Smith AI yet.
+export const STABLE_YIELD_CARD_PRESENTATION_CONTRACT_EXISTS = true;
+export const STABLE_YIELD_REVIEW_PRESENTATION_CONTRACT_EXISTS = true;
+export const STABLE_YIELD_DETERMINISTIC_COPY_MAPPING_EXISTS = true;
+export const STABLE_YIELD_PRESENTATION_VALIDATION_EXISTS = true;
+export const STABLE_YIELD_REVIEW_ONLY_CTA_INTENT_EXISTS = true;
+// Step 16H-C — the Stable Yield card + review render through the shared SuggestionCard + review drawer,
+// with dedicated /testing visual fixtures. Read-only ("Review Strategy" opens the shared drawer only).
+// No Demo/Real-Wallet product integration, Smith AI, execution, transaction, external protocol CTA, or
+// signature. Production still renders no card (no approved product → no suggestion).
+export const STABLE_YIELD_RENDERED_CARD_EXISTS = true;
+export const STABLE_YIELD_RENDERED_REVIEW_MODAL_EXISTS = true;
+export const STABLE_YIELD_TESTING_VISUAL_FIXTURES_EXIST = true;
+export const STABLE_YIELD_SHARED_CARD_MAPPER_EXISTS = true;
+export const STABLE_YIELD_REVIEW_UI_EXISTS = true;
+export const STABLE_YIELD_ACCESSIBILITY_BEHAVIOR_EXISTS = true;
+export const STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS = false;
+export const STABLE_YIELD_REAL_WALLET_INTEGRATION_EXISTS = false;
+export const STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS = false;
 export const STABLE_YIELD_UI_ENABLED = false;
 export const STABLE_YIELD_TESTING_EXISTS = false;
 export const STABLE_YIELD_EXECUTION_ENABLED = false;

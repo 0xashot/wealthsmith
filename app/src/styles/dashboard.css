@@ -2015,6 +2015,17 @@
   color: var(--color-text-primary);
 }
 
+/* Step 16H-C — Stable Yield review disclosures (read-only, non-custodial). */
+.review-modal__disclosures {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
 .review-modal__metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

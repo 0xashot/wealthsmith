@@ -24,6 +24,8 @@ import {
 } from "./testingPageFixtures";
 import { runAllContributionTestingScenarios } from "../suggestions/contributionTestingScenarios";
 import { toSuggestionCard } from "../suggestions/toSuggestionCard";
+import { STABLE_YIELD_TESTING_CARD_FIXTURES, STABLE_YIELD_TESTING_REVIEW_FIXTURES, STABLE_YIELD_TESTING_NON_RENDER_FIXTURES, STABLE_YIELD_TESTING_FIXTURES } from "../suggestions/stableYieldTestingFixtures";
+import { buildStableYieldPlanPresentation } from "../suggestions/yieldStrategyPlanPresentation";
 import "./testingPage.css";
 
 type Filter = "All" | TestingGroup;
@@ -44,6 +46,10 @@ export default function TestingPage() {
   const contributionScenarios = useMemo(() => runAllContributionTestingScenarios(), []);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   const selectedScenario = selectedScenarioId ? contributionScenarios.find((s) => s.id === selectedScenarioId) : undefined;
+
+  const [selectedStableYieldId, setSelectedStableYieldId] = useState<string | null>(null);
+  const selectedStableYield = selectedStableYieldId ? STABLE_YIELD_TESTING_FIXTURES.find((f) => f.id === selectedStableYieldId) : undefined;
+  const selectedStableYieldReview = selectedStableYield?.suggestion ? buildStableYieldPlanPresentation(selectedStableYield.suggestion).review : null;
 
   return (
     <main className="testing-page">
@@ -146,6 +152,66 @@ export default function TestingPage() {
           contributionReview={selectedScenario.review}
           isTopPick={selectedScenario.pipeline.suggestion?.is_top_pick === true}
           onClose={() => setSelectedScenarioId(null)}
+        />
+      )}
+
+      {/* Step 16H-C — Stable Yield card + review states (injected 16H-B presentation fixtures). */}
+      <section className="testing-page__contrib" aria-label="Stable Yield suggestions">
+        <h2 className="testing-page__section-title">Stable Yield</h2>
+        <p className="testing-page__subtext">
+          Injected deterministic Stable Yield presentation fixtures (16G plan → 16H-A suggestion → 16H-B
+          card/review). Read-only: the "Review Strategy" CTA opens the shared review drawer only — never a
+          transaction, signature, deposit, or external protocol page. No production product is approved,
+          so real wallet mode shows no Stable Yield card.
+        </p>
+        <h3 className="testing-page__section-subtitle">Cards</h3>
+        <div className="testing-page__grid">
+          {STABLE_YIELD_TESTING_CARD_FIXTURES.map((f) => (
+            <div key={f.id} className="testing-page__cell">
+              <p className="testing-page__cell-label">{f.label}</p>
+              {f.card ? (
+                <SuggestionCard card={f.card} onReview={() => setSelectedStableYieldId(f.id)} />
+              ) : (
+                <p className="testing-page__contrib-noplan">Fails closed — no card rendered.</p>
+              )}
+            </div>
+          ))}
+        </div>
+        <h3 className="testing-page__section-subtitle">Review drawers</h3>
+        <div className="testing-page__grid">
+          {STABLE_YIELD_TESTING_REVIEW_FIXTURES.map((f) => (
+            <div key={f.id} className="testing-page__cell">
+              <p className="testing-page__cell-label">{f.label}</p>
+              {f.card ? (
+                <SuggestionCard card={f.card} onReview={() => setSelectedStableYieldId(f.id)} />
+              ) : (
+                <p className="testing-page__contrib-noplan">Fails closed — no card rendered.</p>
+              )}
+            </div>
+          ))}
+        </div>
+        <h3 className="testing-page__section-subtitle">Fail-closed (no card)</h3>
+        <div className="testing-page__contrib-grid">
+          {STABLE_YIELD_TESTING_NON_RENDER_FIXTURES.map((f) => (
+            <div key={f.id} className="testing-page__contrib-cell">
+              <div className="testing-page__contrib-head">
+                <span className="testing-page__badge">TEST FIXTURE</span>
+                <span className="testing-page__contrib-id">{f.id}</span>
+              </div>
+              <p className="testing-page__contrib-name">{f.label}</p>
+              <p className="testing-page__contrib-noplan">
+                {f.description} No card is rendered ({f.card === null ? "presentation suppressed" : "unexpected"}).
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {selectedStableYieldReview && (
+        <SuggestionReviewModal
+          stableYieldReview={selectedStableYieldReview}
+          isTopPick={selectedStableYield?.card?.is_top_pick === true}
+          onClose={() => setSelectedStableYieldId(null)}
         />
       )}
     </main>

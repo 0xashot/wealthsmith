@@ -1017,6 +1017,33 @@ import {
   STABLE_YIELD_SUGGESTION_REVIEW_MODAL_EXISTS,
   STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS,
   STABLE_YIELD_SUGGESTION_EXECUTION_EXISTS,
+  STABLE_YIELD_CARD_PRESENTATION_CONTRACT_EXISTS,
+  STABLE_YIELD_REVIEW_PRESENTATION_CONTRACT_EXISTS,
+  STABLE_YIELD_DETERMINISTIC_COPY_MAPPING_EXISTS,
+  STABLE_YIELD_PRESENTATION_VALIDATION_EXISTS,
+  STABLE_YIELD_REVIEW_ONLY_CTA_INTENT_EXISTS,
+  STABLE_YIELD_RENDERED_CARD_EXISTS,
+  STABLE_YIELD_RENDERED_REVIEW_MODAL_EXISTS,
+  STABLE_YIELD_TESTING_VISUAL_FIXTURES_EXIST,
+} from "./investmentTargetRegistry";
+import {
+  YIELD_STRATEGY_PRESENTATION_EXISTS,
+  buildStableYieldPlanPresentation,
+  stableYieldTitle,
+  stableYieldApyPresentation,
+  STABLE_YIELD_READ_ONLY_DISCLOSURE,
+  STABLE_YIELD_EXTERNAL_MANAGEMENT_DISCLOSURE,
+} from "./yieldStrategyPlanPresentation";
+import { YIELD_STRATEGY_PRESENTATION_SCHEMA_VERSION, YIELD_STRATEGY_PRESENTATION_POLICY_ID } from "./yieldStrategyPlanPresentationTypes";
+import { toSuggestionCard as SY_toSuggestionCard } from "./toSuggestionCard";
+import { STABLE_YIELD_TESTING_FIXTURES, STABLE_YIELD_TESTING_CARD_FIXTURES, STABLE_YIELD_TESTING_REVIEW_FIXTURES, STABLE_YIELD_TESTING_NON_RENDER_FIXTURES, STABLE_YIELD_TESTING_FIXTURES_EXIST as SY_TEST_FIXTURES_EXIST } from "./stableYieldTestingFixtures";
+import {
+  STABLE_YIELD_SHARED_CARD_MAPPER_EXISTS,
+  STABLE_YIELD_REVIEW_UI_EXISTS,
+  STABLE_YIELD_ACCESSIBILITY_BEHAVIOR_EXISTS,
+  STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS,
+  STABLE_YIELD_REAL_WALLET_INTEGRATION_EXISTS,
+  STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS,
 } from "./investmentTargetRegistry";
 import type { YieldStrategyRegistryEntry as ELIG_Entry } from "./yieldStrategyRegistryTypes";
 import type { YieldStrategyMarketSnapshot as ELIG_Snap, YieldStrategyMarketDataSet as ELIG_MarketSet, YieldApyData as ELIG_Apy, YieldLiquidityData as ELIG_Liq } from "./yieldStrategyMarketDataTypes";
@@ -15382,7 +15409,7 @@ export function runYieldStrategyPlanFixtureChecks(): FixtureCheck[] {
   add("16G-DE: no product-facing output is updated", rd.updatesProductOutput === false && rd.selectedPlan!.updatesProductOutput === false, "no output");
   {
     const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
-    add("16G-DF: no UI or /testing card is added", STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && prodFiles.every((f) => !/yieldStrategyPlan|yieldStrategyProductCapacity/.test(readIf(f))), "no UI");
+    add("16G-DF: no product-facing file imports the 16G plan decision / capacity logic (only the 16H-B presentation may reach UI)", STABLE_YIELD_UI_ENABLED === false && prodFiles.every((f) => !/buildYieldStrategyPlanDecision|yieldStrategyProductCapacity|yieldStrategyPlanPolicy/.test(readIf(f))), "no planner in UI");
   }
   add("16G-DG: no protocol deep link is created", !/deeplink|https:\/\/app\.|manageurl|deposit_url/.test(planBlob), "no deep link");
   add("16G-DH: no transaction payload is created", rd.transactionBuilt === false && rd.selectedPlan!.transactionBuilt === false && !/transactionmessage|serializedtransaction|instructionlist/.test(planBlob), "no payload");
@@ -15515,6 +15542,184 @@ export function runYieldStrategyPlanSuggestionFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 16H-B — Stable Yield presentation contract + copy-mapping fixtures (16H-B-A…). Verifies the
+ * deterministic card + review view models (formatting only), title/description mapping, APY + capacity
+ * presentation states, disclosures, the read-only CTA intent, fail-closed validation, and that no React
+ * UI / execution / transaction / signature / external URL is created.
+ */
+export function runYieldStrategyPlanPresentationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const T = "2026-07-16T00:00:00.000Z";
+  const OWNER = "OwnerPres1111111111111111111111111111111111";
+
+  // Compact 16G decision factories (synthetic; never touch the production registry).
+  const approvedEntry = (o: Partial<ELIG_Entry> = {}): ELIG_Entry => ({ schemaVersion: "1.0.0", registryVersion: "1.0.0", strategyId: "syn", displayName: "Syn", protocolId: "kamino", protocolDisplayName: "Kamino", strategyType: "lending", principalAsset: "USDC", supportedLane: "safety_buffer_yield", riskLane: "buffer_eligible", lifecycle: "approved", officialUrl: "https://app.kamino.finance", documentationUrl: "https://docs.kamino.finance", address: "ADDR", marketDataEvaluated: false, eligibilityEvaluated: false, comparisonEvaluated: false, suggestionGenerated: false, transactionsEnabled: false, walletSignatureRequired: false, notes: [], ...o });
+  const EX_ENTRY = approvedEntry({ strategyId: "syn_ex", displayName: "Steakhouse-style USDC Vault", supportedLane: "excess_usdc_yield", riskLane: "excess_only", strategyType: "managed_vault", address: "ADDR_EX" });
+  const BUF_ENTRY = approvedEntry({ strategyId: "syn_buf", displayName: "USDC Lending Market", supportedLane: "safety_buffer_yield", riskLane: "buffer_eligible", strategyType: "lending", address: "ADDR_BUF" });
+  const mkLeaderPos = (status: string) => ({ lane: "buffer", held: status === "leader_held" || status === "leader_held_multiple_positions", matchedPositionIds: [], positionCount: 0, status, warnings: [], blockers: [] });
+  const mkCapacity = (o: Partial<PLAN_Cap> = {}): PLAN_Cap => ({ schemaVersion: "1.0.0", policyId: "yield_strategy_product_capacity_v1", policyVersion: "1.0.0", strategyId: "syn_ex", protocolId: "kamino", productAddress: "ADDR_EX", principalAssetId: "USDC", capacityMode: "explicit_remaining_capacity", acceptingDeposits: true, remainingDepositCapacityUsd: 100000, sourceId: "cap_src", provenanceKind: "documented_source", browserFetched: false, fetchedAt: T, checkedAt: T, maximumAgeMs: 3600000, ageMs: 0, status: "complete", warnings: [], blockers: [], productSelected: false, amountSelected: false, planGenerated: false, suggestionGenerated: false, transactionsEnabled: false, walletSignatureRequired: false, ...o });
+  interface CapOpts { bufferCap?: number; excessCap?: number; directBuffer?: number; surplus?: number; current?: number; maxCombined?: number; excessLeaderPos?: string; bufferLeaderPos?: string; }
+  const mkCapital = (o: CapOpts = {}): PLAN_CapitalSnap => ({ schemaVersion: "1.0.0", policyId: "yield_strategy_capital_v1", policyVersion: "1.0.0", ownerAddress: OWNER, checkedAt: T, status: "ready", requiredBufferUsd: 1000, directWalletEligibleBufferUsd: o.directBuffer ?? 1500, existingEligibleBufferYieldUsd: 0, currentEligibleBufferUsd: o.current ?? 1500, bufferShortfallUsd: 0, canonicalBufferSurplusUsd: o.surplus ?? 500, bufferComplete: true, vaultAllocationPct: 0.7, walletAllocationPct: 0.3, allowedBufferYieldUsd: 700, requiredWalletFloorUsd: 300, remainingBufferYieldCapacityUsd: 700, directLiquidUsdcUsd: 5000, rawBufferYieldCapitalUsd: o.bufferCap ?? 0, bufferYieldEligibleCapitalUsd: o.bufferCap ?? 0, bufferYieldMinimumPolicyAvailable: false, rawExcessYieldCapitalUsd: o.excessCap ?? 0, excessYieldEligibleCapitalUsd: o.excessCap ?? 0, excessYieldMinimumUsd: 250, excessYieldMeetsMinimum: (o.excessCap ?? 0) >= 250, maximumCombinedSourceCapitalUsd: o.maxCombined ?? ((o.bufferCap ?? 0) + (o.excessCap ?? 0)), sharedSourceOverlapPossible: false, sharedSourceOverlapUsd: 0, bufferLeaderPositionStatus: mkLeaderPos(o.bufferLeaderPos ?? "no_comparison_leader"), excessLeaderPositionStatus: mkLeaderPos(o.excessLeaderPos ?? "no_comparison_leader"), comparisonPerformed: false, productSelected: false, amountSelected: false, planGenerated: false, suggestionGenerated: false, updatesProductOutput: false, transactionsEnabled: false, walletSignatureRequired: false, blockers: [], warnings: [], notes: [] } as unknown as PLAN_CapitalSnap);
+  const mkLaneComp = (lane: string, o: { status?: string; leader?: string; score?: number; reason?: string }) => ({ schemaVersion: "1.0.0", policyId: "yield_strategy_comparison_v1", policyVersion: "1.0.0", lane, status: o.status ?? "empty_eligible_set", checkedAt: T, candidateScorecards: [], orderedStrategyIds: [], ...(o.leader ? { comparisonLeaderStrategyId: o.leader } : {}), ...(o.score !== undefined ? { comparisonLeaderScore: o.score } : {}), leaderSelectionReason: o.reason ?? "none_empty_set", tieAnalysis: {}, sensitivityAnalysis: {}, walletPositionsEvaluated: false, userCapitalEvaluated: false, amountCalculated: false, planGenerated: false, suggestionGenerated: false, updatesProductOutput: false, transactionsEnabled: false, walletSignatureRequired: false, warnings: [], blockers: [], notes: [] });
+  const mkComparison = (buffer: { status?: string; leader?: string; score?: number; reason?: string }, excess: { status?: string; leader?: string; score?: number; reason?: string }) => ({ schemaVersion: "1.0.0", policyId: "yield_strategy_comparison_v1", policyVersion: "1.0.0", checkedAt: T, bufferComparison: mkLaneComp("buffer", buffer), excessComparison: mkLaneComp("excess", excess), ...(buffer.leader ? { bufferComparisonLeaderStrategyId: buffer.leader } : {}), ...(excess.leader ? { excessComparisonLeaderStrategyId: excess.leader } : {}), emptyApprovedSet: false, emptyBufferEligibleSet: false, emptyExcessEligibleSet: false, comparisonPerformed: true, rankingPerformed: true, walletPositionsEvaluated: false, userCapitalEvaluated: false, amountCalculated: false, planGenerated: false, suggestionGenerated: false, updatesProductOutput: false, transactionsEnabled: false, walletSignatureRequired: false, warnings: [], blockers: [], notes: [] } as unknown as CMP_Set);
+  const elig = (buffer: string[], excess: string[]) => ({ bufferEligibleStrategyIds: buffer, excessEligibleStrategyIds: excess } as unknown as ELIG_EligSet);
+  const excessDecision = (leaderPos = "leader_not_held", capacityOver: Partial<PLAN_Cap> = {}) => buildYieldStrategyPlanDecision({ ownerAddress: OWNER, checkedAt: T, registry: [EX_ENTRY], eligibilitySet: elig([], ["syn_ex"]), comparisonSet: mkComparison({ status: "empty_eligible_set" }, { status: "complete", leader: "syn_ex", score: 80, reason: "highest_stable_score" }), capitalSnapshot: mkCapital({ excessCap: 500, directBuffer: 1500, surplus: 500, current: 1500, maxCombined: 500, excessLeaderPos: leaderPos }), productCapacitySet: [mkCapacity({ strategyId: "syn_ex", productAddress: "ADDR_EX", ...capacityOver })] });
+  const bufferDecision = (leaderPos = "leader_not_held") => buildYieldStrategyPlanDecision({ ownerAddress: OWNER, checkedAt: T, registry: [BUF_ENTRY], eligibilitySet: elig(["syn_buf"], []), comparisonSet: mkComparison({ status: "complete", leader: "syn_buf", score: 85, reason: "highest_stable_score" }, { status: "empty_eligible_set" }), capitalSnapshot: mkCapital({ bufferCap: 700, directBuffer: 1000, surplus: 0, current: 1000, maxCombined: 700, bufferLeaderPos: leaderPos }), productCapacitySet: [mkCapacity({ strategyId: "syn_buf", productAddress: "ADDR_BUF" })], bufferMinimumOverrideUsd: 50 });
+  const APY_LIVE = { netApyPct: 5.2, apyDefinition: "net", apyWindow: "current", sourceId: "kamino_api", sourceLabel: "Kamino API", provenanceKind: "live_protocol_api" as const, checkedAt: T };
+  const APY_FALLBACK = { netApyPct: 4.8, apyDefinition: "net", apyWindow: "current", sourceId: "provider", sourceLabel: "Approved provider", provenanceKind: "approved_fallback" as const };
+  const suggFor = (decision: ReturnType<typeof excessDecision>, apy?: typeof APY_LIVE | typeof APY_FALLBACK, topPick = false) => { const s = buildStableYieldPlanSuggestion(decision, { generatedAt: 1_000_000, ...(apy ? { apyProvenance: apy } : {}) }).suggestion!; return topPick ? { ...s, is_top_pick: true } : s; };
+  const presBlob = ["yieldStrategyPlanPresentationTypes", "yieldStrategyPlanPresentation"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+
+  // ---- Versions + flags ----
+  add("16H-B-A: presentation schema/policy versions exist", YIELD_STRATEGY_PRESENTATION_SCHEMA_VERSION === "1.0.0" && YIELD_STRATEGY_PRESENTATION_POLICY_ID === "yield_strategy_presentation_v1" && YIELD_STRATEGY_PRESENTATION_EXISTS === true, YIELD_STRATEGY_PRESENTATION_POLICY_ID);
+  add("16H-B-B: presentation-contract flags are true", STABLE_YIELD_CARD_PRESENTATION_CONTRACT_EXISTS === true && STABLE_YIELD_REVIEW_PRESENTATION_CONTRACT_EXISTS === true && STABLE_YIELD_DETERMINISTIC_COPY_MAPPING_EXISTS === true && STABLE_YIELD_PRESENTATION_VALIDATION_EXISTS === true && STABLE_YIELD_REVIEW_ONLY_CTA_INTENT_EXISTS === true, "true");
+  add("16H-B-C: Smith-AI / execution / UI-enabled flags remain false (card/modal render at 16H-C)", STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS === false && STABLE_YIELD_SUGGESTION_EXECUTION_EXISTS === false && STABLE_YIELD_UI_ENABLED === false, "false");
+
+  const exStart = buildStableYieldPlanPresentation(suggFor(excessDecision(), APY_LIVE));
+  const exAdd = buildStableYieldPlanPresentation(suggFor(excessDecision("leader_held"), APY_LIVE));
+  const bufStart = buildStableYieldPlanPresentation(suggFor(bufferDecision(), APY_FALLBACK));
+  const bufAdd = buildStableYieldPlanPresentation(suggFor(bufferDecision("leader_held")));
+
+  // ---- Card mapping (lane × action mode) ----
+  add("16H-B-D: excess + start_new_position card maps", exStart.card !== null && exStart.card!.lane === "excess" && exStart.card!.actionMode === "start_new_position" && exStart.card!.title === "Put Excess USDC to Work", exStart.card?.title ?? "null");
+  add("16H-B-E: excess + add_to_existing_strategy card maps", exAdd.card!.title === "Add to Your Stable Yield Strategy" && exAdd.card!.actionMode === "add_to_existing_strategy", exAdd.card!.title);
+  add("16H-B-F: buffer + start_new_position card maps", bufStart.card!.lane === "buffer" && bufStart.card!.title === "Earn Yield on Eligible Buffer Funds", bufStart.card!.title);
+  add("16H-B-G: buffer + add_to_existing_strategy card maps", bufAdd.card!.title === "Add Buffer Funds to Stable Yield", bufAdd.card!.title);
+  add("16H-B-H: title mapping is exhaustive + deterministic", stableYieldTitle("excess", "start_new_position") === "Put Excess USDC to Work" && stableYieldTitle("excess", "add_to_existing_strategy") === "Add to Your Stable Yield Strategy" && stableYieldTitle("buffer", "start_new_position") === "Earn Yield on Eligible Buffer Funds" && stableYieldTitle("buffer", "add_to_existing_strategy") === "Add Buffer Funds to Stable Yield", "mapping");
+
+  // ---- Preservation (no recompute) ----
+  add("16H-B-I: exact amount is preserved (display + raw cents)", exStart.card!.amountDisplay === "$500.00" && exStart.card!.amountUsd === 500 && exStart.card!.amountCents === 50000, "$500.00");
+  add("16H-B-J: source plan ID is preserved", exStart.card!.sourcePlanId === excessDecision().selectedPlan!.planId && exStart.review!.sourcePlanId === exStart.card!.sourcePlanId, "preserved");
+  add("16H-B-K: product identity is preserved", exStart.review!.strategyId === "syn_ex" && exStart.card!.productDisplayName === "Steakhouse-style USDC Vault", "product");
+  add("16H-B-L: protocol identity is preserved", exStart.card!.protocolName === "Kamino" && exStart.review!.protocolId === "kamino", "protocol");
+  add("16H-B-M: product address is preserved (review surface)", exStart.review!.productAddress === "ADDR_EX", "address");
+  add("16H-B-N: singular lane reason copy (description mentions the single reason)", exStart.card!.description.includes("above your required Safety Buffer") && bufStart.card!.description.includes("required Safety Buffer stays covered"), "singular");
+
+  // ---- APY presentation states ----
+  add("16H-B-O: APY with live provenance", exStart.card!.apy.state === "live_protocol_api" && exStart.card!.apy.display === "5.20%" && exStart.card!.apy.sourceLabel === "Kamino API", exStart.card!.apy.display);
+  add("16H-B-P: APY with approved fallback provenance", bufStart.card!.apy.state === "approved_fallback" && bufStart.card!.apy.display === "4.80%", bufStart.card!.apy.state);
+  add("16H-B-Q: missing APY → canonical unavailable state", bufAdd.card!.apy.state === "unavailable" && bufAdd.card!.apy.display === "APY unavailable" && stableYieldApyPresentation(undefined).state === "unavailable", "unavailable");
+  add("16H-B-R: APY source is never inferred (present without kind → 'provided')", stableYieldApyPresentation({ netApyPct: 3.1, apyDefinition: "net", apyWindow: "current", sourceId: "x" }).state === "provided", "provided");
+
+  // ---- Capacity presentation ----
+  add("16H-B-S: capacity explicit_remaining_capacity presents a bounded amount", exStart.review!.capacity.mode === "explicit_remaining_capacity" && exStart.review!.capacity.boundDisplay === "$100,000.00", exStart.review!.capacity.boundDisplay);
+  add("16H-B-T: capacity verified_uncapped uses the bounded selected amount (never 'unlimited')", (() => { const p = buildStableYieldPlanPresentation(suggFor(excessDecision("leader_not_held", { capacityMode: "verified_uncapped", remainingDepositCapacityUsd: undefined }))); return p.review!.capacity.mode === "verified_uncapped" && p.review!.capacity.boundDisplay === "$500.00" && !/unlimited/i.test(p.review!.capacity.note); })(), "uncapped");
+
+  // ---- Projections preserved ----
+  add("16H-B-U: wallet USDC before/after preserved", exStart.review!.walletUsdcBeforeUsd === excessDecision().selectedPlan!.projection.directLiquidUsdcBeforeUsd && exStart.review!.walletUsdcAfterUsd === excessDecision().selectedPlan!.projection.directLiquidUsdcAfterUsd, "wallet proj");
+  add("16H-B-V: buffer before/after preserved + coverage flags", exStart.review!.bufferBeforeUsd === excessDecision().selectedPlan!.projection.currentEligibleBufferBeforeUsd && exStart.review!.bufferAfterUsd === excessDecision().selectedPlan!.projection.currentEligibleBufferAfterUsd && exStart.review!.bufferCoveragePreserved === true && exStart.review!.walletFloorPreserved === true, "buffer proj");
+  add("16H-B-W: current-position context preserved", exAdd.review!.currentPositionContext.held === true && exAdd.review!.currentPositionContext.positionStatusLabel === "You currently hold this strategy." && exStart.review!.currentPositionContext.held === false, "position ctx");
+
+  // ---- CTA + Top Pick + disclosures ----
+  add("16H-B-X: read-only 'Review Strategy' CTA with no execution intent", exStart.card!.cta.label === "Review Strategy" && exStart.card!.cta.intent === "open_stable_yield_review" && exStart.card!.cta.executesTransaction === false && exStart.card!.cta.requiresWalletSignature === false && exStart.card!.cta.opensExternalUrl === false, "review only");
+  add("16H-B-Y: Top Pick badge maps from the suggestion flag", buildStableYieldPlanPresentation(suggFor(excessDecision(), APY_LIVE, true)).card!.isTopPick === true, "top pick");
+  add("16H-B-Z: non-Top-Pick maps to false", exStart.card!.isTopPick === false, "not top pick");
+  add("16H-B-AA: read-only + external-management disclosures present", exStart.review!.disclosures.includes(STABLE_YIELD_READ_ONLY_DISCLOSURE) && exStart.review!.disclosures.includes(STABLE_YIELD_EXTERNAL_MANAGEMENT_DISCLOSURE) && exStart.card!.readOnly === true && exStart.card!.externalManagementRequired === true, "disclosures");
+  add("16H-B-AB: no annual-earnings / no hype / no risk-free copy is generated", (() => { const txt = [exStart.card!.title, exStart.card!.description, exStart.review!.summary, ...exStart.review!.disclosures].join(" "); return !/\b(best|guaranteed|safe yield|risk-free|risk free|instant|annual earnings|you will earn|projected earnings)\b/i.test(txt); })(), "calm copy");
+
+  // ---- Fail-closed validation ----
+  const goodSugg = suggFor(excessDecision(), APY_LIVE);
+  const tamper = (patch: Record<string, unknown>) => buildStableYieldPlanPresentation({ ...goodSugg, stableYieldPlan: { ...goodSugg.stableYieldPlan!, ...patch } } as never);
+  add("16H-B-AC: invalid lane rejected", tamper({ lane: "bogus" }).card === null && tamper({ lane: "bogus" }).diagnostic.emitted === false, "rejected");
+  add("16H-B-AD: invalid action mode rejected", tamper({ actionMode: "switch" }).card === null, "rejected");
+  add("16H-B-AE: non-direct-wallet funding rejected", tamper({ fundingSource: "vault_shares" }).card === null, "rejected");
+  add("16H-B-AF: missing strategy rejected", tamper({ strategyId: "", displayName: "" }).card === null, "rejected");
+  add("16H-B-AG: missing protocol rejected", tamper({ protocolId: "", protocolDisplayName: "" }).card === null, "rejected");
+  add("16H-B-AH: corrupted amount (cents/USD disagree) rejected", tamper({ amountCents: 99999 }).card === null && tamper({ amountUsd: -5 }).card === null, "rejected");
+  add("16H-B-AI: unsupported capacity mode on a ready suggestion rejected (fail closed)", tamper({ capacityMode: "product_full" }).card === null && tamper({ capacityMode: "product_full" }).diagnostic.failureStage === "capacity_contract", "capacity contract");
+  add("16H-B-AJ: false read-only flag rejected", tamper({ readOnly: false }).card === null, "rejected");
+  add("16H-B-AK: false external-management-required flag rejected", tamper({ externalManagementRequired: false }).card === null, "rejected");
+  add("16H-B-AL: an execution flag on the meta is rejected", tamper({ transactionsEnabled: true }).card === null, "rejected");
+  add("16H-B-AM: missing stableYieldPlan meta → no presentation", buildStableYieldPlanPresentation({ ...goodSugg, stableYieldPlan: undefined } as never).card === null && buildStableYieldPlanPresentation({ ...goodSugg, stableYieldPlan: undefined } as never).diagnostic.failureStage === "input_missing", "no meta");
+
+  // ---- Determinism + production ----
+  add("16H-B-AN: deterministic repeated mapping (same card + review)", JSON.stringify(buildStableYieldPlanPresentation(suggFor(excessDecision(), APY_LIVE)).card) === JSON.stringify(buildStableYieldPlanPresentation(suggFor(excessDecision(), APY_LIVE)).card), "deterministic");
+  add("16H-B-AO: timestamp changes do not alter the deterministic text", buildStableYieldPlanPresentation(buildStableYieldPlanSuggestion(excessDecision(), { generatedAt: 1 }).suggestion!).card!.title === buildStableYieldPlanPresentation(buildStableYieldPlanSuggestion(excessDecision(), { generatedAt: 999999 }).suggestion!).card!.title, "stable text");
+  {
+    const prodDecision = buildYieldStrategyPlanDecision({ ownerAddress: OWNER, checkedAt: T, registry: [], eligibilitySet: elig([], []), comparisonSet: mkComparison({ status: "empty_eligible_set" }, { status: "empty_eligible_set" }), capitalSnapshot: mkCapital({}) });
+    add("16H-B-AP: production no-suggestion path produces no presentation", getApprovedYieldStrategies().length === 0 && buildStableYieldPlanSuggestion(prodDecision).suggestion === null && buildStableYieldPlanPresentation(buildStableYieldPlanSuggestion(prodDecision).suggestion).card === null, "no presentation");
+  }
+
+  // ---- No UI / no execution ----
+  add("16H-B-AQ: no React / component / route is added (presentation is pure view models)", !/react|usestate|useeffect|jsx|tsx|<div|classname/.test(presBlob), "no react");
+  add("16H-B-AR: no execution URL / transaction payload / signature intent is created", exStart.diagnostic.containsExecutionIntent === false && exStart.card!.cta.opensExternalUrl === false && !/https?:\/\/|deeplink|manageurl|serializedtransaction|signtransaction|sendtransaction|deposit\(/.test(presBlob), "no execution");
+  add("16H-B-AS: the diagnostic confirms the review CTA intent + no execution intent", exStart.diagnostic.ctaIntent === "open_stable_yield_review" && exStart.diagnostic.emitted === true && exStart.diagnostic.apyState === "live_protocol_api", "diagnostic");
+
+  return checks;
+}
+
+/**
+ * Step 16H-C — Stable Yield card + review UI fixtures (16H-C-A…). Verifies the shared-card mapper
+ * (16H-B card → SuggestionCardState), review VM fields, the /testing fixture inventory, fail-closed
+ * non-rendering, the read-only CTA (no execution/transaction/signature/external URL), and that the React
+ * UI imports no planning/capital/APY logic.
+ */
+export function runYieldStrategyPlanUiFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const byId = (id: string) => STABLE_YIELD_TESTING_FIXTURES.find((f) => f.id === id)!;
+
+  // ---- Flags + inventory ----
+  add("16H-C-A: rendered card / review modal / testing-visual-fixtures flags are true", STABLE_YIELD_RENDERED_CARD_EXISTS === true && STABLE_YIELD_RENDERED_REVIEW_MODAL_EXISTS === true && STABLE_YIELD_TESTING_VISUAL_FIXTURES_EXIST === true && SY_TEST_FIXTURES_EXIST === true, "true");
+  add("16H-C-B: shared-card-mapper / review-UI / accessibility flags are true", STABLE_YIELD_SHARED_CARD_MAPPER_EXISTS === true && STABLE_YIELD_REVIEW_UI_EXISTS === true && STABLE_YIELD_ACCESSIBILITY_BEHAVIOR_EXISTS === true, "true");
+  add("16H-C-C: Demo / Real-Wallet / Smith-AI / external-CTA integration flags remain false", STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS === false && STABLE_YIELD_REAL_WALLET_INTEGRATION_EXISTS === false && STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS === false && STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS === false, "false");
+  add("16H-C-D: /testing inventory covers card + review + fail-closed states", STABLE_YIELD_TESTING_CARD_FIXTURES.length >= 16 && STABLE_YIELD_TESTING_REVIEW_FIXTURES.length >= 11 && STABLE_YIELD_TESTING_NON_RENDER_FIXTURES.length >= 4, `${STABLE_YIELD_TESTING_CARD_FIXTURES.length}/${STABLE_YIELD_TESTING_REVIEW_FIXTURES.length}/${STABLE_YIELD_TESTING_NON_RENDER_FIXTURES.length}`);
+
+  // ---- Card mapper (16H-B card → SuggestionCardState via toSuggestionCard) ----
+  const exStart = byId("sy_card_excess_start");
+  const card = SY_toSuggestionCard(exStart.suggestion!);
+  add("16H-C-E: the shared card mapper renders the approved presentation title/description/tag", card.title === "Put Excess USDC to Work" && card.tag === "Excess USDC Yield" && card.category === "yield_opportunity" && card.type === "deploy_idle_stablecoins", card.title);
+  add("16H-C-F: exact amount is displayed (impact text)", card.impact_text === "Amount to review: $500.00", card.impact_text);
+  add("16H-C-G: the CTA is read-only 'Review Strategy' with all execution booleans false", card.cta.label === "Review Strategy" && card.cta.action === null && card.cta.executes_transaction === false && card.cta.requires_wallet_signature === false && card.cta.completion_on_click === false, "read-only");
+  add("16H-C-H: the accessible CTA label is supplied", typeof card.accessibleCtaLabel === "string" && card.accessibleCtaLabel!.includes("Review Strategy"), "a11y label");
+  add("16H-C-I: APY state is surfaced on the card", card.apy?.status === "live_protocol_api" && card.apy?.display === "5.24%", card.apy?.display ?? "none");
+  add("16H-C-J: correct title for all lane × action-mode combinations", SY_toSuggestionCard(byId("sy_card_excess_add").suggestion!).title === "Add to Your Stable Yield Strategy" && SY_toSuggestionCard(byId("sy_card_buffer_start").suggestion!).title === "Earn Yield on Eligible Buffer Funds" && SY_toSuggestionCard(byId("sy_card_buffer_add").suggestion!).title === "Add Buffer Funds to Stable Yield", "titles");
+  add("16H-C-K: APY unavailable renders the canonical text state", SY_toSuggestionCard(byId("sy_card_apy_unavailable").suggestion!).apy?.display === "APY unavailable" && SY_toSuggestionCard(byId("sy_card_apy_unavailable").suggestion!).apy?.status === "unavailable", "unavailable");
+  add("16H-C-L: APY provided-without-source maps to 'provided'", SY_toSuggestionCard(byId("sy_card_apy_provided").suggestion!).apy?.status === "provided", "provided");
+  add("16H-C-M: Top Pick badge maps from the suggestion flag", SY_toSuggestionCard(byId("sy_card_top_pick").suggestion!).badge === "Top Pick" && SY_toSuggestionCard(byId("sy_card_top_pick").suggestion!).is_top_pick === true && card.badge === "", "top pick");
+  add("16H-C-N: buffer and excess reason copy remain distinct", SY_toSuggestionCard(byId("sy_card_buffer_start").suggestion!).description.includes("stays covered") && card.description.includes("above your required Safety Buffer") && SY_toSuggestionCard(byId("sy_card_buffer_start").suggestion!).description !== card.description, "distinct");
+  add("16H-C-O: amount with cents is preserved (not rounded)", byId("sy_card_amount_cents").card!.impact_text.includes("$1,234.56"), byId("sy_card_amount_cents").card!.impact_text);
+
+  // ---- Review VM ----
+  const rev = buildStableYieldPlanPresentation(byId("sy_review_excess").suggestion!).review!;
+  add("16H-C-P: the review VM renders supplied before/after fields (not reversed)", rev.walletUsdcBeforeUsd === 5000 && rev.walletUsdcAfterUsd === 4500 && rev.walletUsdcAfterUsd < rev.walletUsdcBeforeUsd, `${rev.walletUsdcBeforeUsd}->${rev.walletUsdcAfterUsd}`);
+  add("16H-C-Q: the review VM preserves identity + disclosures", rev.strategyId === "syn_ex" && rev.productAddress === "ADDR_EX" && rev.disclosures.length === 4 && rev.disclosures.some((d) => /cannot move your funds/i.test(d)), "review");
+  add("16H-C-R: capacity is never rendered as 'unlimited'", STABLE_YIELD_TESTING_FIXTURES.every((f) => !f.review || !/unlimited/i.test(f.review.capacity.note + f.review.capacity.boundDisplay)), "no unlimited");
+  add("16H-C-S: verified-uncapped review is bounded by the eligible amount", buildStableYieldPlanPresentation(byId("sy_review_cap_uncapped").suggestion!).review!.capacity.mode === "verified_uncapped" && buildStableYieldPlanPresentation(byId("sy_review_cap_uncapped").suggestion!).review!.capacity.boundDisplay === "$500.00", "bounded");
+
+  // ---- Fail-closed (no card) ----
+  add("16H-C-T: invalid presentation produces no card", byId("sy_nonrender_invalid_lane").card === null, "no card");
+  add("16H-C-U: missing presentation meta produces no card", byId("sy_nonrender_missing").card === null, "no card");
+  add("16H-C-V: unsupported capacity state produces no card", byId("sy_nonrender_capacity").card === null, "no card");
+  add("16H-C-W: execution-intent contamination produces no card", byId("sy_nonrender_execution").card === null, "no card");
+  add("16H-C-X: deterministic re-mapping produces identical visible copy", JSON.stringify(SY_toSuggestionCard(byId("sy_card_excess_start").suggestion!)) === JSON.stringify(SY_toSuggestionCard(byId("sy_card_excess_start").suggestion!)), "deterministic");
+
+  // ---- Production ----
+  add("16H-C-Y: production renders no Stable Yield card (no approved product → no suggestion)", getApprovedYieldStrategies().length === 0 && STABLE_YIELD_TESTING_FIXTURES.every((f) => !f.suggestion || f.suggestion.stableYieldPlan !== undefined || f.group === "non_render"), "no prod card");
+
+  // ---- Integrity: React/UI imports no planning/capital/APY logic + no execution ----
+  {
+    const uiFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/TestingPage.tsx"];
+    const uiBlob = uiFiles.map((f) => readIf(f)).join("").toLowerCase();
+    const forbidden = ["buildyieldstrategyplandecision", "compareyieldstrategiesforlane", "buildyieldstrategyeligiblecapitalsnapshot", "buildstableyieldplansuggestion", "usdtoplancents", "getyieldstrategybufferallocation", "selectleader", "sendtransaction", "signtransaction"];
+    add("16H-C-Z: the React/UI source imports no planner/leader/capital/APY/execution logic", forbidden.filter((h) => uiBlob.includes(h)).length === 0, "clean");
+  }
+  {
+    const modalSrc = readIf("src/components/SuggestionReviewModal.tsx");
+    const syBranch = (modalSrc.split("if (stableYieldReview)")[1] ?? "").split("if (contributionReview)")[0] ?? "";
+    add("16H-C-AA: the Stable Yield review branch is read-only (no transaction/signature/deposit/external-nav)", syBranch.length > 0 && !/executeTransaction|requestSignature|window\.open|deposit\(|href=|externalReviewLink|open_external_protocol/i.test(syBranch), "read-only branch");
+  }
+  add("16H-C-AB: the shared card CTA never opens an external protocol for a stable-yield card", card.cta.action !== "open_external_protocol" && !("protocol_id" in card.cta && (card.cta as unknown as Record<string, unknown>).protocol_id), "no external");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -15610,6 +15815,8 @@ export function printFixtureResults(): void {
     ...runYieldStrategyPositionFixtureChecks(),
     ...runYieldStrategyPlanFixtureChecks(),
     ...runYieldStrategyPlanSuggestionFixtureChecks(),
+    ...runYieldStrategyPlanPresentationFixtureChecks(),
+    ...runYieldStrategyPlanUiFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

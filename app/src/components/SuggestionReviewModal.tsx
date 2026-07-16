@@ -24,12 +24,15 @@ import type {
   SuggestionReviewDetails,
 } from "../suggestions/engineTypes";
 import type { ContributionPlanReviewDetails } from "../suggestions/contributionPlanReviewDetails";
+import type { StableYieldReviewPresentation } from "../suggestions/yieldStrategyPlanPresentationTypes";
 
 interface Props {
   /** The engine review details (existing suggestion families). Optional when `contributionReview` is set. */
   details?: SuggestionReviewDetails;
   /** Step 15H — plan-backed contribution review sections. When present, the modal renders these. */
   contributionReview?: ContributionPlanReviewDetails;
+  /** Step 16H-C — deterministic Stable Yield review presentation. When present, the modal renders it. */
+  stableYieldReview?: StableYieldReviewPresentation;
   isTopPick: boolean;
   onClose: () => void;
 }
@@ -89,7 +92,7 @@ function formatCalcValue(v: number, unit?: string): string {
   return `${num1(v)}${unit ? ` ${unit}` : ""}`;
 }
 
-export default function SuggestionReviewModal({ details, contributionReview, isTopPick, onClose }: Props) {
+export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, isTopPick, onClose }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -129,6 +132,96 @@ export default function SuggestionReviewModal({ details, contributionReview, isT
       first.focus();
     }
   };
+
+  // Step 16H-C — plan-backed Stable Yield review. Renders the deterministic Step 16H-B review view
+  // model through the SAME shared modal shell (no new modal, no recalculation, no execution). The React
+  // layer never computes an amount/APY/projection — it only places already-formatted strings into rows.
+  if (stableYieldReview) {
+    const r = stableYieldReview;
+    const rowList = (rows: { label: string; value: string }[], label: string) => (
+      <dl className="review-modal__rows" aria-label={label}>
+        {rows.map((row, i) => (
+          <div key={`${row.label}-${i}`} className="review-modal__row">
+            <dt>{row.label}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        ))}
+      </dl>
+    );
+    const apyValue = r.apy.display + (r.apy.sourceLabel ? ` · ${r.apy.sourceLabel}` : "") + (r.apy.checkedAtNote ? ` · ${r.apy.checkedAtNote}` : "");
+    const whyBody = r.lane === "excess"
+      ? `${r.amountDisplay} of your direct wallet USDC is above your required Safety Buffer, so it is eligible to review for this strategy.`
+      : `After this amount is placed, the projection keeps your required Safety Buffer of ${r.requiredBufferDisplay} covered.`;
+    const strategyRows = [
+      { label: "Amount to review", value: r.amountDisplay },
+      { label: "Asset", value: "USDC" },
+      { label: "Protocol", value: r.protocolName },
+      { label: "Strategy", value: r.productDisplayName },
+      { label: "Action", value: r.actionMode === "add_to_existing_strategy" ? "Add to existing strategy" : "Start a new position" },
+      { label: "Current position", value: r.currentPositionContext.positionStatusLabel },
+      { label: "Product identifier", value: r.productAddress },
+    ];
+    const beforeAfterRows = [
+      { label: "Wallet USDC before", value: r.walletUsdcBeforeDisplay },
+      { label: "Wallet USDC after", value: r.walletUsdcAfterDisplay },
+      { label: "Required Safety Buffer", value: r.requiredBufferDisplay },
+      { label: "Eligible buffer before", value: r.bufferBeforeDisplay },
+      { label: "Eligible buffer after", value: r.bufferAfterDisplay },
+      { label: "Safety Buffer stays covered", value: r.bufferCoveragePreserved ? "Yes" : "No" },
+      { label: "Wallet floor preserved", value: r.walletFloorPreserved ? "Yes" : "No" },
+    ];
+    const yieldRows = [
+      { label: "APY", value: apyValue },
+      { label: "Deposit capacity", value: `${r.capacity.boundDisplay} — ${r.capacity.note}` },
+      { label: "Minimum", value: r.effectiveMinimumDisplay },
+      { label: "Maximum", value: r.effectiveMaximumDisplay },
+    ];
+    return (
+      <div className="modal-scrim" onClick={onClose}>
+        <div ref={dialogRef} className="modal review-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={reasonId} onKeyDown={onKeyDown} onClick={(e) => e.stopPropagation()}>
+          <div className="modal__header">
+            <div className="review-modal__heading">
+              <div className="review-modal__eyebrow">
+                <p className="review-modal__category">Stable Yield · read-only</p>
+                {isTopPick && <Badge label="Top Pick" tone="info" />}
+              </div>
+              <h2 id={titleId} className="modal__title">{r.title}</h2>
+            </div>
+            <button ref={closeRef} type="button" className="modal__close" aria-label="Close review details" onClick={onClose}>
+              <ButtonIcon src={closeUrl} size={18} />
+            </button>
+          </div>
+          <div className="review-modal__body">
+            <section className="review-modal__section" aria-label="Recommendation">
+              <p id={reasonId} className="modal__intro">{r.summary}</p>
+            </section>
+            <section className="review-modal__section" aria-label="Strategy">
+              <h3 className="review-modal__section-title">Strategy</h3>
+              {rowList(strategyRows, "Strategy")}
+            </section>
+            <section className="review-modal__section" aria-label="Why this fits your plan">
+              <h3 className="review-modal__section-title">Why this fits your plan</h3>
+              <p className="modal__intro">{whyBody}</p>
+            </section>
+            <section className="review-modal__section" aria-label="Before and after">
+              <h3 className="review-modal__section-title">Before and after</h3>
+              {rowList(beforeAfterRows, "Before and after")}
+            </section>
+            <section className="review-modal__section" aria-label="Yield and capacity">
+              <h3 className="review-modal__section-title">Yield and capacity</h3>
+              {rowList(yieldRows, "Yield and capacity")}
+            </section>
+            <section className="review-modal__section" aria-label="Important information">
+              <h3 className="review-modal__section-title">Important information</h3>
+              <ul className="review-modal__disclosures">
+                {r.disclosures.map((d, i) => (<li key={i}>{d}</li>))}
+              </ul>
+            </section>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Step 15H — plan-backed contribution review. Renders the deterministic engine sections through the
   // SAME shared modal shell (no new modal component, no recalculation). Read-only; Close only.

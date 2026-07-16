@@ -21,6 +21,9 @@ export interface StableYieldSuggestionApyProvenance {
   apyWindow: string;
   sourceId: string;
   sourceLabel?: string;
+  /** The source class, when supplied — never inferred by the suggestion/presentation layers. */
+  provenanceKind?: "live_protocol_api" | "approved_fallback";
+  checkedAt?: string;
 }
 
 /** Before/after coverage projection, copied verbatim from the 16G plan (never recalculated). */

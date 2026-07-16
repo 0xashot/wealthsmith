@@ -21,6 +21,7 @@ import { SUGGESTION_COPY, SUGGESTIONS_PARTIAL_PRICING } from "../state/approvedC
 import type { SuggestionReasonCode } from "./engineTypes";
 import type { ContributionPlanSuggestion } from "./contributionIntegrationTypes";
 import { buildContributionPlanCardPresentation } from "./contributionPlanPresentation";
+import { buildStableYieldPlanPresentation } from "./yieldStrategyPlanPresentation";
 
 /** Whole-dollar USD (no cents), e.g. "$2,200". */
 const usd0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -106,6 +107,32 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
       accessibleCtaLabel: p.accessibilityLabel,
       cta: { label: p.ctaLabel, action: null, executes_transaction: false, requires_wallet_signature: false, completion_on_click: false },
     };
+  }
+
+  // Step 16H-C — plan-backed Stable Yield suggestions render the deterministic Step 16H-B card
+  // presentation (title/description/tag/amount/APY/accessible CTA). React never rebuilds these; a
+  // corrupted presentation fails closed and falls through to the generic (never-invented) mapping.
+  if (s.category === "stable_yield" && s.stableYieldPlan) {
+    const c = buildStableYieldPlanPresentation(s).card;
+    if (c) {
+      return {
+        id: s.id,
+        title: c.title,
+        type: CARD_TYPE[s.category],
+        category: CARD_CATEGORY[s.category],
+        badge: s.is_top_pick ? "Top Pick" : "",
+        is_top_pick: s.is_top_pick,
+        status: "active",
+        actionability: "actionable",
+        severity: "info",
+        description: c.description,
+        impact_text: `Amount to review: ${c.amountDisplay}`,
+        tag: c.tag,
+        accessibleCtaLabel: c.accessibilityLabel,
+        cta: { label: c.cta.label, action: null, executes_transaction: false, requires_wallet_signature: false, completion_on_click: false },
+        apy: { status: c.apy.state, display: c.apy.display },
+      };
+    }
   }
 
   const actionability = disabled

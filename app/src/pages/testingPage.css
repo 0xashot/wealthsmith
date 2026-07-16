@@ -104,6 +104,7 @@
 /* Step 15H — contribution/DCA plan scenarios. */
 .testing-page__contrib { margin-top: 32px; display: flex; flex-direction: column; gap: 12px; }
 .testing-page__section-title { font-size: 20px; font-weight: 700; margin: 0; }
+.testing-page__section-subtitle { font-size: 15px; font-weight: 600; margin: 16px 0 0; color: var(--color-text-secondary); }
 .testing-page__contrib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
 .testing-page__contrib-cell { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-control-sm); background: var(--color-surface-card); }
 .testing-page__contrib-head { display: flex; align-items: center; gap: 8px; }
