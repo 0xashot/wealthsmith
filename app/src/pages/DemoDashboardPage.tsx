@@ -28,9 +28,10 @@ import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 import { buildDemoExactSolStakingRail } from "../suggestions/demoExactSolStakingScenario";
 import { buildDemoContributionRail } from "../suggestions/demoContributionScenario";
+import { buildDemoStableYieldRail } from "../suggestions/demoStableYieldScenario";
 
 type RightRailMode = "suggestions" | "ask_smith_ai";
-type DemoScenario = "default" | "sol_staking";
+type DemoScenario = "default" | "sol_staking" | "stable_yield";
 
 interface Props {
   /** Kept for the Props contract (App supplies it); the shared rail handles read-only review internally. */
@@ -57,6 +58,9 @@ export default function DemoDashboardPage({
   // Step 15H — the canonical Demo run through the SAME shared engine (demo_fixture). Buffer-incomplete
   // → exactly one plan-backed Safety Buffer card (Top Pick), no SOL DCA. Rendered via the shared rail.
   const demoContributionRail = useMemo(() => buildDemoContributionRail(), []);
+  // Step 16H-D — a funded-buffer Demo profile that visibly surfaces ONE read-only Stable Yield card
+  // through the SAME shared engine (demo_fixture) → shared rail/card/review modal. Demo-only inputs.
+  const demoStableYieldRail = useMemo(() => buildDemoStableYieldRail(), []);
 
   const openAskSmithAi = () => setRailMode("ask_smith_ai");
   const closeAskSmithAi = () => {
@@ -114,10 +118,23 @@ export default function DemoDashboardPage({
               >
                 SOL Staking Demo
               </button>
+              <button
+                type="button"
+                className={`demo-scenario-switch__btn${demoScenario === "stable_yield" ? " demo-scenario-switch__btn--active" : ""}`}
+                aria-pressed={demoScenario === "stable_yield"}
+                onClick={() => setDemoScenario("stable_yield")}
+              >
+                Stable Yield Demo
+              </button>
             </div>
             {demoScenario === "sol_staking" ? (
               <RealWalletSuggestionsRail
                 rail={buildDemoExactSolStakingRail()}
+                railLabel={d.accessibility.right_rail_label}
+              />
+            ) : demoScenario === "stable_yield" ? (
+              <RealWalletSuggestionsRail
+                rail={demoStableYieldRail}
                 railLabel={d.accessibility.right_rail_label}
               />
             ) : (

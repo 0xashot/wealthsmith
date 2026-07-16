@@ -145,8 +145,72 @@ Flags true: `STABLE_YIELD_RENDERED_CARD_EXISTS`, `_RENDERED_REVIEW_MODAL_EXISTS`
 `_ACCESSIBILITY_BEHAVIOR_EXISTS`. False: Demo / Real-Wallet / Smith-AI / external-protocol-CTA /
 execution / transaction / signature.
 
+## 16H-D — Demo Mode + Real Wallet product integration
+
+The Stable Yield suggestion is now wired into **both** product flows through ONE shared, deterministic,
+React-free orchestration boundary that prepares the optional 16G decision passed as
+`runSuggestionEngine`'s 4th param (`stableYieldPlanSuggestion`) — mirroring the 15H contribution 3rd-param
+pattern. No 16E/16F/16G financial logic is duplicated; the boundary only orchestrates the existing
+modules in canonical order and **fails closed** (no suggestion + a diagnostic) on anything but a ready
+plan.
+
+```
+[demo|real] inputs → deriveStableYieldPlanSuggestion (16E leader → 16F position/capital → 16G plan
+  decision → 16H-A suggestion) → runSuggestionEngine(..., stableYieldPlanSuggestion) → engine
+  ordering/Top-Pick → 16H-B presentation → 16H-C shared card + review drawer
+```
+
+- [`stableYieldProductInput.ts`](./stableYieldProductInput.ts) — `deriveStableYieldPlanSuggestion({ dataMode,
+  positions, pricedAsOf?, goal?, buffer?, checkedAt? })` → `{ suggestion, decision, reviewById, diagnostic }`.
+  Branches ONLY on `dataMode` for the data **source**; the pipeline is identical.
+  - `real_wallet` → `buildProductionStableYieldDecision`: the REAL 16E→16G layers over the production
+    registry with **empty** market data / risk reviews / capacity. No approved product and no wired data
+    source → deterministic `no_plan` → no suggestion → **no card**. That is the correct production state;
+    the *integration* is wired, not the (absent) production data. NO demo/fixture fallback, NO default
+    product, NO registry-order/APY fallback, NO TVL-as-capacity.
+  - `demo_fixture` → the injected demo decision (gated on the demo Safety Buffer being fully funded;
+    otherwise `null` with reason `demo_buffer_incomplete`, so the canonical buffer-incomplete Demo keeps
+    suppressing yield).
+- [`demoStableYieldScenario.ts`](./demoStableYieldScenario.ts) — DEMO-ONLY deterministic inputs (a
+  synthetic approved `managed_vault` `demo_usdc_yield_vault`, capacity, comparison leader, capital
+  snapshot, a funded-buffer SOL $9,000 / USDC $6,000 portfolio) that run through the REAL
+  `buildYieldStrategyPlanDecision` on a **synthetic demo registry** — never `listYieldStrategies()` / the
+  production registry. Produces one ready **excess-lane** plan (amount $500, `direct_wallet_usdc`).
+  `buildDemoStableYieldRail()` runs the SAME `deriveRailSuggestions(dataMode:"demo_fixture")`.
+
+**Rail + rendering.** `useRailSuggestions.deriveRailSuggestions` computes the Stable Yield suggestion and
+passes it as the engine's 4th arg (never marked Top Pick in the UI; the engine owns ordering). The rail
+lifts a `stableYieldReviewById` map keyed by the SAME suggestion id the card uses. `RealWalletSuggestionsRail`
+opens the shared `SuggestionReviewModal` with `stableYieldReview` — no separate Demo/Real card or modal
+components. Legacy "Put Stablecoins to Work" is suppressed whenever the plan-backed suggestion is present
+(one plan → one Stable Yield card; buffer and excess maxima are never summed).
+
+**Demo UI.** `DemoDashboardPage` gains a third scenario button, **"Stable Yield Demo"**, rendering
+`buildDemoStableYieldRail()` through the shared rail/card/modal. Default Demo (buffer-incomplete) and SOL
+Staking Demo are unchanged.
+
+**Read-only boundary.** `review_only` / `readOnly` / `externalManagementRequired` true;
+`executesTransaction` / `requiresWalletSignature` / `opensExternalUrl` / `completionOnClick` false; the
+only CTA is "Review Strategy" (opens the shared drawer). No Smith AI, execution, transaction, signature,
+deposit, withdrawal, migration, switching, protocol navigation, or deep links.
+
+**Isolation.** Demo products/capacities/clocks can never enter production: the demo registry is a local
+array, `listYieldStrategies()` never contains `demo_usdc_yield_vault`, and `getApprovedYieldStrategies()`
+stays empty.
+
+Verified in-browser (Demo, desktop + 320px): the "Stable Yield Demo" scenario surfaces one "Put Excess
+USDC to Work" card (tag "Excess USDC Yield", $500.00, APY 5.15%); "Review Strategy" opens the shared
+drawer with all six sections + four read-only disclosures and no execution CTA; Escape closes and
+restores focus to the card CTA; no console errors; no horizontal overflow. Real Wallet (production
+pipeline) renders no plan-backed Stable Yield card (`no_plan`), and unrelated suggestions still render.
+
+Flags true: `STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS`, `STABLE_YIELD_REAL_WALLET_INTEGRATION_EXISTS`,
+`STABLE_YIELD_SHARED_PRODUCT_ORCHESTRATION_EXISTS`, `STABLE_YIELD_PRODUCT_ORCHESTRATION_EXISTS`. False:
+`STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS`, `STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS`,
+`STABLE_YIELD_EXECUTES_TRANSACTION`, `STABLE_YIELD_REQUIRES_WALLET_SIGNATURE`.
+
 ## Remaining UI work
 
-- **16H-D** — Demo Mode + Real Wallet product integration (still read-only; production shows no card
-  until a product is approved).
 - Smith AI explanation keyed off the reason codes (never generating copy or suggestions).
+- Real-wallet Stable Yield data adapters (16C market data, 16D risk reviews, capacity) — until wired,
+  production correctly shows no card.

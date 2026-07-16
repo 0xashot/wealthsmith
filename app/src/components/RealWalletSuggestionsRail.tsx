@@ -45,19 +45,26 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
   // Read-only "Review": open the details modal when the engine produced details
   // for this suggestion (all Step 10A suggestions do).
   const onReviewSuggestion = (card: SuggestionCardState) => {
-    // Step 15H — open for engine-detail suggestions OR plan-backed contribution suggestions.
-    if (rail?.reviewDetailsById[card.id] || rail?.contributionReviewById[card.id]) setSelectedId(card.id);
+    // Step 15H / 16H-D — open for engine-detail, plan-backed contribution, OR Stable Yield suggestions.
+    if (rail?.reviewDetailsById[card.id] || rail?.contributionReviewById[card.id] || rail?.stableYieldReviewById[card.id]) setSelectedId(card.id);
   };
 
   const selectedDetails = selectedId ? rail?.reviewDetailsById[selectedId] : undefined;
   const selectedContribReview = selectedId ? rail?.contributionReviewById[selectedId] : undefined;
+  const selectedStableYieldReview = selectedId ? rail?.stableYieldReviewById[selectedId] : undefined;
   const selectedCard = selectedId ? rail?.cards.find((c) => c.id === selectedId) : undefined;
   // Inject the current comparison into the SOL staking suggestion's modal details (read-only).
   const isStakingSelected = selectedCard != null && (selectedCard.type === "stake_idle_sol" || selectedCard.type === "staking" || selectedCard.category === "staked_assets" || selectedCard.category === "staking");
   const detailsForModal = selectedDetails && isStakingSelected && stakingPresentation
     ? { ...selectedDetails, selectorPresentation: stakingPresentation }
     : selectedDetails;
-  const reviewModal = selectedContribReview ? (
+  const reviewModal = selectedStableYieldReview ? (
+    <SuggestionReviewModal
+      stableYieldReview={selectedStableYieldReview}
+      isTopPick={selectedCard?.is_top_pick === true}
+      onClose={() => setSelectedId(null)}
+    />
+  ) : selectedContribReview ? (
     <SuggestionReviewModal
       contributionReview={selectedContribReview}
       isTopPick={selectedCard?.is_top_pick === true}

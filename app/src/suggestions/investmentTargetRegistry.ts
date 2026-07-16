@@ -167,9 +167,19 @@ export const STABLE_YIELD_TESTING_VISUAL_FIXTURES_EXIST = true;
 export const STABLE_YIELD_SHARED_CARD_MAPPER_EXISTS = true;
 export const STABLE_YIELD_REVIEW_UI_EXISTS = true;
 export const STABLE_YIELD_ACCESSIBILITY_BEHAVIOR_EXISTS = true;
-export const STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS = false;
-export const STABLE_YIELD_REAL_WALLET_INTEGRATION_EXISTS = false;
+// Step 16H-D — the Stable Yield suggestion is now integrated into BOTH product flows through the shared
+// `deriveStableYieldPlanSuggestion` orchestration → `runSuggestionEngine`'s optional 4th param → shared
+// card + review drawer. Demo Mode visibly demonstrates one valid excess-lane suggestion from DEMO-ONLY
+// injected inputs (synthetic approved product; never the production registry). Real Wallet runs the
+// production pipeline (production registry + empty market/risk/capacity data) → no approved product →
+// no_plan → no suggestion → no card (the correct production state). Still read-only: "Review Strategy"
+// opens the shared drawer only. No Smith AI, execution, transaction, signature, or external protocol CTA.
+export const STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS = true;
+export const STABLE_YIELD_REAL_WALLET_INTEGRATION_EXISTS = true;
+export const STABLE_YIELD_SHARED_PRODUCT_ORCHESTRATION_EXISTS = true;
 export const STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS = false;
+export const STABLE_YIELD_EXECUTES_TRANSACTION = false;
+export const STABLE_YIELD_REQUIRES_WALLET_SIGNATURE = false;
 export const STABLE_YIELD_UI_ENABLED = false;
 export const STABLE_YIELD_TESTING_EXISTS = false;
 export const STABLE_YIELD_EXECUTION_ENABLED = false;

@@ -36,6 +36,8 @@ import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
 import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 import { deriveContributionSuggestion } from "./contributionProductInput";
+import { deriveStableYieldPlanSuggestion } from "./stableYieldProductInput";
+import type { StableYieldReviewPresentation } from "./yieldStrategyPlanPresentationTypes";
 import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID } from "./contributionPricePolicy";
 import type { ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
 
@@ -52,6 +54,11 @@ export interface RailSuggestionsData {
    * modal renders these for a plan-backed card; other cards use `reviewDetailsById`. Engine-owned.
    */
   contributionReviewById: Record<string, ContributionPlanReviewDetails>;
+  /**
+   * Step 16H-D — plan-backed Stable Yield review presentations keyed by suggestion id. The shared
+   * review modal renders these for a Stable Yield card; engine-owned, never recalculated in React.
+   */
+  stableYieldReviewById: Record<string, StableYieldReviewPresentation>;
   notice?: string;
   /** True when the engine produced at least one card. */
   available: boolean;
@@ -127,6 +134,12 @@ export function deriveRailSuggestions(args: {
   // (`wallet/tokenPrices.ts`), so `token_price_service` is a DEMONSTRABLE provenance (not fabricated).
   const contribution = deriveContributionSuggestion({ dataMode, positions, pricedAsOf, goal, buffer, priceProvenance: { sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID } });
 
+  // Step 16H-D — the shared Stable Yield orchestration prepares the optional 16G plan decision → 16H-A
+  // suggestion. Real Wallet uses the production pipeline (no approved product → no_plan → null); Demo
+  // uses injected demo-only data. Merged into the engine BEFORE its sort/Top-Pick pass (never marked
+  // Top Pick here). The presentation review is keyed by the SAME suggestion id the card uses.
+  const stableYield = deriveStableYieldPlanSuggestion({ dataMode, positions, pricedAsOf, goal, buffer });
+
   const engineResult = runSuggestionEngine(
     buildSuggestionEngineInputs({
       positions,
@@ -137,7 +150,8 @@ export function deriveRailSuggestions(args: {
       allocation: allocationInput,
     }),
     pricedAsOf ?? 0,
-    contribution.suggestion
+    contribution.suggestion,
+    stableYield.suggestion
   );
   const cards = toSuggestionCards(engineResult.suggestions);
   // Engine-owned review details, keyed by the SAME stable suggestion id the
@@ -150,6 +164,7 @@ export function deriveRailSuggestions(args: {
     cards,
     reviewDetailsById,
     contributionReviewById: contribution.reviewById,
+    stableYieldReviewById: stableYield.reviewById,
     notice: warningsToNotice(engineResult.warnings),
     available: cards.length > 0,
   };
@@ -168,7 +183,7 @@ export function useRailSuggestions(args: {
   onSuggestions?: (data: RailSuggestions) => void;
 }): void {
   const { positions, pricedAsOf, goal, loading, onSuggestions } = args;
-  const { cards, reviewDetailsById, contributionReviewById, notice, available } = deriveRailSuggestions({
+  const { cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available } = deriveRailSuggestions({
     positions,
     pricedAsOf,
     goal,
@@ -197,7 +212,7 @@ export function useRailSuggestions(args: {
     if (!onSuggestions) return;
     if (signature === lastSignature.current) return;
     lastSignature.current = signature;
-    onSuggestions({ cards, reviewDetailsById, contributionReviewById, notice, available, loading });
+    onSuggestions({ cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available, loading });
     // Signature gates the update; card objects are intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, onSuggestions]);

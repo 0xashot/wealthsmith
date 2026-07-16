@@ -1044,7 +1044,15 @@ import {
   STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS,
   STABLE_YIELD_REAL_WALLET_INTEGRATION_EXISTS,
   STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS,
+  STABLE_YIELD_SHARED_PRODUCT_ORCHESTRATION_EXISTS,
+  STABLE_YIELD_EXECUTES_TRANSACTION,
+  STABLE_YIELD_REQUIRES_WALLET_SIGNATURE,
 } from "./investmentTargetRegistry";
+import { deriveStableYieldPlanSuggestion, STABLE_YIELD_PRODUCT_ORCHESTRATION_EXISTS } from "./stableYieldProductInput";
+import { buildDemoStableYieldRail, buildDemoStableYieldDecision, DEMO_STABLE_YIELD_POSITIONS, DEMO_STABLE_YIELD_GOAL, DEMO_STABLE_YIELD_PRICED_AS_OF } from "./demoStableYieldScenario";
+import { deriveRailSuggestions as SY_deriveRail } from "./useRailSuggestions";
+import { deriveSafetyBuffer as SY_deriveBuffer } from "../wallet/walletSummary";
+import { getSafetyBufferTargetMonths as SY_bufferMonths } from "../wallet/safetyBufferTarget";
 import type { YieldStrategyRegistryEntry as ELIG_Entry } from "./yieldStrategyRegistryTypes";
 import type { YieldStrategyMarketSnapshot as ELIG_Snap, YieldStrategyMarketDataSet as ELIG_MarketSet, YieldApyData as ELIG_Apy, YieldLiquidityData as ELIG_Liq } from "./yieldStrategyMarketDataTypes";
 import {
@@ -15668,7 +15676,9 @@ export function runYieldStrategyPlanUiFixtureChecks(): FixtureCheck[] {
   // ---- Flags + inventory ----
   add("16H-C-A: rendered card / review modal / testing-visual-fixtures flags are true", STABLE_YIELD_RENDERED_CARD_EXISTS === true && STABLE_YIELD_RENDERED_REVIEW_MODAL_EXISTS === true && STABLE_YIELD_TESTING_VISUAL_FIXTURES_EXIST === true && SY_TEST_FIXTURES_EXIST === true, "true");
   add("16H-C-B: shared-card-mapper / review-UI / accessibility flags are true", STABLE_YIELD_SHARED_CARD_MAPPER_EXISTS === true && STABLE_YIELD_REVIEW_UI_EXISTS === true && STABLE_YIELD_ACCESSIBILITY_BEHAVIOR_EXISTS === true, "true");
-  add("16H-C-C: Demo / Real-Wallet / Smith-AI / external-CTA integration flags remain false", STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS === false && STABLE_YIELD_REAL_WALLET_INTEGRATION_EXISTS === false && STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS === false && STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS === false, "false");
+  // 16H-D flipped Demo + Real-Wallet integration to true (product flows wired). Smith-AI + external
+  // protocol CTA remain false (still read-only, no execution).
+  add("16H-C-C: Smith-AI / external-protocol-CTA integration flags remain false", STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS === false && STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS === false, "false");
   add("16H-C-D: /testing inventory covers card + review + fail-closed states", STABLE_YIELD_TESTING_CARD_FIXTURES.length >= 16 && STABLE_YIELD_TESTING_REVIEW_FIXTURES.length >= 11 && STABLE_YIELD_TESTING_NON_RENDER_FIXTURES.length >= 4, `${STABLE_YIELD_TESTING_CARD_FIXTURES.length}/${STABLE_YIELD_TESTING_REVIEW_FIXTURES.length}/${STABLE_YIELD_TESTING_NON_RENDER_FIXTURES.length}`);
 
   // ---- Card mapper (16H-B card → SuggestionCardState via toSuggestionCard) ----
@@ -15716,6 +15726,84 @@ export function runYieldStrategyPlanUiFixtureChecks(): FixtureCheck[] {
     add("16H-C-AA: the Stable Yield review branch is read-only (no transaction/signature/deposit/external-nav)", syBranch.length > 0 && !/executeTransaction|requestSignature|window\.open|deposit\(|href=|externalReviewLink|open_external_protocol/i.test(syBranch), "read-only branch");
   }
   add("16H-C-AB: the shared card CTA never opens an external protocol for a stable-yield card", card.cta.action !== "open_external_protocol" && !("protocol_id" in card.cta && (card.cta as unknown as Record<string, unknown>).protocol_id), "no external");
+
+  return checks;
+}
+
+/**
+ * Step 16H-D — the Stable Yield suggestion integrated into the Demo Mode and Real Wallet product flows
+ * through the SHARED `deriveStableYieldPlanSuggestion` orchestration → `runSuggestionEngine`'s 4th param
+ * → shared card + review drawer. Demo demonstrates ONE valid excess-lane suggestion from DEMO-ONLY
+ * injected inputs; Real Wallet runs the production pipeline → no approved product → no_plan → no card.
+ */
+export function runStableYieldProductIntegrationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  // The demo Safety Buffer (funded) is derived through the SAME canonical helper the rail uses.
+  const demoBuffer = SY_deriveBuffer(DEMO_STABLE_YIELD_POSITIONS, DEMO_STABLE_YIELD_GOAL.expenses_monthly, SY_bufferMonths(DEMO_STABLE_YIELD_GOAL.risk_tolerance));
+  const demoIn = { dataMode: "demo_fixture" as const, positions: DEMO_STABLE_YIELD_POSITIONS, goal: DEMO_STABLE_YIELD_GOAL, buffer: demoBuffer, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF };
+
+  // ---- Flags ----
+  add("16H-D-A: Demo + Real-Wallet + shared-orchestration integration flags are true", STABLE_YIELD_DEMO_MODE_INTEGRATION_EXISTS === true && STABLE_YIELD_REAL_WALLET_INTEGRATION_EXISTS === true && STABLE_YIELD_SHARED_PRODUCT_ORCHESTRATION_EXISTS === true && STABLE_YIELD_PRODUCT_ORCHESTRATION_EXISTS === true, "true");
+  add("16H-D-B: execution / signature / Smith-AI / external-protocol-CTA flags remain false", STABLE_YIELD_EXECUTES_TRANSACTION === false && STABLE_YIELD_REQUIRES_WALLET_SIGNATURE === false && STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS === false && STABLE_YIELD_PROTOCOL_EXTERNAL_ACTION_CTA_EXISTS === false, "false");
+
+  // ---- Demo Mode: one valid excess-lane suggestion through the full pipeline ----
+  const demoBufferFunded = demoBuffer?.fullyFunded === true;
+  add("16H-D-C: the demo Safety Buffer is fully funded (so the engine surfaces yield, not a buffer override)", demoBufferFunded, `funded=${demoBufferFunded}`);
+  const demoDerive = deriveStableYieldPlanSuggestion(demoIn);
+  add("16H-D-D: the demo decision is a ready excess-lane plan", demoDerive.decision?.status === "ready" && demoDerive.decision?.selectedLane === "excess", `${demoDerive.decision?.status}/${demoDerive.decision?.selectedLane ?? "-"}`);
+  add("16H-D-E: the demo orchestration emits one Stable Yield suggestion (category stable_yield)", demoDerive.suggestion !== null && demoDerive.suggestion?.category === "stable_yield", demoDerive.suggestion?.category ?? "null");
+  add("16H-D-F: the demo suggestion funds only direct_wallet_usdc, excess lane, amount $500", demoDerive.suggestion?.stableYieldPlan?.fundingSource === "direct_wallet_usdc" && demoDerive.suggestion?.stableYieldPlan?.lane === "excess" && demoDerive.suggestion?.stableYieldPlan?.amountUsd === 500, `${demoDerive.suggestion?.stableYieldPlan?.fundingSource}/${demoDerive.suggestion?.stableYieldPlan?.amountUsd}`);
+  add("16H-D-G: the orchestration never force-marks the demo suggestion Top Pick (engine decides ordering)", demoDerive.suggestion?.is_top_pick !== true, `top_pick=${demoDerive.suggestion?.is_top_pick}`);
+  add("16H-D-H: the demo orchestration builds exactly one keyed review (fail-closed otherwise)", Object.keys(demoDerive.reviewById).length === 1 && demoDerive.suggestion != null && demoDerive.reviewById[demoDerive.suggestion.id] != null, `${Object.keys(demoDerive.reviewById).length}`);
+
+  // ---- Demo rail: rendered through the SAME shared engine → shared card ----
+  const demoRail = buildDemoStableYieldRail();
+  const demoSyCards = demoRail.cards.filter((c) => c.type === "deploy_idle_stablecoins");
+  add("16H-D-I: the demo rail renders exactly one stable-yield card (legacy 'Put Stablecoins to Work' suppressed)", demoSyCards.length === 1, `${demoSyCards.length}`);
+  add("16H-D-J: the demo card is the plan-backed presentation (title/tag/amount from 16H-B)", demoSyCards[0]?.title === "Put Excess USDC to Work" && demoSyCards[0]?.tag === "Excess USDC Yield" && demoSyCards[0]?.impact_text === "Amount to review: $500.00", `${demoSyCards[0]?.title}`);
+  add("16H-D-K: the demo card CTA is read-only 'Review Strategy' (no transaction/signature/completion)", demoSyCards[0]?.cta.label === "Review Strategy" && demoSyCards[0]?.cta.action === null && demoSyCards[0]?.cta.executes_transaction === false && demoSyCards[0]?.cta.requires_wallet_signature === false && demoSyCards[0]?.cta.completion_on_click === false, "read-only");
+  add("16H-D-L: the demo rail keys the review by the SAME id the card uses (shared modal opens)", demoSyCards[0] != null && demoRail.stableYieldReviewById[demoSyCards[0].id] != null && Object.keys(demoRail.stableYieldReviewById).length === 1, `keys=${Object.keys(demoRail.stableYieldReviewById).length}`);
+  add("16H-D-M: the demo rail exposes at most one Top Pick across all cards", demoRail.cards.filter((c) => c.is_top_pick === true).length <= 1, `${demoRail.cards.filter((c) => c.is_top_pick === true).length}`);
+  add("16H-D-N: the demo rail is available and settles to a concrete (non-loading) payload", demoRail.available === true && demoRail.loading === false, `avail=${demoRail.available}`);
+
+  // ---- Identity: timestamp-only reevaluation preserves the suggestion id ----
+  const demoAgain = deriveStableYieldPlanSuggestion({ ...demoIn, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF + 3_600_000 });
+  add("16H-D-O: a timestamp-only reevaluation keeps a stable suggestion id (no flicker/new card)", demoDerive.suggestion != null && demoAgain.suggestion != null && demoDerive.suggestion.id === demoAgain.suggestion.id, "stable id");
+  const demoRail2 = buildDemoStableYieldRail();
+  add("16H-D-P: rebuilding the demo rail yields identical visible card copy (deterministic)", JSON.stringify(demoRail.cards) === JSON.stringify(demoRail2.cards), "deterministic");
+
+  // ---- Real Wallet: production pipeline → no approved product → no_plan → no card ----
+  const realDerive = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: DEMO_STABLE_YIELD_POSITIONS, goal: DEMO_STABLE_YIELD_GOAL, buffer: demoBuffer, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF });
+  add("16H-D-Q: the real-wallet decision is no_plan (no approved product / no market/capacity data source)", realDerive.decision?.status === "no_plan", realDerive.decision?.status ?? "null");
+  add("16H-D-R: the real-wallet orchestration emits no Stable Yield suggestion + no review (fail-closed, no error)", realDerive.suggestion === null && Object.keys(realDerive.reviewById).length === 0 && realDerive.diagnostic.emitted === false, "no suggestion");
+  const realRail = SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL });
+  add("16H-D-S: the real-wallet rail renders no plan-backed Stable Yield review (integration wired; no card is correct)", Object.keys(realRail.stableYieldReviewById).length === 0, `keys=${Object.keys(realRail.stableYieldReviewById).length}`);
+  add("16H-D-T: unrelated real-wallet suggestions still render (the rail is not broken by no_plan)", realRail.cards.length > 0, `${realRail.cards.length} cards`);
+
+  // ---- Fail-closed: demo path with an incomplete buffer prepares no suggestion ----
+  const demoUnfunded = deriveStableYieldPlanSuggestion({ ...demoIn, buffer: demoBuffer ? { ...demoBuffer, fullyFunded: false } : null });
+  add("16H-D-U: a demo path with an incomplete Safety Buffer prepares no Stable Yield suggestion", demoUnfunded.suggestion === null && demoUnfunded.diagnostic.reason === "demo_buffer_incomplete", demoUnfunded.diagnostic.reason);
+
+  // ---- Demo / production isolation integrity ----
+  add("16H-D-V: the synthetic demo product never enters the production registry", listYieldStrategies().every((e) => e.strategyId !== "demo_usdc_yield_vault") && getApprovedYieldStrategies().length === 0, `approved=${getApprovedYieldStrategies().length}`);
+  const demoDecDirect = buildDemoStableYieldDecision();
+  add("16H-D-W: the demo decision resolves the demo-only product (never a production strategy id)", demoDecDirect.status === "ready" && demoDecDirect.selectedStrategyId === "demo_usdc_yield_vault", demoDecDirect.selectedStrategyId ?? "-");
+
+  // ---- Orchestration boundary: no React, no execution in the shared/demo modules ----
+  {
+    const orchBlob = (readIf("src/suggestions/stableYieldProductInput.ts") + readIf("src/suggestions/demoStableYieldScenario.ts")).toLowerCase();
+    const forbidden = ["from \"react\"", "usestate", "useeffect", "jsx", "sendtransaction", "signtransaction", "window.open", "executetransaction"];
+    add("16H-D-X: the shared orchestration + demo scenario contain no React and no execution/transaction logic", forbidden.filter((h) => orchBlob.includes(h)).length === 0, "clean");
+  }
+  // The rail hook feeds runSuggestionEngine's 4th param and never calls selectTopPick / reorders in the UI.
+  {
+    const railBlob = readIf("src/suggestions/useRailSuggestions.ts").toLowerCase();
+    add("16H-D-Y: the rail passes the Stable Yield suggestion into runSuggestionEngine and never reorders / picks Top Pick in the UI", railBlob.includes("derivestableyieldplansuggestion(") && railBlob.includes("stableyield.suggestion") && !railBlob.includes("selecttoppick"), "engine-owned ordering");
+  }
 
   return checks;
 }
@@ -15817,6 +15905,7 @@ export function printFixtureResults(): void {
     ...runYieldStrategyPlanSuggestionFixtureChecks(),
     ...runYieldStrategyPlanPresentationFixtureChecks(),
     ...runYieldStrategyPlanUiFixtureChecks(),
+    ...runStableYieldProductIntegrationFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console
