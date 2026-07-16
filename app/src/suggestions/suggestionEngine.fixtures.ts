@@ -1097,8 +1097,11 @@ import {
   STABLE_YIELD_RISK_REVIEW_SCORED,
   STABLE_YIELD_RISK_REVIEW_HUMAN_SIGNOFF_COMPLETE,
   STABLE_YIELD_RISK_REVIEW_ELIGIBLE_FOR_APPROVAL_REVIEW,
+  STABLE_YIELD_KVAULT_CAPACITY_SEMANTICS_REVIEWED,
+  STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED_FROM_CAPACITY,
 } from "./investmentTargetRegistry";
 import { getSteakhouseRiskReviewStatus, listSteakhouseRiskEvidence } from "./steakhouseUsdcRiskEvidence";
+import { resolveKvaultDepositCapacity, KVAULT_MAINNET_PROGRAM_ID, KVAULT_CAPACITY_SOURCE, U64_MAX_STR } from "./kaminoVaultCapacitySemantics";
 import { listYieldStrategyRiskReviews, getYieldStrategyRiskReview } from "./yieldStrategyRiskReview";
 import { validateStableYieldMarketRecord, cacheRecordNetApyPct, cacheRecordToMarketDataInput, rawTokenAmountToUsd, STABLE_YIELD_REFRESH_ARTIFACT_EXISTS, type StableYieldMarketRecord } from "./stableYieldMarketCache";
 import { listActiveYieldStrategyCandidates, isYieldStrategyExcluded } from "./yieldStrategyRegistry";
@@ -16292,7 +16295,9 @@ export function runStableYieldSourcePathFixtureChecks(): FixtureCheck[] {
   // ---- Deposit state + capacity stay honestly unknown ----
   add("16H-I-AF: deposit state is `unknown` — a successful read is not proof deposits are enabled", (() => { const r = v(rec()); return r.valid && r.record.depositState === "unknown"; })(), "unknown");
   add("16H-I-AG: capacity is `unknown` — depositCap=0 is NOT guessed as uncapped or full", (() => { const r = v(rec({ depositCapRaw: "0" })); return r.valid && r.record.capacityState === "unknown"; })(), "unknown");
-  add("16H-I-AH: the refresh job never EMITS verified_uncapped / Infinity / a guessed cap", (() => { const s = readIf("scripts/refresh-stable-yield-market-data.mjs"); const assigns = /capacityState:\s*"(?!unknown")/.test(s); return !assigns && !/Infinity|Number\.MAX/.test(s) && /capacityState:\s*"unknown"/.test(s); })(), "never");
+  // 16H-J.1: capacity is now resolved, but ONLY through the reviewed resolver — the job never hard-codes
+  // a capacity verdict of its own, and still never emits Infinity or an arbitrary large number.
+  add("16H-I-AH: the refresh job never hard-codes a capacity verdict; it delegates to the reviewed resolver", (() => { const s = readIf("scripts/refresh-stable-yield-market-data.mjs"); const hardcoded = /capacityState:\s*"(verified_uncapped|explicit_remaining_capacity|product_full)"/.test(s); return !hardcoded && /resolveKvaultDepositCapacity\(/.test(s) && !/Infinity|Number\.MAX/.test(s); })(), "delegated");
   add("16H-I-AI: TVL / withdrawal liquidity are never read as capacity", (() => { const s = readIf("scripts/refresh-stable-yield-market-data.mjs") + readIf("src/suggestions/stableYieldMarketCache.ts"); return !/tvl|withdrawalLiquidity/i.test(s); })(), "clean");
 
   // ---- Publish / artifact safety ----
@@ -16344,7 +16349,8 @@ export function runStableYieldSourcePathFixtureChecks(): FixtureCheck[] {
 
   // ---- Flags ----
   add("16H-I-BF: the 16H-I source-path flags are true", [STABLE_YIELD_KAMINO_SDK_ADAPTER_EXISTS, STABLE_YIELD_CHAIN_TIME_FRESHNESS_EXISTS, STABLE_YIELD_REFRESH_ARTIFACT_EXISTS, STABLE_YIELD_MARKET_CACHE_PUBLISHER_EXISTS, STABLE_YIELD_RUNTIME_CACHE_CONSUMPTION_EXISTS, STABLE_YIELD_EXACT_VAULT_SOURCE_VALIDATION_EXISTS, STABLE_YIELD_NET_APY_SOURCE_PATH_EXISTS, STABLE_YIELD_BACKEND_REFRESH_BOUNDARY_EXISTS].every((f) => f === true), "true");
-  add("16H-I-BG: capacity / deposit-state / risk-review flags stay FALSE (unresolved)", [STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED, STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED, STABLE_YIELD_PRODUCTION_RISK_REVIEW_COMPLETE].every((f) => f === false), "false");
+  // 16H-J.1 resolved capacity from the official kvault source. Deposit state + risk review stay FALSE.
+  add("16H-I-BG: deposit-state / risk-review flags stay FALSE (still genuinely unresolved)", [STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED, STABLE_YIELD_PRODUCTION_RISK_REVIEW_COMPLETE].every((f) => f === false), "false");
   add("16H-I-BH: approval / card / buffer-minimum / Smith-AI / Qdrant flags stay FALSE", [STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS, STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST, STABLE_YIELD_PRODUCTION_CARD_AVAILABLE, STABLE_YIELD_BUFFER_YIELD_MINIMUM_EXISTS, STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS, STABLE_YIELD_QDRANT_INTEGRATION_EXISTS].every((f) => f === false), "false");
 
   return checks;
@@ -16397,7 +16403,8 @@ export function runSteakhouseRiskEvidenceFixtureChecks(): FixtureCheck[] {
   add("16H-J-U: the record explicitly states Claude is not an authorized reviewer", /Claude is not an authorized reviewer/i.test(JSON.stringify(st.reviewerActionsRequired)) && /is NOT an authorized[\s*]+human reviewer/i.test(readIf("src/suggestions/steakhouseUsdcRiskEvidence.ts")), "honest");
 
   // ---- Capacity stays fail-closed; production unchanged ----
-  add("16H-J-V: the capacity observation is descriptive_only and does not resolve capacity", (() => { const c = ev.find((e) => e.evidenceId === "sh-cap-01")!; return c.effect === "descriptive_only" && /remains an inference/i.test(c.reviewerNote ?? "") && STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === false; })(), "still unknown");
+  // 16H-J.1: capacity is now RESOLVED from the official kvault source, superseding the earlier note.
+  add("16H-J-V: capacity is resolved from the reviewed official source, with the citation recorded", (() => { const c = ev.find((e) => e.evidenceId === "sh-cap-02")!; return c.sourceType === "official_docs" && /release\/v2\.2\.2/.test(c.source) && /1d146d7087a76edbbadc14d848ae14295c0745a4/.test(c.source) && /deposit_cap == 0/.test(c.summary) && STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === true; })(), "resolved");
   add("16H-J-W: no product was approved; approved count remains zero", getApprovedYieldStrategies().length === 0 && getYieldStrategy("kamino_steakhouse_usdc")!.lifecycle !== "approved", "0 approved");
   add("16H-J-X: production still returns no_plan and renders no Stable Yield card", (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: "2026-07-16T12:00:00.000Z" }); return r.decision?.status === "no_plan" && r.suggestion === null; })() && SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
   add("16H-J-Y: Demo remains unchanged (one synthetic card, $500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
@@ -16408,6 +16415,50 @@ export function runSteakhouseRiskEvidenceFixtureChecks(): FixtureCheck[] {
 
   // ---- Flags ----
   add("16H-J-AB: evidence + diagnostics flags are true; scored / signoff / approval-ready are FALSE", STABLE_YIELD_EXACT_VAULT_RISK_EVIDENCE_EXISTS === true && STABLE_YIELD_RISK_REVIEW_DIAGNOSTICS_EXIST === true && STABLE_YIELD_RISK_REVIEW_SCORED === false && STABLE_YIELD_RISK_REVIEW_HUMAN_SIGNOFF_COMPLETE === false && STABLE_YIELD_RISK_REVIEW_ELIGIBLE_FOR_APPROVAL_REVIEW === false, "accurate");
+
+  return checks;
+}
+
+
+/**
+ * Step 16H-J.1 — reviewed kvault deposit-capacity semantics. Deterministic and OFFLINE: the proof lives
+ * in the official program source, and these checks pin the rule + its narrow scope.
+ */
+export function runKvaultCapacitySemanticsFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const KV = KVAULT_MAINNET_PROGRAM_ID;
+  const base = { programId: KV, productType: "managed_vault", mintDecimals: 6 };
+
+  // ---- The proven rule ----
+  add("16H-J1-A: deposit_cap = 0 resolves to verified_uncapped (the program's explicit 0 => u64::MAX branch)", (() => { const r = resolveKvaultDepositCapacity({ ...base, depositCapRaw: "0" }); return r.mode === "verified_uncapped" && /get_max_depositable_in_vault/.test(r.reason); })(), "verified_uncapped");
+  add("16H-J1-B: deposit_cap = u64::MAX also resolves to verified_uncapped (the init_vault default)", resolveKvaultDepositCapacity({ ...base, depositCapRaw: U64_MAX_STR }).mode === "verified_uncapped", "verified_uncapped");
+  add("16H-J1-C: an uncapped vault needs NO used-counterpart (no AUM required, none invented)", (() => { const r = resolveKvaultDepositCapacity({ ...base, depositCapRaw: "0" }); return r.mode === "verified_uncapped" && r.remainingUsd === undefined; })(), "no aum needed");
+  add("16H-J1-D: the resolution cites the reviewed release + commit", KVAULT_CAPACITY_SOURCE.release === "release/v2.2.2" && KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4" && KVAULT_CAPACITY_SOURCE.repo === "github.com/Kamino-Finance/kvault", "pinned");
+
+  // ---- A genuinely capped vault still needs cap - AUM ----
+  add("16H-J1-E: a real cap + AUM yields exact remaining capacity (integer math)", (() => { const r = resolveKvaultDepositCapacity({ ...base, depositCapRaw: "1000000000", aumRaw: "250000000" }); return r.mode === "explicit_remaining_capacity" && r.remainingUsd === 750; })(), "750 USDC");
+  add("16H-J1-F: AUM >= cap yields product_full (mirrors the program's saturating_sub -> 0)", resolveKvaultDepositCapacity({ ...base, depositCapRaw: "500000000", aumRaw: "500000000" }).mode === "product_full", "product_full");
+  add("16H-J1-G: a capped vault WITHOUT AUM fails closed (never assumes headroom)", (() => { const r = resolveKvaultDepositCapacity({ ...base, depositCapRaw: "1000000000" }); return r.mode === "unknown" && /requires_dynamically_computed_aum/.test(r.reason); })(), "unknown");
+
+  // ---- Scope: the proof is narrow. Everything else STILL fails closed. ----
+  add("16H-J1-H: another program id fails closed to unknown (a kvault proof is not a universal proof)", (() => { const r = resolveKvaultDepositCapacity({ ...base, programId: "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD", depositCapRaw: "0" }); return r.mode === "unknown" && /unproven_for_program/.test(r.reason); })(), "unknown");
+  add("16H-J1-I: another product type fails closed to unknown (lending / LP semantics are NOT proven)", ["lending", "stable_liquidity_strategy", "staking_like_vault", "future_other"].every((t) => resolveKvaultDepositCapacity({ ...base, productType: t, depositCapRaw: "0" }).mode === "unknown"), "unknown");
+  add("16H-J1-J: a malformed / ambiguous cap encoding fails closed", ["", "abc", "-1", "1.5", "0x0", "1e9"].every((v) => { const r = resolveKvaultDepositCapacity({ ...base, depositCapRaw: v }); return r.mode === "invalid" || r.mode === "unknown"; }), "fails closed");
+  add("16H-J1-K: Infinity is never emitted and no arbitrary large number is substituted", (() => { const rs = ["0", U64_MAX_STR, "1000000000"].map((v) => resolveKvaultDepositCapacity({ ...base, depositCapRaw: v, aumRaw: "1" })); return rs.every((r) => r.remainingUsd === undefined || Number.isFinite(r.remainingUsd)); })(), "finite");
+
+  // ---- Capacity is NOT deposit state ----
+  add("16H-J1-L: verified_uncapped NEVER implies deposits_enabled (separate question, separate field)", (() => { const src = readFileSync(`${process.cwd()}/src/suggestions/kaminoVaultCapacitySemantics.ts`, "utf8"); return !/deposits_enabled|depositsEnabled|deposits_paused/.test(src); })(), "separate");
+  add("16H-J1-M: the resolver emits only capacity modes, never a deposit-state verdict", (() => { const r = resolveKvaultDepositCapacity({ ...base, depositCapRaw: "0" }); return !("depositState" in (r as object)) && !("acceptingDeposits" in (r as object)); })(), "capacity only");
+  add("16H-J1-N: the live artifact records verified_uncapped while deposit state stays unknown", (() => { const c = readFileSync(`${process.cwd()}/public/generated/stable-yield-market-cache.json`, "utf8"); const j = JSON.parse(c); return j.capacityState === "verified_uncapped" && j.depositState === "unknown" && j.blockers.includes("deposit_state_unknown"); })(), "separated");
+
+  // ---- The published record must cite its source for verified_uncapped ----
+  add("16H-J1-O: a verified_uncapped record WITHOUT a reviewed source commit is rejected", (() => { const c = JSON.parse(readFileSync(`${process.cwd()}/public/generated/stable-yield-market-cache.json`, "utf8")); const bad = { ...c, capacitySourceCommit: undefined }; const r = validateStableYieldMarketRecord(bad, c.sourceTimestamp); return !r.valid && r.reason === "verified_uncapped_requires_reviewed_source_commit"; })(), "citation required");
+  add("16H-J1-P: the published record carries the reviewed release + commit", (() => { const c = JSON.parse(readFileSync(`${process.cwd()}/public/generated/stable-yield-market-cache.json`, "utf8")); return c.capacitySourceRelease === "release/v2.2.2" && c.capacitySourceCommit === "1d146d7087a76edbbadc14d848ae14295c0745a4"; })(), "cited");
+
+  // ---- Resolved capacity still does NOT create eligibility ----
+  add("16H-J1-Q: verified_uncapped does NOT approve the product or render a card", getApprovedYieldStrategies().length === 0 && (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: "2026-07-16T12:05:00.000Z" }); return r.decision?.status === "no_plan" && r.suggestion === null; })(), "no_plan");
+  add("16H-J1-R: capacity-resolved flag is true; deposit-state-from-capacity stays false", STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === true && STABLE_YIELD_KVAULT_CAPACITY_SEMANTICS_REVIEWED === true && STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED === false && STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED_FROM_CAPACITY === false, "accurate");
 
   return checks;
 }
@@ -16515,6 +16566,7 @@ export function printFixtureResults(): void {
     ...runStableYieldIdentityResolutionFixtureChecks(),
     ...runStableYieldSourcePathFixtureChecks(),
     ...runSteakhouseRiskEvidenceFixtureChecks(),
+    ...runKvaultCapacitySemanticsFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

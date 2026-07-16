@@ -2031,3 +2031,25 @@ liquidity must not be assumed.
 Open blockers: admin permissions, reserve-level exposure, audit↔deployment linkage, withdrawal model,
 incident review. Capacity stays `unknown` — though the program demonstrably uses `U64_MAX` as its uncapped
 sentinel, which makes "`depositCap = 0` means uncapped" less likely (an inference, not semantics).
+
+### Step 16H-J.1 — kvault capacity semantics resolved
+
+**`deposit_cap = 0` means UNCAPPED**, proven from the official program source — not inferred:
+`github.com/Kamino-Finance/kvault` `release/v2.2.2` @ `1d146d7087a7`,
+`common::get_max_depositable_in_vault` contains the explicit branch
+`if vault.deposit_cap == 0 { u64::MAX }`, then `deposit_cap.saturating_sub(aum)` against a dynamically
+computed AUM. `init_vault` writes `u64::MAX`, so `0` is the legacy zero-init encoding kept for backward
+compatibility, and an uncapped vault needs no stored used-counterpart. Steakhouse USDC capacity is now
+**`verified_uncapped`**, and `blocked_capacity` is no longer a blocker.
+
+This **supersedes** the 16H-J speculation that `0` might mean "closed" — that reasoned from
+`tokenAllocationCap`'s `U64_MAX` sentinel, a different field on a different account.
+
+Scope is narrow by design ([kaminoVaultCapacitySemantics.ts](./kaminoVaultCapacitySemantics.ts)): the
+rule is gated on the kvault mainnet program id + `managed_vault`. Other programs/product types, and any
+ambiguous encoding, still **fail closed** to `unknown`; a capped vault still requires AUM. The cache
+validator rejects `verified_uncapped` that lacks a reviewed source commit.
+
+**Capacity ≠ deposit state.** `verified_uncapped` means no cap constrains a deposit; it is not evidence
+deposits are enabled. No pause field exists on-chain, so deposit state stays **`unknown`** — now the
+remaining technical blocker alongside the risk review. Product still unapproved; production renders no card.

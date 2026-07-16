@@ -234,9 +234,14 @@ export const STABLE_YIELD_RUNTIME_CACHE_CONSUMPTION_EXISTS = true;
 export const STABLE_YIELD_EXACT_VAULT_SOURCE_VALIDATION_EXISTS = true;
 export const STABLE_YIELD_NET_APY_SOURCE_PATH_EXISTS = true;
 export const STABLE_YIELD_BACKEND_REFRESH_BOUNDARY_EXISTS = true;
-// Still genuinely unresolved — the on-chain VaultState exposes no pause field, and `depositCap`
-// carries no documented semantics (the SDK never reads it). Not marked true just to look complete.
-export const STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED = false;
+// Step 16H-J.1 — capacity RESOLVED for the Steakhouse vault from the official kvault program source
+// (release/v2.2.2, common::get_max_depositable_in_vault): `deposit_cap == 0` is explicitly mapped to
+// u64::MAX, i.e. verified_uncapped. Scope-gated to the kvault mainnet program + managed_vault type;
+// every other program/product type still fails closed to `unknown`.
+export const STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED = true;
+export const STABLE_YIELD_KVAULT_CAPACITY_SEMANTICS_REVIEWED = true;
+// Deposit state remains its own question: capacity never implies it, and no pause field exists on-chain.
+export const STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED_FROM_CAPACITY = false;
 export const STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED = false;
 export const STABLE_YIELD_PRODUCTION_RISK_REVIEW_COMPLETE = false;
 // Step 16H-J — the exact-vault risk EVIDENCE package for Steakhouse USDC. Evidence assembled from

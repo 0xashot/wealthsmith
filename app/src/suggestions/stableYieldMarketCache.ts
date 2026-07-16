@@ -78,6 +78,15 @@ export interface StableYieldMarketRecord {
   depositCapRaw?: string | null;
   capacityState: string;
   capacityReason?: string;
+  /** The reviewed kvault source revision the capacity semantics are bound to (16H-J.1). */
+  capacitySourceRelease?: string;
+  capacitySourceCommit?: string;
+  remainingDepositCapacityUsd?: number;
+  /**
+   * DELIBERATELY SEPARATE from capacity. `verified_uncapped` says no cap constrains a deposit; it says
+   * nothing about whether deposits are enabled. A pause/whitelist is a different gate with a different
+   * field, and none exists on this vault's state — so this stays `unknown`.
+   */
   depositState: string;
   depositStateReason?: string;
 
@@ -137,6 +146,23 @@ export function validateStableYieldMarketRecord(raw: unknown, checkedAt: string)
     const v = raw[f];
     if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > 10_000) return { valid: false, stage: "unit_normalization", reason: `invalid_${f}` };
   }
+
+  // ---- Capacity: canonical vocabulary only; verified_uncapped must cite its reviewed source ----
+  const CAP_MODES = ["explicit_remaining_capacity", "verified_uncapped", "deposits_paused", "product_full", "unavailable", "unknown", "invalid"];
+  if (typeof raw.capacityState !== "string" || !CAP_MODES.includes(raw.capacityState)) return { valid: false, stage: "capacity_validation", reason: "invalid_capacity_state" };
+  if (raw.capacityState === "verified_uncapped" && (typeof raw.capacitySourceCommit !== "string" || raw.capacitySourceCommit.length < 7)) {
+    // verified_uncapped is the one mode that asserts a semantic claim, so it must name the reviewed
+    // revision that proves it. Without that citation it is an inference, and inferences fail closed.
+    return { valid: false, stage: "capacity_validation", reason: "verified_uncapped_requires_reviewed_source_commit" };
+  }
+  if (raw.capacityState === "explicit_remaining_capacity") {
+    const rem = raw.remainingDepositCapacityUsd;
+    if (typeof rem !== "number" || !Number.isFinite(rem) || rem <= 0) return { valid: false, stage: "capacity_validation", reason: "invalid_remaining_capacity" };
+  }
+
+  // ---- Deposit state stays its own question. Capacity never implies it. ----
+  const DEP_STATES = ["enabled", "paused", "unknown", "unavailable"];
+  if (typeof raw.depositState !== "string" || !DEP_STATES.includes(raw.depositState)) return { valid: false, stage: "source_parse", reason: "invalid_deposit_state" };
 
   return { valid: true, record: raw as unknown as StableYieldMarketRecord };
 }

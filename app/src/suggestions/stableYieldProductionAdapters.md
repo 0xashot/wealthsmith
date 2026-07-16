@@ -511,12 +511,43 @@ collateral, oracles, liquidation params · `sh-aud-02` audited-version↔deploye
 
 Per the repo's own rubric guidance, **absence of a discovered incident is missing evidence, not a clean record.**
 
-## Capacity — still unresolved, but a useful observation
+## Capacity — RESOLVED (16H-J.1) from the official program source
 
-`depositCap = 0` and `unallocatedTokensCap = 0`; meanwhile two of the four reserve allocations carry
-`tokenAllocationCap = U64_MAX`. So this program **demonstrably uses U64_MAX as its "uncapped" sentinel**,
-which makes "`depositCap = 0` means uncapped" *less* likely. That is an inference, not documented
-semantics — capacity stays `unknown` and fail-closed. Recorded as `descriptive_only`.
+**`deposit_cap = 0` means UNCAPPED.** Proven from the kvault program's own deposit path, not inferred:
+
+```
+repo    github.com/Kamino-Finance/kvault   release/v2.2.2
+commit  1d146d7087a76edbbadc14d848ae14295c0745a4  (2026-07-08)
+file    programs/kvault/src/operations/vault_operations.rs
+fn      common::get_max_depositable_in_vault  (L1003-1012)
+
+    let deposit_cap = if vault.deposit_cap == 0 { u64::MAX } else { vault.deposit_cap };
+    deposit_cap.saturating_sub(holdings_aum_rounded_up)
+```
+
+- `0` is an **explicit branch** mapping to `u64::MAX`, not an absent field.
+- `init_vault` writes `deposit_cap = u64::MAX` (L44), so `0` is the **legacy zero-initialised encoding**
+  kept for backward compatibility.
+- Remaining capacity is `cap − dynamically computed AUM`. There is **no stored used-counterpart**, and an
+  uncapped vault needs none — exactly as the program itself needs none.
+
+> **This supersedes the earlier 16H-J speculation** that `0` might mean "closed". That reasoning came from
+> `tokenAllocationCap`'s `U64_MAX` sentinel — a *different field on a different account* — and is refuted
+> by the deposit path. Both `0` and `u64::MAX` mean uncapped for `deposit_cap`.
+
+**Scope is deliberately narrow.** [`kaminoVaultCapacitySemantics.ts`](./kaminoVaultCapacitySemantics.ts)
+gates on the kvault **mainnet program id** + `managed_vault` type. Any other program, product type, or
+unrecognised encoding still **fails closed** to `unknown`. A proof about kvault is not a proof about
+lending reserves or LP pools. A genuinely capped vault still requires AUM, or it fails closed.
+
+`verified_uncapped` is the one mode asserting a semantic claim, so the cache validator **rejects it
+without a reviewed source commit** — an uncited claim is an inference, and inferences fail closed.
+
+### Capacity is not deposit state
+
+`verified_uncapped` says only that **no cap constrains a deposit**. It says nothing about whether deposits
+are *enabled*. That is a separate gate with a separate field, none exists on this vault's state, and the
+resolver never emits a deposit-state verdict. **Deposit state remains `unknown`.**
 
 ## Re-review triggers
 

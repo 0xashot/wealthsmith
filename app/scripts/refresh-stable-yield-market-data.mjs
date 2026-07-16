@@ -21,13 +21,29 @@
  */
 import { createSolanaRpc, address } from "@solana/kit";
 import * as klend from "@kamino-finance/klend-sdk";
-import { writeFileSync, renameSync, mkdirSync } from "node:fs";
+import { build } from "esbuild";
+import { writeFileSync, renameSync, mkdirSync, existsSync, rmSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import path from "node:path";
 
 const APP_DIR = process.cwd();
 const TMP_DIR = path.join(APP_DIR, "tmp");
 const FINAL_PATH = path.join(TMP_DIR, "stable-yield-market-refresh.json");
 const TMP_PATH = `${FINAL_PATH}.tmp`;
+const CAP_BUNDLE = path.join(TMP_DIR, ".stable-yield-capacity-bundle.mjs");
+
+/**
+ * Load the REVIEWED capacity semantics from TypeScript via esbuild — never reimplement them here.
+ * Mirrors the publisher's precedent so the rule lives in exactly one place.
+ */
+async function loadCapacitySemantics() {
+  mkdirSync(TMP_DIR, { recursive: true });
+  await build({
+    entryPoints: [path.join(APP_DIR, "src/suggestions/kaminoVaultCapacitySemantics.ts")],
+    bundle: true, format: "esm", platform: "node", outfile: CAP_BUNDLE, logLevel: "silent",
+  });
+  return import(pathToFileURL(CAP_BUNDLE).href);
+}
 
 export const REFRESH_ARTIFACT_SCHEMA_VERSION = "1.0.0";
 const ADAPTER_ID = "kamino_vault_sdk_v1";
@@ -69,6 +85,8 @@ async function main() {
     fail("configuration", "production data must not depend on localhost");
   }
   console.log(`Stable Yield refresh — product ${STRATEGY_ID} @ ${redact(VAULT_ADDRESS)} via ${redactUrl(rpcUrl)}`);
+
+  const { resolveKvaultDepositCapacity, KVAULT_CAPACITY_SOURCE } = await loadCapacitySemantics();
 
   const rpc = createSolanaRpc(rpcUrl);
   const fetchedAt = new Date().toISOString();
@@ -135,11 +153,21 @@ async function main() {
   if (!Number.isFinite(managementFeeBps) || managementFeeBps < 0) fail("unit_normalization", "invalid_managementFeeBps");
   if (!Number.isFinite(performanceFeeBps) || performanceFeeBps < 0) fail("unit_normalization", "invalid_performanceFeeBps");
 
-  // ---- Stage: capacity_validation — see the doc: `depositCap` exists on-chain but the SDK never
-  // reads it and no official source documents its semantics (what 0 or U64_MAX mean, or which field is
-  // the matching "used" counterpart). Recording the raw value as EVIDENCE is fine; interpreting it is
-  // not. Capacity therefore stays `unknown` — absence of proven semantics is never "uncapped".
+  // ---- Stage: capacity_validation — RESOLVED at 16H-J.1 from the official kvault program source
+  // (release/v2.2.2, get_max_depositable_in_vault): `deposit_cap == 0` is explicitly mapped to
+  // u64::MAX, i.e. uncapped (the legacy encoding; init_vault now writes u64::MAX). Remaining capacity
+  // is cap − dynamically-computed AUM, so an uncapped vault needs no stored used-counterpart.
+  // The resolver is scope-gated: it proves nothing for any other program or product type.
   const depositCapRaw = state.depositCap != null ? state.depositCap.toString() : undefined;
+  let capacity = { mode: "unknown", reason: "deposit_cap absent from vault state" };
+  if (depositCapRaw !== undefined) {
+    capacity = resolveKvaultDepositCapacity({
+      programId,
+      productType: "managed_vault",
+      depositCapRaw,
+      mintDecimals: decimals,
+    });
+  }
 
   // ---- Stage: deposit state — the on-chain VaultState exposes NO pause/enabled/halt field. A
   // successful read is not proof deposits are enabled, so this stays `unknown`.
@@ -169,19 +197,25 @@ async function main() {
     managementFeeBps,
     performanceFeeBps,
     depositCapRaw: depositCapRaw ?? null,
-    capacityState: "unknown",
-    capacityReason: "depositCap exists on-chain but its semantics are undocumented and the SDK never reads it; no proven used-counterpart. Absence of proven semantics is never verified_uncapped.",
+    capacityState: capacity.mode,
+    capacityReason: capacity.reason,
+    capacitySourceRelease: KVAULT_CAPACITY_SOURCE.release,
+    capacitySourceCommit: KVAULT_CAPACITY_SOURCE.commit,
+    ...(capacity.remainingUsd !== undefined ? { remainingDepositCapacityUsd: capacity.remainingUsd } : {}),
     depositState: "unknown",
     depositStateReason: "VaultState exposes no pause/enabled field; a successful read is not proof deposits are enabled.",
     // Planning-safe stays FALSE: the product is unapproved, capacity and deposit state are unknown,
     // and the 16D risk review is incomplete. This artifact is evidence, not an eligibility grant.
+    // planningSafe stays FALSE: capacity is now resolved, but the product is unapproved, its deposit
+    // state is still unknown, and the 16D risk review is incomplete. Evidence, not an eligibility grant.
     planningSafe: false,
-    blockers: ["product_unapproved", "capacity_unknown", "deposit_state_unknown", "risk_review_incomplete"],
+    blockers: ["product_unapproved", "deposit_state_unknown", "risk_review_incomplete"],
   };
 
   mkdirSync(TMP_DIR, { recursive: true });
   writeFileSync(TMP_PATH, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
   renameSync(TMP_PATH, FINAL_PATH); // atomic
+  if (existsSync(CAP_BUNDLE)) rmSync(CAP_BUNDLE, { force: true });
 
   console.log(`  vault name      : ${vaultName ?? "(undecodable)"}`);
   console.log(`  identity        : tokenMint=USDC ✓  sharesMint ✓  decimals=${decimals} ✓`);
@@ -190,9 +224,11 @@ async function main() {
   console.log(`  net APY (raw)   : ${netApyRaw}  [fraction]`);
   console.log(`  min deposit     : ${minDepositRaw} raw @ ${decimals}dp`);
   console.log(`  fees            : mgmt=${managementFeeBps}bps perf=${performanceFeeBps}bps`);
-  console.log(`  depositCap raw  : ${depositCapRaw ?? "(absent)"} -> capacity=unknown (semantics undocumented)`);
-  console.log(`  deposit state   : unknown (no pause field on-chain)`);
-  console.log(`  planningSafe    : false — approval + capacity + deposit state + risk review outstanding`);
+  console.log(`  depositCap raw  : ${depositCapRaw ?? "(absent)"} -> capacity=${capacity.mode}`);
+  console.log(`     reason       : ${capacity.reason}`);
+  console.log(`     source       : ${KVAULT_CAPACITY_SOURCE.repo} ${KVAULT_CAPACITY_SOURCE.release} @ ${KVAULT_CAPACITY_SOURCE.commit.slice(0, 12)}`);
+  console.log(`  deposit state   : unknown (no pause field on-chain — SEPARATE from capacity)`);
+  console.log(`  planningSafe    : false — approval + deposit state + risk review outstanding`);
   console.log(`\nwrote ${path.relative(APP_DIR, FINAL_PATH)}`);
   process.exit(0);
 }
