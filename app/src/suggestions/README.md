@@ -2053,3 +2053,138 @@ validator rejects `verified_uncapped` that lacks a reviewed source commit.
 **Capacity ≠ deposit state.** `verified_uncapped` means no cap constrains a deposit; it is not evidence
 deposits are enabled. No pause field exists on-chain, so deposit state stays **`unknown`** — now the
 remaining technical blocker alongside the risk review. Product still unapproved; production renders no card.
+
+### Step 16H-K — risk rubric v1 proposal + reviewer governance
+
+The governance foundation for human-reviewed risk scores. **Nothing here is approved**, and that is the
+deliverable: [riskRubricV1ApprovalArtifact.md](./riskRubricV1ApprovalArtifact.md) is a document for the
+product owner to approve, amend, or reject.
+
+**Why this step existed:** `protocol_risk_rubric` has been `v0.1.0-draft` since Step 12Y, and
+`protocolRiskScoreAssignment.ts` gates every 0–10 score on an *approved* rubric plus per-dimension
+reviewer input. Consequently **no candidate has ever been scored** — not Steakhouse, not even JitoSOL.
+The blocker was never evidence; it was governance.
+
+**Proposed rubric v1.0.0** ([riskGovernance.ts](./riskGovernance.ts)) — `proposed_for_approval`,
+`approved: false`, `approvedBy`/`approvedAt` **unset**. 12 dimensions, weights total 100, integers only,
+shared anchors, mandatory rationale + evidence + confidence.
+
+**Direction is pinned to the repo's existing one: 0–10, HIGHER = MORE EVIDENCE-SUPPORTED.** This matters —
+`MIN_PROTOCOL_RISK_SCORE = 7` is used as a **floor**, so inverting the direction would silently turn every
+existing gate into a ceiling.
+
+**`tvl_adoption` is removed from v1 scoring.** TVL cannot make a product safer: a full product and an
+uncapped one report identical TVL, and a large pool is a larger target, not a safer one. Its defensible
+signal survives inside `maturity` as an optional reviewed snapshot that can't be fetched at runtime and
+can't override a blocker. Six dimensions were **added** (upgrade/admin authority, manager discretion,
+strategy complexity, composability, oracle, liquidity/withdrawal) because the Steakhouse review found
+risks v0.1.0 had nowhere to record.
+
+**Blockers can't be averaged away:** aggregation checks mandatory blockers *before* any arithmetic, and any
+dimension in the `unsupported` band (0–2) caps the overall band regardless of the weighted mean.
+
+**Reviewer governance** ([riskReviewerRegistry.ts](./riskReviewerRegistry.ts)): six roles, scoped
+authorization, revocation. **The production registry is EMPTY** — no reviewer was fabricated, so every
+scoring/review/signoff action fails closed today. An **automated agent (including Claude) is rejected for
+every role except `evidence_preparer`**. A *proposed* product-owner record is drafted from the existing
+"Ashot-authorized for scoring" convention in the staking modules — but a code comment is not a scoped
+authorization, so it is not activated. Separation of duties is likewise **proposed**, not policy.
+
+**Six independent lifecycles** with strict transitions: rubric · evidence · scoring · human review ·
+risk signoff · product approval. Evidence complete ≠ scored ≠ reviewed ≠ signed off ≠ **product approved**.
+`riskSignoffImpliesProductApproval()` returns `false` as a named, tested fact.
+
+**Migration** ([riskScoreMigration.md](./riskScoreMigration.md)): nothing migrated. The five
+`assigned_for_review` staking scores are untouched, still usable (they aren't wired into
+`protocolEligibility`), and require explicit rescoring — **not** mapping, since v1 added six dimensions
+never assessed for them. JitoSOL has no score to migrate.
+
+**Steakhouse worksheet** ([steakhouseReviewerWorksheet.ts](./steakhouseReviewerWorksheet.ts)): bound to the
+exact vault/share mint/program, 12 rows, **every reviewer field empty**, 8 of 12 dimensions carrying a
+mandatory blocker. No default score is suggested — a suggested default is an anchor, and an anchor is a
+score by another name.
+
+Capacity remains `verified_uncapped` (pinned citation); deposit state remains `unknown` and is not
+inferred from capacity; product unapproved; production renders no card; Demo unchanged.
+
+### Step 16H-K.1 — human governance decisions applied
+
+The WealthSmith product owner made explicit decisions; they are **transcribed here, not inferred**.
+
+**Rubric v1.0.0 is APPROVED** — `approvedBy: ws_product_owner`, `approvedAt: 2026-07-16T12:33:58.794Z`,
+with rationale and a deterministic `computeRubricV1Hash()` identity. The transition
+`proposed_for_approval → approved` was validated by `recordRubricApproval()` against the reviewer
+registry (rejects unknown/inactive/revoked/wrong-role/agent approvers, future timestamps, and wrong
+rubric identity). Direction preserved: **0–10, higher = stronger evidence-supported suitability**, floor 7.
+
+**Separation of duties is APPROVED.** **One authorized human reviewer** is now recorded:
+`ws_product_owner` (Ashot Gyulzatyan), active, all six roles, scope = Solana staking + Stable Yield +
+MVP, evidence = the explicit decision in this task. **Automated agents remain barred from every role
+except `evidence_preparer`** — enforced by the validator, not merely stated.
+
+**The numeric score is an INTERNAL Risk Suitability Score** ([riskScoreExposurePolicy.ts](./riskScoreExposurePolicy.ts)).
+It drives eligibility, comparison, governance, approval workflows and diagnostics — and never reaches a
+user. Forbidden: cards, review drawers, dashboards, portfolio pages, Smith AI, Qdrant, analytics, public
+docs, customer APIs — including the **components** (dimension scores, weights, the 7 threshold, bands,
+reviewer confidence, blocker codes), because the parts would let anyone reconstruct the whole. Users get
+six approved **qualitative disclosures** ("the strategy is managed", "the program is upgradeable",
+"withdrawals may depend on underlying liquidity", …) which are fixture-asserted to carry **no ordinal
+signal** — no number, band, rating, or comparative.
+
+> **This decision found a real pre-existing violation.** `SuggestionReviewModal.tsx` was rendering
+> `Risk score: X.XX / 10 (assigned for review)` in the SOL staking review drawer — exposing the
+> aggregate, the scale, and an internal review state. It has been removed, and an exposure scan now
+> keeps every product surface clean.
+
+The legacy field name `riskScore` is **preserved** (renaming would ripple through `protocolEligibility`,
+`YieldStrategyRiskReview` and the staking modules) but is documented as *suitability*: **higher = stronger
+evidence-supported**, not higher risk.
+
+**Unchanged by approval:** Steakhouse worksheet fully unscored · no human review or signoff · product
+unapproved · zero approved products · capacity `verified_uncapped` (pinned) · deposit state `unknown` ·
+production renders no card · Demo unchanged · staking scores untouched and **v1 rescoring deferred** until
+after the Stable Yield MVP critical path.
+
+### Step 16H-K.2 — internal `/testing` route gate
+
+A focused correction to 16H-K.1. **Product-owner decision:** `/testing` is an internal development and
+QA tool — it stays available for local dev, fixture review, internal QA and staging, and must not be a
+reachable route in the public production app.
+
+**Correcting the 16H-K.1 report:** it claimed `/testing` was "reachable by URL" in production. That was
+**wrong**. The route was already gated by `isTestingPageEnabled()` (`import.meta.env.DEV ||
+VITE_ENABLE_TESTING_PAGE === "true"`), so a public build never rendered it. What *was* true is narrower:
+the fixture module — including its internal numeric risk-score values — shipped inside the **main
+chunk**, because `App.tsx` imported the gate *from* that module.
+
+**The fix**, in two small parts:
+- The gate moved to its own dependency-free [internalTestingRoute.ts](./../pages/internalTestingRoute.ts),
+  so `App.tsx` can ask "is the route enabled?" without importing the answers.
+- The route is now `lazy()` + `<Suspense>` (matching the existing `SmithInitialLoadingState` convention),
+  so the fixtures live in a separate chunk.
+
+**Verified empirically in both build modes:**
+
+| Build | `/testing` | Testing chunk |
+|---|---|---|
+| `npm run dev` | gallery renders | fetched |
+| `VITE_ENABLE_TESTING_PAGE=true npm run build` | gallery renders (53 fixtures) | fetched |
+| `npm run build` (public) | **normal app** — gallery never renders | **never fetched** |
+
+The main chunk is now free of `Risk score:`. The app has no router, so an unrecognized path renders the
+app — `/testing` in a public build behaves exactly like any other unknown path, which *is* this
+architecture's canonical not-found behaviour.
+
+**Residual, stated plainly:** Rollup still *emits* the `TestingPage-*.js` chunk as a static asset. It is
+never requested, because the route is never registered. Dropping it entirely would need a build-time
+alias/plugin — out of scope, since the requirement is that the route is unreachable, not that the score
+is a secret. The gate's `try/catch` (which keeps the Node fixtures runner alive) defeats Rollup's static
+analysis, and a bare `import.meta.env` literal would crash that runner.
+
+**Known limitation, recorded not hidden** ([riskScoreExposurePolicy.ts](./riskScoreExposurePolicy.ts) →
+`RISK_SCORE_CLIENT_SIDE_LIMITATION`): eligibility is computed client-side, so internal values can exist
+in bundles. That is accepted — the requirement is presentation and contract suppression, not
+cryptographic secrecy. Genuine confidentiality would need a server-side eligibility boundary; that is
+**not required for the read-only MVP and is not a release blocker**.
+
+Fixtures were **preserved**, not deleted — the INF numeric fixture remains available for internal QA.

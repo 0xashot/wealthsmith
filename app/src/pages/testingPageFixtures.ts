@@ -63,7 +63,6 @@ const TESTING_SELECTOR_PRESENTATION = buildTestingSelectorPresentation();
  * Route + safety flags (mirrors the internalPreviewFlags pattern).
  * ------------------------------------------------------------------ */
 export const TESTING_PAGE_EXISTS = true;
-export const TESTING_PAGE_ROUTE = "/testing";
 export const TESTING_PAGE_VISIBLE_IN_NAV = false;
 export const TESTING_PAGE_USES_FIXTURE_DATA = true;
 export const TESTING_PAGE_USES_REAL_WALLET_DATA = false;
@@ -82,22 +81,11 @@ export const TESTING_PAGE_IMPORTED_BY_RAIL = false;
 export const TESTING_PREVIEW_NOT_LIVE = "TESTING_PREVIEW_NOT_LIVE";
 
 /**
- * True in a local dev build, or when `VITE_ENABLE_TESTING_PAGE="true"` (e.g. a
- * staging build). False by default in production unless explicitly enabled.
- * Defensive against runtimes without `import.meta.env` (the Node fixtures runner).
- *
- *   VITE_ENABLE_TESTING_PAGE=true npm run build
+ * Step 16H-K.2 — the route gate moved to `internalTestingRoute.ts` so `App.tsx` can read it WITHOUT
+ * statically importing this fixture module (which would pull the internal numeric risk-score fixtures
+ * below into the main production chunk). Re-exported here so existing importers keep working.
  */
-export function isTestingPageEnabled(): boolean {
-  try {
-    // Access `import.meta.env` as a literal so Vite injects it; in non-Vite
-    // runtimes `import.meta.env` is undefined → caught → false.
-    const env = import.meta.env as unknown as { DEV?: boolean; VITE_ENABLE_TESTING_PAGE?: string };
-    return env.DEV === true || env.VITE_ENABLE_TESTING_PAGE === "true";
-  } catch {
-    return false;
-  }
-}
+export { TESTING_PAGE_ROUTE, isTestingPageEnabled, INTERNAL_TESTING_FLAG } from "./internalTestingRoute";
 
 /* ------------------------------------------------------------------ *
  * Fixture model.

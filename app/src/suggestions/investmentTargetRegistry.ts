@@ -255,6 +255,35 @@ export const STABLE_YIELD_RISK_REVIEW_DIAGNOSTICS_EXIST = true;
 export const STABLE_YIELD_RISK_REVIEW_SCORED = false;
 export const STABLE_YIELD_RISK_REVIEW_HUMAN_SIGNOFF_COMPLETE = false;
 export const STABLE_YIELD_RISK_REVIEW_ELIGIBLE_FOR_APPROVAL_REVIEW = false;
+// Step 16H-K — risk governance foundation. The rubric v1 PROPOSAL, reviewer-authorization contract,
+// provenance + state-transition validation, migration report, and the Steakhouse reviewer worksheet.
+// Everything that requires a human decision is FALSE and stays false until a human acts.
+export const PROTOCOL_RISK_RUBRIC_V1_PROPOSAL_EXISTS = true;
+export const PROTOCOL_RISK_RUBRIC_APPROVAL_ARTIFACT_EXISTS = true;
+export const RISK_REVIEWER_REGISTRY_CONTRACT_EXISTS = true;
+export const RISK_REVIEWER_AUTHORIZATION_VALIDATION_EXISTS = true;
+export const RISK_REVIEWER_ROLE_VALIDATION_EXISTS = true;
+export const RISK_REVIEW_PROVENANCE_EXISTS = true;
+export const RISK_REVIEW_STATE_TRANSITION_VALIDATION_EXISTS = true;
+export const RISK_SCORE_MIGRATION_REPORT_EXISTS = true;
+export const STEAKHOUSE_REVIEWER_WORKSHEET_EXISTS = true;
+// Step 16H-K.1 — HUMAN DECISIONS APPLIED. The WealthSmith product owner explicitly approved rubric
+// v1.0.0 and the separation-of-duties policy, and authorized the initial human reviewer. These are
+// transcribed decisions, not inferences: Claude cannot set them, and did not in 16H-K.
+export const PROTOCOL_RISK_RUBRIC_V1_APPROVED = true;
+export const PROTOCOL_RISK_RUBRIC_APPROVAL_PROVENANCE_COMPLETE = true;
+export const RISK_SEPARATION_OF_DUTIES_POLICY_APPROVED = true;
+export const AUTHORIZED_PRODUCTION_REVIEWER_CONFIGURED = true;
+export const RISK_REVIEWER_AUTHORIZATION_ACTIVE = true;
+export const RUBRIC_APPROVER_CONFIGURED = true;
+// The numeric result is an INTERNAL Risk Suitability Score. It is not a user feature.
+export const RISK_SCORE_INTERNAL_ONLY_POLICY_EXISTS = true;
+export const RISK_SCORE_USER_FACING_SUPPRESSION_EXISTS = true;
+export const USER_FACING_NUMERIC_RISK_SCORE_EXISTS = false;
+export const STEAKHOUSE_RISK_SCORE_ASSIGNED = false;
+export const STEAKHOUSE_HUMAN_REVIEW_COMPLETE = false;
+export const STEAKHOUSE_RISK_SIGNOFF_COMPLETE = false;
+export const STEAKHOUSE_ELIGIBLE_FOR_PRODUCT_APPROVAL = false;
 export const STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS = false;
 export const STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST = false;
 export const STABLE_YIELD_PRODUCTION_CARD_AVAILABLE = false;

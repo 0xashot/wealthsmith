@@ -17,7 +17,7 @@
  * pill shows the real name + shortened publicKey. READ-ONLY: no balance fetch, no
  * signing, no transactions.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, lazy, Suspense } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import DashboardPage from "./pages/DashboardPage";
 import PortfolioPage from "./pages/PortfolioPage";
@@ -50,8 +50,20 @@ import {
   getDefaultSolLstSelectorPreview,
   getInternalOnlySolLstSelectedPreviewExample,
 } from "./suggestions/protocolSolLiquidStakingSelectorPreview";
-import TestingPage from "./pages/TestingPage";
-import { isTestingPageEnabled, TESTING_PAGE_ROUTE } from "./pages/testingPageFixtures";
+/**
+ * Step 16H-K.2 — the internal `/testing` gallery is LAZY, and its gate lives in its own
+ * dependency-free module (`internalTestingRoute`). Previously `App.tsx` imported the gate FROM the
+ * fixture module, which dragged the fixtures — including internal numeric risk-score values — into the
+ * main production chunk even though the route was never reachable. Now the main chunk is clean.
+ *
+ * A public build never registers the route (`isTestingPageEnabled()` is false), so it never requests
+ * this chunk. Rollup still EMITS the chunk as a static asset: the try/catch in the gate defeats static
+ * analysis, and a bare `import.meta.env` literal would crash the Node fixtures runner, which has no
+ * such object. Excluding the chunk outright would need a build-time alias/plugin — deliberately out of
+ * scope, since the requirement is that the route is unreachable, not that the score is a secret.
+ */
+const TestingPage = lazy(() => import("./pages/TestingPage"));
+import { isTestingPageEnabled, TESTING_PAGE_ROUTE } from "./pages/internalTestingRoute";
 import "./styles/dashboard.css";
 
 export type AppMode = "connected" | "demo" | "disconnected";
@@ -73,7 +85,11 @@ export default function App() {
     typeof window !== "undefined" &&
     window.location.pathname === TESTING_PAGE_ROUTE
   ) {
-    return <TestingPage />;
+    return (
+      <Suspense fallback={null}>
+        <TestingPage />
+      </Suspense>
+    );
   }
   if (
     isInternalSolLstPreviewRouteEnabled() &&

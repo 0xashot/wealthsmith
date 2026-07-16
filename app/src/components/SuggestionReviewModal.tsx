@@ -629,9 +629,14 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                   {c.candidateType === "native_staking" && (c.notLstLabel || c.nativeStakeAccountLabel) && (
                     <p className="review-modal__alt-note">{[c.notLstLabel, c.nativeStakeAccountLabel].filter(Boolean).join(" · ")}</p>
                   )}
-                  {typeof c.riskScore === "number" && (
-                    <p className="review-modal__alt-score">Risk score: {c.riskScore.toFixed(2)} / 10 (assigned for review)</p>
-                  )}
+                  {/*
+                    Step 16H-K.1 — the numeric Risk Suitability Score is INTERNAL ONLY, by explicit
+                    product-owner decision. It previously rendered here as "Risk score: X.XX / 10
+                    (assigned for review)", which exposed the aggregate, the scale, and an internal
+                    review state to users. Users get approved qualitative disclosures instead (see
+                    `riskScoreExposurePolicy.ts`); the score itself drives eligibility/comparison
+                    internally and is never shown. An exposure-scan fixture keeps it out.
+                  */}
                   {c.marketData && (
                     <dl className="review-modal__market">
                       {typeof c.delegatedStakeSol === "number" && (

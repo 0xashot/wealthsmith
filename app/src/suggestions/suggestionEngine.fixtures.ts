@@ -147,6 +147,7 @@ import {
 } from "./protocolSolLiquidStakingSourceCandidates";
 import {
   PROTOCOL_RISK_RUBRIC_EXISTS,
+  PROTOCOL_RISK_RUBRIC_VERSION,
   PROTOCOL_RISK_RUBRIC_APPROVED,
   PROTOCOL_RISK_RUBRIC_ASSIGNS_SCORES,
   PROTOCOL_RISK_RUBRIC_AFFECTS_PRODUCTION,
@@ -228,7 +229,6 @@ import {
   getDefaultProtocolRiskScoreAssignmentInput,
   getQaOnlyJitoRiskScoreAssignmentInput,
 } from "./protocolRiskScoreAssignment";
-import { PROTOCOL_RISK_RUBRIC_VERSION } from "./protocolRiskRubric";
 import {
   PROTOCOL_SOL_LST_PRODUCTION_METADATA_EXISTS,
   PROTOCOL_SOL_LST_PRODUCTION_METADATA_ACTIVE,
@@ -1102,6 +1102,30 @@ import {
 } from "./investmentTargetRegistry";
 import { getSteakhouseRiskReviewStatus, listSteakhouseRiskEvidence } from "./steakhouseUsdcRiskEvidence";
 import { resolveKvaultDepositCapacity, KVAULT_MAINNET_PROGRAM_ID, KVAULT_CAPACITY_SOURCE, U64_MAX_STR } from "./kaminoVaultCapacitySemantics";
+import { getProposedRiskRubricV1, getApprovedRiskRubricV1, computeRubricV1Hash, recordRubricApproval, aggregateRiskScore, validateRubricTransition, validateReviewTransition, riskSignoffImpliesProductApproval, RUBRIC_V1_CHANGES, RISK_SCORE_DIRECTION, PROTOCOL_RISK_RUBRIC_V1_LIFECYCLE, PROTOCOL_RISK_RUBRIC_V1_APPROVAL } from "./riskGovernance";
+import { listAuthorizedReviewers, authorizeReviewerAction, PROPOSED_REVIEWER_RECORDS, SEPARATION_OF_DUTIES_POLICY, RISK_SEPARATION_OF_DUTIES_POLICY_APPROVED, PRODUCT_OWNER_REVIEWER_ID, type RiskReviewerRecord } from "./riskReviewerRegistry";
+import { buildSteakhouseReviewerWorksheet, getRiskScoreMigrationReport, WORKSHEET_REJECTED_PRODUCTS } from "./steakhouseReviewerWorksheet";
+import { INTERNAL_TESTING_FLAG, isTestingPageEnabled } from "../pages/internalTestingRoute";
+import { listQualitativeRiskDisclosures, disclosureLeaksNumericSignal, RISK_SCORE_FORBIDDEN_SURFACES, RISK_SCORE_FORBIDDEN_FIELDS, RISK_SUITABILITY_SCORE_LABEL } from "./riskScoreExposurePolicy";
+import { MIN_PROTOCOL_RISK_SCORE } from "./engineThresholds";
+import {
+  PROTOCOL_RISK_RUBRIC_V1_PROPOSAL_EXISTS,
+  PROTOCOL_RISK_RUBRIC_APPROVAL_ARTIFACT_EXISTS,
+  RISK_REVIEWER_REGISTRY_CONTRACT_EXISTS,
+  RISK_REVIEW_PROVENANCE_EXISTS,
+  RISK_REVIEW_STATE_TRANSITION_VALIDATION_EXISTS as RISK_REVIEW_STATE_TRANSITION_VALIDATION_EXISTS_K,
+  RISK_SCORE_MIGRATION_REPORT_EXISTS as RISK_SCORE_MIGRATION_REPORT_EXISTS_K,
+  STEAKHOUSE_REVIEWER_WORKSHEET_EXISTS as STEAKHOUSE_REVIEWER_WORKSHEET_EXISTS_K,
+  PROTOCOL_RISK_RUBRIC_V1_APPROVED,
+  AUTHORIZED_PRODUCTION_REVIEWER_CONFIGURED,
+  RISK_SCORE_INTERNAL_ONLY_POLICY_EXISTS,
+  RISK_SCORE_USER_FACING_SUPPRESSION_EXISTS,
+  USER_FACING_NUMERIC_RISK_SCORE_EXISTS,
+  STEAKHOUSE_RISK_SCORE_ASSIGNED,
+  STEAKHOUSE_HUMAN_REVIEW_COMPLETE,
+  STEAKHOUSE_RISK_SIGNOFF_COMPLETE,
+  STEAKHOUSE_ELIGIBLE_FOR_PRODUCT_APPROVAL,
+} from "./investmentTargetRegistry";
 import { listYieldStrategyRiskReviews, getYieldStrategyRiskReview } from "./yieldStrategyRiskReview";
 import { validateStableYieldMarketRecord, cacheRecordNetApyPct, cacheRecordToMarketDataInput, rawTokenAmountToUsd, STABLE_YIELD_REFRESH_ARTIFACT_EXISTS, type StableYieldMarketRecord } from "./stableYieldMarketCache";
 import { listActiveYieldStrategyCandidates, isYieldStrategyExcluded } from "./yieldStrategyRegistry";
@@ -16200,8 +16224,9 @@ export function runStableYieldIdentityResolutionFixtureChecks(): FixtureCheck[] 
   // ---- Evidence + readiness ----
   add("16H-H-AC: every manifest carries exactly one deterministic primary status", listStableYieldEvidenceManifests().every((m) => typeof m.primaryBlocker === "string" && m.primaryBlocker.length > 0), "deterministic");
   add("16H-H-AD: no manifest claims 'approved' anywhere", !/\"approved\"|: *\"approved\"/.test(JSON.stringify(listStableYieldEvidenceManifests())), "no approved");
-  // 16H-I resolved freshness (chain block time) + net/gross (SDK netAPY); capacity is now primary.
-  add("16H-H-AE: Steakhouse remains blocked despite verified identity (capacity is now the primary blocker)", man("kamino_steakhouse_usdc").primaryBlocker === "blocked_capacity" && man("kamino_steakhouse_usdc").readiness === "blocked", "blocked_capacity");
+  // The primary blocker has migrated as evidence landed: freshness (16H-H) -> capacity (16H-I) ->
+  // risk review (16H-J.1 resolved capacity). Identity has been verified throughout and never sufficed.
+  add("16H-H-AE: Steakhouse remains blocked despite verified identity (the risk review is now primary)", man("kamino_steakhouse_usdc").primaryBlocker === "blocked_risk_review" && man("kamino_steakhouse_usdc").readiness === "blocked", "blocked_risk_review");
   add("16H-H-AF: the readiness matrix shows identity resolved but NOT ready and NOT approved", (() => { const r = buildStableYieldReadinessMatrix().find((x) => x.strategyId === "kamino_steakhouse_usdc")!; return r.identityAdapter === true && r.readyForExplicitReview === false && r.approved === false && r.riskReviewEvidence === false; })(), "identity != approval");
   add("16H-H-AG: missing risk review still blocks readiness for every candidate", listStableYieldEvidenceManifests().every((m) => m.riskReviewState !== "evidence_complete"), "risk blocks");
 
@@ -16463,6 +16488,270 @@ export function runKvaultCapacitySemanticsFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+
+/**
+ * Step 16H-K — risk governance. Deterministic and OFFLINE. Every check here exists to prove the
+ * governance architecture cannot accidentally approve anything.
+ */
+export function runRiskGovernanceFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const rub = getProposedRiskRubricV1();
+  const ws = buildSteakhouseReviewerWorksheet();
+  const mig = getRiskScoreMigrationReport();
+  const VAULT = "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E";
+
+  /** A synthetic ACTIVE reviewer — fixtures only, never the production registry. */
+  const synthReg: RiskReviewerRecord[] = [
+    { reviewerId: "syn_scorer", displayLabel: "Synthetic scorer", actorKind: "human", roles: ["risk_scorer"], authorizedProductTypes: ["managed_vault"], authorizedProtocols: ["kamino"], status: "active", authorizedAt: "2026-01-01", authorizationEvidence: "fixture", createdAt: "2026-01-01", updatedAt: "2026-01-01", synthetic: true, notes: [] },
+    { reviewerId: "syn_revoked", displayLabel: "Synthetic revoked", actorKind: "human", roles: ["risk_scorer"], authorizedProductTypes: [], authorizedProtocols: [], status: "revoked", authorizedAt: "2026-01-01", revokedAt: "2026-02-01", revocationReason: "fixture", createdAt: "2026-01-01", updatedAt: "2026-02-01", synthetic: true, notes: [] },
+    { reviewerId: "syn_inactive", displayLabel: "Synthetic inactive", actorKind: "human", roles: ["risk_scorer"], authorizedProductTypes: [], authorizedProtocols: [], status: "inactive", createdAt: "2026-01-01", updatedAt: "2026-01-01", synthetic: true, notes: [] },
+    { reviewerId: "syn_agent", displayLabel: "Synthetic agent", actorKind: "automated_agent", roles: ["evidence_preparer", "risk_scorer"], authorizedProductTypes: [], authorizedProtocols: [], status: "active", authorizedAt: "2026-01-01", authorizationEvidence: "fixture", createdAt: "2026-01-01", updatedAt: "2026-01-01", synthetic: true, notes: [] },
+    { reviewerId: "syn_multi", displayLabel: "Synthetic multi-role", actorKind: "human", roles: ["risk_scorer", "risk_reviewer", "risk_signoff_approver"], authorizedProductTypes: [], authorizedProtocols: [], status: "active", authorizedAt: "2026-01-01", authorizationEvidence: "fixture", createdAt: "2026-01-01", updatedAt: "2026-01-01", synthetic: true, notes: [] },
+    { reviewerId: "syn_no_ts", displayLabel: "Synthetic no timestamp", actorKind: "human", roles: ["risk_scorer"], authorizedProductTypes: [], authorizedProtocols: [], status: "active", createdAt: "2026-01-01", updatedAt: "2026-01-01", synthetic: true, notes: [] },
+  ];
+  const auth = (id: string | undefined, role: Parameters<typeof authorizeReviewerAction>[0]["role"], extra: Record<string, unknown> = {}) => authorizeReviewerAction({ reviewerId: id, role, registry: synthReg, ...extra });
+
+  // ---- Rubric proposal ----
+  // 16H-K.1: the product owner approved the rubric. The PROPOSAL shape is retained for provenance.
+  add("16H-K-A: rubric v1 identity + semver are stable and the proposal shape is preserved", rub.rubricId === "protocol_risk_rubric_v1" && rub.semver === "1.0.0" && rub.dimensions.length === 12, `${rub.dimensions.length} dims`);
+  add("16H-K-B: rubric v1 is APPROVED with complete human provenance (16H-K.1)", PROTOCOL_RISK_RUBRIC_V1_APPROVED === true && PROTOCOL_RISK_RUBRIC_V1_LIFECYCLE === "approved" && PROTOCOL_RISK_RUBRIC_V1_APPROVAL.approvedBy === "ws_product_owner" && PROTOCOL_RISK_RUBRIC_V1_APPROVAL.approvedAt.length > 0 && PROTOCOL_RISK_RUBRIC_V1_APPROVAL.approvalRationale.length > 0, "approved");
+  add("16H-K-C: score direction is unambiguous and matches the repo (higher = more evidence-supported)", rub.direction === "higher_is_more_evidence_supported" && RISK_SCORE_DIRECTION === "higher_is_more_evidence_supported" && rub.scoreMin === 0 && rub.scoreMax === 10, "pinned");
+  add("16H-K-D: the direction is consistent with MIN_PROTOCOL_RISK_SCORE being a FLOOR (7)", MIN_PROTOCOL_RISK_SCORE === 7 && rub.direction === "higher_is_more_evidence_supported", "floor=7");
+  add("16H-K-E: every dimension has anchors covering the full 0-10 range", rub.dimensions.every((d) => d.anchors.length >= 5 && d.anchors[0].range[0] === 0 && d.anchors[d.anchors.length - 1].range[1] === 10), `${rub.dimensions.length} dims`);
+  add("16H-K-F: every dimension defines mandatory evidence, prohibited evidence, and missing-evidence behavior", rub.dimensions.every((d) => d.mandatoryEvidence.length > 0 && d.prohibitedEvidence.length > 0 && d.missingEvidenceBehavior === "blocks_scoring"), "complete");
+  add("16H-K-G: every dimension requires a rationale and a confidence", rub.dimensions.every((d) => d.requiresRationale === true && d.requiresConfidence === true), "required");
+  add("16H-K-H: weights total 100 and decimals are disallowed", rub.totalWeight === 100 && rub.allowsDecimals === false, `${rub.totalWeight}`);
+  add("16H-K-I: every change from v0.1.0-draft is documented with a rationale", RUBRIC_V1_CHANGES.length >= 12 && RUBRIC_V1_CHANGES.every((c) => c.change.length > 0 && c.rationale.length > 0), `${RUBRIC_V1_CHANGES.length} changes`);
+  add("16H-K-J: tvl_adoption is REMOVED from v1 scoring (TVL can never make a product safer)", !rub.dimensions.some((d) => (d.id as string) === "tvl_adoption") && RUBRIC_V1_CHANGES.some((c) => /REMOVED tvl_adoption/.test(c.change)), "removed");
+  add("16H-K-K: APY / TVL / popularity are prohibited scoring inputs across the rubric", rub.dimensions.some((d) => d.prohibitedEvidence.some((p) => /APY/i.test(p))) && rub.dimensions.some((d) => d.prohibitedEvidence.some((p) => /TVL/i.test(p))) && rub.dimensions.some((d) => d.prohibitedEvidence.some((p) => /popularity|brand/i.test(p))), "prohibited");
+  add("16H-K-L: the rubric module reads no live market data (no runtime recalculation possible)", !/getAPYs|createSolanaRpc|fetch\(|apy7d|tvlUsd/i.test(readIf("src/suggestions/riskGovernance.ts")), "static");
+
+  // ---- Aggregation + blockers ----
+  const goodScores = rub.dimensions.map((d) => ({ id: d.id, score: 8, hasRationale: true, hasEvidence: true }));
+  add("16H-K-M: a still-proposed rubric CANNOT produce a score (the gate survives approval of v1)", (() => { const r = aggregateRiskScore({ rubricLifecycle: "proposed_for_approval", scores: goodScores, mandatoryBlockersPresent: [], evidence: "complete" }); return !r.ok && r.diagnostic.code === "rubric_proposed_not_approved" && r.diagnostic.scoreAllowed === false; })(), "blocked");
+  add("16H-K-N: a DRAFT rubric cannot produce a score", (() => { const r = aggregateRiskScore({ rubricLifecycle: "draft", scores: goodScores, mandatoryBlockersPresent: [], evidence: "complete" }); return !r.ok && r.diagnostic.code === "rubric_draft"; })(), "blocked");
+  add("16H-K-O: a superseded rubric cannot produce a score", (() => { const r = aggregateRiskScore({ rubricLifecycle: "superseded", scores: goodScores, mandatoryBlockersPresent: [], evidence: "complete" }); return !r.ok && r.diagnostic.code === "rubric_superseded"; })(), "blocked");
+  add("16H-K-P: an approved rubric + complete evidence + no blockers aggregates deterministically", (() => { const a = aggregateRiskScore({ rubricLifecycle: "approved", scores: goodScores, mandatoryBlockersPresent: [], evidence: "complete" }); const b = aggregateRiskScore({ rubricLifecycle: "approved", scores: goodScores, mandatoryBlockersPresent: [], evidence: "complete" }); return a.ok && b.ok && a.weightedScore === 8 && a.weightedScore === b.weightedScore && a.band === "supported" && a.meetsMinimum === true; })(), "8.00 supported");
+  add("16H-K-Q: a MANDATORY BLOCKER overrides the aggregate — it cannot be averaged away", (() => { const r = aggregateRiskScore({ rubricLifecycle: "approved", scores: rub.dimensions.map((d) => ({ id: d.id, score: 10, hasRationale: true, hasEvidence: true })), mandatoryBlockersPresent: ["audit_linkage_unproven"], evidence: "complete" }); return !r.ok && r.diagnostic.code === "mandatory_blocker_present"; })(), "blocker wins");
+  add("16H-K-R: one 'unsupported' dimension caps the band, even with a strong weighted mean", (() => { const sc = rub.dimensions.map((d, i) => ({ id: d.id, score: i === 0 ? 1 : 10, hasRationale: true, hasEvidence: true })); const r = aggregateRiskScore({ rubricLifecycle: "approved", scores: sc, mandatoryBlockersPresent: [], evidence: "complete" }); return r.ok && r.band === "unsupported" && r.meetsMinimum === false && r.weightedScore > 7; })(), "severe override");
+  add("16H-K-S: incomplete evidence blocks scoring", (() => { const r = aggregateRiskScore({ rubricLifecycle: "approved", scores: goodScores, mandatoryBlockersPresent: [], evidence: "incomplete" }); return !r.ok && r.diagnostic.code === "evidence_incomplete"; })(), "blocked");
+  add("16H-K-T: a missing dimension is score_partial, never a silent average", (() => { const r = aggregateRiskScore({ rubricLifecycle: "approved", scores: goodScores.slice(1), mandatoryBlockersPresent: [], evidence: "complete" }); return !r.ok && r.diagnostic.code === "score_partial"; })(), "partial");
+  add("16H-K-U: unknown / duplicate dimensions are rejected", (() => { const unk = aggregateRiskScore({ rubricLifecycle: "approved", scores: [...goodScores, { id: "not_a_dim" as never, score: 8, hasRationale: true, hasEvidence: true }], mandatoryBlockersPresent: [], evidence: "complete" }); const dup = aggregateRiskScore({ rubricLifecycle: "approved", scores: [...goodScores, goodScores[0]], mandatoryBlockersPresent: [], evidence: "complete" }); return !unk.ok && /unknown_dimension/.test(unk.diagnostic.detail) && !dup.ok && /duplicate_dimension/.test(dup.diagnostic.detail); })(), "rejected");
+  add("16H-K-V: out-of-range and non-integer scores are rejected", (() => { const hi = aggregateRiskScore({ rubricLifecycle: "approved", scores: goodScores.map((s, i) => (i === 0 ? { ...s, score: 11 } : s)), mandatoryBlockersPresent: [], evidence: "complete" }); const dec = aggregateRiskScore({ rubricLifecycle: "approved", scores: goodScores.map((s, i) => (i === 0 ? { ...s, score: 7.5 } : s)), mandatoryBlockersPresent: [], evidence: "complete" }); return !hi.ok && /out_of_range/.test(hi.diagnostic.detail) && !dec.ok && /unsupported_precision/.test(dec.diagnostic.detail); })(), "rejected");
+  add("16H-K-W: a score without rationale or evidence reference is rejected", (() => { const nr = aggregateRiskScore({ rubricLifecycle: "approved", scores: goodScores.map((s, i) => (i === 0 ? { ...s, hasRationale: false } : s)), mandatoryBlockersPresent: [], evidence: "complete" }); const ne = aggregateRiskScore({ rubricLifecycle: "approved", scores: goodScores.map((s, i) => (i === 0 ? { ...s, hasEvidence: false } : s)), mandatoryBlockersPresent: [], evidence: "complete" }); return !nr.ok && /missing_rationale/.test(nr.diagnostic.detail) && !ne.ok && /missing_evidence_reference/.test(ne.diagnostic.detail); })(), "rejected");
+
+  // ---- Reviewer authorization ----
+  add("16H-K-X: exactly ONE authorized human reviewer exists, added by explicit human decision", (() => { const rs = listAuthorizedReviewers(); return rs.length === 1 && rs[0].reviewerId === "ws_product_owner" && rs[0].actorKind === "human" && rs[0].status === "active" && !!rs[0].authorizedAt && !!rs[0].authorizationEvidence && AUTHORIZED_PRODUCTION_REVIEWER_CONFIGURED === true; })(), "1 human");
+  add("16H-K-Y: an unknown reviewer still fails closed against the real registry", (["risk_scorer", "risk_reviewer", "risk_signoff_approver", "rubric_approver"] as const).every((role) => authorizeReviewerAction({ reviewerId: "anyone", role }).authorized === false), "fails closed");
+  add("16H-K-Z: a valid synthetic ACTIVE reviewer is accepted for their role + scope", auth("syn_scorer", "risk_scorer", { productType: "managed_vault", protocolId: "kamino" }).authorized === true, "accepted");
+  add("16H-K-AA: an unknown / missing reviewer is rejected", (() => { const u = auth("nobody", "risk_scorer"); const m = auth(undefined, "risk_scorer"); return !u.authorized && u.reason === "reviewer_unknown" && !m.authorized && m.reason === "reviewer_missing"; })(), "rejected");
+  add("16H-K-AB: a revoked reviewer cannot act", (() => { const r = auth("syn_revoked", "risk_scorer"); return !r.authorized && r.reason === "reviewer_revoked"; })(), "rejected");
+  add("16H-K-AC: an inactive / proposed reviewer cannot act", (() => { const r = auth("syn_inactive", "risk_scorer"); return !r.authorized && r.reason === "reviewer_not_active"; })(), "rejected");
+  add("16H-K-AD: an LLM / automated agent CANNOT be a human scorer, reviewer, or signatory", (() => { const roles = ["risk_scorer", "risk_reviewer", "risk_signoff_approver", "rubric_approver", "product_approver"] as const; const blocked = roles.every((role) => { const r = auth("syn_agent", role); return !r.authorized && r.reason === "reviewer_is_automated_agent"; }); const prep = auth("syn_agent", "evidence_preparer").authorized === true; return blocked && prep; })(), "agent blocked");
+  add("16H-K-AE: a reviewer acting outside their role is rejected", (() => { const r = auth("syn_scorer", "risk_signoff_approver"); return !r.authorized && r.reason === "reviewer_unauthorized"; })(), "rejected");
+  add("16H-K-AF: a reviewer out of product-type / protocol scope is rejected", (() => { const t = auth("syn_scorer", "risk_scorer", { productType: "lending" }); const p = auth("syn_scorer", "risk_scorer", { protocolId: "raydium" }); return !t.authorized && t.reason === "reviewer_out_of_scope" && !p.authorized && p.reason === "reviewer_out_of_scope"; })(), "rejected");
+  add("16H-K-AG: an active reviewer without an authorization timestamp is rejected", (() => { const r = auth("syn_no_ts", "risk_scorer"); return !r.authorized && r.reason === "reviewer_missing_authorization_timestamp"; })(), "rejected");
+  add("16H-K-AH: one human with multiple EXPLICIT roles is handled correctly", (() => { const ok = (["risk_scorer", "risk_reviewer", "risk_signoff_approver"] as const).every((role) => auth("syn_multi", role).authorized === true); const no = auth("syn_multi", "rubric_approver").authorized === false; return ok && no; })(), "multi-role");
+  add("16H-K-AI: the PROPOSED draft record still authorizes nothing (only the explicit ACTIVE record does)", (() => { const p = PROPOSED_REVIEWER_RECORDS.find((r) => r.reviewerId === "proposed_product_owner")!; const proposedInert = p.status === "proposed" && p.authorizedAt === undefined && !authorizeReviewerAction({ reviewerId: "proposed_product_owner", role: "rubric_approver" }).authorized; const activeIsSeparate = listAuthorizedReviewers().every((r) => r.reviewerId !== "proposed_product_owner"); return proposedInert && activeIsSeparate; })(), "proposed inert");
+  add("16H-K-AJ: the separation-of-duties policy is APPROVED with human provenance (16H-K.1)", SEPARATION_OF_DUTIES_POLICY.status === "approved" && SEPARATION_OF_DUTIES_POLICY.approvedBy === "ws_product_owner" && SEPARATION_OF_DUTIES_POLICY.approvedAt.length > 0 && RISK_SEPARATION_OF_DUTIES_POLICY_APPROVED === true, "approved");
+
+  // ---- State transitions ----
+  add("16H-K-AK: valid rubric transitions accepted; invalid rejected", validateRubricTransition("draft", "proposed_for_approval").valid && validateRubricTransition("proposed_for_approval", "approved").valid && !validateRubricTransition("draft", "approved").valid && !validateRubricTransition("retired", "approved").valid, "enforced");
+  add("16H-K-AL: valid review transitions accepted", validateReviewTransition("evidence_complete", "partially_scored").valid && validateReviewTransition("scoring_complete", "in_review").valid && validateReviewTransition("reviewed", "awaiting_signoff").valid && validateReviewTransition("awaiting_signoff", "risk_approved").valid, "accepted");
+  add("16H-K-AM: skipped states are rejected (evidence_incomplete -> scoring_complete)", !validateReviewTransition("evidence_incomplete", "scoring_complete").valid && !validateReviewTransition("evidence_complete", "risk_approved").valid && !validateReviewTransition("reviewed", "risk_approved").valid && !validateReviewTransition("scoring_complete", "risk_approved").valid, "rejected");
+  add("16H-K-AN: risk signoff NEVER implies product approval", riskSignoffImpliesProductApproval() === false && getApprovedYieldStrategies().length === 0, "separate");
+
+  // ---- Migration ----
+  add("16H-K-AO: the existing-score inventory covers every staking candidate + Stable Yield", mig.length >= 8 && ["JupSOL", "mSOL", "bSOL", "INF", "Jito", "Steakhouse", "fixture"].every((k) => mig.some((m) => new RegExp(k, "i").test(m.subject))), `${mig.length} entries`);
+  add("16H-K-AP: NO existing score is silently migrated — every legacy score requires explicit rescoring", mig.filter((m) => /JupSOL|mSOL|bSOL|INF|Native/i.test(m.subject)).every((m) => m.classification === "requires_rescoring" && m.requiresNewV1Review === true && /Do NOT map/i.test(m.requiredAction)), "no silent migration");
+  add("16H-K-AQ: fixture scores stay fixture-only", mig.some((m) => m.classification === "fixture_only" && /must remain fixture-only/i.test(m.requiredAction)), "fixture_only");
+  add("16H-K-AR: missing reviewer provenance is reported, not invented", mig.some((m) => m.classification === "blocked_missing_reviewer_provenance") && mig.filter((m) => /JupSOL|mSOL|bSOL|INF/i.test(m.subject)).every((m) => /no structured reviewer record/i.test(m.currentProvenance)), "reported");
+
+  // ---- SOL staking compatibility ----
+  add("16H-K-AS: existing staking risk modules are UNCHANGED by this step", ["solLiquidStakingJupsolRiskScore", "solLiquidStakingMsolRiskScore", "solLiquidStakingBsolRiskScore", "solLiquidStakingInfRiskScore", "solNativeStakingBaselineRiskScore"].every((f) => readIf(`src/suggestions/${f}.ts`).length > 0 && !readIf(`src/suggestions/${f}.ts`).includes("riskGovernance")), "untouched");
+  add("16H-K-AT: no staking score is moved onto the proposed v1 rubric", !readIf("src/suggestions/riskGovernance.ts").includes("solLiquidStaking") && mig.filter((m) => /JupSOL|mSOL|bSOL|INF/i.test(m.subject)).every((m) => m.usableUnderCurrentApprovedBehavior === true), "not moved");
+  add("16H-K-AU: the legacy draft rubric still exists and is untouched at v0.1.0-draft", PROTOCOL_RISK_RUBRIC_VERSION === "0.1.0-draft" && PROTOCOL_RISK_RUBRIC_APPROVED === false, "v0.1.0-draft");
+
+  // ---- Steakhouse worksheet ----
+  add("16H-K-AV: the worksheet binds the exact vault, share mint, deposit mint and program", ws.binding.productAddress === VAULT && ws.binding.sharesMint === "7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS" && ws.binding.programId === "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd" && ws.binding.depositMint === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "bound");
+  add("16H-K-AW: the worksheet cannot be reused for High Yield / Testing / a sibling product", Object.keys(WORKSHEET_REJECTED_PRODUCTS).length === 3 && WORKSHEET_REJECTED_PRODUCTS["BEEfo7xwgK2ZP13Pxo7qqTPzAteKJmXjVWtMWcXSvbn2"] === "Steakhouse High Yield USDC" && "kamino_usdc_lending" in WORKSHEET_REJECTED_PRODUCTS && !JSON.stringify(ws.rows).includes("BEEfo7xwgK2ZP13Pxo7qqTPzAteKJmXjVWtMWcXSvbn2"), "exact only");
+  add("16H-K-AX: EVERY reviewer field is empty — no score, rationale, confidence, reviewer or date", ws.rows.length === 12 && ws.rows.every((r) => r.reviewerScore === null && r.reviewerRationale === null && r.reviewerConfidence === null && r.reviewerId === null && r.reviewDate === null), "all empty");
+  add("16H-K-AY: overall score, band and signoff are empty; product is not approved", ws.overallScore === null && ws.riskBand === null && ws.signoff === null && ws.productApproved === false && ws.reviewResult === "evidence_incomplete", "empty");
+  add("16H-K-AZ: the worksheet carries evidence + gaps + blockers, but suggests no default score", ws.rows.every((r) => r.evidenceSummary.length > 0 && r.anchors.length >= 5) && ws.rows.filter((r) => r.mandatoryBlockersPresent.length > 0).length === 8, "8/12 blocked");
+  add("16H-K-BA: the worksheet pins the capacity citation and the evidence cutoff", /release\/v2\.2\.2/.test(ws.binding.capacitySemanticsSource) && /1d146d7087a76edbbadc14d848ae14295c0745a4/.test(ws.binding.capacitySemanticsSource) && ws.binding.evidenceCutoffAt.length > 0, "pinned");
+  add("16H-K-BB: no code path can fill a reviewer score (every occurrence is literally null)", (() => { const src = readIf("src/suggestions/steakhouseReviewerWorksheet.ts"); const all = (src.match(/reviewerScore:/g) ?? []).length; const nulls = (src.match(/reviewerScore: null/g) ?? []).length; return all > 0 && all === nulls; })(), "typed null");
+
+  // ---- Steakhouse evidence status preserved ----
+  add("16H-K-BC: capacity remains verified_uncapped with its pinned citation", (() => { const c = JSON.parse(readIf("public/generated/stable-yield-market-cache.json")); return c.capacityState === "verified_uncapped" && c.capacitySourceCommit === "1d146d7087a76edbbadc14d848ae14295c0745a4" && STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === true; })(), "verified_uncapped");
+  add("16H-K-BD: blocked_capacity was NOT restored", getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker !== "blocked_capacity", "not restored");
+  add("16H-K-BE: deposit state remains unknown and is NOT inferred from capacity", (() => { const c = JSON.parse(readIf("public/generated/stable-yield-market-cache.json")); return c.depositState === "unknown" && c.blockers.includes("deposit_state_unknown") && STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED === false; })(), "unknown");
+
+  // ---- Product remains fail-closed ----
+  add("16H-K-BF: no Steakhouse score / review / signoff / approval-eligibility exists", [STEAKHOUSE_RISK_SCORE_ASSIGNED, STEAKHOUSE_HUMAN_REVIEW_COMPLETE, STEAKHOUSE_RISK_SIGNOFF_COMPLETE, STEAKHOUSE_ELIGIBLE_FOR_PRODUCT_APPROVAL].every((f) => f === false), "all false");
+  add("16H-K-BG: the governance architecture cannot enable the product — production still no_plan, no card", getApprovedYieldStrategies().length === 0 && (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: "2026-07-16T13:00:00.000Z" }); return r.decision?.status === "no_plan" && r.suggestion === null; })() && SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
+  add("16H-K-BH: Demo remains unchanged", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+
+  // ---- Safety ----
+  {
+    const gov = ["riskGovernance.ts", "riskReviewerRegistry.ts", "steakhouseReviewerWorksheet.ts"].map((f) => readIf(`src/suggestions/${f}`)).join("");
+    // The rubric legitimately has an `approved` lifecycle now; what must never happen is the governance
+  // layer mutating the PRODUCT registry or adding execution.
+  add("16H-K-BI: governance adds no execution / transaction / signature / PRODUCT-registry mutation", !/sendTransaction|signTransaction|window\.open|registry\.push|getApprovedYieldStrategies\s*=|yieldStrategyRegistry/.test(gov) && getApprovedYieldStrategies().length === 0, "read-only");
+    add("16H-K-BJ: no UI file imports reviewer-governance internals", ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/components/RealWalletSuggestionsRail.tsx", "src/pages/DemoDashboardPage.tsx", "src/suggestions/toSuggestionCard.ts"].every((f) => !/riskGovernance|riskReviewerRegistry|steakhouseReviewerWorksheet/.test(readIf(f))), "not in UI");
+    add("16H-K-BK: no runtime risk-score recalculation exists (governance is pure + static)", !/setInterval|Date\.now\(\)|createSolanaRpc|fetch\(/.test(gov), "static");
+  }
+
+  // ---- Flags ----
+  add("16H-K-BL: governance-exists flags true; APPROVED-by-human flags true; every PRODUCT flag still false", [PROTOCOL_RISK_RUBRIC_V1_PROPOSAL_EXISTS, PROTOCOL_RISK_RUBRIC_APPROVAL_ARTIFACT_EXISTS, RISK_REVIEWER_REGISTRY_CONTRACT_EXISTS, RISK_REVIEW_PROVENANCE_EXISTS, RISK_REVIEW_STATE_TRANSITION_VALIDATION_EXISTS_K, RISK_SCORE_MIGRATION_REPORT_EXISTS_K, STEAKHOUSE_REVIEWER_WORKSHEET_EXISTS_K, PROTOCOL_RISK_RUBRIC_V1_APPROVED, AUTHORIZED_PRODUCTION_REVIEWER_CONFIGURED].every((f) => f === true) && [STEAKHOUSE_RISK_SCORE_ASSIGNED, STEAKHOUSE_HUMAN_REVIEW_COMPLETE, STEAKHOUSE_RISK_SIGNOFF_COMPLETE, STEAKHOUSE_ELIGIBLE_FOR_PRODUCT_APPROVAL, STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS].every((f) => f === false), "accurate");
+
+  return checks;
+}
+
+
+/**
+ * Step 16H-K.1 — the product owner's applied governance decisions: rubric approval with human
+ * provenance, the authorized reviewer, and the INTERNAL-ONLY Risk Suitability Score boundary.
+ * Deterministic and OFFLINE.
+ */
+export function runRiskGovernanceDecisionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const NOW = "2026-07-16T13:00:00.000Z";
+  const realAuth = (id: string | undefined, role: "rubric_approver") => { const r = authorizeReviewerAction({ reviewerId: id, role }); return { authorized: r.authorized, reason: r.authorized ? undefined : r.reason }; };
+  const approve = (over: Record<string, unknown> = {}) => recordRubricApproval({ rubricId: "protocol_risk_rubric_v1", semver: "1.0.0", approvedBy: PRODUCT_OWNER_REVIEWER_ID, approvedAt: "2026-07-16T12:33:58.794Z", now: NOW, fromLifecycle: "proposed_for_approval", authorize: realAuth, ...over });
+
+  /** Synthetic reviewers for the rejection paths — never the production registry. */
+  const synth: RiskReviewerRecord[] = [
+    { reviewerId: "s_norole", displayLabel: "no rubric role", actorKind: "human", roles: ["risk_scorer"], authorizedProductTypes: [], authorizedProtocols: [], status: "active", authorizedAt: "2026-01-01", authorizationEvidence: "fixture", createdAt: "2026-01-01", updatedAt: "2026-01-01", synthetic: true, notes: [] },
+    { reviewerId: "s_revoked", displayLabel: "revoked", actorKind: "human", roles: ["rubric_approver"], authorizedProductTypes: [], authorizedProtocols: [], status: "revoked", authorizedAt: "2026-01-01", revokedAt: "2026-02-01", createdAt: "2026-01-01", updatedAt: "2026-02-01", synthetic: true, notes: [] },
+    { reviewerId: "s_inactive", displayLabel: "inactive", actorKind: "human", roles: ["rubric_approver"], authorizedProductTypes: [], authorizedProtocols: [], status: "inactive", createdAt: "2026-01-01", updatedAt: "2026-01-01", synthetic: true, notes: [] },
+    { reviewerId: "s_agent", displayLabel: "agent", actorKind: "automated_agent", roles: ["rubric_approver"], authorizedProductTypes: [], authorizedProtocols: [], status: "active", authorizedAt: "2026-01-01", authorizationEvidence: "fixture", createdAt: "2026-01-01", updatedAt: "2026-01-01", synthetic: true, notes: [] },
+  ];
+  const synthAuth = (id: string | undefined, role: "rubric_approver") => { const r = authorizeReviewerAction({ reviewerId: id, role, registry: synth }); return { authorized: r.authorized, reason: r.authorized ? undefined : r.reason }; };
+
+  // ---- Rubric approval transition + provenance ----
+  add("16H-K1-A: the rubric transitions proposed_for_approval -> approved via the validated path", approve().approved === true && validateRubricTransition("proposed_for_approval", "approved").valid, "approved");
+  add("16H-K1-B: approval is bound to the authorized human reviewer with a rationale + artifact version", (() => { const a = PROTOCOL_RISK_RUBRIC_V1_APPROVAL; return a.approvedBy === PRODUCT_OWNER_REVIEWER_ID && a.rubricId === "protocol_risk_rubric_v1" && a.semver === "1.0.0" && a.approvalRationale.includes("mandatory blocker enforcement") && a.approvalArtifactVersion === "1.0.0"; })(), "bound");
+  add("16H-K1-C: the approver holds rubric_approver and is a HUMAN", (() => { const r = listAuthorizedReviewers().find((x) => x.reviewerId === PRODUCT_OWNER_REVIEWER_ID)!; return r.actorKind === "human" && r.roles.includes("rubric_approver") && authorizeReviewerAction({ reviewerId: PRODUCT_OWNER_REVIEWER_ID, role: "rubric_approver" }).authorized === true; })(), "human approver");
+  add("16H-K1-D: the approval timestamp exists and is not future-dated", (() => { const a = PROTOCOL_RISK_RUBRIC_V1_APPROVAL; const ok = Date.parse(a.approvedAt) <= Date.parse(NOW); const fut = approve({ approvedAt: "2099-01-01T00:00:00.000Z" }); return ok && !fut.approved && fut.reason === "future_timestamp"; })(), "not future");
+  add("16H-K1-E: the rubric hash is deterministic and stable across calls", computeRubricV1Hash() === computeRubricV1Hash() && /^rubric_[0-9a-f]{8}$/.test(computeRubricV1Hash()) && getApprovedRiskRubricV1().approval.rubricHash === computeRubricV1Hash(), computeRubricV1Hash());
+  add("16H-K1-F: an unknown reviewer cannot approve the rubric", (() => { const r = approve({ approvedBy: "nobody" }); return !r.approved && r.reason === "reviewer_unknown"; })(), "rejected");
+  add("16H-K1-G: a reviewer WITHOUT rubric_approver authority is rejected", (() => { const r = approve({ approvedBy: "s_norole", authorize: synthAuth }); return !r.approved && r.reason === "reviewer_unauthorized"; })(), "rejected");
+  add("16H-K1-H: a revoked / inactive reviewer is rejected", (() => { const rv = approve({ approvedBy: "s_revoked", authorize: synthAuth }); const ia = approve({ approvedBy: "s_inactive", authorize: synthAuth }); return !rv.approved && rv.reason === "reviewer_revoked" && !ia.approved && ia.reason === "reviewer_not_active"; })(), "rejected");
+  add("16H-K1-I: an AUTOMATED AGENT cannot approve the rubric", (() => { const r = approve({ approvedBy: "s_agent", authorize: synthAuth }); return !r.approved && r.reason === "reviewer_is_automated_agent"; })(), "agent rejected");
+  add("16H-K1-J: approval against the wrong rubric identity / version is rejected", (() => { const id = approve({ rubricId: "other_rubric" }); const v = approve({ semver: "2.0.0" }); return !id.approved && id.reason === "rubric_version_mismatch" && !v.approved && v.reason === "rubric_version_mismatch"; })(), "rejected");
+  add("16H-K1-K: approval with missing provenance is rejected", (() => { const r = approve({ approvedBy: undefined }); return !r.approved; })(), "rejected");
+  add("16H-K1-L: an invalid source transition (draft -> approved) is rejected", (() => { const r = approve({ fromLifecycle: "draft" }); return !r.approved && r.reason === "invalid_state_transition"; })(), "rejected");
+  add("16H-K1-M: score direction is preserved (0-10, higher = more evidence-supported; floor 7)", RISK_SCORE_DIRECTION === "higher_is_more_evidence_supported" && MIN_PROTOCOL_RISK_SCORE === 7 && getProposedRiskRubricV1().dimensions.length === 12 && getProposedRiskRubricV1().totalWeight === 100, "preserved");
+
+  // ---- Approval implies nothing else ----
+  add("16H-K1-N: rubric approval does NOT imply scoring, review, signoff, or product approval", [STEAKHOUSE_RISK_SCORE_ASSIGNED, STEAKHOUSE_HUMAN_REVIEW_COMPLETE, STEAKHOUSE_RISK_SIGNOFF_COMPLETE, STEAKHOUSE_ELIGIBLE_FOR_PRODUCT_APPROVAL].every((f) => f === false) && riskSignoffImpliesProductApproval() === false && getApprovedYieldStrategies().length === 0, "implies nothing");
+  add("16H-K1-O: an APPROVED rubric still cannot score a product with mandatory blockers", (() => { const dims = getProposedRiskRubricV1().dimensions.map((d) => ({ id: d.id, score: 10, hasRationale: true, hasEvidence: true })); const r = aggregateRiskScore({ rubricLifecycle: "approved", scores: dims, mandatoryBlockersPresent: ["audit_linkage_unproven"], evidence: "complete" }); return !r.ok && r.diagnostic.code === "mandatory_blocker_present"; })(), "blocker wins");
+
+  // ---- Steakhouse untouched ----
+  add("16H-K1-P: the Steakhouse worksheet remains completely unscored", (() => { const w = buildSteakhouseReviewerWorksheet(); return w.rows.length === 12 && w.rows.every((r) => r.reviewerScore === null && r.reviewerRationale === null && r.reviewerConfidence === null && r.reviewerId === null && r.reviewDate === null) && w.overallScore === null && w.riskBand === null && w.signoff === null && w.productApproved === false && w.reviewResult === "evidence_incomplete"; })(), "unscored");
+  add("16H-K1-Q: Steakhouse capacity stays verified_uncapped with its pinned citation; deposit state unknown", (() => { const c = JSON.parse(readIf("public/generated/stable-yield-market-cache.json")); return c.capacityState === "verified_uncapped" && c.capacitySourceCommit === "1d146d7087a76edbbadc14d848ae14295c0745a4" && c.depositState === "unknown" && STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === true && STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED === false; })(), "preserved");
+  add("16H-K1-R: production still returns no_plan and renders no Stable Yield card; Demo unchanged", getApprovedYieldStrategies().length === 0 && (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: NOW }); return r.decision?.status === "no_plan" && r.suggestion === null; })() && SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins") && buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins").length === 1, "unchanged");
+
+  // ---- SOL staking untouched ----
+  add("16H-K1-S: staking risk modules are unchanged and import no governance module", ["solLiquidStakingJupsolRiskScore", "solLiquidStakingMsolRiskScore", "solLiquidStakingBsolRiskScore", "solLiquidStakingInfRiskScore", "solNativeStakingBaselineRiskScore"].every((f) => { const src = readIf(`src/suggestions/${f}.ts`); return src.length > 0 && !/riskGovernance|riskReviewerRegistry|getApprovedRiskRubricV1/.test(src); }), "untouched");
+  add("16H-K1-T: no automatic v1 migration or reinterpretation occurred", getRiskScoreMigrationReport().filter((m) => /JupSOL|mSOL|bSOL|INF|Native/i.test(m.subject)).every((m) => m.classification === "requires_rescoring" && /Do NOT map/i.test(m.requiredAction) && m.usableUnderCurrentApprovedBehavior === true), "no migration");
+
+  // ---- INTERNAL-ONLY score boundary ----
+  {
+    /** Every user-facing contract + component. The score must appear in NONE of them. */
+    const userFacing = [
+      "src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx",
+      "src/components/RealWalletSuggestionsRail.tsx", "src/pages/DemoDashboardPage.tsx",
+      "src/pages/DashboardPage.tsx", "src/pages/PortfolioPage.tsx", "src/components/PortfolioTable.tsx",
+      "src/suggestions/toSuggestionCard.ts", "src/suggestions/yieldStrategyPlanPresentation.ts",
+      "src/suggestions/yieldStrategyPlanPresentationTypes.ts",
+    ];
+    // Strip comments before scanning: a comment EXPLAINING the boundary is not a breach of it.
+    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, "");
+    const blob = userFacing.map((f) => strip(readIf(f))).join("");
+    const forbidden = ["riskScore", "riskSuitabilityScore", "dimensionScores", "dimensionWeights", "weightedScore", "riskBand", "reviewerConfidence", "MIN_PROTOCOL_RISK_SCORE", "mandatoryBlocker", "rubric"];
+    const hits = forbidden.filter((f) => blob.includes(f));
+    add("16H-K1-U: no numeric score / dimension / weight / band / threshold / confidence in ANY user-facing contract", hits.length === 0, hits.length ? hits.join(",") : "clean");
+    add("16H-K1-V: React components import no risk scoring / aggregation / governance module", userFacing.every((f) => !/(from|import)\s*\(?\s*["'][^"']*(riskGovernance|riskScoreExposurePolicy|protocolRiskScoreAssignment|protocolRiskRubric|riskReviewerRegistry|steakhouseUsdcRiskEvidence)/.test(strip(readIf(f)))), "no imports");
+    add("16H-K1-W: the card + review presentation contracts expose no field that could reconstruct a score", (() => { const t = readIf("src/suggestions/yieldStrategyPlanPresentationTypes.ts"); return !/risk|score|band|weight|confidence/i.test(t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*/g, "")); })(), "no fields");
+  }
+  add("16H-K1-X: the reviewer record / identity never reaches a user-facing surface", ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DashboardPage.tsx", "src/suggestions/toSuggestionCard.ts"].every((f) => { const src = readIf(f); return !/ws_product_owner|Ashot|reviewerId|approvedBy/.test(src); }), "internal");
+  add("16H-K1-Y: no Smith AI / Qdrant / analytics contract carries a risk score", (() => { const files = readdirSync(`${root}/src`, { recursive: true } as never) as unknown as string[]; const cands = (files as string[]).filter((f) => typeof f === "string" && /smithAi|smith_ai|qdrant|analytics|telemetry/i.test(f) && /\.tsx?$/.test(f)); const blob = cands.map((f) => readIf(`src/${f}`)).join(""); return !/riskScore|riskBand|weightedScore|dimensionScores|reviewerConfidence/.test(blob); })(), "clean");
+  add("16H-K1-Z: the approved qualitative disclosures leak NO ordinal signal (no number/band/comparative)", listQualitativeRiskDisclosures().length === 6 && listQualitativeRiskDisclosures().every((d) => !disclosureLeaksNumericSignal(d)), "6 disclosures");
+  add("16H-K1-AA: the disclosure vocabulary covers the decided concepts", (() => { const ids = listQualitativeRiskDisclosures().map((d) => d.id); return ["strategy_is_managed", "protocol_and_smart_contract_risk", "program_is_upgradeable", "withdrawals_depend_on_liquidity", "yield_may_change", "not_passed_required_review"].every((i) => ids.includes(i as never)); })(), "covered");
+  add("16H-K1-AB: the internal-only policy names the forbidden surfaces + fields", RISK_SCORE_FORBIDDEN_SURFACES.length >= 10 && RISK_SCORE_FORBIDDEN_FIELDS.includes("riskScore") && RISK_SCORE_FORBIDDEN_FIELDS.includes("dimensionWeights") && RISK_SCORE_FORBIDDEN_FIELDS.includes("riskBand"), "named");
+  add("16H-K1-AC: the legacy `riskScore` field name is preserved but documented as SUITABILITY", (() => { const p = readIf("src/suggestions/riskScoreExposurePolicy.ts"); return /legacy internal field name/i.test(p) && /higher = STRONGER evidence-supported suitability/i.test(p) && RISK_SUITABILITY_SCORE_LABEL.includes("internal"); })(), "documented");
+  add("16H-K1-AD: internal-only flags true; user-facing numeric score flag FALSE", RISK_SCORE_INTERNAL_ONLY_POLICY_EXISTS === true && RISK_SCORE_USER_FACING_SUPPRESSION_EXISTS === true && USER_FACING_NUMERIC_RISK_SCORE_EXISTS === false, "accurate");
+
+  // ---- Safety ----
+  // The internal /testing gallery is a PERMITTED internal-diagnostics surface, not a product surface:
+  // it self-labels TESTING_PREVIEW_NOT_LIVE / "Internal evidence view only" and is absent from product
+  // navigation. This check pins that boundary so it stays a deliberate exception, not a loophole.
+  add("16H-K1-AF: the internal /testing gallery is self-labelled internal and absent from product nav", (() => { const tp = readIf("src/pages/TestingPage.tsx") + readIf("src/pages/testingPageFixtures.ts"); const labelled = /TESTING_PREVIEW_NOT_LIVE/.test(tp) && /Internal evidence view only/.test(tp); const nav = readIf("src/components/GlobalNav.tsx"); return labelled && !/testing/i.test(nav); })(), "internal only");
+  add("16H-K1-AG: no PRODUCT surface renders a numeric score, band, weight or threshold", ["src/components/SuggestionCard.tsx", "src/components/RealWalletSuggestionsRail.tsx", "src/pages/DashboardPage.tsx", "src/pages/PortfolioPage.tsx", "src/components/PortfolioTable.tsx"].every((f) => { const src = readIf(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, ""); return !/Risk score|riskScore|riskBand|weightedScore|dimensionScores|reviewerConfidence/.test(src); }), "clean");
+
+  add("16H-K1-AE: the decision added no execution / signature / deposit / external navigation", (() => { const blob = ["riskGovernance.ts", "riskReviewerRegistry.ts", "riskScoreExposurePolicy.ts", "steakhouseReviewerWorksheet.ts"].map((f) => readIf(`src/suggestions/${f}`)).join(""); return !/sendTransaction|signTransaction|window\.open|deposit\(|withdraw\(|lifecycle\s*=\s*"approved"|registry\.push/.test(blob); })(), "read-only");
+
+  return checks;
+}
+
+
+/**
+ * Step 16H-K.2 — the internal `/testing` route gate. Deterministic and OFFLINE: these read source and
+ * the gate module, never a live build.
+ */
+export function runInternalTestingRouteFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  /** Comments explain the policy (and quote the words it forbids), so scan CODE only. */
+  const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const gate = stripComments(readIf("src/pages/internalTestingRoute.ts"));
+  const app = readIf("src/App.tsx");
+  const nav = readIf("src/components/GlobalNav.tsx");
+
+  // ---- The gate itself ----
+  add("16H-K2-A: the route path is /testing and lives in a dependency-free gate module", TESTING_PAGE_ROUTE === "/testing" && gate.length > 0 && !/testingPageFixtures|STABLE_YIELD_TESTING|riskScore/.test(gate), "isolated gate");
+  add("16H-K2-B: the gate is a BUILD-TIME env flag, not a query param or URL password", /import\.meta\.env/.test(gate) && INTERNAL_TESTING_FLAG === "VITE_ENABLE_TESTING_PAGE" && !/location\.search|URLSearchParams|password|token=/i.test(gate), "build-time");
+  add("16H-K2-C: the gate defaults to FALSE in a non-Vite runtime (fails closed)", isTestingPageEnabled() === false, "false in node");
+  add("16H-K2-D: enabling requires DEV or an explicit VITE_ENABLE_TESTING_PAGE=true", /env\.DEV === true \|\| env\.VITE_ENABLE_TESTING_PAGE === "true"/.test(gate), "explicit");
+  add("16H-K2-E: Demo Mode is NOT the gate (a product state can never unlock internal tooling)", !/demo/i.test(gate) && !/demoActive/.test(stripComments(app.split("function MainApp")[0] ?? "")), "not demo");
+
+  // ---- App wiring ----
+  add("16H-K2-F: App imports the gate from the gate module, NOT from the fixture module", /from "\.\/pages\/internalTestingRoute"/.test(app) && !/isTestingPageEnabled[^\n]*from "\.\/pages\/testingPageFixtures"/.test(app), "decoupled");
+  add("16H-K2-G: the testing route is LAZY, so its fixtures leave the main chunk", /lazy\(\(\) => import\("\.\/pages\/TestingPage"\)\)/.test(app) && /<Suspense/.test(app), "lazy");
+  add("16H-K2-H: the route only renders when the gate passes AND the path matches exactly", /isTestingPageEnabled\(\) &&[\s\S]{0,120}window\.location\.pathname === TESTING_PAGE_ROUTE/.test(app), "gated");
+  add("16H-K2-I: a disabled gate falls through to the normal app (canonical unknown-path behaviour)", /return <MainApp \/>;/.test(app), "falls through");
+  add("16H-K2-J: /testing is not linked from product navigation", !/testing/i.test(nav) && !/TESTING_PAGE_ROUTE/.test(nav), "unlinked");
+  add("16H-K2-K: no product page links to or imports the testing route", ["src/pages/DashboardPage.tsx", "src/pages/PortfolioPage.tsx", "src/pages/GoalPage.tsx", "src/pages/SupportPage.tsx", "src/pages/DemoDashboardPage.tsx"].every((f) => !/TESTING_PAGE_ROUTE|internalTestingRoute|TestingPage/.test(readIf(f))), "no links");
+
+  // ---- Fixtures stay available internally ----
+  add("16H-K2-L: the fixture module still exists and re-exports the gate for existing importers", readIf("src/pages/testingPageFixtures.ts").includes('export { TESTING_PAGE_ROUTE, isTestingPageEnabled, INTERNAL_TESTING_FLAG } from "./internalTestingRoute"'), "re-exported");
+  add("16H-K2-M: the INF numeric fixture is preserved for internal QA (not deleted)", /Risk score: \$\{infBlocked\.riskScore/.test(readIf("src/pages/testingPageFixtures.ts")), "preserved");
+  add("16H-K2-N: testing fixtures remain reachable by the offline deterministic suite", STABLE_YIELD_TESTING_FIXTURES.length > 0 && STABLE_YIELD_TESTING_CARD_FIXTURES.length >= 16, `${STABLE_YIELD_TESTING_FIXTURES.length} fixtures`);
+
+  // ---- The internal score stays out of product surfaces ----
+  add("16H-K2-O: no numeric score on any PRODUCT surface (the /testing gallery is not one)", ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/components/RealWalletSuggestionsRail.tsx", "src/pages/DashboardPage.tsx", "src/pages/PortfolioPage.tsx", "src/components/PortfolioTable.tsx", "src/suggestions/toSuggestionCard.ts"].every((f) => { const src = readIf(f).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, ""); return !/Risk score|riskScore|riskBand|weightedScore|dimensionScores|reviewerConfidence/.test(src); }), "clean");
+  add("16H-K2-P: no product React component newly imports a scoring / governance module", ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/components/RealWalletSuggestionsRail.tsx", "src/pages/DashboardPage.tsx", "src/pages/PortfolioPage.tsx", "src/pages/DemoDashboardPage.tsx"].every((f) => !/(from|import)\s*\(?\s*["'][^"']*(riskGovernance|riskReviewerRegistry|protocolRiskScoreAssignment|protocolRiskRubric|steakhouseUsdcRiskEvidence|steakhouseReviewerWorksheet)/.test(readIf(f))), "no imports");
+  add("16H-K2-Q: the client-side score limitation is documented, not hidden", /client-side/i.test(readIf("src/suggestions/riskScoreExposurePolicy.ts")) && /not.{0,40}cryptographic/i.test(readIf("src/suggestions/riskScoreExposurePolicy.ts")), "documented");
+
+  // ---- Nothing else moved ----
+  add("16H-K2-R: rubric approval + reviewer authorization are unchanged", PROTOCOL_RISK_RUBRIC_V1_APPROVED === true && AUTHORIZED_PRODUCTION_REVIEWER_CONFIGURED === true && listAuthorizedReviewers().length === 1, "unchanged");
+  add("16H-K2-S: Steakhouse remains unscored, unreviewed, unsigned and unapproved", [STEAKHOUSE_RISK_SCORE_ASSIGNED, STEAKHOUSE_HUMAN_REVIEW_COMPLETE, STEAKHOUSE_RISK_SIGNOFF_COMPLETE, STEAKHOUSE_ELIGIBLE_FOR_PRODUCT_APPROVAL].every((f) => f === false) && buildSteakhouseReviewerWorksheet().rows.every((r) => r.reviewerScore === null), "unscored");
+  add("16H-K2-T: production approved-product count remains zero and no card renders", getApprovedYieldStrategies().length === 0 && (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: "2026-07-16T14:00:00.000Z" }); return r.decision?.status === "no_plan" && r.suggestion === null; })() && SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
+  add("16H-K2-U: Demo behaviour is unchanged (one card, $500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+  add("16H-K2-V: capacity + deposit state evidence untouched", STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === true && STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED === false, "untouched");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -16567,6 +16856,9 @@ export function printFixtureResults(): void {
     ...runStableYieldSourcePathFixtureChecks(),
     ...runSteakhouseRiskEvidenceFixtureChecks(),
     ...runKvaultCapacitySemanticsFixtureChecks(),
+    ...runRiskGovernanceFixtureChecks(),
+    ...runRiskGovernanceDecisionFixtureChecks(),
+    ...runInternalTestingRouteFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

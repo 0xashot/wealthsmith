@@ -141,10 +141,13 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     positionDetectionState: "adapter_implemented_source_verified",
     positionMatchMechanism: "EXACT vault address HDsay... and/or the exact vault share (receipt) mint 7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS, both confirmed live on-chain. wallet/kaminoVaults.ts already reads vault-share balances keyed by exact vault address, read-only, via the official SDK.",
     readiness: "blocked",
-    primaryBlocker: "blocked_capacity",
+    // 16H-J.1 resolved capacity from the official kvault source, so `blocked_capacity` no longer
+    // applies. The dominant remaining blocker is the risk review: rubric v1 is only PROPOSED, no
+    // reviewer is authorized, and five evidence gaps stand.
+    primaryBlocker: "blocked_risk_review",
     blockers: [
-      "blocked_capacity (PRIMARY): on-chain VaultState.depositCap reads 0, but its semantics are undocumented and the official SDK never reads it. 0 could mean 'no cap' or 'closed'; guessing either would invent capacity. Needs official Kamino confirmation of depositCap semantics + the matching used-counterpart.",
-      "blocked_deposit_state: the on-chain VaultState exposes NO pause/enabled field. A successful read is not proof deposits are enabled.",
+      "blocked_risk_review (PRIMARY): rubric v1.0.0 is proposed_for_approval (not approved), no authorized reviewer exists, and 8 of 12 v1 dimensions carry a mandatory blocker. No score can be assigned.",
+      "blocked_deposit_state: the on-chain VaultState exposes NO pause/enabled field. A successful read is not proof deposits are enabled. NOTE: capacity is verified_uncapped (16H-J.1) — that is a SEPARATE question and is not evidence deposits are enabled.",
       NO_RISK,
       "curation: three 'Steakhouse' USDC vaults exist - WealthSmith must choose which is the intended product (see notes).",
       "no withdrawal/exit or fee evidence collected",
