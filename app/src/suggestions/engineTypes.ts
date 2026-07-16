@@ -23,6 +23,7 @@
  * suggestions and only ever marks `is_top_pick` on engine output.
  */
 import type { SolStakingSelectorPresentation } from "./solStakingSelectorPresentationTypes";
+import type { StableYieldPlanSuggestionMeta } from "./yieldStrategyPlanSuggestionTypes";
 
 /**
  * Suggestion categories. All are IMPLEMENTED with trigger logic (Steps 3–9H);
@@ -72,6 +73,9 @@ export type SuggestionReasonCode =
   | "stable_yield_available"
   | "conservative_yield_candidate"
   | "buffer_eligible_stable_yield"
+  // stable_yield — plan-backed (Step 16H-A: converted from a Step 16G ready plan; singular per lane)
+  | "stable_yield_buffer_lane_ready"
+  | "stable_yield_excess_lane_ready"
   // dca (contribution-funded gradual entry)
   | "crypto_underweight_for_dca"
   | "planned_contribution_available"
@@ -603,6 +607,13 @@ export interface EngineSuggestion {
    * card mapper never surfaces it; the Review drawer (Step 10B) will render it.
    */
   reviewDetails?: SuggestionReviewDetails;
+  /**
+   * Structured Stable Yield plan metadata (Step 16H-A) — present ONLY on a plan-backed `stable_yield`
+   * suggestion converted from a Step 16G ready plan. Read-only + ENGINE-INTERNAL; the card mapper /
+   * Smith AI integration are later 16H steps. Carries the exact 16G identity/amount/projection so no
+   * downstream layer re-selects or recomputes anything.
+   */
+  stableYieldPlan?: StableYieldPlanSuggestionMeta;
 
   engine_version: string;
   /** Input-snapshot time (ms epoch) — supports stale detection on refresh. */

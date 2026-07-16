@@ -129,7 +129,25 @@ export const STABLE_YIELD_PLAN_GENERATES_SUGGESTION = false;
 export const STABLE_YIELD_PLAN_PREPARES_EXECUTION = false;
 export const STABLE_YIELD_PLAN_BUILDS_TRANSACTION = false;
 export const STABLE_YIELD_PLAN_REQUESTS_SIGNATURE = false;
-export const STABLE_YIELD_SUGGESTIONS_EXIST = false;
+// Step 16H-A — a Step 16G ready plan can now be converted into a deterministic, read-only
+// `stable_yield` engine suggestion that participates in ordering + Top Pick. Engine-only: no card,
+// modal, Demo/Real-Wallet UI, Smith-AI, execution, or signature. Production still emits none (no
+// approved product → no ready plan). The PLAN layer itself still generates no suggestion (the
+// converter does), so STABLE_YIELD_PLAN_GENERATES_SUGGESTION stays false.
+export const STABLE_YIELD_SUGGESTIONS_EXIST = true;
+export const STABLE_YIELD_SUGGESTION_CONTRACT_EXISTS = true;
+export const STABLE_YIELD_PLAN_TO_SUGGESTION_EXISTS = true;
+export const STABLE_YIELD_SUGGESTION_PARTICIPATES_IN_ORDERING = true;
+export const STABLE_YIELD_SUGGESTION_TOP_PICK_ELIGIBLE = true;
+export const STABLE_YIELD_SUGGESTION_CARD_EXISTS = false;
+export const STABLE_YIELD_SUGGESTION_REVIEW_MODAL_EXISTS = false;
+export const STABLE_YIELD_SUGGESTION_UI_INTEGRATION_EXISTS = false;
+export const STABLE_YIELD_SUGGESTION_DEMO_UI_EXISTS = false;
+export const STABLE_YIELD_SUGGESTION_REAL_WALLET_UI_EXISTS = false;
+export const STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS = false;
+export const STABLE_YIELD_SUGGESTION_EXECUTION_EXISTS = false;
+export const STABLE_YIELD_SUGGESTION_TRANSACTION_CONSTRUCTION_EXISTS = false;
+export const STABLE_YIELD_SUGGESTION_SIGNATURE_FLOW_EXISTS = false;
 export const STABLE_YIELD_UI_ENABLED = false;
 export const STABLE_YIELD_TESTING_EXISTS = false;
 export const STABLE_YIELD_EXECUTION_ENABLED = false;

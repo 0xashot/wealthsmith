@@ -1792,3 +1792,21 @@ leaders). Flags: `YIELD_STRATEGY_PRODUCT_CAPACITY_EXISTS`/`YIELD_STRATEGY_PLAN_E
 `_AMOUNT_SELECTION_EXISTS`/`_SELECTS_PRODUCT`/`_SELECTS_FINAL_AMOUNT`/`STABLE_YIELD_PLANS_EXIST = true`;
 suggestions/UI/testing/execution and all plan-`GENERATES_SUGGESTION`/`UPDATES_PRODUCT_OUTPUT`/
 `PREPARES_EXECUTION`/`BUILDS_TRANSACTION`/`REQUESTS_SIGNATURE` stay `false`.
+
+## 16H-A — Stable Yield suggestion integration
+
+Converts a Step 16G ready plan into a deterministic, read-only `stable_yield` engine suggestion
+([yieldStrategyPlanSuggestion.md](./yieldStrategyPlanSuggestion.md), `yield_strategy_suggestion_v1`). The
+16G plan is the **sole source of truth** — `buildStableYieldPlanSuggestion` re-selects nothing,
+recalculates no amount, infers no APY/capacity/minimum, and preserves the plan id / identity / amount /
+projection / capacity verbatim in a `stableYieldPlan` metadata block on `EngineSuggestion`. Emits **only**
+for a ready decision; every suppressed case returns `null` + a structured diagnostic (stage + reason).
+Uses the canonical **`stable_yield` category (priority 6)** for both lanes (lane in metadata), so
+buffer corrections and rebalance still outrank yield, and it occupies the `!rebalance` slot, suppressing
+the legacy "Put Stablecoins to Work" rule (one stable-yield card). `runSuggestionEngine` gains an
+optional 4th param; `selectTopPick` marks ≤1 winner. Read-only / non-custodial (`review_only`,
+`externalManagementRequired`, all execution/transaction/signature flags false); no UI/Smith-AI. Production
+still emits none (no approved product → `no_plan`). Flags: `STABLE_YIELD_SUGGESTIONS_EXIST` +
+`STABLE_YIELD_SUGGESTION_CONTRACT_EXISTS`/`_PLAN_TO_SUGGESTION_EXISTS`/`_PARTICIPATES_IN_ORDERING`/
+`_TOP_PICK_ELIGIBLE = true`; card/modal/UI/Demo/Real-Wallet/Smith-AI/execution/transaction/signature
+`false`.

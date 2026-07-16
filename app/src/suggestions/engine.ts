@@ -57,7 +57,14 @@ export function runSuggestionEngine(
    * suggestion; a `dca`-category one takes the DCA slot and suppresses the legacy DCA. It is merged
    * BEFORE the existing sort/Top-Pick pass, so the frontend receives already-ordered output.
    */
-  contributionSuggestion?: EngineSuggestion | null
+  contributionSuggestion?: EngineSuggestion | null,
+  /**
+   * Step 16H-A — an optional pre-built plan-backed Stable Yield suggestion (converted from a Step 16G
+   * ready plan by `buildStableYieldPlanSuggestion`). When provided (category `stable_yield`), it takes
+   * the Stable Yield slot and suppresses the legacy "Put Stablecoins to Work" rule (one stable-yield
+   * card). It is merged BEFORE the sort/Top-Pick pass so the frontend receives already-ordered output.
+   */
+  stableYieldPlanSuggestion?: EngineSuggestion | null
 ): SuggestionEngineResult {
   const warnings: SuggestionReasonCode[] = [];
   if (inputs.value.anyUnpriced) warnings.push("partial_pricing");
@@ -65,6 +72,7 @@ export function runSuggestionEngine(
   const suggestions: EngineSuggestion[] = [];
   const planBuffer = contributionSuggestion?.category === "buffer" ? contributionSuggestion : null;
   const planDca = contributionSuggestion?.category === "dca" ? contributionSuggestion : null;
+  const planStableYield = stableYieldPlanSuggestion?.category === "stable_yield" ? stableYieldPlanSuggestion : null;
 
   // 1) Safety Buffer first (plan-backed version enriches/replaces the generic one — one buffer card).
   const buffer = planBuffer ?? deriveBufferSuggestion(inputs, generatedAt);
@@ -89,7 +97,9 @@ export function runSuggestionEngine(
     // Stable Yield and DCA only when Rebalance does not apply (allocation
     // already close enough to target); Staking is unaffected (SOL, not stables).
     if (!rebalance) {
-      const stableYield = deriveStableYieldSuggestion(inputs, generatedAt);
+      // Step 16H-A — prefer the plan-backed Stable Yield suggestion; it suppresses the legacy rule
+      // (one stable-yield card per run). Production passes none (no approved product → no ready plan).
+      const stableYield = planStableYield ?? deriveStableYieldSuggestion(inputs, generatedAt);
       if (stableYield) candidates.push(stableYield);
       // Step 15H — prefer the plan-backed DCA; it suppresses the legacy DCA (one DCA per plan).
       const dca = planDca ?? deriveDcaSuggestion(inputs, generatedAt);
