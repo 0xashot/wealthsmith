@@ -1770,3 +1770,25 @@ positions with zero approved matches / zero buffer-qualified / zero held leaders
 `YIELD_STRATEGY_POSITION_*`/`YIELD_STRATEGY_ELIGIBLE_CAPITAL_EXISTS`/`STABLE_YIELD_WALLET_DETECTION_EXISTS`/
 `STABLE_YIELD_CAPITAL_EVALUATION_EXISTS = true`; plans/suggestions/UI/testing/execution and all
 capital-`SELECTS_*`/`GENERATES_PLAN` stay `false`.
+
+## 16G — Stable Yield read-only plan
+
+The final pure-engine step ([yieldStrategyPlan.md](./yieldStrategyPlan.md), `yield_strategy_plan_v1` +
+`yield_strategy_plan_selection_v1` + `yield_strategy_product_capacity_v1`). It produces **one**
+deterministic read-only plan (or one no-plan result): one lane, one exact approved comparison-leader
+product, one exact amount funded **only** by direct liquid USDC. A separate injected product
+deposit-capacity contract (distinct from TVL / withdrawal liquidity; `verified_uncapped` ceilinged by
+lane capital, never Infinity; 15m/60m freshness) gates deposits. A **real 16E leader is required — no
+fallback** (never second place / registry order / highest APY / held product / protocol default). Lane
+priority is **buffer > excess**: a ready buffer plan suppresses an otherwise-ready excess lane; the
+lanes share one direct-wallet USDC source and are never added (one plan, `sharedSourceResolvedBySingle
+Plan`). Start-vs-add comes from the 16F leader-position status; existing positions are never funding
+(no switch/withdraw — that's Step 19). Excess reuses the canonical **$250**; **no canonical buffer
+deposit minimum exists** (the $50 is contribution-scoped, not reused) so the buffer lane fails closed
+with `buffer_yield_minimum_policy_missing` unless a future canonical minimum is supplied. Amounts floor
+to exact cents (never up), preserve the Safety Buffer + wallet floor (validated projection), and carry a
+stable `fnv1a` plan ID excluding volatile timestamps. Production → `no_plan` (zero approved products /
+leaders). Flags: `YIELD_STRATEGY_PRODUCT_CAPACITY_EXISTS`/`YIELD_STRATEGY_PLAN_EXISTS`/`_SELECTION_EXISTS`/
+`_AMOUNT_SELECTION_EXISTS`/`_SELECTS_PRODUCT`/`_SELECTS_FINAL_AMOUNT`/`STABLE_YIELD_PLANS_EXIST = true`;
+suggestions/UI/testing/execution and all plan-`GENERATES_SUGGESTION`/`UPDATES_PRODUCT_OUTPUT`/
+`PREPARES_EXECUTION`/`BUILDS_TRANSACTION`/`REQUESTS_SIGNATURE` stay `false`.

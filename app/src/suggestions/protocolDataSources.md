@@ -996,3 +996,15 @@ documentation. Capital reuses the canonical `DCA_EXCESS_USDC_TRIGGER_USD` ($250)
 cents-flooring behavior; the risk→buffer vault/wallet split is the documented mapping encoded as
 `yield_strategy_capital_v1` (no prior executable policy). See
 [yieldStrategyPositionsAndCapital.md](./yieldStrategyPositionsAndCapital.md).
+
+## 16G — Stable Yield product deposit-capacity source boundary
+
+The plan engine (Step 16G) consumes a separate **injected read-only** product deposit-capacity contract
+(`yield_strategy_product_capacity_v1`) — deposit capacity is NOT 16C withdrawal liquidity / TVL / APY /
+position value and is never inferred from them or from protocol brand. Each snapshot must match the exact
+registry product (protocol + address + asset), `browserFetched` must be false, and freshness reuses the
+lane market-data bounds (buffer 15m / excess 60m); `verified_uncapped` is ceilinged by the user's lane
+capital and never serializes Infinity. The plan reuses the canonical `DCA_EXCESS_USDC_TRIGGER_USD` ($250)
+and the Step-15 cents-floor + `fnv1a` plan-ID architecture; no Safety-Buffer-Yield deposit minimum is
+documented, so the buffer lane fails closed rather than reusing the contribution $50. See
+[yieldStrategyPlan.md](./yieldStrategyPlan.md).

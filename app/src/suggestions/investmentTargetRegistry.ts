@@ -111,7 +111,24 @@ export const STABLE_YIELD_CAPITAL_SELECTS_FINAL_AMOUNT = false;
 export const STABLE_YIELD_CAPITAL_GENERATES_PLAN = false;
 export const STABLE_YIELD_CAPITAL_UPDATES_PRODUCT_OUTPUT = false;
 export const STABLE_YIELD_WALLET_DETECTION_EXISTS = true;
-export const STABLE_YIELD_PLANS_EXIST = false;
+// Step 16G — the single deterministic read-only plan engine now exists: exact product deposit-capacity
+// contract, buffer>excess lane priority, real-comparison-leader-only selection, start-vs-add action
+// mode, lane/product minimums, exact-cent amount, before/after buffer projection, and a stable plan ID.
+// It selects one lane + one exact product + one amount funded only by direct liquid USDC; it generates
+// no suggestion/UI/deep link/transaction/signature and updates no product output. Production returns
+// no_plan (zero approved products / zero comparison leaders).
+export const YIELD_STRATEGY_PRODUCT_CAPACITY_EXISTS = true;
+export const YIELD_STRATEGY_PLAN_EXISTS = true;
+export const YIELD_STRATEGY_PLAN_SELECTION_EXISTS = true;
+export const YIELD_STRATEGY_PLAN_AMOUNT_SELECTION_EXISTS = true;
+export const YIELD_STRATEGY_PLAN_SELECTS_PRODUCT = true;
+export const YIELD_STRATEGY_PLAN_SELECTS_FINAL_AMOUNT = true;
+export const STABLE_YIELD_PLANS_EXIST = true;
+export const STABLE_YIELD_PLAN_UPDATES_PRODUCT_OUTPUT = false;
+export const STABLE_YIELD_PLAN_GENERATES_SUGGESTION = false;
+export const STABLE_YIELD_PLAN_PREPARES_EXECUTION = false;
+export const STABLE_YIELD_PLAN_BUILDS_TRANSACTION = false;
+export const STABLE_YIELD_PLAN_REQUESTS_SIGNATURE = false;
 export const STABLE_YIELD_SUGGESTIONS_EXIST = false;
 export const STABLE_YIELD_UI_ENABLED = false;
 export const STABLE_YIELD_TESTING_EXISTS = false;
