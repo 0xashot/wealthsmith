@@ -71,13 +71,22 @@ const REGISTRY: YieldStrategyRegistryEntry[] = [
     principalAsset: "USDC",
     supportedLane: "safety_buffer_yield",
     riskLane: "buffer_eligible",
-    lifecycle: "documentation_required",
+    // 16H-N.1: documentation_required -> identity_verified. Same transition kamino_steakhouse_usdc
+    // made at 16H-H once its identity was resolved. IDENTITY ONLY — every ...OFF flag stays off, and
+    // APY / capacity / constraints / deposit availability remain blocked. Knowing what a product is
+    // says nothing about whether it is available, safe, or recommendable.
+    lifecycle: "identity_verified",
     officialUrl: KAMINO_URL,
-    address: undefined,
+    /** The exact RESERVE — the product is the reserve, not the market. See klendReserveIdentity.ts. */
+    address: "D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59",
     ...OFF,
     notes: [
-      "Kamino supports a USDC lending market (protocolRegistry.ts supportedAssets includes USDC), but no exact reserve address is documented — undefined; documentation_required. Lending is intrinsically buffer-eligible per Step 16A.",
-      "16H-H: the official markets endpoint (GET /v2/kamino-market, checked 2026-07-16) returns 34 lending MARKETS with their addresses, but Kamino documents NO endpoint that lists a market's reserves or their addresses. The product here is the USDC RESERVE, not the market. Writing a market address into `address` would place the wrong identifier in the product-identity field purely to satisfy the adapter, so this stays undefined. Blocker: resolve the exact USDC reserve address from an official source.",
+      "Kamino supports a USDC lending market (protocolRegistry.ts supportedAssets includes USDC). Lending is intrinsically buffer-eligible per Step 16A.",
+      "16H-H (PRESERVED — the original blocker, not rewritten): the official markets endpoint (GET /v2/kamino-market, checked 2026-07-16) returns 34 lending MARKETS with their addresses, but Kamino documents NO endpoint that lists a market's reserves or their addresses. The product here is the USDC RESERVE, not the market. Writing a market address into `address` would place the wrong identifier in the product-identity field purely to satisfy the adapter, so this stays undefined. Blocker: resolve the exact USDC reserve address from an official source.",
+      "16H-N.1 SUPERSEDES that blocker. It was RIGHT that no REST endpoint enumerates reserves — that is still true. It was WRONG to generalise 'no REST endpoint' to 'no official source': the official @kamino-finance/klend-sdk, already installed here, enumerates reserves directly (KaminoMarket.load -> loadReserves -> getReserves -> getReservesByMint). Resolved at slot 433342218 (2026-07-16T20:27:09Z) to the SOL/BTC Market (7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF) USDC reserve D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59, cToken mint B8V6WVjPxW1UGwVDfxH2d2r8SyT4cqn7dQRK6XneVa7D, under hash-verified KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD.",
+      "16H-N.1 DISAMBIGUATION: getReservesByMint(USDC) returns FOUR reserves in this market — mint is NOT an identifier. Three are status 2 (Hidden) with zero deposit limit; exactly one is status 0 (Active). The resolver requires exactly one Active match and fails closed otherwise. See klendReserveIdentity.SOL_BTC_MARKET_OTHER_USDC_RESERVES.",
+      "16H-N.1 STILL BLOCKED: supply APY is NOT on reserve state (must be derived from borrowRateCurve + utilization + protocolTakeRate, or sourced officially) — apyAdapterState stays no_adapter. Capacity, constraints and deposit availability remain blocked. No risk assessment, no human review, no signoff, no approval, no selector integration, no card.",
+      "16H-N.1 SHARED RISK (non-blocking): this is the SAME reserve carrying 87.61% of kamino_steakhouse_usdc's allocation. Direct lending removes KVault layers but creates NO diversification versus Steakhouse — same market, reserve, owner, council and oracle. Recorded for future selector logic; no selector behaviour added.",
     ],
   },
   {

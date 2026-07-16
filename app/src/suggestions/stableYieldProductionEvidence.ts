@@ -170,10 +170,12 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     protocolId: "kamino",
     chain: "solana_mainnet",
     asset: "USDC",
-    productAddress: undefined,
+    // 16H-N.1: identity RESOLVED to the exact reserve (see klendReserveIdentity.ts). Economics remain
+    // unresolved — identity tells you which reserve, not what it pays.
+    productAddress: "D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59",
     apySource: "Kamino official SDK (klend-sdk) reserve/market state",
     apySourceRef: "klend-sdk:reserve state",
-    apySelectedField: "unresolved — no exact reserve/market address documented, so no field can be selected",
+    apySelectedField: "STILL UNRESOLVED (16H-N.1): the exact reserve is now bound, but supply APY is not a field on reserve state. It must be derived from borrowRateCurve + utilization + protocolTakeRatePct, or sourced from an official endpoint. Identity resolution deliberately did not attempt this.",
     apyUnitInterpretation: "unverified",
     apySourceTimestampField: "reserve state read slot time",
     apyFreshnessPolicy: "16C canonical max age (1h); source time authoritative",
@@ -189,10 +191,16 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     positionDetectionState: "no_adapter",
     positionMatchMechanism: undefined,
     readiness: "blocked",
-    primaryBlocker: "blocked_identity",
+    // 16H-N.1: `blocked_identity` is RESOLVED — the exact reserve is bound. The evidence model
+    // separates identity blockers from market-data blockers, so the primary blocker MOVES rather than
+    // staying stale. Leaving `blocked_identity` would assert something now false.
+    primaryBlocker: "blocked_apy_unit",
     blockers: [
-      "blocked_identity (PRIMARY): the product here is the USDC RESERVE, and no official endpoint lists a market's reserves or their addresses. Kamino's documented markets endpoint (GET /v2/kamino-market, checked 2026-07-16) returns 34 lending MARKETS with addresses only. Writing a market address into the product-identity field would place the wrong identifier there purely to satisfy the adapter, so the address stays undefined.",
+      "blocked_apy_unit (PRIMARY, 16H-N.1): identity is resolved, but supply APY is NOT a field on klend reserve state. It must be derived from borrowRateCurve + utilization + protocolTakeRatePct, or sourced from an official endpoint — until then no net-vs-gross unit can be declared and no APY adapter exists.",
+      "capacity_adapter_missing: depositLimit and supplied are readable from reserve state, but no capacity adapter derives remaining capacity for this product.",
+      "deposit_availability_blocked: reserve status/emergencyMode are readable, but no availability adapter evaluates them and the 16H-L.1 read-only deposit-state policy has not been applied to this reserve.",
       NO_RISK,
+      "RESOLVED at 16H-N.1 (retained for provenance, no longer blocking) — blocked_identity: the product is the USDC RESERVE. The 16H-H finding that no REST endpoint enumerates a market's reserves remains TRUE, but it wrongly implied no official source existed. The official installed klend-sdk enumerates reserves directly. Resolved to reserve D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59 in market 7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF at slot 433342218. A market address was NEVER substituted into the product-identity field — the bound address is the RESERVE.",
     ],
     notes: [
       "This is the ONLY current candidate whose strategy type (lending) is intrinsically buffer-lane eligible per Step 16A — which makes its risk review the highest-value 16H-H work, but it is equally blocked on identity.",
