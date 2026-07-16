@@ -14,19 +14,22 @@ Backed by:
 - [`stableYieldProductionEvidence.ts`](./stableYieldProductionEvidence.ts) — versioned evidence manifests + readiness matrix.
 - `scripts/probe-stable-yield-sources.mjs` — developer-only probe (`npm run probe:stable-yield`).
 
-## The headline finding
+## Status after Step 16H-H
 
-> **Every current production candidate is blocked on one thing: no exact product address is documented.**
+Step 16H-G's universal blocker ("no candidate has an exact address") is **partly resolved**, and the
+candidate set has been cleaned up. See [the 16H-H section](#16h-h--exact-identity-resolution--candidate-cleanup).
 
-[`yieldStrategyRegistry.ts`](./yieldStrategyRegistry.ts) contains 5 candidates. All 5 carry
-`address: undefined` and `lifecycle: "documentation_required"`, because the repository documents no
-exact stable-yield vault/market address and **fabricates none**.
+| | 16H-G | after 16H-H |
+|---|---|---|
+| Candidates with a verified exact address | 0 of 5 | **1 of 5** (`kamino_steakhouse_usdc`) |
+| Kamino APY unit | assumed `fraction` | **proven `fraction`** from official evidence |
+| Protocol placeholders | 5 candidates, indistinguishable | **3 explicitly `unsupported_for_mvp`**; 2 active |
+| Approved products | 0 | **0** (unchanged — identity is not approval) |
+| Production card | none | **none** (unchanged) |
 
-Adapters bind source data to a product by **exact address only**. With no address there is nothing to
-bind to and no source query to make — so every candidate fails closed at `identity_validation` with
-`missing_product_address`, and the probe makes **zero network requests**.
-
-This is the correct fail-closed result, and it is the first task of Step 16H-H.
+Adapters still bind source data to a product by **exact address only**. A candidate without one fails
+closed at `identity_validation` with `missing_product_address` — that remains true for
+`kamino_usdc_lending`.
 
 ## Architecture
 
@@ -199,3 +202,153 @@ unapproved.
    (`refresh-sol-staking-market-data.mjs` → `publish-sol-staking-market-cache.mjs`). This step
    implements the contract and the fail-closed boundary and reports the dependency honestly rather than
    fabricating a client-side solution.
+
+---
+
+# 16H-H — Exact identity resolution & candidate cleanup
+
+Resolved the real production identities from **official sources only**, and cleaned the candidate set so
+a protocol-level placeholder can never again be mistaken for a real product.
+
+**No product was approved.** `approved` remains 0, production still returns `no_plan` and renders no card.
+
+## Official evidence used
+
+Source hierarchy applied: official documentation → **official product registry (API)** → official SDK.
+Nothing came from search snippets, community posts, aggregators, token lists, or names alone.
+
+- Official docs index: `https://kamino.com/docs/llms.txt`
+- Official API base (from the docs' own API reference): `https://api.kamino.finance`
+- Official product registry: `GET /kvaults/vaults` — documented at
+  `kamino.com/docs/build/api-reference/earn/vault-data/vaults-list`
+- Official markets endpoint: `GET /v2/kamino-market` — documented at
+  `kamino.com/docs/build/api-reference/borrow/market-data/markets-list`
+- Official APY guidance: `kamino.com/docs/build/earn/get-vault-apys`
+- Official SDK: `@kamino-finance/klend-sdk` v9.1.2 (installed) — ships **program IDs only**, no product
+  addresses. Product addresses are chain-resolved at runtime, which is why the registry had none.
+
+All checked **2026-07-16**.
+
+## Identity resolved: `kamino_steakhouse_usdc`
+
+| Field | Value | Evidence |
+|---|---|---|
+| Vault address | `HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E` | official `/kvaults/vaults` **and** the official docs' canonical `KaminoVault` SDK example — two independent sources |
+| On-chain name | `Steakhouse USDC` | `state.name` decoded from the official registry |
+| Deposit asset / mint | USDC / `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | `state.tokenMint` |
+| Share (receipt) mint | `7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS` | `state.sharesMint` — the 16F position identifier |
+| Product minimum | `state.minDepositAmount` = 100000 raw → **0.1 USDC** (6dp) | on-chain state |
+| Chain | solana_mainnet | official registry |
+
+The **address is the identity**; the name is only corroboration. Lifecycle is `identity_verified` —
+strictly weaker than `approved`.
+
+### The curation decision left for a human
+
+The official registry holds **159 vaults, 89 with the USDC mint**, of which **three** carry "Steakhouse":
+
+| Name | Address |
+|---|---|
+| `Steakhouse USDC` | `HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E` (bound) |
+| `Steakhouse High Yield USDC` | `BEEfo7xwgK2ZP13Pxo7qqTPzAteKJmXjVWtMWcXSvbn2` |
+| `Steakhouse USDC Testing` | `JDmkiqvtyAqAsqrLGDgVH2GesbRAAMJCoQtqiyWx82bF` |
+
+This entry binds the exact-name match. But choosing between "Steakhouse USDC" and "Steakhouse High Yield
+USDC" is a **product decision with materially different risk profiles** — not derivable from data, and
+explicitly not chosen by APY, TVL, or first-result. A human must decide in 16H-I.
+
+## APY unit — the 16H-G blocker, now PROVEN
+
+**Kamino returns a decimal FRACTION, and it is APY (compounding), not APR.**
+
+- Proof: the official docs' own display code — `(vault.apy7d * 100).toFixed(2)`. The `* 100` is the proof.
+- Corroboration: live official values, e.g. `apy7d: "0.040110766058785959014"` ≈ 4.01% — a plausible USDC
+  rate. Read as a percent it would be an implausible 0.04%. (Magnitude was **not** used to decide; it only
+  confirms the documented rule.)
+- Conversion: `pct = fraction × 100`, rounded to 6dp (kills the `0.0515*100 = 5.1499999999999995` artifact).
+- Guarded by fixtures against both the 100× and 0.01× errors.
+
+### Schema finding: rates are decimal STRINGS
+
+The live API returns rates as high-precision decimal **strings**, not numbers. The parser gained an
+explicit documented-decimal-string reader **for this source only**; a string still fails everywhere else,
+because elsewhere a string means the schema changed. `"5.2%"`, `""`, `"1e-2"`, `"1,000"` are all rejected.
+
+## Why Steakhouse is still blocked (primary: `blocked_freshness`)
+
+Verifying the source revealed three real gaps that no amount of adapter work can paper over:
+
+1. **No source timestamp.** `/metrics` returns 34 fields and **zero** time/slot/updated fields. The 16C
+   rule is that the source's own time is authoritative — with no timestamp, freshness cannot be evaluated,
+   so the adapter fails closed. Needs the SDK read's slot time or a documented API timestamp.
+2. **Net-vs-gross undeclared.** `/metrics` exposes 12 APY fields (`apy`, `apyTheoretical`, `apyActual`,
+   `apy24h/7d/30d/90d/180d/365d`, `apyFarmRewards`, `apyIncentives`, `apyReservesIncentives`) and declares
+   net-vs-gross on none. The documented **net** field is the SDK's `getAPYs().actualAPY.netAPY`, which
+   needs an RPC read. Mapping a `/metrics` field onto the 16C net contract is unproven → fails closed.
+3. **No capacity fields.** No cap/limit/paused field exists → capacity is `unknown`, never uncapped.
+
+Plus: no 16D risk review exists.
+
+## Identity NOT resolved: `kamino_usdc_lending`
+
+The product here is the **USDC reserve**, not the market. `GET /v2/kamino-market` returns 34 lending
+**markets** with addresses, but Kamino documents **no endpoint listing a market's reserves or their
+addresses**. Writing a market address into the product-identity field would put the wrong identifier
+there purely to satisfy the adapter — so `address` stays `undefined` and the status is `blocked_identity`.
+
+> Reserve ≠ lending market ≠ obligation account ≠ vault ≠ token mint. The adapter must never blur these.
+
+This candidate matters most long-term: lending is the only strategy type that is intrinsically
+**buffer-lane** eligible (16A) — but a buffer plan would also need the canonical buffer-yield minimum,
+which is still undefined.
+
+## Candidate cleanup
+
+| Candidate | Lifecycle | Reason |
+|---|---|---|
+| `kamino_steakhouse_usdc` | `identity_verified` | exact address proven; **not approved** |
+| `kamino_usdc_lending` | `documentation_required` | reserve address not officially documented |
+| `raydium_stable_usdc_strategy` | `unsupported_for_mvp` | Raydium's USDC venues are **trading pools**; a trading pair is not a deposit product. IL/depeg exposure isn't modelled by 16D or the 16H-B presentation, so it can't honestly be shown as "put excess USDC to work". |
+| `meteora_stable_usdc_strategy` | `unsupported_for_mvp` | Meteora's USDC venues are **dynamic LPs**; an LP position is not a simple USDC yield account. |
+| `hubble_usdc_strategy` | `unsupported_for_mvp` | **Product-model incompatibility**: a USDH CDP requires opening a debt position; Stable Yield models a direct deposit that earns without borrowing. |
+
+All three are **retained, not deleted**, for traceability, and are excluded from the active set by
+`isYieldStrategyExcluded` / `listActiveYieldStrategyCandidates`. New lifecycle states: `identity_verified`,
+`unsupported_for_mvp`, `archived`.
+
+> These are **product-model decisions**, not risk judgements. No risk score was created or altered, and
+> **no name-based penalty** was applied — Hubble is not "bad" or "unsafe" here, it simply offers no product
+> matching this contract. Each may be revisited on evidence.
+
+## Risk-review handoff (16D input, not a score)
+
+For `kamino_steakhouse_usdc` the reviewer now has: exact vault address, share mint, program ID
+(`KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd` from the official SDK), product type (managed vault),
+deposit asset + mint, product minimum, and fee fields exposed by the registry (`performanceFeeBps`,
+`managementFeeBps`). Still missing: audit references, admin/upgradeability model, oracle dependencies,
+strategy complexity, withdrawal restrictions, incident review, reviewer metadata, review date.
+
+**No risk score was generated, recalculated, or mutated.**
+
+## Position detection
+
+Exact matching on the vault address `HDsay…` and/or the share mint `7D8C…`. `wallet/kaminoVaults.ts`
+already reads vault-share balances keyed by exact vault address, read-only, via the official SDK — so
+detection is mechanically supported once the product is approved. Symbol-only/protocol-only matches stay
+rejected; multiple matches stay ambiguous; adapter failure never becomes a zero position.
+
+## Readiness matrix
+
+| Candidate | Active | Identity | Official source | APY field | APY unit | Freshness | Capacity | Deposit state | Bounds | Position | Risk | **Ready for approval review** | Primary blocker |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `kamino_steakhouse_usdc` | ✅ | ✅ verified | ✅ verified | ❌ net/gross undeclared | ✅ fraction | ❌ no timestamp | ❌ unknown | ❌ | ✅ min 0.1 USDC | ✅ | ❌ | **no** | `blocked_freshness` |
+| `kamino_usdc_lending` | ✅ | ❌ | ❌ | ❌ | — | — | ❌ | ❌ | ❌ | ❌ | ❌ | **no** | `blocked_identity` |
+| `raydium_stable_usdc_strategy` | ❌ | ❌ | — | — | — | — | — | — | — | — | ❌ | **no** | `unsupported_for_mvp` |
+| `meteora_stable_usdc_strategy` | ❌ | ❌ | — | — | — | — | — | — | — | — | ❌ | **no** | `unsupported_for_mvp` |
+| `hubble_usdc_strategy` | ❌ | ❌ | — | — | — | — | — | — | — | — | ❌ | **no** | `unsupported_for_mvp` |
+
+`identity resolved` ≠ `adapter implemented` ≠ `live source verified` ≠ `risk review complete` ≠ **approved**.
+`approved` is hard-coded false and unrepresentable in `StableYieldApprovalReadiness`.
+
+Product approval remains a **separate explicit step**, and the canonical buffer-yield minimum remains a
+**separate policy step**. Production renders no Stable Yield card until approval.

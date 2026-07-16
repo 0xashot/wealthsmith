@@ -4,18 +4,19 @@
  * will review.
  *
  * This file records what is PROVEN and what is MISSING. It approves nothing: `StableYieldApprovalReadiness`
- * has no `approved` member, and every manifest below is `blocked`.
+ * has no `approved` member, and no candidate here is approved.
  *
- * THE UNIVERSAL BLOCKER: every entry in `yieldStrategyRegistry.ts` carries `address: undefined` and
- * `lifecycle: "documentation_required"`. Adapters bind data to products by EXACT address only, so with
- * no documented address there is nothing to bind to and no source query to make. Every candidate
- * therefore fails closed at `identity_validation` with `missing_product_address`.
+ * STEP 16H-H UPDATE — the 16H-G universal blocker ("no candidate has an exact address") is partly
+ * resolved. `kamino_steakhouse_usdc` now has an exact address verified from two independent official
+ * sources, and the Kamino APY unit is proven. The candidate set was also cleaned up: three
+ * protocol-level placeholders are now explicitly `unsupported_for_mvp` rather than sitting
+ * indistinguishable from real products.
  *
- * This is not an adapter defect. Resolving it requires a human to document each product's exact
- * on-chain address from its official source — the first task of Step 16H-H.
+ * Identity verification is NOT approval. Every candidate remains ineligible, production still returns
+ * `no_plan`, and no Stable Yield card renders.
  */
 import { listYieldStrategies } from "./yieldStrategyRegistry";
-import type { StableYieldApprovalReadiness, StableYieldIdentityReason } from "./stableYieldProductionAdapterTypes";
+import type { StableYieldApprovalReadiness } from "./stableYieldProductionAdapterTypes";
 
 export const STABLE_YIELD_PRODUCTION_EVIDENCE_EXISTS = true;
 export const STABLE_YIELD_APPROVAL_READINESS_MATRIX_EXISTS = true;
@@ -79,16 +80,29 @@ export interface StableYieldCandidateEvidence {
 
   // ---- Verdict ----
   readiness: StableYieldApprovalReadiness;
-  primaryBlocker: StableYieldIdentityReason | "risk_review_missing" | "source_schema_unverified" | "product_not_a_yield_venue" | "no_official_product_documented";
+  primaryBlocker: StableYieldEvidencePrimaryStatus;
   blockers: string[];
   notes: string[];
 }
 
 /**
- * Shared blocker set. Every candidate carries `missing_product_address`; the rest are candidate-specific
- * and derived from the registry's own documented notes — nothing here is invented.
+ * Step 16H-H — the deterministic primary status of a candidate's evidence. Exactly one applies, even
+ * when several blockers exist. There is deliberately no `approved` member: this file records evidence,
+ * and approval is a separate explicit reviewed decision.
  */
-const NO_ADDRESS = "missing_product_address: the registry documents no exact on-chain product address; adapters match by exact address only, so no source query can be bound to this product";
+export type StableYieldEvidencePrimaryStatus =
+  | "ready_for_approval_review"
+  | "blocked_identity"
+  | "blocked_source_schema"
+  | "blocked_apy_unit"
+  | "blocked_freshness"
+  | "blocked_capacity"
+  | "blocked_risk_review"
+  | "blocked_position_detection"
+  | "unsupported_for_mvp"
+  | "archived";
+
+/** Shared blocker text. Candidate-specific blockers are derived from official evidence, never invented. */
 const NO_RISK = "risk_review_missing: no complete reviewed 16D risk record exists for this product";
 
 const MANIFESTS: StableYieldCandidateEvidence[] = [
@@ -98,42 +112,49 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     protocolId: "kamino",
     chain: "solana_mainnet",
     asset: "USDC",
-    productAddress: undefined,
-    positionIdentifier: undefined,
-    apySource: "Kamino official SDK (@kamino-finance/klend-sdk) vault state",
-    apySourceRef: "klend-sdk:KaminoVault.getState",
-    apySelectedField: "vault yield calc net APY (single field; never averaged, never max-of, never APR-derived)",
-    apyUnitInterpretation: "unverified",
-    apySourceTimestampField: "vault state read slot time (authoritative; local fetch time is NOT)",
-    apyFreshnessPolicy: "16C canonical max age (1h); source time authoritative; stale/future fails closed",
-    apyAdapterState: "adapter_implemented_source_unverified",
-    capacitySource: "Kamino vault state (explicit cap + deposited fields, when exposed)",
-    capacityFieldOrFormula: "remaining = depositCapUsd - depositedUsd, same product, same unit; absent cap => unknown (never verified_uncapped)",
-    capacityAdapterState: "adapter_implemented_source_unverified",
-    productMinimumUsd: undefined,
+    // 16H-H: VERIFIED 2026-07-16 from two independent official sources (see notes).
+    productAddress: "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E",
+    positionIdentifier: "7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS",
+    apySource: "Kamino official API (documented) / official klend-sdk",
+    apySourceRef: "GET https://api.kamino.finance/kvaults/vaults/{pubkey}/metrics AND klend-sdk:vault.getAPYs()",
+    apySelectedField: "UNRESOLVED for the API path: /metrics exposes apy, apyTheoretical, apyActual, apy24h/7d/30d/90d/180d/365d and declares net-vs-gross on none of them. The documented NET field is the SDK's getAPYs().actualAPY.netAPY. Mapping a /metrics field onto the 16C net contract is NOT proven, so it fails closed.",
+    apyUnitInterpretation: "fraction",
+    apySourceTimestampField: "NONE - /metrics returns no timestamp field (34 fields checked; zero time/slot/updated fields)",
+    apyFreshnessPolicy: "16C canonical max age (1h), source time authoritative - CANNOT be applied: this endpoint supplies no source timestamp",
+    apyAdapterState: "adapter_implemented_source_verified",
+    capacitySource: "Kamino official API /metrics - checked; exposes NO cap/limit/paused/full field",
+    capacityFieldOrFormula: "remaining = cap - deposited (same product, same unit). No cap field exists on the verified endpoint => capacity stays `unknown`; absence is never verified_uncapped.",
+    capacityAdapterState: "adapter_implemented_source_verified",
+    // On-chain state.minDepositAmount = 100000 raw; USDC is 6dp => 0.1 USDC. A protocol-enforced product
+    // minimum, entirely distinct from WealthSmith's $250 excess trigger.
+    productMinimumUsd: 0.1,
     productMaximumUsd: undefined,
-    constraintsState: "blocked",
+    constraintsState: "adapter_implemented_source_verified",
     depositAvailabilityState: "blocked",
     withdrawalModel: undefined,
     exitEvidenceState: "blocked",
     riskReviewState: "blocked",
     riskReviewDate: undefined,
-    missingRiskItems: ["protocol_review_status", "product_review_status", "vault_identity", "audit_evidence", "admin_upgradeability", "oracle_exposure", "withdrawal_restrictions", "review_date", "reviewer_metadata"],
-    positionDetectionState: "adapter_implemented_source_unverified",
-    positionMatchMechanism: "Kamino vault share balance keyed by EXACT vault address (wallet/kaminoVaults.ts reads this read-only via the official SDK); requires the documented address to match against",
+    missingRiskItems: ["protocol_review_status", "product_review_status", "audit_evidence", "admin_upgradeability", "oracle_exposure", "withdrawal_restrictions", "review_date", "reviewer_metadata"],
+    positionDetectionState: "adapter_implemented_source_verified",
+    positionMatchMechanism: "EXACT vault address HDsay... and/or the exact vault share (receipt) mint 7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS. wallet/kaminoVaults.ts already reads vault-share balances keyed by exact vault address, read-only, via the official SDK.",
     readiness: "blocked",
-    primaryBlocker: "missing_product_address",
+    primaryBlocker: "blocked_freshness",
     blockers: [
-      NO_ADDRESS,
-      "source_schema_unverified: the klend-sdk net-APY field's unit (fraction vs percent) is documented by assumption only and is not verified against a live response",
+      "blocked_freshness (PRIMARY): the verified official /metrics endpoint returns NO source timestamp, so the 16C freshness rule (source time is authoritative) cannot be evaluated and the adapter fails closed. Needs a timestamped source - the SDK read's slot time, or a documented API timestamp field.",
+      "blocked_source_schema: /metrics exposes 12 APY fields and declares net-vs-gross on none. The documented net field is the SDK's getAPYs().actualAPY.netAPY, which needs an RPC read rather than this endpoint.",
+      "blocked_capacity: no cap/limit/paused field on the verified endpoint => capacity is `unknown`, never uncapped.",
       NO_RISK,
-      "no product minimum/maximum evidence",
-      "no withdrawal/exit evidence",
+      "curation: three 'Steakhouse' USDC vaults exist - WealthSmith must choose which is the intended product (see notes).",
+      "no withdrawal/exit or fee evidence collected",
     ],
     notes: [
-      "The registry documents the NAME 'Steakhouse USDC' (from wallet/kaminoVaults.ts) but a name is not an identity: names are non-unique and mutable on-chain, so matching by name is explicitly rejected.",
-      "wallet/kaminoVaults.ts resolves vault addresses only via getUserSharesBalanceAllVaults(owner) — that is OWNER-scoped position detection, not product discovery. It cannot supply a canonical product address for an unheld product.",
-      "Per Step 16A/16B this product stays excess-lane only; nothing here changes that or grants approval.",
+      "IDENTITY VERIFIED 2026-07-16 from two independent official sources: (1) Kamino's official product registry `GET https://api.kamino.finance/kvaults/vaults` returns a vault at HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E whose on-chain state.name decodes to exactly 'Steakhouse USDC' and whose state.tokenMint is the canonical USDC mint; (2) Kamino's official documentation uses that same address as its canonical KaminoVault SDK example. The ADDRESS is the identity; the name is only corroboration.",
+      "CURATION DECISION FOR THE REVIEWER: the official registry holds 159 vaults, 89 with the USDC mint, of which THREE carry 'Steakhouse' in the name - 'Steakhouse USDC' (HDsay..., bound here), 'Steakhouse High Yield USDC' (BEEfo7xwgK2ZP13Pxo7qqTPzAteKJmXjVWtMWcXSvbn2) and 'Steakhouse USDC Testing' (JDmkiqvtyAqAsqrLGDgVH2GesbRAAMJCoQtqiyWx82bF). This entry binds the exact-name match, but choosing between 'Steakhouse USDC' and 'Steakhouse High Yield USDC' is a product decision with materially different risk profiles. It is not derivable from data and must be made by a human.",
+      "APY UNIT RESOLVED (this was the 16H-G blocker): Kamino returns a decimal FRACTION, and it is APY not APR. Proven by the official docs' own display code `(vault.apy7d * 100).toFixed(2)` - the *100 is the proof - and corroborated by live values (apy7d 0.0401 ~ 4.01%, a plausible USDC rate; read as percent it would be an implausible 0.04%).",
+      "SCHEMA FINDING: the live API returns rates as high-precision decimal STRINGS (e.g. '0.040110766058785959014'), not numbers. The parser gained an explicit documented-decimal-string reader for THIS source only; strings remain rejected everywhere else.",
+      "wallet/kaminoVaults.ts resolves vault addresses only via getUserSharesBalanceAllVaults(owner) - OWNER-scoped position detection, not product discovery. The address above came from the official product registry instead.",
+      "Per Step 16A/16B this product stays excess-lane only. Identity verification grants NO eligibility and NO approval.",
     ],
   },
   {
@@ -161,8 +182,11 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     positionDetectionState: "no_adapter",
     positionMatchMechanism: undefined,
     readiness: "blocked",
-    primaryBlocker: "missing_product_address",
-    blockers: [NO_ADDRESS, "no exact Kamino USDC reserve/market address documented", NO_RISK],
+    primaryBlocker: "blocked_identity",
+    blockers: [
+      "blocked_identity (PRIMARY): the product here is the USDC RESERVE, and no official endpoint lists a market's reserves or their addresses. Kamino's documented markets endpoint (GET /v2/kamino-market, checked 2026-07-16) returns 34 lending MARKETS with addresses only. Writing a market address into the product-identity field would place the wrong identifier there purely to satisfy the adapter, so the address stays undefined.",
+      NO_RISK,
+    ],
     notes: [
       "This is the ONLY current candidate whose strategy type (lending) is intrinsically buffer-lane eligible per Step 16A — which makes its risk review the highest-value 16H-H work, but it is equally blocked on identity.",
       "A buffer-lane plan would additionally require the canonical buffer-yield minimum, which is explicitly NOT defined in this step.",
@@ -185,14 +209,16 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     riskReviewState: "blocked",
     missingRiskItems: ["protocol_review_status", "product_review_status", "product_identity", "audit_evidence", "review_date", "reviewer_metadata"],
     positionDetectionState: "no_adapter",
-    readiness: "blocked",
-    primaryBlocker: "no_official_product_documented",
+    readiness: "unsupported",
+    primaryBlocker: "unsupported_for_mvp",
     blockers: [
-      "no_official_product_documented: the registry records Raydium as an in-scope protocol but documents no exact stable-USDC product, official URL, or address — the entry is an explicit placeholder",
-      NO_ADDRESS,
-      NO_RISK,
+      "unsupported_for_mvp (PRIMARY): Raydium's USDC venues are trading pools. A USDC trading pair is not a USDC deposit product: modelling one as Stable Yield would carry impermanent-loss and depeg exposure that the 16D risk contract and the 16H-B presentation do not model, so it could not be described honestly as 'put excess USDC to work'.",
+      "no exact product, official URL, or address is documented - the entry describes a PROTOCOL and a strategy category, not a product",
     ],
-    notes: ["A protocol being in scope is not a product. No adapter is written for a product that does not yet exist in the registry as a concrete, identified thing."],
+    notes: [
+      "A protocol being in scope is not a product. No adapter is written for a product that does not exist in the registry as a concrete, identified thing.",
+      "PRODUCT-MODEL decision, not a risk judgement about Raydium and not a name-based penalty. Retained (not deleted) for traceability; revisit on evidence if a concrete Raydium USDC deposit product is identified.",
+    ],
   },
   {
     manifestVersion: STABLE_YIELD_EVIDENCE_MANIFEST_VERSION,
@@ -211,14 +237,16 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     riskReviewState: "blocked",
     missingRiskItems: ["protocol_review_status", "product_review_status", "product_identity", "audit_evidence", "review_date", "reviewer_metadata"],
     positionDetectionState: "no_adapter",
-    readiness: "blocked",
-    primaryBlocker: "no_official_product_documented",
+    readiness: "unsupported",
+    primaryBlocker: "unsupported_for_mvp",
     blockers: [
-      "no_official_product_documented: the registry records Meteora as in-scope but documents no exact stable-USDC product, official URL, or address — explicit placeholder",
-      NO_ADDRESS,
-      NO_RISK,
+      "unsupported_for_mvp (PRIMARY): Meteora's USDC venues are dynamic liquidity pools. A dynamic LP position is not a simple USDC yield account - its impermanent-loss, rebalancing and depeg exposure are not modelled by the 16D risk contract or the 16H-B presentation.",
+      "no exact product, official URL, or address is documented - a PROTOCOL and strategy category, not a product",
     ],
-    notes: ["Same as Raydium: in-scope protocol, no identified product."],
+    notes: [
+      "Same as Raydium: in-scope protocol, no identified product.",
+      "PRODUCT-MODEL decision, not a risk judgement about Meteora and not a name-based penalty. Retained for traceability.",
+    ],
   },
   {
     manifestVersion: STABLE_YIELD_EVIDENCE_MANIFEST_VERSION,
@@ -238,10 +266,9 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     missingRiskItems: ["product_review_status", "product_identity", "review_date", "reviewer_metadata"],
     positionDetectionState: "no_adapter",
     readiness: "unsupported",
-    primaryBlocker: "product_not_a_yield_venue",
+    primaryBlocker: "unsupported_for_mvp",
     blockers: [
-      "product_not_a_yield_venue: the registry documents Hubble as a USDH CDP, not a deploy-into USDC yield venue — there is no USDC deposit product to adapt",
-      NO_ADDRESS,
+      "unsupported_for_mvp (PRIMARY): the registry documents Hubble as a USDH CDP. A CDP requires the user to open a debt position and mint USDH; the Stable Yield contract models a direct USDC deposit that earns yield WITHOUT borrowing. The user action does not match, so no exact product satisfies the contract.",
     ],
     notes: [
       "Marked `unsupported` rather than `blocked`: the other candidates are blocked on MISSING evidence, whereas this one appears to be a category mismatch. That is a documentation-backed observation, not a risk judgement.",

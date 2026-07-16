@@ -42,11 +42,23 @@ const REGISTRY: YieldStrategyRegistryEntry[] = [
     principalAsset: "USDC",
     supportedLane: "excess_usdc_yield",
     riskLane: "excess_only",
-    lifecycle: "documentation_required",
+    // Step 16H-H — exact identity PROVEN from official sources; still NOT approved and still ineligible.
+    lifecycle: "identity_verified",
     officialUrl: KAMINO_URL,
-    address: undefined,
+    documentationUrl: "https://kamino.com/docs/build/api-reference/earn/vault-data/vaults-list",
+    // The exact on-chain vault address, verified 2026-07-16 against TWO independent official sources:
+    //  1. Kamino's official product registry `GET https://api.kamino.finance/kvaults/vaults` returns a
+    //     vault at this address whose on-chain `state.name` decodes to exactly "Steakhouse USDC" and
+    //     whose `state.tokenMint` is the canonical USDC mint.
+    //  2. Kamino's official docs use this same address as the canonical `KaminoVault` SDK example.
+    // It is NOT derived from the name: the name is corroborating evidence, the address is the identity.
+    address: "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E",
     ...OFF,
-    notes: ["Product name documented in wallet/kaminoVaults.ts ('Steakhouse USDC'). The exact on-chain vault address is resolved via the Kamino SDK at runtime, not documented as a static value — so it stays undefined and the product is documentation_required until an exact address is documented."],
+    notes: [
+      "16H-H: identity verified from the official Kamino API (/kvaults/vaults) + the official docs SDK example. Vault share (receipt) mint for 16F position detection: 7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS. On-chain state.minDepositAmount = 100000 raw (USDC 6dp => 0.1 USDC).",
+      "CURATION DECISION OPEN (16H-I): the official registry contains THREE USDC vaults with 'Steakhouse' in the name — 'Steakhouse USDC' (this one), 'Steakhouse High Yield USDC' (BEEfo7xwgK2ZP13Pxo7qqTPzAteKJmXjVWtMWcXSvbn2) and 'Steakhouse USDC Testing' (JDmkiqvtyAqAsqrLGDgVH2GesbRAAMJCoQtqiyWx82bF). This entry binds the exact-name match, but WHICH vault WealthSmith intends is a human product decision with different risk profiles — it is not derivable here.",
+      "Still blocked for approval: the /metrics endpoint exposes no source timestamp (freshness cannot be established), no capacity fields, and does not declare net-vs-gross on its `apy` field. No risk review exists.",
+    ],
   },
   {
     schemaVersion: "1.0.0",
@@ -63,7 +75,10 @@ const REGISTRY: YieldStrategyRegistryEntry[] = [
     officialUrl: KAMINO_URL,
     address: undefined,
     ...OFF,
-    notes: ["Kamino supports a USDC lending market (protocolRegistry.ts supportedAssets includes USDC), but no exact reserve/market address is documented — undefined; documentation_required. Lending is intrinsically buffer-eligible per Step 16A."],
+    notes: [
+      "Kamino supports a USDC lending market (protocolRegistry.ts supportedAssets includes USDC), but no exact reserve address is documented — undefined; documentation_required. Lending is intrinsically buffer-eligible per Step 16A.",
+      "16H-H: the official markets endpoint (GET /v2/kamino-market, checked 2026-07-16) returns 34 lending MARKETS with their addresses, but Kamino documents NO endpoint that lists a market's reserves or their addresses. The product here is the USDC RESERVE, not the market. Writing a market address into `address` would place the wrong identifier in the product-identity field purely to satisfy the adapter, so this stays undefined. Blocker: resolve the exact USDC reserve address from an official source.",
+    ],
   },
   {
     schemaVersion: "1.0.0",
@@ -76,11 +91,15 @@ const REGISTRY: YieldStrategyRegistryEntry[] = [
     principalAsset: "USDC",
     supportedLane: "excess_usdc_yield",
     riskLane: "excess_only",
-    lifecycle: "documentation_required",
+    lifecycle: "unsupported_for_mvp",
     officialUrl: undefined,
     address: undefined,
     ...OFF,
-    notes: ["Raydium is a documented candidate (protocolRegistry.ts) but no exact stable-USDC product, manage URL, or address is documented — placeholder; documentation_required."],
+    notes: [
+      "Raydium is a documented candidate (protocolRegistry.ts) but no exact stable-USDC product, manage URL, or address is documented — this entry describes a PROTOCOL and a strategy category, not a product.",
+      "16H-H decision: unsupported_for_mvp. Raydium's USDC venues are trading pools; a USDC trading pair is not a USDC deposit product. Modelling one as Stable Yield would require impermanent-loss and depeg exposure that the 16D risk contract and the Stable Yield presentation do not model, so it cannot be represented honestly to a user as 'put excess USDC to work'. Retained (not deleted) for traceability.",
+      "This is a product-model decision, NOT a risk judgement about Raydium and NOT a name-based penalty. If a concrete, reviewable Raydium USDC deposit product is identified later, this may be revisited on evidence.",
+    ],
   },
   {
     schemaVersion: "1.0.0",
@@ -93,11 +112,15 @@ const REGISTRY: YieldStrategyRegistryEntry[] = [
     principalAsset: "USDC",
     supportedLane: "excess_usdc_yield",
     riskLane: "excess_only",
-    lifecycle: "documentation_required",
+    lifecycle: "unsupported_for_mvp",
     officialUrl: undefined,
     address: undefined,
     ...OFF,
-    notes: ["Meteora is a documented candidate (protocolRegistry.ts) but no exact stable-USDC product, manage URL, or address is documented — placeholder; documentation_required."],
+    notes: [
+      "Meteora is a documented candidate (protocolRegistry.ts) but no exact stable-USDC product, manage URL, or address is documented — a PROTOCOL and strategy category, not a product.",
+      "16H-H decision: unsupported_for_mvp. Meteora's USDC venues are dynamic liquidity pools; a dynamic LP position is not a simple USDC yield account. Its impermanent-loss, rebalancing and depeg exposure are not modelled by the 16D risk contract or the Stable Yield presentation. Retained for traceability.",
+      "Product-model decision only — not a risk judgement about Meteora and not a name-based penalty.",
+    ],
   },
   {
     schemaVersion: "1.0.0",
@@ -110,11 +133,15 @@ const REGISTRY: YieldStrategyRegistryEntry[] = [
     principalAsset: "USDC",
     supportedLane: "excess_usdc_yield",
     riskLane: "excess_only",
-    lifecycle: "documentation_required",
+    lifecycle: "unsupported_for_mvp",
     officialUrl: undefined,
     address: undefined,
     ...OFF,
-    notes: ["Hubble is within the documented protocol scope but the repo notes it is a USDH CDP, not currently a deploy-into USDC yield venue. No exact product or address is documented — placeholder; documentation_required."],
+    notes: [
+      "Hubble is within the documented protocol scope but the repo documents it as a USDH CDP, not a deploy-into USDC yield venue. No exact product or address is documented.",
+      "16H-H decision: unsupported_for_mvp on PRODUCT-MODEL incompatibility. A CDP requires the user to open a debt position and mint USDH; the Stable Yield contract models a direct USDC deposit that earns yield without borrowing. The user action does not match, so no exact product satisfies the contract.",
+      "Explicitly: this is not a statement that Hubble is bad or unsafe, no risk score is assigned or altered, and no name-based penalty is applied (16E scoring is untouched). If Hubble offers a direct USDC deposit product later, this may be revisited on evidence.",
+    ],
   },
 ];
 
@@ -144,7 +171,24 @@ export function getApprovedYieldStrategies(): YieldStrategyRegistryEntry[] {
 /* ------------------------------------------------------------------ *
  * Validation (fails closed).
  * ------------------------------------------------------------------ */
-const LIFECYCLES: YieldStrategyLifecycle[] = ["approved", "review", "documentation_required", "deprecated", "disabled", "future"];
+const LIFECYCLES: YieldStrategyLifecycle[] = ["approved", "review", "identity_verified", "documentation_required", "unsupported_for_mvp", "archived", "deprecated", "disabled", "future"];
+
+/**
+ * Step 16H-H — lifecycle states that must never reach an adapter, comparison, or planning. `approved`
+ * is the ONLY state that may; these are listed explicitly so a reader sees the exclusion, not an
+ * implicit `!== "approved"` scattered across call sites.
+ */
+const INELIGIBLE_LIFECYCLES: YieldStrategyLifecycle[] = ["unsupported_for_mvp", "archived", "deprecated", "disabled"];
+
+/** True when a candidate is excluded from the ACTIVE production set (adapters/comparison/planning). */
+export function isYieldStrategyExcluded(entry: YieldStrategyRegistryEntry): boolean {
+  return INELIGIBLE_LIFECYCLES.includes(entry.lifecycle);
+}
+
+/** The ACTIVE production candidate set — placeholders/unsupported/archived removed. Never approved-only. */
+export function listActiveYieldStrategyCandidates(): YieldStrategyRegistryEntry[] {
+  return listYieldStrategies().filter((e) => !isYieldStrategyExcluded(e));
+}
 const STRATEGY_TYPES = ["lending", "managed_vault", "staking_like_vault", "stable_liquidity_strategy", "future_other"];
 const RISK_LANES = ["buffer_eligible", "excess_only", "unsupported"];
 const LANES = ["safety_buffer_yield", "excess_usdc_yield"];

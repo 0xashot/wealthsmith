@@ -1039,3 +1039,28 @@ minted from a live observation.
 **Infrastructure blocker:** no backend/refresh job exists to deliver `browserFetched: false` normalized
 Stable Yield data to runtime. The precedent is the local Node job + published cache used for SOL staking
 (`refresh-sol-staking-market-data.mjs` → `publish-sol-staking-market-cache.mjs`).
+
+## 16H-H — resolved Stable Yield product identities
+
+Identity resolution used **official sources only** (checked 2026-07-16), per the documented hierarchy.
+Full evidence: [stableYieldProductionAdapters.md](./stableYieldProductionAdapters.md#16h-h--exact-identity-resolution--candidate-cleanup).
+
+| Source | Tier | Used for |
+|---|---|---|
+| `https://kamino.com/docs/llms.txt` + `/docs/build/api-reference/introduction` | official documentation | discovering the documented API surface (never guessed endpoints) |
+| `GET https://api.kamino.finance/kvaults/vaults` | official product registry | the exact vault address, on-chain name, `tokenMint`, `sharesMint`, `minDepositAmount` |
+| `GET https://api.kamino.finance/kvaults/vaults/{pubkey}/metrics` | official API | APY fields — **no timestamp, no capacity fields** (both now documented blockers) |
+| `kamino.com/docs/build/earn/get-vault-apys` | official documentation | **proof** the APY unit is a decimal fraction and is APY not APR |
+| `GET https://api.kamino.finance/v2/kamino-market` | official API | 34 lending **markets**; Kamino documents **no** reserve-listing endpoint |
+| `@kamino-finance/klend-sdk` v9.1.2 | official SDK | program IDs only — ships **no** product addresses |
+
+**Resolved:** `kamino_steakhouse_usdc` → `HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E` (shares mint
+`7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS`), corroborated by the official docs' `KaminoVault` example
+using the same address. Lifecycle `identity_verified` — **not approved**, still ineligible, no card.
+
+**Unresolved:** `kamino_usdc_lending` — the product is the USDC **reserve**; no official endpoint lists a
+market's reserves, and a market address was never substituted for one.
+
+**Unsupported for MVP:** Raydium (trading pools ≠ deposit product), Meteora (dynamic LPs ≠ USDC yield
+account), Hubble (USDH CDP requires a debt position). Product-model decisions; no risk score altered; no
+name-based penalty. Retained for traceability, excluded from the active candidate set.

@@ -33,7 +33,7 @@ function tally(entries: YieldStrategyRegistryEntry[], key: (e: YieldStrategyRegi
 /** Deterministic inventory counts of the registry. No comparison, no recommendation. */
 export function getYieldStrategyRegistryDiagnostics(): YieldStrategyRegistryDiagnostics {
   const entries = listYieldStrategies();
-  const byLifecycle: Record<YieldStrategyLifecycle, number> = { approved: 0, review: 0, documentation_required: 0, deprecated: 0, disabled: 0, future: 0 };
+  const byLifecycle: Record<YieldStrategyLifecycle, number> = { approved: 0, review: 0, identity_verified: 0, documentation_required: 0, unsupported_for_mvp: 0, archived: 0, deprecated: 0, disabled: 0, future: 0 };
   for (const e of entries) byLifecycle[e.lifecycle] += 1;
   return {
     registeredProducts: entries.length,

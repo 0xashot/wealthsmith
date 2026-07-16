@@ -213,6 +213,16 @@ export const STABLE_YIELD_PRODUCTION_ADAPTER_DIAGNOSTICS_EXIST = true;
 export const STABLE_YIELD_PRODUCTION_ORCHESTRATION_CONSUMES_ADAPTERS = true;
 export const STABLE_YIELD_PRODUCTION_SOURCE_PROBE_EXISTS = true;
 // Hard false until an explicit, evidence-backed review says otherwise.
+// Step 16H-H — exact product identity resolution + candidate-set cleanup. `kamino_steakhouse_usdc` now
+// has an exact address verified from two independent official sources, and the Kamino APY unit is proven
+// (decimal fraction). Three protocol-level placeholders are explicitly `unsupported_for_mvp`.
+// Identity resolution is NOT approval: every candidate remains ineligible and production renders no card.
+export const STABLE_YIELD_PRODUCTION_IDENTITY_RESOLUTION_EXISTS = true;
+export const STABLE_YIELD_PRODUCTION_CANDIDATE_LIFECYCLE_CLEANUP_EXISTS = true;
+export const STABLE_YIELD_PRODUCTION_OFFICIAL_IDENTITY_EVIDENCE_EXISTS = true;
+export const STABLE_YIELD_PRODUCTION_APY_UNIT_VERIFIED = true;
+export const STABLE_YIELD_PRODUCTION_RISK_REVIEW_HANDOFF_EXISTS = true;
+export const STABLE_YIELD_UNSUPPORTED_CANDIDATE_CLASSIFICATION_EXISTS = true;
 export const STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS = false;
 export const STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST = false;
 export const STABLE_YIELD_PRODUCTION_CARD_AVAILABLE = false;

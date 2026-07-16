@@ -1934,3 +1934,43 @@ false and unrepresentable in the readiness type. Flags true: `STABLE_YIELD_PRODU
 `_SOURCE_PROBE_EXISTS`, `STABLE_YIELD_APPROVAL_READINESS_MATRIX_EXISTS`. False:
 `_PRODUCT_APPROVAL_EXISTS`, `_APPROVED_PRODUCTS_EXIST`, `_CARD_AVAILABLE`,
 `STABLE_YIELD_BUFFER_YIELD_MINIMUM_EXISTS`, `STABLE_YIELD_QDRANT_INTEGRATION_EXISTS`.
+
+### Step 16H-H — exact product identity resolution + candidate cleanup
+
+Resolved the real production identities from **official sources only** and cleaned up the candidate set.
+Full evidence: [stableYieldProductionAdapters.md](./stableYieldProductionAdapters.md#16h-h--exact-identity-resolution--candidate-cleanup).
+**No product was approved**; production still returns `no_plan` and renders no card; Demo is unchanged.
+
+**One identity resolved.** `kamino_steakhouse_usdc` → vault `HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E`,
+verified from two independent official sources (Kamino's official product registry `GET /kvaults/vaults`,
+whose on-chain `state.name` decodes to exactly "Steakhouse USDC" with the canonical USDC mint; and the
+official docs' canonical `KaminoVault` SDK example, which uses the same address). Share mint
+`7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS` (the 16F position identifier); product minimum 0.1 USDC
+from on-chain `state.minDepositAmount`. Lifecycle `identity_verified` — strictly weaker than `approved`.
+
+**The APY unit blocker from 16H-G is proven, not assumed:** Kamino returns a decimal **fraction**, and it
+is APY not APR — proven by the official docs' own display code `(vault.apy7d * 100).toFixed(2)`.
+A schema finding came with it: the live API returns rates as high-precision decimal **strings**, so the
+parser gained a documented-decimal-string reader for that source only.
+
+**Still blocked** (primary `blocked_freshness`): the official `/metrics` endpoint returns **no timestamp**
+(so 16C freshness, which treats source time as authoritative, cannot be evaluated), declares net-vs-gross
+on none of its 12 APY fields, and exposes no capacity field. No risk review exists. And a **human curation
+decision** remains: three USDC vaults carry "Steakhouse" — picking between "Steakhouse USDC" and
+"Steakhouse High Yield USDC" is a product decision with different risk profiles, not a derivable one.
+
+`kamino_usdc_lending` stays `documentation_required`: the product is the USDC **reserve**, and no official
+endpoint lists a market's reserves. A market address was **not** substituted into the product-identity field.
+
+**Cleanup.** Raydium and Meteora are `unsupported_for_mvp` — their USDC venues are trading/LP pools, not
+deposit products, carrying IL/depeg exposure that 16D and the 16H-B presentation do not model. Hubble is
+`unsupported_for_mvp` on product-model grounds — a USDH CDP requires opening a debt position, while Stable
+Yield models a direct deposit that earns without borrowing. All three are **retained for traceability**,
+excluded via `isYieldStrategyExcluded`/`listActiveYieldStrategyCandidates`. These are product-model
+decisions, **not** risk judgements: no risk score was created or altered and no name-based penalty applied.
+
+New lifecycle states: `identity_verified`, `unsupported_for_mvp`, `archived`. Flags true:
+`STABLE_YIELD_PRODUCTION_IDENTITY_RESOLUTION_EXISTS`, `_CANDIDATE_LIFECYCLE_CLEANUP_EXISTS`,
+`_OFFICIAL_IDENTITY_EVIDENCE_EXISTS`, `_APY_UNIT_VERIFIED`, `_RISK_REVIEW_HANDOFF_EXISTS`,
+`STABLE_YIELD_UNSUPPORTED_CANDIDATE_CLASSIFICATION_EXISTS`. Unchanged false: product approval, approved
+products, card available, buffer-yield minimum, execution, Smith AI, Qdrant.

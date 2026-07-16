@@ -21,7 +21,30 @@ export const YIELD_STRATEGY_REGISTRY_POLICY_ID = "yield_strategy_registry_v1";
  * candidates in Step 16C. `documentation_required` marks a product whose exact address / full
  * documentation is not yet available (never fabricated).
  */
-export type YieldStrategyLifecycle = "approved" | "review" | "documentation_required" | "deprecated" | "disabled" | "future";
+/**
+ * Step 16H-H added three states so a protocol-level PLACEHOLDER is never indistinguishable from a real
+ * product, and so a product whose exact identity is now proven is distinguishable from one that is not:
+ *
+ *  - `identity_verified`   — the exact on-chain product address is proven from an official source. This
+ *                            is strictly WEAKER than `approved`: identity resolution is not approval,
+ *                            and an `identity_verified` product is still ineligible for planning.
+ *  - `unsupported_for_mvp` — a real evidence-backed decision that this candidate cannot be modelled as a
+ *                            WealthSmith Stable Yield product (wrong product model, or no exact product
+ *                            exists). Not a risk judgement and never a name-based penalty.
+ *  - `archived`            — retained for traceability only; never enters adapters or comparison.
+ *
+ * Only `approved` may ever reach planning, and that is set only by an explicit reviewed approval step.
+ */
+export type YieldStrategyLifecycle =
+  | "approved"
+  | "review"
+  | "identity_verified"
+  | "documentation_required"
+  | "unsupported_for_mvp"
+  | "archived"
+  | "deprecated"
+  | "disabled"
+  | "future";
 
 /** Principal asset held by the strategy. MVP: USDC. The union is open for future assets. */
 export type YieldStrategyPrincipalAsset = "USDC";

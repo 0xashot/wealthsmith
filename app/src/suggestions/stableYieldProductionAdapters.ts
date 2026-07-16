@@ -34,7 +34,13 @@ const KAMINO_ADAPTER_ID = "kamino_vault_state_v1";
 const KAMINO_ADAPTER_VERSION = "1.0.0";
 const KAMINO_SOURCE_NAME = "Kamino official SDK (klend-sdk) vault state";
 
-/** Kamino's SDK vault yield calc returns a decimal fraction. UNVERIFIED live — see evidence manifest. */
+/**
+ * Step 16H-H — VERIFIED (2026-07-16), no longer an assumption. Kamino expresses vault APY as a decimal
+ * FRACTION (0.0515 === 5.15%). Proven by the official docs' own display code `(vault.apy7d * 100).toFixed(2)`
+ * — the `* 100` is the proof — and corroborated by live official values (`apy7d: "0.0401…"` ≈ 4.01%,
+ * a plausible USDC rate; read as percent it would be an implausible 0.04%). Kamino documents these as
+ * APY (continuously compounding), not APR. This resolves the Step 16H-G `blocked_apy_unit` blocker.
+ */
 const KAMINO_RATE_UNIT: StableYieldRateUnit = "fraction";
 
 /** Canonical max age for production market data. Mirrors the 16C freshness contract — no new constant. */

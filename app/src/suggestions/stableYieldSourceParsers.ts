@@ -25,6 +25,37 @@ export type StableYieldParseResult<T> = { ok: true; value: T } | StableYieldPars
 /** How a source expresses a rate. Declared per source from its documentation — never inferred. */
 export type StableYieldRateUnit = "fraction" | "percent";
 
+/**
+ * Step 16H-H — the Kamino API's DOCUMENTED numeric encoding. Verified 2026-07-16 against the live
+ * official endpoint `GET https://api.kamino.finance/kvaults/vaults/{pubkey}/metrics`, which returns
+ * rates as high-precision decimal STRINGS (e.g. `apy7d: "0.040110766058785959014"`), not numbers.
+ *
+ * This is the narrow, source-specific exception the general rule allows: `readFiniteNumber` still
+ * rejects strings everywhere else, because elsewhere a string means the schema changed. Here the string
+ * IS the schema, so it gets an explicit parser rather than a silent coercion.
+ *
+ * The format is strict: an optional sign, digits, an optional single decimal point, digits. No
+ * exponents, no thousands separators, no `%` suffix, no whitespace padding, no empty string.
+ */
+const STRICT_DECIMAL_STRING = /^-?\d+(\.\d+)?$/;
+
+/**
+ * Parse a documented high-precision decimal string into a finite number. Precision beyond IEEE-754 is
+ * truncated by `Number()`, which is acceptable and intended: the value is a rate we then round to 6dp
+ * anyway. What is NOT acceptable is accepting a malformed string, so the shape is validated first.
+ */
+export function readDocumentedDecimalString(source: unknown, field: string): StableYieldParseResult<number> {
+  if (typeof source !== "object" || source === null || Array.isArray(source)) return { ok: false, reason: "source_not_an_object", field };
+  const v = (source as Record<string, unknown>)[field];
+  if (v === undefined) return { ok: false, reason: "missing_field", field };
+  if (v === null) return { ok: false, reason: "null_is_not_zero", field };
+  if (typeof v !== "string") return { ok: false, reason: "expected_documented_decimal_string", field };
+  if (!STRICT_DECIMAL_STRING.test(v)) return { ok: false, reason: "malformed_decimal_string", field };
+  const n = Number(v);
+  if (!Number.isFinite(n)) return { ok: false, reason: "not_a_finite_number", field };
+  return { ok: true, value: n };
+}
+
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /**
@@ -112,8 +143,15 @@ export interface KaminoVaultSourceRecord {
   protocolId: string;
   /** Decoded on-chain vault name. Diagnostic only — NEVER used to match identity. */
   productName?: string;
-  /** Net APY as reported by the SDK's vault yield calculation. Unit declared by the caller. */
-  netApy: number;
+  /**
+   * Net APY. Step 16H-H VERIFIED the unit against official sources: Kamino returns a decimal FRACTION
+   * (0.0515 === 5.15%), proven by the official docs' own display code `(vault.apy7d * 100).toFixed(2)`
+   * and corroborated by live values (`apy7d: "0.0401…"` ≈ 4.01%). It is APY, not APR — Kamino documents
+   * that vault earnings compound continuously.
+   *
+   * ACCEPTS a number OR the documented high-precision decimal string the live API actually returns.
+   */
+  netApy: number | string;
   /** When the SOURCE produced this value (chain/API time) — not when we fetched it. */
   sourceTimestamp: string;
   /** Explicit deposit cap, when the vault state exposes one. */
@@ -157,7 +195,9 @@ export function parseKaminoVaultRecord(raw: unknown, rateUnit: StableYieldRateUn
   const protocolId = readNonEmptyString(raw, "protocolId");
   if (!protocolId.ok) return protocolId;
 
-  const netApyRaw = readFiniteNumber(raw, "netApy");
+  // The live Kamino API returns rates as documented decimal strings; the SDK returns numbers. Accept
+  // both, each through its own strict reader — never a blanket coercion.
+  const netApyRaw = typeof raw.netApy === "string" ? readDocumentedDecimalString(raw, "netApy") : readFiniteNumber(raw, "netApy");
   if (!netApyRaw.ok) return netApyRaw;
   const netApyPct = normalizeRateToPercent(netApyRaw.value, rateUnit, "netApy");
   if (!netApyPct.ok) return netApyPct;
