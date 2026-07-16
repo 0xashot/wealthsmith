@@ -1082,7 +1082,18 @@ import {
   STABLE_YIELD_PRODUCTION_APY_UNIT_VERIFIED,
   STABLE_YIELD_PRODUCTION_RISK_REVIEW_HANDOFF_EXISTS,
   STABLE_YIELD_UNSUPPORTED_CANDIDATE_CLASSIFICATION_EXISTS,
+  STABLE_YIELD_KAMINO_SDK_ADAPTER_EXISTS,
+  STABLE_YIELD_CHAIN_TIME_FRESHNESS_EXISTS,
+  STABLE_YIELD_MARKET_CACHE_PUBLISHER_EXISTS,
+  STABLE_YIELD_RUNTIME_CACHE_CONSUMPTION_EXISTS,
+  STABLE_YIELD_EXACT_VAULT_SOURCE_VALIDATION_EXISTS,
+  STABLE_YIELD_NET_APY_SOURCE_PATH_EXISTS,
+  STABLE_YIELD_BACKEND_REFRESH_BOUNDARY_EXISTS,
+  STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED,
+  STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED,
+  STABLE_YIELD_PRODUCTION_RISK_REVIEW_COMPLETE,
 } from "./investmentTargetRegistry";
+import { validateStableYieldMarketRecord, cacheRecordNetApyPct, cacheRecordToMarketDataInput, rawTokenAmountToUsd, STABLE_YIELD_REFRESH_ARTIFACT_EXISTS, type StableYieldMarketRecord } from "./stableYieldMarketCache";
 import { listActiveYieldStrategyCandidates, isYieldStrategyExcluded } from "./yieldStrategyRegistry";
 import { buildDemoStableYieldRail, buildDemoStableYieldDecision, DEMO_STABLE_YIELD_POSITIONS, DEMO_STABLE_YIELD_GOAL, DEMO_STABLE_YIELD_PRICED_AS_OF } from "./demoStableYieldScenario";
 import { deriveRailSuggestions as SY_deriveRail } from "./useRailSuggestions";
@@ -16179,7 +16190,8 @@ export function runStableYieldIdentityResolutionFixtureChecks(): FixtureCheck[] 
   // ---- Evidence + readiness ----
   add("16H-H-AC: every manifest carries exactly one deterministic primary status", listStableYieldEvidenceManifests().every((m) => typeof m.primaryBlocker === "string" && m.primaryBlocker.length > 0), "deterministic");
   add("16H-H-AD: no manifest claims 'approved' anywhere", !/\"approved\"|: *\"approved\"/.test(JSON.stringify(listStableYieldEvidenceManifests())), "no approved");
-  add("16H-H-AE: Steakhouse remains blocked despite verified identity (freshness is the primary blocker)", man("kamino_steakhouse_usdc").primaryBlocker === "blocked_freshness" && man("kamino_steakhouse_usdc").readiness === "blocked", "blocked_freshness");
+  // 16H-I resolved freshness (chain block time) + net/gross (SDK netAPY); capacity is now primary.
+  add("16H-H-AE: Steakhouse remains blocked despite verified identity (capacity is now the primary blocker)", man("kamino_steakhouse_usdc").primaryBlocker === "blocked_capacity" && man("kamino_steakhouse_usdc").readiness === "blocked", "blocked_capacity");
   add("16H-H-AF: the readiness matrix shows identity resolved but NOT ready and NOT approved", (() => { const r = buildStableYieldReadinessMatrix().find((x) => x.strategyId === "kamino_steakhouse_usdc")!; return r.identityAdapter === true && r.readyForExplicitReview === false && r.approved === false && r.riskReviewEvidence === false; })(), "identity != approval");
   add("16H-H-AG: missing risk review still blocks readiness for every candidate", listStableYieldEvidenceManifests().every((m) => m.riskReviewState !== "evidence_complete"), "risk blocks");
 
@@ -16190,6 +16202,143 @@ export function runStableYieldIdentityResolutionFixtureChecks(): FixtureCheck[] 
   // ---- Flags ----
   add("16H-H-AJ: the 16H-H identity/cleanup flags are true", [STABLE_YIELD_PRODUCTION_IDENTITY_RESOLUTION_EXISTS, STABLE_YIELD_PRODUCTION_CANDIDATE_LIFECYCLE_CLEANUP_EXISTS, STABLE_YIELD_PRODUCTION_OFFICIAL_IDENTITY_EVIDENCE_EXISTS, STABLE_YIELD_PRODUCTION_APY_UNIT_VERIFIED, STABLE_YIELD_PRODUCTION_RISK_REVIEW_HANDOFF_EXISTS, STABLE_YIELD_UNSUPPORTED_CANDIDATE_CLASSIFICATION_EXISTS].every((f) => f === true), "true");
   add("16H-H-AK: approval / approved-products / card / buffer-minimum / Qdrant flags remain false", [STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS, STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST, STABLE_YIELD_PRODUCTION_CARD_AVAILABLE, STABLE_YIELD_BUFFER_YIELD_MINIMUM_EXISTS, STABLE_YIELD_QDRANT_INTEGRATION_EXISTS, STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS].every((f) => f === false), "false");
+
+  return checks;
+}
+
+/**
+ * Step 16H-I — the Kamino Steakhouse USDC SDK source path + refresh/publish cache. Deterministic and
+ * OFFLINE: every "SDK record" below is a local literal shaped like the real artifact. No network.
+ */
+export function runStableYieldSourcePathFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+
+  const NOW = "2026-07-16T11:30:00.000Z";
+  const CHAIN_TIME = "2026-07-16T11:27:33.000Z"; // the real slot 433263778 block time
+  const VAULT = "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E";
+  const SHARES = "7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS";
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const HIGH_YIELD = "BEEfo7xwgK2ZP13Pxo7qqTPzAteKJmXjVWtMWcXSvbn2";
+  const TESTING = "JDmkiqvtyAqAsqrLGDgVH2GesbRAAMJCoQtqiyWx82bF";
+
+  /** A record shaped exactly like the real refresh artifact. APY value is illustrative, not pinned. */
+  const rec = (over: Record<string, unknown> = {}) => ({
+    schemaVersion: "1.0.0", adapterId: "kamino_vault_sdk_v1", adapterVersion: "1.0.0", generatedAt: NOW,
+    strategyId: "kamino_steakhouse_usdc", productAddress: VAULT, sharesMint: SHARES, depositMint: USDC,
+    chain: "solana_mainnet", sourceType: "official_protocol_sdk",
+    sourceMethod: "klend-sdk:KaminoVault.getAPYs(slot).actualAPY.netAPY",
+    sourceSlot: "433263778", sourceTimestamp: CHAIN_TIME, fetchedAt: NOW,
+    netApyRaw: "0.0515", netApyUnit: "fraction", apyProvenanceKind: "backend_normalized", browserFetched: false,
+    minDepositRaw: "100000", mintDecimals: 6, managementFeeBps: 0, performanceFeeBps: 500,
+    depositCapRaw: "0", capacityState: "unknown", depositState: "unknown",
+    planningSafe: false, blockers: ["product_unapproved"], ...over,
+  });
+  const v = (r: unknown, at = NOW) => validateStableYieldMarketRecord(r, at);
+
+  // ---- Exact vault enforcement ----
+  add("16H-I-A: the exact selected vault validates", v(rec()).valid === true, "accepted");
+  add("16H-I-B: 'Steakhouse High Yield USDC' is rejected BY NAME, not just by mismatch", (() => { const r = v(rec({ productAddress: HIGH_YIELD })); return !r.valid && r.reason === "rejected_non_selected_vault:Steakhouse High Yield USDC"; })(), "rejected");
+  add("16H-I-C: 'Steakhouse USDC Testing' is rejected by name", (() => { const r = v(rec({ productAddress: TESTING })); return !r.valid && r.reason === "rejected_non_selected_vault:Steakhouse USDC Testing"; })(), "rejected");
+  add("16H-I-D: a one-character vault address change is rejected", (() => { const bad = VAULT.slice(0, -1) + "F"; const r = v(rec({ productAddress: bad })); return !r.valid && r.reason === "product_identity_mismatch"; })(), "rejected");
+  add("16H-I-E: a wrong share mint is rejected (share-mint must match the vault relationship)", (() => { const r = v(rec({ sharesMint: USDC })); return !r.valid && r.reason === "shares_mint_mismatch"; })(), "rejected");
+  add("16H-I-F: a wrong deposit mint is rejected", (() => { const r = v(rec({ depositMint: SHARES })); return !r.valid && r.reason === "wrong_asset"; })(), "rejected");
+  add("16H-I-G: a wrong chain is rejected", (() => { const r = v(rec({ chain: "ethereum_mainnet" })); return !r.valid && r.reason === "wrong_chain"; })(), "rejected");
+  add("16H-I-H: a mismatched strategyId is rejected", (() => { const r = v(rec({ strategyId: "kamino_usdc_lending" })); return !r.valid && r.reason === "strategy_id_mismatch"; })(), "rejected");
+
+  // ---- APY ----
+  add("16H-I-I: a valid net APY fraction normalizes exactly (0.0515 => 5.15%)", cacheRecordNetApyPct(v(rec()).valid ? (v(rec()) as { record: StableYieldMarketRecord }).record : ({} as StableYieldMarketRecord)) === 5.15, "5.15%");
+  add("16H-I-J: the 100x error is prevented (fraction is never read as percent)", (() => { const r = v(rec({ netApyRaw: "0.0515", netApyUnit: "fraction" })); return r.valid && cacheRecordNetApyPct(r.record) === 5.15; })(), "5.15%");
+  add("16H-I-K: the 0.01x error is prevented (a declared percent stays percent)", (() => { const r = v(rec({ netApyRaw: "5.15", netApyUnit: "percent" })); return r.valid && cacheRecordNetApyPct(r.record) === 5.15; })(), "5.15%");
+  add("16H-I-L: the binary-float artifact is normalized out of the canonical value", (() => { const r = v(rec({ netApyRaw: "0.038774279858246" })); return r.valid && cacheRecordNetApyPct(r.record) === 3.877428; })(), "3.877428%");
+  add("16H-I-M: an undeclared APY unit is rejected", (() => { const r = v(rec({ netApyUnit: "unknown" })); return !r.valid && r.reason === "undeclared_apy_unit"; })(), "rejected");
+  add("16H-I-N: a percent-suffixed APY string is rejected", (() => { const r = v(rec({ netApyRaw: "5.15%" })); return !r.valid && r.reason === "malformed_decimal_string"; })(), "rejected");
+  add("16H-I-O: an exponent APY string is rejected", (() => { const r = v(rec({ netApyRaw: "5.15e-2" })); return !r.valid && r.reason === "malformed_decimal_string"; })(), "rejected");
+  add("16H-I-P: a missing / non-string APY is rejected (never 0)", (() => { const a = v(rec({ netApyRaw: undefined })); const b = v(rec({ netApyRaw: 0.05 })); const c = v(rec({ netApyRaw: null })); return !a.valid && !b.valid && !c.valid; })(), "rejected");
+  add("16H-I-Q: a negative APY is rejected", (() => { const r = v(rec({ netApyRaw: "-0.01" })); return !r.valid && r.reason === "negative_rate_unsupported"; })(), "rejected");
+
+  // ---- Chain time / freshness ----
+  add("16H-I-R: a valid slot + chain block time is accepted", v(rec()).valid === true && rec().sourceSlot === "433263778", "accepted");
+  add("16H-I-S: a missing source slot is rejected", (() => { const r = v(rec({ sourceSlot: undefined })); return !r.valid && r.reason === "missing_source_slot"; })(), "rejected");
+  add("16H-I-T: a missing source timestamp is rejected (never substituted by fetch time)", (() => { const r = v(rec({ sourceTimestamp: undefined })); return !r.valid && r.reason === "missing_source_timestamp"; })(), "rejected");
+  add("16H-I-U: stale chain time fails closed", (() => { const r = v(rec({ sourceTimestamp: "2026-07-15T00:00:00.000Z" })); return !r.valid && r.reason === "source_stale"; })(), "stale");
+  add("16H-I-V: future chain time fails closed", (() => { const r = v(rec({ sourceTimestamp: "2026-07-17T00:00:00.000Z" })); return !r.valid && r.reason === "source_future_dated"; })(), "future");
+  add("16H-I-W: a RECENT fetchedAt cannot make stale chain data look fresh", (() => { const r = v(rec({ sourceTimestamp: "2026-07-01T00:00:00.000Z", fetchedAt: NOW, generatedAt: NOW })); return !r.valid && r.reason === "source_stale"; })(), "fetch != authority");
+  add("16H-I-X: the market input carries the CHAIN time, not the fetch time", (() => { const r = v(rec()); return r.valid && cacheRecordToMarketDataInput(r.record)?.fetchedAt === CHAIN_TIME; })(), "chain time");
+
+  // ---- Minimum + fees ----
+  add("16H-I-Y: the on-chain integer minimum converts to exactly 0.1 USDC (no float round-trip)", rawTokenAmountToUsd("100000", 6) === 0.1, "0.1 USDC");
+  add("16H-I-Z: token-unit math is exact across magnitudes (no lamport/decimal confusion)", rawTokenAmountToUsd("1", 6) === 0.000001 && rawTokenAmountToUsd("1000000", 6) === 1 && rawTokenAmountToUsd("2500000000", 6) === 2500, "exact");
+  add("16H-I-AA: wrong mint decimals are rejected", (() => { const r = v(rec({ mintDecimals: 9 })); return !r.valid && r.reason === "unexpected_mint_decimals"; })(), "rejected");
+  add("16H-I-AB: a negative / non-integer raw minimum is rejected", (() => { const a = v(rec({ minDepositRaw: "-100" })); const b = v(rec({ minDepositRaw: "1.5" })); return !a.valid && !b.valid; })(), "rejected");
+  add("16H-I-AC: management + performance fees are preserved in basis points", (() => { const r = v(rec()); return r.valid && r.record.managementFeeBps === 0 && r.record.performanceFeeBps === 500; })(), "0/500 bps");
+  add("16H-I-AD: out-of-range fee basis points are rejected", (() => { const a = v(rec({ performanceFeeBps: -1 })); const b = v(rec({ performanceFeeBps: 10001 })); const c = v(rec({ managementFeeBps: 1.5 })); return !a.valid && !b.valid && !c.valid; })(), "rejected");
+  {
+    // computeNetAPR in the official SDK is `grossAPR * (1 - perfFee) - mgmtFee`, so netAPY ALREADY
+    // deducts both fees. The adapter must never deduct them a second time.
+    const src = readIf("src/suggestions/stableYieldMarketCache.ts") + readIf("scripts/refresh-stable-yield-market-data.mjs");
+    add("16H-I-AE: no adapter deducts fees again (the SDK's net APY already includes them)", !/netApy[^\n]*[-*]\s*(performanceFee|managementFee|FeeBps)/i.test(src), "no double deduction");
+  }
+
+  // ---- Deposit state + capacity stay honestly unknown ----
+  add("16H-I-AF: deposit state is `unknown` — a successful read is not proof deposits are enabled", (() => { const r = v(rec()); return r.valid && r.record.depositState === "unknown"; })(), "unknown");
+  add("16H-I-AG: capacity is `unknown` — depositCap=0 is NOT guessed as uncapped or full", (() => { const r = v(rec({ depositCapRaw: "0" })); return r.valid && r.record.capacityState === "unknown"; })(), "unknown");
+  add("16H-I-AH: the refresh job never EMITS verified_uncapped / Infinity / a guessed cap", (() => { const s = readIf("scripts/refresh-stable-yield-market-data.mjs"); const assigns = /capacityState:\s*"(?!unknown")/.test(s); return !assigns && !/Infinity|Number\.MAX/.test(s) && /capacityState:\s*"unknown"/.test(s); })(), "never");
+  add("16H-I-AI: TVL / withdrawal liquidity are never read as capacity", (() => { const s = readIf("scripts/refresh-stable-yield-market-data.mjs") + readIf("src/suggestions/stableYieldMarketCache.ts"); return !/tvl|withdrawalLiquidity/i.test(s); })(), "clean");
+
+  // ---- Publish / artifact safety ----
+  add("16H-I-AJ: a browser-fetched record is rejected outright", (() => { const r = v(rec({ browserFetched: true })); return !r.valid && r.reason === "browser_fetched_is_not_allowed"; })(), "rejected");
+  add("16H-I-AK: an unsupported schema version is rejected", (() => { const r = v(rec({ schemaVersion: "2.0.0" })); return !r.valid; })(), "rejected");
+  add("16H-I-AL: a corrupted / non-object record is rejected", !v("nope").valid && !v(null).valid && !v([]).valid, "rejected");
+  {
+    const pub = readIf("scripts/publish-stable-yield-market-cache.mjs");
+    add("16H-I-AM: the publisher makes no network call and approves nothing", pub.length > 0 && !/fetch\(|createSolanaRpc|klend/.test(pub) && !/lifecycle\s*[:=]|registry\.push/.test(pub), "offline");
+    add("16H-I-AN: the publisher writes atomically (tmp + rename)", pub.includes("TMP_PATH") && pub.includes("renameSync"), "atomic");
+    add("16H-I-AO: the publisher refuses to publish secrets or a non-selected vault", pub.includes("api_key") && pub.includes("REJECTED_VAULT_ADDRESSES"), "guarded");
+  }
+  {
+    const cache = readIf("public/generated/stable-yield-market-cache.json");
+    if (cache.length > 0) {
+      const parsed = JSON.parse(cache);
+      add("16H-I-AP: the PUBLISHED cache contains no secret, RPC URL, or raw SDK response", !/helius|api_key|apikey|secret|http|authorization/i.test(cache), "clean");
+      add("16H-I-AQ: the published cache contains only the selected vault (no High Yield / Testing)", !cache.includes(HIGH_YIELD) && !cache.includes(TESTING) && parsed.productAddress === VAULT, "one vault");
+      add("16H-I-AR: the published cache pins browserFetched:false and planningSafe:false", parsed.browserFetched === false && parsed.planningSafe === false, "pinned");
+    } else {
+      add("16H-I-AP: published cache absent — skipped (refresh+publish not run in this environment)", true, "skipped");
+    }
+  }
+
+  // ---- Runtime consumption ----
+  add("16H-I-AS: a valid published record reaches the canonical 16C market input", buildProductionStableYieldMarketInputs({ checkedAt: NOW, publishedCache: rec() }).inputs.length === 1, "1 input");
+  add("16H-I-AT: a rejected sibling vault contributes NO market input", buildProductionStableYieldMarketInputs({ checkedAt: NOW, publishedCache: rec({ productAddress: HIGH_YIELD }) }).inputs.length === 0, "0 inputs");
+  add("16H-I-AU: a stale published record contributes NO market input", buildProductionStableYieldMarketInputs({ checkedAt: NOW, publishedCache: rec({ sourceTimestamp: "2026-07-01T00:00:00.000Z" }) }).inputs.length === 0, "0 inputs");
+  add("16H-I-AV: the market input is net/current with backend provenance and browserFetched false", (() => { const i = buildProductionStableYieldMarketInputs({ checkedAt: NOW, publishedCache: rec() }).inputs[0]; return i?.apy?.apyDefinition === "net" && i?.apy?.apyWindow === "current" && i?.provenanceKind === "backend_normalized" && i?.browserFetched === false; })(), "canonical");
+
+  // ---- The point: real market data does NOT create eligibility ----
+  add("16H-I-AW: an UNAPPROVED product with fresh verified market data is still ineligible", getApprovedYieldStrategies().length === 0 && (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: NOW }); return r.decision?.status === "no_plan" && r.suggestion === null; })(), "no_plan");
+  add("16H-I-AX: production still renders NO Stable Yield card", SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
+  add("16H-I-AY: Demo remains unchanged (exactly one synthetic card, $500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+
+  // ---- No SDK/RPC/Node code in the browser path ----
+  {
+    const uiBlob = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/components/RealWalletSuggestionsRail.tsx", "src/pages/DemoDashboardPage.tsx", "src/suggestions/useRailSuggestions.ts", "src/suggestions/stableYieldMarketCache.ts"].map((f) => readIf(f)).join("");
+    add("16H-I-AZ: no SDK / RPC / Node / refresh code reaches the React or cache-consumption path", !/klend-sdk|createSolanaRpc|@solana\/kit|node:fs|refresh-stable-yield/.test(uiBlob), "clean");
+    add("16H-I-BA: the cache module is pure (no network, no Node built-ins) so the browser stays a consumer", !/fetch\(|node:|require\(/.test(readIf("src/suggestions/stableYieldMarketCache.ts")), "pure");
+  }
+  {
+    const refresh = readIf("scripts/refresh-stable-yield-market-data.mjs");
+    add("16H-I-BB: the refresh job READS only Node-only RPC vars (never process.env.VITE_*, which inlines into the bundle)", /process\.env\.STABLE_YIELD_RPC_URL/.test(refresh) && !/process\.env\.VITE_/.test(refresh), "node-only");
+    add("16H-I-BC: the refresh job fails closed on missing config, localhost, and null block time", /configuration_missing/.test(refresh) && /localhost/.test(refresh) && /missing_block_time/.test(refresh), "fail-closed");
+    add("16H-I-BD: the refresh job binds ONE hard-coded vault and names the rejected siblings", refresh.includes(VAULT) && refresh.includes("REJECTED_VAULTS"), "one vault");
+    add("16H-I-BE: the refresh job redacts addresses and the RPC URL in its output", refresh.includes("redactUrl") && refresh.includes("redact"), "redacted");
+  }
+
+  // ---- Flags ----
+  add("16H-I-BF: the 16H-I source-path flags are true", [STABLE_YIELD_KAMINO_SDK_ADAPTER_EXISTS, STABLE_YIELD_CHAIN_TIME_FRESHNESS_EXISTS, STABLE_YIELD_REFRESH_ARTIFACT_EXISTS, STABLE_YIELD_MARKET_CACHE_PUBLISHER_EXISTS, STABLE_YIELD_RUNTIME_CACHE_CONSUMPTION_EXISTS, STABLE_YIELD_EXACT_VAULT_SOURCE_VALIDATION_EXISTS, STABLE_YIELD_NET_APY_SOURCE_PATH_EXISTS, STABLE_YIELD_BACKEND_REFRESH_BOUNDARY_EXISTS].every((f) => f === true), "true");
+  add("16H-I-BG: capacity / deposit-state / risk-review flags stay FALSE (unresolved)", [STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED, STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED, STABLE_YIELD_PRODUCTION_RISK_REVIEW_COMPLETE].every((f) => f === false), "false");
+  add("16H-I-BH: approval / card / buffer-minimum / Smith-AI / Qdrant flags stay FALSE", [STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS, STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST, STABLE_YIELD_PRODUCTION_CARD_AVAILABLE, STABLE_YIELD_BUFFER_YIELD_MINIMUM_EXISTS, STABLE_YIELD_SMITH_AI_INTEGRATION_EXISTS, STABLE_YIELD_QDRANT_INTEGRATION_EXISTS].every((f) => f === false), "false");
 
   return checks;
 }
@@ -16295,6 +16444,7 @@ export function printFixtureResults(): void {
     ...runStableYieldReleaseGateFixtureChecks(),
     ...runStableYieldProductionAdapterFixtureChecks(),
     ...runStableYieldIdentityResolutionFixtureChecks(),
+    ...runStableYieldSourcePathFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

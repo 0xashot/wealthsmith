@@ -352,3 +352,109 @@ rejected; multiple matches stay ambiguous; adapter failure never becomes a zero 
 
 Product approval remains a **separate explicit step**, and the canonical buffer-yield minimum remains a
 **separate policy step**. Production renders no Stable Yield card until approval.
+
+---
+
+# 16H-I — Kamino Steakhouse SDK source path + refresh/publish cache
+
+Replaced the incomplete REST metrics path with the **official Kamino SDK over RPC**, and built the
+backend-style refresh/publish infrastructure. **Live-verified 2026-07-16.**
+
+**Two of 16H-H's blockers are resolved.** Still no approval, still no card.
+
+## The selected product (human decision, Step 16H-H)
+
+Only `HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E` — "Steakhouse USDC" — is in scope.
+**Excluded, by name, in code:** `BEEfo7…` ("Steakhouse High Yield USDC") and `JDmki…`
+("Steakhouse USDC Testing"). Nothing is chosen dynamically, and never by APY/TVL/registry order.
+
+## Source path (verified against the installed SDK, not assumed)
+
+```
+getSlot()  →  KaminoVault(rpc, VAULT).getState()  →  identity checks  →  getAPYs(slot)
+           →  getBlockTime(slot)  →  normalize  →  tmp artifact  →  publish  →  runtime cache
+```
+
+`klend-sdk` **v9.1.2**. The real signature is `getAPYs(slot: Slot): Promise<VaultAPYs>` — it takes a
+**slot** (the prompt's assumed zero-arg `getAPYs()` does not exist), and returns
+`{ theoreticalAPY, actualAPY }` where each is `{ grossAPY: Decimal; netAPY: Decimal }` — **Decimal**, not
+number. That slot argument is what makes freshness solvable: the same slot feeds `getBlockTime(slot)`.
+
+## Net APY — proven from the SDK's own source
+
+Selected field: **`getAPYs(slot).actualAPY.netAPY`**. Both properties are proven, not assumed:
+
+- **Net**: `computeNetAPR(grossAPR, vault) = grossAPR × (1 − performanceFeeBps/10000) − managementFeeBps/10000`.
+  Both fees are already deducted ⇒ **no adapter may deduct them again**.
+- **APY, not APR**: `calculateAPYFromAPR(apr) = (1 + apr/SLOTS_PER_YEAR)^SLOTS_PER_YEAR − 1` — the
+  standard compounding formula, which is only coherent for a **fraction** and returns a fraction.
+
+Normalization: `percent = fraction × 100`, rounded to 6dp (kills the `0.0515×100 = 5.1499999999999995`
+artifact). No averaging, no highest-field selection, no REST fallback, no High-Yield-vault APY.
+
+## Authoritative time — chain, not our clock
+
+`slot` is read **first**, then passed to both `getAPYs(slot)` and `getBlockTime(slot)`, so the APY and the
+timestamp describe the same chain state. `getBlockTime` returning `null` (slot older than the node's
+history) **fails closed** — local `fetchedAt` is retrieval metadata only and can never make stale chain
+data look fresh. Freshness reuses the canonical 16C max age; no competing threshold. If RPC nodes lag,
+the block time is simply older and the record goes stale — which is the correct outcome.
+
+## Live verification — 2026-07-16 (Helius mainnet, redacted)
+
+| | |
+|---|---|
+| Vault name (on-chain `state.name`) | **"Steakhouse USDC"** — a *third* independent identity confirmation |
+| Identity | `tokenMint`=USDC ✓ · `sharesMint` ✓ · decimals=6 ✓ |
+| Source slot / chain block time | `433263778` / `2026-07-16T11:27:33Z` |
+| `actualAPY.netAPY` | `0.038774279858246` (fraction) → **3.877428 %** |
+| `minDepositAmount` | `100000` raw @ 6dp → **0.1 USDC** (integer math) |
+| Fees | mgmt **0 bps**, perf **500 bps** (already inside netAPY) |
+| `depositCap` | **`0`** |
+| Deposit state | no field exists on-chain |
+
+> The APY is **not** pinned as a fixture expectation — it changes. Fixtures assert shape and rules.
+
+## Capacity — still `unknown`, and that is deliberate
+
+`VaultState.depositCap` exists and reads **`0`**. The official SDK **never reads it**, and no official
+source documents whether `0` means "no cap" or "closed", nor which field is the matching *used*
+counterpart. Both guesses are dangerous in opposite directions: "uncapped" would invent headroom the
+protocol never offered; "full" would wrongly block. So it stays `unknown` — **this is now the primary
+blocker**. (Note the SDK *does* use `U64_MAX` as an uncapped sentinel for *reserve* `depositLimit`, which
+is a different field on a different account — evidence that a cap sentinel convention exists, but not
+evidence about this field.)
+
+## Deposit state — still `unknown`
+
+The on-chain `VaultState` exposes **no** pause/enabled/halt field. A successful read is not proof
+deposits are enabled; TVL and UI availability are not proof either. Fails closed.
+
+## Refresh / publish / consume
+
+| Command | Does | Never |
+|---|---|---|
+| `npm run refresh:stable-yield-market-data` | Node + SDK + RPC → `tmp/stable-yield-market-refresh.json` (atomic) | browser, secrets in output, registry mutation, approval |
+| `npm run publish:stable-yield-market-cache` | revalidates → `public/generated/stable-yield-market-cache.json` (tmp+rename) | **any network call**, planning, approval |
+| `npm run validate:stable-yield-market-cache` | validate only, writes nothing | — |
+
+RPC comes from the **Node-only** `STABLE_YIELD_RPC_URL` / `SOLANA_RPC_URL`. It is deliberately **not**
+read from `VITE_SOLANA_RPC_URL`: `VITE_`-prefixed vars are inlined into the browser bundle, so a
+key-bearing URL must never live there. Missing config, localhost, and null block time all exit non-zero.
+No public-proxy fallback.
+
+**Runtime** consumes only the published, same-origin, already-normalized record — revalidating identity
+and freshness, because a file on disk is untrusted input. `browserFetched` stays `false`. No SDK/RPC/Node
+code enters the React bundle (asserted by fixtures).
+
+> **This is a scheduled-job precursor, not a backend.** Today a human runs the refresh; a real deployment
+> needs a scheduled job. The browser is not, and never becomes, the backend.
+
+## Why fresh market data still changes nothing
+
+The product is **unapproved**, so the 16C join refuses to build a snapshot for it. A validated market
+record can be perfectly fresh and still not be planning-safe: `planningSafe: false`, blockers
+`product_unapproved`, `capacity_unknown`, `deposit_state_unknown`, `risk_review_incomplete`.
+
+**Data about a product is not permission to plan with it.** Production still returns `no_plan` and renders
+no card; Demo is unchanged; the buffer-yield minimum remains undefined.

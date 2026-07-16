@@ -13,7 +13,10 @@
     "market:refresh-staking": "node scripts/refresh-sol-staking-market-data.mjs",
     "market:publish-staking": "node scripts/publish-sol-staking-market-cache.mjs",
     "market:refresh-and-publish-staking": "npm run market:refresh-staking && npm run market:publish-staking",
-    "probe:stable-yield": "node scripts/probe-stable-yield-sources.mjs"
+    "probe:stable-yield": "node scripts/probe-stable-yield-sources.mjs",
+    "refresh:stable-yield-market-data": "node scripts/refresh-stable-yield-market-data.mjs",
+    "publish:stable-yield-market-cache": "node scripts/publish-stable-yield-market-cache.mjs",
+    "validate:stable-yield-market-cache": "node scripts/publish-stable-yield-market-cache.mjs --validate-only"
   },
   "dependencies": {
     "@hubbleprotocol/hubble-sdk": "^8.0.4",

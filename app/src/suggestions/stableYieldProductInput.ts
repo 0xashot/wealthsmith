@@ -27,6 +27,7 @@ import { buildEmptyApprovedYieldStrategyMarketDataSet, buildYieldStrategyMarketD
 import type { YieldStrategyMarketDataInput } from "./yieldStrategyMarketDataTypes";
 import { buildKaminoMarketDataInput } from "./stableYieldProductionAdapters";
 import type { StableYieldAdapterDiagnostic } from "./stableYieldProductionAdapterTypes";
+import { validateStableYieldMarketRecord, cacheRecordToMarketDataInput } from "./stableYieldMarketCache";
 import { buildYieldStrategyPositionSet } from "./yieldStrategyPositionEngine";
 import { buildYieldStrategyEligibleCapitalSnapshot } from "./yieldStrategyEligibleCapital";
 import { buildYieldStrategyPlanDecision } from "./yieldStrategyPlan";
@@ -72,13 +73,35 @@ export interface DeriveStableYieldSuggestionResult {
  * `planningSafe` output is returned; a rejected record contributes NOTHING (never a partial default).
  * Raw source payloads never reach the planner — only canonical `YieldStrategyMarketDataInput`s do.
  */
-export function buildProductionStableYieldMarketInputs(args: { checkedAt: string; sourceRecords?: Record<string, unknown> }): {
+export function buildProductionStableYieldMarketInputs(args: {
+  checkedAt: string;
+  sourceRecords?: Record<string, unknown>;
+  /**
+   * Step 16H-I — the PUBLISHED market cache (`public/generated/stable-yield-market-cache.json`),
+   * produced by the Node refresh job + publisher. This is the canonical production path: the browser
+   * reads an already-normalized, same-origin record and never calls a yield-data provider itself.
+   * Identity and freshness are revalidated HERE — a file on disk is an untrusted input.
+   */
+  publishedCache?: unknown;
+}): {
   inputs: YieldStrategyMarketDataInput[];
   diagnostics: StableYieldAdapterDiagnostic[];
 } {
-  const { checkedAt, sourceRecords } = args;
+  const { checkedAt, sourceRecords, publishedCache } = args;
   const inputs: YieldStrategyMarketDataInput[] = [];
   const diagnostics: StableYieldAdapterDiagnostic[] = [];
+
+  if (publishedCache !== undefined) {
+    const v = validateStableYieldMarketRecord(publishedCache, checkedAt);
+    if (v.valid) {
+      const input = cacheRecordToMarketDataInput(v.record);
+      // A record can be valid (identity + freshness + units all proven) and STILL not be planning-safe:
+      // the product is unapproved and its capacity/deposit state are unknown. The market input is
+      // published either way — the 16C join is what refuses to build a snapshot for an unapproved
+      // product. Data about a product is not permission to plan with it.
+      if (input) inputs.push(input);
+    }
+  }
 
   for (const entry of listYieldStrategies()) {
     const raw = sourceRecords?.[entry.strategyId];
@@ -101,9 +124,9 @@ export function buildProductionStableYieldMarketInputs(args: { checkedAt: string
  * product and (b) the 16C join only builds a real snapshot for an APPROVED entry with a documented
  * address. Approval is Step 16H-H's job, not this layer's. Never Demo data.
  */
-function buildProductionStableYieldDecision(checkedAt: string, sourceRecords?: Record<string, unknown>): YieldStrategyPlanDecision {
+function buildProductionStableYieldDecision(checkedAt: string, sourceRecords?: Record<string, unknown>, publishedCache?: unknown): YieldStrategyPlanDecision {
   const registry = listYieldStrategies();
-  const { inputs } = buildProductionStableYieldMarketInputs({ checkedAt, sourceRecords });
+  const { inputs } = buildProductionStableYieldMarketInputs({ checkedAt, sourceRecords, publishedCache });
   // The canonical registry↔market join. With no inputs this is equivalent to the empty-approved set,
   // but it is now the REAL join, so a future approved product + adapter record flows through unchanged.
   const marketDataSet = inputs.length > 0 ? buildYieldStrategyMarketDataSet({ checkedAt, inputs }) : buildEmptyApprovedYieldStrategyMarketDataSet(checkedAt);

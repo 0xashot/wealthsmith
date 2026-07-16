@@ -1974,3 +1974,35 @@ New lifecycle states: `identity_verified`, `unsupported_for_mvp`, `archived`. Fl
 `_OFFICIAL_IDENTITY_EVIDENCE_EXISTS`, `_APY_UNIT_VERIFIED`, `_RISK_REVIEW_HANDOFF_EXISTS`,
 `STABLE_YIELD_UNSUPPORTED_CANDIDATE_CLASSIFICATION_EXISTS`. Unchanged false: product approval, approved
 products, card available, buffer-yield minimum, execution, Smith AI, Qdrant.
+
+### Step 16H-I — Kamino SDK source path + refresh/publish cache
+
+The official Kamino **SDK-over-RPC** source path for the one selected vault, plus backend-style refresh /
+publish / validate commands. **Live-verified 2026-07-16.** Full detail:
+[stableYieldProductionAdapters.md](./stableYieldProductionAdapters.md#16h-i--kamino-steakhouse-sdk-source-path--refreshpublish-cache).
+No approval; production still renders no card; Demo unchanged.
+
+**Two 16H-H blockers resolved.** *Net APY*: `getAPYs(slot).actualAPY.netAPY` — proven **net** by the SDK's
+own `computeNetAPR = grossAPR×(1−perfFee)−mgmtFee` (so fees are never deducted twice) and proven **APY not
+APR** by `calculateAPYFromAPR = (1+apr/SLOTS_PER_YEAR)^SLOTS_PER_YEAR−1`, which is only coherent for a
+fraction. *Freshness*: the slot is read first and passed to both `getAPYs(slot)` and `getBlockTime(slot)`,
+so **chain block time** is authoritative; a null block time fails closed and local fetch time can never
+make stale chain data fresh.
+
+Live: on-chain `state.name` decoded to **"Steakhouse USDC"** (a third independent identity confirmation),
+slot 433263778 @ 2026-07-16T11:27:33Z, netAPY 0.038774279858246 → **3.877428%**, min 0.1 USDC, fees
+0/500 bps. The APY is **not** pinned as a fixture expectation.
+
+**Still blocked — capacity is now primary.** `VaultState.depositCap` reads **0**, the SDK never reads it,
+and no official source says whether 0 means "no cap" or "closed" — both guesses are wrong in opposite
+directions, so it stays `unknown`. Deposit state stays `unknown` (no pause field exists on-chain). Risk
+review outstanding.
+
+Commands: `refresh:stable-yield-market-data` (Node+SDK+RPC → `tmp/`), `publish:stable-yield-market-cache`
+(revalidate → `public/generated/`, atomic, **no network**), `validate:stable-yield-market-cache`. RPC uses
+the **Node-only** `STABLE_YIELD_RPC_URL` — never `VITE_`-prefixed, which would inline a key into the
+browser bundle. Runtime consumes only the published same-origin record, revalidating identity + freshness;
+`browserFetched` stays false and no SDK/RPC code enters the React bundle.
+
+A validated, fresh record is still `planningSafe: false` — the product is unapproved. **Data about a
+product is not permission to plan with it.**

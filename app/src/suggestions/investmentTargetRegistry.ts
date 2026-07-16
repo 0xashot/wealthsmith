@@ -223,6 +223,22 @@ export const STABLE_YIELD_PRODUCTION_OFFICIAL_IDENTITY_EVIDENCE_EXISTS = true;
 export const STABLE_YIELD_PRODUCTION_APY_UNIT_VERIFIED = true;
 export const STABLE_YIELD_PRODUCTION_RISK_REVIEW_HANDOFF_EXISTS = true;
 export const STABLE_YIELD_UNSUPPORTED_CANDIDATE_CLASSIFICATION_EXISTS = true;
+// Step 16H-I — the official Kamino SDK/RPC source path + backend-style refresh/publish cache for the ONE
+// selected vault (Steakhouse USDC). Chain block time is the authoritative source time, and the SDK's
+// `getAPYs(slot).actualAPY.netAPY` is a proven NET, fraction-unit APY. Live-verified 2026-07-16.
+// This resolves the 16H-H freshness + net/gross blockers. It approves nothing.
+export const STABLE_YIELD_KAMINO_SDK_ADAPTER_EXISTS = true;
+export const STABLE_YIELD_CHAIN_TIME_FRESHNESS_EXISTS = true;
+export const STABLE_YIELD_MARKET_CACHE_PUBLISHER_EXISTS = true;
+export const STABLE_YIELD_RUNTIME_CACHE_CONSUMPTION_EXISTS = true;
+export const STABLE_YIELD_EXACT_VAULT_SOURCE_VALIDATION_EXISTS = true;
+export const STABLE_YIELD_NET_APY_SOURCE_PATH_EXISTS = true;
+export const STABLE_YIELD_BACKEND_REFRESH_BOUNDARY_EXISTS = true;
+// Still genuinely unresolved — the on-chain VaultState exposes no pause field, and `depositCap`
+// carries no documented semantics (the SDK never reads it). Not marked true just to look complete.
+export const STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED = false;
+export const STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED = false;
+export const STABLE_YIELD_PRODUCTION_RISK_REVIEW_COMPLETE = false;
 export const STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS = false;
 export const STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST = false;
 export const STABLE_YIELD_PRODUCTION_CARD_AVAILABLE = false;
