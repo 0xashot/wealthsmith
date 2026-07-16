@@ -235,8 +235,19 @@ export const AUDIT_RECORDS_V2: AuditRecordV2[] = [
   },
 ];
 
+/**
+ * SUPERSEDED BY 16H-L.2. Retained because the reasoning below is still correct for what it addressed —
+ * a verified build is not an audit — but its `unverified_linkage` verdict is now too coarse.
+ *
+ * 16H-L.2 related the audits to the deployed bytecode WITHOUT the private mapping, by inspecting the
+ * hash-verified public source directly. See FINAL_AUDIT_CLASSIFICATION in steakhouseAuditCoverage.ts:
+ * `deployed_feature_remediations_verified_with_partial_coverage`. What remains unverified is the
+ * PRIVATE-to-public commit mapping, which is not required for code properties that can be read.
+ */
 export const AUDIT_LINKAGE_REASSESSMENT = {
   version: "2.0.0",
+  supersededBy: "steakhouseAuditCoverage.FINAL_AUDIT_CLASSIFICATION (16H-L.2)",
+  supersededResult: "deployed_feature_remediations_verified_with_partial_coverage",
   result: "unverified_linkage" as const,
   buildVerificationChangesLinkage: false,
   reasoning:

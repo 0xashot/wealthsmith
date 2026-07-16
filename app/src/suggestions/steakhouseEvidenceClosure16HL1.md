@@ -178,6 +178,55 @@ Surviving blockers, both needing Kamino:
 Missing evidence never produces `unsuitable_to_continue_review`; that verdict is reserved for a
 verified disqualifying condition, of which there are none.
 
+## Incident history (16H-L.1 follow-up)
+
+An official, scoped statement **does** exist — and it does not cover this product.
+
+**Located (primary):** `kamino.com/docs/risk/index`, "Battle-Tested Track Record" — **$0 bad debt across
+all protocol markets since November 2023**, across 5 named stress events (Feb 2025 → Feb 2026), each
+$0 bad debt, protocol "continued operating normally … with no degradation in service". The Feb 5–6
+2026 event has a detailed analysis on Kamino's official governance forum (authored by Allez Labs, a
+third-party risk firm publishing in an official venue).
+
+**Four scope gaps, each fatal on its own:**
+
+1. **Wrong subject** — a *bad-debt* claim about *lending markets*. Not a claim of no security,
+   withdrawal, allocation, oracle, administrative or operational incident. This product is a vault on
+   a separate program.
+2. **The program is uncovered** — no incident source for `KvauGMsp…` located anywhere; a governance
+   forum search for "kvault" returns no topics.
+3. **The dominant market is uncovered** — the Feb 2026 breakdown lists Main, JLP, Bitcoin, Fartcoin,
+   JTO. **SOL/BTC Market (87.61% of allocation) is absent**, as is Maple Market (1.44%). The track
+   record demonstrably covers **10.95%** of this vault's exposure by weight.
+4. **Stale for this binary** — latest monthly report found is April 2026 (published 2026-05-05); the
+   deployed binary is from 2026-07-14. No published review postdates the code holding user funds.
+
+**Other statements.** A Kamino X post asserts "3 years. 0 bad debt. 0 exploits. 0 Incidents." It is
+the only located statement claiming *0 incidents* rather than *$0 bad debt*, but has no scope, cutoff,
+definition or methodology. Recorded as marketing; **not** treated as a disclosure.
+
+**Unresolved lead, not a finding.** A third-party article asserts ~$1.26M bad debt across Solend,
+Coin98 and "Kamino" pools via USDH oracle manipulation. No primary source located; it appears to
+predate Kamino Lend's stated Nov-2023 launch, so it may concern a different product. Retained in
+`unresolvedThirdPartyLeads` — a third-party source may *locate* primary evidence, never establish it.
+
+**Verdict:** `incident_history` blocker **survives**. State stays `review_incomplete`. No incident
+found is **not** no incident occurred.
+
+### New exposure surfaced while answering this
+
+Kamino's curator docs describe a per-market **`emergency_council`** — distinct from
+`lending_market_owner` — holding **`socialize_loss`** plus `emergency_mode`, `borrow_disabled` and
+`price_triggered_liquidation_disabled`. Kamino's own playbook: "run socialize-loss if a position
+becomes irrecoverable".
+
+`socialize_loss` distributes bad debt to a market's **depositors**. This vault is a depositor in four
+markets — so **four further authorities**, none of them the vault's own, can impose a loss on
+WealthSmith users. Whether an `emergency_council` is configured on these four markets, who controls
+it, and whether it has ever fired are all **unresolved**. Recorded as an open structural exposure in
+`RESERVE_EMERGENCY_AUTHORITY_EXPOSURE`, **not** a finding and **not** a disqualifier. The $0-bad-debt
+record is context, not control: it describes outcomes to date, not who holds the switch.
+
 ## Questionnaire
 
 Struck (now proven on-chain): which commit is deployed; whether a verifiable hash exists; upgrade

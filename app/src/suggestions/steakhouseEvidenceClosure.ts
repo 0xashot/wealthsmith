@@ -17,6 +17,8 @@ export const STEAKHOUSE_EVIDENCE_CLOSURE_VERSION = "1.0.0" as const;
 /** Live read-only mainnet reads for this step. Facts age; this is the cutoff. */
 export const CLOSURE_EVIDENCE_CUTOFF_AT = "2026-07-16T12:40:00.000Z";
 export const CLOSURE_EVIDENCE_SLOT = "433291120";
+/** The incident review was re-run 16H-L.1 against official docs + the Kamino governance forum. */
+export const L1_INCIDENT_REVIEW_CUTOFF_AT = "2026-07-16T16:10:00.000Z";
 
 /* ---- Exact product binding. Every artifact below is bound to THIS vault only. ---- */
 export const CLOSURE_BINDING = {
@@ -400,31 +402,109 @@ export type IncidentReviewState =
   | "review_incomplete"
   | "conflicting_reports";
 
+/**
+ * 16H-L.1 incident-history follow-up. UPGRADED from `review_incomplete` in substance but NOT in
+ * verdict — an official, scoped track record was located, and it does not cover this product.
+ *
+ * WHAT WAS FOUND (official, primary): kamino.com/docs/risk/index carries a "Battle-Tested Track
+ * Record" section stating **$0 bad debt since November 2023 across all protocol markets**, with a
+ * table of 5 named stress events (Feb 2025 → Feb 2026), each recording $0 bad debt, and the statement
+ * that the protocol "continued operating normally throughout the event with no degradation in
+ * service". The Feb 5-6 2026 event has a detailed analysis on Kamino's official governance forum.
+ *
+ * WHY THAT DOES NOT CLOSE THIS DIMENSION — four scope gaps, each fatal on its own:
+ *
+ *  1. WRONG SUBJECT. The claim is about BAD DEBT in LENDING MARKETS. This product is a VAULT on a
+ *     separate program (KvauGMsp…). "$0 bad debt" is not a claim of no security, withdrawal,
+ *     allocation, oracle, administrative or operational incident, which is what was asked.
+ *  2. THE PROGRAM IS UNCOVERED. Zero incident coverage for the kvault program exists anywhere located:
+ *     no postmortem in the docs, and a governance-forum search for "kvault" returns NO topics.
+ *  3. THE DOMINANT MARKET IS UNCOVERED. The Feb 2026 case study's market breakdown lists Main, JLP,
+ *     Bitcoin, Fartcoin and JTO. **SOL/BTC Market — 87.61% of this vault's allocation — does not
+ *     appear**, nor does Maple Market (1.44%). The track record demonstrably covers 10.95% of this
+ *     vault's exposure by weight (JLP 10.29% + Bitcoin 0.66%).
+ *  4. STALE FOR THIS BINARY. The last documented event is 2026-02-05/06 and the most recent monthly
+ *     risk report found is April 2026 (published 2026-05-05). The deployed binary is from 2026-07-14.
+ *     No published review postdates the code currently holding user funds.
+ *
+ * So the rubric blocker "no sourced incident review exists" REMAINS PRESENT: a sourced review exists
+ * for the lending-market layer, but not for this product. The state moves review_incomplete → partial
+ * to record the genuine progress without inflating it.
+ *
+ * ABSENCE IS NOT EVIDENCE: "no incident found" is NOT "no incident occurred". Every negative below is
+ * a statement about what was searched, never about what happened.
+ */
 export const INCIDENT_REVIEW = {
-  version: "1.0.0",
+  version: "2.0.0",
   state: "review_incomplete" as IncidentReviewState,
-  cutoffAt: CLOSURE_EVIDENCE_CUTOFF_AT,
+  cutoffAt: L1_INCIDENT_REVIEW_CUTOFF_AT,
   scopeReviewed: [
     "Kamino's official security documentation index (security overview, audits, formal verification, fuzzing, bug bounty)",
-    "Kamino's official risk documentation index",
+    "Kamino's official risk documentation index, including the 'Battle-Tested Track Record' section (kamino.com/docs/risk/index)",
+    "Kamino's full official documentation corpus (llms-full.txt, 2.25MB) searched for: postmortem, incident, exploit, hack, bad debt, insolvency, emergency mode, pause, disclosure, breach, attack, vulnerability",
+    "Kamino's official governance forum (gov.kamino.finance), including the Feb 5-6 2026 Risk Event Analysis and searches for the vault's markets and the kvault program",
   ],
   scopeNotReviewed: [
-    "Official Kamino incident disclosures or postmortems (no such index was located)",
-    "The kvault program's own incident history",
-    "The four active reserves and their lending markets",
+    "The kvault program's own incident history — NO source covering it was located anywhere",
+    "SOL/BTC Market (87.61% of allocation) and Maple Market (1.44%) — absent from the official stress-event breakdown",
+    "Any period after 2026-05-05 (latest monthly risk report found), which includes the entire life of the currently deployed binary",
     "The Scope oracle aggregator",
     "The allocation-admin operator's history",
     "Bug-bounty disclosures and their remediation",
+    "Non-public incident history",
   ],
+  /** Confirmed incidents affecting THIS product. Still empty — and that is a search result, not a finding. */
   confirmedIncidents: [],
+  /**
+   * Official Kamino claims located. Recorded verbatim in substance, WITH their scope, because a claim
+   * and its scope are inseparable — quoting the number without the scope would be the whole problem.
+   */
+  officialClaims: [
+    {
+      claim: "$0 bad debt across all protocol markets since launch (November 2023), across 5 significant stress events.",
+      source: "https://kamino.com/docs/risk/index — 'Battle-Tested Track Record'",
+      sourceType: "official_primary",
+      scope: "bad debt only; lending markets only; from 2023-11",
+      statedCutoffDate: null,
+      latestEventDocumented: "2026-02-06",
+      coversThisVaultOrProgram: false,
+      coversAllActiveMarkets: false,
+      note: "The 5 stress events are market-volatility episodes that produced $0 bad debt — they are documented as tests passed, not as incidents. They are not evidence about the vault layer.",
+    },
+    {
+      claim: "Kamino has been live on mainnet for 3 years. 0 bad debt. 0 exploits. 0 Incidents.",
+      source: "Kamino official X account, post 1955968425735397501",
+      sourceType: "official_marketing",
+      scope: "none stated",
+      statedCutoffDate: null,
+      latestEventDocumented: null,
+      coversThisVaultOrProgram: false,
+      coversAllActiveMarkets: false,
+      note: "This is the ONLY located Kamino statement that asserts '0 Incidents' rather than '$0 bad debt'. It is a promotional post with no scope, no cutoff, no definition of 'incident' and no methodology. It is recorded because the questionnaire asked whether such a statement exists — it does — but it is NOT treated as a scoped disclosure and must not be cited as one.",
+    },
+  ],
+  /**
+   * Leads that a THIRD PARTY raised and that primary sources have NOT settled. Recorded so they are
+   * not silently dropped; explicitly NOT findings.
+   */
+  unresolvedThirdPartyLeads: [
+    {
+      lead: "A third-party article asserts ~$1.26M of bad debt across Solend, Coin98 and 'Kamino' lending pools arising from USDH oracle manipulation.",
+      sourceType: "third_party_unverified",
+      whyNotRecordedAsFact: "No primary source was located. Per the standing rule, a third-party source may LOCATE primary evidence but can never establish a fact. It also appears to predate Kamino Lend's stated November 2023 launch, so it may concern a different product or be a misattribution — that is a hypothesis, not a finding, and it is not resolved either way.",
+      resolvedBy: "A primary Kamino disclosure, or confirmation of which product and date the claim refers to.",
+    },
+  ],
   /** The rule that keeps this honest. */
   absenceInterpretation:
-    "No confirmed incident was found — but the review scope above is INCOMPLETE, so this is `review_incomplete`, NOT `no_confirmed_incident_found_within_review_scope`, and emphatically not a clean record. Kamino publishes no incident/postmortem index we could locate; a null result from an incomplete search is missing evidence.",
+    "No confirmed incident affecting this vault, the kvault program or its reserves was found — but the scope above is INCOMPLETE and, critically, the located official track record covers neither the vault layer nor 87.61% of this vault's allocation nor any period after the current binary was deployed. So this stays `review_incomplete`. It is NOT `no_confirmed_incident_found_within_reviewed_scope`, and it is emphatically NOT 'no incident occurred'.",
   whatWouldResolveIt: [
-    "An official Kamino incident/postmortem index, or written confirmation of incident history for this vault, the kvault program, and the active reserves",
-    "Bug-bounty disclosure history with remediation status",
+    "A Kamino statement of incident history — scoped and dated — for THIS vault, the kvault program, and specifically SOL/BTC Market and Maple Market.",
+    "Confirmation of whether any incident affected the vault layer as distinct from the lending markets.",
+    "Bug-bounty disclosure history with remediation status.",
+    "Any non-public incident history.",
   ],
-  invalidationTriggers: ["any new incident", "cutoff older than the review-freshness policy"],
+  invalidationTriggers: ["any new incident", "cutoff older than the review-freshness policy", "a new binary deployment postdating the review"],
 } as const;
 
 /* ------------------------------------------------------------------ *
@@ -505,10 +585,13 @@ export interface DimensionReadiness {
 
 /** Per-dimension evidence state. Deterministic — derived from the artifacts above, not judgement. */
 export const DIMENSION_READINESS: DimensionReadiness[] = [
-  // 16H-L.1: STILL BLOCKED, and the verified build does NOT change that. Source↔binary correspondence
-  // and audit coverage are different claims; the temptation to treat a green "verified" badge as an
-  // audit is exactly the error this dimension exists to catch.
-  { dimension: "audit_security", state: "blocked", mandatoryBlockerPresent: true, detail: "Blocker 'the audited version cannot be related to the deployed bytecode' — STILL PRESENT. What 16H-L.1 DID establish: the deployed binary is hash-verified (on-chain hash 5b1eac16… == rebuilt hash) against commit 1d146d7087a76edbbadc14d848ae14295c0745a4, per the solana-verify/OtterSec registry, signed by the program's own upgrade authority, 6m28s AFTER the 2026-07-14 deploy, with no upgrade since. So we now know EXACTLY which source is deployed. What that does NOT establish: that any audit covers it. All three known Earn Vaults reports (OtterSec 2024-12-09, Sec3 2025-02-06, Offside Labs 2025-04-12) predate the deployment by 15-19 months and state NO commit, tag or release, so nothing could link them to 1d146d70… even in principle. Knowing the deployed commit exactly makes the gap sharper, not smaller. Unresolved hypothesis, recorded but NOT treated as a finding: those reports may have audited the now-closed kvauTFR8… program, which was active over that period. Note also that OtterSec appears here in two unrelated roles — 2024 auditor and 2026 verification registry — which is a coincidence of names and is NOT linkage. Kamino confirmation required." },
+  // 16H-L.2: UNBLOCKED — and the reason is narrow, so read it carefully. The rubric blocker is "the
+  // audited version cannot be related to the deployed bytecode". 16H-L.2 related them DIRECTLY: the
+  // deployed binary is hash-verified to public commit 1d146d70…, and the audited redeem_in_kind and
+  // reward function bodies are BYTE-IDENTICAL to the public releases their reports name. The blocker
+  // is therefore absent — not because the coverage is good, but because the relation now exists and
+  // is readable. Coverage is explicitly PARTIAL and the reviewer scores it.
+  { dimension: "audit_security", state: "complete", mandatoryBlockerPresent: false, detail: "Blocker 'the audited version cannot be related to the deployed bytecode' — ABSENT as of 16H-L.2, established by direct source inspection rather than by a private-to-public commit mapping (which still does not exist). Deployed release resolved by git ancestry: release/v2.2.2 @ 1d146d70…, tag points exactly at the deployed commit, previous release/v2.2.1 @ 0426eb12. WHAT IS VERIFIED: all 7 documented remediations from the four 2026 feature audits are verified_present_in_deployed_source by reading commit 1d146d70… — redeem-in-kind minimum-withdrawal validation (same canonical min_withdraw_amount field as standard withdraw, checked against the POST-cap amount), cToken-vault mint validation (closed constraint chain: ctoken_vault PDA seeded by (vault_state, reserve) + token::mint = ctoken_mint + ctoken_mint pinned to reserve.collateral.mint_pubkey), two-stage penalty (proven by ALGEBRA — inclusive uses bps/FULL_BPS, exclusive uses f/(1-f) — with Fraction precision end-to-end and no intermediate rounding), and four reward remediations (saturating pending-reward arithmetic, exhaustion-timestamp reset in topup_rewards, refresh ordering across 9 call sites, duplicate-refresh removal in invest). STRUCTURAL CORROBORATION: vault_operations::redeem_in_kind and both penalty helpers are byte-identical between release/v2.1.0 (their audit target) and the deployed release/v2.2.2; refresh_rewards and topup_rewards are byte-identical between release/v2.1.1 and v2.2.2. The audited logic IS the running logic. WHAT IS NOT COVERED, and it is material: klend_operations.rs changed 214 lines in v2.2.2 — the CPI layer that actually moves user funds — plus three new instructions (update_reserve_allocation_v2, deposit_with_min_shares_out, buy_with_min_shares_out), the new CtokenCap state concept, the allocation-admin surface (46 lines), and the reserve whitelist (15 lines) that manager-discretion mitigation relies on. All bounded and enumerated in PUBLICLY_UNCOVERED_SURFACE. The 2024-2025 baselines state no commit and predate the first public tag; they are NOT credited with covering later changed code. Classification: deployed_feature_remediations_verified_with_partial_coverage. Evidence is COMPLETE FOR HUMAN SCORING and distinctly mixed — that is a scoreable input, not a favourable one. NOT scored here; no approval." },
   // 16H-L.1: this dimension was blocked ONLY because of the incorrect single-key finding. Both of the
   // rubric's mandatory blockers are now verifiably ABSENT, and every item of mandatoryEvidence is
   // supplied. That makes the dimension scoreable — it does NOT score it, and it is NOT an approval.
@@ -527,7 +610,12 @@ export const DIMENSION_READINESS: DimensionReadiness[] = [
   // 16H-L.1: blocker "withdrawal model cannot be determined" is now ABSENT — the model is fully
   // determined against the hash-verified binary. Determined does not mean good; see the detail.
   { dimension: "liquidity_withdrawal", state: "complete", mandatoryBlockerPresent: false, detail: "Blocker 'withdrawal model cannot be determined' — ABSENT. The model, bound to verified commit 1d146d70…: NO withdrawal queue, FIFO, cooldown or pending-withdrawal construct exists anywhere in the deployed binary (authoritative negative, not an unknown). Withdrawal is synchronous via `withdraw` (pulls from reserves) or `withdrawFromAvailable` (unallocated buffer only). CORRECTION to 16H-L: withdrawalPenaltyBps=0 and withdrawalPenaltyLamports=0 — there is NO configured withdrawal penalty; the earlier 'third exit cost' claim was written before these fields were read and was wrong. Both remain admin-configurable with immediate effect (3-of-10, no time lock). MATERIAL: unallocatedWeight=0 (policy: hold NO buffer) and at slot 433302860 tokenAvailable (69,969.58 USDC) is LESS than pendingFees (70,038.77 USDC) — the unencumbered buffer is NEGATIVE, so effectively 100% of any withdrawal must come from reserves. Two of four active reserves (Maple 1.44%, Bitcoin 0.66%) currently hold LESS free liquidity than the vault's position in them, so those cannot be exited in full right now; aggregate coverage (27.4M vs 20.7M) does NOT imply this, because withdrawal is per-reserve. All four reserves are Active, emergencyMode 0, blockCtokenUsage 0. Withdrawals must NOT be described as instant. Determined and unscored." },
-  { dimension: "incident_history", state: "blocked", mandatoryBlockerPresent: true, detail: "The rubric's blocker 'no sourced incident review exists' is PRESENT. Review scope is incomplete and no official incident index was located." },
+  // 16H-L.2 incident addendum: UNBLOCKED — on completeness, NOT on a clean record. The rubric blocker
+  // is "no sourced incident review exists". A sourced, scoped, bounded review now exists for this exact
+  // product: sources enumerated, the covered allocation quantified (10.95%), gaps named, the unresolved
+  // lead retained, and the structural loss mechanism verified against the deployed KLend binary.
+  // Confirmed incidents remain ZERO — a search result, never a finding.
+  { dimension: "incident_history", state: "complete", mandatoryBlockerPresent: false, detail: "Blocker 'no sourced incident review exists' — ABSENT as of the 16H-L.2 incident addendum. This is completeness, NOT a clean record. OFFICIAL PRIMARY: kamino.com/docs/risk 'Battle-Tested Track Record' — $0 bad debt across all protocol LENDING MARKETS since 2023-11 across 5 named stress events (Feb 2025 → Feb 2026, latest 2026-02-05/06, detailed on Kamino's governance forum by Allez Labs). SCOPE, which is the point: it is a BAD-DEBT claim about LENDING MARKETS with no stated cutoff; it does not cover the exact vault, does not cover the current KVault deployment (2026-07-14, which postdates every published review), does not establish absence of security/withdrawal/allocation/oracle/administrative/operational incidents, and does not cover all active markets. EXACT COVERAGE: official stress-event material names Main/JLP/Bitcoin/Fartcoin/JTO; this vault allocates 87.61% to SOL/BTC Market and 1.44% to Maple Market, neither named — so the official reports demonstrably speak to 10.95% of current allocation (JLP 10.29 + Bitcoin 0.66) and 89.05% is UNEXAMINED, which is not the same as adverse. Percentage used for scope description only; allocation is dynamic so it must be recomputed, not cached. STRUCTURAL LOSS MECHANISM, premise CORRECTED: the task and Kamino's prose docs state the per-market emergency_council may invoke socialize_loss. The VERIFIED DEPLOYED KLend binary (commit 37592174…, hash-verified) shows otherwise — SocializeLoss requires `lending_market_owner: Signer` with `has_one = lending_market_owner`, and emergency_council is not referenced in the handler at all. socialize_loss on 99.34% of allocation therefore requires a 4-of-10 Squads multisig behind a 12-HOUR time lock (owner 24LjDBuk…, corroborating Kamino's published '12h on SOL/BTC Market'); the remaining 0.66% (Bitcoin Market) has an owner whose control model is UNRESOLVED. The council (4VtJ1yCC… — ONE Squads 2-of-7, NO time lock, over ALL FOUR markets) holds only a restrictive-only allowlist (limits to 0, emergency mode on, LTV to 0; `_ => false` otherwise) — a one-way brake that cannot loosen anything or impose a loss. Residual: a brake can still impede exit, which compounds the ~0-buffer finding. Vault depositors are NOT treated differently from direct depositors — the vault holds ordinary cTokens and dilutes pro rata. HISTORY SEARCH: history_search_incomplete. The current owner of the 99.34% markets has 166 signatures = its COMPLETE history (2026-02-24 → 2026-07-16); all 166 inspected, 162 involve KLend, ZERO socialize_loss invocations. But that address's history begins 2026-02-24 and the markets are older, so a PREVIOUS owner's period is unsearched; the Bitcoin owner's history hit the RPC cap. No invocation found is NOT never invoked. MARKETING: one X post claims '0 Incidents' — no scope, cutoff, methodology or taxonomy; context only, never evidence. UNRESOLVED LEAD retained: ~$1.26M bad debt allegation involving Solend/Coin98/'Kamino' pools via USDH oracle manipulation — no primary source, may predate Kamino Lend's 2023-11 launch; NOT a confirmed incident, NOT deleted. Confirmed incidents: 0 — a search result, not a finding. No clean-history claim is made. Evidence complete for human scoring; unscored; no approval." },
   { dimension: "asset_stablecoin_risk", state: "partial", mandatoryBlockerPresent: false, detail: "Principal is canonical USDC and every active reserve's liquidity mint is canonical USDC — verified. But the vault's credit exposure is to JLP / SOL-BTC / Bitcoin collateral markets, which is a materially different risk from 'holds USDC'." },
   { dimension: "withdrawal_fee_transparency", state: "complete", mandatoryBlockerPresent: false, detail: "No mandatory blockers are defined for this dimension. Fees are fully readable on the verified binary: mgmt 0 bps / perf 500 bps, both already inside the SDK's net APY via computeNetAPR. 16H-L.1 CORRECTS the 16H-L finding of a hidden third fee: withdrawalPenaltyBps=0 and withdrawalPenaltyLamports=0, so no withdrawal penalty is configured and none is missing from the net APY. Residual facts for the reviewer, not blockers: all three are admin-settable via the 3-of-10 vault-admin multisig with NO time lock, so a displayed APY can change with immediate effect; and `calculate_withdrawal_penalty_params` still sources from a protocol-level GlobalConfig whose controller WealthSmith has not verified, so a future non-zero penalty could originate outside this vault's admin." },
   { dimension: "operational_dependency_risk", state: "complete", mandatoryBlockerPresent: false, detail: "Resolved at 16H-I: official SDK/RPC source path, proven net + fraction APY, chain block time as the authoritative timestamp, validated artifact and published same-origin cache with browserFetched:false." },
@@ -607,9 +695,15 @@ export const KAMINO_QUESTIONNAIRE = {
     // the solana-verify registry answered both (commit 1d146d70…, hash 5b1eac16…, verified 6m28s after
     // deploy by the upgrade authority itself). Asking Kamino to restate proven facts wastes everyone's
     // time. What survives is only what the registry cannot answer: audit COVERAGE of that commit.
-    { id: "C_audit_coverage", title: "Audit coverage of the deployed commit", questions: [
-      "The deployed kvault binary is hash-verified against commit 1d146d7087a76edbbadc14d848ae14295c0745a4 (deployed 2026-07-14). Which audit report, if any, covers that exact commit — and were all critical findings remediated in it? The three published Earn Vaults reports (OtterSec 2024-12, Sec3 2025-02, Offside Labs 2025-04) state no commit and predate this deployment by 15-19 months.",
-      "Did those 2024-2025 reports audit the current program KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd, or the now-closed predecessor kvauTFR8qm1dhniz6pYuBZkuene3Hfrs1VQhVRgCNrr?",
+    // 16H-L.2 REWROTE this section. "Which audit covers commit 1d146d70…?" was largely answered by
+    // source inspection: the audited redeem_in_kind and reward bodies are byte-identical to the public
+    // releases the official audit artifacts are named for, and all 7 documented remediations are
+    // verified present in the deployed code. What survives is only what source CANNOT show — the
+    // private-to-public correspondence, and whether the uncovered v2.2.2 deltas were reviewed
+    // internally. These now IMPROVE CONFIDENCE; they no longer gate human scoring.
+    { id: "C_audit_coverage", title: "Audit coverage — private-to-public correspondence", questions: [
+      "We verified by direct source inspection that the deployed binary (public commit 1d146d7087a76edbbadc14d848ae14295c0745a4, tag release/v2.2.2) contains every documented remediation from your 2026 redeem-in-kind and vault-rewards audits, and that the audited function bodies are byte-identical to public releases 2.1.0 and 2.1.1 respectively. Can you confirm which private kvault-private PRs (#59, #78, #113) and commits (5f8c2…, 4b66b…, dabe9a26…) were squashed into which public releases? Public history is squashed and references no private PR, so only you can attest this.",
+      "Release 2.2.2 changed runtime code that no public audit covers: klend_operations.rs (214 lines, the KLend CPI layer that moves user funds), three new instructions (update_reserve_allocation_v2, deposit_with_min_shares_out, buy_with_min_shares_out), the new CtokenCap state concept, handler_update_reserve_allocation.rs, and reserve_whitelist_operations.rs. Were these covered by a rolling internal or external review, and do non-public review artifacts exist for them? Relatedly, do your Certora formal-verification and Ackee fuzzing artifacts state which properties were proven against which commit, and do any hold for the deployed 2.2.2 binary?",
     ] },
     // 16H-L.1: the queue and penalty questions were STRUCK — the verified binary contains no queue/FIFO
     // construct at all, and withdrawalPenaltyBps/withdrawalPenaltyLamports read 0/0 on-chain.
@@ -621,9 +715,16 @@ export const KAMINO_QUESTIONNAIRE = {
       "We have verified there is no deposit-pause field in the deployed binary, no depositor allowlist, and no status field of any kind in GET /kvaults/vaults/{pubkey}. Given that, is there a canonical signal an integrator should poll to detect a future deposit suspension or a vault deprecation — or is there genuinely none?",
       "Are there off-chain restrictions on this vault (geofencing, jurisdictional limits, terms-based eligibility) that would not be visible on-chain to a read-only integrator?",
     ] },
-    { id: "F_incidents", title: "Incident history", questions: [
-      "Has this vault, the kvault program, or its active reserves — JLP Market, SOL/BTC Market, Bitcoin Market and Maple Market — experienced any security, accounting, liquidity, withdrawal or administrative incident?",
-      "Are there official disclosures or postmortems we should review?",
+    // 16H-L.1: sharpened. The generic "any incidents?" question was answerable in part from official
+    // sources ($0 bad debt since 2023-11, 5 stress events). What survives is precisely the gap that
+    // track record leaves: the vault layer, the two uncovered markets, and everything after 2026-05-05.
+    // 16H-L.2 incident addendum: reduced to the three facts that source inspection and on-chain
+    // history genuinely cannot settle. Kamino is NOT asked to repeat its published $0-bad-debt record —
+    // we have read it, quantified its scope (10.95% of this allocation), and recorded it.
+    { id: "F_incidents", title: "Incident history — the unresolved remainder", questions: [
+      "Has the exact Steakhouse vault (HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E) or the current KVault deployment (KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd, deployed 2026-07-14) experienced any non-public security, accounting, withdrawal, allocation, administrative or operational incident?",
+      "Have any active Steakhouse markets — SOL/BTC (87.61% of this vault), JLP, Maple, Bitcoin — experienced a socialize_loss action, emergency action, or material withdrawal interruption not covered by public disclosures? We verified socialize_loss requires the lending_market_owner and found no invocation in that signer's full history from 2026-02-24, but earlier owners' periods are unsearched.",
+      "Does Kamino maintain an authoritative incident register, or a scoped no-incident statement, for KVault and managed vaults — as distinct from the $0-bad-debt lending-market track record?",
     ] },
   ],
 } as const;
@@ -647,20 +748,80 @@ export type SteakhouseClosureDiagnostic =
   | "protocol_confirmation_required"
   | "evidence_stale"
   | "review_not_ready"
-  | "verified_disqualifying_condition";
+  | "verified_disqualifying_condition"
+  /* ---- added 16H-L.1: these replace diagnostics that the step RESOLVED. A resolved diagnostic that
+     stays raised is noise; a real exposure that never gets raised is worse. ---- */
+  | "allocation_admin_single_key_no_timelock"
+  | "vault_admin_multisig_no_timelock"
+  | "reserve_emergency_council_socialize_loss_exposure_unresolved"
+  | "reserve_liquidity_below_vault_position"
+  | "incident_review_excludes_vault_layer_and_dominant_market"
+  /* ---- added 16H-L.2 ---- */
+  | "audit_private_to_public_mapping_unattested"
+  | "deployed_release_runtime_changes_publicly_unaudited";
 
 /** The diagnostics currently RAISED. Internal only — never user copy. */
+/**
+ * 16H-L.1 rewrote this list. Diagnostics RESOLVED by this step were REMOVED, not left standing:
+ * upgrade_authority_control_unknown, upgrade_authority_not_multisig_verified,
+ * allocation_admin_control_unknown, admin_permissions_unknown, reserve_exposure_incomplete,
+ * reserve_market_identity_unknown, withdrawal_model_incomplete, deposit_state_unknown. Keeping a
+ * resolved diagnostic raised would misrepresent the evidence just as badly as dropping a live one.
+ *
+ * The replacements are not softer — `allocation_admin_control_unknown` ("we don't know") became
+ * `allocation_admin_single_key_no_timelock` ("we know, and it's a single key").
+ */
 export const RAISED_DIAGNOSTICS: SteakhouseClosureDiagnostic[] = [
-  "upgrade_authority_not_multisig_verified",
-  "upgrade_authority_control_unknown",
-  "allocation_admin_control_unknown",
-  "reserve_exposure_incomplete",
-  "reserve_market_identity_unknown",
+  // Authority — now KNOWN, and what is known is what gets raised.
+  "allocation_admin_single_key_no_timelock",
+  "vault_admin_multisig_no_timelock",
+  // Reserve-layer exposure surfaced while answering the incident question.
+  "reserve_emergency_council_socialize_loss_exposure_unresolved",
+  "reserve_liquidity_below_vault_position",
+  // 16H-L.2: `audit_deployment_linkage_unverified` REMOVED — the linkage was established by direct
+  // inspection of the hash-verified deployed source. The two diagnostics replacing it are narrower and
+  // true: the PRIVATE mapping is unattested, and part of the deployed release is publicly unaudited.
+  "audit_private_to_public_mapping_unattested",
+  "deployed_release_runtime_changes_publicly_unaudited",
+  // Still genuinely open.
   "oracle_dependency_unknown",
-  "audit_deployment_linkage_unverified",
-  "withdrawal_model_incomplete",
   "incident_review_incomplete",
-  "deposit_state_unknown",
+  "incident_review_excludes_vault_layer_and_dominant_market",
   "protocol_confirmation_required",
   "review_not_ready",
 ];
+
+/**
+ * Surfaced 16H-L.1 while answering the incident-history question, and material enough to name rather
+ * than bury in a diagnostic string.
+ *
+ * Kamino's own curator documentation describes a per-lending-market `emergency_council` — an authority
+ * DISTINCT from `lending_market_owner` — holding `socialize_loss` and similar emergency-only handlers,
+ * plus market kill switches (`emergency_mode`, `borrow_disabled`,
+ * `price_triggered_liquidation_disabled`). Kamino's own incident playbook says: "run socialize-loss if
+ * a position becomes irrecoverable".
+ *
+ * WHY THIS MATTERS HERE: socialize_loss distributes bad debt to a market's DEPOSITORS. This vault is a
+ * depositor in four markets. So there exist FOUR further authorities — none of them the vault's admin,
+ * the allocation admin, or the upgrade authority — each able to impose a loss on this vault's users,
+ * on a market whose owner WealthSmith has not identified.
+ *
+ * WHAT IS NOT CLAIMED: that any emergency_council is configured on these four markets, who controls
+ * them, or that socialize_loss has ever been executed. None of that was verified. The exposure is
+ * documented by Kamino as a designed capability; its configuration for THESE markets is UNRESOLVED.
+ * This is recorded as an open exposure, NOT as a finding against the product — and explicitly not as
+ * a disqualifier.
+ */
+export const RESERVE_EMERGENCY_AUTHORITY_EXPOSURE = {
+  version: "1.0.0",
+  raisedBy: "16H-L.1 incident-history review",
+  documentedBy: "Kamino official curator documentation (kamino.com/docs/curators/markets/emergency-controls and related)",
+  capability: "A market's emergency_council may execute socialize_loss, distributing bad debt to that market's depositors, and may set emergency_mode / borrow_disabled / price_triggered_liquidation_disabled.",
+  whyItReachesThisVault: "The vault is a depositor in JLP Market, SOL/BTC Market, Bitcoin Market and Maple Market. A socialize_loss on any of them would land on this vault's position, and therefore on WealthSmith users — without any action by the vault's own authorities.",
+  authoritiesNotIdentified: ["JLP Market", "SOL/BTC Market", "Bitcoin Market", "Maple Market"],
+  configuredForTheseMarkets: "unresolved",
+  everExecuted: "unresolved",
+  isDisqualifier: false,
+  note: "Kamino's $0-bad-debt track record is relevant context but does not resolve this: it is a statement about outcomes to date, not about who holds the switch. The exposure is structural.",
+  evidenceCutoffAt: L1_INCIDENT_REVIEW_CUTOFF_AT,
+} as const;
