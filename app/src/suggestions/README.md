@@ -2006,3 +2006,28 @@ browser bundle. Runtime consumes only the published same-origin record, revalida
 
 A validated, fresh record is still `planningSafe: false` — the product is unapproved. **Data about a
 product is not permission to plan with it.**
+
+### Step 16H-J — Steakhouse USDC risk evidence package
+
+Exact-vault risk evidence assembled for a human 16D review:
+[stableYieldProductionAdapters.md](./stableYieldProductionAdapters.md#16h-j--steakhouse-usdc-risk-evidence-package).
+**Result: `evidence_incomplete` / awaiting human signoff — no score, no approval, no card.**
+
+**No score exists because the repository's own gates forbid one:** `protocolRiskRubric.ts` is
+**v0.1.0-draft** (`PROTOCOL_RISK_RUBRIC_APPROVED = false`, `ASSIGNS_SCORES = false`), and
+`protocolRiskScoreAssignment.ts` (12Y) requires an approved rubric **plus per-dimension reviewer-scored
+input** — its default `not_submitted` leaves every candidate blocked, including JitoSOL. `YieldStrategyRiskReview`
+has no reviewer field and no authorized reviewer record exists. Claude assembled the evidence but **is not
+an authorized human reviewer**; `riskScore` is `undefined`, not `0`.
+
+Established on-chain: program **upgradeable with an ACTIVE upgrade authority**, deployed **~2 days** before
+the read; admin and strategy control are **separate** accounts; the vault allocates USDC across **four**
+Kamino lending reserves (changeable by `allocationAdmin`) — so it is a **managed multi-reserve lending
+allocation, not a plain USDC deposit**. Audits exist (Offside Labs / Sec3 / OtterSec on Earn Vaults, plus
+formal verification, fuzzing, a $1.5M bounty), but **no audited commit is published**, so today's bytecode
+cannot be tied to an audited version — the most consequential gap. Withdrawals may be queued, so instant
+liquidity must not be assumed.
+
+Open blockers: admin permissions, reserve-level exposure, audit↔deployment linkage, withdrawal model,
+incident review. Capacity stays `unknown` — though the program demonstrably uses `U64_MAX` as its uncapped
+sentinel, which makes "`depositCap = 0` means uncapped" less likely (an inference, not semantics).

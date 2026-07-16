@@ -1092,7 +1092,14 @@ import {
   STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED,
   STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED,
   STABLE_YIELD_PRODUCTION_RISK_REVIEW_COMPLETE,
+  STABLE_YIELD_EXACT_VAULT_RISK_EVIDENCE_EXISTS,
+  STABLE_YIELD_RISK_REVIEW_DIAGNOSTICS_EXIST,
+  STABLE_YIELD_RISK_REVIEW_SCORED,
+  STABLE_YIELD_RISK_REVIEW_HUMAN_SIGNOFF_COMPLETE,
+  STABLE_YIELD_RISK_REVIEW_ELIGIBLE_FOR_APPROVAL_REVIEW,
 } from "./investmentTargetRegistry";
+import { getSteakhouseRiskReviewStatus, listSteakhouseRiskEvidence } from "./steakhouseUsdcRiskEvidence";
+import { listYieldStrategyRiskReviews, getYieldStrategyRiskReview } from "./yieldStrategyRiskReview";
 import { validateStableYieldMarketRecord, cacheRecordNetApyPct, cacheRecordToMarketDataInput, rawTokenAmountToUsd, STABLE_YIELD_REFRESH_ARTIFACT_EXISTS, type StableYieldMarketRecord } from "./stableYieldMarketCache";
 import { listActiveYieldStrategyCandidates, isYieldStrategyExcluded } from "./yieldStrategyRegistry";
 import { buildDemoStableYieldRail, buildDemoStableYieldDecision, DEMO_STABLE_YIELD_POSITIONS, DEMO_STABLE_YIELD_GOAL, DEMO_STABLE_YIELD_PRICED_AS_OF } from "./demoStableYieldScenario";
@@ -16343,6 +16350,68 @@ export function runStableYieldSourcePathFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+
+/**
+ * Step 16H-J — the exact-vault risk EVIDENCE package. Deterministic and OFFLINE: every assertion reads
+ * the committed evidence record. No network, no score, no signoff.
+ */
+export function runSteakhouseRiskEvidenceFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const VAULT = "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E";
+  const HIGH_YIELD = "BEEfo7xwgK2ZP13Pxo7qqTPzAteKJmXjVWtMWcXSvbn2";
+  const st = getSteakhouseRiskReviewStatus();
+  const ev = listSteakhouseRiskEvidence();
+
+  // ---- Exact product boundary ----
+  add("16H-J-A: the evidence package binds the exact vault, share mint and program", st.productAddress === VAULT && st.sharesMint === "7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS" && st.programId === "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd", "bound");
+  add("16H-J-B: no sibling / High Yield / Testing vault appears in the evidence", !JSON.stringify(ev).includes(HIGH_YIELD) && !JSON.stringify(ev).includes("JDmkiqvtyAqAsqrLGDgVH2GesbRAAMJCoQtqiyWx82bF"), "exact only");
+  add("16H-J-C: no risk review was reused from a sibling product or from Kamino protocol-wide", ev.every((e) => !/protocol-wide approval|reused from/i.test(e.summary)) && ev.some((e) => /program family/i.test(e.productRelationship + e.reviewerNote)), "no reuse");
+
+  // ---- NO score, NO signoff — the central guarantee of this step ----
+  add("16H-J-D: NO risk score is asserted (undefined, not 0 — 0 would be a claim)", st.riskScore === undefined, "no score");
+  add("16H-J-E: rubric scoring is NOT complete (the repo rubric is a draft)", st.rubricScoreComplete === false && getProtocolRiskRubric().approvalStatus === "draft" && PROTOCOL_RISK_RUBRIC_APPROVED === false, "draft rubric");
+  add("16H-J-F: the rubric does not assign scores; 12Y gates them on reviewer input", PROTOCOL_RISK_RUBRIC_ASSIGNS_SCORES === false, "gated");
+  add("16H-J-G: human signoff is NOT claimed and the product is NOT eligible for approval review", st.humanSignoffComplete === false && st.eligibleForApprovalReview === false, "awaiting human");
+  add("16H-J-H: the review state is honestly evidence_incomplete", st.state === "evidence_incomplete", st.state);
+  add("16H-J-I: no production 16D risk review record exists for this product", listYieldStrategyRiskReviews().length === 0 && getYieldStrategyRiskReview("kamino_steakhouse_usdc") === undefined, "0 reviews");
+
+  // ---- Evidence integrity ----
+  add("16H-J-J: every evidence item carries a source, relationship, date and effect", ev.length >= 12 && ev.every((e) => e.evidenceId && e.source && e.productRelationship && e.checkedAt && e.effect && e.confidence), `${ev.length} items`);
+  add("16H-J-K: unestablished facts are marked not_established, never assumed safe", ev.filter((e) => e.sourceType === "not_established").length >= 5 && ev.filter((e) => e.sourceType === "not_established").every((e) => /GAP:/.test(e.summary)), "gaps explicit");
+  add("16H-J-L: absence of a discovered incident is recorded as MISSING evidence, not a clean record", (() => { const i = ev.find((e) => e.dimension === "incident_history")!; return i.sourceType === "not_established" && /NOT evidence of a clean record/i.test(i.summary); })(), "not clean");
+  add("16H-J-M: the material upgrade-authority + audit-linkage findings are recorded as blockers", st.openBlockers.some((b) => /sh-mgr-02|sh-exp-02|sh-liq-02|sh-inc-01/.test(b)) && ev.some((e) => e.evidenceId === "sh-aud-02" && e.effect === "eligibility_blocker"), `${st.openBlockers.length} blockers`);
+  add("16H-J-N: audits are recorded without claiming safety", (() => { const a = ev.find((e) => e.evidenceId === "sh-aud-01")!; return /not a safety guarantee/i.test(a.reviewerNote ?? ""); })(), "no safety claim");
+  add("16H-J-O: no evidence claims safe / risk-free / guaranteed / fully audited / no incidents", !/\b(is safe|risk-free|guaranteed|fully audited|no incidents)\b/i.test(JSON.stringify(ev)), "no claims");
+  add("16H-J-P: evidence is separated from reviewer judgement", ev.filter((e) => e.reviewerNote).every((e) => e.summary !== e.reviewerNote), "separated");
+
+  // ---- APY / TVL / popularity must not influence risk ----
+  add("16H-J-Q: no evidence item uses APY, TVL or popularity as a risk input", ev.every((e) => e.effect !== "score_input" || !/\bapy is\b|\btvl is high\b|popular|widely adopted/i.test(e.summary)), "no apy/tvl");
+  add("16H-J-R: the evidence module reads no live market data (score cannot move with APY)", !/getAPYs|netApy|apy7d|tvl|createSolanaRpc|fetch\(/i.test(readIf("src/suggestions/steakhouseUsdcRiskEvidence.ts")), "static");
+  add("16H-J-S: USDC is not scored favourably merely for being widely used", (() => { const s2 = ev.find((e) => e.evidenceId === "sh-stb-01")!; return /Do not score this favourably merely because USDC is widely used/i.test(s2.reviewerNote ?? ""); })(), "guarded");
+
+  // ---- Reviewer provenance ----
+  add("16H-J-T: the reviewer actions name the rubric-approval + reviewer-input gates", st.reviewerActionsRequired.some((a) => /rubric/i.test(a) && /draft/i.test(a)) && st.reviewerActionsRequired.some((a) => /reviewer-scored input/i.test(a)), "named");
+  add("16H-J-U: the record explicitly states Claude is not an authorized reviewer", /Claude is not an authorized reviewer/i.test(JSON.stringify(st.reviewerActionsRequired)) && /is NOT an authorized[\s*]+human reviewer/i.test(readIf("src/suggestions/steakhouseUsdcRiskEvidence.ts")), "honest");
+
+  // ---- Capacity stays fail-closed; production unchanged ----
+  add("16H-J-V: the capacity observation is descriptive_only and does not resolve capacity", (() => { const c = ev.find((e) => e.evidenceId === "sh-cap-01")!; return c.effect === "descriptive_only" && /remains an inference/i.test(c.reviewerNote ?? "") && STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === false; })(), "still unknown");
+  add("16H-J-W: no product was approved; approved count remains zero", getApprovedYieldStrategies().length === 0 && getYieldStrategy("kamino_steakhouse_usdc")!.lifecycle !== "approved", "0 approved");
+  add("16H-J-X: production still returns no_plan and renders no Stable Yield card", (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: "2026-07-16T12:00:00.000Z" }); return r.decision?.status === "no_plan" && r.suggestion === null; })() && SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
+  add("16H-J-Y: Demo remains unchanged (one synthetic card, $500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+
+  // ---- Safety: no risk prose reaches the UI; no execution added ----
+  add("16H-J-Z: no risk document or evidence text reaches browser card copy", ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/suggestions/toSuggestionCard.ts", "src/suggestions/yieldStrategyPlanPresentation.ts"].every((f) => !readIf(f).includes("steakhouseUsdcRiskEvidence")), "not in UI");
+  add("16H-J-AA: the evidence module adds no execution / transaction / signature / registry mutation", (() => { const s2 = readIf("src/suggestions/steakhouseUsdcRiskEvidence.ts"); return !/sendTransaction|signTransaction|lifecycle\s*[:=]|registry\.push|approved\s*:\s*true/.test(s2); })(), "read-only");
+
+  // ---- Flags ----
+  add("16H-J-AB: evidence + diagnostics flags are true; scored / signoff / approval-ready are FALSE", STABLE_YIELD_EXACT_VAULT_RISK_EVIDENCE_EXISTS === true && STABLE_YIELD_RISK_REVIEW_DIAGNOSTICS_EXIST === true && STABLE_YIELD_RISK_REVIEW_SCORED === false && STABLE_YIELD_RISK_REVIEW_HUMAN_SIGNOFF_COMPLETE === false && STABLE_YIELD_RISK_REVIEW_ELIGIBLE_FOR_APPROVAL_REVIEW === false, "accurate");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -16445,6 +16514,7 @@ export function printFixtureResults(): void {
     ...runStableYieldProductionAdapterFixtureChecks(),
     ...runStableYieldIdentityResolutionFixtureChecks(),
     ...runStableYieldSourcePathFixtureChecks(),
+    ...runSteakhouseRiskEvidenceFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

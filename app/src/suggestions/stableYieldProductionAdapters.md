@@ -458,3 +458,74 @@ record can be perfectly fresh and still not be planning-safe: `planningSafe: fal
 
 **Data about a product is not permission to plan with it.** Production still returns `no_plan` and renders
 no card; Demo is unchanged; the buffer-yield minimum remains undefined.
+
+---
+
+# 16H-J — Steakhouse USDC risk evidence package
+
+Assembled the exact-vault risk evidence for a human 16D review.
+Backed by [`steakhouseUsdcRiskEvidence.ts`](./steakhouseUsdcRiskEvidence.ts).
+
+**Result: `evidence_incomplete` / awaiting human signoff. No score assigned. No approval.**
+
+## Why no score exists — the repository's own gates
+
+This is not a judgement call; it is what the repo already encodes:
+
+- `protocolRiskRubric.ts` is **v0.1.0-draft**, `approvalStatus: "draft"`, `PROTOCOL_RISK_RUBRIC_APPROVED = false`, `PROTOCOL_RISK_RUBRIC_ASSIGNS_SCORES = false`.
+- `protocolRiskScoreAssignment.ts` (Step 12Y) gates every 0–10 score on an **approved rubric** *plus*
+  **per-dimension reviewer-scored input with rationale + sources**. Its default is `not_submitted`, so
+  every candidate — including the far more mature JitoSOL work — stays `blocked` with no score.
+- `YieldStrategyRiskReview` has **no reviewer field**, and the repository holds no authorized reviewer record.
+
+Claude assembled evidence and may run deterministic rubric mechanics, but **is not an authorized human
+reviewer** and does not represent itself as one. `riskScore` is `undefined` — not `0`, which would be a claim.
+
+## Evidence established (on-chain, 2026-07-16)
+
+| Dimension | Finding |
+|---|---|
+| Program identity | Vault owned by `KvauGMspG5k…`; on-chain name "Steakhouse USDC"; canonical USDC mint; share mint `7D8C…` ✓ |
+| **Upgrade/admin** | Program is **UPGRADEABLE** (`BPFLoaderUpgradeab1e…`) with an **ACTIVE** upgrade authority `GzFgdRJXmaw…` — not immutable |
+| **Deployment age** | `lastDeployedSlot 432874668` — upgraded **~2 days** before the read |
+| Manager | `vaultAdminAuthority 9ceRgz…`; `allocationAdmin CuEC7J…` — **separate** accounts controlling admin vs strategy |
+| **Strategy exposure** | Allocates USDC across **four** Kamino lending reserves (~74.2% / ~23.0% / ~1.8% / ~1.0%), changeable by `allocationAdmin` |
+| Audits | Kamino Earn Vaults: Offside Labs 2025-04-12, Sec3 2025-02-06, OtterSec 2024-12-09 + formal verification, fuzzing, $1.5M ImmuneFi bounty |
+| Oracles | Scope aggregator (multi-provider, 3 audits) — protocol-level |
+| Withdrawal | `minWithdrawAmount` 0.001 USDC; SDK models `queuedForWithdrawalForReserves` ⇒ **instant liquidity must not be assumed** |
+| Fees | perf **500 bps**, mgmt **0 bps** — both already inside the SDK's net APY |
+| Stablecoin | Canonical Circle USDC, not bridged/wrapped |
+
+### Two findings that most affect suitability
+
+1. **Audit linkage is unproven.** Audits exist and are substantial — but no audited commit is published,
+   and the deployed bytecode changed ~2 days ago. What is running today cannot be tied to what was audited.
+2. **This is not a plain USDC deposit.** It is a *managed, multi-reserve lending allocation* whose
+   composition an admin can change. "USDC vault" ≠ pure USDC lending.
+
+## Open evidence gaps (all block approval review)
+
+`sh-mgr-02` admin/allocation permission set + timelocks · `sh-exp-02` the four reserves' markets,
+collateral, oracles, liquidation params · `sh-aud-02` audited-version↔deployed-version linkage ·
+`sh-liq-02` exact withdrawal model, fees, emergency behaviour · `sh-inc-01` sourced incident review.
+
+Per the repo's own rubric guidance, **absence of a discovered incident is missing evidence, not a clean record.**
+
+## Capacity — still unresolved, but a useful observation
+
+`depositCap = 0` and `unallocatedTokensCap = 0`; meanwhile two of the four reserve allocations carry
+`tokenAllocationCap = U64_MAX`. So this program **demonstrably uses U64_MAX as its "uncapped" sentinel**,
+which makes "`depositCap = 0` means uncapped" *less* likely. That is an inference, not documented
+semantics — capacity stays `unknown` and fail-closed. Recorded as `descriptive_only`.
+
+## Re-review triggers
+
+Program upgrade · upgrade-authority change · admin/allocationAdmin change · material strategy/reserve
+change · withdrawal-model change · fee change · critical incident · mint change · vault migration · audit
+scope change. **APY changes alone never invalidate the risk score** (there is no live data in this module).
+
+## State
+
+`evidence_complete` ≠ `rubric score complete` ≠ `human signoff complete` ≠ `eligible for approval review`
+≠ `approved`. All are false or absent here. Production still returns `no_plan` and renders no card; Demo
+unchanged; capacity fail-closed; buffer-yield minimum still undefined.

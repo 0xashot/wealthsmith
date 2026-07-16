@@ -239,6 +239,17 @@ export const STABLE_YIELD_BACKEND_REFRESH_BOUNDARY_EXISTS = true;
 export const STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED = false;
 export const STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED = false;
 export const STABLE_YIELD_PRODUCTION_RISK_REVIEW_COMPLETE = false;
+// Step 16H-J — the exact-vault risk EVIDENCE package for Steakhouse USDC. Evidence assembled from
+// on-chain reads + Kamino's official audit inventory; reviewer-facing gaps recorded explicitly.
+// NO score is assigned and NO signoff is claimed: protocolRiskRubric.ts is v0.1.0-draft
+// (PROTOCOL_RISK_RUBRIC_APPROVED=false) and protocolRiskScoreAssignment.ts (12Y) gates every 0-10 score
+// on an approved rubric + per-dimension reviewer input. Claude is not an authorized human reviewer.
+export const STABLE_YIELD_EXACT_VAULT_RISK_EVIDENCE_EXISTS = true;
+export const STABLE_YIELD_RISK_REVIEW_DIAGNOSTICS_EXIST = true;
+// Deliberately false — an accurate incomplete/awaiting-signoff state, not a convenient one.
+export const STABLE_YIELD_RISK_REVIEW_SCORED = false;
+export const STABLE_YIELD_RISK_REVIEW_HUMAN_SIGNOFF_COMPLETE = false;
+export const STABLE_YIELD_RISK_REVIEW_ELIGIBLE_FOR_APPROVAL_REVIEW = false;
 export const STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS = false;
 export const STABLE_YIELD_PRODUCTION_APPROVED_PRODUCTS_EXIST = false;
 export const STABLE_YIELD_PRODUCTION_CARD_AVAILABLE = false;
