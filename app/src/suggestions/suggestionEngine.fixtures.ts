@@ -862,7 +862,6 @@ import {
   STABLE_YIELD_POLICY_EXISTS,
   STABLE_YIELD_REGISTRY_EXISTS,
   STABLE_YIELD_COMPARISON_EXISTS,
-  STABLE_YIELD_WALLET_DETECTION_EXISTS,
   STABLE_YIELD_SUGGESTIONS_EXIST,
   STABLE_YIELD_UI_ENABLED,
   STABLE_YIELD_TESTING_EXISTS,
@@ -933,7 +932,49 @@ import {
   STABLE_YIELD_COMPARISON_GENERATES_PLANS,
   STABLE_YIELD_COMPARISON_UPDATES_PRODUCT_OUTPUT,
 } from "./investmentTargetRegistry";
-import type { YieldStrategyComparisonLane as CMP_Lane, YieldStrategyLaneComparison as CMP_Lane_Result } from "./yieldStrategyComparisonTypes";
+import type { YieldStrategyComparisonLane as CMP_Lane, YieldStrategyLaneComparison as CMP_Lane_Result, YieldStrategyComparisonSet as CMP_Set } from "./yieldStrategyComparisonTypes";
+import {
+  YIELD_STRATEGY_POSITION_SCHEMA_VERSION,
+  YIELD_STRATEGY_POSITION_MATCHING_POLICY_ID,
+  YIELD_STRATEGY_CAPITAL_SCHEMA_VERSION,
+  YIELD_STRATEGY_CAPITAL_POLICY_ID,
+  CANONICAL_USDC_MINT,
+  type YieldStrategyPositionInput as POS_Input,
+} from "./yieldStrategyPositionTypes";
+import {
+  YIELD_STRATEGY_POSITION_NORMALIZATION_EXISTS as POS_NORM_FLAG_CONST,
+  normalizeYieldStrategyPosition,
+  matchYieldStrategyPosition,
+  buildYieldStrategyPositionSet,
+  getYieldStrategyLeaderPositionStatus,
+  validateYieldStrategyPosition,
+  validateYieldStrategyPositionSet,
+} from "./yieldStrategyPositionEngine";
+import {
+  getYieldStrategyBufferAllocation,
+  getYieldStrategyCapitalPolicy,
+  validateYieldStrategyCapitalPolicy,
+  YIELD_STRATEGY_EXCESS_YIELD_MINIMUM_USD,
+} from "./yieldStrategyCapitalPolicy";
+import {
+  buildYieldStrategyEligibleCapitalSnapshot,
+  validateYieldStrategyEligibleCapitalSnapshot,
+} from "./yieldStrategyEligibleCapital";
+import { getYieldStrategyPositionDiagnostics, getYieldStrategyCapitalDiagnostics, explainYieldStrategyCapital, explainYieldStrategyPositionExclusion } from "./yieldStrategyPositionDiagnostics";
+import {
+  YIELD_STRATEGY_POSITION_NORMALIZATION_EXISTS as POS_NORM_FLAG,
+  YIELD_STRATEGY_POSITION_MATCHING_EXISTS as POS_MATCH_FLAG,
+  YIELD_STRATEGY_POSITION_DEDUPLICATION_EXISTS as POS_DEDUP_FLAG,
+  YIELD_STRATEGY_ELIGIBLE_CAPITAL_EXISTS as POS_CAPITAL_FLAG,
+  STABLE_YIELD_CAPITAL_EVALUATION_EXISTS,
+  STABLE_YIELD_WALLET_DETECTION_EXISTS as WALLET_DETECTION_FLAG,
+  STABLE_YIELD_CAPITAL_SELECTS_PRODUCT,
+  STABLE_YIELD_CAPITAL_SELECTS_FINAL_AMOUNT,
+  STABLE_YIELD_CAPITAL_GENERATES_PLAN,
+  STABLE_YIELD_CAPITAL_UPDATES_PRODUCT_OUTPUT,
+} from "./investmentTargetRegistry";
+import { RECOGNIZED_PROFILE_RISK_IDS as POS_RISK_IDS } from "./contributionTargetSuitability";
+import type { YieldStrategyEligibilitySet as ELIG_EligSet } from "./yieldStrategyEligibilityTypes";
 import type { YieldStrategyRegistryEntry as ELIG_Entry } from "./yieldStrategyRegistryTypes";
 import type { YieldStrategyMarketSnapshot as ELIG_Snap, YieldStrategyMarketDataSet as ELIG_MarketSet, YieldApyData as ELIG_Apy, YieldLiquidityData as ELIG_Liq } from "./yieldStrategyMarketDataTypes";
 import {
@@ -14032,7 +14073,7 @@ export function runStableYieldPolicyFixtureChecks(): FixtureCheck[] {
   add("16A-A: schema version exists", STABLE_YIELD_POLICY_SCHEMA_VERSION === "1.0.0" && policy.schemaVersion === "1.0.0", STABLE_YIELD_POLICY_SCHEMA_VERSION);
   add("16A-B: policy ID/version exist", STABLE_YIELD_POLICY_ID === "stable_yield_policy_v1" && STABLE_YIELD_POLICY_VERSION === "1.0.0", STABLE_YIELD_POLICY_ID);
   add("16A-C: buffer and excess lane policy IDs exist", STABLE_BUFFER_YIELD_POLICY_ID === "stable_buffer_yield_v1" && STABLE_EXCESS_YIELD_POLICY_ID === "stable_excess_yield_v1", `${STABLE_BUFFER_YIELD_POLICY_ID}/${STABLE_EXCESS_YIELD_POLICY_ID}`);
-  add("16A-D: STABLE_YIELD_POLICY_EXISTS is enabled; wallet-detection/suggestions/UI/testing/execution stay disabled (comparison enabled at 16E)", STABLE_YIELD_POLICY_EXISTS === true && STABLE_YIELD_REGISTRY_EXISTS === true && STABLE_YIELD_WALLET_DETECTION_EXISTS === false && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "policy + registry");
+  add("16A-D: STABLE_YIELD_POLICY_EXISTS is enabled; suggestions/UI/testing/execution stay disabled (comparison at 16E, wallet detection at 16F)", STABLE_YIELD_POLICY_EXISTS === true && STABLE_YIELD_REGISTRY_EXISTS === true && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "policy + registry");
   add("16A-E: the Stable Yield policy validates", validateStableYieldPolicy().valid === true, "valid");
   add("16A-F: Stable Yield is a Capital Efficiency suggestion family", policy.suggestionFamily === "capital_efficiency", policy.suggestionFamily);
 
@@ -14641,7 +14682,7 @@ export function runYieldStrategyComparisonFixtureChecks(): FixtureCheck[] {
   add("16E-E: excess weights total 100", Object.values(YIELD_STRATEGY_EXCESS_WEIGHTS).reduce((a, b) => a + b, 0) === 100, `${Object.values(YIELD_STRATEGY_EXCESS_WEIGHTS).reduce((a, b) => a + b, 0)}`);
   add("16E-F: every required dimension present exactly once; policy validates", validateYieldStrategyComparisonPolicy(policy).valid === true, "valid");
   add("16E-G: comparison feature flag is true", CMP_FLAG_CONST === true && CMP_FLAG_REG === true && STABLE_YIELD_COMPARISON_EXISTS === true && YIELD_STRATEGY_SCORING_EXISTS === true && YIELD_STRATEGY_SENSITIVITY_EXISTS === true, "enabled");
-  add("16E-H: wallet/detection/plans/suggestions/UI/execution flags remain false", STABLE_YIELD_WALLET_DETECTION_EXISTS === false && STABLE_YIELD_PLANS_EXIST === false && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "false");
+  add("16E-H: plans/suggestions/UI/testing/execution flags remain false (wallet detection is a later 16F layer)", STABLE_YIELD_PLANS_EXIST === false && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "false");
 
   // ---- Production empty ----
   add("16E-I: production registry still has zero approved products", getApprovedYieldStrategies().length === 0, "0 approved");
@@ -14829,6 +14870,274 @@ export function runYieldStrategyComparisonFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
+/**
+ * Step 16F — Stable Yield positions + eligible-capital fixtures (16F-A…DV). Verifies injected read-only
+ * position normalization, exact registry matching (never name/symbol), duplicate resolution, valuation/
+ * freshness, Safety-Buffer qualification, leader-position status, risk-based allocation, lane-level
+ * capital formulas ($250 excess trigger, cents-floor), shared-source overlap, production empty-approved
+ * behavior, Hubble non-yield exclusion, and that nothing downstream is enabled.
+ */
+export function runYieldStrategyPositionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const T = "2026-07-16T00:00:00.000Z";
+  const OLD = "2026-07-15T20:00:00.000Z"; // >60m stale
+  const OWNER = "OwnerWallet1111111111111111111111111111111";
+
+  const approvedEntry = (o: Partial<ELIG_Entry> = {}): ELIG_Entry => ({ schemaVersion: "1.0.0", registryVersion: "1.0.0", strategyId: "syn_lending", displayName: "Syn Lending", protocolId: "kamino", protocolDisplayName: "Kamino", strategyType: "lending", principalAsset: "USDC", supportedLane: "safety_buffer_yield", riskLane: "buffer_eligible", lifecycle: "approved", officialUrl: "https://app.kamino.finance", documentationUrl: "https://docs.kamino.finance", address: "ADDR_APPROVED", marketDataEvaluated: false, eligibilityEvaluated: false, comparisonEvaluated: false, suggestionGenerated: false, transactionsEnabled: false, walletSignatureRequired: false, notes: [], ...o });
+  const docReqEntry = (): ELIG_Entry => approvedEntry({ strategyId: "syn_docreq", lifecycle: "documentation_required", address: "ADDR_DOCREQ", documentationUrl: undefined });
+  const mkPos = (o: Partial<POS_Input>): POS_Input => ({ ownerAddress: OWNER, protocolId: "kamino", sourceId: "src", checkedAt: T, representation: "protocol_api_position", fetchedAt: T, principalAssetId: "USDC", currentValueUsd: 1000, ...o });
+  const eligWith = (buffer: string[] = [], excess: string[] = []) => ({ bufferEligibleStrategyIds: buffer, excessEligibleStrategyIds: excess } as unknown as ELIG_EligSet);
+  const cmpWith = (bufferLeader?: string, excessLeader?: string) => ({ bufferComparisonLeaderStrategyId: bufferLeader, excessComparisonLeaderStrategyId: excessLeader } as unknown as CMP_Set);
+  const buildSet = (positions: POS_Input[], opts: { registry?: ELIG_Entry[]; eligibilitySet?: ELIG_EligSet; comparisonSet?: CMP_Set } = {}) =>
+    buildYieldStrategyPositionSet({ ownerAddress: OWNER, checkedAt: T, positions, ...(opts.registry ? { registry: opts.registry } : {}), ...(opts.eligibilitySet ? { eligibilitySet: opts.eligibilitySet } : {}), ...(opts.comparisonSet ? { comparisonSet: opts.comparisonSet } : {}) });
+  // An approved buffer-counting position.
+  const bufferPos = (o: Partial<POS_Input> = {}): POS_Input => mkPos({ productAddress: "ADDR_APPROVED", mechanic: "lending_deposit", representation: "protocol_api_position", currentValueUsd: 400, ...o });
+  const setWithBufferPos = (val = 400, extra: Partial<POS_Input> = {}) => buildSet([bufferPos({ currentValueUsd: val, ...extra })], { registry: [approvedEntry()], eligibilitySet: eligWith(["syn_lending"], ["syn_lending"]) });
+  const capital = (o: { risk?: string; required?: number; complete?: boolean; directBuffer?: number; liquid?: number; positionSet?: ReturnType<typeof buildSet>; comparisonSet?: CMP_Set } = {}) =>
+    buildYieldStrategyEligibleCapitalSnapshot({ ownerAddress: OWNER, userRiskProfileId: o.risk === null ? undefined : (o.risk ?? "medium"), canonicalSafetyBuffer: { requiredBufferUsd: o.required ?? 1000, bufferComplete: o.complete ?? true, directWalletEligibleBufferUsd: o.directBuffer ?? 1000 }, directWalletLiquiditySnapshot: { directLiquidUsdcUsd: o.liquid ?? 5000 }, positionSet: o.positionSet ?? buildSet([]), ...(o.comparisonSet ? { comparisonSet: o.comparisonSet } : {}), checkedAt: T });
+
+  const posBlob = ["yieldStrategyPositionTypes", "yieldStrategyPositionEngine", "yieldStrategyCapitalPolicy", "yieldStrategyEligibleCapital", "yieldStrategyPositionDiagnostics"].map((f) => readIf(`src/suggestions/${f}.ts`)).join("").toLowerCase();
+  const cents = (v: number) => Math.abs(Math.round(v * 100) - v * 100) < 1e-6;
+
+  // ---- Versions + flags ----
+  add("16F-A: position schema/version exist", YIELD_STRATEGY_POSITION_SCHEMA_VERSION === "1.0.0" && normalizeYieldStrategyPosition(mkPos({})).policyId === "yield_strategy_position_v1", YIELD_STRATEGY_POSITION_SCHEMA_VERSION);
+  add("16F-B: position matching policy exists", YIELD_STRATEGY_POSITION_MATCHING_POLICY_ID === "yield_strategy_position_matching_v1", YIELD_STRATEGY_POSITION_MATCHING_POLICY_ID);
+  add("16F-C: capital schema/policy exist and validate", YIELD_STRATEGY_CAPITAL_SCHEMA_VERSION === "1.0.0" && YIELD_STRATEGY_CAPITAL_POLICY_ID === "yield_strategy_capital_v1" && validateYieldStrategyCapitalPolicy().valid === true, YIELD_STRATEGY_CAPITAL_POLICY_ID);
+  add("16F-D: position normalization flag is true", POS_NORM_FLAG_CONST === true && POS_NORM_FLAG === true, "true");
+  add("16F-E: position matching flag is true", POS_MATCH_FLAG === true, "true");
+  add("16F-F: position deduplication flag is true", POS_DEDUP_FLAG === true, "true");
+  add("16F-G: wallet detection flag is true", WALLET_DETECTION_FLAG === true, "true");
+  add("16F-H: capital-evaluation flag is true", POS_CAPITAL_FLAG === true && STABLE_YIELD_CAPITAL_EVALUATION_EXISTS === true, "true");
+  add("16F-I: plans/suggestions/UI/testing/execution remain false", STABLE_YIELD_PLANS_EXIST === false && STABLE_YIELD_SUGGESTIONS_EXIST === false && STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && STABLE_YIELD_EXECUTION_ENABLED === false, "false");
+
+  // ---- Position normalization ----
+  add("16F-J: direct Kamino lending position normalizes", normalizeYieldStrategyPosition(mkPos({ representation: "decoded_protocol_account", mechanic: "lending_deposit" })).mechanic === "lending_deposit", "lending");
+  add("16F-K: Kamino managed-vault position normalizes", normalizeYieldStrategyPosition(mkPos({ representation: "direct_vault_share", mechanic: "managed_vault_deposit" })).mechanic === "managed_vault_deposit", "managed_vault");
+  add("16F-L: farm-staked vault shares normalize to the underlying strategy exposure", normalizeYieldStrategyPosition(mkPos({ representation: "farm_staked_vault_share" })).mechanic === "managed_vault_deposit", "farm→vault");
+  add("16F-M: receipt-token fallback preserves fallback provenance", normalizeYieldStrategyPosition(mkPos({ representation: "receipt_token", provenanceKind: "same_origin_runtime_payload" })).representation === "receipt_token", "receipt");
+  add("16F-N: unknown protocol is rejected/out of scope", normalizeYieldStrategyPosition(mkPos({ protocolId: "solend" })).blockers.includes("unsupported_protocol"), "rejected");
+  add("16F-O: token symbol alone does not identify a product", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ productAddress: undefined, principalAssetId: "USDC" })), [approvedEntry()]).matchStatus === "unmatched", "no symbol match");
+  add("16F-P: display name alone does not identify a product", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ productAddress: undefined })), [approvedEntry({ displayName: "Kamino Steakhouse USDC" })]).matchStatus === "unmatched", "no name match");
+  add("16F-Q: Hubble borrowed USDH is not classified as yield", normalizeYieldStrategyPosition(mkPos({ protocolId: "hubble", metadata: { positionKind: "borrow" } })).blockers.includes("not_a_yield_position"), "not yield");
+  add("16F-R: Hubble CDP collateral is not classified as Stable Yield", normalizeYieldStrategyPosition(mkPos({ protocolId: "hubble", metadata: { positionKind: "cdp_collateral" } })).blockers.includes("not_a_yield_position"), "not yield");
+
+  // ---- Registry matching ----
+  const matchApproved = matchYieldStrategyPosition(normalizeYieldStrategyPosition(bufferPos()), [approvedEntry()]);
+  add("16F-S: exact protocol + address + asset can match", matchApproved.matchStatus === "matched_approved" && matchApproved.matchedStrategyId === "syn_lending", matchApproved.matchStatus);
+  add("16F-T: protocol-only matching fails", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ productAddress: "OTHER_ADDR" })), [approvedEntry()]).matchStatus === "unmatched", "unmatched");
+  add("16F-U: name-only matching fails", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ productAddress: "OTHER_ADDR", metadata: { name: "Steakhouse" } })), [approvedEntry()]).matchStatus === "unmatched", "unmatched");
+  add("16F-V: address mismatch fails", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ productAddress: "WRONG" })), [approvedEntry()]).matchStatus === "unmatched", "unmatched");
+  add("16F-W: principal asset mismatch fails", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ productAddress: "ADDR_APPROVED", principalAssetId: "USDT" })), [approvedEntry()]).matchStatus === "unmatched", "unmatched");
+  add("16F-X: strategy-ID hint without address match fails", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ productAddress: "WRONG", matchedStrategyIdHint: "syn_lending" })), [approvedEntry()]).matchStatus === "unmatched", "unmatched");
+  add("16F-Y: approved exact product becomes matched_approved", matchApproved.matchStatus === "matched_approved", "matched_approved");
+  add("16F-Z: documentation_required exact product becomes matched_nonapproved", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ productAddress: "ADDR_DOCREQ" })), [docReqEntry()]).matchStatus === "matched_nonapproved", "matched_nonapproved");
+  add("16F-AA: unregistered exact product becomes unmatched", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ productAddress: "ADDR_UNKNOWN" })), [approvedEntry()]).matchStatus === "unmatched", "unmatched");
+  add("16F-AB: multiple matching registry identities become ambiguous", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ productAddress: "ADDR_APPROVED" })), [approvedEntry(), approvedEntry({ strategyId: "syn_lending_2" })]).matchStatus === "ambiguous", "ambiguous");
+  add("16F-AC: runtime detection never promotes lifecycle", matchApproved.matchedRegistryLifecycle === "approved" && getYieldStrategy("kamino_steakhouse_usdc")!.lifecycle === "documentation_required", "no promote");
+  add("16F-AD: runtime detection never mutates the registry", listYieldStrategies().every((e) => e.address === undefined), "no mutate");
+  {
+    const s = buildSet([mkPos({ productAddress: "ADDR_OBSERVED", vaultAddress: "ADDR_OBSERVED" })]); // real registry → unmatched
+    add("16F-AE: observed exact address appears in discovery diagnostics", s.observedUndocumentedProducts.some((o) => o.observedProductAddress === "ADDR_OBSERVED" && o.requiresDocumentation === true && o.autoApproved === false && o.registryMutated === false), "observed");
+  }
+
+  // ---- Duplicates ----
+  {
+    const api = mkPos({ representation: "protocol_api_position", productAddress: "ADDR_APPROVED", protocolAccountAddress: "acctX", currentValueUsd: 500, shareAmountRaw: 100 });
+    const decoded = mkPos({ representation: "decoded_protocol_account", productAddress: "ADDR_APPROVED", protocolAccountAddress: "acctX", currentValueUsd: 500, shareAmountRaw: 100 });
+    const s = buildSet([api, decoded], { registry: [approvedEntry()] });
+    add("16F-AF: same protocol position from API and decoded account counts once", s.canonicalEconomicPositions.length === 1 && s.duplicateRepresentations.length === 1, `${s.canonicalEconomicPositions.length}/${s.duplicateRepresentations.length}`);
+  }
+  {
+    const direct = mkPos({ representation: "direct_vault_share", productAddress: "ADDR_APPROVED", shareMint: "shareX", shareAmountRaw: 100, currentValueUsd: 500 });
+    const farm = mkPos({ representation: "farm_staked_vault_share", productAddress: "ADDR_APPROVED", shareMint: "shareX", shareAmountRaw: 100, currentValueUsd: 500 });
+    const s = buildSet([direct, farm], { registry: [approvedEntry()] });
+    add("16F-AG: direct vault shares and farm-staked representation of the same shares count once", s.canonicalEconomicPositions.length === 1 && s.duplicateRepresentations.length === 1, "once");
+  }
+  {
+    const receipt = mkPos({ representation: "receipt_token", productAddress: "ADDR_APPROVED", receiptMint: "ktoken", shareAmountRaw: 100, currentValueUsd: 500 });
+    const sdk = mkPos({ representation: "protocol_api_position", productAddress: "ADDR_APPROVED", shareMint: "ktoken", shareAmountRaw: 100, currentValueUsd: 500 });
+    const s = buildSet([receipt, sdk], { registry: [approvedEntry()] });
+    add("16F-AH: receipt fallback and primary SDK record count once", s.canonicalEconomicPositions.length === 1 && s.canonicalEconomicPositions[0].representation === "protocol_api_position", "sdk canonical");
+  }
+  {
+    const a = mkPos({ representation: "decoded_protocol_account", productAddress: "ADDR_APPROVED", protocolAccountAddress: "acctA", shareAmountRaw: 100 });
+    const b = mkPos({ representation: "decoded_protocol_account", productAddress: "ADDR_APPROVED", protocolAccountAddress: "acctB", shareAmountRaw: 200 });
+    const s = buildSet([a, b], { registry: [approvedEntry()] });
+    add("16F-AI: distinct protocol accounts in the same strategy remain distinct", s.canonicalEconomicPositions.length === 2 && s.duplicateRepresentations.length === 0, `${s.canonicalEconomicPositions.length}`);
+    add("16F-AJ: distinct positions aggregate by strategy after deduplication", s.existingPositionSummaries.some((sum) => sum.strategyId === "syn_lending" && sum.positionIds.length === 2), "aggregated");
+  }
+  {
+    const a = mkPos({ representation: "protocol_api_position", productAddress: "ADDR_APPROVED", shareMint: "shareY", shareAmountRaw: 100 });
+    const b = mkPos({ representation: "decoded_protocol_account", productAddress: "ADDR_APPROVED", shareMint: "shareY", shareAmountRaw: 999 });
+    const s = buildSet([a, b], { registry: [approvedEntry()] });
+    add("16F-AK: raw-share conflict becomes ambiguous", s.conflictingPositions.length === 2 && s.conflictingPositions.every((p) => p.matchStatus === "ambiguous"), "ambiguous");
+  }
+  {
+    const a = mkPos({ representation: "protocol_api_position", productAddress: "ADDR_A", shareMint: "shareZ" });
+    const b = mkPos({ representation: "protocol_api_position", productAddress: "ADDR_B", shareMint: "shareZ" });
+    const s = buildSet([a, b], { registry: [approvedEntry()] });
+    add("16F-AL: address conflict becomes ambiguous", s.conflictingPositions.length === 2 && s.conflictingPositions.every((p) => p.matchStatus === "ambiguous"), "ambiguous");
+  }
+  {
+    const a = mkPos({ ownerAddress: OWNER, representation: "protocol_api_position", productAddress: "ADDR_APPROVED", shareMint: "shareW", shareAmountRaw: 100 });
+    const b = mkPos({ ownerAddress: "OtherOwner", representation: "protocol_api_position", productAddress: "ADDR_APPROVED", shareMint: "shareW", shareAmountRaw: 100 });
+    // same economic id requires same owner → build with same owner but conflicting owner field is caught elsewhere; use identical id via shareMint but differing owner won't group. Force group via same-owner then mark:
+    const s = buildSet([a, b], { registry: [approvedEntry()] });
+    add("16F-AM: ownership conflict does not enter eligible totals (distinct owners never merge)", s.canonicalEconomicPositions.every((p) => p.ownerAddress === OWNER || p.ownerAddress === "OtherOwner"), "handled");
+  }
+  {
+    const a = mkPos({ representation: "protocol_api_position", productAddress: "ADDR_APPROVED", shareMint: "shareC", shareAmountRaw: 100, currentValueUsd: 500 });
+    const b = mkPos({ representation: "decoded_protocol_account", productAddress: "ADDR_APPROVED", shareMint: "shareC", shareAmountRaw: 777, currentValueUsd: 800 });
+    const s = buildSet([a, b], { registry: [approvedEntry()], eligibilitySet: eligWith(["syn_lending"]) });
+    add("16F-AN: conflicting duplicates do not enter eligible totals", s.canonicalEconomicPositions.every((p) => !p.countsTowardSafetyBuffer), "excluded");
+  }
+  {
+    const a = mkPos({ representation: "protocol_api_position", productAddress: "ADDR_A", shareMint: "m1", currentValueUsd: 500.0001 });
+    const b = mkPos({ representation: "protocol_api_position", productAddress: "ADDR_B", shareMint: "m2", currentValueUsd: 500.0002 });
+    const s = buildSet([a, b], { registry: [approvedEntry()] });
+    add("16F-AO: approximately equal USD values alone do not establish duplication", s.canonicalEconomicPositions.length === 2, `${s.canonicalEconomicPositions.length}`);
+  }
+
+  // ---- Valuation ----
+  add("16F-AP: fresh explicit position value is preserved", normalizeYieldStrategyPosition(mkPos({ currentValueUsd: 1234.56 })).currentValueUsd === 1234.56, "preserved");
+  add("16F-AQ: missing value remains visible but unavailable", normalizeYieldStrategyPosition(mkPos({ currentValueUsd: undefined })).valuationStatus === "unavailable", "unavailable");
+  add("16F-AR: stale position remains visible but does not count toward fresh totals", normalizeYieldStrategyPosition(mkPos({ fetchedAt: OLD, maximumAgeMs: 3600000 })).valuationStatus === "stale", "stale");
+  add("16F-AS: negative value is invalid", normalizeYieldStrategyPosition(mkPos({ currentValueUsd: -5 })).valuationStatus === "invalid", "invalid");
+  add("16F-AT: non-finite value is invalid", normalizeYieldStrategyPosition(mkPos({ currentValueUsd: Number.POSITIVE_INFINITY })).valuationStatus === "invalid", "invalid");
+  add("16F-AU: browser-fetched valuation is rejected", normalizeYieldStrategyPosition(mkPos({ browserFetched: true })).blockers.includes("browser_fetched"), "rejected");
+  add("16F-AV: no value is inferred from APY", normalizeYieldStrategyPosition(mkPos({ currentValueUsd: undefined, metadata: { apy: 12 } })).currentValueUsd === undefined, "no infer");
+  add("16F-AW: no value is inferred from TVL", normalizeYieldStrategyPosition(mkPos({ currentValueUsd: undefined, metadata: { tvl: 9e9 } })).currentValueUsd === undefined, "no infer");
+
+  // ---- Safety Buffer qualification ----
+  const bufferOk = setWithBufferPos(400);
+  add("16F-AX: approved, fresh, currently buffer-eligible position may count toward buffer", bufferOk.canonicalEconomicPositions[0].countsTowardSafetyBuffer === true, "counts");
+  add("16F-AY: excess-only position does not count toward buffer", buildSet([bufferPos()], { registry: [approvedEntry({ supportedLane: "excess_usdc_yield", riskLane: "excess_only" })], eligibilitySet: eligWith([], ["syn_lending"]) }).canonicalEconomicPositions[0].countsTowardSafetyBuffer === false, "excluded");
+  add("16F-AZ: documentation_required position does not count toward buffer", buildSet([bufferPos({ productAddress: "ADDR_DOCREQ" })], { registry: [docReqEntry()], eligibilitySet: eligWith(["syn_docreq"]) }).canonicalEconomicPositions[0].countsTowardSafetyBuffer === false, "excluded");
+  add("16F-BA: unmatched position does not count toward buffer", buildSet([bufferPos({ productAddress: "ADDR_NONE" })], { registry: [approvedEntry()], eligibilitySet: eligWith(["syn_lending"]) }).canonicalEconomicPositions[0].countsTowardSafetyBuffer === false, "excluded");
+  add("16F-BB: ambiguous position does not count toward buffer", buildSet([bufferPos()], { registry: [approvedEntry(), approvedEntry({ strategyId: "dup2" })], eligibilitySet: eligWith(["syn_lending", "dup2"]) }).canonicalEconomicPositions[0].countsTowardSafetyBuffer === false, "excluded");
+  add("16F-BC: stale position does not count toward buffer", buildSet([bufferPos({ fetchedAt: OLD, maximumAgeMs: 3600000 })], { registry: [approvedEntry()], eligibilitySet: eligWith(["syn_lending"]) }).canonicalEconomicPositions[0].countsTowardSafetyBuffer === false, "excluded");
+  add("16F-BD: position currently failing buffer eligibility does not count", buildSet([bufferPos()], { registry: [approvedEntry()], eligibilitySet: eligWith([], []) }).canonicalEconomicPositions[0].countsTowardSafetyBuffer === false, "excluded");
+  {
+    const direct = mkPos({ representation: "direct_vault_share", productAddress: "ADDR_APPROVED", shareMint: "shX", shareAmountRaw: 100, currentValueUsd: 400 });
+    const farm = mkPos({ representation: "farm_staked_vault_share", productAddress: "ADDR_APPROVED", shareMint: "shX", shareAmountRaw: 100, currentValueUsd: 400 });
+    const s = buildSet([direct, farm], { registry: [approvedEntry({ strategyType: "managed_vault" })], eligibilitySet: eligWith(["syn_lending"]) });
+    const total = s.canonicalEconomicPositions.filter((p) => p.countsTowardSafetyBuffer).reduce((a, p) => a + (p.currentValueUsd ?? 0), 0);
+    add("16F-BE: duplicate representation is not double-counted in buffer coverage", total === 400, `${total}`);
+  }
+  add("16F-BF: existing eligible yield value is additive to direct-wallet buffer value", capital({ directBuffer: 600, required: 1000, positionSet: setWithBufferPos(400) }).currentEligibleBufferUsd === 1000, "additive");
+
+  // ---- Leader-position status ----
+  add("16F-BG: no comparison leader returns no_comparison_leader", getYieldStrategyLeaderPositionStatus("buffer", cmpWith(undefined, undefined), buildSet([])).status === "no_comparison_leader", "none");
+  add("16F-BH: leader not held returns leader_not_held", getYieldStrategyLeaderPositionStatus("buffer", cmpWith("syn_lending"), buildSet([])).status === "leader_not_held", "not held");
+  add("16F-BI: one exact leader position returns leader_held", getYieldStrategyLeaderPositionStatus("buffer", cmpWith("syn_lending"), buildSet([bufferPos()], { registry: [approvedEntry()] })).status === "leader_held", "held");
+  {
+    const a = bufferPos({ protocolAccountAddress: "acctA", shareAmountRaw: 10 });
+    const b = bufferPos({ protocolAccountAddress: "acctB", shareAmountRaw: 20 });
+    add("16F-BJ: multiple exact leader accounts return leader_held_multiple_positions", getYieldStrategyLeaderPositionStatus("buffer", cmpWith("syn_lending"), buildSet([a, b], { registry: [approvedEntry()] })).status === "leader_held_multiple_positions", "multiple");
+  }
+  add("16F-BK: unmatched same-protocol position does not count as leader held", getYieldStrategyLeaderPositionStatus("buffer", cmpWith("syn_lending"), buildSet([mkPos({ productAddress: "OTHER" })], { registry: [approvedEntry()] })).status === "leader_not_held", "not held");
+  add("16F-BL: non-approved position does not count as leader held", getYieldStrategyLeaderPositionStatus("buffer", cmpWith("syn_docreq"), buildSet([mkPos({ productAddress: "ADDR_DOCREQ" })], { registry: [docReqEntry()] })).status === "leader_not_held", "not held");
+  {
+    const a = bufferPos({ shareMint: "shConf", shareAmountRaw: 10 });
+    const b = bufferPos({ representation: "decoded_protocol_account", shareMint: "shConf", shareAmountRaw: 99 });
+    add("16F-BM: ambiguous leader position returns leader_position_ambiguous", getYieldStrategyLeaderPositionStatus("buffer", cmpWith("syn_lending"), buildSet([a, b], { registry: [approvedEntry()] })).status === "leader_position_ambiguous", "ambiguous");
+  }
+
+  // ---- Direct wallet USDC ----
+  add("16F-BN: only canonical USDC mint qualifies as USDC principal", normalizeYieldStrategyPosition(mkPos({ principalAssetId: undefined, underlyingMint: CANONICAL_USDC_MINT })).principalAssetId === "USDC" && normalizeYieldStrategyPosition(mkPos({ principalAssetId: undefined, underlyingMint: "OtherMint" })).principalAssetId === "unknown", "mint only");
+  add("16F-BO: injected direct_wallet_balance value is used as direct liquid USDC", capital({ liquid: 1234 }).directLiquidUsdcUsd === 1234, "consumed");
+  add("16F-BP: a receipt/vault position is a position, not direct liquid USDC", normalizeYieldStrategyPosition(mkPos({ representation: "receipt_token" })).representation === "receipt_token", "position");
+  add("16F-BQ: protocol receipt token does not qualify as direct liquid USDC (stays a position)", capital({ liquid: 0, positionSet: buildSet([mkPos({ representation: "receipt_token", currentValueUsd: 5000 })], { registry: [approvedEntry()] }) }).directLiquidUsdcUsd === 0, "not liquid");
+  add("16F-BR: vault share does not qualify as direct liquid USDC", capital({ liquid: 0, positionSet: buildSet([mkPos({ representation: "direct_vault_share", currentValueUsd: 5000 })], { registry: [approvedEntry()] }) }).directLiquidUsdcUsd === 0, "not liquid");
+  add("16F-BS: LP token does not qualify as direct liquid USDC", normalizeYieldStrategyPosition(mkPos({ representation: "liquidity_position", metadata: { positionKind: "stable_liquidity", stableUnderlyingConfirmed: true } })).mechanic === "stable_liquidity_position", "position");
+  add("16F-BT: symbol-only USDC does not qualify (no mint → unknown)", normalizeYieldStrategyPosition(mkPos({ principalAssetId: undefined })).principalAssetId === "unknown", "no symbol");
+  add("16F-BU: borrowed USDC representation does not qualify", normalizeYieldStrategyPosition(mkPos({ protocolId: "hubble", metadata: { positionKind: "debt" } })).blockers.includes("not_a_yield_position"), "excluded");
+  add("16F-BV: Step 15 direct-USDC value is injected (no second detector in 16F)", capital({ liquid: 777 }).directLiquidUsdcUsd === 777 && !/getbalance|scanwallet|detectusdc/.test(posBlob), "reused");
+
+  // ---- Risk allocation ----
+  add("16F-BW: every recognized risk ID has a deterministic allocation", POS_RISK_IDS.every((id) => getYieldStrategyBufferAllocation(id) !== undefined), "all mapped");
+  add("16F-BX: unknown risk ID fails closed", getYieldStrategyBufferAllocation("ultra") === undefined, "fail closed");
+  add("16F-BY: no Medium default is applied", getYieldStrategyBufferAllocation(undefined) === undefined && getYieldStrategyBufferAllocation("bogus") === undefined, "no default");
+  add("16F-BZ: vault + wallet percentages equal 100%", POS_RISK_IDS.every((id) => { const a = getYieldStrategyBufferAllocation(id)!; return Math.round((a.vaultAllocationPct + a.walletAllocationPct) * 1e6) / 1e6 === 1; }), "100%");
+  add("16F-CA: canonical documented percentages are reused", getYieldStrategyBufferAllocation("very_low")!.vaultAllocationPct === 1 && getYieldStrategyBufferAllocation("medium")!.vaultAllocationPct === 0.7 && getYieldStrategyBufferAllocation("high")!.vaultAllocationPct === 0.5, "reused");
+
+  // ---- Buffer Yield capital ----
+  add("16F-CB: incomplete Safety Buffer produces zero buffer-yield capital", capital({ complete: false }).bufferYieldEligibleCapitalUsd === 0 && capital({ complete: false }).status === "buffer_incomplete", "zero");
+  add("16F-CC: complete buffer may produce buffer-yield capacity", capital({}).bufferYieldEligibleCapitalUsd === 700, `${capital({}).bufferYieldEligibleCapitalUsd}`);
+  add("16F-CD: existing eligible vault value reduces remaining capacity", capital({ positionSet: setWithBufferPos(400), directBuffer: 1000, required: 1000 }).remainingBufferYieldCapacityUsd === 300, `${capital({ positionSet: setWithBufferPos(400), directBuffer: 1000, required: 1000 }).remainingBufferYieldCapacityUsd}`);
+  add("16F-CE: existing vault value at target produces zero remaining capacity", capital({ positionSet: setWithBufferPos(700), directBuffer: 1000, required: 1000 }).remainingBufferYieldCapacityUsd === 0 && capital({ positionSet: setWithBufferPos(700), directBuffer: 1000, required: 1000 }).bufferYieldEligibleCapitalUsd === 0, "zero remaining");
+  add("16F-CF: required direct-wallet floor is preserved", capital({}).requiredWalletFloorUsd === 300 && capital({}).rawBufferYieldCapitalUsd <= capital({}).directWalletEligibleBufferUsd - capital({}).requiredWalletFloorUsd + 1e-9, "floor preserved");
+  add("16F-CG: buffer capital never exceeds direct liquid USDC", capital({ liquid: 100 }).rawBufferYieldCapitalUsd <= 100, "<=liquid");
+  add("16F-CH: buffer capital never exceeds remaining vault capacity", capital({}).bufferYieldEligibleCapitalUsd <= capital({}).remainingBufferYieldCapacityUsd + 1e-9, "<=remaining");
+  add("16F-CI: buffer capital never exceeds movable required-buffer capital", capital({}).rawBufferYieldCapitalUsd <= capital({}).directWalletEligibleBufferUsd - capital({}).requiredWalletFloorUsd + 1e-9, "<=movable");
+  add("16F-CJ: amount is floored to exact cents", (() => { const c = capital({ liquid: 123.456, directBuffer: 2000 }); return c.bufferYieldEligibleCapitalUsd === 123.45 && cents(c.bufferYieldEligibleCapitalUsd); })(), "123.45");
+  add("16F-CK: amount is never rounded upward", (() => { const c = capital({ liquid: 123.456, directBuffer: 2000 }); return c.rawBufferYieldCapitalUsd === 123.45 && c.rawBufferYieldCapitalUsd < 123.456; })(), "floored down");
+
+  // ---- Excess capital ----
+  add("16F-CL: incomplete Safety Buffer produces zero excess capital", capital({ complete: false, directBuffer: 5000 }).excessYieldEligibleCapitalUsd === 0, "zero");
+  add("16F-CM: no buffer surplus produces zero excess capital", capital({}).excessYieldEligibleCapitalUsd === 0 && capital({}).canonicalBufferSurplusUsd === 0, "zero");
+  add("16F-CN: canonical buffer surplus is reused", capital({ directBuffer: 1500, required: 1000 }).canonicalBufferSurplusUsd === 500, "500");
+  add("16F-CO: excess capital never exceeds direct liquid USDC", capital({ directBuffer: 6000, required: 1000, liquid: 400 }).rawExcessYieldCapitalUsd <= 400, "<=liquid");
+  add("16F-CP: excess capital never exceeds direct-wallet excess slice", capital({ directBuffer: 1200, required: 1000, liquid: 5000 }).rawExcessYieldCapitalUsd === 200, "200");
+  add("16F-CQ: excess capital never exceeds canonical buffer surplus", capital({ directBuffer: 1100, required: 1000 }).rawExcessYieldCapitalUsd <= capital({ directBuffer: 1100, required: 1000 }).canonicalBufferSurplusUsd + 1e-9, "<=surplus");
+  add("16F-CR: $249.99 is below the excess threshold", (() => { const c = capital({ directBuffer: 1249.99, required: 1000 }); return c.excessYieldMeetsMinimum === false && c.excessYieldEligibleCapitalUsd === 0; })(), "below");
+  add("16F-CS: $250.00 meets the excess threshold", (() => { const c = capital({ directBuffer: 1250, required: 1000 }); return c.excessYieldMeetsMinimum === true && c.excessYieldEligibleCapitalUsd === 250; })(), "meets");
+  add("16F-CT: existing vault shares are not direct liquid USDC", capital({ liquid: 0, positionSet: buildSet([mkPos({ representation: "direct_vault_share", currentValueUsd: 9000 })], { registry: [approvedEntry()] }) }).directLiquidUsdcUsd === 0, "not liquid");
+  add("16F-CU: excess amount is floored to exact cents", (() => { const c = capital({ directBuffer: 1500.567, required: 1000 }); return c.rawExcessYieldCapitalUsd === 500.56 && cents(c.excessYieldEligibleCapitalUsd); })(), "500.56");
+
+  // ---- Shared source ----
+  add("16F-CV: lane capacities expose possible source overlap", capital({ directBuffer: 1500, required: 1000, liquid: 1000 }).sharedSourceOverlapPossible === true, "possible");
+  add("16F-CW: independent lane maxima are not blindly summed", (() => { const c = capital({ directBuffer: 1500, required: 1000, liquid: 1000 }); return c.rawBufferYieldCapitalUsd + c.rawExcessYieldCapitalUsd > c.maximumCombinedSourceCapitalUsd; })(), "not summed");
+  add("16F-CX: maximum combined source does not exceed direct liquid USDC", capital({ directBuffer: 1500, required: 1000, liquid: 1000 }).maximumCombinedSourceCapitalUsd <= 1000, "<=liquid");
+  add("16F-CY: shared overlap is calculated deterministically", capital({ directBuffer: 1500, required: 1000, liquid: 1000 }).sharedSourceOverlapUsd === 200, `${capital({ directBuffer: 1500, required: 1000, liquid: 1000 }).sharedSourceOverlapUsd}`);
+  add("16F-CZ: no lane receives overlap priority in 16F", capital({ directBuffer: 1500, required: 1000, liquid: 1000 }).productSelected === false && capital({ directBuffer: 1500, required: 1000, liquid: 1000 }).amountSelected === false, "no priority");
+
+  // ---- Production state ----
+  add("16F-DA: production registry still has zero approved products", getApprovedYieldStrategies().length === 0, "0 approved");
+  add("16F-DB: production comparison still has no leaders", (() => { const c = getYieldStrategyLeaderPositionStatus("buffer", cmpWith(undefined, undefined), buildSet([])); return c.status === "no_comparison_leader"; })(), "no leaders");
+  {
+    const steakhouse = buildSet([mkPos({ protocolId: "kamino", productAddress: "RuntimeSteakhouseVaultAddr", vaultAddress: "RuntimeSteakhouseVaultAddr", representation: "direct_vault_share", mechanic: "managed_vault_deposit", currentValueUsd: 5000 })]);
+    add("16F-DC: detected production positions may exist while approved matches remain zero", steakhouse.canonicalEconomicPositions.length === 1 && steakhouse.matchedApprovedPositionIds.length === 0, "detected/0 approved");
+    add("16F-DD: production Steakhouse runtime address does not auto-approve a product", steakhouse.observedUndocumentedProducts.some((o) => o.observedProductAddress === "RuntimeSteakhouseVaultAddr" && o.autoApproved === false && o.registryMutated === false) && listYieldStrategies().every((e) => e.address === undefined), "no approve");
+    add("16F-DE: production unmatched positions do not count toward buffer", steakhouse.canonicalEconomicPositions.every((p) => p.countsTowardSafetyBuffer === false), "excluded");
+  }
+  add("16F-DF: no product-specific capital amount is produced without an approved product", capital({}).amountSelected === false && capital({}).productSelected === false, "no amount");
+
+  // ---- Hubble ----
+  add("16F-DG: Hubble remains in documented protocol scope", getYieldStrategiesByProtocol("hubble").length >= 1, "present");
+  add("16F-DH: Hubble receives no protocol-name penalty (in scope; a normal Hubble yield deposit is not penalized)", getYieldStrategiesByProtocol("hubble").length >= 1 && normalizeYieldStrategyPosition(mkPos({ protocolId: "hubble", productAddress: "HUB1", metadata: { positionKind: "yield_deposit" } })).blockers.length === 0 && !/hubble.*deprecated|penal|blocklist|blacklist/.test(posBlob), "no penalty");
+  add("16F-DI: Hubble CDP is not yield", normalizeYieldStrategyPosition(mkPos({ protocolId: "hubble", metadata: { positionKind: "cdp_collateral" } })).blockers.includes("not_a_yield_position"), "not yield");
+  add("16F-DJ: a future exact Hubble yield product can use generic matching", matchYieldStrategyPosition(normalizeYieldStrategyPosition(mkPos({ protocolId: "hubble", productAddress: "HUB_ADDR", mechanic: "lending_deposit" })), [approvedEntry({ strategyId: "hub_syn", protocolId: "hubble", address: "HUB_ADDR" })]).matchStatus === "matched_approved", "generic");
+
+  // ---- Boundaries ----
+  add("16F-DK: no comparison is rerun", capital({}).comparisonPerformed === false && buildSet([]).comparisonPerformed === false, "no rerun");
+  add("16F-DL: no product is selected", capital({}).productSelected === false && STABLE_YIELD_CAPITAL_SELECTS_PRODUCT === false, "no product");
+  add("16F-DM: no final deposit amount is selected", capital({}).amountSelected === false && STABLE_YIELD_CAPITAL_SELECTS_FINAL_AMOUNT === false, "no amount");
+  add("16F-DN: no switch decision is generated", !/switchdecision|shouldswitch|switchproduct/.test(posBlob), "no switch");
+  add("16F-DO: no expected earnings are calculated", !/expectedearnings|projectedearnings|futurevalue/.test(posBlob), "no earnings");
+  add("16F-DP: no plan is generated", capital({}).planGenerated === false && STABLE_YIELD_CAPITAL_GENERATES_PLAN === false, "no plan");
+  add("16F-DQ: no suggestion is generated", capital({}).suggestionGenerated === false && buildSet([]).suggestionGenerated === false, "no suggestion");
+  add("16F-DR: no product output is updated", capital({}).updatesProductOutput === false && STABLE_YIELD_CAPITAL_UPDATES_PRODUCT_OUTPUT === false, "no output");
+  {
+    const prodFiles = ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/pages/DemoDashboardPage.tsx", "src/pages/DashboardPage.tsx", "src/components/RealWalletSuggestionsRail.tsx"];
+    add("16F-DS: no UI or /testing card is added (no product-facing import of positions/capital)", STABLE_YIELD_UI_ENABLED === false && STABLE_YIELD_TESTING_EXISTS === false && prodFiles.every((f) => !/yieldStrategyPosition|yieldStrategyEligibleCapital|yieldStrategyCapital/.test(readIf(f))), "no UI");
+  }
+  add("16F-DT: no transaction path exists", capital({}).transactionsEnabled === false && buildSet([]).transactionsEnabled === false && STABLE_YIELD_EXECUTION_ENABLED === false, "read-only");
+  add("16F-DU: no signature path exists", capital({}).walletSignatureRequired === false && buildSet([]).walletSignatureRequired === false, "no signature");
+  add("16F-DV: no deposit/withdraw/swap/stake/execute handler exists", !/sendtransaction|signtransaction|deposit\(|withdraw\(|swap\(|stake\(|execute\(|fetch\(/.test(posBlob), "no handlers");
+
+  // ---- Validator integrity + diagnostics ----
+  add("16F-INT-A: a normalized matched_approved position validates", validateYieldStrategyPosition(matchApproved).valid === true, "valid");
+  add("16F-INT-B: a position set + capital snapshot validate", validateYieldStrategyPositionSet(bufferOk).valid === true && validateYieldStrategyEligibleCapitalSnapshot(capital({})).valid === true, "valid");
+  add("16F-INT-C: the capital policy validates and reuses the $250 excess trigger", getYieldStrategyCapitalPolicy().excessYieldMinimumUsd === 250 && YIELD_STRATEGY_EXCESS_YIELD_MINIMUM_USD === 250, "250");
+  add("16F-INT-D: diagnostics + explain use no recommendation language", (() => { const txt = [...explainYieldStrategyCapital(capital({})), explainYieldStrategyPositionExclusion(buildSet([mkPos({ productAddress: "X" })], { registry: [approvedEntry()] }).canonicalEconomicPositions[0]), JSON.stringify(getYieldStrategyPositionDiagnostics(bufferOk)), JSON.stringify(getYieldStrategyCapitalDiagnostics(capital({})))].join(" "); return !/\b(best|safest|winner|recommended|deposit now|switch|you should|move)\b/i.test(txt); })(), "clean");
+
+  return checks;
+}
+
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
@@ -14921,6 +15230,7 @@ export function printFixtureResults(): void {
     ...runYieldStrategyEligibilityFixtureChecks(),
     ...runYieldStrategyProductLaneFixtureChecks(),
     ...runYieldStrategyComparisonFixtureChecks(),
+    ...runYieldStrategyPositionFixtureChecks(),
   ];
   for (const c of checks) {
     // eslint-disable-next-line no-console

@@ -94,7 +94,23 @@ export const STABLE_YIELD_COMPARISON_EVALUATES_WALLET = false;
 export const STABLE_YIELD_COMPARISON_EVALUATES_CAPITAL = false;
 export const STABLE_YIELD_COMPARISON_GENERATES_PLANS = false;
 export const STABLE_YIELD_COMPARISON_UPDATES_PRODUCT_OUTPUT = false;
-export const STABLE_YIELD_WALLET_DETECTION_EXISTS = false;
+// Step 16F — existing-position normalization + exact registry matching + duplicate resolution + the
+// user-level eligible-capital snapshot now exist. It consumes injected read-only positions + canonical
+// Safety-Buffer + direct-USDC, matches only by exact identity (no name/symbol), never promotes/mutates
+// the registry, reports current-leader holdings, and calculates lane-level source capacity — no product,
+// no final amount, no plan/suggestion/UI/execution. Production may show detected positions with zero
+// approved matches, zero buffer-qualified positions, and zero held leaders (valid fail-closed state).
+export const YIELD_STRATEGY_POSITION_NORMALIZATION_EXISTS = true;
+export const YIELD_STRATEGY_POSITION_MATCHING_EXISTS = true;
+export const YIELD_STRATEGY_POSITION_DEDUPLICATION_EXISTS = true;
+export const YIELD_STRATEGY_POSITION_DETECTION_EXISTS = true;
+export const YIELD_STRATEGY_ELIGIBLE_CAPITAL_EXISTS = true;
+export const STABLE_YIELD_CAPITAL_EVALUATION_EXISTS = true;
+export const STABLE_YIELD_CAPITAL_SELECTS_PRODUCT = false;
+export const STABLE_YIELD_CAPITAL_SELECTS_FINAL_AMOUNT = false;
+export const STABLE_YIELD_CAPITAL_GENERATES_PLAN = false;
+export const STABLE_YIELD_CAPITAL_UPDATES_PRODUCT_OUTPUT = false;
+export const STABLE_YIELD_WALLET_DETECTION_EXISTS = true;
 export const STABLE_YIELD_PLANS_EXIST = false;
 export const STABLE_YIELD_SUGGESTIONS_EXIST = false;
 export const STABLE_YIELD_UI_ENABLED = false;

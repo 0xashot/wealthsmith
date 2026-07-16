@@ -982,3 +982,17 @@ official endpoint) is the primary tier, `backend_normalized` an approved-provide
 1.00-point material-tie band, and ±10% weight-sensitivity are the versioned `yield_strategy_*_v1`
 source of truth, deliberately distinct from the SOL selector's 0–10 / epsilon / retention framework
 because Stable Yield deploys principal. See [yieldStrategyComparison.md](./yieldStrategyComparison.md).
+
+## 16F — Stable Yield position + capital source boundary
+
+The position/capital layer (Step 16F) consumes **injected read-only** data only — normalized wallet
+position records (a protocol adapter may normalize before calling; `browserFetched` must be false), the
+canonical Step-15 direct-liquid-USDC value, and the canonical required Safety Buffer. It writes **no**
+second USDC detector and fetches nothing from React. Positions match registry products by **exact
+identity** (protocol + exact product/vault/market/pool/reserve address + principal asset + mechanic) —
+never by name/symbol/brand — and runtime detection never mutates the registry or promotes a lifecycle;
+an observed undocumented exact address surfaces as an `ObservedYieldStrategyProduct` requiring
+documentation. Capital reuses the canonical `DCA_EXCESS_USDC_TRIGGER_USD` ($250) and the Step-15
+cents-flooring behavior; the risk→buffer vault/wallet split is the documented mapping encoded as
+`yield_strategy_capital_v1` (no prior executable policy). See
+[yieldStrategyPositionsAndCapital.md](./yieldStrategyPositionsAndCapital.md).

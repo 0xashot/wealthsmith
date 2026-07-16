@@ -1747,3 +1747,26 @@ differ from the SOL selector (0–10 / epsilon / retention) — documented becau
 principal. Hubble gets no protocol penalty and its `documentation_required` entry is unscored.
 `YIELD_STRATEGY_COMPARISON_EXISTS`/`STABLE_YIELD_COMPARISON_EXISTS = true`; wallet/plans/suggestions/UI/
 testing/execution stay `false`.
+
+## 16F — Stable Yield positions & eligible capital
+
+The existing-position + eligible-capital layer
+([yieldStrategyPositionsAndCapital.md](./yieldStrategyPositionsAndCapital.md), `yield_strategy_position_v1`
++ `yield_strategy_position_matching_v1` + `yield_strategy_capital_v1`). It normalizes **injected
+read-only** wallet positions, matches them to **exact** registry products (protocol + exact address +
+principal asset + mechanic — never name/symbol/brand), resolves duplicate economic positions (one
+canonical value record; direct + farm-staked of the same shares counted once; conflicts → ambiguous;
+ownership conflict → invalid; approx-equal USD never dedups), and aggregates by strategy. Non-yield usage
+is excluded (Hubble borrow/CDP/debt, volatile LP, unconfirmed stable LP). Runtime detection **never**
+promotes a lifecycle or mutates the registry; an observed exact address surfaces as an
+`ObservedYieldStrategyProduct` (`requiresDocumentation`, `autoApproved:false`). A position counts toward
+the Safety Buffer only when `matched_approved` + `buffer_eligible` + currently 16D-buffer-eligible + fresh
+(15m) + non-duplicate. It reports current 16E-leader holdings (never rerunning comparison) and reuses the
+injected canonical direct-liquid-USDC + Safety Buffer. Risk→buffer allocation (very_low/low 100/0, medium
+70/30, high/very_high 50/50) is encoded as v1 (unknown risk fails closed, never defaults to Medium);
+lane-level capacities are floored to exact cents (never up), excess uses the canonical **$250** trigger,
+and shared-source overlap is exposed but not allocated (16G decides). Production may show detected
+positions with zero approved matches / zero buffer-qualified / zero held leaders (valid). Flags:
+`YIELD_STRATEGY_POSITION_*`/`YIELD_STRATEGY_ELIGIBLE_CAPITAL_EXISTS`/`STABLE_YIELD_WALLET_DETECTION_EXISTS`/
+`STABLE_YIELD_CAPITAL_EVALUATION_EXISTS = true`; plans/suggestions/UI/testing/execution and all
+capital-`SELECTS_*`/`GENERATES_PLAN` stay `false`.
