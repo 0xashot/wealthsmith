@@ -1,3 +1,4 @@
+import { POSITION_IDENTITY, EXPECTED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, IDENTIFICATION_RULES, validatePositionIdentity, WALLET_DISCOVERY_SOURCE, discoverCTokenAccounts, CTOKEN_SUPPLY_AUTHORITY, VALUATION_SEMANTICS, MAX_POSITION_SOURCE_SKEW, POSITION_TTL_MS, deriveKlendDirectLendingPosition, BUFFER_RECOGNITION_BOUNDARY, recognizeUnderlyingUsd, EXISTING_POSITION_SEMANTICS, POSITION_SNAPSHOT, POSITION_SNAPSHOT_IS_NOT_PRODUCTION_INPUT, PRESERVED_PRIOR_EVIDENCE_N5, POSITION_EVIDENCE, computePositionEvidenceManifestHash, POSITION_EVIDENCE_MANIFEST_HASH, POSITION_BLOCKER_SUPERSESSION, POSITION_CONFERS, type PositionIdentityInputs, type WalletTokenAccountInput } from "./klendDirectLendingPosition";
 import { KLEND_CAPACITY_SOURCE, SDK_MIRRORS_ENFORCEMENT, ENFORCEMENT_FACTS, DEPOSIT_LIMIT_SENTINEL_SEMANTICS, CAPACITY_IS_NOT_DEPOSIT_STATE, CAPACITY_PRODUCT_BINDING, validateCapacityIdentity, deriveKlendReserveCapacity, CAPACITY_TTL_MS, MAX_CAPACITY_SLOT_AGE, CAPACITY_SNAPSHOT, SNAPSHOT_IS_NOT_PRODUCTION_INPUT, CAPACITY_LAYER_SEPARATION, USD_CAPACITY, API_PARITY_OBSERVATIONS, KAMINO_CAPACITY_API_DIAGNOSTIC, classifyCapacityParity, CAPACITY_PARITY_RESULT, PRESERVED_PRIOR_EVIDENCE as PRESERVED_PRIOR_EVIDENCE_CAP, CAPACITY_EVIDENCE, computeCapacityEvidenceManifestHash, CAPACITY_EVIDENCE_MANIFEST_HASH, CAPACITY_BLOCKER_SUPERSESSION, CAPACITY_CONFERS, type CapacityIdentityInputs } from "./klendReserveCapacity";
 import { measureSlotDuration, computeSlotAdjustmentFactor, validateReserveMeasurementSkew, PRIMARY_WINDOW_SLOTS, VALIDATION_WINDOW_SLOTS, WINDOW_AGREEMENT_TOLERANCE, SANITY_RANGE_MS, MEASUREMENT_TTL_MS, MAX_RESERVE_MEASUREMENT_SLOT_SKEW, DENOMINATOR_POLICY, REJECTED_CONSTANT_MS } from "./solanaSlotDurationEstimator";
 import { EXACT_PRODUCT_BINDING, validateExactProductBinding, MEASUREMENT_REUSE_POLICY, SLOT_ADJUSTMENT_MECHANISM, FROZEN_SNAPSHOT_SENSITIVITY, HARDCODED_450_DEFECT, MEASUREMENT_SNAPSHOT_IS_NOT_PRODUCTION_INPUT, EVIDENCE_LAYER_SEPARATION, RATE_KIND, PRECISION_STATE, deriveMeasuredApy, CORRECTED_APY_SNAPSHOT, PARITY_TOLERANCE, KAMINO_API_DIAGNOSTIC, evaluateParityDiagnostic, CORRECTION_PARITY_RESULT, PARITY_IMPROVEMENT, USER_FACING_APY_PRESENTATION, COMPARISON_METHODOLOGY_RULE, PRESERVED_PRIOR_EVIDENCE, PRIOR_EVIDENCE_HANDLING, MEASURED_APY_EVIDENCE, computeMeasuredApyEvidenceManifestHash, MEASURED_APY_EVIDENCE_MANIFEST_HASH, evaluateComparisonReadiness, CORRECTION_READINESS_RESULT, APY_UNIT_BLOCKER_SUPERSESSION, CORRECTION_CONFERS } from "./klendReserveMeasuredApyCorrection";
@@ -16275,7 +16276,7 @@ export function runStableYieldIdentityResolutionFixtureChecks(): FixtureCheck[] 
   // 16H-N.1 moved the primary blocker off blocked_identity onto blocked_apy_unit. 16H-N.2 then
   // resolved the APY unit too, so primary moved again. The invariant across both: identity stays
   // resolved, and every superseded blocker keeps a RESOLVED provenance entry rather than vanishing.
-  add("16H-N.1-AB2 (updated by 16H-N.3b): resolved blockers keep provenance and primary moves on", (() => { const m = man("kamino_usdc_lending"); const b = m.blockers.join(" "); return m.primaryBlocker === "blocked_position_detection" && /RESOLVED at 16H-N\.1/.test(b) && /RESOLVED at 16H-N\.2/.test(b) && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && !/^blocked_identity \(PRIMARY/.test(b); })(), "blocker moved to capacity");
+  add("16H-N.1-AB2 (updated by 16H-N.3b): resolved blockers keep provenance and primary moves on", (() => { const m = man("kamino_usdc_lending"); const b = m.blockers.join(" "); return m.primaryBlocker === "blocked_risk_review" && /RESOLVED at 16H-N\.1/.test(b) && /RESOLVED at 16H-N\.2/.test(b) && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && !/^blocked_identity \(PRIMARY/.test(b); })(), "blocker moved to capacity");
 
   // ---- Evidence + readiness ----
   add("16H-H-AC: every manifest carries exactly one deterministic primary status", listStableYieldEvidenceManifests().every((m) => typeof m.primaryBlocker === "string" && m.primaryBlocker.length > 0), "deterministic");
@@ -16986,7 +16987,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   // ---- Consequence ----
   add("PAR-22: the APY methodology is UNRESOLVED and comparison is blocked", PARITY_CONSEQUENCE.apyMethodologyResolved === false && PARITY_CONSEQUENCE.definitionSufficientForComparison === false && PARITY_CONSEQUENCE.definitionSufficientPriorValue === true, "unresolved");
   add("PAR-23: the adapter was NOT silently edited and NO correction was invented", PARITY_CONSEQUENCE.adapterSilentlyEdited === false && PARITY_CONSEQUENCE.methodologyCorrectionMade === false && /requires identifying the omitted component/i.test(PARITY_CONSEQUENCE.methodologyCorrectionWithheldBecause) && PARITY_AMENDMENT_CONFERS.adapterEdited === false, "not edited");
-  add("PAR-24 (superseded by 16H-N.3b): the 16H-N.3a reopening is immutable; the live blocker has since moved on", PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && /APY methodology itself is unresolved/i.test(PARITY_CONSEQUENCE.primaryBlockerRationale) && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_position_detection" && APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit", "historical record intact, live state advanced");
+  add("PAR-24 (superseded by 16H-N.3b): the 16H-N.3a reopening is immutable; the live blocker has since moved on", PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && /APY methodology itself is unresolved/i.test(PARITY_CONSEQUENCE.primaryBlockerRationale) && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review" && APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit", "historical record intact, live state advanced");
   add("PAR-25: UI-rounding noise is distinguished from official-source disagreement", /would NOT block/i.test(PARITY_CONSEQUENCE.internalComparabilityVsUiParity) && /far beyond rounding/i.test(PARITY_CONSEQUENCE.internalComparabilityVsUiParity), "distinguished");
   add("PAR-26: 16H-N.2's circular parity is acknowledged, not withdrawn", /circular/i.test(PARITY_CONSEQUENCE.regression16HN2) && /remains TRUE and is not withdrawn/i.test(PARITY_CONSEQUENCE.regression16HN2) && APY_PARITY.result === "exact_match", "acknowledged");
   add("PAR-27: the manifest records the reopening and keeps capacity listed", (() => { const b = getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" "); return /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.4 \(retained for provenance, no longer blocking\) — blocked_capacity/.test(b) && /api_freshness_unestablishable/.test(b) && /SUPERSEDED at 16H-N\.3a/.test(b); })(), "recorded");
@@ -17061,7 +17062,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   // 16H-N.3a found the official API and SDK disagree ~9.65%, reopening the APY methodology, which is
   // the one condition permitting the primary to move. The invariant that survives: 16H-N.3 itself
   // invented no enum and did not move the blocker; a LATER step moved it on new evidence.
-  add("RW-39 (updated by 16H-N.3b): 16H-N.3 moved nothing; the APY reopened then resolved, returning primary to capacity", REWARD_GAP_SUPERSESSION.primaryBlockerUnchanged === "blocked_capacity" && REWARD_GAP_SUPERSESSION.newBlockerEnumInvented === false && PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_position_detection", "round trip complete");
+  add("RW-39 (updated by 16H-N.3b): 16H-N.3 moved nothing; the APY reopened then resolved, returning primary to capacity", REWARD_GAP_SUPERSESSION.primaryBlockerUnchanged === "blocked_capacity" && REWARD_GAP_SUPERSESSION.newBlockerEnumInvented === false && PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review", "round trip complete");
   add("RW-40: the manifest records the reward resolution and the open UI gap", (() => { const b = getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" "); return /RESOLVED at 16H-N\.3/.test(b) && /UI PARITY UNEXPLAINED/.test(b); })(), "recorded");
 
   // ---- Isolation ----
@@ -17123,7 +17124,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   add("APY-34: the supersession is explicit with authority, method, units, version, slot", (() => { const r = APY_BLOCKER_SUPERSESSION.resolution; return r.resolved === true && r.calculationAuthority.startsWith("A") && r.sdkMethodIdentity.includes("totalSupplyAPY") && r.units.includes("percentage_points") && r.calculationVersion === "1.0.0" && r.sourceSlot === "433344510" && r.parity.includes("exact_match"); })(), "explicit");
   add("APY-35: the reward STATE-MODEL GAP is reported, not invented around", /no reward-resolution state/i.test(APY_BLOCKER_SUPERSESSION.remainingApyGap.stateModelGap) && /NO new state was invented/i.test(APY_BLOCKER_SUPERSESSION.remainingApyGap.stateModelGap) && APY_BLOCKER_SUPERSESSION.primaryBlockerMovesTo === "blocked_capacity", "gap reported");
   add("APY-36: the manifest reflects a verified adapter and the moved blocker", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.apyAdapterState === "adapter_implemented_source_verified" && m.apyUnitInterpretation === "percent" && /RESOLVED at 16H-N\.2/.test(m.blockers.join(" ")); })(), "manifest");
-  add("APY-36b (updated by 16H-N.3b): the adapter state stood throughout the reopen-and-resolve cycle", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; const b = m.blockers.join(" "); return m.apyAdapterState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_position_detection" && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && PARITY_CONSEQUENCE.adapterSilentlyEdited === false; })(), "reopened, adapter intact");
+  add("APY-36b (updated by 16H-N.3b): the adapter state stood throughout the reopen-and-resolve cycle", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; const b = m.blockers.join(" "); return m.apyAdapterState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_risk_review" && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && PARITY_CONSEQUENCE.adapterSilentlyEdited === false; })(), "reopened, adapter intact");
 
   // ---- Isolation ----
   add("APY-37 (capacity resolved at 16H-N.4): capacity, constraints, deposits and risk remain UNCHANGED", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "adapter_implemented_source_verified" && m.constraintsState === "blocked" && m.depositAvailabilityState === "blocked" && m.riskReviewState === "blocked" && m.readiness === "blocked"; })(), "unchanged");
@@ -17833,6 +17834,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runKlendPositionFixtureChecks(),
     ...runKlendReserveCapacityFixtureChecks(),
     ...runMeasuredSlotDurationApyFixtureChecks(),
     ...runSuggestionEngineFixtureChecks(),
@@ -18081,7 +18083,7 @@ export function runMeasuredSlotDurationApyFixtureChecks(): FixtureCheck[] {
   add("SD-71: successful validation moves primary blocker to blocked_capacity", CORRECTION_READINESS_RESULT.primaryBlocker === "blocked_capacity" && APY_UNIT_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_capacity", "→ blocked_capacity");
   add("SD-72: prior primary blocker is recorded as blocked_apy_unit", APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit" && APY_UNIT_BLOCKER_SUPERSESSION.reopenedAt === "16H-N.3a", "provenance kept");
   add("SD-73: any failed gate keeps blocked_apy_unit", ["identityVerified", "slotDurationValidated", "slotDurationFresh", "windowsAgree", "reserveFresh", "skewWithinBound", "rewardResolved"].every((g) => { const i = { identityVerified: true, slotDurationValidated: true, slotDurationFresh: true, windowsAgree: true, reserveFresh: true, skewWithinBound: true, rewardResolved: true, parityWithinTolerance: true } as Record<string, boolean>; i[g] = false; const r = evaluateComparisonReadiness(i as unknown as Parameters<typeof evaluateComparisonReadiness>[0]); return r.definitionSufficientForComparison === false && r.primaryBlocker === "blocked_apy_unit"; }), "7 gates each block");
-  add("SD-74 (updated by 16H-N.4): the production evidence records the APY blocker as resolved and has moved past capacity too", (() => { const src = readIf("src/suggestions/stableYieldProductionEvidence.ts"); const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return /RESOLVED at 16H-N\.3b/.test(src) && m.primaryBlocker !== "blocked_apy_unit" && m.primaryBlocker === "blocked_position_detection"; })(), "apy resolved, primary advanced");
+  add("SD-74 (updated by 16H-N.4): the production evidence records the APY blocker as resolved and has moved past capacity too", (() => { const src = readIf("src/suggestions/stableYieldProductionEvidence.ts"); const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return /RESOLVED at 16H-N\.3b/.test(src) && m.primaryBlocker !== "blocked_apy_unit" && m.primaryBlocker === "blocked_risk_review"; })(), "apy resolved, primary advanced");
 
   // --- Presentation ---
   add("SD-75: display format requires the ~ prefix", USER_FACING_APY_PRESENTATION.displayFormat === "~{formattedApy}% APY" && USER_FACING_APY_PRESENTATION.tildePrefixRequired === true, "~{apy}% APY");
@@ -18261,7 +18263,7 @@ export function runKlendReserveCapacityFixtureChecks(): FixtureCheck[] {
   // --- State transition ---
   add("CAP-83: capacity state moves no_adapter → adapter_implemented_source_verified", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "adapter_implemented_source_verified" && CAPACITY_BLOCKER_SUPERSESSION.priorCapacityState === "no_adapter"; })(), "source-verified");
   add("CAP-84: blocked_capacity provenance is preserved", /RESOLVED at 16H-N\.4[\s\S]*blocked_capacity/.test(getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" ")), "provenance kept");
-  add("CAP-85: primary blocker moves to blocked_position_detection", getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_position_detection" && CAPACITY_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_position_detection", "moved on");
+  add("CAP-85 (updated by 16H-N.5): capacity moved primary to position detection, which 16H-N.5 has since resolved", CAPACITY_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_position_detection" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review", "N.4 record intact, live state advanced");
   add("CAP-86: no blocker enum or lifecycle value was invented", CAPACITY_BLOCKER_SUPERSESSION.newBlockerEnumInvented === false && CAPACITY_BLOCKER_SUPERSESSION.newLifecycleValueInvented === false, "none invented");
   add("CAP-87: the state-model gap is reported, not papered over", /no blocked_deposit_availability or blocked_constraints value/i.test(CAPACITY_BLOCKER_SUPERSESSION.stateModelGap), "gap reported");
   add("CAP-88: lifecycle remains identity_verified", /identity_verified/.test(CAPACITY_CONFERS.lifecycleUnchanged) && getYieldStrategy("kamino_usdc_lending")!.lifecycle === "identity_verified", "unchanged");
@@ -18281,6 +18283,168 @@ export function runKlendReserveCapacityFixtureChecks(): FixtureCheck[] {
   add("CAP-98: no transaction is constructed or simulated", CAPACITY_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction|VersionedTransaction/.test(capSrc), "read-only");
   add("CAP-99: the module is read-only", /STRICTLY READ-ONLY/.test(capSrc) && !/deposit\(|withdraw\(/.test(capSrc), "reads only");
   add("CAP-100: Steakhouse capacity semantics are untouched", KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4" && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker === "blocked_risk_review", "unchanged");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-N.5 — Existing Position Detection and Underlying-Value Adapter
+ * ------------------------------------------------------------------ */
+
+export function runKlendPositionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const posSrc = readIf("src/suggestions/klendDirectLendingPosition.ts");
+
+  const P = POSITION_SNAPSHOT;
+  const WALLET = "3xJ8kQmNvB2pLwRtYuIoPaSdFgHjKlZxCvBnM1qWeRt4";
+  const CT = POSITION_IDENTITY.cTokenMint;
+  const TP = EXPECTED_TOKEN_PROGRAM_ID;
+  const ID = { ...POSITION_IDENTITY } as unknown as PositionIdentityInputs;
+  const SLOT = 433435000;
+  const OBS = "2026-07-17T07:05:00.000Z";
+  const NOW = Date.parse(OBS) + 30_000;
+  const ONE = 2n ** 60n;
+
+  const acct = (address: string, amountRaw: string, o: Partial<WalletTokenAccountInput> = {}): WalletTokenAccountInput =>
+    ({ address, mint: CT, tokenProgram: TP, amountRaw, decimals: 6, owner: WALLET, ...o });
+
+  const ATA = acct("ATAaaa11111111111111111111111111111111111111", "1000000");      // 1 cToken
+  const NON_ATA = acct("NONata2222222222222222222222222222222222222", "2500000");  // 2.5 cTokens
+
+  const base = {
+    identity: ID, walletAddress: WALLET, accounts: [ATA, NON_ATA],
+    estimatedTotalSupplySf: (BigInt("110184636249066") * ONE).toString(),
+    collateralMintTotalSupplyRaw: P.reserveCollateralMintTotalSupply,
+    walletSourceSlot: SLOT, reserveSourceSlot: SLOT, cTokenMintSourceSlot: SLOT,
+    observedAt: OBS, nowMs: NOW,
+  };
+  const r = deriveKlendDirectLendingPosition(base);
+
+  // --- Detection ---
+  add("POS-1: the exact cToken position is detected", r.ok === true && r.positionExists === true && r.failure === undefined, "detected");
+  add("POS-2: an associated token account is detected", (r.sourceTokenAccounts ?? []).some((a) => a.address === ATA.address), "ATA found");
+  add("POS-3: a non-associated token account is detected", (r.sourceTokenAccounts ?? []).some((a) => a.address === NON_ATA.address), "non-ATA found");
+  add("POS-4: multiple exact-mint accounts are aggregated", r.cTokenBalanceRaw === "3500000" && (r.sourceTokenAccounts ?? []).length === 2, "1.0 + 2.5 = 3.5 cTokens");
+  add("POS-5: discovery reuses existing ingestion, no new scanner", WALLET_DISCOVERY_SOURCE.newScannerCreated === false && /useWalletPortfolio\.ts:504-525/.test(WALLET_DISCOVERY_SOURCE.reusedFrom), "reused");
+  add("POS-6: enumerating by owner is why both account kinds arrive", WALLET_DISCOVERY_SOURCE.coversAssociatedAccounts && WALLET_DISCOVERY_SOURCE.coversNonAssociatedAccounts && /enumerates by OWNER/.test(WALLET_DISCOVERY_SOURCE.rationale), "owner-enumerated");
+  add("POS-7: one wallet is not assumed to have one cToken account", /may hold the same mint in several accounts/i.test(WALLET_DISCOVERY_SOURCE.multipleAccountsPerMint), "multi-account");
+
+  // --- Exclusions ---
+  const disc = (extra: WalletTokenAccountInput) => discoverCTokenAccounts([ATA, extra], WALLET);
+  add("POS-8: zero balances are ignored", (() => { const d = disc(acct("Zero111", "0")); return d.aggregateRaw === "1000000" && d.rejected.some((x) => x.reason === "zero_balance"); })(), "0 skipped");
+  add("POS-9: closed accounts are ignored", (() => { const d = disc(acct("Closed11", "500000", { isClosed: true })); return d.aggregateRaw === "1000000" && d.rejected.some((x) => x.reason === "closed_account"); })(), "closed skipped");
+  add("POS-10: wrong mint is rejected", discoverCTokenAccounts([acct("Wrong11", "9999999", { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" })], WALLET).aggregateRaw === "0", "USDC mint ≠ cToken mint");
+  add("POS-11: wrong token program is rejected", (() => { const d = disc(acct("Tok22", "500000", { tokenProgram: TOKEN_2022_PROGRAM_ID })); return d.aggregateRaw === "1000000" && d.rejected.some((x) => /wrong_token_program/.test(x.reason)); })(), "Token-2022 rejected");
+  add("POS-12: foreign-owner accounts are rejected", (() => { const d = disc(acct("Foreign1", "500000", { owner: "OtherWallet1111111111111111111111111111111" })); return d.aggregateRaw === "1000000" && d.rejected.some((x) => x.reason === "not_owned_by_wallet"); })(), "not ours");
+  add("POS-13: fully delegated balances are excluded", (() => { const d = disc(acct("Deleg11", "500000", { delegateAmountRaw: "500000" })); return d.aggregateRaw === "1000000" && d.rejected.some((x) => x.reason === "fully_delegated"); })(), "delegated excluded");
+  add("POS-14: partially delegated balances count only the wallet's share", discoverCTokenAccounts([acct("Part11", "500000", { delegateAmountRaw: "200000" })], WALLET).aggregateRaw === "300000", "500k - 200k");
+  add("POS-15: malformed amounts are rejected", (() => { const d = disc(acct("Bad11", "1.5e6")); return d.aggregateRaw === "1000000" && d.rejected.some((x) => x.reason === "malformed_amount"); })(), "non-integer rejected");
+  add("POS-16: wrong cToken decimals are rejected", (() => { const d = disc(acct("Dec11", "500000", { decimals: 9 })); return d.rejected.some((x) => /ctoken_decimals_mismatch/.test(x.reason)); })(), "9dp rejected");
+
+  // --- Identity binding ---
+  const wrong = (o: Partial<PositionIdentityInputs>) => deriveKlendDirectLendingPosition({ ...base, identity: { ...ID, ...o } });
+  add("POS-17: symbol-only matching is rejected by construction", (IDENTIFICATION_RULES.neverIdentifyBy as readonly string[]).includes("symbol") && (IDENTIFICATION_RULES.neverIdentifyBy as readonly string[]).includes("display name") && !/symbol/i.test(String(POSITION_IDENTITY.cTokenMint)), "address-bound");
+  add("POS-18: USDC-mint-alone matching is rejected", (IDENTIFICATION_RULES.neverIdentifyBy as readonly string[]).includes("USDC mint alone") && /shared by FOUR reserves/i.test(IDENTIFICATION_RULES.rationale), "4 reserves share it");
+  add("POS-19: market-name-alone matching is rejected", (IDENTIFICATION_RULES.neverIdentifyBy as readonly string[]).includes("market name alone"), "name rejected");
+  add("POS-20: wrong reserve binding fails", wrong({ reserveAddress: "So11111111111111111111111111111111111111112" }).failure === "identity_mismatch", "reserve bound");
+  add("POS-21: wrong market binding fails", wrong({ marketAddress: "So11111111111111111111111111111111111111112" }).failure === "identity_mismatch", "market bound");
+  add("POS-22: wrong KLend program fails", wrong({ klendProgram: "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd" }).failure === "identity_mismatch", "program bound");
+  add("POS-23: wrong cToken mint fails", wrong({ cTokenMint: "7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS" }).failure === "identity_mismatch", "Steakhouse share mint rejected");
+  add("POS-24: wrong token program in identity fails", wrong({ tokenProgram: TOKEN_2022_PROGRAM_ID }).failure === "identity_mismatch", "Tokenkeg required");
+  add("POS-25: wrong cluster fails", wrong({ cluster: "devnet" }).failure === "identity_mismatch", "mainnet-beta required");
+  add("POS-26: cToken decimals are verified as exactly 6", POSITION_IDENTITY.cTokenDecimals === 6 && P.cTokenDecimals === 6 && validatePositionIdentity({ ...ID, cTokenDecimals: 9 }).failure === "ctoken_decimals_mismatch", "6dp verified");
+  add("POS-27: the token program is the classic SPL Token program, verified on-chain", EXPECTED_TOKEN_PROGRAM_ID === "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" && P.cTokenMintOwnerProgram === EXPECTED_TOKEN_PROGRAM_ID, "Tokenkeg");
+
+  // --- Valuation ---
+  add("POS-28: raw cToken units are preserved as integer strings", r.cTokenBalanceRaw === "3500000" && typeof r.cTokenBalanceRaw === "string" && r.cTokenBalanceNormalized === 3.5, "raw ≠ normalized");
+  add("POS-29: cToken is NOT treated one-to-one with USDC", VALUATION_SEMANTICS.oneToOneAssumed === false && P.cTokenEqualsUsdc === false && (r.underlyingUsdcTokenAmount ?? 0) > (r.cTokenBalanceNormalized ?? 0), "3.5 cTokens > 3.5 USDC");
+  add("POS-30: the official exchange-rate conversion is used", (() => { const expected = (3_500_000n * BigInt(base.estimatedTotalSupplySf)) / (ONE * BigInt(P.reserveCollateralMintTotalSupply)); return r.underlyingUsdcRaw === expected.toString(); })(), "floor(bal x supply / cSupply)");
+  add("POS-31: 1 cToken values at ~1.191791 USDC, not 1", Math.abs(P.oneCTokenInUsdc - 1.191791) < 1e-6 && Math.abs((r.collateralExchangeRate ?? 0) - 1.191791) < 0.001, "~1.1918 rate");
+  add("POS-32: rounding is floor, per the program", /^floor\b/.test(VALUATION_SEMANTICS.roundingDirection) && /to_floor/.test(VALUATION_SEMANTICS.roundingDirection) && /to_floor/.test(posSrc), "to_floor");
+  add("POS-33: rounding never overstates the claim", (() => { const exactFloor = (3_500_000n * BigInt(base.estimatedTotalSupplySf)) / (ONE * BigInt(P.reserveCollateralMintTotalSupply)); const unfloored = Number(3_500_000n) * (Number(BigInt(base.estimatedTotalSupplySf)) / Number(ONE * BigInt(P.reserveCollateralMintTotalSupply))); return Number(exactFloor) <= unfloored; })(), "floor ≤ exact");
+  add("POS-34: the SDK's unfloored value would overstate, and is not used", P.floorNeverOverstates === true && Number(P.underlyingPerCTokenSdkUnfloored) > Number(P.underlyingPerCTokenFloorRaw) && /NO floor/.test(VALUATION_SEMANTICS.sdkDivergence), "1191791.727 > 1191791");
+  add("POS-35: the SDK rate is inverted and is not naively reused", P.sdkRateIsInverted === true && /INVERTED/.test(VALUATION_SEMANTICS.sdkDivergence), "mintSupply/totalSupply");
+  add("POS-36: the denominator is the reserve's cached field, not the SPL mint supply", CTOKEN_SUPPLY_AUTHORITY.authoritativeField === "reserve.collateral.mint_total_supply" && CTOKEN_SUPPLY_AUTHORITY.theyDiverge === true && String(P.splMintReportedSupply) !== String(P.reserveCollateralMintTotalSupply), "fields diverge ~12.76 cTokens");
+  add("POS-37: no market price is used for the cToken", VALUATION_SEMANTICS.marketPriceUsed === false && !/price/i.test(String(VALUATION_SEMANTICS.formula)), "accounting only");
+  add("POS-38: accrued interest is included; fees are excluded", /INCLUDED/.test(VALUATION_SEMANTICS.accruedInterestTreatment) && /EXCLUDED/.test(VALUATION_SEMANTICS.feeTreatment), "program-consistent");
+  add("POS-39: valuation uses BigInt, not floating point", /BigInt|ONE_SF/.test(posSrc) && !/parseFloat\(/.test(posSrc), "BigInt path");
+  add("POS-40: the valuation authority is the deployed program", /redeem_collateral/.test(r.valuationAuthority ?? "") && /reserve\.rs/.test(r.valuationAuthority ?? ""), "program authority");
+
+  // --- Dust + no position ---
+  const dust = deriveKlendDirectLendingPosition({ ...base, accounts: [acct("Dust11", "0")] });
+  add("POS-41: a wallet with no cTokens reports a definite no-position", dust.ok === true && dust.positionExists === false && dust.underlyingUsdcRaw === "0", "verified absent");
+  const tiny = deriveKlendDirectLendingPosition({ ...base, accounts: [acct("Tiny11", "1")] });
+  add("POS-42: dust that floors to 0 still reports the position as existing", tiny.ok === true && tiny.positionExists === true && tiny.cTokenBalanceRaw === "1", "never silently discarded");
+  add("POS-43: dust handling follows program semantics", /would pay 0/i.test(VALUATION_SEMANTICS.dustBehaviour) && /positionExists is driven by a non-zero cToken balance/.test(VALUATION_SEMANTICS.dustBehaviour), "mirrors program");
+
+  // --- Freshness ---
+  add("POS-44: stale wallet data fails current recognition", (() => { const x = deriveKlendDirectLendingPosition({ ...base, nowMs: NOW + POSITION_TTL_MS + 1000 }); return x.failure === "stale_wallet_data" && x.freshnessState === "stale"; })(), "past TTL");
+  add("POS-45: missing reserve conversion inputs fail valuation", deriveKlendDirectLendingPosition({ ...base, estimatedTotalSupplySf: undefined }).failure === "missing_conversion_inputs", "no supply → fail");
+  add("POS-46: missing cToken mint supply fails valuation", deriveKlendDirectLendingPosition({ ...base, collateralMintTotalSupplyRaw: undefined }).failure === "missing_conversion_inputs", "no cSupply → fail");
+  add("POS-47: malformed conversion inputs fail", deriveKlendDirectLendingPosition({ ...base, collateralMintTotalSupplyRaw: "9.2e13" }).failure === "malformed_conversion_inputs", "non-integer → fail");
+  add("POS-48: excessive source skew fails valuation", deriveKlendDirectLendingPosition({ ...base, reserveSourceSlot: SLOT + MAX_POSITION_SOURCE_SKEW + 1 }).failure === "source_skew_exceeded", "skew → fail");
+  add("POS-49: all three source slots are recorded independently", r.walletSourceSlot === SLOT && r.reserveSourceSlot === SLOT && r.cTokenMintSourceSlot === SLOT && r.sourceSkewSlots === 0, "3 slots");
+  add("POS-50: contradictory zero supply fails rather than using INITIAL_COLLATERAL_RATE", deriveKlendDirectLendingPosition({ ...base, collateralMintTotalSupplyRaw: "0" }).failure === "contradictory_zero_supply" && /refusing to value at INITIAL_COLLATERAL_RATE/i.test(deriveKlendDirectLendingPosition({ ...base, collateralMintTotalSupplyRaw: "0" }).failureDetail ?? ""), "fails closed");
+  add("POS-51: position confidence is recorded", r.positionConfidence === "verified_exact" && r.freshnessState === "fresh" && r.freshnessTtlMs === POSITION_TTL_MS, "verified_exact");
+  add("POS-52: a stale position never counts toward current sufficiency", BUFFER_RECOGNITION_BOUNDARY.countsTowardSufficiency === false, "no sufficiency");
+
+  // --- USD recognition ---
+  const priced = recognizeUnderlyingUsd({ underlyingUsdcTokenAmount: 100, usdcPriceUsd: 0.99985, priceSource: "approved_exact_mint_oracle", priceObservedAt: OBS, priceMaxAgeMs: 60_000, nowMs: NOW });
+  add("POS-53: a token-unit position exists without USD pricing", r.ok === true && (r.underlyingUsdcTokenAmount ?? 0) > 0 && recognizeUnderlyingUsd({ underlyingUsdcTokenAmount: 100, usdcPriceUsd: undefined, priceSource: undefined, priceObservedAt: undefined, priceMaxAgeMs: 60_000, nowMs: NOW }).state === "unavailable_no_fresh_price", "token-unit stands alone");
+  add("POS-54: a missing USDC price prevents USD recognition but preserves tokens", (() => { const x = recognizeUnderlyingUsd({ underlyingUsdcTokenAmount: 100, usdcPriceUsd: undefined, priceSource: undefined, priceObservedAt: undefined, priceMaxAgeMs: 60_000, nowMs: NOW }); return x.state === "unavailable_no_fresh_price" && x.recognizedBufferValueUsd === null && x.tokenAmountPreserved === 100; })(), "tokens preserved");
+  add("POS-55: a stale USDC price prevents USD recognition", recognizeUnderlyingUsd({ underlyingUsdcTokenAmount: 100, usdcPriceUsd: 0.99985, priceSource: "approved_exact_mint_oracle", priceObservedAt: "2026-07-17T06:00:00.000Z", priceMaxAgeMs: 60_000, nowMs: NOW }).state === "unavailable_no_fresh_price", "stale → unavailable");
+  add("POS-56: USDC is not assumed to equal exactly $1", priced.state === "recognized" && priced.recognizedBufferValueUsd !== 100 && Math.abs((priced.recognizedBufferValueUsd ?? 0) - 99.985) < 1e-9, "100 tokens = $99.985");
+  add("POS-57: recognizedBufferValueUsd is separate from liquidBufferValueUsd", String(BUFFER_RECOGNITION_BOUNDARY.recognizedMeaning) !== String(BUFFER_RECOGNITION_BOUNDARY.liquidMeaning) && /drives SUFFICIENCY/.test(BUFFER_RECOGNITION_BOUNDARY.liquidMeaning), "separate");
+  add("POS-58: liquidBufferValueUsd does not become positive before withdrawal availability is verified", BUFFER_RECOGNITION_BOUNDARY.liquidBufferValueUsdThisStep === "unresolved" && POSITION_CONFERS.liquidBufferValueUsdRemains === "unresolved" && /not proof of exit/i.test(BUFFER_RECOGNITION_BOUNDARY.liquidBufferValueUsdRationale), "unresolved until N.6");
+  add("POS-59: no percentage haircut was invented", BUFFER_RECOGNITION_BOUNDARY.inventedHaircut === false && /never a guess in between/i.test(BUFFER_RECOGNITION_BOUNDARY.inventedHaircutNote), "verified-or-unresolved");
+  add("POS-60: buffer recognition reuses the existing separation", /stableYieldBufferRecognition\.ts/.test(BUFFER_RECOGNITION_BOUNDARY.reuses) && typeof recognizeStableYieldBuffer === "function", "reused");
+
+  // --- Boundaries ---
+  add("POS-61: existing-position recognition does not imply recommendation", BUFFER_RECOGNITION_BOUNDARY.impliesRecommendation === false && BUFFER_RECOGNITION_BOUNDARY.impliesApproval === false && EXISTING_POSITION_SEMANTICS.recommendationCreated === false, "recognition ≠ recommendation");
+  add("POS-62: the position is visible under Yield Strategies", BUFFER_RECOGNITION_BOUNDARY.visibleUnderYieldStrategies === true, "visible");
+  add("POS-63: no Top Pick or production card", EXISTING_POSITION_SEMANTICS.topPickCreated === false && EXISTING_POSITION_SEMANTICS.productionCardRendered === false, "none");
+  add("POS-64: the user is never told to deposit, withdraw or migrate", EXISTING_POSITION_SEMANTICS.mustNotTellUserTo.length === 3 && (EXISTING_POSITION_SEMANTICS.mustNotTellUserTo as readonly string[]).includes("migrate from Steakhouse"), "3 forbidden");
+  add("POS-65: no internal risk score or approved label is rendered", (EXISTING_POSITION_SEMANTICS.mustNotRender as readonly string[]).includes("internal numeric risk scores") && (EXISTING_POSITION_SEMANTICS.mustNotRender as readonly string[]).includes("an approved label"), "internal-only");
+  add("POS-66: APY is described as estimated and variable", EXISTING_POSITION_SEMANTICS.apy === "estimated and variable" && RATE_KIND === "estimated_variable_apy" && CAPACITY_CONFERS.apyRateKindUnchanged === "estimated_variable_apy", "estimated_variable_apy");
+  add("POS-67: no transaction action is enabled", EXISTING_POSITION_SEMANTICS.transactionActionEnabled === false && POSITION_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction|VersionedTransaction/.test(posSrc), "read-only");
+  add("POS-68: the module is read-only", /STRICTLY READ-ONLY/.test(posSrc), "reads only");
+
+  // --- State ---
+  add("POS-69: positionDetectionState moves no_adapter → adapter_implemented_source_verified", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.positionDetectionState === "adapter_implemented_source_verified" && POSITION_BLOCKER_SUPERSESSION.priorPositionDetectionState === "no_adapter"; })(), "source-verified");
+  add("POS-70: blocked_position_detection provenance is preserved", /RESOLVED at 16H-N\.5[\s\S]*blocked_position_detection/.test(getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" ")), "provenance kept");
+  add("POS-71: the primary blocker moves to blocked_risk_review", getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review" && POSITION_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_risk_review", "moved on");
+  add("POS-72: no blocker enum or lifecycle value was invented", POSITION_BLOCKER_SUPERSESSION.newBlockerEnumInvented === false && POSITION_BLOCKER_SUPERSESSION.newLifecycleValueInvented === false, "none invented");
+  add("POS-73: the state-model gap is reported and is now binding", /no blocked_deposit_availability or blocked_constraints value/i.test(POSITION_BLOCKER_SUPERSESSION.stateModelGap) && /state_model_gap_primary_blocker_expressiveness/.test(getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" ")), "gap surfaced");
+  add("POS-74: the match mechanism is recorded as the exact cToken mint", /B8V6WVjPxW1UGwVDfxH2d2r8SyT4cqn7dQRK6XneVa7D/.test(getStableYieldEvidenceManifest("kamino_usdc_lending")!.positionMatchMechanism ?? ""), "exact mint");
+  add("POS-75: lifecycle remains identity_verified", /identity_verified/.test(POSITION_CONFERS.lifecycleUnchanged) && getYieldStrategy("kamino_usdc_lending")!.lifecycle === "identity_verified", "unchanged");
+
+  // --- Scope fence ---
+  add("POS-76: deposit availability remains blocked", POSITION_CONFERS.depositAvailabilityRemains === "blocked" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.depositAvailabilityState === "blocked", "blocked");
+  add("POS-77: constraints remain blocked", POSITION_CONFERS.constraintsRemain === "blocked" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.constraintsState === "blocked", "blocked");
+  add("POS-78: no risk score, review, signoff, or approval", POSITION_CONFERS.riskScoreAssigned === false && POSITION_CONFERS.humanReviewOccurred === false && POSITION_CONFERS.signoffOccurred === false && POSITION_CONFERS.productApproved === false && getStableYieldEvidenceManifest("kamino_usdc_lending")!.riskReviewState === "blocked", "none");
+  add("POS-79: no selector or recommendation eligibility", (POSITION_CONFERS.doesNotConfer as readonly string[]).includes("selector eligibility") && (POSITION_CONFERS.doesNotConfer as readonly string[]).includes("recommendation eligibility") && (POSITION_CONFERS.doesNotConfer as readonly string[]).includes("Top Pick"), "none");
+  add("POS-80: readiness remains blocked", getStableYieldEvidenceManifest("kamino_usdc_lending")!.readiness === "blocked", "blocked");
+  add("POS-81: capacity remains resolved and unchanged by this step", getStableYieldEvidenceManifest("kamino_usdc_lending")!.capacityAdapterState === "adapter_implemented_source_verified", "N.4 intact");
+  add("POS-82: Steakhouse recognition and detection remain unchanged", (() => { const m = getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!; return m.positionDetectionState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_risk_review" && m.productAddress === "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E"; })(), "unchanged");
+  add("POS-83: the Steakhouse share mint is not confused with this cToken", String(POSITION_IDENTITY.cTokenMint) !== "7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS", "distinct mints");
+
+  // --- Evidence ---
+  add("POS-84: the evidence manifest is deterministic", POSITION_EVIDENCE_MANIFEST_HASH === computePositionEvidenceManifestHash() && /^position_evidence_[0-9a-f]{8}$/.test(POSITION_EVIDENCE_MANIFEST_HASH), POSITION_EVIDENCE_MANIFEST_HASH);
+  add("POS-85: evidence records authority, numeric type, rounding, provenance, triggers", /redeem_collateral/.test(POSITION_EVIDENCE.valuationAuthority) && /BigInt/.test(POSITION_EVIDENCE.numericType) && POSITION_EVIDENCE.roundingDirection === "floor" && POSITION_EVIDENCE.sourceProvenance.length === 7 && POSITION_EVIDENCE.invalidationTriggers.length === 5, "complete");
+  add("POS-86: the preparer is not represented as a human reviewer", POSITION_EVIDENCE.preparerIsNotHumanReviewer === true && POSITION_EVIDENCE.preparerRole === "automated_evidence_preparer", "not a reviewer");
+  add("POS-87: the snapshot is evidence, not a production input", POSITION_SNAPSHOT_IS_NOT_PRODUCTION_INPUT.isProductionInput === false && /rises every accrual slot/i.test(POSITION_SNAPSHOT_IS_NOT_PRODUCTION_INPUT.rule), "evidence ≠ input");
+  add("POS-88: prior identity evidence is unchanged", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && computeIdentityManifestHash() === SOL_BTC_USDC_IDENTITY_MANIFEST_HASH, "identity_9773ac14");
+  add("POS-89: prior APY evidence is unchanged", APY_EVIDENCE_MANIFEST_HASH === "apy_evidence_d468fce5" && computeApyEvidenceManifestHash() === APY_EVIDENCE_MANIFEST_HASH, "apy_evidence_d468fce5");
+  add("POS-90: prior reward evidence is unchanged", REWARD_EVIDENCE_MANIFEST_HASH === "reward_evidence_cace4fe4" && computeRewardEvidenceManifestHash() === REWARD_EVIDENCE_MANIFEST_HASH, "reward_evidence_cace4fe4");
+  add("POS-91: prior parity evidence is unchanged", PARITY_EVIDENCE_MANIFEST_HASH === "parity_evidence_dd25a9a1" && computeParityEvidenceManifestHash() === PARITY_EVIDENCE_MANIFEST_HASH, "parity_evidence_dd25a9a1");
+  add("POS-92: measured-APY evidence is unchanged", MEASURED_APY_EVIDENCE_MANIFEST_HASH === "measured_apy_evidence_ebc7627d" && computeMeasuredApyEvidenceManifestHash() === MEASURED_APY_EVIDENCE_MANIFEST_HASH, "measured_apy_evidence_ebc7627d");
+  add("POS-93: capacity evidence is unchanged", CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && /^capacity_evidence_[0-9a-f]{8}$/.test(CAPACITY_EVIDENCE_MANIFEST_HASH), CAPACITY_EVIDENCE_MANIFEST_HASH);
+  add("POS-94: all prior evidence ids are preserved", (PRESERVED_PRIOR_EVIDENCE_N5 as readonly string[]).includes("capacity_evidence_e54e310a") && (PRESERVED_PRIOR_EVIDENCE_N5 as readonly string[]).includes("measured_apy_evidence_ebc7627d") && PRESERVED_PRIOR_EVIDENCE_N5.length === 14, "14 preserved");
+  add("POS-95: Steakhouse evidence and assessment remain immutable", KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4", "unchanged");
 
   return checks;
 }
