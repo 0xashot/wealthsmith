@@ -1,3 +1,4 @@
+import { KLEND_CAPACITY_SOURCE, SDK_MIRRORS_ENFORCEMENT, ENFORCEMENT_FACTS, DEPOSIT_LIMIT_SENTINEL_SEMANTICS, CAPACITY_IS_NOT_DEPOSIT_STATE, CAPACITY_PRODUCT_BINDING, validateCapacityIdentity, deriveKlendReserveCapacity, CAPACITY_TTL_MS, MAX_CAPACITY_SLOT_AGE, CAPACITY_SNAPSHOT, SNAPSHOT_IS_NOT_PRODUCTION_INPUT, CAPACITY_LAYER_SEPARATION, USD_CAPACITY, API_PARITY_OBSERVATIONS, KAMINO_CAPACITY_API_DIAGNOSTIC, classifyCapacityParity, CAPACITY_PARITY_RESULT, PRESERVED_PRIOR_EVIDENCE as PRESERVED_PRIOR_EVIDENCE_CAP, CAPACITY_EVIDENCE, computeCapacityEvidenceManifestHash, CAPACITY_EVIDENCE_MANIFEST_HASH, CAPACITY_BLOCKER_SUPERSESSION, CAPACITY_CONFERS, type CapacityIdentityInputs } from "./klendReserveCapacity";
 import { measureSlotDuration, computeSlotAdjustmentFactor, validateReserveMeasurementSkew, PRIMARY_WINDOW_SLOTS, VALIDATION_WINDOW_SLOTS, WINDOW_AGREEMENT_TOLERANCE, SANITY_RANGE_MS, MEASUREMENT_TTL_MS, MAX_RESERVE_MEASUREMENT_SLOT_SKEW, DENOMINATOR_POLICY, REJECTED_CONSTANT_MS } from "./solanaSlotDurationEstimator";
 import { EXACT_PRODUCT_BINDING, validateExactProductBinding, MEASUREMENT_REUSE_POLICY, SLOT_ADJUSTMENT_MECHANISM, FROZEN_SNAPSHOT_SENSITIVITY, HARDCODED_450_DEFECT, MEASUREMENT_SNAPSHOT_IS_NOT_PRODUCTION_INPUT, EVIDENCE_LAYER_SEPARATION, RATE_KIND, PRECISION_STATE, deriveMeasuredApy, CORRECTED_APY_SNAPSHOT, PARITY_TOLERANCE, KAMINO_API_DIAGNOSTIC, evaluateParityDiagnostic, CORRECTION_PARITY_RESULT, PARITY_IMPROVEMENT, USER_FACING_APY_PRESENTATION, COMPARISON_METHODOLOGY_RULE, PRESERVED_PRIOR_EVIDENCE, PRIOR_EVIDENCE_HANDLING, MEASURED_APY_EVIDENCE, computeMeasuredApyEvidenceManifestHash, MEASURED_APY_EVIDENCE_MANIFEST_HASH, evaluateComparisonReadiness, CORRECTION_READINESS_RESULT, APY_UNIT_BLOCKER_SUPERSESSION, CORRECTION_CONFERS } from "./klendReserveMeasuredApyCorrection";
 import { KAMINO_RESERVE_METRICS_API, PARITY_OBSERVATIONS, GAP_LOCALIZATION, UI_API_RELATIONSHIP, NOT_INVESTIGATED, PARITY_CLASSIFICATION, PARITY_CONSEQUENCE, PARITY_EVIDENCE, computeParityEvidenceManifestHash, PARITY_EVIDENCE_MANIFEST_HASH, PARITY_AMENDMENT_CONFERS } from "./klendReserveApyParityAmendment";
@@ -16274,7 +16275,7 @@ export function runStableYieldIdentityResolutionFixtureChecks(): FixtureCheck[] 
   // 16H-N.1 moved the primary blocker off blocked_identity onto blocked_apy_unit. 16H-N.2 then
   // resolved the APY unit too, so primary moved again. The invariant across both: identity stays
   // resolved, and every superseded blocker keeps a RESOLVED provenance entry rather than vanishing.
-  add("16H-N.1-AB2 (updated by 16H-N.3b): resolved blockers keep provenance and primary moves on", (() => { const m = man("kamino_usdc_lending"); const b = m.blockers.join(" "); return m.primaryBlocker === "blocked_capacity" && /RESOLVED at 16H-N\.1/.test(b) && /RESOLVED at 16H-N\.2/.test(b) && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && !/^blocked_identity \(PRIMARY/.test(b); })(), "blocker moved to capacity");
+  add("16H-N.1-AB2 (updated by 16H-N.3b): resolved blockers keep provenance and primary moves on", (() => { const m = man("kamino_usdc_lending"); const b = m.blockers.join(" "); return m.primaryBlocker === "blocked_position_detection" && /RESOLVED at 16H-N\.1/.test(b) && /RESOLVED at 16H-N\.2/.test(b) && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && !/^blocked_identity \(PRIMARY/.test(b); })(), "blocker moved to capacity");
 
   // ---- Evidence + readiness ----
   add("16H-H-AC: every manifest carries exactly one deterministic primary status", listStableYieldEvidenceManifests().every((m) => typeof m.primaryBlocker === "string" && m.primaryBlocker.length > 0), "deterministic");
@@ -16985,10 +16986,10 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   // ---- Consequence ----
   add("PAR-22: the APY methodology is UNRESOLVED and comparison is blocked", PARITY_CONSEQUENCE.apyMethodologyResolved === false && PARITY_CONSEQUENCE.definitionSufficientForComparison === false && PARITY_CONSEQUENCE.definitionSufficientPriorValue === true, "unresolved");
   add("PAR-23: the adapter was NOT silently edited and NO correction was invented", PARITY_CONSEQUENCE.adapterSilentlyEdited === false && PARITY_CONSEQUENCE.methodologyCorrectionMade === false && /requires identifying the omitted component/i.test(PARITY_CONSEQUENCE.methodologyCorrectionWithheldBecause) && PARITY_AMENDMENT_CONFERS.adapterEdited === false, "not edited");
-  add("PAR-24 (superseded by 16H-N.3b): the 16H-N.3a reopening is immutable; the live blocker has since moved on", PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && /APY methodology itself is unresolved/i.test(PARITY_CONSEQUENCE.primaryBlockerRationale) && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_capacity" && APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit", "historical record intact, live state advanced");
+  add("PAR-24 (superseded by 16H-N.3b): the 16H-N.3a reopening is immutable; the live blocker has since moved on", PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && /APY methodology itself is unresolved/i.test(PARITY_CONSEQUENCE.primaryBlockerRationale) && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_position_detection" && APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit", "historical record intact, live state advanced");
   add("PAR-25: UI-rounding noise is distinguished from official-source disagreement", /would NOT block/i.test(PARITY_CONSEQUENCE.internalComparabilityVsUiParity) && /far beyond rounding/i.test(PARITY_CONSEQUENCE.internalComparabilityVsUiParity), "distinguished");
   add("PAR-26: 16H-N.2's circular parity is acknowledged, not withdrawn", /circular/i.test(PARITY_CONSEQUENCE.regression16HN2) && /remains TRUE and is not withdrawn/i.test(PARITY_CONSEQUENCE.regression16HN2) && APY_PARITY.result === "exact_match", "acknowledged");
-  add("PAR-27: the manifest records the reopening and keeps capacity listed", (() => { const b = getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" "); return /REOPENED at 16H-N\.3a/.test(b) && /blocked_capacity \(PRIMARY, 16H-N\.2, restored as primary at 16H-N\.3b\)/.test(b) && /api_freshness_unestablishable/.test(b) && /SUPERSEDED at 16H-N\.3a/.test(b); })(), "recorded");
+  add("PAR-27: the manifest records the reopening and keeps capacity listed", (() => { const b = getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" "); return /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.4 \(retained for provenance, no longer blocking\) — blocked_capacity/.test(b) && /api_freshness_unestablishable/.test(b) && /SUPERSEDED at 16H-N\.3a/.test(b); })(), "recorded");
 
   // ---- Evidence immutability ----
   add("PAR-28: parity evidence is versioned and deterministic", PARITY_EVIDENCE_MANIFEST_HASH.startsWith("parity_evidence_") && computeParityEvidenceManifestHash() === PARITY_EVIDENCE_MANIFEST_HASH && computeParityEvidenceManifestHash({ ...PARITY_EVIDENCE, classification: "A_sdk_api_agree_ui_stale" } as unknown as typeof PARITY_EVIDENCE) !== PARITY_EVIDENCE_MANIFEST_HASH, "manifest");
@@ -16996,7 +16997,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   add("PAR-30: prior APY and reward methodology evidence are untouched", APY_METHODOLOGY_EVIDENCE.evidenceId === "klend_reserve_apy_methodology_v1" && REWARD_METHODOLOGY_EVIDENCE.evidenceId === "klend_reserve_reward_methodology_v1" && REWARD_STREAMS[0].state === "exhausted" && getSolBtcUsdcTotalApy().rewardApyPct === 0, "untouched");
 
   // ---- Isolation ----
-  add("PAR-31: capacity and deposits remain unresolved", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "no_adapter" && m.depositAvailabilityState === "blocked" && m.constraintsState === "blocked" && m.riskReviewState === "blocked"; })() && PARITY_AMENDMENT_CONFERS.capacityResolved === false && PARITY_AMENDMENT_CONFERS.depositAvailabilityResolved === false, "unresolved");
+  add("PAR-31 (updated by 16H-N.4): the parity amendment itself resolved no capacity; capacity was resolved later by 16H-N.4, deposits remain blocked", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "adapter_implemented_source_verified" && m.depositAvailabilityState === "blocked" && m.constraintsState === "blocked" && m.riskReviewState === "blocked"; })() && PARITY_AMENDMENT_CONFERS.capacityResolved === false && PARITY_AMENDMENT_CONFERS.depositAvailabilityResolved === false, "N.3a resolved none; N.4 resolved capacity only");
   add("PAR-32: no score, approval, selector or card", PARITY_AMENDMENT_CONFERS.riskScoreAssigned === false && PARITY_AMENDMENT_CONFERS.humanReviewPerformed === false && PARITY_AMENDMENT_CONFERS.productApproved === false && PARITY_AMENDMENT_CONFERS.selectorIntegrated === false && PARITY_AMENDMENT_CONFERS.rendersCard === false, "nothing enabled");
   add("PAR-33: Demo, Steakhouse and SOL staking unchanged", PARITY_AMENDMENT_CONFERS.demoChanged === false && PARITY_AMENDMENT_CONFERS.steakhouseRecognitionChanged === false && PARITY_AMENDMENT_CONFERS.solStakingChanged === false && listYieldStrategies().find((x) => x.strategyId === "kamino_steakhouse_usdc")!.address === "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E", "unchanged");
   add("PAR-34: lifecycle untouched — investigation changes claims, not build", listYieldStrategies().find((x) => x.strategyId === "kamino_usdc_lending")!.lifecycle === "identity_verified" && /changes what is claimed, not what is built/i.test(PARITY_AMENDMENT_CONFERS.note), "claims only");
@@ -17060,11 +17061,11 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   // 16H-N.3a found the official API and SDK disagree ~9.65%, reopening the APY methodology, which is
   // the one condition permitting the primary to move. The invariant that survives: 16H-N.3 itself
   // invented no enum and did not move the blocker; a LATER step moved it on new evidence.
-  add("RW-39 (updated by 16H-N.3b): 16H-N.3 moved nothing; the APY reopened then resolved, returning primary to capacity", REWARD_GAP_SUPERSESSION.primaryBlockerUnchanged === "blocked_capacity" && REWARD_GAP_SUPERSESSION.newBlockerEnumInvented === false && PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_capacity", "round trip complete");
+  add("RW-39 (updated by 16H-N.3b): 16H-N.3 moved nothing; the APY reopened then resolved, returning primary to capacity", REWARD_GAP_SUPERSESSION.primaryBlockerUnchanged === "blocked_capacity" && REWARD_GAP_SUPERSESSION.newBlockerEnumInvented === false && PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_position_detection", "round trip complete");
   add("RW-40: the manifest records the reward resolution and the open UI gap", (() => { const b = getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" "); return /RESOLVED at 16H-N\.3/.test(b) && /UI PARITY UNEXPLAINED/.test(b); })(), "recorded");
 
   // ---- Isolation ----
-  add("RW-41: capacity, deposits, constraints and risk remain UNCHANGED", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "no_adapter" && m.depositAvailabilityState === "blocked" && m.constraintsState === "blocked" && m.riskReviewState === "blocked" && m.readiness === "blocked"; })(), "unchanged");
+  add("RW-41 (capacity resolved at 16H-N.4): capacity, deposits, constraints and risk remain UNCHANGED", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "adapter_implemented_source_verified" && m.depositAvailabilityState === "blocked" && m.constraintsState === "blocked" && m.riskReviewState === "blocked" && m.readiness === "blocked"; })(), "unchanged");
   add("RW-42: reward resolution enables NOTHING downstream", (() => { const c = REWARD_RESOLUTION_CONFERS; return c.capacityResolved === false && c.depositAvailabilityResolved === false && c.riskScoreAssigned === false && c.humanReviewPerformed === false && c.riskSignoffCompleted === false && c.productApproved === false && c.selectorIntegrated === false && c.rendersCard === false && c.topPick === false && c.recommendationGenerated === false && c.transactionsEnabled === false && c.lifecycleChanged === false; })(), "enables nothing");
   add("RW-43: lifecycle and production flags untouched", (() => { const c = listYieldStrategies().find((x) => x.strategyId === "kamino_usdc_lending")!; return c.lifecycle === "identity_verified" && c.marketDataEvaluated === false && c.suggestionGenerated === false && c.transactionsEnabled === false; })(), "untouched");
   add("RW-44: Demo, Steakhouse and SOL staking unchanged", REWARD_RESOLUTION_CONFERS.demoChanged === false && REWARD_RESOLUTION_CONFERS.steakhouseRecognitionChanged === false && REWARD_RESOLUTION_CONFERS.solStakingChanged === false && listYieldStrategies().find((x) => x.strategyId === "kamino_steakhouse_usdc")!.address === "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E", "unchanged");
@@ -17122,10 +17123,10 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   add("APY-34: the supersession is explicit with authority, method, units, version, slot", (() => { const r = APY_BLOCKER_SUPERSESSION.resolution; return r.resolved === true && r.calculationAuthority.startsWith("A") && r.sdkMethodIdentity.includes("totalSupplyAPY") && r.units.includes("percentage_points") && r.calculationVersion === "1.0.0" && r.sourceSlot === "433344510" && r.parity.includes("exact_match"); })(), "explicit");
   add("APY-35: the reward STATE-MODEL GAP is reported, not invented around", /no reward-resolution state/i.test(APY_BLOCKER_SUPERSESSION.remainingApyGap.stateModelGap) && /NO new state was invented/i.test(APY_BLOCKER_SUPERSESSION.remainingApyGap.stateModelGap) && APY_BLOCKER_SUPERSESSION.primaryBlockerMovesTo === "blocked_capacity", "gap reported");
   add("APY-36: the manifest reflects a verified adapter and the moved blocker", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.apyAdapterState === "adapter_implemented_source_verified" && m.apyUnitInterpretation === "percent" && /RESOLVED at 16H-N\.2/.test(m.blockers.join(" ")); })(), "manifest");
-  add("APY-36b (updated by 16H-N.3b): the adapter state stood throughout the reopen-and-resolve cycle", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; const b = m.blockers.join(" "); return m.apyAdapterState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_capacity" && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && PARITY_CONSEQUENCE.adapterSilentlyEdited === false; })(), "reopened, adapter intact");
+  add("APY-36b (updated by 16H-N.3b): the adapter state stood throughout the reopen-and-resolve cycle", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; const b = m.blockers.join(" "); return m.apyAdapterState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_position_detection" && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && PARITY_CONSEQUENCE.adapterSilentlyEdited === false; })(), "reopened, adapter intact");
 
   // ---- Isolation ----
-  add("APY-37: capacity, constraints, deposits and risk remain UNCHANGED", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "no_adapter" && m.constraintsState === "blocked" && m.depositAvailabilityState === "blocked" && m.riskReviewState === "blocked" && m.readiness === "blocked"; })(), "unchanged");
+  add("APY-37 (capacity resolved at 16H-N.4): capacity, constraints, deposits and risk remain UNCHANGED", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "adapter_implemented_source_verified" && m.constraintsState === "blocked" && m.depositAvailabilityState === "blocked" && m.riskReviewState === "blocked" && m.readiness === "blocked"; })(), "unchanged");
   add("APY-38: APY resolution enables NOTHING downstream", (() => { const c = APY_RESOLUTION_CONFERS; return c.capacityResolved === false && c.depositAvailabilityResolved === false && c.riskScoreAssigned === false && c.humanReviewPerformed === false && c.riskSignoffCompleted === false && c.productApproved === false && c.selectorIntegrated === false && c.rendersCard === false && c.topPick === false && c.recommendationGenerated === false && c.transactionsEnabled === false; })(), "enables nothing");
   add("APY-39: lifecycle and production flags are untouched by APY work", (() => { const c = listYieldStrategies().find((x) => x.strategyId === "kamino_usdc_lending")!; return c.lifecycle === "identity_verified" && c.marketDataEvaluated === false && c.eligibilityEvaluated === false && c.suggestionGenerated === false && c.transactionsEnabled === false; })(), "untouched");
   add("APY-40: Demo, Steakhouse and SOL staking are unchanged", APY_RESOLUTION_CONFERS.demoChanged === false && APY_RESOLUTION_CONFERS.steakhouseRecognitionChanged === false && APY_RESOLUTION_CONFERS.solStakingChanged === false && listYieldStrategies().find((x) => x.strategyId === "kamino_steakhouse_usdc")!.address === "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E", "unchanged");
@@ -17177,7 +17178,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   // BASE rate via the official SDK. The guarantee that survives: identity resolution itself enabled
   // nothing, and TOTAL APY is still unresolved because a configured farm is unevaluated.
   add("ID-29 (updated by 16H-N.2): the reserve is bound; BASE APY resolved, TOTAL still unresolved", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; const r = getSolBtcUsdcApy(); return m.productAddress === "D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59" && m.apyAdapterState === "adapter_implemented_source_verified" && r.baseSupplyApyPct === 3.178951 && r.totalSupplyApyPct === null && APY_RESOLUTION_CONFERS.totalApyResolved === false; })(), "base yes, total no");
-  add("ID-30: capacity, constraints and deposit availability remain blocked", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "no_adapter" && m.constraintsState === "blocked" && m.depositAvailabilityState === "blocked"; })(), "still blocked");
+  add("ID-30 (capacity resolved at 16H-N.4): capacity, constraints and deposit availability remain blocked", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "adapter_implemented_source_verified" && m.constraintsState === "blocked" && m.depositAvailabilityState === "blocked"; })(), "capacity verified; deposits+constraints still blocked");
 
   // ---- Governance ----
   add("ID-31: manager_discretion is APPLICABLE to direct lending — not marked n/a", MANAGER_DISCRETION_APPLICABILITY.applicableToDirectLending === true && MANAGER_DISCRETION_APPLICABILITY.notApplicable === false && MANAGER_DISCRETION_APPLICABILITY.relevantEvidence.length >= 8 && /after deposit/i.test(MANAGER_DISCRETION_APPLICABILITY.evaluates), "applicable");
@@ -17832,6 +17833,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runKlendReserveCapacityFixtureChecks(),
     ...runMeasuredSlotDurationApyFixtureChecks(),
     ...runSuggestionEngineFixtureChecks(),
     ...runMapperFixtureChecks(),
@@ -18079,7 +18081,7 @@ export function runMeasuredSlotDurationApyFixtureChecks(): FixtureCheck[] {
   add("SD-71: successful validation moves primary blocker to blocked_capacity", CORRECTION_READINESS_RESULT.primaryBlocker === "blocked_capacity" && APY_UNIT_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_capacity", "→ blocked_capacity");
   add("SD-72: prior primary blocker is recorded as blocked_apy_unit", APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit" && APY_UNIT_BLOCKER_SUPERSESSION.reopenedAt === "16H-N.3a", "provenance kept");
   add("SD-73: any failed gate keeps blocked_apy_unit", ["identityVerified", "slotDurationValidated", "slotDurationFresh", "windowsAgree", "reserveFresh", "skewWithinBound", "rewardResolved"].every((g) => { const i = { identityVerified: true, slotDurationValidated: true, slotDurationFresh: true, windowsAgree: true, reserveFresh: true, skewWithinBound: true, rewardResolved: true, parityWithinTolerance: true } as Record<string, boolean>; i[g] = false; const r = evaluateComparisonReadiness(i as unknown as Parameters<typeof evaluateComparisonReadiness>[0]); return r.definitionSufficientForComparison === false && r.primaryBlocker === "blocked_apy_unit"; }), "7 gates each block");
-  add("SD-74: the production evidence records the resolved blocker", /primaryBlocker:\s*"blocked_capacity"/.test(readIf("src/suggestions/stableYieldProductionEvidence.ts")), "evidence updated");
+  add("SD-74 (updated by 16H-N.4): the production evidence records the APY blocker as resolved and has moved past capacity too", (() => { const src = readIf("src/suggestions/stableYieldProductionEvidence.ts"); const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return /RESOLVED at 16H-N\.3b/.test(src) && m.primaryBlocker !== "blocked_apy_unit" && m.primaryBlocker === "blocked_position_detection"; })(), "apy resolved, primary advanced");
 
   // --- Presentation ---
   add("SD-75: display format requires the ~ prefix", USER_FACING_APY_PRESENTATION.displayFormat === "~{formattedApy}% APY" && USER_FACING_APY_PRESENTATION.tildePrefixRequired === true, "~{apy}% APY");
@@ -18117,6 +18119,168 @@ export function runMeasuredSlotDurationApyFixtureChecks(): FixtureCheck[] {
   add("SD-101: lifecycle is unchanged and no lifecycle value was invented", /identity_verified/.test(CORRECTION_CONFERS.lifecycleUnchanged) && /no lifecycle value was invented/i.test(CORRECTION_CONFERS.lifecycleUnchanged), "identity_verified");
   add("SD-102: no transaction is constructed or simulated", CORRECTION_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction|VersionedTransaction/.test(estimatorSrc + readIf("src/suggestions/klendReserveMeasuredApyCorrection.ts")), "read-only");
   add("SD-103: the estimator is read-only", !/sendTransaction|signTransaction|simulateTransaction/.test(estimatorSrc) && /STRICTLY READ-ONLY/.test(estimatorSrc), "block times only");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-N.4 — Exact Reserve Capacity Adapter
+ * ------------------------------------------------------------------ */
+
+export function runKlendReserveCapacityFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const capSrc = readIf("src/suggestions/klendReserveCapacity.ts");
+
+  const S = CAPACITY_SNAPSHOT;
+  const ID = { ...CAPACITY_PRODUCT_BINDING } as unknown as CapacityIdentityInputs;
+  const NOW = Date.parse("2026-07-17T07:01:30.000Z");
+  const base = {
+    identity: ID,
+    depositLimitRaw: S.depositLimitRaw,
+    totalSupplySf: S.totalSupplySf,
+    reserveSourceSlot: S.reserveSourceSlot,
+    currentSlot: S.reserveSourceSlot + 10,
+    observedAt: S.observedAt,
+    nowMs: NOW,
+  };
+  const r = deriveKlendReserveCapacity(base);
+  const ONE = 2n ** 60n;
+
+  // --- Happy path ---
+  add("CAP-1: exact reserve capacity derives successfully", r.ok === true && r.failure === undefined, "ok");
+  add("CAP-2: capacity kind is capped (finite 1B cap, not uncapped)", r.capacityKind === "capped" && r.capacityMode === "explicit_remaining_capacity", "capped");
+  add("CAP-3: deposit limit is exact and in base units", r.depositLimitRaw === "1000000000000000" && r.depositLimitTokenAmount === 1_000_000_000, "1B USDC");
+  add("CAP-4: total supplied is exact", r.totalSuppliedRaw === "111556662387780" && Math.abs((r.totalSuppliedTokenAmount ?? 0) - 111556662.38778) < 1e-6, "111.56M USDC");
+  add("CAP-5: remaining capacity is exact", r.remainingCapacityRaw === "888443337612219" && Math.abs((r.remainingCapacityTokenAmount ?? 0) - 888443337.612219) < 1e-6, "888.44M USDC");
+  add("CAP-6: remaining = floor(limit - supply) in exact fixed-point", (() => { const rem = (BigInt(S.depositLimitRaw) * ONE - BigInt(S.totalSupplySf)) / ONE; return rem.toString() === r.remainingCapacityRaw; })(), "matches BigInt");
+  add("CAP-7: not at capacity, not over cap", r.isAtCapacity === false && r.isOverConfiguredLimit === false, "healthy");
+  add("CAP-8: asset decimals are exactly 6", r.assetDecimals === 6 && CAPACITY_PRODUCT_BINDING.assetDecimals === 6 && S.mintDecimals === 6, "6dp");
+  add("CAP-9: source slot, observedAt and provenance are recorded", r.reserveSourceSlot === S.reserveSourceSlot && r.observedAt === S.observedAt && (r.sourceProvenance ?? []).length === 3, "dated");
+  add("CAP-10: calculation authority is the deployed program, not the SDK display path", /deposit_reserve_liquidity/.test(r.calculationAuthority ?? "") && /lending_operations\.rs/.test(r.calculationAuthority ?? ""), "program authority");
+
+  // --- Identity binding ---
+  const wrong = (o: Partial<CapacityIdentityInputs>) => deriveKlendReserveCapacity({ ...base, identity: { ...ID, ...o } });
+  add("CAP-11: exact market is required", wrong({ marketAddress: "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfG" }).failure === "identity_mismatch", "market bound");
+  add("CAP-12: exact reserve is required", wrong({ reserveAddress: "So11111111111111111111111111111111111111112" }).failure === "identity_mismatch", "reserve bound");
+  add("CAP-13: another USDC reserve fails (same mint, different reserve)", (() => { const x = wrong({ reserveAddress: "H3t6qZ1JkjV1x8Nv3vXG7Zt6QdVYKPMNvJHT3Hzp2Ykq" }); return x.failure === "identity_mismatch" && x.capacityKind === "unresolved"; })(), "reserve-address bound, not mint");
+  add("CAP-14: exact canonical USDC mint is required", wrong({ liquidityMint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" }).failure === "identity_mismatch", "mint bound");
+  add("CAP-15: exact cToken mint is required", wrong({ cTokenMint: "So11111111111111111111111111111111111111112" }).failure === "identity_mismatch", "ctoken bound");
+  add("CAP-16: exact KLend program is required", wrong({ klendProgram: "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd" }).failure === "identity_mismatch", "program bound");
+  add("CAP-17: mainnet-beta is required", wrong({ cluster: "devnet" }).failure === "identity_mismatch", "cluster bound");
+  add("CAP-18: decimals mismatch fails closed", validateCapacityIdentity({ ...ID, assetDecimals: 9 }).failure === "decimals_mismatch", "6dp enforced");
+  add("CAP-19: candidate id is required", validateCapacityIdentity({ ...ID, candidateId: "kamino_steakhouse_usdc" }).failure === "candidate_mismatch", "candidate bound");
+
+  // --- Fail closed ---
+  add("CAP-20: missing source slot fails", deriveKlendReserveCapacity({ ...base, reserveSourceSlot: undefined }).failure === "missing_source_slot", "undated → fail");
+  add("CAP-21: stale reserve state fails", deriveKlendReserveCapacity({ ...base, nowMs: NOW + CAPACITY_TTL_MS + 1000 }).failure === "stale_reserve_state", "past TTL → fail");
+  add("CAP-22: slot-age beyond bound fails", deriveKlendReserveCapacity({ ...base, currentSlot: S.reserveSourceSlot + MAX_CAPACITY_SLOT_AGE + 1 }).failure === "stale_reserve_state", "slot age → fail");
+  add("CAP-23: missing deposit limit fails", deriveKlendReserveCapacity({ ...base, depositLimitRaw: undefined }).failure === "missing_deposit_limit", "absent → fail");
+  add("CAP-24: malformed deposit limit fails", deriveKlendReserveCapacity({ ...base, depositLimitRaw: "1e15" }).failure === "malformed_deposit_limit" && deriveKlendReserveCapacity({ ...base, depositLimitRaw: "-5" }).failure === "malformed_deposit_limit", "non-u64 → fail");
+  add("CAP-25: missing total supply fails", deriveKlendReserveCapacity({ ...base, totalSupplySf: undefined }).failure === "missing_total_supply", "absent → fail");
+  add("CAP-26: malformed total supply fails", deriveKlendReserveCapacity({ ...base, totalSupplySf: "abc" }).failure === "malformed_total_supply", "non-numeric → fail");
+  add("CAP-27: negative total supply fails", deriveKlendReserveCapacity({ ...base, totalSupplySf: "-1000" }).failure === "malformed_total_supply", "negative → fail");
+  add("CAP-28: a failed derivation emits no capacity value at all", (() => { const x = deriveKlendReserveCapacity({ ...base, depositLimitRaw: undefined }); return x.remainingCapacityRaw === undefined && x.capacityKind === "unresolved"; })(), "no partial value");
+
+  // --- Numeric integrity ---
+  add("CAP-29: raw base units are never confused with token units", r.remainingCapacityRaw === "888443337612219" && (r.remainingCapacityTokenAmount ?? 0) === 888443337.612219 && r.remainingCapacityRaw !== String(r.remainingCapacityTokenAmount), "raw ≠ tokens (1e6 apart)");
+  add("CAP-30: unsafe-integer values survive exactly as raw strings", BigInt(r.remainingCapacityRaw!) > BigInt(Number.MAX_SAFE_INTEGER) === false || BigInt(S.totalSupplySf) > BigInt(Number.MAX_SAFE_INTEGER), "sf exceeds 2^53; BigInt preserves it");
+  add("CAP-31: the sf value would lose precision as a Number", Number(BigInt(S.totalSupplySf)) !== Number.parseInt(S.totalSupplySf, 10) || BigInt(S.totalSupplySf) > 9007199254740991n, "float would lose it");
+  add("CAP-32: arithmetic is BigInt, not floating point", /BigInt|2n \*\* 60n|ONE_SF/.test(capSrc) && !/parseFloat\(/.test(capSrc), "BigInt path");
+  add("CAP-33: token conversion splits whole/remainder to avoid float overflow", /raw \/ scale/.test(capSrc) && /raw % scale/.test(capSrc), "no big-float");
+  add("CAP-34: remaining capacity is not rounded before eligibility", Number.isInteger(Number(r.remainingCapacityRaw)) === false || r.remainingCapacityRaw!.length > 10, "raw retained exactly");
+
+  // --- Cap edge cases ---
+  const atCap = deriveKlendReserveCapacity({ ...base, totalSupplySf: (BigInt(S.depositLimitRaw) * ONE).toString() });
+  add("CAP-35: equality with the cap reports zero remaining and at-capacity", atCap.ok === true && atCap.remainingCapacityRaw === "0" && atCap.isAtCapacity === true && atCap.isOverConfiguredLimit === false, "supply == cap");
+  add("CAP-36: equality is allowed by the program (strict >), so no -1 adjustment", ENFORCEMENT_FACTS.equalityWithLimitAllowed === true && ENFORCEMENT_FACTS.comparisonOperator === "strict_greater_than", "gt not gte");
+  const over = deriveKlendReserveCapacity({ ...base, totalSupplySf: ((BigInt(S.depositLimitRaw) + 5_000_000n) * ONE).toString() });
+  add("CAP-37: finite cap below total supply reports over-cap", over.ok === true && over.isOverConfiguredLimit === true && over.isAtCapacity === true, "cap lowered");
+  add("CAP-38: negative user-facing capacity is never emitted", over.remainingCapacityRaw === "0" && over.remainingCapacityTokenAmount === 0 && (over.remainingCapacityTokenAmount ?? 0) >= 0, "clamped to 0 for callers");
+  add("CAP-39: the over-cap condition is preserved diagnostically, not hidden", over.overConfiguredLimitAmountRaw === "5000000" && over.overConfiguredLimitTokenAmount === 5, "5 USDC over, surfaced");
+  add("CAP-40: over-cap does not force an exit (program semantics recorded)", /does NOT rebalance or force an exit/i.test(ENFORCEMENT_FACTS.overCapBehaviour), "positions untouched");
+
+  // --- Sentinel ---
+  const uncapped = deriveKlendReserveCapacity({ ...base, depositLimitRaw: U64_MAX_STR });
+  add("CAP-41: u64::MAX sentinel is explicitly represented as uncapped", uncapped.ok === true && uncapped.capacityKind === "uncapped" && uncapped.capacityMode === "verified_uncapped", "verified_uncapped");
+  add("CAP-42: uncapped does not manufacture a remaining amount", uncapped.remainingCapacityRaw === undefined && uncapped.remainingCapacityTokenAmount === undefined && uncapped.depositLimitTokenAmount === undefined, "no arbitrary large number");
+  add("CAP-43: a large finite limit is NOT misclassified as uncapped", r.capacityKind === "capped" && S.isUncappedSentinel === false && DEPOSIT_LIMIT_SENTINEL_SEMANTICS.largeFiniteIsNotUncapped === true, "1B is capped");
+  add("CAP-44: zero is a literal zero cap in klend, NOT uncapped", DEPOSIT_LIMIT_SENTINEL_SEMANTICS.zeroMeansUncapped === false && deriveKlendReserveCapacity({ ...base, depositLimitRaw: "0" }).isOverConfiguredLimit === true, "0 → over cap, not unlimited");
+  add("CAP-45: the klend/kvault sentinel divergence is recorded", DEPOSIT_LIMIT_SENTINEL_SEMANTICS.zeroDivergesFromKvault === true && /kvault maps deposit_cap == 0 to u64::MAX/i.test(DEPOSIT_LIMIT_SENTINEL_SEMANTICS.zeroDivergenceNote), "programs differ");
+  add("CAP-46: klend has no enforcement sentinel branch", DEPOSIT_LIMIT_SENTINEL_SEMANTICS.hasExplicitSentinelBranchInEnforcement === false && DEPOSIT_LIMIT_SENTINEL_SEMANTICS.u64MaxIsUncapped === true, "uncapped by type");
+
+  // --- Wrong-field guards ---
+  add("CAP-47: available liquidity is NOT used as remaining capacity", Math.abs((r.remainingCapacityTokenAmount ?? 0) - S.availableLiquidityTokens) > 1_000_000 && r.remainingCapacityTokenAmount !== S.availableLiquidityTokens, "888.44M ≠ 22.58M");
+  add("CAP-48: borrow limit is NOT used as deposit limit", String(S.borrowLimitRaw) !== String(S.depositLimitRaw) && String(r.depositLimitRaw) === String(S.depositLimitRaw) && String(r.depositLimitRaw) !== String(S.borrowLimitRaw), "1B ≠ 700M");
+  add("CAP-49: the counted amount is total_supply, per the program", ENFORCEMENT_FACTS.amountComparedAgainstLimit === "reserve.liquidity.total_supply()", "total_supply");
+  add("CAP-50: fees are excluded from the counted amount", ENFORCEMENT_FACTS.feesIncludedInCountedAmount === false && ENFORCEMENT_FACTS.feesExcluded.length === 3, "3 accumulators excluded");
+  add("CAP-51: available + borrowed = total_supply is NOT assumed, and is numerically false", ENFORCEMENT_FACTS.availablePlusBorrowedEqualsTotalSupply === false && Math.abs((S.availableLiquidityTokens + S.borrowedTokens) - S.totalSuppliedTokenAmount - S.accumulatedProtocolFeesTokens) < 0.01, "delta == protocol fees exactly");
+  add("CAP-52: the incoming deposit is counted before comparison", ENFORCEMENT_FACTS.incomingDepositIncludedBeforeComparison === true, "amount + supply > limit");
+  add("CAP-53: accrual is refreshed first (ReserveStale), so capacity is freshness-gated", ENFORCEMENT_FACTS.interestAccrualRefreshedFirst === true && KLEND_CAPACITY_SOURCE.errorOnStale === "LendingError::ReserveStale", "refresh required");
+  add("CAP-54: the rolling deposit_withdrawal_cap is kept out of capacity scope", /deposit_withdrawal_cap/.test(ENFORCEMENT_FACTS.separateRollingCap) && /DEPOSIT-AVAILABILITY concern/i.test(ENFORCEMENT_FACTS.separateRollingCap), "not conflated");
+  add("CAP-55: the SDK is used only because it mirrors the program", SDK_MIRRORS_ENFORCEMENT.mirrorsProgram === true && SDK_MIRRORS_ENFORCEMENT.divergence === "none identified" && /getTotalSupplySf/.test(SDK_MIRRORS_ENFORCEMENT.exactArithmeticHelper), "mirror verified");
+  add("CAP-56: the error on exceeding the cap is recorded", KLEND_CAPACITY_SOURCE.errorOnExceeded === "LendingError::DepositLimitExceeded", "DepositLimitExceeded");
+
+  // --- API diagnostics ---
+  add("CAP-57: API values remain diagnostic only", KAMINO_CAPACITY_API_DIAGNOSTIC.role === "diagnostic_only", "diagnostic_only");
+  add("CAP-58: the API exposes no deposit limit or remaining capacity at all", KAMINO_CAPACITY_API_DIAGNOSTIC.exposesDepositLimit === false && KAMINO_CAPACITY_API_DIAGNOSTIC.exposesRemainingCapacity === false, "cannot answer the question");
+  add("CAP-59: symbol-only API matching is rejected", KAMINO_CAPACITY_API_DIAGNOSTIC.symbolOnlyMatchingRejected === true && /Matching on symbol or mint alone would bind the wrong reserve/i.test(KAMINO_CAPACITY_API_DIAGNOSTIC.matchingRule), "exact address only");
+  add("CAP-60: mint-only API matching is rejected", KAMINO_CAPACITY_API_DIAGNOSTIC.mintOnlyMatchingRejected === true && KAMINO_CAPACITY_API_DIAGNOSTIC.boundBy.includes(CAPACITY_PRODUCT_BINDING.reserveAddress), "exact address only");
+  add("CAP-61: missing API timestamp prevents production authority", KAMINO_CAPACITY_API_DIAGNOSTIC.exposesSourceTimestamp === false && KAMINO_CAPACITY_API_DIAGNOSTIC.exposesSourceSlot === false && /can never be the capacity authority/i.test(KAMINO_CAPACITY_API_DIAGNOSTIC.disqualifiedAsProductionAuthority), "no timestamp");
+  add("CAP-62: API staleness is demonstrated, not assumed", KAMINO_CAPACITY_API_DIAGNOSTIC.explanationIsEvidenced === true && /same value at two timestamps/i.test(KAMINO_CAPACITY_API_DIAGNOSTIC.explanationEvidence) && API_PARITY_OBSERVATIONS[0].apiTotalSupplyTokens === API_PARITY_OBSERVATIONS[1].apiTotalSupplyTokens, "same value, 20 min apart");
+  add("CAP-63: a fresh API agrees with the SDK to ~1e-7, proving definitions match", API_PARITY_OBSERVATIONS[0].relativeDifference < 1e-6, "0.0000077%");
+  add("CAP-64: the current parity gap is classified as explained staleness", CAPACITY_PARITY_RESULT.classification === "explained_by_demonstrated_api_staleness" && CAPACITY_PARITY_RESULT.blocksVerification === false, "explained");
+  add("CAP-65: a material UNEXPLAINED mismatch fails verification", (() => { const x = classifyCapacityParity({ sdkTotalSupplyTokens: 111_556_662, apiTotalSupplyTokens: 90_000_000, apiValueUnchangedSincePriorObservation: false, onChainSupplyChangedSincePriorObservation: false }); return x.classification === "material_unexplained_mismatch" && x.blocksVerification === true; })(), "unexplained → block");
+  add("CAP-66: staleness only explains a gap when BOTH conditions hold", classifyCapacityParity({ sdkTotalSupplyTokens: 111_556_662, apiTotalSupplyTokens: 90_000_000, apiValueUnchangedSincePriorObservation: true, onChainSupplyChangedSincePriorObservation: false }).blocksVerification === true, "no free pass");
+
+  // --- USD ---
+  add("CAP-67: token units are canonical; USD is not fabricated", USD_CAPACITY.canonicalUnit === "USDC token amount" && USD_CAPACITY.usdDerived === false && USD_CAPACITY.usdValue === null, "token-canonical");
+  add("CAP-68: USDC is not assumed to equal exactly $1", USD_CAPACITY.usdcAssumedOneDollar === false && /USDC ≈ \$0\.99985/.test(USD_CAPACITY.note), "≈$0.99985 observed");
+  add("CAP-69: missing USD does not block token-unit capacity", USD_CAPACITY.blocksTokenUnitCapacity === false && r.ok === true, "not blocked");
+  add("CAP-70: no new price provider was introduced", USD_CAPACITY.priceSource === null, "none");
+
+  // --- Evidence + layers ---
+  add("CAP-71: the evidence manifest is deterministic", CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && /^capacity_evidence_[0-9a-f]{8}$/.test(CAPACITY_EVIDENCE_MANIFEST_HASH), CAPACITY_EVIDENCE_MANIFEST_HASH);
+  add("CAP-72: evidence records authority, numeric type, units, sentinel, provenance, triggers", /deposit_reserve_liquidity/.test(CAPACITY_EVIDENCE.calculationAuthority) && /BigInt/.test(CAPACITY_EVIDENCE.numericType) && CAPACITY_EVIDENCE.sourceProvenance.length === 6 && CAPACITY_EVIDENCE.invalidationTriggers.length === 6, "complete");
+  add("CAP-73: the preparer is not represented as a human reviewer", CAPACITY_EVIDENCE.preparerIsNotHumanReviewer === true && CAPACITY_EVIDENCE.preparerRole === "automated_evidence_preparer", "not a reviewer");
+  add("CAP-74: the snapshot is evidence, not a production input", SNAPSHOT_IS_NOT_PRODUCTION_INPUT.isProductionInput === false && SNAPSHOT_IS_NOT_PRODUCTION_INPUT.isProductIdentity === false && SNAPSHOT_IS_NOT_PRODUCTION_INPUT.isImmutableEvidence === true, "evidence ≠ input");
+  add("CAP-75: the four capacity layers are separated", Object.keys(CAPACITY_LAYER_SEPARATION).length === 4, "4 layers");
+  add("CAP-76: no capacity value is written into immutable product identity", !/remainingCapacity|totalSupplied/.test(readIf("src/suggestions/klendReserveIdentity.ts")), "identity clean");
+
+  // --- Prior evidence immutable ---
+  add("CAP-77: prior identity evidence is unchanged", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && computeIdentityManifestHash() === SOL_BTC_USDC_IDENTITY_MANIFEST_HASH, "identity_9773ac14");
+  add("CAP-78: prior APY evidence is unchanged", APY_EVIDENCE_MANIFEST_HASH === "apy_evidence_d468fce5" && computeApyEvidenceManifestHash() === APY_EVIDENCE_MANIFEST_HASH, "apy_evidence_d468fce5");
+  add("CAP-79: prior reward evidence is unchanged", REWARD_EVIDENCE_MANIFEST_HASH === "reward_evidence_cace4fe4" && computeRewardEvidenceManifestHash() === REWARD_EVIDENCE_MANIFEST_HASH, "reward_evidence_cace4fe4");
+  add("CAP-80: prior parity evidence is unchanged", PARITY_EVIDENCE_MANIFEST_HASH === "parity_evidence_dd25a9a1" && computeParityEvidenceManifestHash() === PARITY_EVIDENCE_MANIFEST_HASH, "parity_evidence_dd25a9a1");
+  add("CAP-81: measured-APY evidence is unchanged", MEASURED_APY_EVIDENCE_MANIFEST_HASH === "measured_apy_evidence_ebc7627d" && computeMeasuredApyEvidenceManifestHash() === MEASURED_APY_EVIDENCE_MANIFEST_HASH, "measured_apy_evidence_ebc7627d");
+  add("CAP-82: all prior evidence ids are preserved in the amendment", (PRESERVED_PRIOR_EVIDENCE_CAP as readonly string[]).includes("identity_9773ac14") && (PRESERVED_PRIOR_EVIDENCE_CAP as readonly string[]).includes("measured_apy_evidence_ebc7627d") && PRESERVED_PRIOR_EVIDENCE_CAP.length === 12, "12 preserved");
+
+  // --- State transition ---
+  add("CAP-83: capacity state moves no_adapter → adapter_implemented_source_verified", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "adapter_implemented_source_verified" && CAPACITY_BLOCKER_SUPERSESSION.priorCapacityState === "no_adapter"; })(), "source-verified");
+  add("CAP-84: blocked_capacity provenance is preserved", /RESOLVED at 16H-N\.4[\s\S]*blocked_capacity/.test(getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" ")), "provenance kept");
+  add("CAP-85: primary blocker moves to blocked_position_detection", getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_position_detection" && CAPACITY_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_position_detection", "moved on");
+  add("CAP-86: no blocker enum or lifecycle value was invented", CAPACITY_BLOCKER_SUPERSESSION.newBlockerEnumInvented === false && CAPACITY_BLOCKER_SUPERSESSION.newLifecycleValueInvented === false, "none invented");
+  add("CAP-87: the state-model gap is reported, not papered over", /no blocked_deposit_availability or blocked_constraints value/i.test(CAPACITY_BLOCKER_SUPERSESSION.stateModelGap), "gap reported");
+  add("CAP-88: lifecycle remains identity_verified", /identity_verified/.test(CAPACITY_CONFERS.lifecycleUnchanged) && getYieldStrategy("kamino_usdc_lending")!.lifecycle === "identity_verified", "unchanged");
+
+  // --- Capacity is not deposit state ---
+  add("CAP-89: capacity verification does NOT enable deposits", CAPACITY_CONFERS.depositAvailabilityRemains === "blocked" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.depositAvailabilityState === "blocked" && CAPACITY_IS_NOT_DEPOSIT_STATE.depositAvailabilityStateUnchangedByThisModule === "blocked", "deposits blocked");
+  add("CAP-90: none of the seven tempting signals imply deposit availability", CAPACITY_IS_NOT_DEPOSIT_STATE.notEvidenceOfDepositAvailability.length === 7 && CAPACITY_IS_NOT_DEPOSIT_STATE.depositAvailabilityStillRequires.length === 9, "7 rejected, 9 required");
+  add("CAP-91: the capacity question is stated narrowly", /How much additional USDC can this reserve accept/i.test(CAPACITY_IS_NOT_DEPOSIT_STATE.capacityAnswers) && /Can a user deposit right now/i.test(CAPACITY_IS_NOT_DEPOSIT_STATE.capacityDoesNotAnswer), "scoped");
+  add("CAP-92: constraints remain blocked", CAPACITY_CONFERS.constraintsRemain === "blocked" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.constraintsState === "blocked", "blocked");
+
+  // --- Scope fence ---
+  add("CAP-93: no risk score, review, signoff, or approval", CAPACITY_CONFERS.riskScoreAssigned === false && CAPACITY_CONFERS.humanReviewOccurred === false && CAPACITY_CONFERS.signoffOccurred === false && CAPACITY_CONFERS.productApproved === false && getStableYieldEvidenceManifest("kamino_usdc_lending")!.riskReviewState === "blocked", "none");
+  add("CAP-94: no selector, recommendation, Top Pick, or production card", (CAPACITY_CONFERS.doesNotConfer as readonly string[]).includes("selector eligibility") && (CAPACITY_CONFERS.doesNotConfer as readonly string[]).includes("recommendation eligibility") && (CAPACITY_CONFERS.doesNotConfer as readonly string[]).includes("Top Pick") && (CAPACITY_CONFERS.doesNotConfer as readonly string[]).includes("a production card"), "none");
+  add("CAP-95: APY remains comparison-ready and estimated_variable_apy", CAPACITY_CONFERS.apyRemainsComparisonReady === true && CAPACITY_CONFERS.apyRateKindUnchanged === "estimated_variable_apy" && CORRECTION_READINESS_RESULT.definitionSufficientForComparison === true, "unchanged");
+  add("CAP-96: reward state remains exhausted with zero APY", CAPACITY_CONFERS.rewardStateUnchanged === "exhausted" && CORRECTED_APY_SNAPSHOT.rewardApyPct === 0, "unchanged");
+  add("CAP-97: readiness remains blocked", getStableYieldEvidenceManifest("kamino_usdc_lending")!.readiness === "blocked", "blocked");
+  add("CAP-98: no transaction is constructed or simulated", CAPACITY_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction|VersionedTransaction/.test(capSrc), "read-only");
+  add("CAP-99: the module is read-only", /STRICTLY READ-ONLY/.test(capSrc) && !/deposit\(|withdraw\(/.test(capSrc), "reads only");
+  add("CAP-100: Steakhouse capacity semantics are untouched", KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4" && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker === "blocked_risk_review", "unchanged");
 
   return checks;
 }
