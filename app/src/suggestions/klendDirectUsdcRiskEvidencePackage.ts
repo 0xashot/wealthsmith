@@ -446,7 +446,7 @@ export const DIMENSION_EVIDENCE: DimensionEvidence[] = [
     ],
     limitations: [
       "Steakhouse's fatal gaps 1 (wrong subject — a vault) and 2 (kvault program uncovered) do NOT apply here: this IS a lending-market reserve on the covered program. That is a material difference and must not be flattened.",
-      "Gap 4 DOES apply: the last documented event is 2026-02-05/06 and the latest monthly risk report is April 2026 (published 2026-05-05), while the deployed binary is from 2026-05-28 (CORRECTED AT 16H-P.2a from 2026-07-14, the KVault date). The gap STANDS — the binary still postdates every documented event, and the April report predates it by 23 days. No published review covers the code holding funds.",
+      "Gap 4 DOES apply, RESTATED AT 16H-S.0 with a precision it lacked: the last documented event is 2026-02-05/06 and monthly Risk Insights run through June 2026 (published 2026-07-03; corrected from 'April 2026 latest', a search failure), while the deployed binary is from 2026-05-28 (CORRECTED AT 16H-P.2a from 2026-07-14, the KVault date). The June report POSTDATES the binary but is market-risk monitoring, not code review — so the gap that stands is that no CODE review postdates the binary, and the binary still postdates every documented event. No published review covers the code holding funds.",
       "Exact reserve existence and USDC exposure during each event window are UNVERIFIED.",
       "The market-owner period is unestablished, so statements cannot be attributed to a known administrative regime.",
       "No socialize_loss history search bound to this exact reserve was completed.",

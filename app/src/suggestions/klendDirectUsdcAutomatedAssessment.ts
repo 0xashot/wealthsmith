@@ -424,13 +424,14 @@ export const DIRECT_DIMENSION_ASSESSMENTS: DirectDimensionAssessment[] = [
     anchorBand: "partial",
     evidenceReadiness: "partial",
     confidence: "low",
-    limitingFact: "The deployed binary (2026-05-28, corrected at 16H-P.2a) postdates every documented event (latest 2026-02-05/06; latest monthly risk report April 2026), so no published review covers the code holding funds. Reserve existence and USDC exposure during each event window are unverified, and no socialize_loss history search bound to this exact reserve was completed.",
+    limitingFact: "The deployed binary (2026-05-28, corrected at 16H-P.2a) postdates every documented event (latest 2026-02-05/06). CORRECTED AT 16H-S.0: monthly Risk Insights continue through June 2026 (published 2026-07-03), which POSTDATES this binary — the prior 'latest report is April 2026' was a search failure. Those are market-risk monitoring, not code review, so the precise surviving gap is that no CODE review covers the code holding funds. Reserve existence and USDC exposure during each event window are unverified, and no socialize_loss history search bound to this exact reserve was completed.",
     rationale:
       "Unlike Steakhouse, this product IS the layer the official evidence covers. The exact market is named in the Feb 2026 case study as 'Main' — Main Market and SOL/BTC Market are the same account 7u3He… (on-chain name is a mutable field on a stable address; the API marks that exact address isPrimary: true; the UI states the rename verbatim; confidence high, not absolute). Official material reports $0 bad debt since November 2023 across five named stress events with no service degradation. Steakhouse's two fatal gaps — 'wrong subject' (a vault on a separate program) and 'the kvault program is uncovered' — do NOT apply here, and that is a material difference that must not be flattened. Scored 5 rather than Steakhouse's 4 for that reason alone. Scored 5 and NOT higher deliberately: zero bad debt is not zero incidents and not zero exploits; 'zero confirmed incidents' is a SEARCH RESULT, not a clean record; the binary postdates the evidence; and event-window binding is unverified. More directly applicable evidence is not the same as more evidence.",
     favorableEvidence: [
       "the exact market IS named in official stress-event material, as 'Main' (alias verified three ways)",
       "official material reports $0 bad debt across five named stress events (Feb 2025 → Feb 2026), with continued operation",
       "this evidence speaks to the lending-market layer — exactly this product's layer",
+      "(added at 16H-S.0) the Oct 10 2025 risk event analysis (gov forum, 2025-10-11) covers the exact market by name: Main Market took $16M of $20M liquidations during ~30% drawdowns with $0 bad debt, an official NO-SOCIALIZED-LOSSES attestation, 8,000+ liquidations processed with zero failures, and no withdrawal issues — a second detailed per-event primary source, found only when the forum's index was finally enumerated",
       "Steakhouse's KVault-specific scope gaps do not apply",
     ],
     unfavorableEvidence: [

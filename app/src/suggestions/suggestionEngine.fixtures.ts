@@ -1,6 +1,15 @@
+import { SOURCE_CLASSIFICATION as TD_SRC, TEAM_ANSWERS as TD_ANSWERS, ISOLATION_RECONCILED as TD_ISO, COLLATERAL_UNIVERSE_ONCHAIN as TD_COLLAT, LOSS_WATERFALL_DESIGN_RESOLVED as TD_WATERFALL, MANDATORY_ARTIFACTS_V2 as TD_MANDATORY, evaluateReadinessV3, READINESS_V3 as TD_READINESS, READINESS_V3_RATIONALE as TD_RATIONALE, DIMENSION_STATE_V3, computeTeamDisclosureHash, TEAM_DISCLOSURE_HASH as TD_HASH, TEAM_DISCLOSURE_CONFERS as TD_CONFERS } from "./jupiterLendTeamDisclosureAmendment";
+import { INCIDENT_SCOPE_MODEL as IS_SCOPE, SOURCE_CLASSES as IS_SOURCES, NEGATIVE_RESULT_DISCIPLINE as IS_NEG, SELF_CHECK as IS_SELFCHECK, SOURCE_ENUMERATION_RULE_INHERITED as IS_ENUM, anchorDiscriminator, loadKlendDiscriminatorRegistry, KLEND_ADMIN_INSTRUCTIONS as IS_ADMIN_ALIAS, REGISTRY_VERIFICATION as IS_REGVERIFY, KAMINO_ADMIN_SCAN as IS_SCAN, JUPITER_APPLICABILITY as IS_JUP, computeIncidentSearchHash, INCIDENT_SEARCH_HASH as IS_HASH, INCIDENT_SEARCH_CONFERS as IS_CONFERS } from "./incidentSearchMethodology";
+const KLEND_ADMIN = IS_ADMIN_ALIAS;
+const IS_RESULTS = IS_SCAN.results;
+import { SUPERSEDED_SOURCE_CLAIMS as SC_SUPERSEDED, NEW_SOURCE_FACTS as SC_FACTS, CORRECTED_SITES as SC_SITES, SCORE_IMPACT_S0 as SC_IMPACT, SOURCE_ENUMERATION_RULE as SC_RULE, computeS0ManifestHash, S0_MANIFEST_HASH as SC_HASH, S0_CONFERS as SC_CONFERS } from "./sourceCompletionAmendment";
+import { SUPERSEDED_UNREADABLE_CLAIM as IDL_SUPERSEDED, CORRECTED_PROGRAM_GRAPH as IDL_GRAPH, GRAPH_FINDINGS_V2 as IDL_GRAPH_FINDINGS, PRIVILEGED_POWERS_V2 as IDL_POWERS, PERMISSIONLESS_INSTRUCTIONS as IDL_PERMISSIONLESS, NO_EXPLICIT_WRITE_DOWN_INSTRUCTION as IDL_NO_WRITEDOWN, ORACLE_SURFACE_V2 as IDL_ORACLE, RECLASSIFICATIONS as IDL_RECLASS, RECLASSIFIED_DIMENSIONS as IDL_DIMS_V2, MANDATORY_ARTIFACTS as IDL_MANDATORY, evaluateReadinessV2, READINESS_V2 as IDL_READINESS, READINESS_V2_RATIONALE as IDL_RATIONALE, IDL_AMENDMENT_EVIDENCE as IDL_EVIDENCE, computeIdlAmendmentHash, IDL_AMENDMENT_HASH as IDL_HASH, IDL_AMENDMENT_CONFERS as IDL_CONFERS } from "./jupiterLendIdlDiscoveryAmendment";
+import { JUP_PRODUCT_BINDING as JUP_BINDING, validateJupBinding, JUP_PROGRAM_GRAPH as JUP_GRAPH, PROGRAM_GRAPH_FINDINGS as JUP_GRAPH_FINDINGS, SOURCE_TO_BINARY as JUP_SRC2BIN, FLUID_CONTINUITY as JUP_CONTINUITY, LENDER_CLAIM as JUP_CLAIM, WITHDRAWAL_LIMITER as JUP_LIMITER, APY_AND_REWARDS as JUP_APY, LOSS_WATERFALL as JUP_LOSS, COLLATERAL_UNIVERSE as JUP_COLLAT, ORACLE_SURFACE as JUP_ORACLE, PRIVILEGED_POWER_MAP as JUP_POWERS, JUP_DIMENSION_EVIDENCE as JUP_DIMS, KAMINO_STRUCTURAL_COMPARISON as JUP_COMPARE, COMPARISON_RULES as JUP_COMPARISON_RULES, evaluateJupReadiness, JUP_PACKAGE_READINESS as JUP_READINESS, JUP_READINESS_RATIONALE as JUP_RATIONALE, JUP_PACKAGE_MANIFEST as JUP_MANIFEST, computeJupPackageManifestHash, JUP_PACKAGE_MANIFEST_HASH as JUP_MANIFEST_HASH, JUP_PACKAGE_CONFERS as JUP_CONFERS } from "./jupiterLendUsdcRiskEvidencePackage";
 import { SUPERSEDED_BINARY_DATE_CLAIM as BD_SUPERSEDED, CORRECTED_BINARY_FACT as BD_FACT, DETECTION as BD_DETECTION, SCORE_IMPACT as BD_IMPACT, CORRECTION_EVIDENCE as BD_EVIDENCE, computeBinaryDateCorrectionHash, BINARY_DATE_CORRECTION_HASH as BD_HASH, CORRECTION_INVARIANTS as BD_INVARIANTS } from "./directAssessmentBinaryDateCorrection";
 import { DIRECT_ASSESSMENT_PROVENANCE as DA_PROVENANCE, DIRECT_DIMENSION_ASSESSMENTS as DA_DIMS, computeDirectAggregate, DIRECT_AGGREGATE_RESULT as DA_AGG_RESULT, DIRECT_ASSESSMENT_OUTCOME as DA_OUTCOME, LOWEST_SCORING_DIMENSIONS as DA_LOWEST_SCORE, LOWEST_CONFIDENCE_DIMENSIONS as DA_LOWEST_CONF, HUMAN_REVIEW_FOCUS_AREAS as DA_FOCUS, ASSESSMENT_LIMITATIONS as DA_LIMITS, DIRECT_ASSESSMENT_STATE as DA_STATE, validateDirectAssessment, DIRECT_ASSESSMENT_VALIDATION as DA_VALIDATION, DIRECT_HUMAN_REVIEW_PACKET as DA_PACKET, DIRECT_ASSESSMENT_MANIFEST as DA_MANIFEST, computeDirectAssessmentManifestHash, DIRECT_ASSESSMENT_MANIFEST_HASH as DA_MANIFEST_HASH, DIRECT_ASSESSMENT_CONFERS as DA_CONFERS } from "./klendDirectUsdcAutomatedAssessment";
 import { AGGREGATE_COMPUTATION_VERSION as AGG_VERSION } from "./steakhouseAutomatedAssessment";
+import { REVIEW_BRIEF_PROVENANCE as RB_PROV, BOUND_ASSESSMENT_MANIFEST_HASH as RB_BOUND, DECISION_HEADLINE as RB_HEADLINE, projectRows, REVIEW_BRIEF_ROWS as RB_ROWS, CAPPING_RISKS as RB_CAPS, partitionEvidenceStrength, EVIDENCE_STRENGTH as RB_STRENGTH, DECISION_OPTIONS as RB_OPTIONS, MITIGATION_CONDITIONS as RB_MITIG, BRIEF_STATE as RB_STATE, validateReviewBrief, REVIEW_BRIEF_VALIDATION as RB_VALIDATION, REVIEW_BRIEF_MANIFEST as RB_MANIFEST, computeReviewBriefHash, REVIEW_BRIEF_HASH as RB_HASH, REVIEW_BRIEF_CONFERS as RB_CONFERS } from "./klendDirectUsdcReviewBrief";
+import { JUP_PROVISIONAL_PROVENANCE as JP_PROV, BOUND_PACKAGE_MANIFEST as JP_BOUND_PKG, BOUND_IDL_AMENDMENT_MANIFEST as JP_BOUND_IDL, BOUND_TEAM_DISCLOSURE_MANIFEST as JP_BOUND_TD, JUP_PROVISIONAL_SCORES as JP_SCORES, HELD_OUT_INCIDENT_HISTORY as JP_HELDOUT, scoredWeightedPoints, computeBoundedAggregate, JUP_BOUNDED_AGGREGATE as JP_AGG, JUP_PROVISIONAL_OUTCOME as JP_OUTCOME, ROBUSTNESS_NOTE as JP_ROBUST, JUP_PROVISIONAL_STATE as JP_STATE, validateJupProvisional, JUP_PROVISIONAL_VALIDATION as JP_VALIDATION, JUP_PROVISIONAL_MANIFEST as JP_MANIFEST, computeJupProvisionalHash, JUP_PROVISIONAL_HASH as JP_HASH, JUP_PROVISIONAL_CONFERS as JP_CONFERS } from "./jupiterLendUsdcProvisionalAssessment";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17846,6 +17855,13 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runJupProvisionalAssessmentFixtureChecks(),
+    ...runDirectReviewBriefFixtureChecks(),
+    ...runTeamDisclosureFixtureChecks(),
+    ...runIncidentSearchFixtureChecks(),
+    ...runSourceCompletionFixtureChecks(),
+    ...runJupIdlAmendmentFixtureChecks(),
+    ...runJupiterPackageFixtureChecks(),
     ...runBinaryDateCorrectionFixtureChecks(),
     ...runDirectAssessmentFixtureChecks(),
     ...runAuthorityResolutionFixtureChecks(),
@@ -19360,6 +19376,498 @@ export function runBinaryDateCorrectionFixtureChecks(): FixtureCheck[] {
   add("BD-30: the correction manifest is deterministic", BD_HASH === computeBinaryDateCorrectionHash() && /^binary_date_correction_[0-9a-f]{8}$/.test(BD_HASH), BD_HASH);
   add("BD-31: prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && AUTH_MANIFEST_HASH === computeAuthorityManifestHash() && ALIAS_AMENDMENT_MANIFEST_HASH === computeAliasAmendmentManifestHash() && VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd", "4 intact");
   add("BD-32: the Steakhouse assessment is untouched", Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005 && AUTOMATED_ASSESSMENT_OUTCOME.meetsMinimum === false, "5.37 / false");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-R.1 — Jupiter Lend USDC Canonical Risk Evidence Package
+ * ------------------------------------------------------------------ */
+
+export function runJupiterPackageFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const src = readFileSync(`${process.cwd()}/src/suggestions/jupiterLendUsdcRiskEvidencePackage.ts`, "utf8");
+  const B = JUP_BINDING, G = JUP_GRAPH, R = JUP_READINESS, D = JUP_DIMS;
+  const dim = (id: string) => D.find((d) => d.dimensionId === id)!;
+  const prog = (id: string) => G.find((p) => p.programId.startsWith(id))!;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+
+  // --- Identity ---
+  add("JP-1: the USDC mint alone is insufficient identity", (B.identityNotEstablishedBy as readonly string[]).includes("the USDC mint alone") && /mintAuthority = pool account/.test(B.identityEstablishedBy), "account-chain bound");
+  add("JP-2: the exact lending pool is required", B.poolAccount === "5nmGjA4s7ATzpBQXC5RNceRpaJ7pYw2wKsNBWyuSAZV6" && validateJupBinding({ candidateId: B.candidateId, liquidityMint: B.liquidityMint, receiptTokenMint: B.receiptTokenMint, poolAccount: "So11111111111111111111111111111111111111112", cluster: "mainnet-beta" }).failure === "pool_mismatch", "pool bound");
+  add("JP-3: the exact receipt-token mint is required", B.receiptTokenMint === "9BEcn9aPEmhSPbPQeFGjidRiEKki46fVQDyPpSQXPA2D" && validateJupBinding({ candidateId: B.candidateId, liquidityMint: B.liquidityMint, receiptTokenMint: "So11111111111111111111111111111111111111112", poolAccount: B.poolAccount, cluster: "mainnet-beta" }).failure === "receipt_mint_mismatch", "jlUSDC bound");
+  add("JP-4: symbol/URL/APY are rejected as identity", B.identityNotEstablishedBy.length === 5 && (B.identityNotEstablishedBy as readonly string[]).includes("an APY value") && (B.identityNotEstablishedBy as readonly string[]).includes("an app URL"), "5 rejected");
+  add("JP-5: exactly one canonical-USDC pool is established from the official API", B.singleUsdcPool === true && /returns exactly ONE entry with assetAddress = canonical USDC/.test(B.singleUsdcPoolEvidence), "1 of 7");
+  add("JP-6: the canonical USDC mint and receipt decimals are exact", B.liquidityMint === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" && B.receiptTokenDecimals === 6 && B.receiptTokenProgram === "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "6dp / Tokenkeg");
+  add("JP-7: jlUSDC freeze authority is verified ABSENT", B.receiptTokenFreezeAuthority === null && /VERIFIED absent/.test(B.receiptTokenFreezeAuthorityNote), "no freeze");
+
+  // --- Program graph ---
+  add("JP-8: all material program IDs are represented", G.length === 2 && G.some((p) => p.programId === "jup3YeL8QhtSx1e253b2FDvsMNC87fDrgQZivbrndc9") && G.some((p) => p.programId === "jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC"), "2 programs");
+  add("JP-9: jup3YeL8 is PROVEN not to be the whole product", JUP_GRAPH_FINDINGS.jup3YeL8IsNotTheWholeProduct === true && /owns only 10 accounts/.test(JUP_GRAPH_FINDINGS.proofItIsNotTheWholeProduct) && /offset 40/.test(JUP_GRAPH_FINDINGS.proofItIsNotTheWholeProduct), "proven, not assumed");
+  add("JP-10: both programs record ProgramData, slot, date and authority", G.every((p) => p.programDataAccount.length > 0 && p.programDataPointerMatchesDerivation === true && p.deployedSlot > 0 && p.deployedAt.length > 0 && p.upgradeAuthority.length > 0), "complete nodes");
+  add("JP-11: the liquidity program HOLDS the funds and is ~33 hours old", prog("jupeiUmn").supplierPrincipalDependsOnIt === true && prog("jupeiUmn").deployedAt === "2026-07-16" && /HOURS/.test(prog("jupeiUmn").ageAtCutoff) && /HOLDS SUPPLIER FUNDS/.test(prog("jupeiUmn").role), "33h old, 428.6M");
+  add("JP-12: the graph is recorded as a LOWER BOUND, not complete", JUP_GRAPH_FINDINGS.graphMayBeIncomplete === true && /LOWER BOUND/.test(JUP_GRAPH_FINDINGS.graphIncompletenessNote), "incomplete");
+
+  // --- Authority: not generalized ---
+  add("JP-13: one program's authority is NOT generalized — it was verified per-program", JUP_GRAPH_FINDINGS.bothProgramsShareOneUpgradeAuthority === true && G.every((p) => p.upgradeAuthority === "4MsgBB5VPoTrUSp5XnfbViV386C1UnsTdifLBw33ZMSJ") && /verified per-program, not assumed/.test(JUP_GRAPH_FINDINGS.sharedAuthorityMeaning), "checked on both");
+  add("JP-14: threshold/timelock evidence is exact-address bound", /4-of-8/.test(JUP_GRAPH_FINDINGS.sharedAuthorityMeaning) && /12h/.test(JUP_GRAPH_FINDINGS.sharedAuthorityMeaning) && (dim("upgrade_admin_authority").limitations as string[]).some((l) => /multisig decode was not re-run inside this package/.test(l)), "bound + honest limitation");
+  add("JP-15: a single authority controlling BOTH programs is recorded as unfavorable", (dim("upgrade_admin_authority").unfavorableFacts as string[]).some((f) => /ONE authority .* can upgrade BOTH/.test(f)), "shared risk");
+  add("JP-16: unlocated programs' authorities are flagged unknown", (dim("upgrade_admin_authority").unfavorableFacts as string[]).some((f) => /LOWER BOUND/.test(f)), "graph gap");
+
+  // --- Audit / binary ---
+  add("JP-17: the current binary does NOT inherit audit applicability", JUP_SRC2BIN.code4renaAuditedCommitMapsToAnyLiveProgram === false && JUP_SRC2BIN.liveJulyBinaryHasPublicSource === false, "no inheritance");
+  add("JP-18: Code4rena commit applicability is represented exactly", JUP_SRC2BIN.code4renaEvidence.auditedCommit === "626b177f235224bc5d074d39439cd2558f542886" && JUP_SRC2BIN.code4renaEvidence.auditedCommitExistsPublicly === true && JUP_SRC2BIN.code4renaEvidence.declaredIdsDeployedOnMainnet === false && JUP_SRC2BIN.code4renaEvidence.liveIdsAppearInAuditedSource === false, "exists but unmapped");
+  add("JP-19: NEITHER live program is a verified build", G.every((p) => p.verifiedBuild === "public_source_does_not_match_live_binary") && G.every((p) => /is_verified: false/.test(p.verifiedBuildEvidence)), "both unverified");
+  add("JP-20: the deployed surface cannot be independently reviewed", JUP_SRC2BIN.currentDeployedSurfaceCanBeIndependentlyReviewed === false && /No verified build/.test(JUP_SRC2BIN.cannotReviewEvidence) && G.every((p) => p.onChainIdl === false), "unreadable");
+  add("JP-21: the Kamino contrast is factual, not a ranking", /is_verified: TRUE/.test(JUP_SRC2BIN.contrastWithKamino) && /factual contrast, not a ranking/.test(JUP_SRC2BIN.contrastWithKamino), "contrast only");
+  add("JP-22: Code4rena findings are recorded as unavailable", JUP_SRC2BIN.code4renaEvidence.findingsPublic === false && /treated as sensitive/.test(JUP_SRC2BIN.code4renaEvidence.findingsNote), "withheld");
+
+  // --- Fluid continuity ---
+  add("JP-23: Fluid design maturity is separate from Solana deployment maturity", JUP_CONTINUITY.designLineageIsNotBinaryProvenance === true && /not deployed-program operating history/.test(JUP_CONTINUITY.ethereumFluidMaturityDoesNotTransfer) && (dim("maturity").limitations as string[]).some((l) => /does not transfer/.test(l)), "not transferred");
+  add("JP-24: continuity is classified as a private continuation, with reasoning", JUP_CONTINUITY.classification === "C_private_continuation_of_a_public_audited_design" && /not 'exact source deployed unchanged'/.test(JUP_CONTINUITY.reasoning) && /~5 months/.test(JUP_CONTINUITY.privateCodeGap), "class C");
+
+  // --- Blocking gaps ---
+  add("JP-25: the principal write-down path cannot be omitted — it is recorded as unresolved", JUP_LOSS.resolved === false && JUP_LOSS.mandatoryForReadiness === true && /whether principal can be written down/.test(JUP_LOSS.whyUnresolved), "mandatory + absent");
+  add("JP-26: bad-debt isolation is explicit and unresolved", JUP_COLLAT.isolationUnresolved.length > 0 && /suggestion is not evidence/.test(JUP_COLLAT.isolationUnresolved) && /must not be inferred from naming or UI grouping/.test(JUP_COLLAT.isolationUnresolved), "not inferred");
+  add("JP-27: shared-liquidity behaviour is explicit", /shared liquidity across markets/.test(JUP_COLLAT.isolationUnresolved) && /could reach all jlUSDC holders/.test(JUP_COLLAT.isolationUnresolved), "explicit");
+  add("JP-28: the collateral universe is represented as unresolved, not empty", JUP_COLLAT.resolved === false && JUP_COLLAT.unresolved.length === 4 && /WSOL/.test(JUP_COLLAT.partialObservation) && JUP_COLLAT.concentrationUnresolved === true, "sampled only");
+  add("JP-29: the exact USDC oracle does NOT replace collateral-oracle review", /would not substitute for collateral-side oracle evidence/.test(JUP_ORACLE.usdcPricingDoesNotSubstitute) && JUP_ORACLE.resolved === false, "neither side");
+  add("JP-30: the loss waterfall cannot be substituted by API or docs", /are not the deployed Solana instruction set/.test(JUP_LOSS.cannotBeSubstituted), "no substitute");
+
+  // --- Liquidity ---
+  add("JP-31: current liquidity is NOT described as guaranteed", JUP_LIMITER.currentLiquidityIsNotGuaranteed === true && (dim("liquidity_withdrawal").prohibitedInferences as string[]).some((p) => /guaranteed future liquidity/.test(p)) && (dim("liquidity_withdrawal").prohibitedInferences as string[]).some((p) => /supply size is exit capacity/.test(p)), "not guaranteed");
+  add("JP-32: the dynamic withdrawal limiter is represented", JUP_LIMITER.exists === true && JUP_LIMITER.observed.expandPercent === 5000 && JUP_LIMITER.observed.expandDuration === 21600 && Number(JUP_LIMITER.observed.baseWithdrawalLimit) > 0, "50% / 6h");
+  add("JP-33: the ACTUAL withdrawable (~15% of supply) is the headline, not the 50% limit", /~64.38M against a supply of ~428.59M — about 15%/.test(JUP_LIMITER.headlineFinding) && JUP_LIMITER.observed.withdrawableTokens < JUP_LIMITER.observed.withdrawalLimitTokens, "64.38M < 214.3M");
+  add("JP-34: the limiter's semantics are recorded as unresolved", /NOT readable without source or an IDL/.test(JUP_LIMITER.semanticsUnresolved) && /whether an authority can tighten it instantly/.test(JUP_LIMITER.semanticsUnresolved), "unread");
+  add("JP-35: emergency exit-freeze controls are represented as unresolved", /Who can pause deposits or withdrawals/.test(JUP_POWERS.emergencyControlsUnresolved) && JUP_POWERS.resolved === false, "unknown");
+
+  // --- APY / rewards ---
+  add("JP-36: rewards are separate from base APY", JUP_APY.observedSupplyRate === 343 && JUP_APY.observedRewardsRate === 70 && JUP_APY.observedTotalRate === 413, "3.43 + 0.70 = 4.13");
+  add("JP-37: the scouting APY was reverified and drifted", /3\.44% base/.test(JUP_APY.scoutingClaimWas) && /drifted by 0\.01pp/.test(JUP_APY.reverifiedAs), "reverified");
+  add("JP-38: the rewards contradiction is surfaced, not smoothed", /UNRESOLVED CONTRADICTION/.test(JUP_APY.rewardsContradiction) && /rewards` array is EMPTY/.test(JUP_APY.rewardsContradiction), "70bps vs []");
+  add("JP-39: APY is not used as favorable risk evidence", /not evidence of lower risk and is not used as such/.test(JUP_APY.apyIsNotFavorableRiskEvidence) && dim("liquidity_withdrawal").favorableFacts.every((f) => !/4\.13|APY|yield/i.test(f)), "not favorable");
+  add("JP-40: 1 jlUSDC is NOT assumed to equal 1 USDC", JUP_CLAIM.oneToOneAssumed === false && JUP_CLAIM.observedShareRate === 1.051795 && /API-reported figure/.test(JUP_CLAIM.apiIsNotAnAccountingAuthority), "1.0518");
+
+  // --- Structure ---
+  add("JP-41: all 12 dimensions in canonical order with correct weights", D.length === 12 && D.map((d) => d.dimensionId).join(",") === CANON.join(",") && D.reduce((a, d) => a + d.weight, 0) === 100, "canonical");
+  add("JP-42: NO score exists in the package", D.every((d) => !("score" in d)) && JUP_CONFERS.scoresAssigned === false && JUP_MANIFEST.containsScores === false, "score-free");
+  add("JP-43: NO estimated aggregate exists", JUP_CONFERS.aggregateCalculated === false && JUP_MANIFEST.containsAggregate === false && !/estimatedAggregate|likelyScore|suggestedScore|anchorRecommendation/.test(src), "none");
+  add("JP-44: NO threshold targeting exists", JUP_CONFERS.thresholdTargeting === false && JUP_COMPARISON_RULES.jupiterNotTargetedAbove593 === true && !/target(ing)? (a score above|5\.93|the minimum)/i.test(src.replace(/Do not target[^"]*/g, "")), "not targeted");
+  add("JP-45: every dimension carries favorable AND unfavorable handling plus prohibited inferences", D.every((d) => d.prohibitedInferences.length > 0 && d.scorerInstructions.length > 0 && d.invalidationTriggers.length > 0 && d.evidenceRefs.length > 0), "12 complete");
+
+  // --- Comparison ---
+  add("JP-46: the structural comparison does not modify either product", JUP_COMPARISON_RULES.doesNotModifyEitherProduct === true && JUP_COMPARISON_RULES.kaminoAggregateUnchanged === 5.93 && JUP_CONFERS.kaminoAssessmentChanged === false, "read-only");
+  add("JP-47: Kamino's assessment remains 5.93", DA_OUTCOME.unroundedAggregate === 5.93 && DA_OUTCOME.meetsMinimum === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3", "unchanged");
+  add("JP-48: the comparison uses only the four permitted verdicts", JUP_COMPARE.every((c) => ["potentially_stronger","approximately_comparable","potentially_weaker","unresolved"].includes(c.jupiterVsKamino)) && JUP_COMPARE.length === 15, "15 aspects");
+  add("JP-49: no overall safety claim is made", /does not state that either product is safer overall/.test(JUP_COMPARISON_RULES.noOverallSafetyClaim) && JUP_COMPARISON_RULES.noScoreInheritance.length > 0, "aspect-wise only");
+  add("JP-50: the comparison is honest in BOTH directions", JUP_COMPARE.some((c) => c.jupiterVsKamino === "potentially_stronger") && JUP_COMPARE.some((c) => c.jupiterVsKamino === "potentially_weaker") && JUP_COMPARE.some((c) => c.jupiterVsKamino === "unresolved"), "not one-sided");
+
+  // --- Readiness ---
+  add("JP-51: the package is NOT ready", R.readiness === "not_ready_for_automated_assessment", "not ready");
+  add("JP-52: four dimensions are insufficient, carrying 37% of weight", R.insufficientDimensions.length === 4 && D.filter((d) => !d.scoreable).reduce((a, d) => a + d.weight, 0) === 37, "37%");
+  add("JP-53: the insufficient set is exactly the unreadable-binary consequence", ["audit_security","manager_discretion","oracle_risk","incident_history"].every((id) => R.insufficientDimensions.includes(id)), "4 named");
+  add("JP-54: blocking artifacts are enumerated exactly", R.blockingArtifacts.length === 8 && R.blockingArtifacts.some((a) => /no verified build/.test(a)) && R.blockingArtifacts.some((a) => /loss waterfall unresolved \(MANDATORY/.test(a)), "8 artifacts");
+  add("JP-55: readiness is deterministic both ways", evaluateJupReadiness(D.map((d) => ({ ...d, scoreable: true, readiness: "partial" as const }))).readiness === "ready_for_automated_assessment" && R.readiness === "not_ready_for_automated_assessment", "deterministic");
+  add("JP-56: not-ready is justified by missing evidence, NOT by comparison", /rests on missing evidence classes, not on comparison/.test(JUP_RATIONALE.notBecauseJupiterIsAnAlternative) && /regardless of what any score turned out to be/.test(JUP_RATIONALE.notBecauseJupiterIsAnAlternative), "evidence-based");
+  add("JP-57: readiness is not suitability", /not suitability, approval or recommendation eligibility/.test(JUP_RATIONALE.readinessIsNotSuitability), "scoped");
+  add("JP-58: the asymmetry with Kamino is stated precisely", /one level deeper/.test(JUP_RATIONALE.theAsymmetryWithKamino) && /the artifact that would carry the evidence does not exist publicly/.test(JUP_RATIONALE.theAsymmetryWithKamino), "deeper blocker");
+
+  // --- Boundaries ---
+  add("JP-59: Jupiter is NOT added to selector eligibility or production output", JUP_CONFERS.addedToSelectorEligibility === false && JUP_CONFERS.addedToProductionCandidateOutput === false && listStableYieldEvidenceManifests().every((m) => m.strategyId !== "jupiter_lend_usdc"), "not a candidate");
+  add("JP-60: no recommendation, Top Pick, card or execution", (JUP_CONFERS.doesNotConfer as readonly string[]).includes("recommendation eligibility") && (JUP_CONFERS.doesNotConfer as readonly string[]).includes("Top Pick") && (JUP_CONFERS.doesNotConfer as readonly string[]).includes("a production card") && JUP_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction/.test(src), "none");
+  add("JP-61: no wallet-position or Safety Buffer integration", (JUP_CONFERS.doesNotConfer as readonly string[]).includes("wallet-position integration") && (JUP_CONFERS.doesNotConfer as readonly string[]).includes("Safety Buffer integration"), "none");
+  add("JP-62: the preparer is not the scorer", B.preparationRole === "evidence_preparer" && B.preparerIsNotScorer === true && B.rubricHash === computeRubricV1Hash(), "SoD held");
+  add("JP-63: the manifest is deterministic", JUP_MANIFEST_HASH === computeJupPackageManifestHash() && /^jup_risk_package_[0-9a-f]{8}$/.test(JUP_MANIFEST_HASH), JUP_MANIFEST_HASH);
+  add("JP-64: prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && AUTH_MANIFEST_HASH === computeAuthorityManifestHash() && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd" && Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005, "5 intact");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-R.1a — Jupiter Lend IDL Discovery Amendment
+ * ------------------------------------------------------------------ */
+
+export function runJupIdlAmendmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const src = readFileSync(`${process.cwd()}/src/suggestions/jupiterLendIdlDiscoveryAmendment.ts`, "utf8");
+  const G = IDL_GRAPH, R = IDL_READINESS, RC = IDL_RECLASS, P = IDL_POWERS;
+  const prog = (n: string) => G.find((p) => p.name === n)!;
+  const rc = (id: string) => RC.find((r) => r.dimensionId === id)!;
+
+  // --- The error, preserved ---
+  add("IA-1: the erroneous 'any available means' claim is preserved verbatim", (IDL_SUPERSEDED.claims as readonly string[]).includes("the deployed instruction set cannot be enumerated by any available means") && IDL_SUPERSEDED.claims.length === 5, "5 claims preserved");
+  add("IA-2: the error class is named", IDL_SUPERSEDED.errorClass === "universal_claim_from_an_unfinished_search", "named");
+  add("IA-3: the redirect-pivot is recorded as the cause", /pivoted to the API instead of following the redirect/.test(IDL_SUPERSEDED.howMissed) && /one hop away/.test(IDL_SUPERSEDED.howMissed), "self-critical");
+  add("IA-4: the recurring pattern across three misses is recorded", /Third instance/.test(IDL_SUPERSEDED.patternNote) && /kamino\.com\/docs\/security/.test(IDL_SUPERSEDED.patternNote) && /generalize to 'does not exist'/.test(IDL_SUPERSEDED.patternNote), "pattern named");
+  add("IA-5: history was not rewritten", IDL_EVIDENCE.historyRewritten === false, "additive");
+
+  // --- Corrected graph ---
+  add("IA-6: the graph is corrected 2 → 6 programs", G.length === 6 && IDL_GRAPH_FINDINGS.materialProgramCount === 6 && IDL_GRAPH_FINDINGS.priorRecordedCount === 2, "6 programs");
+  add("IA-7: four programs were newly located", G.filter((p) => !p.wasLocatedAt16HR1).length === 4 && ["oracle","vaults","flashloan","reward_rate_model"].every((n) => prog(n).wasLocatedAt16HR1 === false), "oracle/vaults/flashloan/rewards");
+  add("IA-8: every IDL address matches a LIVE program", G.every((p) => p.idlPublished === true && p.idlAddressMatchesLive === true), "6/6 match");
+  add("IA-9: ALL SIX share ONE upgrade authority", new Set(G.map((p) => p.upgradeAuthority)).size === 1 && IDL_GRAPH_FINDINGS.allShareOneUpgradeAuthority === true && G[0].upgradeAuthority === "4MsgBB5VPoTrUSp5XnfbViV386C1UnsTdifLBw33ZMSJ", "1 authority, 6 programs");
+  add("IA-10: the concentration finding names the full stack", /liquidity layer holding ~428.6M USDC, the oracle that prices collateral, the vaults that liquidate/.test(IDL_GRAPH_FINDINGS.concentrationFinding), "whole stack");
+  add("IA-11: the coordinated 2026-07-16 stack redeploy is recorded", /liquidity .* oracle .* vaults .* ALL deployed on 2026-07-16/.test(IDL_GRAPH_FINDINGS.coordinatedRedeployFinding) && [prog("liquidity"), prog("oracle"), prog("vaults")].every((p) => p.deployedAt === "2026-07-16"), "3 same day");
+  add("IA-12: the 108-instruction surface is recorded", IDL_GRAPH_FINDINGS.totalInstructions === 108 && G.reduce((a, p) => a + p.instructionCount, 0) === 108, "108 ix");
+  add("IA-13: reward_rate_model is the outlier at ~340 days", prog("reward_rate_model").ageDaysAtAmendment > 300 && prog("reward_rate_model").supplierPrincipalDependsOnIt === false, "340d, not principal-critical");
+
+  // --- IDL is not proof ---
+  add("IA-14: an IDL is explicitly NOT a verified build", /not a build attestation and is not source/.test(IDL_CONFERS.idlIsNotAVerifiedBuild) && (IDL_CONFERS.doesNotConfer as readonly string[]).includes("proof that the IDL matches the deployed binary"), "IDL ≠ build");
+  add("IA-15: the IDL/binary staleness gap is recorded", /PREDATES the 2026-07-16/.test(IDL_GRAPH_FINDINGS.idlMayBeStaleAgainstLiveBinaries) && /13 days/.test(IDL_GRAPH_FINDINGS.idlMayBeStaleAgainstLiveBinaries), "13-day gap");
+  add("IA-16: no Rust source is published", /NOT the program source/.test(IDL_GRAPH_FINDINGS.rustSourceNotPublished) && /Instruction LOGIC remains unreadable/.test(IDL_GRAPH_FINDINGS.rustSourceNotPublished), "IDLs + SDK only");
+
+  // --- Power map ---
+  add("IA-17: the privileged-power map is derived from IDL signer lists", P.length === 25 && P.every((x) => x.instruction.length > 0 && x.signer.length > 0 && x.note.length > 0), "25 powers");
+  add("IA-18: per-user pause is found and flagged", P.some((x) => x.instruction === "pause_user" && x.signer === "authority" && /PER-USER FREEZE/.test(x.note)), "pause_user");
+  add("IA-19: per-user withdrawal limit is found and flagged", P.some((x) => x.instruction === "update_user_withdrawal_limit" && x.signer === "authority" && /individually addressable/.test(x.note)), "targeted limiter");
+  add("IA-20: the oracle swap power is found", P.some((x) => x.program === "vaults" && x.instruction === "update_oracle" && x.signer === "authority"), "update_oracle");
+  add("IA-21: MY OWN hypothesis is corrected — update_exchange_price is permissionless", IDL_PERMISSIONLESS.some((x) => x.instruction === "update_exchange_price" && /SIGNER LIST IS EMPTY/.test(x.note) && /IT IS NOT AN ADMIN POWER/.test(x.note)), "speculation corrected");
+  add("IA-22: no explicit write-down instruction was found, and absence is NOT concluded", IDL_NO_WRITEDOWN.explicitWriteDownFound === false && IDL_NO_WRITEDOWN.totalInstructionsSearched === 108 && /NOT absence of a mechanism/.test(IDL_NO_WRITEDOWN.doNotConcludeAbsence), "not concluded");
+  add("IA-23: the Kamino contrast on write-down is exact", /READ FROM DEPLOYED RUST/.test(IDL_NO_WRITEDOWN.contrastWithKamino) && IDL_NO_WRITEDOWN.stillBlocksReadiness === true, "socialize_loss vs unknown");
+
+  // --- Oracle ---
+  add("IA-24: the oracle provider is corrected from unknown to Chainlink Data Streams", IDL_ORACLE.priorClaim === "the provider is unknown" && IDL_ORACLE.corrected === true && IDL_ORACLE.primaryProvider === "Chainlink Data Streams", "provider known");
+  add("IA-25: the keeper dependency is recorded", /PRESENT/.test(IDL_ORACLE.keeperDependency) && /liveness dependency/.test(IDL_ORACLE.keeperDependency), "keeper-push");
+  add("IA-26: oracle parameters remain unresolved — names are not logic", IDL_ORACLE.stillUnresolved.length === 4 && /these are LOGIC, not names/.test(IDL_ORACLE.stillUnresolved[0]) && IDL_ORACLE.usdcPricingStillUnresolved === true, "params open");
+
+  // --- Reclassification ---
+  add("IA-27: three dimensions were reclassified to scoreable", RC.filter((r) => r.newScoreable && !r.priorScoreable).length === 3 && rc("audit_security").newScoreable === true && rc("manager_discretion").newScoreable === true && rc("oracle_risk").newScoreable === true, "3 flipped");
+  add("IA-28: incident_history was deliberately NOT reclassified", rc("incident_history").newScoreable === false && rc("incident_history").newReadiness === "insufficient" && /MY evidence gap, not Jupiter's/.test(rc("incident_history").reason), "not carried along");
+  add("IA-29: the no-overcorrection guard is explicit", /reclassification wave is exactly where an over-correction would hide/.test(IDL_RATIONALE.didNotOvercorrect), "guarded");
+  add("IA-30: every reclassification carries a reason", RC.every((r) => r.reason.length > 50), "4 reasoned");
+  add("IA-31: audit_security is scoreable but WEAK — not improved", rc("audit_security").newReadiness === "weak" && /NO live program is a verified build/.test(rc("audit_security").reason), "weak, not better");
+
+  // --- Readiness + the mandatory gate ---
+  add("IA-32: readiness verdict is UNCHANGED — still not ready", R.readiness === "not_ready_for_automated_assessment" && IDL_RATIONALE.priorReadiness === "not_ready_for_automated_assessment" && IDL_RATIONALE.verdictUnchanged === true, "verdict held");
+  add("IA-33: but the prior REASONING is recorded as substantially false", /reached it for a substantially false reason/.test(IDL_RATIONALE.butTheReasoningWasWrong) && /Three of those four are now scoreable/.test(IDL_RATIONALE.butTheReasoningWasWrong), "reasoning corrected");
+  add("IA-34: only ONE dimension remains insufficient", R.insufficientDimensions.length === 1 && R.insufficientDimensions[0] === "incident_history", "1, was 4");
+  add("IA-35: ten dimensions are partial-but-scoreable", R.partialButScoreableDimensions.length === 10 && R.completeDimensions.length === 1, "10 + 1 + 1 = 12");
+  add("IA-36: MANDATORY ARTIFACTS gate readiness independently of dimensions", IDL_MANDATORY.length === 1 && IDL_MANDATORY[0].id === "loss_waterfall" && IDL_MANDATORY[0].resolved === false, "waterfall mandatory");
+  add("IA-37: THE GATE DOES NOT LEAK — all dims scoreable + waterfall unresolved stays NOT ready", evaluateReadinessV2(IDL_DIMS_V2.map((d) => ({ ...d, scoreable: true, readiness: "partial" as const }))).readiness === "not_ready_for_automated_assessment", "gate holds");
+  add("IA-38: the gate releases only when BOTH conditions are met", evaluateReadinessV2(IDL_DIMS_V2.map((d) => ({ ...d, scoreable: true, readiness: "partial" as const })), [{ id: "loss_waterfall", resolved: true }]).readiness === "ready_for_automated_assessment", "both required");
+  add("IA-39: the leak was caught in this amendment's own logic and recorded", /the gate would leak/.test(IDL_RATIONALE.readinessIsGatedOnTwoConditions) && /a defect in the first version of this amendment's own logic/.test(IDL_RATIONALE.readinessIsGatedOnTwoConditions), "self-caught");
+  add("IA-40: blocking artifacts name the mandatory failure first", R.blockingArtifacts.some((a) => /MANDATORY ARTIFACT UNRESOLVED: loss_waterfall/.test(a)), "named");
+  add("IA-41: the correction's value is stated even though the verdict held", /would conclude Jupiter is unassessable\. It is not\./.test(IDL_RATIONALE.whyThisCorrectionMattersEvenThoughTheVerdictHeld) && /mirror image of inflating it/.test(IDL_RATIONALE.whyThisCorrectionMattersEvenThoughTheVerdictHeld), "understating ≠ safe");
+
+  // --- Sources + boundaries ---
+  add("IA-42: the sources that resolved it are recorded", IDL_EVIDENCE.sourcesAdded.length === 3 && IDL_EVIDENCE.sourcesAdded.some((s) => /jup-ag\/jupiter-lend/.test(s)), "3 sources");
+  add("IA-43: support.jup.ag was checked and recorded as EMPTY, not left unchecked", /support\.jup\.ag/.test(IDL_EVIDENCE.sourceCheckedAndEmpty) && /Checked and recorded as empty rather than left unchecked/.test(IDL_EVIDENCE.sourceCheckedAndEmpty), "checked");
+  add("IA-44: no scores or aggregate were assigned", IDL_CONFERS.scoresAssigned === false && IDL_CONFERS.aggregateCalculated === false && (IDL_CONFERS.doesNotConfer as readonly string[]).includes("readiness"), "none");
+  add("IA-45: no selector, recommendation or execution behaviour", IDL_CONFERS.addedToSelectorEligibility === false && IDL_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction/.test(src), "read-only");
+  add("IA-46: Kamino's assessment is untouched", IDL_CONFERS.kaminoAssessmentChanged === false && DA_OUTCOME.unroundedAggregate === 5.93 && DA_OUTCOME.meetsMinimum === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3", "5.93");
+  add("IA-47: the amendment manifest is deterministic", IDL_HASH === computeIdlAmendmentHash() && /^jup_idl_amendment_[0-9a-f]{8}$/.test(IDL_HASH), IDL_HASH);
+  add("IA-48: the fast-moving-stack invalidation trigger is recorded", (IDL_EVIDENCE.invalidationTriggers as readonly string[]).some((t) => /3 were redeployed 1\.3 days ago — this stack moves fast/.test(t)), "volatility flagged");
+  add("IA-49: prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && AUTH_MANIFEST_HASH === computeAuthorityManifestHash() && VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd" && Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005, "4 intact");
+  add("IA-50: Jupiter is still not a production candidate", listStableYieldEvidenceManifests().every((m) => m.strategyId !== "jupiter_lend_usdc"), "not a candidate");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-S.0 — Source Completion Amendment
+ * ------------------------------------------------------------------ */
+
+export function runSourceCompletionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const asmt = readIf("src/suggestions/klendDirectUsdcAutomatedAssessment.ts");
+  const pkg = readIf("src/suggestions/klendDirectUsdcRiskEvidencePackage.ts");
+  const steakAsmt = readIf("src/suggestions/steakhouseAutomatedAssessment.ts");
+  const closure = readIf("src/suggestions/steakhouseEvidenceClosure.ts");
+  const jup = readIf("src/suggestions/jupiterLendUsdcRiskEvidencePackage.ts");
+  const p2a = readIf("src/suggestions/directAssessmentBinaryDateCorrection.ts");
+  const F = SC_FACTS, dimIH = () => DA_DIMS.find((d) => String(d.dimensionId) === "incident_history")!;
+
+  // --- Superseded claims preserved ---
+  add("SC-1: the superseded 'April 2026 latest' claim is preserved verbatim", SC_SUPERSEDED.claims.some((c) => /most recent monthly risk report found is April 2026/.test(c.text)) && SC_SUPERSEDED.claims.length === 4, "4 claims");
+  add("SC-2: the error class names the cited-but-unenumerated failure", SC_SUPERSEDED.errorClass === "cited_source_index_never_enumerated", "named");
+  add("SC-3: the P.2a historical record is deliberately NOT edited and still carries April 2026", /April 2026/.test(p2a) && /IMMUTABLE historical correction record/.test(SC_SUPERSEDED.historicalRecordsLeftIntact), "immutable record intact");
+
+  // --- The corrected facts ---
+  add("SC-4: May and June 2026 reports are recorded with publication dates", F.kaminoRiskReports.reports.length === 2 && F.kaminoRiskReports.reports[1].publishedAt === "2026-07-03" && F.kaminoRiskReports.latestPostdatesKlendBinary === true && F.kaminoRiskReports.latestPredatesKvaultBinary === true, "Jun 2026 / 2026-07-03");
+  add("SC-5: the market-monitoring vs code-review distinction is explicit", /NOT code review/.test(F.kaminoRiskReports.natureOfReports) && /recency fact was wrong/.test(F.kaminoRiskReports.natureOfReports), "precision added");
+  add("SC-6: the Oct 10 2025 event is recorded with the exact market and $0 bad debt", F.october2025Event.marketsAffected[0].market.includes("Main Market") && F.october2025Event.badDebt === "$0" && /NONE/.test(F.october2025Event.socializedLosses) && /8,000\+/.test(F.october2025Event.liquidationOutcome), "Main $16M, 0 failures");
+  add("SC-7: the attestation is NOT treated as the on-chain scan", /narrows; it does not close/.test(F.october2025Event.attestationIsNotAScan), "narrowed, not closed");
+  add("SC-8: the five-event relationship is recorded without overclaiming", /CONSISTENT with being one of the five/.test(F.october2025Event.relationshipToFiveEvents) && /Not asserted as identical/.test(F.october2025Event.relationshipToFiveEvents), "no overclaim");
+  add("SC-9: seven Jupiter audits are enumerated with firms and dates", F.jupiterAudits.reports.length === 7 && F.jupiterAudits.reports.filter((r) => r.auditor === "Offside Labs").length === 3 && F.jupiterAudits.reports.filter((r) => r.auditor === "OtterSec").length === 2, "Zenith+Offside×3+MixBytes+OtterSec×2");
+  add("SC-10: Jupiter's own audit disclaimer is preserved verbatim", /point-in-time review/.test(F.jupiterAudits.officialDisclaimerPreserved) && /does not guarantee/.test(F.jupiterAudits.officialDisclaimerPreserved), "kept");
+  add("SC-11: the audit-to-binary linkage is recorded as UNCHANGED", /gap STANDS/.test(F.jupiterAudits.linkageUnchanged) && /~a year old/.test(F.jupiterAudits.linkageUnchanged), "richer set, same gap");
+  add("SC-12: the bug bounty is recorded with its weak-signal framing", F.jupiterBugBounty.criticalCap === "$500,000" && F.jupiterBugBounty.resolvedReports === 25 && /WEAK signal/.test(F.jupiterBugBounty.signalReading), "not overweighted");
+
+  // --- Live sites corrected ---
+  add("SC-13: the direct assessment limitingFact carries the S.0 correction", /CORRECTED AT 16H-S\.0/.test(dimIH().limitingFact) && /June 2026 \(published 2026-07-03\)/.test(dimIH().limitingFact) && /no CODE review covers the code holding funds/.test(dimIH().limitingFact), "corrected + precise");
+  add("SC-14: the P.2a phrases survive in the same limitingFact", /2026-05-28, corrected at 16H-P\.2a/.test(dimIH().limitingFact) && /postdates every documented event/.test(dimIH().limitingFact), "both corrections coexist");
+  add("SC-15: the Oct 2025 event is added to favorable evidence, marked", (dimIH().favorableEvidence as string[]).some((f) => /added at 16H-S\.0/.test(f) && /NO-SOCIALIZED-LOSSES attestation/.test(f)), "added + marked");
+  add("SC-16: the direct package gap-4 is restated with precision", /RESTATED AT 16H-S\.0/.test(pkg) && /no CODE review postdates the binary/.test(pkg), "restated");
+  add("SC-17: the Steakhouse rationale is corrected and its gap still stands", /CORRECTED AT 16H-S\.0 from 'most recent is April 2026'/.test(steakAsmt) && /after even the June report/.test(steakAsmt), "KVault gap stands");
+  add("SC-18: the closure comment is annotated", /CORRECTED AT 16H-S\.0/.test(closure) && /search failure/.test(closure), "annotated");
+  add("SC-19: the alias amendment gap-4 is corrected and keeps the KVault date", /CORRECTED AT 16H-S\.0/.test(readIf("src/suggestions/incidentMarketAliasAmendment.ts")) && /2026-07-14, which postdates even the June report/.test(readIf("src/suggestions/incidentMarketAliasAmendment.ts")), "corrected, date kept");
+  add("SC-20: the Jupiter audit record is corrected 2 → 7 + bounty", /CORRECTED AT 16H-S\.0 \(was 'Zenith and Offside audits are reported'\)/.test(jup) && /OOOsec bug bounty/.test(jup) && /development age is ~a year/.test(jup), "3 Jupiter edits");
+  add("SC-21: no live site still asserts April 2026 as latest", ![asmt, pkg, steakAsmt, closure].some((s) => /(most recent|latest) monthly risk report (found )?is April 2026/.test(s.replace(/original text said "[^"]*"/g, "").replace(/CORRECTED AT 16H-S\.0[^"']*/g, ""))), "purged from live claims");
+  add("SC-22: all seven corrected sites are enumerated", SC_SITES.length === 7, "7 sites");
+
+  // --- Nothing moved ---
+  add("SC-23: no score, confidence or aggregate changed", SC_IMPACT.scoresChanged === false && SC_IMPACT.kaminoAggregate === 5.93 && SC_IMPACT.steakhouseAggregate === 5.37 && DA_OUTCOME.unroundedAggregate === 5.93 && Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005, "5.93 / 5.37");
+  add("SC-24: the assessment manifest hash is unchanged", DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && DA_MANIFEST_HASH === computeDirectAssessmentManifestHash() && SC_IMPACT.assessmentManifestHashUnchanged === DA_MANIFEST_HASH, "hash stable");
+  add("SC-25: Jupiter readiness is unchanged", IDL_READINESS.readiness === "not_ready_for_automated_assessment" && SC_IMPACT.jupiterReadinessUnchanged === IDL_READINESS.readiness, "still not ready");
+  add("SC-26: each unmoved score is justified on its real reason", SC_IMPACT.whyNoScoreMoves.length === 4 && /anchor does not move/.test(SC_IMPACT.whyNoScoreMoves[0]) && /not a completed search/.test(SC_IMPACT.whyNoScoreMoves[3]), "4 reasons");
+  add("SC-27: the reviewer must be told of the double amendment", /amended twice \(P\.2a, S\.0\)/.test(SC_IMPACT.reviewerMustBeTold), "disclosed");
+
+  // --- The rule ---
+  add("SC-28: the source-enumeration rule is recorded and binding", /enumerate its index/.test(SC_RULE.rule) && /treated as UNSEARCHED/.test(SC_RULE.rule) && /16H-S\.1 incident-search methodology/.test(SC_RULE.bindingOn), "binding");
+  add("SC-29: the rule's motivation names the actual failure", /cited at 16H-L\.2 \(one thread\)/.test(SC_RULE.motivation) && /false confidence/.test(SC_RULE.motivation), "motivated");
+  add("SC-30: the round-4 pattern is recorded in the module header", /FOURTH ROUND/.test(readIf("src/suggestions/sourceCompletionAmendment.ts")) && /worst of the four/.test(readIf("src/suggestions/sourceCompletionAmendment.ts")), "pattern named");
+
+  // --- Integrity ---
+  add("SC-31: the amendment manifest is deterministic", SC_HASH === computeS0ManifestHash() && /^source_completion_[0-9a-f]{8}$/.test(SC_HASH), SC_HASH);
+  add("SC-32: prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && AUTH_MANIFEST_HASH === computeAuthorityManifestHash() && ALIAS_AMENDMENT_MANIFEST_HASH === computeAliasAmendmentManifestHash() && IDL_HASH === computeIdlAmendmentHash() && VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd", "5 intact");
+  add("SC-33: no execution behaviour was added", SC_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction/.test(readIf("src/suggestions/sourceCompletionAmendment.ts")), "read-only");
+  add("SC-34: the amendment confers no score, readiness or search closure", SC_CONFERS.scoresAssigned === false && (SC_CONFERS.doesNotConfer as readonly string[]).includes("a completed incident search") && (SC_CONFERS.doesNotConfer as readonly string[]).includes("closure of the socialize_loss scan"), "bounded");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-S.1 — Incident Search Methodology + validated Kamino admin scan
+ * ------------------------------------------------------------------ */
+
+export function runIncidentSearchFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const S = IS_SCAN, R = IS_RESULTS;
+
+  // --- Method ---
+  add("IS-1: the scope model has all 8 incident categories", IS_SCOPE.categories.length === 8 && (IS_SCOPE.categories as readonly string[]).includes("accounting") && /answers ACCOUNTING alone/.test(IS_SCOPE.categoriesNote), "8 categories");
+  add("IS-2: the subject boundary is defined and motivated by real errors", /subjects must not blur/.test(IS_SCOPE.subjectBoundary) && /KVault-vs-KLend/.test(IS_SCOPE.subjectBoundaryMotivation) && /Main-vs-SOL\/BTC/.test(IS_SCOPE.subjectBoundaryMotivation), "boundary + motivation");
+  add("IS-3: four source classes ranked, third-party is locate-only", IS_SOURCES.length === 4 && IS_SOURCES[0].name === "on-chain" && /LOCATE-ONLY/.test(IS_SOURCES[2].authority), "on-chain first, aggregators locate-only");
+  add("IS-4: the negative-result discipline is preserved", /SEARCH RESULT/.test(IS_NEG.rule) && /never a clean record/.test(IS_NEG.rule) && /steakhouseIncidentEvidence/.test(IS_NEG.preservedVerbatimFrom), "search result, not clean record");
+  add("IS-5: the source-enumeration rule is inherited from S.0", IS_ENUM.from.includes("16H-S.0") && /cited-but-unenumerated source is UNSEARCHED/.test(IS_ENUM.rule), "inherited");
+
+  // --- The self-check (the load-bearing part) ---
+  add("IS-6: the self-check requirement is defined with a threshold", /recognizedFraction/.test(IS_SELFCHECK.requirement) && IS_SELFCHECK.threshold === 0.9 && /void/.test(IS_SELFCHECK.whyMandatory) === false && /every count .* is void/.test(IS_SELFCHECK.requirement.replace("must be near 1.0","")) === false, "threshold 0.9");
+  add("IS-7: the self-check exists because run 1 was a false negative", /Run 1 of this exact scan returned 'socialize_loss: 0'/.test(IS_SELFCHECK.whyMandatory) && /decode bug/.test(IS_SELFCHECK.whyMandatory), "false negative recorded");
+  add("IS-8: a failed self-check voids the zero, not confirms clean", /Discard all counts/.test(IS_SELFCHECK.onFailure) && /a broken instrument/.test(IS_SELFCHECK.onFailure), "0 ≠ clean when decoder dead");
+
+  // --- Registry (SDK-verified, live-loadable) ---
+  add("IS-9: the SDK discriminator registry loads all 63 instructions", (() => { const r = loadKlendDiscriminatorRegistry(); return Object.keys(r).length === 63; })(), "63 instructions");
+  add("IS-10: socialize_loss and update_reserve_config resolve in the live registry", (() => { const r = loadKlendDiscriminatorRegistry(); return r["f54b5b00ec611303"] === "socializeLoss" && r["3d9464468f6b110d"] === "updateReserveConfig"; })(), "SDK-confirmed");
+  add("IS-11: the admin instruction registry maps each to a dimension", KLEND_ADMIN.socialize_loss.feedsDimension === "incident_history" && KLEND_ADMIN.update_reserve_config.feedsDimension === "manager_discretion" && KLEND_ADMIN.withdraw_protocol_fee.feedsDimension === "withdrawal_fee_transparency", "mapped");
+  add("IS-12: the anchorDiscriminator helper is correct", anchorDiscriminator("socialize_loss") === "f54b5b00ec611303", "global:name sha256");
+  add("IS-13: the registry mismatch was the decoder, not the registry", /the mismatch was the decoder, not the registry/.test(IS_REGVERIFY.note), "registry authoritative");
+
+  // --- The validated result ---
+  add("IS-14: the scan self-check passed at 1.0", S.selfCheckRecognizedFraction === 1.0 && S.selfCheckPassed === true, "1.0");
+  add("IS-15: socialize_loss on this reserve is zero, over full owner tenure", R.socialize_loss.onThisReserve === 0 && R.socialize_loss.totalObserved === 0, "0");
+  add("IS-16: update_reserve_config was exercised 4 times on this reserve", R.update_reserve_config.onThisReserve === 4 && R.update_reserve_config.datesOnThisReserve.length === 4 && R.update_reserve_config.datesOnThisReserve.includes("2026-06-05"), "4 dated");
+  add("IS-17: the scan scope is the market-owner authority's complete history", /market-owner Squads vault 24LjDBuk/.test(S.scope) && S.totalOwnerTxns === 168 && /has_one.*VERIFIED at 16H-L\.2/.test(S.scopeJustification), "correct scope");
+  add("IS-18: the socialize_loss negative is strong BUT bounded", /STRONG negative for the current-owner period/.test(S.interpretation.socializeLoss) && /still a SEARCH RESULT/.test(S.interpretation.socializeLossLimits) && /current owner's tenure only/i.test(S.interpretation.socializeLossLimits), "strong + bounded");
+  add("IS-19: the socialize_loss_v2 and pre-tenure limits are named", /socialize_loss_v2/.test(S.interpretation.socializeLossLimits) && /prior owner could have socialized losses earlier/.test(S.interpretation.socializeLossLimits), "3 bounds");
+  add("IS-20: manager_discretion is recorded as EXERCISED, not dormant", /manager_discretion is NOT dormant/.test(S.interpretation.updateReserveConfig) && /has been EXERCISED/.test(S.interpretation.updateReserveConfig), "active");
+  add("IS-21: the update_reserve_config parameter-decode limit is stated", /does not decode WHICH parameters changed/.test(S.interpretation.updateReserveConfigLimits), "count, not params");
+
+  // --- Scores frozen ---
+  add("IS-22: incident_history score is unchanged at 5", /5 \(unchanged\)/.test(S.feedsButDoesNotMove.incidentHistoryScore) && DA_DIMS.find((d) => String(d.dimensionId) === "incident_history")!.score === 5, "5");
+  add("IS-23: manager_discretion score is unchanged at 5", /5 \(unchanged\)/.test(S.feedsButDoesNotMove.managerDiscretionScore) && DA_DIMS.find((d) => String(d.dimensionId) === "manager_discretion")!.score === 5, "5");
+  add("IS-24: scores are frozen because this is an evidence task", /Moving a live score requires the assessment mechanism/.test(S.feedsButDoesNotMove.scoresFrozenBecause) && IS_CONFERS.scoresAssigned === false, "evidence, not reassessment");
+  add("IS-25: the Kamino aggregate is untouched", DA_OUTCOME.unroundedAggregate === 5.93 && DA_OUTCOME.meetsMinimum === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3", "5.93");
+
+  // --- Jupiter applicability ---
+  add("IS-26: the scan was NOT run for Jupiter, with reasons", IS_JUP.scanRun === false && IS_JUP.whyNot.length === 3 && /share-price model/.test(IS_JUP.whyNot[0]) && /~1\.4 days old/.test(IS_JUP.whyNot[1]), "correctly skipped");
+  add("IS-27: the correct Jupiter technique is named and deferred", /convertToAssets\) monotonicity/.test(IS_JUP.correctJupiterTechnique) && /too young to be informative/.test(IS_JUP.correctJupiterTechnique), "share-price, deferred");
+
+  // --- Integrity ---
+  add("IS-28: the methodology manifest is deterministic", IS_HASH === computeIncidentSearchHash() && /^incident_search_[0-9a-f]{8}$/.test(IS_HASH), IS_HASH);
+  add("IS-29: no execution behaviour was added", IS_CONFERS.transactionConstructedOrSimulated === false, "read-only");
+  add("IS-30: no clean record or proof of absence is conferred", (IS_CONFERS.doesNotConfer as readonly string[]).includes("a clean record") && (IS_CONFERS.doesNotConfer as readonly string[]).includes("proof of absence"), "bounded negative only");
+  add("IS-31: prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && AUTH_MANIFEST_HASH === computeAuthorityManifestHash() && IDL_HASH === computeIdlAmendmentHash() && SC_HASH === computeS0ManifestHash() && VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd", "5 intact");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-R.1b — Jupiter Lend Team Disclosure Amendment
+ * ------------------------------------------------------------------ */
+
+export function runTeamDisclosureFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const A = TD_ANSWERS, C = TD_COLLAT, W = TD_WATERFALL, R = TD_READINESS;
+
+  // --- The governing caveat ---
+  add("TD-1: answers are classified as self-reported, not binary-verified", TD_SRC.sourceClass === 2 && TD_SRC.binaryVerified === false && /Design description . deployed logic/.test(TD_SRC.binaryVerifiedNote), "class 2");
+  add("TD-2: all five answers are recorded with resolution levels", A.length === 5 && A.every((a) => a.resolutionLevel.length > 0 && a.caveat.length > 0), "5 answers");
+  add("TD-3: every answer carries the binary-unverified limitation via source class", TD_SRC.usableButBounded === true && /cannot be cross-checked against the deployed binary/i.test(TD_SRC.binaryVerifiedNote), "bounded");
+
+  // --- Loss waterfall (the mandatory artifact) ---
+  add("TD-4: the loss waterfall is design-resolved", W.resolvedAtDesignLevel === true && W.waterfall.length === 5 && W.seniority.includes("none"), "5-step waterfall");
+  add("TD-5: it is NOT binary-verified", W.binaryVerified === false && W.residualGaps.some((g) => /verified against the deployed binary/.test(g)), "design only");
+  add("TD-6: loss is a share-price decline, corroborating the no-socialize_loss finding", /share-price decline/.test(W.lossMechanism) && /no socialize_loss-equivalent/.test(W.confirmsSocializeLossFinding), "corroborated");
+  add("TD-7: the 10% reserve is recorded as NOT a guaranteed backstop", W.waterfall.some((s) => /NOT a confirmed insurance fund/.test(s.event)), "not guaranteed");
+  add("TD-8: the correct incident technique (share-price monotonicity) is named", /share-price .* monotonicity/.test(W.correctIncidentTechnique), "technique named");
+  add("TD-9: residual gaps are recorded, not smoothed", W.residualGaps.length === 3 && W.residualGaps.some((g) => /exact accounting timing/.test(g)), "gaps kept");
+
+  // --- Isolation reconciled ---
+  add("TD-10: the isolation apparent-tension is reconciled, not contradicted", /resolved, not contradictory/.test(TD_ISO.apparentTension) && /per LIQUIDITY ASSET/.test(TD_ISO.reconciliation), "per-asset");
+  add("TD-11: practical exposure is recorded as BROAD, not narrow", TD_ISO.practicalExposureIsBroadNotNarrow === true && /isolates by borrowed asset, not by collateral or by risk/.test(TD_ISO.reconciliation), "broad");
+  add("TD-12: the isolation answer's caveat sharpens it, not obscures", A[0].caveat.includes("19 collateral types share the risk"), "sharpened");
+
+  // --- On-chain collateral universe ---
+  add("TD-13: 19 USDC-borrowing collateral types are enumerated on-chain", C.usdcBorrowingVaults === 19 && C.collateralTypes.length === 19 && C.totalBorrowVaults === 79, "19 of 79");
+  add("TD-14: tokenized equities are flagged as risk-notable collateral", C.riskNotableCollateral.tokenizedEquities.assets.length === 4 && C.riskNotableCollateral.tokenizedEquities.assets.includes("TSLAx") && /off-hours/.test(C.riskNotableCollateral.tokenizedEquities.concern), "4 equities");
+  add("TD-15: the recursive jlJUPUSD collateral is flagged at 89% LTV", C.riskNotableCollateral.recursive.assets.includes("jlJUPUSD") && C.riskNotableCollateral.recursive.ltv === "89%" && /leverage loop/.test(C.riskNotableCollateral.recursive.concern), "recursive");
+  add("TD-16: reflexive JLP collateral is flagged", C.riskNotableCollateral.reflexive.assets.includes("JLP") && /Jupiter's own LP token/.test(C.riskNotableCollateral.reflexive.concern), "reflexive");
+  add("TD-17: this is recorded as UNFAVORABLE evidence the clean answer obscured", /UNFAVORABLE evidence the 'isolated by market' answer obscured/.test(C.materiality) && /19 collateral oracles including four equity feeds/.test(C.materiality), "unfavorable");
+  add("TD-18: per-collateral parameters remain unresolved", C.stillUnresolved.length === 3 && C.stillUnresolved.some((x) => /liquidation parameters/.test(x)), "params open");
+
+  // --- Rewards + powers ---
+  add("TD-19: the rewards contradiction is resolved — no separate rewards", A[4].resolutionLevel === "design" && /empty rewards array is CORRECT/.test(A[4].caveat) && /API decomposition/.test(A[4].caveat), "resolved");
+  add("TD-20: powers answer is partial — favorable but incomplete", A[2].resolutionLevel === "design_partial" && /no complete authority matrix/.test(A[2].caveat), "partial");
+  add("TD-21: the redeploy remains indeterminate from timing", A[3].resolutionLevel === "unresolved" && /On-chain-resolvable/.test(A[3].caveat), "indeterminate");
+
+  // --- Readiness ---
+  add("TD-22: readiness is still not_ready", R.readiness === "not_ready_for_automated_assessment", "not ready");
+  add("TD-23: loss_waterfall mandatory artifact is now resolved", TD_MANDATORY.length === 1 && TD_MANDATORY[0].id === "loss_waterfall" && TD_MANDATORY[0].resolved === true && /double-count one gap/.test(TD_MANDATORY[0].basis), "resolved, no double-count");
+  add("TD-24: the package is now blocked on ONE thing, incident_history", R.insufficientDimensions.length === 1 && R.insufficientDimensions[0] === "incident_history" && R.blockingArtifacts.length === 1, "1 blocker");
+  add("TD-25: one narrow step from ready is recorded honestly", /would make incident_history scoreable/.test(TD_RATIONALE.oneNarrowStepFromReady) && /flip the package to ready/.test(TD_RATIONALE.oneNarrowStepFromReady) && /youth, not evidence/.test(TD_RATIONALE.oneNarrowStepFromReady), "share-price scan");
+  add("TD-26: ready would NOT mean suitable", /honest expectation is Jupiter scores below 7/.test(TD_RATIONALE.butReadyIsNotSuitable) && /would not make it eligible/.test(TD_RATIONALE.butReadyIsNotSuitable), "ready ≠ suitable");
+  add("TD-27: the binary-unverified caveat is recorded as non-resolving", /design-resolved but binary-UNverified/.test(TD_RATIONALE.theCaveatThatDoesNotResolve) && /keeps audit_security weak/.test(TD_RATIONALE.theCaveatThatDoesNotResolve), "persists");
+  add("TD-28: the gate reasoning avoids double-counting the binary gap", /Binary-verification is a SEPARATE fact belonging to audit_security/.test(TD_MANDATORY[0].basis), "no double-count");
+
+  // --- Integrity ---
+  add("TD-29: scores unchanged; Kamino untouched", TD_CONFERS.scoresAssigned === false && TD_CONFERS.kaminoAssessmentChanged === false && DA_OUTCOME.unroundedAggregate === 5.93 && DA_MANIFEST_HASH === "direct_assessment_54a11ba3", "5.93");
+  add("TD-30: binary still unverified, no clean record conferred", TD_CONFERS.binaryStillUnverified === true && (TD_CONFERS.doesNotConfer as readonly string[]).includes("a binary-verified fact") && (TD_CONFERS.doesNotConfer as readonly string[]).includes("a clean record"), "bounded");
+  add("TD-31: the manifest is deterministic", TD_HASH === computeTeamDisclosureHash() && /^jup_team_disclosure_[0-9a-f]{8}$/.test(TD_HASH), TD_HASH);
+  add("TD-32: no execution behaviour; Jupiter still not a candidate", TD_CONFERS.transactionConstructedOrSimulated === false && listStableYieldEvidenceManifests().every((m) => m.strategyId !== "jupiter_lend_usdc"), "read-only");
+  add("TD-34: readiness flips to ready ONLY if incident_history is also resolved (gate proven)", (() => {
+    const dims = DIMENSION_STATE_V3.map((d) => d.dimensionId === "incident_history" ? { ...d, scoreable: true, readiness: "weak" as const } : d);
+    const stillBlocked = evaluateReadinessV3();
+    const wouldBeReady = evaluateReadinessV3(dims, [{ id: "loss_waterfall", resolved: true }]);
+    return stillBlocked.readiness === "not_ready_for_automated_assessment" && stillBlocked.insufficientDimensions[0] === "incident_history" && wouldBeReady.readiness === "ready_for_automated_assessment";
+  })(), "gate deterministic");
+  add("TD-33: prior evidence remains immutable", IDL_HASH === computeIdlAmendmentHash() && SC_HASH === computeS0ManifestHash() && IS_HASH === computeIncidentSearchHash() && SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14", "4 intact");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 16H-T.1 — Kamino direct USDC human-review brief.
+ * A presentation of the completed 5.93 assessment: binds to its manifest,
+ * introduces no score, states the four capping risks, splits evidence
+ * solid/thin, and lays out three reviewer-owned options without picking one.
+ * ------------------------------------------------------------------ */
+export function runDirectReviewBriefFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  // --- Binding: presents exactly the completed assessment, nothing new ---
+  add("RB-1: brief binds to the direct assessment manifest (no drift)", RB_BOUND === "direct_assessment_54a11ba3" && DA_MANIFEST_HASH === RB_BOUND && RB_PROV.presentsAssessmentManifest === RB_BOUND, RB_BOUND);
+  add("RB-2: validation passes", RB_VALIDATION.valid === true && validateReviewBrief().valid === true, RB_VALIDATION.errors.join("|") || "clean");
+  add("RB-3: authored under the evidence-PREPARER role, not assessor/reviewer", RB_PROV.preparerRole === "evidence_preparer" && RB_PROV.preparerIsNotAssessor === true && RB_PROV.preparerIsNotHumanReviewer === true && RB_PROV.introducesNoNewScore === true, "preparer");
+
+  // --- No new/changed scores: rows are projected row-for-row from the assessment ---
+  add("RB-4: rows equal the assessment, in order", RB_ROWS.length === DA_DIMS.length && RB_ROWS.every((r, i) => r.dimensionId === String(DA_DIMS[i].dimensionId) && r.score === DA_DIMS[i].score && r.weight === DA_DIMS[i].weight && r.band === DA_DIMS[i].anchorBand), "12 rows match");
+  add("RB-5: projected weights sum to 100", RB_ROWS.reduce((s, r) => s + r.weight, 0) === 100, `sum=${RB_ROWS.reduce((s, r) => s + r.weight, 0)}`);
+  add("RB-6: projectRows is a pure projection (idempotent vs source)", (() => { const a = projectRows(); return a.length === 12 && a.every((r, i) => r.score === DA_DIMS[i].score && r.confidence === DA_DIMS[i].confidence); })(), "pure");
+
+  // --- Headline agrees with the assessment output ---
+  add("RB-7: headline is 5.93 / floor 7 / meetsMinimum false / band partial", RB_HEADLINE.aggregate === 5.93 && RB_HEADLINE.aggregate === DA_OUTCOME.displayedAggregate && RB_HEADLINE.threshold === 7 && RB_HEADLINE.meetsMinimum === false && RB_HEADLINE.band === "partial", `${RB_HEADLINE.aggregate}/${RB_HEADLINE.threshold}`);
+  add("RB-8: distance to floor is 1.07 and framed as a fact, not a target", RB_HEADLINE.distanceToFloor === 1.07 && /gates AUTOMATED eligibility only/.test(RB_HEADLINE.whatTheFloorMeansHere) && /does not lower the floor/.test(RB_HEADLINE.whatTheFloorMeansHere), `d=${RB_HEADLINE.distanceToFloor}`);
+
+  // --- The four capping risks ---
+  add("RB-9: exactly four capping risks, each citing real dimensions", RB_CAPS.length === 4 && RB_CAPS.every((c) => c.dimensionsCapped.every((d) => DA_DIMS.some((a) => String(a.dimensionId) === d))), `n=${RB_CAPS.length}`);
+  add("RB-10: capping risks name the four uncomfortable facts", RB_CAPS.some((c) => c.id === "socialize_loss_reaches_principal") && RB_CAPS.some((c) => c.id === "zero_timelock_exit_freeze") && RB_CAPS.some((c) => c.id === "no_audit_maps_to_deployed_binary") && RB_CAPS.some((c) => c.id === "borrower_collateral_oracle_unexamined"), "4 facts");
+  add("RB-11: the two structural risks are marked structural, not evidentiary", RB_CAPS.find((c) => c.id === "socialize_loss_reaches_principal")?.isStructuralNotEvidentiary === true && RB_CAPS.find((c) => c.id === "zero_timelock_exit_freeze")?.isStructuralNotEvidentiary === true, "structural");
+
+  // --- Evidence solid/thin split derived from readiness ---
+  add("RB-12: solid = complete readiness (6), thin = partial readiness (6)", RB_STRENGTH.solid.length === 6 && RB_STRENGTH.thin.length === 6 && RB_STRENGTH.solid.length + RB_STRENGTH.thin.length === 12, `${RB_STRENGTH.solid.length}/${RB_STRENGTH.thin.length}`);
+  add("RB-13: partition matches the assessment's own readiness flags", (() => { const p = partitionEvidenceStrength(); const complete = DA_DIMS.filter((a) => a.evidenceReadiness === "complete").map((a) => String(a.dimensionId)); return p.solid.map((s) => s.dimensionId).join(",") === complete.join(","); })(), "derived");
+  add("RB-14: low-confidence dimensions are flagged for reviewer attention", /maturity, oracle_risk, incident_history/.test(RB_STRENGTH.note) && RB_STRENGTH.thin.some((t) => t.dimensionId === "oracle_risk" && t.confidence === "low"), "flagged");
+
+  // --- Three options, reviewer-owned, none pre-selected ---
+  add("RB-15: exactly three decision options", RB_OPTIONS.length === 3 && RB_OPTIONS.map((o) => o.id).join(",") === "accept_residual_risk,require_mitigations,hold", RB_OPTIONS.map((o) => o.id).join(","));
+  add("RB-16: every option is owned by the human reviewer, none pre-selected", RB_OPTIONS.every((o) => o.whoDecides === "human_risk_reviewer") && RB_STATE.outcomeSelectedByPreparer === false && RB_PROV.recommendsNoOutcome === true, "reviewer-owned");
+  add("RB-17: accept option is an explicit override, not a floor change", /explicit\s+human override of the automated gate/.test(RB_OPTIONS[0].consequenceIfChosen) && /floor is NOT changed/.test(RB_OPTIONS[0].consequenceIfChosen), "override");
+  add("RB-18: mitigate option does NOT promise clearing 7", /does NOT guarantee clearing/.test(RB_OPTIONS[1].consequenceIfChosen) && RB_MITIG.length === 4 && RB_MITIG.some((m) => m.unblocks === "oracle_risk" && /EITHER direction/.test(m.note)), "no promise");
+  add("RB-19: hold option preserves existing-position recognition", /Existing-position recognition and visibility are unaffected/.test(RB_OPTIONS[2].consequenceIfChosen), "preserved");
+
+  // --- Separation of duties / no fabrication ---
+  add("RB-20: reviewer/signoff/approval fields are null; no fabricated reviewer", RB_STATE.reviewerId === null && RB_STATE.reviewerSignoff === null && RB_STATE.approval === null && RB_STATE.reviewerIdentityFabricated === false, "null");
+  add("RB-21: brief changes no floor and retargets no score", RB_STATE.floorChanged === false && RB_STATE.anyScoreRetargeted === false && RB_CONFERS.changedFloor === false && RB_CONFERS.changedAnyScore === false, "unchanged");
+  add("RB-22: confers a presentation only — not review, signoff, approval, or a card", (RB_CONFERS.doesNotConfer as readonly string[]).includes("human review") && (RB_CONFERS.doesNotConfer as readonly string[]).includes("risk signoff") && (RB_CONFERS.doesNotConfer as readonly string[]).includes("product approval") && (RB_CONFERS.doesNotConfer as readonly string[]).includes("a production card") && RB_CONFERS.humanReviewOccurred === false, "presentation");
+
+  // --- The assessment and its neighbours are untouched ---
+  add("RB-23: the underlying assessment is unchanged (still 5.93, still false)", DA_OUTCOME.unroundedAggregate === 5.93 && DA_OUTCOME.meetsMinimum === false && DA_MANIFEST_HASH === computeDirectAssessmentManifestHash(), "5.93");
+  add("RB-24: no execution behaviour", RB_CONFERS.transactionConstructedOrSimulated === false && RB_CONFERS.selectorChanged === false && RB_CONFERS.solStakingChanged === false, "read-only");
+
+  // --- Score confidentiality ---
+  add("RB-25: brief is marked internal-only for the numeric score", /INTERNAL ONLY/.test(RB_CONFERS.scoreIsInternalOnly) && /never appear on suggestion cards/.test(RB_CONFERS.scoreIsInternalOnly), "internal");
+
+  // --- Manifest determinism ---
+  add("RB-26: manifest hash is deterministic and well-formed", RB_HASH === computeReviewBriefHash() && /^review_brief_[0-9a-f]{8}$/.test(RB_HASH) && RB_MANIFEST.presentsAssessmentManifest === RB_BOUND, RB_HASH);
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 16H-T.2 — Jupiter Lend USDC provisional bounded assessment.
+ * Scores the 11 scoreable dimensions, holds incident_history as an
+ * unknown spanned 0..10, and proves the aggregate band [4.12, 4.32]
+ * sits entirely below the floor — so the unknown cannot change the answer.
+ * ------------------------------------------------------------------ */
+export function runJupProvisionalAssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  // --- Binding + validity ---
+  add("JP-1: binds to the 3 Jupiter source manifests (no drift)", JP_BOUND_PKG === "jup_risk_package_4d19e296" && JP_BOUND_IDL === "jup_idl_amendment_15730409" && JP_BOUND_TD === "jup_team_disclosure_94951f2a" && JUP_MANIFEST_HASH === "jup_risk_package_4d19e296", "bound");
+  add("JP-2: validation passes", JP_VALIDATION.valid === true && validateJupProvisional().valid === true, JP_VALIDATION.errors.join("|") || "clean");
+  add("JP-3: authored as the automated assessor, not a reviewer", JP_PROV.assessorRole === "automated_risk_assessor" && JP_PROV.assessorIsNotHumanReviewer === true && JP_PROV.kind === "provisional_bounded", "assessor");
+
+  // --- Exactly 11 scored; incident_history held out ---
+  add("JP-4: 11 dimensions scored, incident_history NOT among them", JP_SCORES.length === 11 && !JP_SCORES.some((d) => d.dimensionId === "incident_history"), `n=${JP_SCORES.length}`);
+  add("JP-5: incident_history is held out, unscored, neither zero nor favorable", JP_HELDOUT.scored === false && JP_HELDOUT.weight === 2 && JP_STATE.incidentHistoryScoredAsZero === false && JP_STATE.incidentHistoryTreatedAsFavorable === false, "held out");
+  add("JP-6: scored weight is 98, total is 100", JP_SCORES.reduce((s, d) => s + d.weight, 0) === 98 && JP_SCORES.reduce((s, d) => s + d.weight, 0) + JP_HELDOUT.weight === 100, "98+2");
+  add("JP-7: every score is in-range and matches its anchor band", JP_SCORES.every((d) => Number.isInteger(d.score) && d.score >= 0 && d.score <= 10) && JP_SCORES.every((d) => anchorMatchesScore(d.score, d.anchorBand)), "anchored");
+
+  // --- The arithmetic ---
+  add("JP-8: scored weighted points total 412", scoredWeightedPoints() === 412, `pts=${scoredWeightedPoints()}`);
+  add("JP-9: aggregate band is [4.12, 4.32]", JP_AGG.lowerBound === 4.12 && JP_AGG.upperBound === 4.32, `[${JP_AGG.lowerBound}, ${JP_AGG.upperBound}]`);
+  add("JP-10: band width equals the weight-2 maximum of 0.20", JP_AGG.bandWidth === 0.2, `w=${JP_AGG.bandWidth}`);
+  add("JP-11: recompute is deterministic", (() => { const a = computeBoundedAggregate(); return a.lowerBound === 4.12 && a.upperBound === 4.32 && a.totalWeight === 100; })(), "deterministic");
+
+  // --- The conclusion: below floor even at the generous upper bound ---
+  add("JP-12: upper bound (incident=10) is below the floor of 7", JP_OUTCOME.upperBound < 7 && JP_OUTCOME.meetsMinimumEvenAtUpperBound === false, `ub=${JP_OUTCOME.upperBound}`);
+  add("JP-13: distance from upper bound to floor is 2.68", JP_OUTCOME.distanceFromUpperBoundToFloor === 2.68, `d=${JP_OUTCOME.distanceFromUpperBoundToFloor}`);
+  add("JP-14: the finding is stated as provisional, not final", JP_OUTCOME.provisional === true && JP_OUTCOME.isFinalAggregate === false && /provisionally FAILS the floor/.test(JP_OUTCOME.interpretation), "provisional");
+
+  // --- Robustness ---
+  add("JP-15: conclusion is robust to the soft point scores", JP_ROBUST.conclusionIsRobustToPointJudgement === true && JP_ROBUST.worstCaseGenerousScenarioAggregate < 7 && /cannot plausibly approach 7|the evidence points the other way/i.test(JP_ROBUST.reasoning), `worst=${JP_ROBUST.worstCaseGenerousScenarioAggregate}`);
+  add("JP-16: only a verified build could materially move it — a protocol change, not a re-score", /verified build/.test(JP_ROBUST.whatWouldChangeIt) && /protocol-side change/.test(JP_ROBUST.whatWouldChangeIt), "protocol change");
+
+  // --- Anchoring: the one high-confidence dimension, and the low-confidence rest ---
+  add("JP-17: asset_stablecoin_risk is the only high-confidence score (8, supported)", (() => { const a = JP_SCORES.find((d) => d.dimensionId === "asset_stablecoin_risk"); const highs = JP_SCORES.filter((d) => d.confidence === "high"); return a?.score === 8 && a?.confidence === "high" && highs.length === 1; })(), "1 high");
+  add("JP-18: audit_security capped in weak band by binary-unverifiability", (() => { const a = JP_SCORES.find((d) => d.dimensionId === "audit_security"); return a?.score === 4 && a?.anchorBand === "weak" && /verified build/.test(a.limitingFact); })(), "audit=4");
+  add("JP-19: maturity reflects the ~33-hour fund-holding binary", (() => { const a = JP_SCORES.find((d) => d.dimensionId === "maturity"); return a?.score === 3 && /33 HOURS/.test(a.limitingFact); })(), "maturity=3");
+  add("JP-20: liquidity reflects the ~15% withdrawal-limiter constraint", (() => { const a = JP_SCORES.find((d) => d.dimensionId === "liquidity_withdrawal"); return a?.score === 4 && /15%|64.38M/.test(a.limitingFact); })(), "liq=4");
+  add("JP-21: every scored dimension carries a Kamino comparison", JP_SCORES.every((d) => d.vsKamino.length > 0), "compared");
+
+  // --- Consistency with the evidence system's own state ---
+  add("JP-22: evidence system still reports not_ready with incident_history the sole blocker", TD_READINESS.readiness === "not_ready_for_automated_assessment" && (() => { const r = IDL_DIMS_V2.find((d) => d.dimensionId === "incident_history"); return r?.scoreable === false; })(), "consistent");
+  add("JP-23: provisional assessment does NOT flip readiness or open the gate", JP_STATE.readinessFlipped === false && JP_STATE.finalAssessmentState === "not_ready" && JP_STATE.incidentHistoryGate === "open" && JP_PROV.readinessFlipped === false, "gate open");
+
+  // --- Separation of duties / integrity ---
+  add("JP-24: reviewer/signoff/approval are null; no fabrication", JP_STATE.reviewerId === null && JP_STATE.reviewerSignoff === null && JP_STATE.approval === null && JP_STATE.reviewerIdentityFabricated === false, "null");
+  add("JP-25: confers a bound only — not review, signoff, approval, readiness, or a clean record", (JP_CONFERS.doesNotConfer as readonly string[]).includes("a final assessment") && (JP_CONFERS.doesNotConfer as readonly string[]).includes("risk signoff") && (JP_CONFERS.doesNotConfer as readonly string[]).includes("readiness") && (JP_CONFERS.doesNotConfer as readonly string[]).includes("a clean incident record") && JP_CONFERS.incidentHistoryScored === false, "bound only");
+  add("JP-26: Kamino/Steakhouse/SOL-staking assessments untouched", JP_CONFERS.kaminoAssessmentChanged === false && JP_CONFERS.steakhouseAssessmentChanged === false && JP_CONFERS.solStakingChanged === false && DA_OUTCOME.unroundedAggregate === 5.93, "untouched");
+  add("JP-27: no execution behaviour; internal-only", JP_CONFERS.transactionConstructedOrSimulated === false && /INTERNAL ONLY/.test(JP_CONFERS.scoreIsInternalOnly), "read-only");
+
+  // --- Manifest determinism + provisional score comparison ---
+  add("JP-28: manifest hash is deterministic and well-formed", JP_HASH === computeJupProvisionalHash() && /^jup_provisional_[0-9a-f]{8}$/.test(JP_HASH) && JP_MANIFEST.upperBound === 4.32, JP_HASH);
+  add("JP-29: Jupiter's upper bound (4.32) is below both scored candidates (Kamino 5.93, Steakhouse 5.37)", JP_AGG.upperBound < 5.37 && JP_AGG.upperBound < DA_OUTCOME.unroundedAggregate && DA_OUTCOME.unroundedAggregate === 5.93, `${JP_AGG.upperBound}<5.37<5.93`);
 
   return checks;
 }

@@ -79,7 +79,7 @@ export const SCOPE_GAP_STATUS = {
   standing: [
     { gap: 1, name: "wrong subject", detail: "$0 bad debt is a claim about BAD DEBT in LENDING MARKETS. This product is a VAULT on a separate program. It is not a claim of no security, withdrawal, allocation, oracle, administrative or operational incident — which is what was asked." },
     { gap: 2, name: "the program is uncovered", detail: "No kvault postmortem exists in the docs; a governance-forum search for 'kvault' returns NO topics." },
-    { gap: 4, name: "stale for this binary", detail: "Last documented event 2026-02-05/06; most recent monthly risk report April 2026. The deployed binary is from 2026-07-14. No published review postdates the code holding user funds." },
+    { gap: 4, name: "stale for this binary", detail: "Last documented event 2026-02-05/06; monthly Risk Insights run through June 2026 (published 2026-07-03; CORRECTED AT 16H-S.0 from 'most recent April 2026', a search failure). The deployed binary is from 2026-07-14, which postdates even the June report — so for the KVault binary the gap stands unchanged: no published review postdates the code holding user funds." },
   ],
   rubricBlockerStillPresent: true,
   rubricBlocker: "no sourced incident review exists for this product",

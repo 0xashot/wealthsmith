@@ -430,9 +430,10 @@ export type IncidentReviewState =
  *     CRUCIALLY this changes SCOPE, not SAFETY: gaps 1, 2 and 4 below are untouched, each is fatal on
  *     its own, and the rubric blocker "no sourced incident review exists for this product" still
  *     stands. High coverage of EXPOSURE is not coverage of the PRODUCT.
- *  4. STALE FOR THIS BINARY. The last documented event is 2026-02-05/06 and the most recent monthly
- *     risk report found is April 2026 (published 2026-05-05). The deployed binary is from 2026-07-14.
- *     No published review postdates the code currently holding user funds.
+ *  4. STALE FOR THIS BINARY. The last documented event is 2026-02-05/06. [CORRECTED AT 16H-S.0: the
+ *     original text said "most recent monthly risk report found is April 2026" — a search failure;
+ *     Insights run through June 2026 (published 2026-07-03).] The deployed binary is from 2026-07-14,
+ *     after even the June report. No published review postdates the code currently holding user funds.
  *
  * So the rubric blocker "no sourced incident review exists" REMAINS PRESENT: a sourced review exists
  * for the lending-market layer, but not for this product. The state moves review_incomplete → partial
