@@ -1,3 +1,5 @@
+import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
+import { SUPERSEDED_COVERAGE_CALCULATION } from "./steakhouseIncidentEvidence";
 import { CONTRADICTORY_FIELDS, CANONICAL_SOURCE, CURRENT_VAULT_VERIFICATION, NOT_A_DEPOSIT_GATE, CAPACITY_SCOPE_BOUNDARY, RECONCILED_CAPACITY_RESOLUTION, RECONCILIATION_RESULT, RECONCILIATION_CONFERS, RECONCILIATION_EVIDENCE, computeReconciliationManifestHash, RECONCILIATION_MANIFEST_HASH } from "./steakhouseCapacityReconciliation";
 import { DEPOSIT_AMOUNT_SEMANTICS, REDEEM_AMOUNT_SEMANTICS, FEE_AND_TIMING_CONSTRAINTS, ACCOUNT_REQUIREMENTS, PERMISSIONING_CONSTRAINT, PER_WALLET_LIMIT, PRODUCT_ELIGIBILITY_RESTRICTION, liquidityToCollateralFloor, deriveProtocolMinimumDepositRaw, deriveMinimumRedeemCTokenRaw, CONSTRAINTS_TTL_MS, MAX_CONSTRAINTS_SLOT_SKEW, validateConstraintsIdentity, deriveKlendReserveConstraints, CONSTRAINT_LAYER_SEPARATION, CONSTRAINTS_SNAPSHOT, CONSTRAINT_PRESENTATION, PRESERVED_PRIOR_EVIDENCE_N7, CONSTRAINTS_EVIDENCE, computeConstraintsEvidenceManifestHash, CONSTRAINTS_EVIDENCE_MANIFEST_HASH, CONSTRAINTS_BLOCKER_SUPERSESSION, CONSTRAINTS_CONFERS, type ConstraintsIdentity, type ConstraintsInputs } from "./klendReserveConstraints";
 import { DEPOSIT_PATH, WITHDRAWAL_PATH, ROLLING_WITHDRAWAL_CAP, AVAILABILITY_TTL_MS, MAX_AVAILABILITY_SLOT_SKEW, evaluateDepositAvailability, collateralToLiquidityFloor, maxRedeemableCTokens, evaluateWithdrawalAccessibility, BUFFER_COVERAGE_POLICY, computeBufferCoverage, AVAILABILITY_PRESENTATION, AVAILABILITY_SNAPSHOT, SNAPSHOT_IS_NOT_PRODUCTION_INPUT_N6, PRESERVED_PRIOR_EVIDENCE_N6, STEAKHOUSE_CAPACITY_CONTRADICTION_UNTOUCHED, AVAILABILITY_EVIDENCE, computeAvailabilityEvidenceManifestHash, AVAILABILITY_EVIDENCE_MANIFEST_HASH, DEPOSIT_BLOCKER_SUPERSESSION, AVAILABILITY_CONFERS, type AvailabilityIdentity, type DepositAvailabilityInputs, type WithdrawalAccessibilityInputs } from "./klendReserveAvailability";
@@ -17625,7 +17627,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   add("16H-L.2-L2: seven evidence kinds are kept apart", CONFIRMED_INCIDENTS.length === 0 && OFFICIAL_LIMITED_SCOPE_STATEMENTS.length >= 1 && MARKETING_CLAIMS.length >= 1 && UNRESOLVED_THIRD_PARTY_LEADS.length >= 1 && STRUCTURAL_LOSS_MECHANISMS.length >= 2 && INCIDENT_EVIDENCE_SCOPE.sourcesReviewed.length >= 6 && SOCIALIZE_LOSS_HISTORY_SEARCH.scopes.length >= 2, "seven kinds");
   add("16H-L.2-L3: the official statement carries its scope and covers neither vault nor deployment", OFFICIAL_LIMITED_SCOPE_STATEMENTS.every((o) => o.coversExactVault === false && o.coversCurrentKvaultDeployment === false && o.coversAllActiveMarkets === false && o.establishesAbsenceOfNonBadDebtIncidents === false && o.statedCutoffDate === null && /BAD DEBT ONLY/i.test(o.scope)), "scoped");
   add("16H-L.2-L4: the five named stress events are preserved with their $0 bad debt", OFFICIAL_LIMITED_SCOPE_STATEMENTS[0].namedEvents.length === 5 && OFFICIAL_LIMITED_SCOPE_STATEMENTS[0].namedEvents.every((e) => e.badDebt === "$0") && OFFICIAL_LIMITED_SCOPE_STATEMENTS[0].latestEventDocumented === "2026-02-06", "5 events");
-  add("16H-L.2-L5: the exact covered allocation is 10.95% and sums correctly", OFFICIAL_EVENT_MARKET_COVERAGE.coveredAllocationPct === 10.95 && OFFICIAL_EVENT_MARKET_COVERAGE.uncoveredAllocationPct === 89.05 && Math.abs(OFFICIAL_EVENT_MARKET_COVERAGE.thisVaultsMarkets.filter((m) => m.namedInOfficialEventMaterial).reduce((s, m) => s + m.pct, 0) - 10.95) < 0.01, "10.95%");
+  add("16H-L.2-L5 (corrected at 16H-O.2): the exact covered allocation is 98.56% and sums correctly", OFFICIAL_EVENT_MARKET_COVERAGE.coveredAllocationPct === 98.56 && OFFICIAL_EVENT_MARKET_COVERAGE.uncoveredAllocationPct === 1.44 && Math.abs(OFFICIAL_EVENT_MARKET_COVERAGE.thisVaultsMarkets.filter((m) => m.namedInOfficialEventMaterial).reduce((a, m) => a + m.pct, 0) - 98.56) < 0.001 && Math.abs(OFFICIAL_EVENT_MARKET_COVERAGE.thisVaultsMarkets.reduce((a, m) => a + m.pct, 0) - 100) < 0.001, "98.56 + 1.44 = 100");
   add("16H-L.2-L6: uncovered markets are NEVER treated as having incidents", OFFICIAL_EVENT_MARKET_COVERAGE.uncoveredMeansUnexamined === true && /does NOT imply the uncovered .* experienced incidents|unexamined, not adverse/i.test(OFFICIAL_EVENT_MARKET_COVERAGE.useOfThisPercentage), "unexamined");
   add("16H-L.2-L7: the percentage is scope description only, not a risk weight", /SCOPE DESCRIPTION ONLY/i.test(OFFICIAL_EVENT_MARKET_COVERAGE.useOfThisPercentage) && /NOT a risk weight|NOT a score input/i.test(OFFICIAL_EVENT_MARKET_COVERAGE.useOfThisPercentage), "scope only");
   add("16H-L.2-L8: the marketing claim cannot establish a clean history", MARKETING_CLAIMS.every((m) => m.usableToEstablishCleanHistory === false && m.hasDefinedScope === false && m.hasCutoff === false && m.hasMethodology === false && m.hasIncidentTaxonomy === false), "context only");
@@ -17839,6 +17841,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runIncidentAliasAmendmentFixtureChecks(),
     ...runSteakhouseCapacityReconciliationFixtureChecks(),
     ...runKlendConstraintsFixtureChecks(),
     ...runKlendAvailabilityFixtureChecks(),
@@ -18907,6 +18910,103 @@ export function runSteakhouseCapacityReconciliationFixtureChecks(): FixtureCheck
   add("RC-45: the preparer is not represented as a human reviewer", RECONCILIATION_EVIDENCE.preparerIsNotHumanReviewer === true && RECONCILIATION_EVIDENCE.preparerRole === "automated_evidence_preparer", "not a reviewer");
   add("RC-46: prior Steakhouse evidence hashes remain immutable", VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd" && computeEvidenceManifestHash() === VERIFIED_EVIDENCE_MANIFEST_HASH, "evidence_a86da1fd");
   add("RC-47: all direct-lending evidence hashes remain immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && POSITION_EVIDENCE_MANIFEST_HASH === computePositionEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash() && CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash(), "5 intact");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-O.2 — Main Market → SOL/BTC Market Incident Identity & Coverage
+ * ------------------------------------------------------------------ */
+
+export function runIncidentAliasAmendmentFixtureChecks(): FixtureCheck[] {
+  const AMENDMENT_CONFERS = ALIAS_AMENDMENT_CONFERS_ALIAS;
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const closureSrc = readIf("src/suggestions/steakhouseEvidenceClosure.ts");
+  const amendSrc = readIf("src/suggestions/incidentMarketAliasAmendment.ts");
+  const COV = OFFICIAL_EVENT_MARKET_COVERAGE;
+  const inc = () => AUTOMATED_DIMENSION_ASSESSMENTS.find((d) => d.dimensionId === "incident_history")!;
+  const solbtc = () => COV.thisVaultsMarkets.find((m) => m.market === "SOL/BTC Market")!;
+  const maple = () => COV.thisVaultsMarkets.find((m) => m.market === "Maple Market")!;
+
+  // --- Alias identity ---
+  add("AL-1: the Main Market alias mapping is explicit", (MAIN_MARKET_ALIAS.historicalAliases as readonly string[]).includes("Main") && (MAIN_MARKET_ALIAS.historicalAliases as readonly string[]).includes("Main Market") && MAIN_MARKET_ALIAS.currentName === "SOL/BTC Market", "Main → SOL/BTC");
+  add("AL-2: the alias binds to the exact market address", MAIN_MARKET_ALIAS.marketAddress === "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF" && solbtc().marketAddress === MAIN_MARKET_ALIAS.marketAddress, "7u3He…");
+  add("AL-3: the conclusion is same-account-renamed-label", MAIN_MARKET_ALIAS.identityConclusion === "same_exact_market_renamed_label", "conclusion A");
+  add("AL-4: identity rests on three independent official strands", MAIN_MARKET_ALIAS.evidence.length === 3 && MAIN_MARKET_ALIAS.evidence.some((e) => /on-chain LendingMarket\.name/.test(e)) && MAIN_MARKET_ALIAS.evidence.some((e) => /isPrimary: true/.test(e)) && MAIN_MARKET_ALIAS.evidence.some((e) => /has been renamed/.test(e)), "on-chain + API + UI");
+  add("AL-5: display-name similarity alone is explicitly insufficient", /Matching assets or similar descriptions would NOT establish identity/.test(MAIN_MARKET_ALIAS.labelSimilarityIsNotProof) && (IDENTITY_RULE.neverBindBy as readonly string[]).includes("display label alone"), "address-bound");
+  add("AL-6: exact address binding is required, never the label", IDENTITY_RULE.bindBy === "exact market address" && IDENTITY_RULE.neverBindBy.length === 4, "bindBy address");
+  add("AL-7: the rename is possible because the name is mutable on a stable account", /MUTABLE field on a STABLE account/.test(IDENTITY_RULE.renameIsPossibleBecause), "config update, not a new market");
+  add("AL-8: confidence is high but NOT absolute, with the limitation recorded", MAIN_MARKET_ALIAS.confidence === "high_not_absolute" && /does NOT print its address/.test(MAIN_MARKET_ALIAS.limitation), "no dated address snapshot");
+
+  // --- Coverage correction ---
+  add("AL-9: the prior 10.95% result is preserved historically", SUPERSEDED_COVERAGE_CALCULATION.coveredAllocationPct === 10.95 && SUPERSEDED_COVERAGE_CALCULATION.uncoveredAllocationPct === 89.05 && COVERAGE_CORRECTION.priorResultPreserved === true, "not overwritten");
+  add("AL-10: the prior result records WHY it was wrong and why it was reasonable", /market IDENTITY was not/.test(SUPERSEDED_COVERAGE_CALCULATION.whyItWasWrong) && /correct default/.test(SUPERSEDED_COVERAGE_CALCULATION.whyTheErrorWasReasonable), "auditable");
+  add("AL-11: corrected coverage is 98.56%", COV.coveredAllocationPct === 98.56 && COVERAGE_CORRECTION.correctedCoveredPct === 98.56, "98.56");
+  add("AL-12: corrected uncovered allocation is 1.44%", COV.uncoveredAllocationPct === 1.44 && COVERAGE_CORRECTION.correctedUncoveredPct === 1.44, "1.44");
+  add("AL-13: coverage is computed from exact allocations and sums to 100", Math.abs(COV.thisVaultsMarkets.filter((m) => m.namedInOfficialEventMaterial).reduce((a, m) => a + m.pct, 0) - 98.56) < 0.001 && Math.abs(COV.thisVaultsMarkets.reduce((a, m) => a + m.pct, 0) - 100) < 0.001, "87.61+10.29+0.66 = 98.56");
+  add("AL-14: SOL/BTC is now covered, named as 'Main'", solbtc().namedInOfficialEventMaterial === true && solbtc().namedAs === "Main" && solbtc().pct === 87.61, "87.61% covered");
+  add("AL-15: Maple remains uncovered and visible", maple().namedInOfficialEventMaterial === false && maple().pct === 1.44 && COVERAGE_CORRECTION.mapleRemainsUncovered === true, "1.44% uncovered");
+  add("AL-16: coverage can never reach 100% and the residual is real", COVERAGE_CORRECTION.coverageCannotReach100 === true && /not a KLend stress-event market/.test(COVERAGE_CORRECTION.mapleRationale), "Maple not a KLend market");
+  add("AL-17: the allocation snapshot is unchanged, so the correction is identity-only", /unchanged/.test(COVERAGE_CORRECTION.allocationSnapshot) && /attributable to identity alone/.test(COVERAGE_CORRECTION.allocationSnapshot), "same snapshot");
+  add("AL-18: allocation remains explicitly dynamic and must be recomputed", COV.allocationIsDynamic.length > 0 && /recomputed, not cached/.test(COV.allocationIsDynamic), "slot-bound");
+
+  // --- Forbidden inferences ---
+  add("AL-19: coverage is NOT converted into a safety claim", /says nothing about whether that exposure is safe/.test(FORBIDDEN_INFERENCES.coverageIsNotSafety) && /NOR does the covered 98\.56% imply safety/i.test(COV.useOfThisPercentage), "scope ≠ safety");
+  add("AL-20: zero bad debt is NOT converted into zero incidents", /NOT zero incidents, NOT zero exploits/.test(FORBIDDEN_INFERENCES.zeroBadDebtIsNotZeroIncidents) && /future losses cannot occur/.test(FORBIDDEN_INFERENCES.zeroBadDebtIsNotZeroIncidents), "narrow accounting claim");
+  add("AL-21: KLend evidence is NOT converted into KVault evidence", /does not transfer to kvault/.test(FORBIDDEN_INFERENCES.klendEvidenceIsNotKvaultEvidence), "scopes separate");
+  add("AL-22: 'zero confirmed incidents is a SEARCH RESULT' is preserved", /SEARCH RESULT, not a clean record/.test(FORBIDDEN_INFERENCES.zeroConfirmedIncidentsIsASearchResult) && /SEARCH RESULT, not a clean record/.test(inc().rationale), "preserved verbatim");
+  add("AL-23: uncovered means unexamined, not adverse", COV.uncoveredMeansUnexamined === true && /means UNEXAMINED, not that anything went wrong/.test(FORBIDDEN_INFERENCES.uncoveredIsNotAdverse), "not adverse");
+  add("AL-24: a coverage percentage is not a risk weight or score input", /NOT a risk weight, NOT a score input/.test(COV.useOfThisPercentage) && /not a score input/.test(FORBIDDEN_INFERENCES.higherCoverageDoesNotRaiseScores), "scope description only");
+
+  // --- Scope gaps ---
+  add("AL-25: exactly one scope gap was corrected", SCOPE_GAP_STATUS.corrected.length === 1 && SCOPE_GAP_STATUS.corrected[0].gap === 3, "gap 3 only");
+  add("AL-26: three scope gaps still stand, each fatal alone", SCOPE_GAP_STATUS.standing.length === 3 && SCOPE_GAP_STATUS.standing.map((g) => g.gap).join(",") === "1,2,4" && SCOPE_GAP_STATUS.eachStandingGapIsFatalAlone === true, "1, 2, 4");
+  add("AL-27: the rubric blocker still stands", SCOPE_GAP_STATUS.rubricBlockerStillPresent === true && SCOPE_GAP_STATUS.rubricBlocker === "no sourced incident review exists for this product", "still present");
+  add("AL-28: the closure module records gap 3 as corrected", /CORRECTED AT 16H-O\.2, NO LONGER A GAP/.test(closureSrc) && /coverage is 98\.56%/.test(closureSrc), "closure updated");
+  add("AL-29: the closure module preserves gaps 1, 2 and 4 verbatim", /1\. WRONG SUBJECT/.test(closureSrc) && /2\. THE PROGRAM IS UNCOVERED/.test(closureSrc) && /4\. STALE FOR THIS BINARY/.test(closureSrc), "3 gaps intact");
+  add("AL-30: the closure module states coverage change is scope, not safety", /changes SCOPE, not SAFETY/.test(closureSrc) && /High coverage of EXPOSURE is not coverage of the PRODUCT/.test(closureSrc), "explicit");
+  add("AL-31: the KVault program remains uncovered and current-binary scope unresolved", /kvault/i.test(SCOPE_GAP_STATUS.standing[1].detail) && /2026-07-14/.test(SCOPE_GAP_STATUS.standing[2].detail), "gaps 2 + 4");
+
+  // --- Score outcome ---
+  add("AL-32: Steakhouse incident_history remains 4", inc().score === 4 && STEAKHOUSE_SCORE_OUTCOME.resultingScore === 4 && STEAKHOUSE_SCORE_OUTCOME.scoreChanged === false, "4");
+  add("AL-33: confidence remains low", inc().confidence === "low" && STEAKHOUSE_SCORE_OUTCOME.resultingConfidence === "low" && STEAKHOUSE_SCORE_OUTCOME.confidenceChanged === false, "low");
+  add("AL-34: weight and anchor band are unchanged", inc().weight === 2 && inc().anchorBand === "weak" && STEAKHOUSE_SCORE_OUTCOME.anchorBandUnchanged === "weak", "2 / weak");
+  add("AL-35: the score did not rise merely because coverage rose", /Coverage was never the binding constraint/.test(STEAKHOUSE_SCORE_OUTCOME.whyUnchanged) && /scoring the search, not the evidence/.test(STEAKHOUSE_SCORE_OUTCOME.whyUnchanged), "anchor did not move");
+  add("AL-36: the aggregate remains 5.37", Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005 && STEAKHOUSE_SCORE_OUTCOME.resultingAggregate === 5.37 && STEAKHOUSE_SCORE_OUTCOME.aggregateRecalculated === false, "5.37");
+  add("AL-37: meetsMinimum remains false", AUTOMATED_ASSESSMENT_OUTCOME.meetsMinimum === false && STEAKHOUSE_SCORE_OUTCOME.meetsMinimum === false && STEAKHOUSE_SCORE_OUTCOME.minimumThreshold === 7, "5.37 < 7");
+  add("AL-38: no new assessment version was created", STEAKHOUSE_SCORE_OUTCOME.newAssessmentVersionCreated === false && (STEAKHOUSE_SCORE_OUTCOME.assessmentVersionsPreserved as readonly string[]).includes("1.0.0") && (STEAKHOUSE_SCORE_OUTCOME.assessmentVersionsPreserved as readonly string[]).includes("1.1.0"), "amendment only");
+  add("AL-39: no threshold targeting occurred", STEAKHOUSE_SCORE_OUTCOME.thresholdTargeting === false && /aggregate is an output, never a target/.test(STEAKHOUSE_SCORE_OUTCOME.thresholdTargetingNote), "not targeted");
+  add("AL-40: all other Steakhouse dimensions remain immutable", STEAKHOUSE_SCORE_OUTCOME.otherDimensionsUnchanged === true && STEAKHOUSE_SCORE_OUTCOME.otherDimensions.length === 11 && AUTOMATED_DIMENSION_ASSESSMENTS.length === 12, "11 untouched + incident = 12");
+  add("AL-41: the corrected rationale names the alias fix AND retains the three gaps", /16H-O\.2 alias correction/.test(inc().rationale) && /WRONG SUBJECT/.test(inc().rationale) && /THE PROGRAM IS UNCOVERED/.test(inc().rationale) && /STALE FOR THIS BINARY/.test(inc().rationale), "scope corrected, gaps kept");
+  add("AL-42: the limitingFact records the correction and why the score held", /CORRECTED AT 16H-O\.2/.test(inc().limitingFact) && /98\.56%/.test(inc().limitingFact) && /THE SCORE IS UNCHANGED/.test(inc().limitingFact), "explicit");
+  add("AL-43: the rationale states higher coverage is not a safety finding", /higher coverage percentage is not a safety finding/.test(inc().rationale) && /Absence of evidence is not evidence of absence/.test(inc().rationale), "explicit");
+
+  // --- Direct reserve ---
+  const D = DIRECT_RESERVE_INCIDENT_EVIDENCE;
+  add("AL-44: the exact direct reserve receives the corrected market evidence", D.marketAddress === "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF" && D.reserveAddress === "D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59" && D.candidateId === "kamino_usdc_lending", "bound");
+  add("AL-45: the exact market is recorded as named in official material, as 'Main'", D.exactMarketIsNamedInOfficialMaterial === true && D.namedAs === "Main", "covered");
+  add("AL-46: NO direct-reserve score is assigned", D.scoreAssigned === false && /No direct-reserve incident_history score is assigned/.test(D.scoreAssignedNote) && (AMENDMENT_CONFERS.doesNotConfer as readonly string[]).includes("a direct-reserve score") && AMENDMENT_CONFERS.directReserveScoreAssigned === false, "input only");
+  add("AL-47: what zero bad debt does NOT establish is enumerated for the reserve", D.whatZeroBadDebtDoesNotEstablish.length === 5 && D.whatZeroBadDebtDoesNotEstablish.some((x) => /exploit/.test(x)) && D.whatZeroBadDebtDoesNotEstablish.some((x) => /future losses cannot occur/.test(x)), "5 non-claims");
+  add("AL-48: the reserve's material difference from Steakhouse is recorded, not flattened", /gaps 1 and 2/.test(D.whyGapsOneAndTwoDoNotApplyHere) && /MATERIAL difference/.test(D.whyGapsOneAndTwoDoNotApplyHere), "IS a lending-market reserve");
+  add("AL-49: event-window binding remains unresolved rather than assumed", /UNRESOLVED/.test(D.reserveExistedDuringEvents) && /UNRESOLVED/.test(D.usdcSupplyExposedDuringEvents), "not assumed");
+  add("AL-50: market-owner period and socialize-loss scope are recorded", /period over which this owner has held the role was NOT established/.test(D.currentMarketOwnerPeriod) && /socialize_loss requires lending_market_owner/.test(D.socializeLossSearchScope), "scoped");
+  add("AL-51: readiness is partial with the gaps enumerated", D.incidentHistoryReadiness === "partial" && D.remainingGaps.length === 5 && /NOT sufficient to conclude a clean record/.test(D.readinessRationale), "partial");
+
+  // --- Boundaries + evidence ---
+  add("AL-52: the amendment manifest is deterministic", ALIAS_AMENDMENT_MANIFEST_HASH === computeAliasAmendmentManifestHash() && /^incident_alias_evidence_[0-9a-f]{8}$/.test(ALIAS_AMENDMENT_MANIFEST_HASH), ALIAS_AMENDMENT_MANIFEST_HASH);
+  add("AL-53: the amendment records why Main was previously treated as distinct", /prints no address/.test(ALIAS_AMENDMENT_EVIDENCE.whyMainWasTreatedAsDistinct) && /correct default/.test(ALIAS_AMENDMENT_EVIDENCE.whyMainWasTreatedAsDistinct), "reasonable error");
+  add("AL-54: the amendment records cutoff, limitations and invalidation triggers", ALIAS_AMENDMENT_EVIDENCE.sourceCutoff.length > 0 && ALIAS_AMENDMENT_EVIDENCE.limitations.length === 1 && ALIAS_AMENDMENT_EVIDENCE.invalidationTriggers.length === 5 && ALIAS_AMENDMENT_EVIDENCE.whatChanged.length === 6, "complete");
+  add("AL-55: the preparer is not represented as a human reviewer", ALIAS_AMENDMENT_EVIDENCE.preparerIsNotHumanReviewer === true && ALIAS_AMENDMENT_EVIDENCE.preparerRole === "automated_evidence_preparer", "not a reviewer");
+  add("AL-56: human review remains pending", AMENDMENT_CONFERS.humanReviewRemains === "awaiting_reviewer" && HUMAN_REVIEW_PACKET !== undefined, "awaiting_reviewer");
+  add("AL-57: no signoff, approval, recommendation, card or execution change", AMENDMENT_CONFERS.signoffOccurred === false && AMENDMENT_CONFERS.productApproved === false && AMENDMENT_CONFERS.recommendationBehaviourChanged === false && AMENDMENT_CONFERS.cardRendered === false && AMENDMENT_CONFERS.executionBehaviourChanged === false, "none");
+  add("AL-58: no safety finding is conferred", (AMENDMENT_CONFERS.doesNotConfer as readonly string[]).includes("a safety finding") && (AMENDMENT_CONFERS.doesNotConfer as readonly string[]).includes("a score change") && (AMENDMENT_CONFERS.doesNotConfer as readonly string[]).includes("a new assessment version"), "scope only");
+  add("AL-59: Demo, /testing and SOL staking are unchanged", AMENDMENT_CONFERS.demoChanged === false && AMENDMENT_CONFERS.testingPresentationChanged === false && AMENDMENT_CONFERS.solStakingChanged === false, "unchanged");
+  add("AL-60: the amendment adds no execution behaviour", !/sendTransaction|signTransaction|simulateTransaction/.test(amendSrc), "read-only");
+  add("AL-61: prior Steakhouse evidence + capacity reconciliation are unchanged", VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd" && RECONCILIATION_MANIFEST_HASH === computeReconciliationManifestHash() && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker === "blocked_deposit_availability" && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.capacityAdapterState === "adapter_implemented_source_verified", "O.1 intact");
+  add("AL-62: direct-lending mechanical evidence is unchanged", getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && POSITION_EVIDENCE_MANIFEST_HASH === computePositionEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash() && CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash(), "N.4-N.7 intact");
 
   return checks;
 }

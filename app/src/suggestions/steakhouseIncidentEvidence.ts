@@ -421,19 +421,64 @@ export const NO_SINGLE_HAS_INCIDENT_BOOLEAN = {
 } as const;
 
 /** Official material covering the Feb 2026 event named these markets. Ours are mostly not among them. */
+/**
+ * The alias mapping corrected at 16H-O.2. The official stress-event material names markets by DISPLAY
+ * LABEL and never prints an address, which is exactly how the original error arose: "Main" was read as
+ * a market distinct from "SOL/BTC Market" when it is the same account under a later label.
+ *
+ * The rename is possible because `LendingMarket.name` is a MUTABLE field on a STABLE account — renaming
+ * never mints a new market. Identity therefore binds to the ADDRESS, never to the label.
+ */
+export const MARKET_ALIAS_MAPPING = [
+  {
+    currentName: "SOL/BTC Market",
+    historicalAliases: ["Main", "Main Market"],
+    marketAddress: "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF",
+    identityConclusion: "same_exact_market_renamed_label" as const,
+    confidence: "high_not_absolute" as const,
+    evidence: [
+      "on-chain LendingMarket.name at 7u3He… reads 'SOL/BTC Market' — the name is a mutable field on a stable account, so a rename is a config update to the SAME address",
+      "Kamino API v2/kamino-market for the exact address: name 'SOL/BTC Market', isPrimary: true, description 'Primary market on mainnet' — the ONLY isPrimary entry among 34 markets, which is what 'Main Market' denoted",
+      "Kamino UI (kamino.com/borrow), verified verbatim: 'The Main Market has been renamed to the SOL/BTC Market.'",
+    ],
+    limitation:
+      "The February 2026 case study names 'Main Market' but does NOT print its address. Identity rests on the official rename statement, the unique primary-market designation, the stable account address and the mutable name field — not on a dated address snapshot. Hence high, not absolute.",
+    labelSimilarityIsNotProof:
+      "Matching assets or similar descriptions would NOT establish identity. The load-bearing facts are the explicit rename statement and the unique isPrimary designation on the exact address.",
+  },
+] as const;
+
+/** The superseded 16H-L.2 calculation, retained so the correction is auditable. NEVER delete. */
+export const SUPERSEDED_COVERAGE_CALCULATION = {
+  supersededAt: "16H-O.2",
+  recordedAtStep: "16H-L.2",
+  coveredAllocationPct: 10.95,
+  uncoveredAllocationPct: 89.05,
+  derivation: "JLP 10.29 + Bitcoin 0.66",
+  whyItWasWrong:
+    "It treated the officially-named 'Main' market as distinct from this vault's 'SOL/BTC Market' allocation. They are the same account (7u3He…). The arithmetic was correct; the market IDENTITY was not.",
+  whyTheErrorWasReasonable:
+    "The official material names markets only by display label. Nothing in the case study revealed that 'Main' had been relabelled, and refusing to equate two different labels without proof was the correct default — the fix was to FIND the rename evidence, not to have assumed it.",
+  conclusionUnaffected:
+    "This corrected only the 'dominant market uncovered' gap. The product-, program- and binary-scope gaps stand, so incident_history remains 4 / low and the aggregate remains 5.37.",
+} as const;
+
 export const OFFICIAL_EVENT_MARKET_COVERAGE = {
   marketsNamedInOfficialStressEventMaterial: ["Main", "JLP", "Bitcoin", "Fartcoin", "JTO"],
+  /** 16H-O.2: `namedInOfficialEventMaterial` is now resolved by ADDRESS via MARKET_ALIAS_MAPPING. */
   thisVaultsMarkets: [
-    { market: "SOL/BTC Market", pct: 87.61, namedInOfficialEventMaterial: false },
+    { market: "SOL/BTC Market", marketAddress: "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF", pct: 87.61, namedInOfficialEventMaterial: true, namedAs: "Main", aliasCorrectedAt: "16H-O.2" },
     { market: "JLP Market", pct: 10.29, namedInOfficialEventMaterial: true },
     { market: "Maple Market", pct: 1.44, namedInOfficialEventMaterial: false },
     { market: "Bitcoin Market", pct: 0.66, namedInOfficialEventMaterial: true },
   ],
-  /** JLP 10.29 + Bitcoin 0.66. Computed from the same slot as RESERVE_WITHDRAWAL_BEHAVIOR. */
-  coveredAllocationPct: 10.95,
-  uncoveredAllocationPct: 89.05,
+  /** 16H-O.2: SOL/BTC 87.61 (as 'Main') + JLP 10.29 + Bitcoin 0.66. Prior: SUPERSEDED_COVERAGE_CALCULATION. */
+  coveredAllocationPct: 98.56,
+  /** Maple Market only — it is not a KLend stress-event market, so coverage can never reach 100%. */
+  uncoveredAllocationPct: 1.44,
+  supersededCalculation: "see SUPERSEDED_COVERAGE_CALCULATION (10.95 / 89.05, 16H-L.2)",
   useOfThisPercentage:
-    "SCOPE DESCRIPTION ONLY. It states how much of the current allocation the official event reports demonstrably speak to. It is NOT a risk weight, NOT a score input, and it emphatically does NOT imply the uncovered 89.05% experienced incidents — uncovered means unexamined, not adverse.",
+    "SCOPE DESCRIPTION ONLY. It states how much of the current allocation the official event reports demonstrably speak to. It is NOT a risk weight, NOT a score input, and it emphatically does NOT imply the uncovered 1.44% experienced incidents — uncovered means unexamined, not adverse. NOR does the covered 98.56% imply safety: the reports speak to BAD DEBT IN LENDING MARKETS, not to this vault, its program, or the deployed binary. High coverage of EXPOSURE is not coverage of the PRODUCT.",
   uncoveredMeansUnexamined: true,
   allocationIsDynamic:
     "These percentages are a slot-bound snapshot. The allocation admin can change them at any time (observed drift: SOL/BTC 74.2% → 69.37% → 87.61%), so the coverage percentage itself moves with the allocation and must be recomputed, not cached.",

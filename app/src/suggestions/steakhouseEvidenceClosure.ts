@@ -419,10 +419,17 @@ export type IncidentReviewState =
  *     allocation, oracle, administrative or operational incident, which is what was asked.
  *  2. THE PROGRAM IS UNCOVERED. Zero incident coverage for the kvault program exists anywhere located:
  *     no postmortem in the docs, and a governance-forum search for "kvault" returns NO topics.
- *  3. THE DOMINANT MARKET IS UNCOVERED. The Feb 2026 case study's market breakdown lists Main, JLP,
- *     Bitcoin, Fartcoin and JTO. **SOL/BTC Market — 87.61% of this vault's allocation — does not
- *     appear**, nor does Maple Market (1.44%). The track record demonstrably covers 10.95% of this
- *     vault's exposure by weight (JLP 10.29% + Bitcoin 0.66%).
+ *  3. ~~THE DOMINANT MARKET IS UNCOVERED~~ — CORRECTED AT 16H-O.2, NO LONGER A GAP. This gap rested on
+ *     an IDENTITY ERROR: the Feb 2026 case study lists "Main", and "Main Market" was renamed to
+ *     "SOL/BTC Market" — the same account, 7u3He… (on-chain LendingMarket.name is a mutable field on a
+ *     stable address; Kamino's API marks that exact address isPrimary: true, "Primary market on
+ *     mainnet"; the UI states the rename verbatim). So the dominant 87.61% IS named, as "Main", and
+ *     coverage is 98.56% (SOL/BTC 87.61 + JLP 10.29 + Bitcoin 0.66), not 10.95%. Only Maple Market
+ *     (1.44%) remains uncovered — it is not a KLend stress-event market, so coverage cannot reach 100%.
+ *     The prior figure is retained at steakhouseIncidentEvidence.SUPERSEDED_COVERAGE_CALCULATION.
+ *     CRUCIALLY this changes SCOPE, not SAFETY: gaps 1, 2 and 4 below are untouched, each is fatal on
+ *     its own, and the rubric blocker "no sourced incident review exists for this product" still
+ *     stands. High coverage of EXPOSURE is not coverage of the PRODUCT.
  *  4. STALE FOR THIS BINARY. The last documented event is 2026-02-05/06 and the most recent monthly
  *     risk report found is April 2026 (published 2026-05-05). The deployed binary is from 2026-07-14.
  *     No published review postdates the code currently holding user funds.
