@@ -1,3 +1,4 @@
+import { SUPERSEDED_BINARY_DATE_CLAIM as BD_SUPERSEDED, CORRECTED_BINARY_FACT as BD_FACT, DETECTION as BD_DETECTION, SCORE_IMPACT as BD_IMPACT, CORRECTION_EVIDENCE as BD_EVIDENCE, computeBinaryDateCorrectionHash, BINARY_DATE_CORRECTION_HASH as BD_HASH, CORRECTION_INVARIANTS as BD_INVARIANTS } from "./directAssessmentBinaryDateCorrection";
 import { DIRECT_ASSESSMENT_PROVENANCE as DA_PROVENANCE, DIRECT_DIMENSION_ASSESSMENTS as DA_DIMS, computeDirectAggregate, DIRECT_AGGREGATE_RESULT as DA_AGG_RESULT, DIRECT_ASSESSMENT_OUTCOME as DA_OUTCOME, LOWEST_SCORING_DIMENSIONS as DA_LOWEST_SCORE, LOWEST_CONFIDENCE_DIMENSIONS as DA_LOWEST_CONF, HUMAN_REVIEW_FOCUS_AREAS as DA_FOCUS, ASSESSMENT_LIMITATIONS as DA_LIMITS, DIRECT_ASSESSMENT_STATE as DA_STATE, validateDirectAssessment, DIRECT_ASSESSMENT_VALIDATION as DA_VALIDATION, DIRECT_HUMAN_REVIEW_PACKET as DA_PACKET, DIRECT_ASSESSMENT_MANIFEST as DA_MANIFEST, computeDirectAssessmentManifestHash, DIRECT_ASSESSMENT_MANIFEST_HASH as DA_MANIFEST_HASH, DIRECT_ASSESSMENT_CONFERS as DA_CONFERS } from "./klendDirectUsdcAutomatedAssessment";
 import { AGGREGATE_COMPUTATION_VERSION as AGG_VERSION } from "./steakhouseAutomatedAssessment";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
@@ -17845,6 +17846,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runBinaryDateCorrectionFixtureChecks(),
     ...runDirectAssessmentFixtureChecks(),
     ...runAuthorityResolutionFixtureChecks(),
     ...runRiskEvidencePackageFixtureChecks(),
@@ -19295,6 +19297,69 @@ export function runDirectAssessmentFixtureChecks(): FixtureCheck[] {
   add("DA-66: no transaction is constructed or simulated", DA_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction/.test(src), "read-only");
   add("DA-67: all prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash() && CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash() && ALIAS_AMENDMENT_MANIFEST_HASH === computeAliasAmendmentManifestHash() && AUTH_MANIFEST_HASH === computeAuthorityManifestHash() && VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd", "7 intact");
   add("DA-68: the package remains ready and unmutated by scoring", PKG_READINESS.readiness === "ready_for_automated_assessment" && PKG_DIMENSIONS.every((d) => !("score" in d)), "package score-free");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-P.2a — Direct Assessment Binary-Date Correction
+ * ------------------------------------------------------------------ */
+
+export function runBinaryDateCorrectionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const asmt = readIf("src/suggestions/klendDirectUsdcAutomatedAssessment.ts");
+  const pkg = readIf("src/suggestions/klendDirectUsdcRiskEvidencePackage.ts");
+  const F = BD_FACT, S = BD_SUPERSEDED, I = BD_IMPACT;
+  const dim = (id: string) => DA_DIMS.find((d) => String(d.dimensionId) === id)!;
+
+  // --- The corrected fact ---
+  add("BD-1: the KLend binary date is corrected to 2026-05-28", F.deployedAt === "2026-05-28T12:47:42.000Z" && F.deployedSlot === 422723185, "2026-05-28");
+  add("BD-2: the corrected age is ~50 days, not 3", Math.abs(F.ageDaysAtAssessment - 50) < 1 && F.priorClaimedAgeDays === 3, "50 vs 3");
+  add("BD-3: the date is bound to the ProgramData slot and a verification method", F.programDataAccount === "9uSbGW1y9H5Av6H5TKxQ1wnFApSq2t3oEpfF2YfjDQGA" && /ProgramData offset 4/.test(F.verificationMethod) && F.verifiedAtSlot > F.deployedSlot, "slot → blockTime");
+
+  // --- THE GUARD THAT WOULD HAVE CAUGHT IT ---
+  // The error was a KVault→KLend date transfer. Assert the two programs' binary dates are NOT equal,
+  // and that no KLend module asserts the KVault date. This is the check that was missing.
+  add("BD-4: GUARD — the KLend binary date is NOT the KVault binary date", String(F.deployedAt) !== "2026-07-14T14:54:02.000Z" && !/2026-07-14/.test(F.deployedAt), "different programs, different dates");
+  add("BD-5: GUARD — no KLend module asserts the KVault binary date as its own", (() => { const strip = (s: string) => s.replace(/CORRECTED AT 16H-P\.2a[^"]*/g, "").replace(/the KVault binary date[^"]*/g, "").replace(/KVAULT binary date carried over[^"]*/g, "").replace(/the KVault date[^"]*/g, ""); return !/2026-07-14/.test(strip(asmt)) && !/2026-07-14/.test(strip(pkg)); })(), "no bare KVault date in KLend modules");
+  add("BD-6: the KVault date remains correct where it belongs", /2026-07-14T14:54:02\.000Z/.test(readIf("src/suggestions/steakhouseEvidenceClosure.ts")), "KVault untouched");
+  add("BD-7: no '~3 days old' claim survives anywhere", !/3 days old/.test(asmt) && !/3 days old/.test(pkg), "removed");
+
+  // --- The error is preserved, not erased ---
+  add("BD-8: the erroneous claim is preserved verbatim", S.claim === "The deployed KLend binary dates from 2026-07-14." && S.restatedAs === "the deployed binary is ~3 days old", "preserved");
+  add("BD-9: the error's scope is recorded exactly", S.affectedSites === 9 && S.affectedModules.length === 2 && S.affectedDimensions.length === 3, "9 sites, 2 modules, 3 dims");
+  add("BD-10: the error class is named as a KVault→KLend transfer", S.errorClass === "kvault_to_klend_evidence_transfer" && /different program/.test(S.whyItWasWrong), "named");
+  add("BD-11: the irony is recorded rather than buried", /refused this exact transfer for the upgrade authority/.test(S.irony) && /applied to the fact under examination but not to the surrounding context/.test(S.irony), "self-critical");
+  add("BD-12: history was not rewritten", BD_EVIDENCE.historyRewritten === false, "additive");
+
+  // --- Detection path ---
+  add("BD-13: the detection path is recorded — a cross-check, not internal review", /Jupiter Lend scouting/.test(BD_DETECTION.foundBy) && /not by review of the assessment/.test(BD_DETECTION.foundBy), "found by comparison");
+  add("BD-14: the mechanism records why it was arithmetically impossible", /430476341/.test(BD_DETECTION.mechanism) && /HIGHER slot is necessarily more recent/.test(BD_DETECTION.mechanism), "slot arithmetic");
+  add("BD-15: the fixture blind spot is recorded", /internally consistent and externally false/.test(BD_DETECTION.internalConsistencyDidNotCatchIt) && /never its arithmetic against chain/.test(BD_DETECTION.internalConsistencyDidNotCatchIt), "structure ≠ arithmetic");
+
+  // --- Nothing moved ---
+  add("BD-16: no score changed", I.scoresChanged === false && dim("audit_security").score === 6 && dim("maturity").score === 4 && dim("incident_history").score === 5, "6 / 4 / 5");
+  add("BD-17: no confidence changed", I.confidenceChanged === false && dim("audit_security").confidence === "medium" && dim("maturity").confidence === "low" && dim("incident_history").confidence === "low", "unchanged");
+  add("BD-18: the aggregate is unchanged", I.aggregateChanged === false && DA_OUTCOME.unroundedAggregate === 5.93 && I.priorAggregate === I.resultingAggregate, "5.93");
+  add("BD-19: meetsMinimum remains false", DA_OUTCOME.meetsMinimum === false && I.meetsMinimum === false, "false");
+  add("BD-20: no new assessment version was minted", I.assessmentVersionBumped === false && I.assessmentVersionRemains === "1.0.0" && DA_PROVENANCE.assessmentVersion === "1.0.0", "1.0.0");
+  add("BD-21: the manifest hash is unchanged BY CONSTRUCTION", I.manifestHashChanged === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && DA_MANIFEST_HASH === computeDirectAssessmentManifestHash() && /NOT rationale prose/.test(I.manifestHashStableByConstruction), "rationale ∉ hash");
+  add("BD-22: the correction invariants hold live", BD_INVARIANTS.aggregateStillFiveNinetyThree === true && BD_INVARIANTS.meetsMinimumStillFalse === true && BD_INVARIANTS.twelveDimensionsIntact === true && BD_INVARIANTS.manifestHashUnchanged === true, "4 invariants");
+  add("BD-23: each unmoved score is justified on its REAL reason", I.whyNoScoreMoved.length === 3 && /audit commits are PRIVATE-repo, not that the binary is new/.test(I.whyNoScoreMoved[0]) && /never rested on '3 days'/.test(I.whyNoScoreMoved[1]) && /still postdates every documented event/.test(I.whyNoScoreMoved[2]), "reasons survive");
+  add("BD-24: a score-dependent error would have forced a reassessment", /REASSESSMENT requiring a new immutable assessment version/.test(I.ifAScoreHadDepended) && /checked rather than assumed/.test(I.ifAScoreHadDepended), "checked");
+  add("BD-25: the reviewer is told regardless", /should know an assessment they are reviewing contained a wrong fact/.test(I.reviewerShouldStillKnow), "disclosed");
+
+  // --- Corrected rationales still coherent ---
+  add("BD-26: the three affected rationales now carry the corrected date", /2026-05-28/.test(dim("audit_security").limitingFact) && /2026-05-28/.test(dim("maturity").limitingFact) && /2026-05-28/.test(dim("incident_history").limitingFact), "3 corrected");
+  add("BD-27: each corrected rationale marks the correction", /CORRECTED AT 16H-P\.2a/.test(dim("audit_security").limitingFact) && /CORRECTED AT 16H-P\.2a/.test(dim("maturity").limitingFact) && /corrected at 16H-P\.2a/.test(dim("incident_history").limitingFact), "traceable");
+  add("BD-28: incident_history's gap-4 reasoning still holds against the real date", /postdates every documented event/.test(dim("incident_history").limitingFact) && new Date(F.deployedAt) > new Date("2026-02-06") && new Date(F.deployedAt) > new Date("2026-05-05"), "2026-05-28 > both");
+  add("BD-29: audit_security's linkage gap is date-independent", /every referenced commit is private and unmappable/.test(dim("audit_security").limitingFact) && /linkage gap is unaffected by the correction/.test(dim("audit_security").limitingFact), "private commits");
+  add("BD-30: the correction manifest is deterministic", BD_HASH === computeBinaryDateCorrectionHash() && /^binary_date_correction_[0-9a-f]{8}$/.test(BD_HASH), BD_HASH);
+  add("BD-31: prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && AUTH_MANIFEST_HASH === computeAuthorityManifestHash() && ALIAS_AMENDMENT_MANIFEST_HASH === computeAliasAmendmentManifestHash() && VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd", "4 intact");
+  add("BD-32: the Steakhouse assessment is untouched", Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005 && AUTOMATED_ASSESSMENT_OUTCOME.meetsMinimum === false, "5.37 / false");
 
   return checks;
 }

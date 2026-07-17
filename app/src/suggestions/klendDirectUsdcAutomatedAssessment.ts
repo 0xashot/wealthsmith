@@ -22,7 +22,7 @@
  * THE UNCOMFORTABLE FACTS ARE IN THE SCORES, NOT FOOTNOTED:
  *   • supplier principal can be written down via socialize_loss at 4-of-10 + 12h
  *   • a 2-of-7 multisig with ZERO timelock can freeze every exit immediately
- *   • the deployed binary is ~3 days old and no audit maps to it
+ *   • the deployed binary is ~50 days old and no audit maps to it (date corrected at 16H-P.2a)
  *   • the borrower-collateral oracle surface — the supplier's dominant oracle exposure — is unexamined
  */
 import { aggregateRiskScore, computeRubricV1Hash, PROTOCOL_RISK_RUBRIC_V1_ID, PROTOCOL_RISK_RUBRIC_V1_SEMVER, type RiskRubricV1DimensionId } from "./riskGovernance";
@@ -103,7 +103,7 @@ export const DIRECT_DIMENSION_ASSESSMENTS: DirectDimensionAssessment[] = [
     anchorBand: "partial",
     evidenceReadiness: "partial",
     confidence: "medium",
-    limitingFact: "NO audit maps to the deployed binary. Sec3 cites 8273031ea75e3972cce5314cefe3e88f962927c5, Offside cites master + 4 hashes, OtterSec cites 8a4b1fe — `git cat-file` proved NONE exist in the public repository, so every referenced commit is private and unmappable. The deployed code (slot 422723185, ~2026-07-14) is ~3 days old at assessment; no published report postdates it.",
+    limitingFact: "NO audit maps to the deployed binary. Sec3 cites 8273031ea75e3972cce5314cefe3e88f962927c5, Offside cites master + 4 hashes, OtterSec cites 8a4b1fe — `git cat-file` proved NONE exist in the public repository, so every referenced commit is private and unmappable. The deployed code (slot 422723185) dates from 2026-05-28T12:47:42Z — ~50 days old at assessment, CORRECTED AT 16H-P.2a from an erroneous 2026-07-14 (the KVault binary date, a different program). No published report postdates it either way, so the linkage gap is unaffected by the correction.",
     rationale:
       "Reports EXIST and their scope is verified from primary sources: traditional audits (Sec3, Offside, OtterSec), plus formal-verification and fuzzing inventories — a materially richer artifact set than KVault's, and the program is a verified build (solana-verify / OtterSec). That places evidence in the `partial` band: it covers the main risk surface but leaves one named, bounded gap. It does NOT reach `supported`, because 'reports exist' and 'the running code is audited' are different claims and only the first is established. Scored 6 rather than 5 because the artifact set includes formal verification and fuzzing, which KVault lacks; not 7, because the binary-linkage gap is exactly the question this dimension asks.",
     favorableEvidence: [
@@ -116,7 +116,7 @@ export const DIRECT_DIMENSION_ASSESSMENTS: DirectDimensionAssessment[] = [
     unfavorableEvidence: [
       "no referenced audit commit exists in the public repository — all are private-repo commits",
       "no report can be mapped to the deployed binary",
-      "the deployed binary is ~3 days old; no published review postdates it",
+      "the deployed binary dates from 2026-05-28 (~50 days at assessment); no published review postdates it",
       "uncovered deployed surface is unquantified",
     ],
     unresolvedLimitations: ["which audited commit, if any, corresponds to the deployed binary", "what deployed surface no report covers"],
@@ -133,7 +133,7 @@ export const DIRECT_DIMENSION_ASSESSMENTS: DirectDimensionAssessment[] = [
     anchorBand: "weak",
     evidenceReadiness: "partial",
     confidence: "low",
-    limitingFact: "The exact RESERVE's age and configuration history are unverified, and the deployed binary is ~3 days old (slot 422723185, ~2026-07-14, assessed 2026-07-17). Authority tenure is unresolved for all three multisigs, so no administrative regime can be dated.",
+    limitingFact: "The exact RESERVE's age and configuration history are unverified, and the deployed binary dates from 2026-05-28 (slot 422723185, ~50 days at assessment) — CORRECTED AT 16H-P.2a from an erroneous 2026-07-14 (the KVault date). Authority tenure is unresolved for all three multisigs, so no administrative regime can be dated.",
     rationale:
       "Market-level maturity is genuinely strong: this is Kamino's PRIMARY market (API isPrimary: true), operating since at least November 2023 with five documented stress events (Feb 2025 → Feb 2026) reporting $0 bad debt. But this dimension asks about the maturity of the EXACT CURRENT CONFIGURATION, and that is materially incomplete: reserve creation date unknown, configuration-continuity record unknown, authority tenure unknown, and the code holding funds is days old. Protocol age is not reserve age, and it is not binary age. `weak` — evidence exists but is materially incomplete on precisely the reserve-specific facts required.",
     favorableEvidence: [
@@ -143,7 +143,7 @@ export const DIRECT_DIMENSION_ASSESSMENTS: DirectDimensionAssessment[] = [
     ],
     unfavorableEvidence: [
       "exact reserve creation date and configuration history UNVERIFIED",
-      "deployed binary is ~3 days old at assessment",
+      "deployed binary dates from 2026-05-28, ~50 days at assessment",
       "code continuity across binaries not established",
       "authority tenure unresolved for all three multisigs",
     ],
@@ -424,7 +424,7 @@ export const DIRECT_DIMENSION_ASSESSMENTS: DirectDimensionAssessment[] = [
     anchorBand: "partial",
     evidenceReadiness: "partial",
     confidence: "low",
-    limitingFact: "The deployed binary (~2026-07-14) postdates every documented event (latest 2026-02-05/06; latest monthly risk report April 2026), so no published review covers the code holding funds. Reserve existence and USDC exposure during each event window are unverified, and no socialize_loss history search bound to this exact reserve was completed.",
+    limitingFact: "The deployed binary (2026-05-28, corrected at 16H-P.2a) postdates every documented event (latest 2026-02-05/06; latest monthly risk report April 2026), so no published review covers the code holding funds. Reserve existence and USDC exposure during each event window are unverified, and no socialize_loss history search bound to this exact reserve was completed.",
     rationale:
       "Unlike Steakhouse, this product IS the layer the official evidence covers. The exact market is named in the Feb 2026 case study as 'Main' — Main Market and SOL/BTC Market are the same account 7u3He… (on-chain name is a mutable field on a stable address; the API marks that exact address isPrimary: true; the UI states the rename verbatim; confidence high, not absolute). Official material reports $0 bad debt since November 2023 across five named stress events with no service degradation. Steakhouse's two fatal gaps — 'wrong subject' (a vault on a separate program) and 'the kvault program is uncovered' — do NOT apply here, and that is a material difference that must not be flattened. Scored 5 rather than Steakhouse's 4 for that reason alone. Scored 5 and NOT higher deliberately: zero bad debt is not zero incidents and not zero exploits; 'zero confirmed incidents' is a SEARCH RESULT, not a clean record; the binary postdates the evidence; and event-window binding is unverified. More directly applicable evidence is not the same as more evidence.",
     favorableEvidence: [
@@ -491,7 +491,7 @@ export const LOWEST_CONFIDENCE_DIMENSIONS = ["maturity (low)", "oracle_risk (low
 /** Dimensions where missing evidence could plausibly move the score by one or more anchors. */
 export const HUMAN_REVIEW_FOCUS_AREAS = [
   { dimensionId: "oracle_risk", why: "PRIORITY — the borrower-collateral oracle surface is the supplier's dominant oracle exposure and is entirely unexamined. Could move two bands either way. The single largest evidence gap in this assessment.", couldMoveBands: 2 },
-  { dimensionId: "audit_security", why: "Zero audits map to the deployed binary, which is ~3 days old. Whether 6 is defensible on 'reports exist' alone is a judgement call.", couldMoveBands: 1 },
+  { dimensionId: "audit_security", why: "Zero audits map to the deployed binary (2026-05-28, ~50 days). Whether 6 is defensible on 'reports exist' alone is a judgement call.", couldMoveBands: 1 },
   { dimensionId: "upgrade_admin_authority", why: "9-of-10 member overlap between the upgrade and market-owner multisigs reduces practical independence; a 2-of-7 zero-timelock freeze power may warrant a cap below `supported`.", couldMoveBands: 1 },
   { dimensionId: "manager_discretion", why: "socialize_loss reaches supplier principal at 4-of-10 + 12h. A reviewer may hold this in `weak` regardless of the absent vault layer.", couldMoveBands: 1 },
   { dimensionId: "maturity", why: "Reserve-level age and configuration continuity are absent entirely; the binary is days old.", couldMoveBands: 1 },

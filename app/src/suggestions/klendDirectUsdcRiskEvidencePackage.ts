@@ -181,7 +181,7 @@ export const DIMENSION_EVIDENCE: DimensionEvidence[] = [
     verifiedFacts: [
       "The exact market is Kamino's PRIMARY market (API isPrimary: true, 'Primary market on mainnet') and was previously named 'Main Market'.",
       "Official material claims continuous operation with $0 bad debt since November 2023 and across 5 named stress events (Feb 2025 → Feb 2026).",
-      "The deployed KLend binary dates from 2026-07-14.",
+      "The deployed KLend binary dates from 2026-05-28T12:47:42Z (slot 422723185), ~50 days old at the evidence cutoff. CORRECTED AT 16H-P.2a: this previously read 2026-07-14, which is the KVAULT binary date carried over in error — a different program.",
     ],
     limitations: [
       "Protocol age, KLend product age, exact market age, exact RESERVE age and current binary age are FIVE distinct quantities. Only market identity and binary date are established.",
@@ -446,7 +446,7 @@ export const DIMENSION_EVIDENCE: DimensionEvidence[] = [
     ],
     limitations: [
       "Steakhouse's fatal gaps 1 (wrong subject — a vault) and 2 (kvault program uncovered) do NOT apply here: this IS a lending-market reserve on the covered program. That is a material difference and must not be flattened.",
-      "Gap 4 DOES apply: the last documented event is 2026-02-05/06 and the latest monthly risk report is April 2026, while the deployed binary is from 2026-07-14. No published review postdates the code holding funds.",
+      "Gap 4 DOES apply: the last documented event is 2026-02-05/06 and the latest monthly risk report is April 2026 (published 2026-05-05), while the deployed binary is from 2026-05-28 (CORRECTED AT 16H-P.2a from 2026-07-14, the KVault date). The gap STANDS — the binary still postdates every documented event, and the April report predates it by 23 days. No published review covers the code holding funds.",
       "Exact reserve existence and USDC exposure during each event window are UNVERIFIED.",
       "The market-owner period is unestablished, so statements cannot be attributed to a known administrative regime.",
       "No socialize_loss history search bound to this exact reserve was completed.",
