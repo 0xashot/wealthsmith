@@ -1,3 +1,5 @@
+import { measureSlotDuration, computeSlotAdjustmentFactor, validateReserveMeasurementSkew, PRIMARY_WINDOW_SLOTS, VALIDATION_WINDOW_SLOTS, WINDOW_AGREEMENT_TOLERANCE, SANITY_RANGE_MS, MEASUREMENT_TTL_MS, MAX_RESERVE_MEASUREMENT_SLOT_SKEW, DENOMINATOR_POLICY, REJECTED_CONSTANT_MS } from "./solanaSlotDurationEstimator";
+import { EXACT_PRODUCT_BINDING, validateExactProductBinding, MEASUREMENT_REUSE_POLICY, SLOT_ADJUSTMENT_MECHANISM, FROZEN_SNAPSHOT_SENSITIVITY, HARDCODED_450_DEFECT, MEASUREMENT_SNAPSHOT_IS_NOT_PRODUCTION_INPUT, EVIDENCE_LAYER_SEPARATION, RATE_KIND, PRECISION_STATE, deriveMeasuredApy, CORRECTED_APY_SNAPSHOT, PARITY_TOLERANCE, KAMINO_API_DIAGNOSTIC, evaluateParityDiagnostic, CORRECTION_PARITY_RESULT, PARITY_IMPROVEMENT, USER_FACING_APY_PRESENTATION, COMPARISON_METHODOLOGY_RULE, PRESERVED_PRIOR_EVIDENCE, PRIOR_EVIDENCE_HANDLING, MEASURED_APY_EVIDENCE, computeMeasuredApyEvidenceManifestHash, MEASURED_APY_EVIDENCE_MANIFEST_HASH, evaluateComparisonReadiness, CORRECTION_READINESS_RESULT, APY_UNIT_BLOCKER_SUPERSESSION, CORRECTION_CONFERS } from "./klendReserveMeasuredApyCorrection";
 import { KAMINO_RESERVE_METRICS_API, PARITY_OBSERVATIONS, GAP_LOCALIZATION, UI_API_RELATIONSHIP, NOT_INVESTIGATED, PARITY_CLASSIFICATION, PARITY_CONSEQUENCE, PARITY_EVIDENCE, computeParityEvidenceManifestHash, PARITY_EVIDENCE_MANIFEST_HASH, PARITY_AMENDMENT_CONFERS } from "./klendReserveApyParityAmendment";
 import { SUPPLIER_FARM_IDENTITY, KAMINO_FARMS_PROGRAM_ID, REWARD_STREAMS, FARM_STATE_SNAPSHOT, SDK_REWARD_SEMANTICS, resolveRewardsAndTotalApy, SOL_BTC_REWARD_RESOLUTION_INPUTS, getSolBtcUsdcTotalApy, UNIFIED_SLOT_SNAPSHOT, UI_PARITY_DIAGNOSTIC, REWARD_METHODOLOGY_EVIDENCE, computeRewardEvidenceManifestHash, REWARD_EVIDENCE_MANIFEST_HASH, REWARD_GAP_SUPERSESSION, REWARD_RESOLUTION_CONFERS, MAX_SLOT_SKEW } from "./klendReserveRewardResolution";
 import { deriveKlendReserveApy, getSolBtcUsdcApy, SOL_BTC_USDC_APY_SNAPSHOT, ratioToPercent, RATE_SEMANTICS, OUTPUT_UNIT, APY_PARITY, APY_METHODOLOGY_EVIDENCE, computeApyEvidenceManifestHash, APY_EVIDENCE_MANIFEST_HASH, APY_BLOCKER_SUPERSESSION, APY_RESOLUTION_CONFERS, KLEND_APY_DERIVATION_VERSION } from "./klendReserveApyDerivation";
@@ -16272,7 +16274,7 @@ export function runStableYieldIdentityResolutionFixtureChecks(): FixtureCheck[] 
   // 16H-N.1 moved the primary blocker off blocked_identity onto blocked_apy_unit. 16H-N.2 then
   // resolved the APY unit too, so primary moved again. The invariant across both: identity stays
   // resolved, and every superseded blocker keeps a RESOLVED provenance entry rather than vanishing.
-  add("16H-N.1-AB2 (updated by 16H-N.2): resolved blockers keep provenance and primary moves on", (() => { const m = man("kamino_usdc_lending"); const b = m.blockers.join(" "); return m.primaryBlocker === "blocked_apy_unit" && /RESOLVED at 16H-N\.1/.test(b) && /RESOLVED at 16H-N\.2/.test(b) && /REOPENED at 16H-N\.3a/.test(b) && !/^blocked_identity \(PRIMARY/.test(b); })(), "blocker moved");
+  add("16H-N.1-AB2 (updated by 16H-N.3b): resolved blockers keep provenance and primary moves on", (() => { const m = man("kamino_usdc_lending"); const b = m.blockers.join(" "); return m.primaryBlocker === "blocked_capacity" && /RESOLVED at 16H-N\.1/.test(b) && /RESOLVED at 16H-N\.2/.test(b) && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && !/^blocked_identity \(PRIMARY/.test(b); })(), "blocker moved to capacity");
 
   // ---- Evidence + readiness ----
   add("16H-H-AC: every manifest carries exactly one deterministic primary status", listStableYieldEvidenceManifests().every((m) => typeof m.primaryBlocker === "string" && m.primaryBlocker.length > 0), "deterministic");
@@ -16983,10 +16985,10 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   // ---- Consequence ----
   add("PAR-22: the APY methodology is UNRESOLVED and comparison is blocked", PARITY_CONSEQUENCE.apyMethodologyResolved === false && PARITY_CONSEQUENCE.definitionSufficientForComparison === false && PARITY_CONSEQUENCE.definitionSufficientPriorValue === true, "unresolved");
   add("PAR-23: the adapter was NOT silently edited and NO correction was invented", PARITY_CONSEQUENCE.adapterSilentlyEdited === false && PARITY_CONSEQUENCE.methodologyCorrectionMade === false && /requires identifying the omitted component/i.test(PARITY_CONSEQUENCE.methodologyCorrectionWithheldBecause) && PARITY_AMENDMENT_CONFERS.adapterEdited === false, "not edited");
-  add("PAR-24: the primary blocker returns to blocked_apy_unit — the one permitted condition", PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_apy_unit" && /APY methodology itself is unresolved/i.test(PARITY_CONSEQUENCE.primaryBlockerRationale), "blocker moved");
+  add("PAR-24 (superseded by 16H-N.3b): the 16H-N.3a reopening is immutable; the live blocker has since moved on", PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && /APY methodology itself is unresolved/i.test(PARITY_CONSEQUENCE.primaryBlockerRationale) && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_capacity" && APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit", "historical record intact, live state advanced");
   add("PAR-25: UI-rounding noise is distinguished from official-source disagreement", /would NOT block/i.test(PARITY_CONSEQUENCE.internalComparabilityVsUiParity) && /far beyond rounding/i.test(PARITY_CONSEQUENCE.internalComparabilityVsUiParity), "distinguished");
   add("PAR-26: 16H-N.2's circular parity is acknowledged, not withdrawn", /circular/i.test(PARITY_CONSEQUENCE.regression16HN2) && /remains TRUE and is not withdrawn/i.test(PARITY_CONSEQUENCE.regression16HN2) && APY_PARITY.result === "exact_match", "acknowledged");
-  add("PAR-27: the manifest records the reopening and keeps capacity listed", (() => { const b = getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" "); return /REOPENED at 16H-N\.3a/.test(b) && /blocked_capacity \(16H-N\.2, still true/.test(b) && /api_freshness_unestablishable/.test(b) && /SUPERSEDED at 16H-N\.3a/.test(b); })(), "recorded");
+  add("PAR-27: the manifest records the reopening and keeps capacity listed", (() => { const b = getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" "); return /REOPENED at 16H-N\.3a/.test(b) && /blocked_capacity \(PRIMARY, 16H-N\.2, restored as primary at 16H-N\.3b\)/.test(b) && /api_freshness_unestablishable/.test(b) && /SUPERSEDED at 16H-N\.3a/.test(b); })(), "recorded");
 
   // ---- Evidence immutability ----
   add("PAR-28: parity evidence is versioned and deterministic", PARITY_EVIDENCE_MANIFEST_HASH.startsWith("parity_evidence_") && computeParityEvidenceManifestHash() === PARITY_EVIDENCE_MANIFEST_HASH && computeParityEvidenceManifestHash({ ...PARITY_EVIDENCE, classification: "A_sdk_api_agree_ui_stale" } as unknown as typeof PARITY_EVIDENCE) !== PARITY_EVIDENCE_MANIFEST_HASH, "manifest");
@@ -17058,7 +17060,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   // 16H-N.3a found the official API and SDK disagree ~9.65%, reopening the APY methodology, which is
   // the one condition permitting the primary to move. The invariant that survives: 16H-N.3 itself
   // invented no enum and did not move the blocker; a LATER step moved it on new evidence.
-  add("RW-39 (updated by 16H-N.3a): 16H-N.3 moved nothing; the APY reopening later did", REWARD_GAP_SUPERSESSION.primaryBlockerUnchanged === "blocked_capacity" && REWARD_GAP_SUPERSESSION.newBlockerEnumInvented === false && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_apy_unit" && PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit", "reopened later");
+  add("RW-39 (updated by 16H-N.3b): 16H-N.3 moved nothing; the APY reopened then resolved, returning primary to capacity", REWARD_GAP_SUPERSESSION.primaryBlockerUnchanged === "blocked_capacity" && REWARD_GAP_SUPERSESSION.newBlockerEnumInvented === false && PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_capacity", "round trip complete");
   add("RW-40: the manifest records the reward resolution and the open UI gap", (() => { const b = getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" "); return /RESOLVED at 16H-N\.3/.test(b) && /UI PARITY UNEXPLAINED/.test(b); })(), "recorded");
 
   // ---- Isolation ----
@@ -17120,7 +17122,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   add("APY-34: the supersession is explicit with authority, method, units, version, slot", (() => { const r = APY_BLOCKER_SUPERSESSION.resolution; return r.resolved === true && r.calculationAuthority.startsWith("A") && r.sdkMethodIdentity.includes("totalSupplyAPY") && r.units.includes("percentage_points") && r.calculationVersion === "1.0.0" && r.sourceSlot === "433344510" && r.parity.includes("exact_match"); })(), "explicit");
   add("APY-35: the reward STATE-MODEL GAP is reported, not invented around", /no reward-resolution state/i.test(APY_BLOCKER_SUPERSESSION.remainingApyGap.stateModelGap) && /NO new state was invented/i.test(APY_BLOCKER_SUPERSESSION.remainingApyGap.stateModelGap) && APY_BLOCKER_SUPERSESSION.primaryBlockerMovesTo === "blocked_capacity", "gap reported");
   add("APY-36: the manifest reflects a verified adapter and the moved blocker", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.apyAdapterState === "adapter_implemented_source_verified" && m.apyUnitInterpretation === "percent" && /RESOLVED at 16H-N\.2/.test(m.blockers.join(" ")); })(), "manifest");
-  add("APY-36b (16H-N.3a): the adapter state stands, but the APY blocker REOPENED on API disagreement", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.apyAdapterState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_apy_unit" && /REOPENED at 16H-N\.3a/.test(m.blockers.join(" ")) && PARITY_CONSEQUENCE.adapterSilentlyEdited === false; })(), "reopened, adapter intact");
+  add("APY-36b (updated by 16H-N.3b): the adapter state stood throughout the reopen-and-resolve cycle", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; const b = m.blockers.join(" "); return m.apyAdapterState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_capacity" && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && PARITY_CONSEQUENCE.adapterSilentlyEdited === false; })(), "reopened, adapter intact");
 
   // ---- Isolation ----
   add("APY-37: capacity, constraints, deposits and risk remain UNCHANGED", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "no_adapter" && m.constraintsState === "blocked" && m.depositAvailabilityState === "blocked" && m.riskReviewState === "blocked" && m.readiness === "blocked"; })(), "unchanged");
@@ -17830,6 +17832,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runMeasuredSlotDurationApyFixtureChecks(),
     ...runSuggestionEngineFixtureChecks(),
     ...runMapperFixtureChecks(),
     ...runContractFixtureChecks(),
@@ -17944,4 +17947,176 @@ export function printFixtureResults(): void {
   // eslint-disable-next-line no-console
   console.log(`${checks.length - failed}/${checks.length} fixture checks passed`);
   if (failed > 0 && typeof process !== "undefined") process.exitCode = 1;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-N.3b — Measured Slot Duration APY Methodology Correction
+ * ------------------------------------------------------------------ */
+
+export function runMeasuredSlotDurationApyFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const root = process.cwd();
+  const readIf = (rel: string) => { try { return readFileSync(`${root}/${rel}`, "utf8"); } catch { return ""; } };
+  const vaultsSrc = readIf("src/wallet/kaminoVaults.ts");
+  const refreshSrc = readIf("scripts/refresh-stable-yield-market-data.mjs");
+  const estimatorSrc = readIf("src/suggestions/solanaSlotDurationEstimator.ts");
+
+  const NOW = Date.parse("2026-07-17T06:41:00.000Z");
+  const OBS = "2026-07-17T06:40:18.000Z";
+  const END = 433431193;
+  // Real observed block times from the correction measurement.
+  const okWindows = {
+    primaryWindow: { windowSlots: 10000, startSlot: 433421193, endSlot: END, startBlockTime: 1784266267, endBlockTime: 1784270418 },
+    validationWindows: [
+      { windowSlots: 2500, startSlot: 433428693, endSlot: END, startBlockTime: 1784269379, endBlockTime: 1784270418 },
+      { windowSlots: 50000, startSlot: 433381193, endSlot: END, startBlockTime: 1784249698, endBlockTime: 1784270418 },
+    ],
+  };
+  const baseInputs = { cluster: "mainnet-beta", rpcSource: "configured_rpc", observedAt: OBS, nowMs: NOW, ...okWindows };
+  const good = measureSlotDuration(baseInputs);
+
+  // --- No hardcoded constant survives in production ---
+  // Scan for the ASSIGNMENT construct, not the digits: this module's own comments legitimately
+  // discuss 450/400/500 as rejected values, and a naive digit scan would match those.
+  const assignRe = /RECENT_SLOT_DURATION_MS\s*=\s*\d+/;
+  add("SD-1: kaminoVaults no longer assigns a constant slot duration", vaultsSrc.length > 0 && !assignRe.test(vaultsSrc), "no RECENT_SLOT_DURATION_MS = <n>");
+  add("SD-2: refresh script no longer assigns a constant slot duration", refreshSrc.length > 0 && !assignRe.test(refreshSrc), "no RECENT_SLOT_DURATION_MS = <n>");
+  add("SD-3: 450ms is not retained as production truth", vaultsSrc.length > 0 && !/=\s*450\b/.test(vaultsSrc) && !/=\s*450\b/.test(refreshSrc), "no `= 450` in either production site");
+  add("SD-4: 400ms is not retained as production truth", !/=\s*400\b/.test(vaultsSrc) && !/=\s*400\b/.test(refreshSrc), "no `= 400` in either production site");
+  add("SD-5: 500ms is not used as a silent fallback", !/=\s*500\b/.test(vaultsSrc) && !/=\s*500\b/.test(refreshSrc), "no `= 500` in either production site");
+  add("SD-6: kaminoVaults consumes the estimator", /measureSlotDurationLive\s*\(/.test(vaultsSrc), "estimator invoked");
+  add("SD-7: kaminoVaults fails closed with no fallback", /Refusing to substitute a constant slot duration/.test(vaultsSrc) && /throw new Error/.test(vaultsSrc), "throws rather than assuming");
+  add("SD-8: refresh script measures per run", /measureSlotDurationMs\s*\(\s*rpc/.test(refreshSrc), "measurement called with rpc");
+  add("SD-9: refresh script passes measured value to the SDK", /new klend\.KaminoVault\([\s\S]*?measuredSlotDurationMs\)/.test(refreshSrc), "measured value threaded into SDK");
+  add("SD-10: the estimator itself declares no fallback constant", !/fallback\s*=\s*\d+/.test(estimatorSrc) && /There is NO fallback/i.test(estimatorSrc), "no fallback binding");
+  add("SD-11: rejected constants are recorded as rejected, not used", REJECTED_CONSTANT_MS[450].length > 0 && REJECTED_CONSTANT_MS[400].length > 0 && REJECTED_CONSTANT_MS[500].length > 0 && REJECTED_CONSTANT_MS[411].length > 0, "4 rejected");
+
+  // --- Windows ---
+  add("SD-12: primary window is deterministic 10,000 slots", PRIMARY_WINDOW_SLOTS === 10000, "10k");
+  add("SD-13: 2,500-slot validation is required", (VALIDATION_WINDOW_SLOTS as readonly number[]).includes(2500), "2.5k required");
+  add("SD-14: 50,000-slot validation is required", (VALIDATION_WINDOW_SLOTS as readonly number[]).includes(50000), "50k required");
+  add("SD-15: a missing required validation window fails closed", measureSlotDuration({ ...baseInputs, validationWindows: [okWindows.validationWindows[0]] }).failure === "missing_validation_window", "50k absent → fail");
+  add("SD-16: windows use slot-NUMBER differences including skipped slots", good.primary?.slotDifference === 10000 && DENOMINATOR_POLICY.includesSkippedSlots === true && DENOMINATOR_POLICY.denominator === "endSlot - startSlot", "slot-number denominator");
+  add("SD-17: forbidden denominators are named and excluded", (DENOMINATOR_POLICY.forbiddenDenominators as readonly string[]).includes("produced_block_count") && (DENOMINATOR_POLICY.forbiddenDenominators as readonly string[]).includes("transaction_count"), "3 forbidden");
+
+  // --- Fail-closed validation ---
+  const brk = (o: Record<string, unknown>) => measureSlotDuration({ ...baseInputs, primaryWindow: { ...okWindows.primaryWindow, ...o } });
+  add("SD-18: missing block time fails closed", brk({ startBlockTime: undefined }).failure === "missing_block_time", "undefined → fail");
+  add("SD-19: null block time fails closed", brk({ startBlockTime: null }).failure === "null_block_time", "null → fail");
+  add("SD-20: reversed slots fail closed", brk({ startSlot: END + 10 }).failure === "invalid_slot_ordering", "start > end → fail");
+  add("SD-21: reversed block times fail closed", brk({ startBlockTime: 1784270419 }).failure === "invalid_block_time_ordering", "start > end → fail");
+  add("SD-22: zero/negative duration fails closed", brk({ startBlockTime: 1784270418 }).failure === "invalid_block_time_ordering", "equal times → fail before division");
+  add("SD-23: non-finite duration fails closed", typeof (measureSlotDuration({ ...baseInputs, primaryWindow: { ...okWindows.primaryWindow, startSlot: NaN } }).failure) === "string", "NaN → fail");
+  add("SD-24: duration outside the sanity range fails closed", brk({ startBlockTime: 1784270418 - 100000 }).failure === "outside_sanity_range", "far too slow → fail");
+  add("SD-25: an out-of-range result is NOT clamped into range", brk({ startBlockTime: 1784270418 - 100000 }).measuredSlotDurationMs === undefined && /never clamped/i.test(estimatorSrc), "no clamp; no value emitted");
+  add("SD-26: window disagreement beyond 2% fails closed", measureSlotDuration({ ...baseInputs, validationWindows: [{ ...okWindows.validationWindows[0], startBlockTime: 1784269379 - 200 }, okWindows.validationWindows[1]] }).failure === "window_disagreement", ">2% → fail");
+  add("SD-27: tolerance is 2%", WINDOW_AGREEMENT_TOLERANCE === 0.02, "0.02");
+  add("SD-28: stale measurement fails closed", measureSlotDuration({ ...baseInputs, nowMs: NOW + MEASUREMENT_TTL_MS + 1000 }).failure === "stale_measurement", "past TTL → fail");
+  add("SD-29: wrong cluster fails closed", measureSlotDuration({ ...baseInputs, cluster: "devnet" }).failure === "wrong_cluster", "devnet → fail");
+  add("SD-30: unresolved RPC source fails closed", measureSlotDuration({ ...baseInputs, rpcSource: undefined }).failure === "unresolved_rpc_source", "no provenance → fail");
+  add("SD-31: reserve/measurement skew beyond bound fails closed", validateReserveMeasurementSkew(433431197, END).ok === true && validateReserveMeasurementSkew(END + MAX_RESERVE_MEASUREMENT_SLOT_SKEW + 1, END).failure === "reserve_measurement_skew", "4 ok, 151 fail");
+
+  // --- Valid measurement ---
+  add("SD-32: the correction measurement validates", good.ok === true && good.failure === undefined, "ok");
+  add("SD-33: measured duration is ~415.1ms, not any rejected constant", Math.abs((good.measuredSlotDurationMs ?? 0) - 415.1) < 0.001 && good.measuredSlotDurationMs !== 450 && good.measuredSlotDurationMs !== 400 && good.measuredSlotDurationMs !== 500, "415.1ms measured");
+  add("SD-34: slotAdjustmentFactor is computed correctly (500/ms)", Math.abs((good.slotAdjustmentFactor ?? 0) - 500 / 415.1) < 1e-9 && Math.abs(computeSlotAdjustmentFactor(500) - 1) < 1e-12 && Math.abs(computeSlotAdjustmentFactor(400) - 1.25) < 1e-12, "matches SDK formula");
+  add("SD-35: measurement is fresh and records its age", good.freshnessState === "fresh" && typeof good.measurementAgeMs === "number" && good.freshnessTtlMs === MEASUREMENT_TTL_MS, "fresh + age + TTL");
+  add("SD-36: every window records full provenance", (good.validations ?? []).every((v) => v.startSlot > 0 && v.endSlot > v.startSlot && v.startBlockTime > 0 && v.elapsedMs > 0 && v.averageSlotDurationMs > 0), "2 validations complete");
+  add("SD-37: windows agree well inside tolerance", (good.windowAgreement ?? []).every((a) => a.withinTolerance && a.relativeDifference < 0.005), "~0.12% / ~0.17%");
+  add("SD-38: TTL is justified from rate variability, not arbitrary", MEASUREMENT_TTL_MS === 15 * 60 * 1000 && /Justified from the rate's expected variability/i.test(estimatorSrc), "15min justified");
+  add("SD-39: sanity range is justified", SANITY_RANGE_MS.minMs === 300 && SANITY_RANGE_MS.maxMs === 800 && /target block time is 400\s?ms/i.test(estimatorSrc), "[300,800] justified");
+
+  // --- Mechanism evidence ---
+  add("SD-40: the slotAdjustmentFactor mechanism is verified from SDK source", SLOT_ADJUSTMENT_MECHANISM.verified === true && SLOT_ADJUSTMENT_MECHANISM.verifiedFrom.some((v) => /reserve\.js:777-779/.test(v)), "4 source refs");
+  add("SD-41: the recorded gap ratio is explained by the slot-duration ratio", Math.abs(SLOT_ADJUSTMENT_MECHANISM.gapExplanation.recordedGapRatio - 450 / 410.99) < 0.0001, "1.094888 ≈ 450/410.99");
+  add("SD-42: SDK version is explicitly rejected as the cause", /red herring/i.test(SLOT_ADJUSTMENT_MECHANISM.sdkVersionIsNotTheCause) && /REJECTED/.test(SLOT_ADJUSTMENT_MECHANISM.sdkVersionIsNotTheCause), "9.1.2 vs 9.1.5 not the cause");
+  add("SD-43: the 450ms defect is recorded with both locations", HARDCODED_450_DEFECT.locationsFound.length === 2 && HARDCODED_450_DEFECT.status === "corrected" && /kaminoVaults\.ts:23/.test(HARDCODED_450_DEFECT.locationsFound[0]), "both sites");
+  add("SD-44: the defect is established independently of the API", /does not depend on the Kamino API being correct/i.test(HARDCODED_450_DEFECT.establishedIndependently), "on-chain proof alone");
+  add("SD-45: frozen-snapshot sensitivity shows the factor is the only variable", FROZEN_SNAPSHOT_SENSITIVITY.length === 3 && FROZEN_SNAPSHOT_SENSITIVITY.every((s) => Math.abs(s.slotAdjustmentFactor - 500 / s.recentSlotDurationMs) < 1e-6), "400/450/500 traced");
+
+  // --- APY derivation ---
+  const apyInputs = {
+    identity: { candidateId: "kamino_usdc_lending", marketAddress: EXACT_PRODUCT_BINDING.marketAddress, reserveAddress: EXACT_PRODUCT_BINDING.reserveAddress, liquidityMint: EXACT_PRODUCT_BINDING.liquidityMint, cTokenMint: EXACT_PRODUCT_BINDING.cTokenMint, klendProgram: EXACT_PRODUCT_BINDING.klendProgram, cluster: "mainnet-beta" },
+    slotDuration: good, reserveSourceSlot: 433431197, reserveObservedAt: "2026-07-17T06:40:21.754Z",
+    utilization: 0.8035779, borrowApr: 0.05299286, borrowApy: 0.05442212,
+    supplyApr: 0.03396981, baseSupplyApy: 0.03455338, protocolTakeRatePct: 10,
+    rewardState: "exhausted" as const, rewardApyPct: 0,
+  };
+  const apy = deriveMeasuredApy(apyInputs);
+  add("SD-46: measured duration is passed into the SDK-derived APY", apy.ok === true && apy.measuredSlotDurationMs === 415.1 && Math.abs((apy.slotAdjustmentFactor ?? 0) - 1.204529) < 0.00001, "415.1ms → factor 1.2045");
+  add("SD-47: rateKind is estimated_variable_apy", apy.rateKind === "estimated_variable_apy" && RATE_KIND === "estimated_variable_apy", "estimated_variable_apy");
+  add("SD-48: precision state is estimated", apy.precisionState === "estimated" && PRECISION_STATE === "estimated", "estimated");
+  add("SD-49: output unit is percentage_points", apy.outputUnit === "percentage_points" && Math.abs((apy.baseSupplyApyPct ?? 0) - 3.455338) < 0.000001, "ratio → pp once");
+  add("SD-50: reward state remains exhausted with zero APY", apy.rewardApyPct === 0 && CORRECTED_APY_SNAPSHOT.rewardState === "exhausted" && CORRECTED_APY_SNAPSHOT.rewardApyPct === 0, "unchanged");
+  add("SD-51: total supply APY = base + reward on the same observation boundary", Math.abs((apy.totalSupplyApyPct ?? 0) - ((apy.baseSupplyApyPct ?? 0) + (apy.rewardApyPct ?? 0))) < 1e-12 && (apy.sourceSkewSlots ?? 999) <= MAX_RESERVE_MEASUREMENT_SLOT_SKEW, "skew 4 slots");
+  add("SD-52: an unresolved slot duration blocks the APY entirely", deriveMeasuredApy({ ...apyInputs, slotDuration: measureSlotDuration({ ...baseInputs, cluster: "devnet" }) }).failure === "slot_duration_unavailable", "no measurement → no APY");
+  add("SD-53: a stale slot duration blocks the APY", deriveMeasuredApy({ ...apyInputs, slotDuration: { ...good, freshnessState: "stale" as const } }).failure === "slot_duration_stale", "stale → fail");
+  add("SD-54: skew beyond bound blocks the APY", deriveMeasuredApy({ ...apyInputs, reserveSourceSlot: END + 500 }).failure === "reserve_measurement_skew", "500 slots → fail");
+  add("SD-55: unresolved rewards block total APY", deriveMeasuredApy({ ...apyInputs, rewardState: "unresolved" as const }).failure === "reward_unresolved", "unresolved → fail");
+  add("SD-56: the APY is never described as exact", /can never be exact|inherently an ESTIMATE/i.test(readIf("src/suggestions/klendReserveMeasuredApyCorrection.ts")), "estimate, not exact");
+
+  // --- Identity binding ---
+  add("SD-57: exact candidate identity is required", validateExactProductBinding(apyInputs.identity).ok === true && validateExactProductBinding({ ...apyInputs.identity, reserveAddress: "So11111111111111111111111111111111111111112" }).failure === "reserve_mismatch", "exact reserve enforced");
+  add("SD-58: every identity component fails closed independently", validateExactProductBinding({ ...apyInputs.identity, candidateId: "x" }).failure === "candidate_mismatch" && validateExactProductBinding({ ...apyInputs.identity, marketAddress: "x" }).failure === "market_mismatch" && validateExactProductBinding({ ...apyInputs.identity, liquidityMint: "x" }).failure === "mint_mismatch" && validateExactProductBinding({ ...apyInputs.identity, cTokenMint: "x" }).failure === "ctoken_mismatch" && validateExactProductBinding({ ...apyInputs.identity, klendProgram: "x" }).failure === "program_mismatch" && validateExactProductBinding({ ...apyInputs.identity, cluster: "devnet" }).failure === "cluster_mismatch", "7 components");
+  add("SD-59: another reserve may not reuse the reserve state", MEASUREMENT_REUSE_POLICY.reserveStateMayBeShared === false && MEASUREMENT_REUSE_POLICY.eachProductMustBindItsOwnReserveState === true, "reserve state not shareable");
+  add("SD-60: the slot-duration measurement IS network-wide reusable", MEASUREMENT_REUSE_POLICY.slotDurationIsNetworkWide === true, "network property");
+
+  // --- API diagnostic ---
+  add("SD-61: the API remains diagnostic only", KAMINO_API_DIAGNOSTIC.role === "diagnostic_only", "diagnostic_only");
+  add("SD-62: the API's missing timestamp prevents it becoming production authority", KAMINO_API_DIAGNOSTIC.exposesSourceTimestamp === false && KAMINO_API_DIAGNOSTIC.exposesSourceSlot === false && KAMINO_API_DIAGNOSTIC.exposesAsOfField === false && /freshness cannot be evaluated/i.test(KAMINO_API_DIAGNOSTIC.disqualifiedAsProductionAuthority), "no timestamp → not authority");
+  add("SD-63: the API's slot-duration input is NOT inferred", /remains UNKNOWN/.test(KAMINO_API_DIAGNOSTIC.slotDurationInputNotInferred) && /never adopted/i.test(KAMINO_API_DIAGNOSTIC.slotDurationInputNotInferred), "411ms not adopted");
+  add("SD-64: the API is bound by exact reserve address", KAMINO_API_DIAGNOSTIC.boundBy.includes(EXACT_PRODUCT_BINDING.reserveAddress), "exact binding");
+  add("SD-65: residual parity is recorded with abs + rel differences", CORRECTION_PARITY_RESULT.borrowAbsoluteDifferencePct > 0 && CORRECTION_PARITY_RESULT.supplyAbsoluteDifferencePct > 0 && CORRECTION_PARITY_RESULT.borrowRelativeDifference > 0 && CORRECTION_PARITY_RESULT.supplyRelativeDifference > 0 && typeof CORRECTION_PARITY_RESULT.requestedAt === "string", "recorded");
+  add("SD-66: residual is within the justified tolerance and classified", CORRECTION_PARITY_RESULT.withinTolerance === true && CORRECTION_PARITY_RESULT.classification === "consistent_with_measurement_window_difference" && CORRECTION_PARITY_RESULT.supplyRelativeDifference < 0.02, "~1.03% < 2%");
+  add("SD-67: parity tolerance is justified by the mechanism, not numeric convenience", PARITY_TOLERANCE.notChosenForNumericConvenience === true && /scales linearly in slotAdjustmentFactor/i.test(PARITY_TOLERANCE.justification), "mechanism-justified");
+  add("SD-68: a material residual prevents comparison readiness", evaluateParityDiagnostic(5.44, 3.45, 6.5, 4.2, OBS).classification === "material_mismatch_unresolved" && evaluateComparisonReadiness({ identityVerified: true, slotDurationValidated: true, slotDurationFresh: true, windowsAgree: true, reserveFresh: true, skewWithinBound: true, rewardResolved: true, parityWithinTolerance: false }).primaryBlocker === "blocked_apy_unit", "material → blocked");
+  add("SD-69: neither value was forced to match the other", /no reference to the API/i.test(PARITY_IMPROVEMENT.neitherValueWasForcedToMatch) && PARITY_IMPROVEMENT.beforeRelativeDifference > PARITY_IMPROVEMENT.afterRelativeDifference, "9.65% → 1.03%");
+
+  // --- State transition ---
+  add("SD-70: successful validation restores definitionSufficientForComparison", CORRECTION_READINESS_RESULT.definitionSufficientForComparison === true && CORRECTION_READINESS_RESULT.failedGates.length === 0, "restored");
+  add("SD-71: successful validation moves primary blocker to blocked_capacity", CORRECTION_READINESS_RESULT.primaryBlocker === "blocked_capacity" && APY_UNIT_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_capacity", "→ blocked_capacity");
+  add("SD-72: prior primary blocker is recorded as blocked_apy_unit", APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit" && APY_UNIT_BLOCKER_SUPERSESSION.reopenedAt === "16H-N.3a", "provenance kept");
+  add("SD-73: any failed gate keeps blocked_apy_unit", ["identityVerified", "slotDurationValidated", "slotDurationFresh", "windowsAgree", "reserveFresh", "skewWithinBound", "rewardResolved"].every((g) => { const i = { identityVerified: true, slotDurationValidated: true, slotDurationFresh: true, windowsAgree: true, reserveFresh: true, skewWithinBound: true, rewardResolved: true, parityWithinTolerance: true } as Record<string, boolean>; i[g] = false; const r = evaluateComparisonReadiness(i as unknown as Parameters<typeof evaluateComparisonReadiness>[0]); return r.definitionSufficientForComparison === false && r.primaryBlocker === "blocked_apy_unit"; }), "7 gates each block");
+  add("SD-74: the production evidence records the resolved blocker", /primaryBlocker:\s*"blocked_capacity"/.test(readIf("src/suggestions/stableYieldProductionEvidence.ts")), "evidence updated");
+
+  // --- Presentation ---
+  add("SD-75: display format requires the ~ prefix", USER_FACING_APY_PRESENTATION.displayFormat === "~{formattedApy}% APY" && USER_FACING_APY_PRESENTATION.tildePrefixRequired === true, "~{apy}% APY");
+  add("SD-76: tooltip states estimated and variable", USER_FACING_APY_PRESENTATION.tooltipTitle === "Estimated variable APY" && /Estimated variable APY/.test(USER_FACING_APY_PRESENTATION.tooltipTitle), "title");
+  add("SD-77: tooltip states actual returns may differ", /actual returns may differ/i.test(USER_FACING_APY_PRESENTATION.tooltipBody), "may differ");
+  add("SD-78: tooltip states returns are not guaranteed", /Returns are not guaranteed/i.test(USER_FACING_APY_PRESENTATION.tooltipBody), "not guaranteed");
+  add("SD-79: tooltip states the rate can change at any time", /rate can change at any time/i.test(USER_FACING_APY_PRESENTATION.tooltipBody), "variable");
+  add("SD-80: tooltip implies no protection, custody, or execution", USER_FACING_APY_PRESENTATION.mustNotImply.length === 6 && !/principal protection|fixed income|guaranteed liquidity|custody/i.test(USER_FACING_APY_PRESENTATION.tooltipBody), "6 forbidden, none present");
+  add("SD-81: production presentation is NOT enabled", USER_FACING_APY_PRESENTATION.productionPresentationEnabled === false && USER_FACING_APY_PRESENTATION.productionCardRendered === false, "recorded only");
+
+  // --- Comparison methodology ---
+  add("SD-82: comparison requires compatible methodology", COMPARISON_METHODOLOGY_RULE.kaminoDirectLendingRequires.length === 7 && COMPARISON_METHODOLOGY_RULE.forbiddenComparisons.length === 4, "7 requirements, 4 forbidden");
+  add("SD-83: no selector behavior was added", COMPARISON_METHODOLOGY_RULE.selectorBehaviorAdded === false, "no selector");
+
+  // --- Evidence integrity ---
+  add("SD-84: prior evidence is preserved immutably", (PRESERVED_PRIOR_EVIDENCE as readonly string[]).includes("identity_9773ac14") && (PRESERVED_PRIOR_EVIDENCE as readonly string[]).includes("apy_evidence_d468fce5") && (PRESERVED_PRIOR_EVIDENCE as readonly string[]).includes("reward_evidence_cace4fe4") && (PRESERVED_PRIOR_EVIDENCE as readonly string[]).includes("parity_evidence_dd25a9a1"), "7 preserved");
+  add("SD-85: prior identity evidence is still live and unchanged", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && computeIdentityManifestHash() === SOL_BTC_USDC_IDENTITY_MANIFEST_HASH, "unchanged");
+  add("SD-86: prior APY evidence is still live and unchanged", APY_EVIDENCE_MANIFEST_HASH === "apy_evidence_d468fce5" && computeApyEvidenceManifestHash() === APY_EVIDENCE_MANIFEST_HASH, "unchanged");
+  add("SD-87: prior reward evidence is still live and unchanged", REWARD_EVIDENCE_MANIFEST_HASH === "reward_evidence_cace4fe4" && computeRewardEvidenceManifestHash() === REWARD_EVIDENCE_MANIFEST_HASH, "unchanged");
+  add("SD-88: prior parity evidence is still live and unchanged", PARITY_EVIDENCE_MANIFEST_HASH === "parity_evidence_dd25a9a1" && computeParityEvidenceManifestHash() === PARITY_EVIDENCE_MANIFEST_HASH, "unchanged");
+  add("SD-89: no prior evidence was silently rewritten", PRIOR_EVIDENCE_HANDLING.silentRewriteOccurred === false && PRIOR_EVIDENCE_HANDLING.supersessionMode === "additive_amendment" && PRIOR_EVIDENCE_HANDLING.historicalBlockerTransitionsRetained === true, "additive only");
+  add("SD-90: the new evidence manifest is deterministic", MEASURED_APY_EVIDENCE_MANIFEST_HASH === computeMeasuredApyEvidenceManifestHash() && /^measured_apy_evidence_[0-9a-f]{8}$/.test(MEASURED_APY_EVIDENCE_MANIFEST_HASH), MEASURED_APY_EVIDENCE_MANIFEST_HASH);
+  add("SD-91: evidence records what changed, why, preparer, provenance, timestamp, triggers", MEASURED_APY_EVIDENCE.whatChanged.length === 5 && MEASURED_APY_EVIDENCE.whyItChanged.length > 0 && MEASURED_APY_EVIDENCE.preparerId.length > 0 && MEASURED_APY_EVIDENCE.sourceProvenance.length === 4 && MEASURED_APY_EVIDENCE.evidenceTimestamp.length > 0 && MEASURED_APY_EVIDENCE.invalidationTriggers.length === 8, "complete");
+  add("SD-92: the preparer is not represented as a human reviewer", MEASURED_APY_EVIDENCE.preparerIsNotHumanReviewer === true && MEASURED_APY_EVIDENCE.preparerRole === "automated_evidence_preparer", "not a reviewer");
+  add("SD-93: the evidence snapshot is not a production input", MEASUREMENT_SNAPSHOT_IS_NOT_PRODUCTION_INPUT.isProductionInput === false && MEASUREMENT_SNAPSHOT_IS_NOT_PRODUCTION_INPUT.isProductIdentity === false && MEASUREMENT_SNAPSHOT_IS_NOT_PRODUCTION_INPUT.isImmutableEvidence === true, "evidence ≠ input");
+  add("SD-94: the four evidence layers are separated", Object.keys(EVIDENCE_LAYER_SEPARATION).length === 4, "methodology/snapshot/ephemeral/cache");
+  add("SD-95: no measured value is written into immutable methodology", !/measuredSlotDurationMs:\s*4\d\d(\.\d+)?[,\s]/.test(estimatorSrc.split("CORRECTION_MEASUREMENT_SNAPSHOT")[0] ?? ""), "methodology carries no measurement");
+  add("SD-96: the RPC URL is never embedded in evidence", !/https?:\/\/[^\s"]*(helius|quicknode|alchemy|rpcpool)/i.test(readIf("src/suggestions/klendReserveMeasuredApyCorrection.ts")), "no secret in evidence");
+
+  // --- Scope fence ---
+  add("SD-97: capacity remains unresolved", CORRECTION_CONFERS.capacityRemains === "unresolved" && (CORRECTION_CONFERS.doesNotConfer as readonly string[]).includes("capacity resolution"), "unresolved");
+  add("SD-98: deposits remain blocked", CORRECTION_CONFERS.depositAvailabilityRemains === "blocked", "blocked");
+  add("SD-99: no risk score, review, signoff, or approval", CORRECTION_CONFERS.riskScoreAssigned === false && CORRECTION_CONFERS.humanReviewOccurred === false && CORRECTION_CONFERS.signoffOccurred === false && CORRECTION_CONFERS.productApproved === false, "none");
+  add("SD-100: no selector, recommendation, Top Pick, or production card", (CORRECTION_CONFERS.doesNotConfer as readonly string[]).includes("selector eligibility") && (CORRECTION_CONFERS.doesNotConfer as readonly string[]).includes("recommendation eligibility") && (CORRECTION_CONFERS.doesNotConfer as readonly string[]).includes("Top Pick") && (CORRECTION_CONFERS.doesNotConfer as readonly string[]).includes("a production card"), "none");
+  add("SD-101: lifecycle is unchanged and no lifecycle value was invented", /identity_verified/.test(CORRECTION_CONFERS.lifecycleUnchanged) && /no lifecycle value was invented/i.test(CORRECTION_CONFERS.lifecycleUnchanged), "identity_verified");
+  add("SD-102: no transaction is constructed or simulated", CORRECTION_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction|VersionedTransaction/.test(estimatorSrc + readIf("src/suggestions/klendReserveMeasuredApyCorrection.ts")), "read-only");
+  add("SD-103: the estimator is read-only", !/sendTransaction|signTransaction|simulateTransaction/.test(estimatorSrc) && /STRICTLY READ-ONLY/.test(estimatorSrc), "block times only");
+
+  return checks;
 }

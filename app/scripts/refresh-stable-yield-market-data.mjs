@@ -60,8 +60,57 @@ const REJECTED_VAULTS = {
   JDmkiqvtyAqAsqrLGDgVH2GesbRAAMJCoQtqiyWx82bF: "Steakhouse USDC Testing",
 };
 
-const RECENT_SLOT_DURATION_MS = 450; // mirrors wallet/kaminoVaults.ts
+// Slot duration is MEASURED per run, never hardcoded. The SDK scales rate/slot-age math by
+// 500/recentSlotDurationMs, so a fixed constant silently skews derived values. The previous
+// hardcoded 450 was ~8.4% off measured mainnet reality (~415ms). See Step 16H-N.3b:
+// src/suggestions/solanaSlotDurationEstimator.ts + klendReserveMeasuredApyCorrection.ts.
+// There is deliberately NO fallback: a failed measurement fails the run.
+const PRIMARY_WINDOW_SLOTS = 10_000;
+const VALIDATION_WINDOW_SLOTS = [2_500, 50_000];
+const WINDOW_AGREEMENT_TOLERANCE = 0.02;
+const SANITY_RANGE_MS = { minMs: 300, maxMs: 800 };
 const RPC_TIMEOUT_MS = 20_000;
+
+/**
+ * Measure recent mainnet slot duration from block times. Mirrors
+ * src/suggestions/solanaSlotDurationEstimator.ts (this script is standalone ESM and cannot import
+ * the TS module). Denominator is the slot-NUMBER difference, including skipped slots, because
+ * KLend accrues against slot numbers.
+ */
+async function measureSlotDurationMs(rpc, endSlot) {
+  const endBlockTime = await withTimeout(rpc.getBlockTime(BigInt(endSlot)).send(), RPC_TIMEOUT_MS, "getBlockTime");
+  if (endBlockTime == null) fail("fetch", "slot_duration_missing_end_block_time");
+
+  const readWindow = async (windowSlots) => {
+    let startSlot = endSlot - windowSlots;
+    let startBlockTime = null;
+    for (let attempt = 0; attempt < 20 && startBlockTime == null; attempt++) {
+      try {
+        startBlockTime = await withTimeout(rpc.getBlockTime(BigInt(startSlot)).send(), RPC_TIMEOUT_MS, "getBlockTime");
+      } catch { startBlockTime = null; }
+      if (startBlockTime == null) startSlot++;
+    }
+    if (startBlockTime == null) fail("fetch", `slot_duration_missing_block_time_w${windowSlots}`);
+    const slotDiff = endSlot - startSlot;
+    if (!(slotDiff > 0)) fail("fetch", `slot_duration_invalid_slot_ordering_w${windowSlots}`);
+    if (!(Number(endBlockTime) > Number(startBlockTime))) fail("fetch", `slot_duration_invalid_block_time_ordering_w${windowSlots}`);
+    const avg = ((Number(endBlockTime) - Number(startBlockTime)) * 1000) / slotDiff;
+    if (!Number.isFinite(avg) || !(avg > 0)) fail("fetch", `slot_duration_invalid_w${windowSlots}`);
+    return avg;
+  };
+
+  const primary = await readWindow(PRIMARY_WINDOW_SLOTS);
+  if (primary < SANITY_RANGE_MS.minMs || primary > SANITY_RANGE_MS.maxMs) {
+    fail("fetch", "slot_duration_outside_sanity_range"); // never clamped
+  }
+  for (const w of VALIDATION_WINDOW_SLOTS) {
+    const v = await readWindow(w);
+    if (Math.abs(v - primary) / primary > WINDOW_AGREEMENT_TOLERANCE) {
+      fail("fetch", `slot_duration_window_disagreement_w${w}`);
+    }
+  }
+  return primary;
+}
 
 /** Redact any address/URL so nothing sensitive reaches stdout or the artifact. */
 const redact = (s) => (typeof s === "string" && s.length > 10 ? `${s.slice(0, 4)}…${s.slice(-4)}` : String(s));
@@ -101,7 +150,8 @@ async function main() {
   if (slot == null) fail("fetch", "missing_slot");
 
   // ---- Stage: fetch — the exact vault, by exact address. No enumeration, no name lookup. ----
-  const vault = new klend.KaminoVault(rpc, address(VAULT_ADDRESS), undefined, undefined, RECENT_SLOT_DURATION_MS);
+  const measuredSlotDurationMs = await measureSlotDurationMs(rpc, Number(slot));
+  const vault = new klend.KaminoVault(rpc, address(VAULT_ADDRESS), undefined, undefined, measuredSlotDurationMs);
   let state;
   try {
     state = await withTimeout(vault.getState(), RPC_TIMEOUT_MS, "getState");

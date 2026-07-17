@@ -19,8 +19,17 @@ import * as klend from "@kamino-finance/klend-sdk";
 import { createSolanaRpc, address } from "@solana/kit";
 import { lookupMint, shortMint, type WalletPosition } from "./walletPosition";
 
-/** Mainnet slot duration (ms) — used by the SDK for slot-age math on reads. */
-const RECENT_SLOT_DURATION_MS = 450;
+/**
+ * Slot duration (ms) is MEASURED, never assumed. The SDK scales slot-age math by
+ * 500/recentSlotDurationMs, so a wrong constant silently skews every derived rate. A previously
+ * hardcoded 450 ms was ~8.4% off measured mainnet reality (~415 ms); see
+ * suggestions/klendReserveMeasuredApyCorrection.ts (Step 16H-N.3b).
+ *
+ * There is deliberately NO fallback constant: if the measurement fails we throw rather than
+ * silently substituting 400/450/500 ms. This module is dynamically imported and its failure is
+ * isolated from the rest of the app (see the file header).
+ */
+import { measureSlotDurationLive } from "../suggestions/solanaSlotDurationEstimator";
 
 function decodeVaultName(bytes: Uint8Array | number[] | undefined): string | undefined {
   if (!bytes) return undefined;
@@ -38,7 +47,25 @@ export async function fetchKaminoVaultPositions(
   ownerBase58: string
 ): Promise<WalletPosition[]> {
   const rpc = createSolanaRpc(rpcUrl);
-  const client = new klend.KaminoVaultClient(rpc, RECENT_SLOT_DURATION_MS);
+
+  // Measure slot duration; fail closed rather than assume one.
+  const measurement = await measureSlotDurationLive(
+    {
+      getSlot: async () => Number(await rpc.getSlot({ commitment: "confirmed" }).send()),
+      getBlockTime: async (slot: number) => {
+        const t = await rpc.getBlockTime(BigInt(slot) as never).send();
+        return t === null || t === undefined ? null : Number(t);
+      },
+    },
+    "configured_rpc",
+  );
+  if (!measurement.ok || measurement.measuredSlotDurationMs === undefined) {
+    throw new Error(
+      `kaminoVaults: slot-duration measurement failed (${measurement.failure}: ${measurement.failureDetail}). ` +
+        `Refusing to substitute a constant slot duration.`
+    );
+  }
+  const client = new klend.KaminoVaultClient(rpc, measurement.measuredSlotDurationMs);
   const sharesByVault = await client.getUserSharesBalanceAllVaults(address(ownerBase58));
 
   // Current slot for the shares → underlying-token conversion below.
