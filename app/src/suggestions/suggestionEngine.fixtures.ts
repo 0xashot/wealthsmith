@@ -1,3 +1,5 @@
+import { DIRECT_ASSESSMENT_PROVENANCE as DA_PROVENANCE, DIRECT_DIMENSION_ASSESSMENTS as DA_DIMS, computeDirectAggregate, DIRECT_AGGREGATE_RESULT as DA_AGG_RESULT, DIRECT_ASSESSMENT_OUTCOME as DA_OUTCOME, LOWEST_SCORING_DIMENSIONS as DA_LOWEST_SCORE, LOWEST_CONFIDENCE_DIMENSIONS as DA_LOWEST_CONF, HUMAN_REVIEW_FOCUS_AREAS as DA_FOCUS, ASSESSMENT_LIMITATIONS as DA_LIMITS, DIRECT_ASSESSMENT_STATE as DA_STATE, validateDirectAssessment, DIRECT_ASSESSMENT_VALIDATION as DA_VALIDATION, DIRECT_HUMAN_REVIEW_PACKET as DA_PACKET, DIRECT_ASSESSMENT_MANIFEST as DA_MANIFEST, computeDirectAssessmentManifestHash, DIRECT_ASSESSMENT_MANIFEST_HASH as DA_MANIFEST_HASH, DIRECT_ASSESSMENT_CONFERS as DA_CONFERS } from "./klendDirectUsdcAutomatedAssessment";
+import { AGGREGATE_COMPUTATION_VERSION as AGG_VERSION } from "./steakhouseAutomatedAssessment";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17843,6 +17845,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runDirectAssessmentFixtureChecks(),
     ...runAuthorityResolutionFixtureChecks(),
     ...runRiskEvidencePackageFixtureChecks(),
     ...runIncidentAliasAmendmentFixtureChecks(),
@@ -19195,6 +19198,103 @@ export function runAuthorityResolutionFixtureChecks(): FixtureCheck[] {
   add("AU-56: no transaction behaviour and all live calls were read-only", AUTH_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction/.test(authSrc), "read-only");
   add("AU-57: the authority manifest is deterministic", AUTH_MANIFEST_HASH === computeAuthorityManifestHash() && /^authority_evidence_[0-9a-f]{8}$/.test(AUTH_MANIFEST_HASH), AUTH_MANIFEST_HASH);
   add("AU-58: prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash() && CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash() && ALIAS_AMENDMENT_MANIFEST_HASH === computeAliasAmendmentManifestHash() && VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd", "6 intact");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-P.2 — Direct USDC Automated 12-Dimension Assessment
+ * ------------------------------------------------------------------ */
+
+export function runDirectAssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const src = readFileSync(`${process.cwd()}/src/suggestions/klendDirectUsdcAutomatedAssessment.ts`, "utf8");
+  const P = DA_PROVENANCE, D = DA_DIMS, O = DA_OUTCOME, S = DA_STATE;
+  const dim = (id: string) => D.find((d) => String(d.dimensionId) === id)!;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+
+  // --- Binding ---
+  add("DA-1: the assessment binds to risk_package_3711fd25", P.evidencePackageManifest === "risk_package_3711fd25" && P.evidencePackageId === "klend_direct_usdc_risk_evidence_package_v1", "package bound");
+  add("DA-2: the assessment binds to authority_evidence_a99ace84", P.authorityEvidenceManifest === "authority_evidence_a99ace84" && P.authorityEvidenceId === "klend_direct_usdc_authority_evidence_v1", "authority bound");
+  add("DA-3: exact candidate identity is required", P.candidateId === "kamino_usdc_lending" && P.marketAddress === "7u3HeHxYDLhnCoErrtycNokbQYbWGzLs6JSDqGAv5PfF" && P.reserveAddress === "D6q6wuQSrifJKZYpR1M8R4YawnLDtDsMmWM1NbBmgJ59" && P.cTokenMint === "B8V6WVjPxW1UGwVDfxH2d2r8SyT4cqn7dQRK6XneVa7D" && P.klendProgram === "KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD" && P.cluster === "mainnet-beta", "exact");
+  add("DA-4: rubric identity, version and hash are bound", P.rubricId === "protocol_risk_rubric_v1" && P.rubricVersion === "1.0.0" && P.rubricHash === computeRubricV1Hash() && P.rubricHash === "rubric_64bf43e2", "rubric_64bf43e2");
+  add("DA-5: confidence and SoD policies are bound", P.confidencePolicyId === "risk_review_confidence_v2" && P.separationOfDutiesId === "risk_separation_of_duties_v2", "v2 policies");
+  add("DA-6: assessor is distinct from evidence preparer and from any human reviewer", P.assessorId === "ws_automated_risk_assessor" && P.evidencePreparerId === "claude_automated_evidence_preparer" && P.assessorIsNotPreparer === true && P.assessorIsNotHumanReviewer === true && P.assessorMayNotSignOffOrApprove === true, "SoD held");
+
+  // --- Structure ---
+  add("DA-7: all 12 dimensions present in canonical order", D.length === 12 && D.map((d) => String(d.dimensionId)).join(",") === CANON.join(","), "canonical");
+  add("DA-8: weights match the rubric and sum to 100", D.reduce((a, d) => a + d.weight, 0) === 100 && dim("audit_security").weight === 15 && dim("upgrade_admin_authority").weight === 15 && dim("manager_discretion").weight === 12 && dim("liquidity_withdrawal").weight === 12 && dim("incident_history").weight === 2, "sum 100");
+  add("DA-9: every dimension has an integer score in range", D.every((d) => Number.isInteger(d.score) && d.score >= 0 && d.score <= 10), "12 integers");
+  add("DA-10: every score matches its rubric anchor band", D.every((d) => anchorMatchesScore(d.score, d.anchorBand)), "anchors valid");
+  add("DA-11: every confidence value is allowed by the policy", D.every((d) => (ALLOWED_CONFIDENCE_VALUES as readonly string[]).includes(d.confidence)), "high|medium|low");
+  add("DA-12: the assessment validator passes, and rejects an anchor/score mismatch", DA_VALIDATION.valid === true && DA_VALIDATION.errors.length === 0 && validateDirectAssessment(D.map((d, i) => (i === 0 ? { ...d, score: 10 } : d))).valid === false, "valid; tamper rejected");
+  add("DA-13: favorable AND unfavorable evidence are both recorded on every dimension", D.every((d) => d.favorableEvidence.length > 0 && d.unfavorableEvidence.length > 0 && d.limitingFact.length > 0), "both sides");
+  add("DA-14: no vague rationale appears", D.every((d) => !/generally safe|well known|reputable|strong protocol|trusted team/i.test(d.rationale)), "no appeals to reputation");
+  add("DA-15: every dimension cites evidence and a prohibited inference", D.every((d) => d.evidenceRefs.length > 0 && d.prohibitedInference.length > 0 && d.invalidationTriggers.length > 0), "traceable");
+
+  // --- Aggregation ---
+  add("DA-16: the aggregate comes from the approved engine, not hand arithmetic", DA_AGG_RESULT.ok === true && DA_AGG_RESULT.weightedScore === 5.93 && DA_AGG_RESULT.meetsMinimum === false && O.computationVersion === AGG_VERSION, "engine agrees");
+  add("DA-17: the aggregate is deterministic and reproducible from scores+weights", (() => { const r = computeDirectAggregate(); return r.ok === true && r.weightedScore === O.unroundedAggregate && D.reduce((a, d) => a + d.weight * d.score, 0) === 593; })(), "593/100");
+  add("DA-18: unrounded and displayed aggregates are recorded", O.unroundedAggregate === 5.93 && O.displayedAggregate === 5.93 && O.roundingApplied === false && /terminates exactly/.test(O.roundingNote), "5.93");
+  add("DA-19: threshold is exactly 7", O.minimumThreshold === 7, "7");
+  add("DA-20: meetsMinimum matches the aggregate", O.meetsMinimum === (O.unroundedAggregate >= O.minimumThreshold) && O.meetsMinimum === false, "5.93 < 7 → false");
+  add("DA-21: no score was adjusted after seeing the aggregate", O.scoresAdjustedAfterSeeingAggregate === false && P.aggregateIsAnOutputNotATarget === true, "output not target");
+  add("DA-22: no threshold targeting exists", O.thresholdTargeting === false && P.thresholdTargeting === false && /recorded nowhere as a target/.test(O.distanceToThresholdIsNotAGoal) && !/7\s*-\s*(aggregate|weightedScore)|(aggregate|weightedScore)\s*[<>]=?\s*7\s*\?|gapToThreshold\s*[:=]\s*[0-9]/.test(src), "no computed gap-to-threshold");
+  add("DA-23: mandatory blockers were evaluated before arithmetic", O.blockersEvaluatedBeforeArithmetic === true && O.mandatoryBlockerResult === "none_present" && D.every((d) => d.mandatoryBlockerPresent === false), "none present");
+
+  // --- Substance ---
+  add("DA-24: manager_discretion remains applicable and is scored", dim("manager_discretion").notApplicable !== true && dim("manager_discretion").score === 5, "applicable");
+  add("DA-25: program upgrade authority is distinct from market owner in the evidence", (dim("upgrade_admin_authority").favorableEvidence as string[]).some((e) => /GzFgdRJ/.test(e)) && (dim("upgrade_admin_authority").favorableEvidence as string[]).some((e) => /24LjDBuk/.test(e)) && UPGRADE_LAYER.squads!.multisigState !== MARKET_OWNER_LAYER.squads!.multisigState, "distinct");
+  add("DA-26: market owner is distinct from emergency council in the evidence", (dim("upgrade_admin_authority").favorableEvidence as string[]).some((e) => /4VtJ1yC/.test(e)) && MARKET_OWNER_LAYER.squads!.multisigState !== EMERGENCY_LAYER.squads!.multisigState, "distinct");
+  add("DA-27: the 2-of-7 immediate freeze power is represented as UNFAVORABLE", (dim("upgrade_admin_authority").unfavorableEvidence as string[]).some((e) => /2-of-7 with ZERO timelock/.test(e)) && (dim("liquidity_withdrawal").unfavorableEvidence as string[]).some((e) => /2-of-7 multisig with ZERO timelock/.test(e)), "in both dims");
+  add("DA-28: the 4-of-10 socialize-loss control is represented as UNFAVORABLE", (dim("upgrade_admin_authority").unfavorableEvidence as string[]).some((e) => /SUPPLIER PRINCIPAL at 4-of-10/.test(e)) && (dim("manager_discretion").unfavorableEvidence as string[]).some((e) => /socialize_loss can write down supplier principal/.test(e)), "principal path");
+  add("DA-29: the 9-of-10 member overlap is represented and not treated as identity", (dim("upgrade_admin_authority").unfavorableEvidence as string[]).some((e) => /share 9 of 10 member keys/.test(e)) && /reducing practical independence/.test(dim("upgrade_admin_authority").unfavorableEvidence.join(" ")), "overlap ≠ identity");
+  add("DA-30: unresolved proposer_authority remains a limitation and an invalidation trigger", (dim("upgrade_admin_authority").unresolvedLimitations as string[]).some((l) => /proposer_authority/.test(l)) && (DA_MANIFEST.invalidationTriggers as readonly string[]).includes("proposer_authority material powers discovered") && (DA_LIMITS as readonly string[]).some((l) => /MUST be invalidated and reopened/.test(l)), "reopens assessment");
+  add("DA-31: the borrower-collateral oracle gap remains visible and is the priority focus", (dim("oracle_risk").unfavorableEvidence as string[]).some((e) => /borrower-collateral oracle configurations NOT assessed/.test(e)) && DA_FOCUS[0].dimensionId === "oracle_risk" && DA_FOCUS[0].couldMoveBands === 2, "priority");
+  add("DA-32: the audit-to-binary gap remains visible", /NO audit maps to the deployed binary/.test(dim("audit_security").limitingFact) && (dim("audit_security").unfavorableEvidence as string[]).some((e) => /all are private-repo commits/.test(e)), "no linkage");
+  add("DA-33: current liquidity is NOT represented as guaranteed", /guaranteed future liquidity/.test(dim("liquidity_withdrawal").prohibitedInference) && (dim("liquidity_withdrawal").unfavorableEvidence as string[]).some((e) => /slot-bound snapshot, not a future guarantee/.test(e)) && /Users cannot always leave/.test(dim("liquidity_withdrawal").prohibitedInference), "not guaranteed");
+  add("DA-34: zero bad debt is NOT represented as zero incidents", /zero bad debt means zero incidents or zero exploits/.test(dim("incident_history").prohibitedInference) && /SEARCH RESULT, not a clean record/.test(dim("incident_history").prohibitedInference), "search result");
+  add("DA-35: the direct reserve does NOT inherit KVault-specific scope gaps", /Steakhouse's two fatal gaps .* do NOT apply here|Steakhouse's KVault-specific scope gaps do not apply/.test(dim("incident_history").rationale + dim("incident_history").favorableEvidence.join(" ")), "layer-correct");
+  add("DA-36: incident_history did not overcorrect — it is 5 with LOW confidence", dim("incident_history").score === 5 && dim("incident_history").confidence === "low" && /More directly applicable evidence is not the same as more evidence/.test(dim("incident_history").rationale), "5, not higher");
+  add("DA-37: the product is NOT described as equivalent to holding USDC", /not equivalent to holding USDC|NOT equivalent to holding USDC/.test(dim("strategy_complexity").rationale) && /it is a credit position/.test(dim("strategy_complexity").prohibitedInference), "credit position");
+  add("DA-38: the product is NOT described as having no composability dependencies", /Direct lending is not dependency-free/.test(dim("composability_dependency").prohibitedInference), "has dependencies");
+  add("DA-39: the take rate is not labelled a withdrawal fee", /take rate is a user withdrawal fee/.test(dim("withdrawal_fee_transparency").prohibitedInference) && /INTEREST-REVENUE SHARE/.test(dim("withdrawal_fee_transparency").rationale), "interest share");
+  add("DA-40: multisig+timelock presence is not described as eliminating admin risk", /eliminates admin risk. It bounds and delays it; it does not remove it/.test(dim("upgrade_admin_authority").prohibitedInference), "bounds ≠ removes");
+  add("DA-41: KVault audit evidence is not transferred", /KVault/.test(dim("audit_security").favorableEvidence.join(" ")) === true && /materially richer artifact set than KVault/.test(dim("audit_security").rationale), "compared, not transferred");
+  add("DA-42: engineering inconvenience is not scored as protocol risk", /WealthSmith's integration effort is protocol risk/.test(dim("operational_dependency_risk").prohibitedInference) && /NOT scored as protocol risk/.test(dim("operational_dependency_risk").rationale), "rubric-bound");
+
+  // --- Confidence ---
+  add("DA-43: confidence reflects evidence quality, not favorability", dim("asset_stablecoin_risk").score === 8 && dim("asset_stablecoin_risk").confidence === "high" && dim("oracle_risk").score === 5 && dim("oracle_risk").confidence === "low" && dim("upgrade_admin_authority").score === 7 && dim("upgrade_admin_authority").confidence === "medium", "high score ≠ high confidence");
+  add("DA-44: partial-readiness dimensions carry limited confidence", D.filter((d) => d.evidenceReadiness === "partial").every((d) => d.confidence !== "high"), "6 partial, none high");
+  add("DA-45: focus areas name where evidence could move the score", DA_FOCUS.length === 6 && DA_FOCUS.every((f) => f.couldMoveBands >= 1 && f.why.length > 0), "6 focus areas");
+  add("DA-46: lowest-scoring and lowest-confidence dimensions are recorded", (DA_LOWEST_SCORE as readonly string[]).includes("maturity (4)") && (DA_LOWEST_CONF as readonly string[]).length === 3, "recorded");
+
+  // --- State ---
+  add("DA-47: automated assessment state is completed", S.automatedAssessmentState === "completed", "completed");
+  add("DA-48: lifecycle remains identity_verified", S.lifecycle === "identity_verified" && getYieldStrategy("kamino_usdc_lending")!.lifecycle === "identity_verified", "unchanged");
+  add("DA-49: primary blocker remains blocked_risk_review", S.primaryBlocker === "blocked_risk_review" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review", "unchanged");
+  add("DA-50: human review remains awaiting_reviewer and was not created", S.humanReviewState === "awaiting_reviewer" && S.humanReviewCreated === false && DA_CONFERS.humanReviewOccurred === false, "awaiting");
+  add("DA-51: NO reviewer identity is fabricated", S.reviewerIdentityFabricated === false && DA_PACKET.reviewerId === null && DA_PACKET.reviewerDecision === null && DA_PACKET.reviewerSignoff === null && DA_PACKET.containsFabricatedReviewer === false, "reviewer fields null");
+  add("DA-52: every reviewer row field is null by construction", DA_PACKET.rows.every((r) => r.reviewerScore === null && r.reviewerConfidence === null && r.reviewerRationale === null && r.reviewerAgrees === null) && DA_PACKET.rows.length === 12, "12 empty rows");
+  add("DA-53: no signoff occurred", S.riskSignoffState === "absent" && DA_CONFERS.signoffOccurred === false && DA_PACKET.approval === null, "absent");
+  add("DA-54: no product approval occurred", S.productApprovalState === "absent" && DA_CONFERS.productApproved === false && S.movedToReadyForApprovalReview === false, "absent");
+  add("DA-55: no selector eligibility or recommendation was created", S.selectorEligible === false && S.recommendationEligible === false && S.topPickCreated === false && DA_CONFERS.selectorChanged === false && DA_CONFERS.recommendationChanged === false, "none");
+  add("DA-56: no production card renders", S.productionCardRendered === false && getStableYieldEvidenceManifest("kamino_usdc_lending")!.readiness === "blocked", "no card");
+  add("DA-57: a passing aggregate would still not confer eligibility", /would ALL still be false/.test(S.evenIfMeetsMinimumWereTrue) && /never a substitute for it/.test(S.evenIfMeetsMinimumWereTrue), "input, not substitute");
+  add("DA-58: meetsMinimum=false does not revoke existing-position recognition", S.existingPositionRecognitionChanged === false && S.safetyBufferHandlingChanged === false && /not revoked/.test(S.meetsMinimumFalseConsequence.replace("recognition is not revoked", "not revoked")), "positions preserved");
+  add("DA-59: the score is internal-only", /INTERNAL ONLY/.test(DA_CONFERS.scoreIsInternalOnly) && /never appear on suggestion cards/.test(DA_CONFERS.scoreIsInternalOnly), "internal");
+
+  // --- Immutability ---
+  add("DA-60: the assessment manifest is deterministic", DA_MANIFEST_HASH === computeDirectAssessmentManifestHash() && /^direct_assessment_[0-9a-f]{8}$/.test(DA_MANIFEST_HASH), DA_MANIFEST_HASH);
+  add("DA-61: the manifest records all 12 scores and confidences", DA_MANIFEST.scores.length === 12 && DA_MANIFEST.scores.every((s) => Number.isInteger(s.score) && (ALLOWED_CONFIDENCE_VALUES as readonly string[]).includes(s.confidence)) && DA_MANIFEST.threshold === 7 && DA_MANIFEST.meetsMinimum === false, "complete");
+  add("DA-62: invalidation triggers cover authority, config, incident and governance changes", DA_MANIFEST.invalidationTriggers.length === 19 && (DA_MANIFEST.invalidationTriggers as readonly string[]).includes("socialize_loss event") && (DA_MANIFEST.invalidationTriggers as readonly string[]).includes("audit-to-current-binary linkage resolved") && (DA_MANIFEST.invalidationTriggers as readonly string[]).includes("rubric or confidence-policy version change"), "19 triggers");
+  add("DA-63: current-state changes do not invalidate the assessment", /invalidate CURRENT-STATE SNAPSHOTS, not this assessment/.test(DA_MANIFEST.currentStateChangesDoNotInvalidate), "scoped");
+  add("DA-64: the Steakhouse assessment is unchanged", DA_CONFERS.steakhouseAssessmentChanged === false && Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005 && AUTOMATED_ASSESSMENT_OUTCOME.meetsMinimum === false && AUTOMATED_DIMENSION_ASSESSMENTS.length === 12, "5.37 / false");
+  add("DA-65: this is a separate assessment, not a mutation of Steakhouse's", DA_MANIFEST_HASH !== computeEvidenceManifestHash() && P.assessmentId === "klend_direct_usdc_automated_assessment_v1" && P.assessmentVersion === "1.0.0", "distinct");
+  add("DA-66: no transaction is constructed or simulated", DA_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction/.test(src), "read-only");
+  add("DA-67: all prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash() && CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash() && ALIAS_AMENDMENT_MANIFEST_HASH === computeAliasAmendmentManifestHash() && AUTH_MANIFEST_HASH === computeAuthorityManifestHash() && VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd", "7 intact");
+  add("DA-68: the package remains ready and unmutated by scoring", PKG_READINESS.readiness === "ready_for_automated_assessment" && PKG_DIMENSIONS.every((d) => !("score" in d)), "package score-free");
 
   return checks;
 }
