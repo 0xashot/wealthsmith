@@ -1,3 +1,5 @@
+import { STABLE_YIELD_BLOCKER_ORDER, NON_SEQUENTIAL_PRIMARY_STATUSES, blockerRank, isNearerBlocker, STABLE_YIELD_EVIDENCE_MANIFEST_VERSION, SUPERSEDED_MANIFEST_VERSIONS } from "./stableYieldProductionEvidence";
+import { PRIOR_PRIMARY_STATUS_VOCABULARY, ADDED_PRIMARY_STATUSES, DELIBERATELY_NOT_ADDED, SCHEMA_VERSION_CHANGE, validatePrimaryBlockerIsNearest, AFFECTED_CANDIDATE, PRESERVED_HISTORICAL_TRANSITION, STEAKHOUSE_OBSERVATION_NOT_ACTED_ON, AMENDMENT_CONFERS, PRESERVED_PRIOR_EVIDENCE_N5A, BLOCKER_ORDER_EVIDENCE, computeBlockerOrderEvidenceManifestHash, BLOCKER_ORDER_EVIDENCE_MANIFEST_HASH } from "./stableYieldBlockerOrderAmendment";
 import { POSITION_IDENTITY, EXPECTED_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID, IDENTIFICATION_RULES, validatePositionIdentity, WALLET_DISCOVERY_SOURCE, discoverCTokenAccounts, CTOKEN_SUPPLY_AUTHORITY, VALUATION_SEMANTICS, MAX_POSITION_SOURCE_SKEW, POSITION_TTL_MS, deriveKlendDirectLendingPosition, BUFFER_RECOGNITION_BOUNDARY, recognizeUnderlyingUsd, EXISTING_POSITION_SEMANTICS, POSITION_SNAPSHOT, POSITION_SNAPSHOT_IS_NOT_PRODUCTION_INPUT, PRESERVED_PRIOR_EVIDENCE_N5, POSITION_EVIDENCE, computePositionEvidenceManifestHash, POSITION_EVIDENCE_MANIFEST_HASH, POSITION_BLOCKER_SUPERSESSION, POSITION_CONFERS, type PositionIdentityInputs, type WalletTokenAccountInput } from "./klendDirectLendingPosition";
 import { KLEND_CAPACITY_SOURCE, SDK_MIRRORS_ENFORCEMENT, ENFORCEMENT_FACTS, DEPOSIT_LIMIT_SENTINEL_SEMANTICS, CAPACITY_IS_NOT_DEPOSIT_STATE, CAPACITY_PRODUCT_BINDING, validateCapacityIdentity, deriveKlendReserveCapacity, CAPACITY_TTL_MS, MAX_CAPACITY_SLOT_AGE, CAPACITY_SNAPSHOT, SNAPSHOT_IS_NOT_PRODUCTION_INPUT, CAPACITY_LAYER_SEPARATION, USD_CAPACITY, API_PARITY_OBSERVATIONS, KAMINO_CAPACITY_API_DIAGNOSTIC, classifyCapacityParity, CAPACITY_PARITY_RESULT, PRESERVED_PRIOR_EVIDENCE as PRESERVED_PRIOR_EVIDENCE_CAP, CAPACITY_EVIDENCE, computeCapacityEvidenceManifestHash, CAPACITY_EVIDENCE_MANIFEST_HASH, CAPACITY_BLOCKER_SUPERSESSION, CAPACITY_CONFERS, type CapacityIdentityInputs } from "./klendReserveCapacity";
 import { measureSlotDuration, computeSlotAdjustmentFactor, validateReserveMeasurementSkew, PRIMARY_WINDOW_SLOTS, VALIDATION_WINDOW_SLOTS, WINDOW_AGREEMENT_TOLERANCE, SANITY_RANGE_MS, MEASUREMENT_TTL_MS, MAX_RESERVE_MEASUREMENT_SLOT_SKEW, DENOMINATOR_POLICY, REJECTED_CONSTANT_MS } from "./solanaSlotDurationEstimator";
@@ -16276,7 +16278,7 @@ export function runStableYieldIdentityResolutionFixtureChecks(): FixtureCheck[] 
   // 16H-N.1 moved the primary blocker off blocked_identity onto blocked_apy_unit. 16H-N.2 then
   // resolved the APY unit too, so primary moved again. The invariant across both: identity stays
   // resolved, and every superseded blocker keeps a RESOLVED provenance entry rather than vanishing.
-  add("16H-N.1-AB2 (updated by 16H-N.3b): resolved blockers keep provenance and primary moves on", (() => { const m = man("kamino_usdc_lending"); const b = m.blockers.join(" "); return m.primaryBlocker === "blocked_risk_review" && /RESOLVED at 16H-N\.1/.test(b) && /RESOLVED at 16H-N\.2/.test(b) && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && !/^blocked_identity \(PRIMARY/.test(b); })(), "blocker moved to capacity");
+  add("16H-N.1-AB2 (updated by 16H-N.3b): resolved blockers keep provenance and primary moves on", (() => { const m = man("kamino_usdc_lending"); const b = m.blockers.join(" "); return m.primaryBlocker === "blocked_deposit_availability" && /RESOLVED at 16H-N\.1/.test(b) && /RESOLVED at 16H-N\.2/.test(b) && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && !/^blocked_identity \(PRIMARY/.test(b); })(), "blocker moved to capacity");
 
   // ---- Evidence + readiness ----
   add("16H-H-AC: every manifest carries exactly one deterministic primary status", listStableYieldEvidenceManifests().every((m) => typeof m.primaryBlocker === "string" && m.primaryBlocker.length > 0), "deterministic");
@@ -16987,7 +16989,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   // ---- Consequence ----
   add("PAR-22: the APY methodology is UNRESOLVED and comparison is blocked", PARITY_CONSEQUENCE.apyMethodologyResolved === false && PARITY_CONSEQUENCE.definitionSufficientForComparison === false && PARITY_CONSEQUENCE.definitionSufficientPriorValue === true, "unresolved");
   add("PAR-23: the adapter was NOT silently edited and NO correction was invented", PARITY_CONSEQUENCE.adapterSilentlyEdited === false && PARITY_CONSEQUENCE.methodologyCorrectionMade === false && /requires identifying the omitted component/i.test(PARITY_CONSEQUENCE.methodologyCorrectionWithheldBecause) && PARITY_AMENDMENT_CONFERS.adapterEdited === false, "not edited");
-  add("PAR-24 (superseded by 16H-N.3b): the 16H-N.3a reopening is immutable; the live blocker has since moved on", PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && /APY methodology itself is unresolved/i.test(PARITY_CONSEQUENCE.primaryBlockerRationale) && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review" && APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit", "historical record intact, live state advanced");
+  add("PAR-24 (superseded by 16H-N.3b): the 16H-N.3a reopening is immutable; the live blocker has since moved on", PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && /APY methodology itself is unresolved/i.test(PARITY_CONSEQUENCE.primaryBlockerRationale) && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_deposit_availability" && APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit", "historical record intact, live state advanced");
   add("PAR-25: UI-rounding noise is distinguished from official-source disagreement", /would NOT block/i.test(PARITY_CONSEQUENCE.internalComparabilityVsUiParity) && /far beyond rounding/i.test(PARITY_CONSEQUENCE.internalComparabilityVsUiParity), "distinguished");
   add("PAR-26: 16H-N.2's circular parity is acknowledged, not withdrawn", /circular/i.test(PARITY_CONSEQUENCE.regression16HN2) && /remains TRUE and is not withdrawn/i.test(PARITY_CONSEQUENCE.regression16HN2) && APY_PARITY.result === "exact_match", "acknowledged");
   add("PAR-27: the manifest records the reopening and keeps capacity listed", (() => { const b = getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" "); return /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.4 \(retained for provenance, no longer blocking\) — blocked_capacity/.test(b) && /api_freshness_unestablishable/.test(b) && /SUPERSEDED at 16H-N\.3a/.test(b); })(), "recorded");
@@ -17062,7 +17064,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   // 16H-N.3a found the official API and SDK disagree ~9.65%, reopening the APY methodology, which is
   // the one condition permitting the primary to move. The invariant that survives: 16H-N.3 itself
   // invented no enum and did not move the blocker; a LATER step moved it on new evidence.
-  add("RW-39 (updated by 16H-N.3b): 16H-N.3 moved nothing; the APY reopened then resolved, returning primary to capacity", REWARD_GAP_SUPERSESSION.primaryBlockerUnchanged === "blocked_capacity" && REWARD_GAP_SUPERSESSION.newBlockerEnumInvented === false && PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review", "round trip complete");
+  add("RW-39 (updated by 16H-N.3b): 16H-N.3 moved nothing; the APY reopened then resolved, returning primary to capacity", REWARD_GAP_SUPERSESSION.primaryBlockerUnchanged === "blocked_capacity" && REWARD_GAP_SUPERSESSION.newBlockerEnumInvented === false && PARITY_CONSEQUENCE.primaryBlockerMovesTo === "blocked_apy_unit" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_deposit_availability", "round trip complete");
   add("RW-40: the manifest records the reward resolution and the open UI gap", (() => { const b = getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" "); return /RESOLVED at 16H-N\.3/.test(b) && /UI PARITY UNEXPLAINED/.test(b); })(), "recorded");
 
   // ---- Isolation ----
@@ -17124,7 +17126,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   add("APY-34: the supersession is explicit with authority, method, units, version, slot", (() => { const r = APY_BLOCKER_SUPERSESSION.resolution; return r.resolved === true && r.calculationAuthority.startsWith("A") && r.sdkMethodIdentity.includes("totalSupplyAPY") && r.units.includes("percentage_points") && r.calculationVersion === "1.0.0" && r.sourceSlot === "433344510" && r.parity.includes("exact_match"); })(), "explicit");
   add("APY-35: the reward STATE-MODEL GAP is reported, not invented around", /no reward-resolution state/i.test(APY_BLOCKER_SUPERSESSION.remainingApyGap.stateModelGap) && /NO new state was invented/i.test(APY_BLOCKER_SUPERSESSION.remainingApyGap.stateModelGap) && APY_BLOCKER_SUPERSESSION.primaryBlockerMovesTo === "blocked_capacity", "gap reported");
   add("APY-36: the manifest reflects a verified adapter and the moved blocker", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.apyAdapterState === "adapter_implemented_source_verified" && m.apyUnitInterpretation === "percent" && /RESOLVED at 16H-N\.2/.test(m.blockers.join(" ")); })(), "manifest");
-  add("APY-36b (updated by 16H-N.3b): the adapter state stood throughout the reopen-and-resolve cycle", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; const b = m.blockers.join(" "); return m.apyAdapterState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_risk_review" && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && PARITY_CONSEQUENCE.adapterSilentlyEdited === false; })(), "reopened, adapter intact");
+  add("APY-36b (updated by 16H-N.3b): the adapter state stood throughout the reopen-and-resolve cycle", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; const b = m.blockers.join(" "); return m.apyAdapterState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_deposit_availability" && /REOPENED at 16H-N\.3a/.test(b) && /RESOLVED at 16H-N\.3b/.test(b) && PARITY_CONSEQUENCE.adapterSilentlyEdited === false; })(), "reopened, adapter intact");
 
   // ---- Isolation ----
   add("APY-37 (capacity resolved at 16H-N.4): capacity, constraints, deposits and risk remain UNCHANGED", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "adapter_implemented_source_verified" && m.constraintsState === "blocked" && m.depositAvailabilityState === "blocked" && m.riskReviewState === "blocked" && m.readiness === "blocked"; })(), "unchanged");
@@ -17834,6 +17836,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runBlockerOrderAmendmentFixtureChecks(),
     ...runKlendPositionFixtureChecks(),
     ...runKlendReserveCapacityFixtureChecks(),
     ...runMeasuredSlotDurationApyFixtureChecks(),
@@ -18083,7 +18086,7 @@ export function runMeasuredSlotDurationApyFixtureChecks(): FixtureCheck[] {
   add("SD-71: successful validation moves primary blocker to blocked_capacity", CORRECTION_READINESS_RESULT.primaryBlocker === "blocked_capacity" && APY_UNIT_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_capacity", "→ blocked_capacity");
   add("SD-72: prior primary blocker is recorded as blocked_apy_unit", APY_UNIT_BLOCKER_SUPERSESSION.priorPrimaryBlocker === "blocked_apy_unit" && APY_UNIT_BLOCKER_SUPERSESSION.reopenedAt === "16H-N.3a", "provenance kept");
   add("SD-73: any failed gate keeps blocked_apy_unit", ["identityVerified", "slotDurationValidated", "slotDurationFresh", "windowsAgree", "reserveFresh", "skewWithinBound", "rewardResolved"].every((g) => { const i = { identityVerified: true, slotDurationValidated: true, slotDurationFresh: true, windowsAgree: true, reserveFresh: true, skewWithinBound: true, rewardResolved: true, parityWithinTolerance: true } as Record<string, boolean>; i[g] = false; const r = evaluateComparisonReadiness(i as unknown as Parameters<typeof evaluateComparisonReadiness>[0]); return r.definitionSufficientForComparison === false && r.primaryBlocker === "blocked_apy_unit"; }), "7 gates each block");
-  add("SD-74 (updated by 16H-N.4): the production evidence records the APY blocker as resolved and has moved past capacity too", (() => { const src = readIf("src/suggestions/stableYieldProductionEvidence.ts"); const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return /RESOLVED at 16H-N\.3b/.test(src) && m.primaryBlocker !== "blocked_apy_unit" && m.primaryBlocker === "blocked_risk_review"; })(), "apy resolved, primary advanced");
+  add("SD-74 (updated by 16H-N.4): the production evidence records the APY blocker as resolved and has moved past capacity too", (() => { const src = readIf("src/suggestions/stableYieldProductionEvidence.ts"); const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return /RESOLVED at 16H-N\.3b/.test(src) && m.primaryBlocker !== "blocked_apy_unit" && m.primaryBlocker === "blocked_deposit_availability"; })(), "apy resolved, primary advanced");
 
   // --- Presentation ---
   add("SD-75: display format requires the ~ prefix", USER_FACING_APY_PRESENTATION.displayFormat === "~{formattedApy}% APY" && USER_FACING_APY_PRESENTATION.tildePrefixRequired === true, "~{apy}% APY");
@@ -18263,7 +18266,7 @@ export function runKlendReserveCapacityFixtureChecks(): FixtureCheck[] {
   // --- State transition ---
   add("CAP-83: capacity state moves no_adapter → adapter_implemented_source_verified", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.capacityAdapterState === "adapter_implemented_source_verified" && CAPACITY_BLOCKER_SUPERSESSION.priorCapacityState === "no_adapter"; })(), "source-verified");
   add("CAP-84: blocked_capacity provenance is preserved", /RESOLVED at 16H-N\.4[\s\S]*blocked_capacity/.test(getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" ")), "provenance kept");
-  add("CAP-85 (updated by 16H-N.5): capacity moved primary to position detection, which 16H-N.5 has since resolved", CAPACITY_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_position_detection" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review", "N.4 record intact, live state advanced");
+  add("CAP-85 (updated by 16H-N.5): capacity moved primary to position detection, which 16H-N.5 has since resolved", CAPACITY_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_position_detection" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_deposit_availability", "N.4 record intact, live state advanced");
   add("CAP-86: no blocker enum or lifecycle value was invented", CAPACITY_BLOCKER_SUPERSESSION.newBlockerEnumInvented === false && CAPACITY_BLOCKER_SUPERSESSION.newLifecycleValueInvented === false, "none invented");
   add("CAP-87: the state-model gap is reported, not papered over", /no blocked_deposit_availability or blocked_constraints value/i.test(CAPACITY_BLOCKER_SUPERSESSION.stateModelGap), "gap reported");
   add("CAP-88: lifecycle remains identity_verified", /identity_verified/.test(CAPACITY_CONFERS.lifecycleUnchanged) && getYieldStrategy("kamino_usdc_lending")!.lifecycle === "identity_verified", "unchanged");
@@ -18416,7 +18419,7 @@ export function runKlendPositionFixtureChecks(): FixtureCheck[] {
   // --- State ---
   add("POS-69: positionDetectionState moves no_adapter → adapter_implemented_source_verified", (() => { const m = getStableYieldEvidenceManifest("kamino_usdc_lending")!; return m.positionDetectionState === "adapter_implemented_source_verified" && POSITION_BLOCKER_SUPERSESSION.priorPositionDetectionState === "no_adapter"; })(), "source-verified");
   add("POS-70: blocked_position_detection provenance is preserved", /RESOLVED at 16H-N\.5[\s\S]*blocked_position_detection/.test(getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" ")), "provenance kept");
-  add("POS-71: the primary blocker moves to blocked_risk_review", getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review" && POSITION_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_risk_review", "moved on");
+  add("POS-71 (updated by 16H-N.5a): N.5 moved primary to risk review under the old vocabulary; the live primary is now the nearer deposit-availability state", POSITION_BLOCKER_SUPERSESSION.resultingPrimaryBlocker === "blocked_risk_review" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_deposit_availability", "N.5 record intact, live state nearer");
   add("POS-72: no blocker enum or lifecycle value was invented", POSITION_BLOCKER_SUPERSESSION.newBlockerEnumInvented === false && POSITION_BLOCKER_SUPERSESSION.newLifecycleValueInvented === false, "none invented");
   add("POS-73: the state-model gap is reported and is now binding", /no blocked_deposit_availability or blocked_constraints value/i.test(POSITION_BLOCKER_SUPERSESSION.stateModelGap) && /state_model_gap_primary_blocker_expressiveness/.test(getStableYieldEvidenceManifest("kamino_usdc_lending")!.blockers.join(" ")), "gap surfaced");
   add("POS-74: the match mechanism is recorded as the exact cToken mint", /B8V6WVjPxW1UGwVDfxH2d2r8SyT4cqn7dQRK6XneVa7D/.test(getStableYieldEvidenceManifest("kamino_usdc_lending")!.positionMatchMechanism ?? ""), "exact mint");
@@ -18445,6 +18448,103 @@ export function runKlendPositionFixtureChecks(): FixtureCheck[] {
   add("POS-93: capacity evidence is unchanged", CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && /^capacity_evidence_[0-9a-f]{8}$/.test(CAPACITY_EVIDENCE_MANIFEST_HASH), CAPACITY_EVIDENCE_MANIFEST_HASH);
   add("POS-94: all prior evidence ids are preserved", (PRESERVED_PRIOR_EVIDENCE_N5 as readonly string[]).includes("capacity_evidence_e54e310a") && (PRESERVED_PRIOR_EVIDENCE_N5 as readonly string[]).includes("measured_apy_evidence_ebc7627d") && PRESERVED_PRIOR_EVIDENCE_N5.length === 14, "14 preserved");
   add("POS-95: Steakhouse evidence and assessment remain immutable", KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4", "unchanged");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-N.5a — Deposit Availability and Constraints Blocker States
+ * ------------------------------------------------------------------ */
+
+export function runBlockerOrderAmendmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const ORDER = STABLE_YIELD_BLOCKER_ORDER as readonly string[];
+  const at = (s: string) => ORDER.indexOf(s);
+  const kam = () => getStableYieldEvidenceManifest("kamino_usdc_lending")!;
+  const steak = () => getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!;
+
+  // --- New states exist and are valid ---
+  add("BO-1: blocked_deposit_availability is a valid primary state", at("blocked_deposit_availability") !== -1 && blockerRank("blocked_deposit_availability") !== undefined, "valid");
+  add("BO-2: blocked_constraints is a valid primary state", at("blocked_constraints") !== -1 && blockerRank("blocked_constraints") !== undefined, "valid");
+  add("BO-3: both are recorded as the added states", ADDED_PRIMARY_STATUSES.length === 2 && (ADDED_PRIMARY_STATUSES as readonly string[]).includes("blocked_deposit_availability") && (ADDED_PRIMARY_STATUSES as readonly string[]).includes("blocked_constraints"), "2 added");
+  add("BO-4: both round-trip through JSON serialization", (() => { for (const s of ADDED_PRIMARY_STATUSES) { const round = JSON.parse(JSON.stringify({ primaryBlocker: s })).primaryBlocker; if (round !== s || blockerRank(round) === undefined) return false; } return true; })(), "serialize + deserialize");
+  add("BO-5: a manifest carrying a new state serializes and deserializes intact", (() => { const round = JSON.parse(JSON.stringify(kam())); return round.primaryBlocker === "blocked_deposit_availability" && round.primaryBlocker === kam().primaryBlocker; })(), "round-trips");
+
+  // --- Existing states remain valid ---
+  add("BO-6: every prior vocabulary state is still valid", PRIOR_PRIMARY_STATUS_VOCABULARY.every((s) => ORDER.includes(s) || (NON_SEQUENTIAL_PRIMARY_STATUSES as readonly string[]).includes(s)), "10 prior states retained");
+  add("BO-7: nothing was removed or renamed", PRIOR_PRIMARY_STATUS_VOCABULARY.length === 10 && SCHEMA_VERSION_CHANGE.changeKind === "additive_widening", "additive only");
+  add("BO-8: prior manifest schema 1.0.0 remains readable", (SUPERSEDED_MANIFEST_VERSIONS as readonly string[]).includes("1.0.0") && /stay readable and need no migration/i.test(SCHEMA_VERSION_CHANGE.compatibilityBehaviour), "1.0.0 readable");
+  add("BO-9: the schema version was bumped 1.0.0 → 1.1.0", SCHEMA_VERSION_CHANGE.priorVersion === "1.0.0" && STABLE_YIELD_EVIDENCE_MANIFEST_VERSION === "1.1.0", "1.1.0");
+  add("BO-10: a minor bump is justified because the change is additive", /A major bump would signal a breaking change that did not happen/i.test(SCHEMA_VERSION_CHANGE.whyMinorNotMajor), "minor");
+  add("BO-11: no broad migration framework was invented", /No schema-migration framework was invented/i.test(SCHEMA_VERSION_CHANGE.compatibilityBehaviour), "smallest change");
+
+  // --- Ordering ---
+  add("BO-12: deposit availability comes after position detection", at("blocked_deposit_availability") > at("blocked_position_detection"), "detection → deposit availability");
+  add("BO-13: constraints come after deposit availability", at("blocked_constraints") > at("blocked_deposit_availability"), "deposit availability → constraints");
+  add("BO-14: risk review comes after constraints", at("blocked_risk_review") > at("blocked_constraints"), "constraints → risk review");
+  add("BO-15: the full progression is deterministic and identity-first", at("blocked_identity") === 0 && at("blocked_apy_unit") > at("blocked_identity") && at("blocked_capacity") > at("blocked_apy_unit") && at("blocked_position_detection") > at("blocked_capacity"), "identity → ... → detection");
+  add("BO-16: ready_for_approval_review is terminal", at("ready_for_approval_review") === ORDER.length - 1, "last");
+  add("BO-17: no blocked_approval was invented", !ORDER.includes("blocked_approval") && /Approval is a separate reviewed DECISION, not a blocker stage/i.test(DELIBERATELY_NOT_ADDED.blocked_approval), "not invented");
+  add("BO-18: the repo's existing terminal name was reused, not a new 'ready'", !ORDER.includes("ready") && /existing terminal is `ready_for_approval_review`/i.test(DELIBERATELY_NOT_ADDED.ready), "existing name");
+  add("BO-19: no generic blocked_availability was added", !ORDER.includes("blocked_availability") && /blur the deposit\/withdrawal distinction/i.test(DELIBERATELY_NOT_ADDED.blocked_availability), "not added");
+  add("BO-20: blocked_withdrawal_availability was not added as a primary state", !ORDER.includes("blocked_withdrawal_availability") && /there is no matching withdrawal field/i.test(DELIBERATELY_NOT_ADDED.blocked_withdrawal_availability), "follows depositAvailabilityState");
+  add("BO-21: no duplicate aliases or transitional states", new Set(ORDER).size === ORDER.length && /None\./.test(DELIBERATELY_NOT_ADDED.transitional_aliases), "no aliases");
+  add("BO-22: dispositions are excluded from the progression", (NON_SEQUENTIAL_PRIMARY_STATUSES as readonly string[]).every((s) => !ORDER.includes(s)) && blockerRank("unsupported_for_mvp") === undefined && blockerRank("archived") === undefined, "not ranked");
+  add("BO-23: isNearerBlocker orders correctly and refuses dispositions", isNearerBlocker("blocked_deposit_availability", "blocked_risk_review") === true && isNearerBlocker("blocked_risk_review", "blocked_deposit_availability") === false && isNearerBlocker("unsupported_for_mvp", "blocked_risk_review") === false, "comparable only within the sequence");
+
+  // --- The validator ---
+  add("BO-24: the validator finds the nearest unresolved stage", validatePrimaryBlockerIsNearest("blocked_deposit_availability", ["blocked_risk_review", "blocked_constraints", "blocked_deposit_availability"]).ok === true, "nearest wins");
+  add("BO-25: the validator rejects a blocker farther than the nearest", (() => { const v = validatePrimaryBlockerIsNearest("blocked_risk_review", ["blocked_risk_review", "blocked_deposit_availability"]); return v.ok === false && v.nearest === "blocked_deposit_availability"; })(), "catches the old bug");
+  add("BO-26: the validator treats dispositions as out of scope", validatePrimaryBlockerIsNearest("unsupported_for_mvp", ["blocked_risk_review"]).ok === true, "not a stage");
+  add("BO-27: the validator is a checker, not a mutator", (() => { const before = kam().primaryBlocker; validatePrimaryBlockerIsNearest("blocked_risk_review", ["blocked_deposit_availability"]); return kam().primaryBlocker === before; })(), "no silent rewrite");
+  add("BO-28: kamino's recorded primary IS the nearest of its unresolved stages", validatePrimaryBlockerIsNearest(kam().primaryBlocker, ["blocked_deposit_availability", "blocked_constraints", "blocked_risk_review"]).ok === true, "consistent");
+
+  // --- The candidate correction ---
+  add("BO-29: kamino_usdc_lending's current blocker is blocked_deposit_availability", kam().primaryBlocker === "blocked_deposit_availability" && AFFECTED_CANDIDATE.correctedPrimaryBlocker === "blocked_deposit_availability", "corrected");
+  add("BO-30: the previous blocker is recorded as blocked_risk_review", AFFECTED_CANDIDATE.previousPrimaryBlocker === "blocked_risk_review", "provenance");
+  add("BO-31: the historical blocked_position_detection → blocked_risk_review transition remains recorded", PRESERVED_HISTORICAL_TRANSITION.transition === "blocked_position_detection → blocked_risk_review" && PRESERVED_HISTORICAL_TRANSITION.rewritten === false, "preserved");
+  add("BO-32: the historical reason remains accurate for schema 1.0.0 and was not rewritten", PRESERVED_HISTORICAL_TRANSITION.stillAccurateForSchema === "1.0.0" && /the nearer states .* did not exist/i.test(PRESERVED_HISTORICAL_TRANSITION.reasonAsRecordedThen), "not falsified");
+  add("BO-33: the 16H-N.5 statement survives verbatim in the manifest", /was PRIMARY at 16H-N\.5 only because the nearer states did not exist/i.test(kam().blockers.join(" ")), "verbatim");
+  add("BO-34: the closed state-model gap is retained for provenance", /RESOLVED at 16H-N\.5a[\s\S]*state_model_gap_primary_blocker_expressiveness/.test(kam().blockers.join(" ")), "retained");
+  add("BO-35: this is recorded as a vocabulary/order correction only", AFFECTED_CANDIDATE.correctionKind === "vocabulary_and_ordering_only", "vocabulary only");
+
+  // --- Nothing became resolved ---
+  add("BO-36: no deposit-availability evidence was added", AFFECTED_CANDIDATE.depositAvailabilityEvidenceAdded === false && /NOTHING about deposit availability was investigated at 16H-N\.5a/i.test(kam().blockers.join(" ")), "none added");
+  add("BO-37: deposit availability remains unresolved", kam().depositAvailabilityState === "blocked" && AMENDMENT_CONFERS.depositAvailabilityRemains === "blocked", "blocked");
+  add("BO-38: no constraints evidence was added", AFFECTED_CANDIDATE.constraintsEvidenceAdded === false, "none added");
+  add("BO-39: constraints remain unresolved", kam().constraintsState === "blocked" && AMENDMENT_CONFERS.constraintsRemain === "blocked", "blocked");
+  add("BO-40: risk review remains unresolved", kam().riskReviewState === "blocked" && AFFECTED_CANDIDATE.riskReviewStillUnresolved === true && AMENDMENT_CONFERS.riskReviewRemains === "blocked", "blocked");
+  add("BO-41: a blocker is never resolved merely because the enum now exists", /A word for a gap is not evidence about the gap/i.test(AMENDMENT_CONFERS.enumExistenceDoesNotResolve), "explicit");
+  add("BO-42: the candidate did not become more eligible", AFFECTED_CANDIDATE.candidateBecameMoreEligible === false && kam().readiness === "blocked" && /less ready, not more/i.test(AFFECTED_CANDIDATE.eligibilityDelta), "less ready, not more");
+  add("BO-43: the corrected primary is NEARER than the previous one", isNearerBlocker("blocked_deposit_availability", "blocked_risk_review") === true, "nearer, not farther");
+
+  // --- Other products preserved ---
+  add("BO-44: Steakhouse is unchanged", steak().primaryBlocker === "blocked_risk_review" && steak().productAddress === "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E" && STEAKHOUSE_OBSERVATION_NOT_ACTED_ON.changed === false, "untouched");
+  add("BO-45: the Steakhouse observation is reported, not silently acted on", /depositAvailabilityState = blocked while primaryBlocker = blocked_risk_review/i.test(STEAKHOUSE_OBSERVATION_NOT_ACTED_ON.observation) && /capacityAdapterState = 'blocked'/.test(STEAKHOUSE_OBSERVATION_NOT_ACTED_ON.blockedOnFirst), "reported");
+  add("BO-46: other candidates retain their blocker states", ["raydium_stable_usdc_strategy", "meteora_stable_usdc_strategy", "hubble_usdc_strategy"].every((id) => getStableYieldEvidenceManifest(id)!.primaryBlocker === "unsupported_for_mvp"), "3 unchanged");
+  add("BO-47: no candidate was mass-updated", listStableYieldEvidenceManifests().filter((m) => m.primaryBlocker === "blocked_deposit_availability").length === 1, "exactly 1 changed");
+  add("BO-48: Steakhouse capacity semantics remain untouched", KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4", "unchanged");
+  add("BO-49: approved-product count remains zero (the readiness type has no `approved` member at all)", listStableYieldEvidenceManifests().every((m) => String(m.readiness) !== "approved" && String(m.primaryBlocker) !== "ready_for_approval_review"), "zero approved");
+
+  // --- Boundaries ---
+  add("BO-50: lifecycle is unchanged", AMENDMENT_CONFERS.lifecycleUnchanged.startsWith("identity_verified") && getYieldStrategy("kamino_usdc_lending")!.lifecycle === "identity_verified" && AFFECTED_CANDIDATE.lifecycleChanged === false, "identity_verified");
+  add("BO-51: no risk score, review, signoff, or approval", AMENDMENT_CONFERS.riskScoreAssigned === false && AMENDMENT_CONFERS.humanReviewOccurred === false && AMENDMENT_CONFERS.signoffOccurred === false && AMENDMENT_CONFERS.productApproved === false, "none");
+  add("BO-52: no selector, recommendation, or Top Pick", (AMENDMENT_CONFERS.doesNotConfer as readonly string[]).includes("selector eligibility") && (AMENDMENT_CONFERS.doesNotConfer as readonly string[]).includes("recommendation eligibility") && (AMENDMENT_CONFERS.doesNotConfer as readonly string[]).includes("Top Pick"), "none");
+  add("BO-53: no production card and no execution", (AMENDMENT_CONFERS.doesNotConfer as readonly string[]).includes("a production suggestion card") && AMENDMENT_CONFERS.transactionConstructedOrSimulated === false, "none");
+  add("BO-54: Safety Buffer values and position recognition are unchanged", AMENDMENT_CONFERS.safetyBufferValuesChanged === false && AMENDMENT_CONFERS.existingPositionRecognitionChanged === false && BUFFER_RECOGNITION_BOUNDARY.liquidBufferValueUsdThisStep === "unresolved", "unchanged");
+  add("BO-55: the position adapter's own state is unchanged", kam().positionDetectionState === "adapter_implemented_source_verified" && kam().capacityAdapterState === "adapter_implemented_source_verified", "N.4 + N.5 intact");
+
+  // --- Evidence ---
+  add("BO-56: the amendment manifest is deterministic", BLOCKER_ORDER_EVIDENCE_MANIFEST_HASH === computeBlockerOrderEvidenceManifestHash() && /^blocker_order_evidence_[0-9a-f]{8}$/.test(BLOCKER_ORDER_EVIDENCE_MANIFEST_HASH), BLOCKER_ORDER_EVIDENCE_MANIFEST_HASH);
+  add("BO-57: evidence records prior vocabulary, added states, order, versions, candidate, triggers", BLOCKER_ORDER_EVIDENCE.priorVocabularySize === 10 && BLOCKER_ORDER_EVIDENCE.addedStates.length === 2 && BLOCKER_ORDER_EVIDENCE.orderLength === 10 && BLOCKER_ORDER_EVIDENCE.schemaPriorVersion === "1.0.0" && BLOCKER_ORDER_EVIDENCE.affectedCandidate === "kamino_usdc_lending" && BLOCKER_ORDER_EVIDENCE.whatChanged.length === 5 && BLOCKER_ORDER_EVIDENCE.invalidationTriggers.length === 3, "complete");
+  add("BO-58: the preparer is not represented as a human reviewer", BLOCKER_ORDER_EVIDENCE.preparerIsNotHumanReviewer === true && BLOCKER_ORDER_EVIDENCE.preparerRole === "automated_evidence_preparer", "not a reviewer");
+  add("BO-59: prior identity evidence is unchanged", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && computeIdentityManifestHash() === SOL_BTC_USDC_IDENTITY_MANIFEST_HASH, "identity_9773ac14");
+  add("BO-60: prior APY evidence is unchanged", APY_EVIDENCE_MANIFEST_HASH === "apy_evidence_d468fce5" && computeApyEvidenceManifestHash() === APY_EVIDENCE_MANIFEST_HASH, "apy_evidence_d468fce5");
+  add("BO-61: reward and parity evidence are unchanged", REWARD_EVIDENCE_MANIFEST_HASH === "reward_evidence_cace4fe4" && PARITY_EVIDENCE_MANIFEST_HASH === "parity_evidence_dd25a9a1", "unchanged");
+  add("BO-62: measured-APY, capacity and position evidence are unchanged", MEASURED_APY_EVIDENCE_MANIFEST_HASH === "measured_apy_evidence_ebc7627d" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && POSITION_EVIDENCE_MANIFEST_HASH === computePositionEvidenceManifestHash(), "unchanged");
+  add("BO-63: all prior evidence ids are preserved", (PRESERVED_PRIOR_EVIDENCE_N5A as readonly string[]).includes("position_evidence_fb2bb70b") && (PRESERVED_PRIOR_EVIDENCE_N5A as readonly string[]).includes("capacity_evidence_e54e310a") && PRESERVED_PRIOR_EVIDENCE_N5A.length === 16, "16 preserved");
 
   return checks;
 }

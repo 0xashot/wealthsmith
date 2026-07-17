@@ -20,7 +20,21 @@ import type { StableYieldApprovalReadiness } from "./stableYieldProductionAdapte
 
 export const STABLE_YIELD_PRODUCTION_EVIDENCE_EXISTS = true;
 export const STABLE_YIELD_APPROVAL_READINESS_MATRIX_EXISTS = true;
-export const STABLE_YIELD_EVIDENCE_MANIFEST_VERSION = "1.0.0" as const;
+/**
+ * Manifest schema version. 16H-N.5a bumped 1.0.0 -> 1.1.0: the primary-blocker vocabulary gained
+ * `blocked_deposit_availability` and `blocked_constraints`, and a deterministic order was declared.
+ *
+ * The change is ADDITIVE, so 1.0.0 values remain readable: every state valid under 1.0.0 is still
+ * valid, and `StableYieldEvidenceManifestVersion` accepts both. Nothing stored needs rewriting.
+ */
+export const STABLE_YIELD_EVIDENCE_MANIFEST_VERSION = "1.1.0" as const;
+
+/** Superseded schema versions that remain readable. Never delete an entry — that would orphan stored data. */
+export const SUPERSEDED_MANIFEST_VERSIONS = ["1.0.0"] as const;
+
+export type StableYieldEvidenceManifestVersion =
+  | typeof STABLE_YIELD_EVIDENCE_MANIFEST_VERSION
+  | (typeof SUPERSEDED_MANIFEST_VERSIONS)[number];
 
 /** Per-facet adapter/evidence state. `implemented` never implies `verified` and never implies approved. */
 export type StableYieldEvidenceState =
@@ -32,7 +46,7 @@ export type StableYieldEvidenceState =
   | "blocked";
 
 export interface StableYieldCandidateEvidence {
-  manifestVersion: typeof STABLE_YIELD_EVIDENCE_MANIFEST_VERSION;
+  manifestVersion: StableYieldEvidenceManifestVersion;
 
   // ---- Identity ----
   strategyId: string;
@@ -97,10 +111,68 @@ export type StableYieldEvidencePrimaryStatus =
   | "blocked_apy_unit"
   | "blocked_freshness"
   | "blocked_capacity"
-  | "blocked_risk_review"
   | "blocked_position_detection"
+  // 16H-N.5a: added. Before these existed, a candidate whose nearest unresolved prerequisite was
+  // deposit availability or constraints had to report a FARTHER blocker (blocked_risk_review),
+  // which was accurate but not the nearest work. See stableYieldBlockerOrderAmendment.ts.
+  | "blocked_deposit_availability"
+  | "blocked_constraints"
+  | "blocked_risk_review"
   | "unsupported_for_mvp"
   | "archived";
+
+/**
+ * The deterministic prerequisite sequence. `primaryBlocker` should be the NEAREST unresolved stage:
+ * earlier stages gate later ones, so reporting a farther blocker hides the actual next piece of work.
+ *
+ * Ordering rationale — each stage is a genuine precondition for the next:
+ *   identity          — nothing else means anything without the exact product
+ *   source_schema     — the source must be readable before its fields can be interpreted
+ *   apy_unit          — the rate's units/semantics must be known before its freshness matters
+ *   freshness         — a rate must be current before capacity against it is meaningful
+ *   capacity          — how much the product can accept
+ *   position_detection— whether the user already holds it
+ *   deposit_availability — whether a deposit is possible AT ALL (capacity is not permission)
+ *   constraints       — minimums/maximums, once depositing is possible
+ *   risk_review       — the human gate, last before approval review
+ *   ready_for_approval_review — no blocker remains
+ *
+ * NOTE: there is deliberately NO `blocked_approval`. The repository's terminal state is
+ * `ready_for_approval_review`, and approval is a separate reviewed decision this file never records.
+ * Inventing `blocked_approval` would imply approval is a blocker stage rather than an outcome.
+ */
+export const STABLE_YIELD_BLOCKER_ORDER = [
+  "blocked_identity",
+  "blocked_source_schema",
+  "blocked_apy_unit",
+  "blocked_freshness",
+  "blocked_capacity",
+  "blocked_position_detection",
+  "blocked_deposit_availability",
+  "blocked_constraints",
+  "blocked_risk_review",
+  "ready_for_approval_review",
+] as const;
+
+/**
+ * Statuses OUTSIDE the progression. `unsupported_for_mvp` and `archived` are dispositions, not stages:
+ * a candidate in either is not working through prerequisites, so ranking them against the sequence
+ * would be meaningless. They are excluded rather than given an arbitrary position.
+ */
+export const NON_SEQUENTIAL_PRIMARY_STATUSES = ["unsupported_for_mvp", "archived"] as const;
+
+/** Rank within the progression, or `undefined` for a non-sequential disposition. */
+export function blockerRank(status: StableYieldEvidencePrimaryStatus): number | undefined {
+  const i = (STABLE_YIELD_BLOCKER_ORDER as readonly string[]).indexOf(status);
+  return i === -1 ? undefined : i;
+}
+
+/** True when `a` is a strictly NEARER (earlier) blocker than `b`. Non-sequential statuses are never comparable. */
+export function isNearerBlocker(a: StableYieldEvidencePrimaryStatus, b: StableYieldEvidencePrimaryStatus): boolean {
+  const ra = blockerRank(a), rb = blockerRank(b);
+  if (ra === undefined || rb === undefined) return false;
+  return ra < rb;
+}
 
 /** Shared blocker text. Candidate-specific blockers are derived from official evidence, never invented. */
 const NO_RISK = "risk_review_missing: no complete reviewed 16D risk record exists for this product";
@@ -227,15 +299,18 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     // genuinely unresolved blocker the state model actually supports. NOTE the reported state-model
     // gap: depositAvailabilityState and constraintsState are both blocked but have NO enum value in
     // StableYieldEvidencePrimaryStatus, so neither can be primary without inventing one.
-    // 16H-N.5: blocked_position_detection RESOLVED. Primary moves to blocked_risk_review — supported by
-    // the state model and genuinely unresolved. The STATE-MODEL GAP persists and is now binding: the
-    // most proximate blockers (deposit availability, constraints) have no enum value, so they cannot be
-    // primary without inventing one. Reported rather than invented.
-    primaryBlocker: "blocked_risk_review",
+    // 16H-N.5a: the state-model gap is CLOSED. blocked_deposit_availability and blocked_constraints now
+    // exist, so primary can name the NEAREST unresolved prerequisite instead of a farther one. This is a
+    // VOCABULARY AND ORDERING correction only: no deposit-availability evidence and no constraints
+    // evidence was added, and the candidate did not become more eligible. The 16H-N.5 transition to
+    // blocked_risk_review is preserved below and remains accurate for manifest schema 1.0.0.
+    primaryBlocker: "blocked_deposit_availability",
     blockers: [
-      "blocked_risk_review (PRIMARY at 16H-N.5): riskReviewState = blocked. No complete reviewed 16D risk record exists, no numeric score is assigned, no reviewer is authorized and no signoff exists. NOTE: this is accurate and supported by the state model, but it is NOT the most proximate blocker — deposit availability and constraints are, and neither is representable as a primary status. See the state-model gap below.",
+      "blocked_deposit_availability (PRIMARY at 16H-N.5a): depositAvailabilityState = blocked. Capacity is not permission and position detection is not permission. Still unevaluated: reserve status, deposit pause/freeze flags, market + reserve emergency state, program restrictions, exact transaction-path constraints, and the SEPARATE deposit_withdrawal_cap rolling-window accumulator that deposit_reserve_liquidity debits. NOTHING about deposit availability was investigated at 16H-N.5a — only the vocabulary that lets this be named as primary.",
+      "blocked_constraints (16H-N.5a, genuinely blocked, next after deposit availability): constraintsState = blocked. No product minimum or maximum is established for this reserve. Now expressible as a primary status, but it is NOT primary because deposit availability is the nearer unresolved prerequisite.",
+      "blocked_risk_review (16H-N.5, still true, no longer primary): riskReviewState = blocked. No complete reviewed 16D risk record exists, no numeric score is assigned, no reviewer is authorized and no signoff exists. This was PRIMARY at 16H-N.5 only because the nearer states did not exist in the schema-1.0.0 vocabulary — an accurate statement for that model version, preserved verbatim rather than rewritten. Under schema 1.1.0 it is correctly ranked after deposit availability and constraints.",
       "RESOLVED at 16H-N.5 (retained for provenance, no longer blocking) — blocked_position_detection: the exact cToken position is now detected and valued. Identity: cToken mint B8V6WVjPxW1UGwVDfxH2d2r8SyT4cqn7dQRK6XneVa7D, owned by the classic SPL Token program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA (NOT Token-2022), decimals 6 — all verified live. Bound by ADDRESS only; symbol, display name, protocol name, USDC-mint-alone and market-name-alone are all rejected, because canonical USDC is shared by four reserves in this market. Discovery REUSES existing ingestion (useWalletPortfolio.ts:504-525) which enumerates by owner, so associated and non-associated accounts both arrive; multiple accounts per mint are summed. VALUATION uses the deployed redemption path, not the SDK display path: redeem_reserve_collateral (lending_operations.rs L574-613) -> Reserve::redeem_collateral (reserve.rs L444-457) -> collateral_to_liquidity (L1404-1407) -> checked_fraction_collateral_to_liquidity (L1435-1443), i.e. underlying = FLOOR(cTokenBalance x liquidity.total_supply() / collateral.mint_total_supply). Two details are load-bearing: (1) the program FLOORS (to_floor) while the SDK cTokensToLiquidity is an unfloored Decimal divide — at the snapshot the program pays 1191791 base units where the SDK reports 1191791.7274, so using the SDK figure would OVERSTATE the user's claim; the SDK's rate is also INVERTED (mintTotalSupply/totalSupply) and divided by rather than multiplied. (2) The denominator is the RESERVE'S CACHED collateral.mint_total_supply (92452929243853), NOT the SPL mint's live supply (92452916483318) — they diverge by ~12.76 cTokens and the program reads its own field. cToken is NOT 1:1 with USDC: 1 cToken = 1.191791 USDC at the snapshot, and no market price is used (none exists). Accrued interest is INCLUDED (the program rejects a stale reserve, so the refresh accrues first); protocol/referrer/pending fees are EXCLUDED from the numerator, consistent with capacity's counted amount. Dust that floors to 0 underlying still reports positionExists = true, so it is never silently discarded. All arithmetic BigInt; float only at the display boundary. positionDetectionState no_adapter -> adapter_implemented_source_verified. See klendDirectLendingPosition.ts (position_evidence).",
-      "state_model_gap_primary_blocker_expressiveness (16H-N.5, reported not invented): StableYieldEvidencePrimaryStatus has no blocked_deposit_availability and no blocked_constraints value. Both depositAvailabilityState and constraintsState are genuinely blocked and are the most proximate remaining work, but neither can be set as primaryBlocker without inventing an enum member. Primary therefore sits at blocked_risk_review, which is supported and genuinely unresolved. Recommend adding the missing enum values in a dedicated state-model step rather than as a side effect of an adapter task.",
+      "RESOLVED at 16H-N.5a (retained for provenance, no longer blocking) — state_model_gap_primary_blocker_expressiveness (16H-N.5, reported not invented): StableYieldEvidencePrimaryStatus had no blocked_deposit_availability and no blocked_constraints value. Both depositAvailabilityState and constraintsState are genuinely blocked and are the most proximate remaining work, but neither can be set as primaryBlocker without inventing an enum member. Primary therefore sits at blocked_risk_review, which is supported and genuinely unresolved. Recommend adding the missing enum values in a dedicated state-model step rather than as a side effect of an adapter task.",
       "buffer_liquidity_unverified (16H-N.5, not blocking recognition): recognizedBufferValueUsd MAY populate from the existing approved exact-mint USDC/USD price path (USDC is NOT assumed to be $1 — the API's own totalSupplyUsd/totalSupply implies ~$0.99985). liquidBufferValueUsd remains UNRESOLVED and this position counts toward NO buffer sufficiency check until withdrawal accessibility is verified at 16H-N.6. Free liquidity, Active status and a positive claim are not proof of exit. No percentage haircut was invented.",
       "deposit_availability_blocked (16H-N.4, genuinely blocked, NOT representable as primary): capacity is NOT deposit state. Positive remaining capacity, Active status, emergencyMode = 0, large available liquidity, a successful decode, a fresh APY and a verified identity are individually and jointly NOT evidence deposits are enabled. Still unevaluated: reserve status, deposit pause/freeze flags, market + reserve emergency state, program restrictions, transaction-path constraints, and the SEPARATE deposit_withdrawal_cap rolling-window accumulator that deposit_reserve_liquidity also debits. STATE-MODEL GAP: StableYieldEvidencePrimaryStatus has no blocked_deposit_availability value, so this cannot be primary without inventing an enum value.",
       "RESOLVED at 16H-N.4 (retained for provenance, no longer blocking) — blocked_capacity: remaining deposit capacity derived EXACTLY from the deployed program's own predicate, not the SDK's display path. Authority: programs/klend/src/lending_market/lending_operations.rs :: deposit_reserve_liquidity L122-173 — `new_reserve_liquidity_supply_f = liquidity_amount_f + reserve.liquidity.total_supply(); if new_reserve_liquidity_supply_f > deposit_limit_f { err!(DepositLimitExceeded) }`. Five load-bearing facts: (1) the counted amount is liquidity.total_supply(), never available liquidity and never the borrow limit; (2) the incoming deposit is added BEFORE comparison; (3) the test is strict `>`, so equality with the cap is ALLOWED and remaining = limit - supply with no -1; (4) accrual must be refreshed in the current slot (ReserveStale), so capacity is freshness-gated; (5) there is NO unlimited sentinel branch. total_supply (reserve.rs L1123-1128) EXCLUDES accumulated_protocol_fees_sf + accumulated_referrer_fees_sf + pending_referrer_fees_sf, so available + borrowed = total_supply is FALSE and was never assumed — verified numerically: 22,581,491.78 + 89,087,415.71 = 111,668,907.49 vs total_supply 111,556,662.39, the 112,245.10 delta being exactly accumulated protocol fees. SENTINEL: klend DIVERGES from kvault — kvault maps deposit_cap == 0 to u64::MAX (uncapped), klend has no such branch, so 0 is a literal ZERO cap (corroborated by SDK reserve.js:1409 isUsageBlocked = depositLimit.isZero() && borrowLimit.isZero()); u64::MAX is uncapped by TYPE (predicate unsatisfiable), and any other value is a finite cap however large. At slot 433434136 (2026-07-17T07:00:45Z): depositLimit = 1000000000000000 raw = 1,000,000,000 USDC (FINITE, not u64::MAX, not misclassified as uncapped); borrowLimit = 700000000000000 = 700,000,000 USDC (a DIFFERENT value, never used as deposit capacity); total_supply = 111,556,662.387780 USDC; remaining = 888,443,337.612219 USDC; isAtCapacity = false; isOverConfiguredLimit = false; depositLimitCrossed() = false. All arithmetic in BigInt scaled-fraction (2^60) via the SDK's getTotalSupplySf ('for exact on-chain-matching fixed-point math'), float only at the final token boundary. capacityAdapterState no_adapter -> adapter_implemented_source_verified. See klendReserveCapacity.ts (capacity_evidence).",
