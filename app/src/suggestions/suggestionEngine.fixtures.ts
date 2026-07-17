@@ -1,3 +1,4 @@
+import { CONTRADICTORY_FIELDS, CANONICAL_SOURCE, CURRENT_VAULT_VERIFICATION, NOT_A_DEPOSIT_GATE, CAPACITY_SCOPE_BOUNDARY, RECONCILED_CAPACITY_RESOLUTION, RECONCILIATION_RESULT, RECONCILIATION_CONFERS, RECONCILIATION_EVIDENCE, computeReconciliationManifestHash, RECONCILIATION_MANIFEST_HASH } from "./steakhouseCapacityReconciliation";
 import { DEPOSIT_AMOUNT_SEMANTICS, REDEEM_AMOUNT_SEMANTICS, FEE_AND_TIMING_CONSTRAINTS, ACCOUNT_REQUIREMENTS, PERMISSIONING_CONSTRAINT, PER_WALLET_LIMIT, PRODUCT_ELIGIBILITY_RESTRICTION, liquidityToCollateralFloor, deriveProtocolMinimumDepositRaw, deriveMinimumRedeemCTokenRaw, CONSTRAINTS_TTL_MS, MAX_CONSTRAINTS_SLOT_SKEW, validateConstraintsIdentity, deriveKlendReserveConstraints, CONSTRAINT_LAYER_SEPARATION, CONSTRAINTS_SNAPSHOT, CONSTRAINT_PRESENTATION, PRESERVED_PRIOR_EVIDENCE_N7, CONSTRAINTS_EVIDENCE, computeConstraintsEvidenceManifestHash, CONSTRAINTS_EVIDENCE_MANIFEST_HASH, CONSTRAINTS_BLOCKER_SUPERSESSION, CONSTRAINTS_CONFERS, type ConstraintsIdentity, type ConstraintsInputs } from "./klendReserveConstraints";
 import { DEPOSIT_PATH, WITHDRAWAL_PATH, ROLLING_WITHDRAWAL_CAP, AVAILABILITY_TTL_MS, MAX_AVAILABILITY_SLOT_SKEW, evaluateDepositAvailability, collateralToLiquidityFloor, maxRedeemableCTokens, evaluateWithdrawalAccessibility, BUFFER_COVERAGE_POLICY, computeBufferCoverage, AVAILABILITY_PRESENTATION, AVAILABILITY_SNAPSHOT, SNAPSHOT_IS_NOT_PRODUCTION_INPUT_N6, PRESERVED_PRIOR_EVIDENCE_N6, STEAKHOUSE_CAPACITY_CONTRADICTION_UNTOUCHED, AVAILABILITY_EVIDENCE, computeAvailabilityEvidenceManifestHash, AVAILABILITY_EVIDENCE_MANIFEST_HASH, DEPOSIT_BLOCKER_SUPERSESSION, AVAILABILITY_CONFERS, type AvailabilityIdentity, type DepositAvailabilityInputs, type WithdrawalAccessibilityInputs } from "./klendReserveAvailability";
 import { STABLE_YIELD_BLOCKER_ORDER, NON_SEQUENTIAL_PRIMARY_STATUSES, blockerRank, isNearerBlocker, STABLE_YIELD_EVIDENCE_MANIFEST_VERSION, SUPERSEDED_MANIFEST_VERSIONS } from "./stableYieldProductionEvidence";
@@ -16287,7 +16288,7 @@ export function runStableYieldIdentityResolutionFixtureChecks(): FixtureCheck[] 
   add("16H-H-AD: no manifest claims 'approved' anywhere", !/\"approved\"|: *\"approved\"/.test(JSON.stringify(listStableYieldEvidenceManifests())), "no approved");
   // The primary blocker has migrated as evidence landed: freshness (16H-H) -> capacity (16H-I) ->
   // risk review (16H-J.1 resolved capacity). Identity has been verified throughout and never sufficed.
-  add("16H-H-AE: Steakhouse remains blocked despite verified identity (the risk review is now primary)", man("kamino_steakhouse_usdc").primaryBlocker === "blocked_risk_review" && man("kamino_steakhouse_usdc").readiness === "blocked", "blocked_risk_review");
+    add("16H-H-AE (updated by 16H-O.1): Steakhouse remains blocked despite verified identity — the blocker is now the NEAREST one, deposit availability, not the largest one", man("kamino_steakhouse_usdc").primaryBlocker === "blocked_deposit_availability" && man("kamino_steakhouse_usdc").readiness === "blocked" && man("kamino_steakhouse_usdc").riskReviewState === "blocked", "still blocked");
   add("16H-H-AF: the readiness matrix shows identity resolved but NOT ready and NOT approved", (() => { const r = buildStableYieldReadinessMatrix().find((x) => x.strategyId === "kamino_steakhouse_usdc")!; return r.identityAdapter === true && r.readyForExplicitReview === false && r.approved === false && r.riskReviewEvidence === false; })(), "identity != approval");
   add("16H-H-AG: missing risk review still blocks readiness for every candidate", listStableYieldEvidenceManifests().every((m) => m.riskReviewState !== "evidence_complete"), "risk blocks");
 
@@ -17838,6 +17839,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runSteakhouseCapacityReconciliationFixtureChecks(),
     ...runKlendConstraintsFixtureChecks(),
     ...runKlendAvailabilityFixtureChecks(),
     ...runBlockerOrderAmendmentFixtureChecks(),
@@ -18289,7 +18291,7 @@ export function runKlendReserveCapacityFixtureChecks(): FixtureCheck[] {
   add("CAP-97: readiness remains blocked", getStableYieldEvidenceManifest("kamino_usdc_lending")!.readiness === "blocked", "blocked");
   add("CAP-98: no transaction is constructed or simulated", CAPACITY_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction|VersionedTransaction/.test(capSrc), "read-only");
   add("CAP-99: the module is read-only", /STRICTLY READ-ONLY/.test(capSrc) && !/deposit\(|withdraw\(/.test(capSrc), "reads only");
-  add("CAP-100: Steakhouse capacity semantics are untouched", KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4" && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker === "blocked_risk_review", "unchanged");
+  add("CAP-100 (updated by 16H-O.1): the KLend capacity step left kvault semantics untouched; 16H-O.1 applied them to Steakhouse without changing the reviewed source", KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4" && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker === "blocked_deposit_availability", "source pinned; state reconciled");
 
   return checks;
 }
@@ -18436,7 +18438,7 @@ export function runKlendPositionFixtureChecks(): FixtureCheck[] {
   add("POS-79: no selector or recommendation eligibility", (POSITION_CONFERS.doesNotConfer as readonly string[]).includes("selector eligibility") && (POSITION_CONFERS.doesNotConfer as readonly string[]).includes("recommendation eligibility") && (POSITION_CONFERS.doesNotConfer as readonly string[]).includes("Top Pick"), "none");
   add("POS-80: readiness remains blocked", getStableYieldEvidenceManifest("kamino_usdc_lending")!.readiness === "blocked", "blocked");
   add("POS-81: capacity remains resolved and unchanged by this step", getStableYieldEvidenceManifest("kamino_usdc_lending")!.capacityAdapterState === "adapter_implemented_source_verified", "N.4 intact");
-  add("POS-82: Steakhouse recognition and detection remain unchanged", (() => { const m = getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!; return m.positionDetectionState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_risk_review" && m.productAddress === "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E"; })(), "unchanged");
+  add("POS-82 (updated by 16H-O.1): Steakhouse recognition and detection remain unchanged; only its capacity/primary-blocker representation was reconciled", (() => { const m = getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!; return m.positionDetectionState === "adapter_implemented_source_verified" && m.primaryBlocker === "blocked_deposit_availability" && m.productAddress === "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E"; })(), "detection intact");
   add("POS-83: the Steakhouse share mint is not confused with this cToken", String(POSITION_IDENTITY.cTokenMint) !== "7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS", "distinct mints");
 
   // --- Evidence ---
@@ -18525,10 +18527,10 @@ export function runBlockerOrderAmendmentFixtureChecks(): FixtureCheck[] {
   add("BO-43: the corrected primary is NEARER than the previous one", isNearerBlocker("blocked_deposit_availability", "blocked_risk_review") === true, "nearer, not farther");
 
   // --- Other products preserved ---
-  add("BO-44: Steakhouse is unchanged", steak().primaryBlocker === "blocked_risk_review" && steak().productAddress === "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E" && STEAKHOUSE_OBSERVATION_NOT_ACTED_ON.changed === false, "untouched");
+  add("BO-44 (updated by 16H-O.1): N.5a did not act on the Steakhouse observation it raised; 16H-O.1 acted on it, and the primary landed exactly where N.5a predicted", STEAKHOUSE_OBSERVATION_NOT_ACTED_ON.changed === false && steak().productAddress === "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E" && steak().primaryBlocker === "blocked_deposit_availability", "prediction confirmed");
   add("BO-45: the Steakhouse observation is reported, not silently acted on", /depositAvailabilityState = blocked while primaryBlocker = blocked_risk_review/i.test(STEAKHOUSE_OBSERVATION_NOT_ACTED_ON.observation) && /capacityAdapterState = 'blocked'/.test(STEAKHOUSE_OBSERVATION_NOT_ACTED_ON.blockedOnFirst), "reported");
   add("BO-46: other candidates retain their blocker states", ["raydium_stable_usdc_strategy", "meteora_stable_usdc_strategy", "hubble_usdc_strategy"].every((id) => getStableYieldEvidenceManifest(id)!.primaryBlocker === "unsupported_for_mvp"), "3 unchanged");
-  add("BO-47 (updated by 16H-N.7): no candidate was mass-updated — exactly one moved through the N.5a-added states and has since passed both", listStableYieldEvidenceManifests().filter((m) => String(m.primaryBlocker) === "blocked_deposit_availability").length === 0 && listStableYieldEvidenceManifests().filter((m) => String(m.primaryBlocker) === "blocked_constraints").length === 0 && AFFECTED_CANDIDATE.candidateId === "kamino_usdc_lending", "1 candidate traversed them; none parked there");
+  add("BO-47 (updated by 16H-O.1): no candidate was mass-updated — the N.5a-added states are now genuinely load-bearing for two separate candidates", AFFECTED_CANDIDATE.candidateId === "kamino_usdc_lending" && listStableYieldEvidenceManifests().filter((m) => String(m.primaryBlocker) === "blocked_deposit_availability").length === 1 && listStableYieldEvidenceManifests().filter((m) => String(m.primaryBlocker) === "blocked_constraints").length === 0, "kamino traversed both; Steakhouse parked at deposit availability");
   add("BO-48: Steakhouse capacity semantics remain untouched", KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4", "unchanged");
   add("BO-49: approved-product count remains zero (the readiness type has no `approved` member at all)", listStableYieldEvidenceManifests().every((m) => String(m.readiness) !== "approved" && String(m.primaryBlocker) !== "ready_for_approval_review"), "zero approved");
 
@@ -18699,7 +18701,7 @@ export function runKlendAvailabilityFixtureChecks(): FixtureCheck[] {
   add("AV-82: the rolling withdrawal cap is modelled and shown non-binding", ROLLING_WITHDRAWAL_CAP.bindingNow === false && /Headroom is capacity - currentTotal/.test(ROLLING_WITHDRAWAL_CAP.bindingRationale) && ROLLING_WITHDRAWAL_CAP.isSeparateFromDepositLimit === true, "91.9M headroom > 21.6M liquidity");
   add("AV-83: the preparer is not represented as a human reviewer", AVAILABILITY_EVIDENCE.preparerIsNotHumanReviewer === true, "not a reviewer");
   add("AV-84: the snapshot is evidence, not a production input", SNAPSHOT_IS_NOT_PRODUCTION_INPUT_N6.isProductionInput === false && /yesterday's permission as today's/.test(SNAPSHOT_IS_NOT_PRODUCTION_INPUT_N6.rule), "evidence ≠ input");
-  add("AV-85: Steakhouse is unchanged and its capacity contradiction untouched", getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker === "blocked_risk_review" && STEAKHOUSE_CAPACITY_CONTRADICTION_UNTOUCHED.modified === false && KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4", "untouched");
+  add("AV-85 (updated by 16H-O.1): the N.6 availability step left the Steakhouse capacity contradiction untouched, exactly as recorded; 16H-O.1 later reconciled it", STEAKHOUSE_CAPACITY_CONTRADICTION_UNTOUCHED.modified === false && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.capacityAdapterState === "adapter_implemented_source_verified" && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker === "blocked_deposit_availability" && KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4", "N.6 deferred it; O.1 fixed it");
   add("AV-86: all prior evidence is immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && APY_EVIDENCE_MANIFEST_HASH === "apy_evidence_d468fce5" && REWARD_EVIDENCE_MANIFEST_HASH === "reward_evidence_cace4fe4" && PARITY_EVIDENCE_MANIFEST_HASH === "parity_evidence_dd25a9a1" && MEASURED_APY_EVIDENCE_MANIFEST_HASH === "measured_apy_evidence_ebc7627d" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && POSITION_EVIDENCE_MANIFEST_HASH === computePositionEvidenceManifestHash() && BLOCKER_ORDER_EVIDENCE_MANIFEST_HASH === computeBlockerOrderEvidenceManifestHash(), "8 hashes intact");
   add("AV-87: all prior evidence ids are preserved", (PRESERVED_PRIOR_EVIDENCE_N6 as readonly string[]).includes("blocker_order_evidence_fae4d95f") && PRESERVED_PRIOR_EVIDENCE_N6.length === 18, "18 preserved");
 
@@ -18829,9 +18831,82 @@ export function runKlendConstraintsFixtureChecks(): FixtureCheck[] {
   add("CN-71: the evidence manifest is deterministic", CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash() && /^constraints_evidence_[0-9a-f]{8}$/.test(CONSTRAINTS_EVIDENCE_MANIFEST_HASH), CONSTRAINTS_EVIDENCE_MANIFEST_HASH);
   add("CN-72: evidence records the formula, authorities and triggers", CONSTRAINTS_EVIDENCE.minimumFormula === "ceil(T / S)" && /compute_depositable_amount/.test(CONSTRAINTS_EVIDENCE.depositAuthority) && CONSTRAINTS_EVIDENCE.whatChanged.length === 5 && CONSTRAINTS_EVIDENCE.invalidationTriggers.length === 5, "complete");
   add("CN-73: the preparer is not represented as a human reviewer", CONSTRAINTS_EVIDENCE.preparerIsNotHumanReviewer === true, "not a reviewer");
-  add("CN-74: Steakhouse and SOL staking remain unchanged", getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker === "blocked_risk_review" && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.constraintsState === "adapter_implemented_source_verified" && KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4", "unchanged");
+  add("CN-74 (updated by 16H-O.1): the N.7 constraints step changed nothing for Steakhouse; 16H-O.1 later reconciled its capacity contradiction and moved its primary nearer", getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker === "blocked_deposit_availability" && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.constraintsState === "adapter_implemented_source_verified" && KVAULT_CAPACITY_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4", "N.7 untouched it; O.1 reconciled it");
   add("CN-75: all prior evidence is immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && APY_EVIDENCE_MANIFEST_HASH === "apy_evidence_d468fce5" && REWARD_EVIDENCE_MANIFEST_HASH === "reward_evidence_cace4fe4" && PARITY_EVIDENCE_MANIFEST_HASH === "parity_evidence_dd25a9a1" && MEASURED_APY_EVIDENCE_MANIFEST_HASH === "measured_apy_evidence_ebc7627d" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && POSITION_EVIDENCE_MANIFEST_HASH === computePositionEvidenceManifestHash() && BLOCKER_ORDER_EVIDENCE_MANIFEST_HASH === computeBlockerOrderEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash(), "9 hashes intact");
   add("CN-76: all prior evidence ids are preserved", (PRESERVED_PRIOR_EVIDENCE_N7 as readonly string[]).includes("availability_evidence_078133b7") && PRESERVED_PRIOR_EVIDENCE_N7.length === 11, "11 preserved");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-O.1 — Steakhouse Capacity Evidence and Primary-Blocker Reconciliation
+ * ------------------------------------------------------------------ */
+
+export function runSteakhouseCapacityReconciliationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const steak = () => getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!;
+  const kam = () => getStableYieldEvidenceManifest("kamino_usdc_lending")!;
+  const blob = () => [...steak().blockers, ...steak().notes].join(" ");
+
+  // --- Canonical capacity ---
+  add("RC-1: the canonical capacity state matches the strongest existing evidence", RECONCILED_CAPACITY_RESOLUTION.mode === "verified_uncapped" && steak().capacityAdapterState === "adapter_implemented_source_verified", "verified_uncapped");
+  add("RC-2: the conclusion is DERIVED from the canonical resolver, not asserted", resolveKvaultDepositCapacity({ programId: KVAULT_MAINNET_PROGRAM_ID, productType: "managed_vault", depositCapRaw: "0" }).mode === RECONCILED_CAPACITY_RESOLUTION.mode, "resolver re-run");
+  add("RC-3: canonical source is the kvault program, pinned by commit", CANONICAL_SOURCE.commit === KVAULT_CAPACITY_SOURCE.commit && CANONICAL_SOURCE.commit === "1d146d7087a76edbbadc14d848ae14295c0745a4" && /get_max_depositable_in_vault/.test(CANONICAL_SOURCE.symbol), "pinned");
+  add("RC-4: the resolved side is canonical because it rests on code, not on recency", /rests on the program's own code/.test(CANONICAL_SOURCE.whyCanonical) && /superseded by proof, not by opinion/.test(CANONICAL_SOURCE.whyCanonical), "proof, not recency");
+  add("RC-5: deposit_cap = 0 is an explicit uncapped BRANCH, not an absent field", /uncapped BRANCH in the deposit path, not an absent field/.test(CANONICAL_SOURCE.semantics), "explicit branch");
+  add("RC-6: the conclusion was re-verified against the deployed vault", CURRENT_VAULT_VERIFICATION.ownerMatchesReviewedProgram === true && CURRENT_VAULT_VERIFICATION.depositCapRaw === "0" && CURRENT_VAULT_VERIFICATION.conclusionStillValidForDeployedVault === true, "slot 433466880");
+  add("RC-7: the capacity investigation was NOT redone", RECONCILIATION_RESULT.capacityInvestigationRedone === false && /No capacity investigation was redone/i.test(readFileSync(`${process.cwd()}/src/suggestions/steakhouseCapacityReconciliation.ts`, "utf8")), "evidence sufficed");
+
+  // --- Scope boundaries ---
+  add("RC-8: KVault uncapped semantics are NOT generalized to KLend reserves", /KLend has NO such branch/.test(CAPACITY_SCOPE_BOUNDARY.kvaultProofDoesNotTransferToKlend) && DEPOSIT_LIMIT_SENTINEL_SEMANTICS.zeroMeansUncapped === false, "kvault ≠ klend");
+  add("RC-9: uncapped does NOT imply deposit availability", CAPACITY_SCOPE_BOUNDARY.uncappedImpliesDepositAvailability === false && steak().depositAvailabilityState === "blocked", "separate questions");
+  add("RC-10: no KVault cap is NOT unlimited downstream availability", CAPACITY_SCOPE_BOUNDARY.noKvaultCapIsNotUnlimitedDownstream === true && CAPACITY_SCOPE_BOUNDARY.whatIsNotEstablished.length === 3, "3 things not established");
+  add("RC-11: downstream reserve capacity remains separate and finite", (CAPACITY_SCOPE_BOUNDARY.whatIsNotEstablished as readonly string[]).some((x) => /1,000,000,000 USDC/.test(x)) && CAPACITY_SNAPSHOT.depositLimitTokenAmount === 1_000_000_000 && CAPACITY_SNAPSHOT.capacityKind === "capped", "KLend reserve capped at 1B");
+  add("RC-12: what is uncapped is scoped to the KVAULT level only", /KVAULT-level deposit cap/.test(CAPACITY_SCOPE_BOUNDARY.whatIsUncapped), "vault-level only");
+  add("RC-13: cap-shaped fields that do not gate deposits are enumerated", NOT_A_DEPOSIT_GATE.unallocatedTokensCap.gatesDeposits === false && NOT_A_DEPOSIT_GATE.allowAllocationsInWhitelistedReservesOnly.gatesDeposits === false && /reads deposit_cap ONLY/.test(NOT_A_DEPOSIT_GATE.unallocatedTokensCap.reason), "2 non-gates");
+
+  // --- The contradiction + history ---
+  add("RC-14: both sides of the contradiction are recorded verbatim", CONTRADICTORY_FIELDS.saidUnresolved.length === 3 && CONTRADICTORY_FIELDS.saidResolved.length === 3 && /never wrote the conclusion into the two structured fields/.test(CONTRADICTORY_FIELDS.rootCause), "3 vs 3");
+  add("RC-15: the stale current wording is corrected", steak().capacityFieldOrFormula !== undefined && !/^UNRESOLVED:/.test(steak().capacityFieldOrFormula!) && /RESOLVED at 16H-J\.1, reconciled here at 16H-O\.1/.test(steak().capacityFieldOrFormula!), "no longer UNRESOLVED");
+  add("RC-16: capacitySource is untouched — 'depositCap value is 0' is still a true reading", /value is 0/.test(steak().capacitySource ?? ""), "fact preserved");
+  add("RC-17: historical blocked-capacity evidence remains preserved verbatim", /16H-I did NOT resolve capacity: depositCap reads 0 on-chain, and 0 is unsafe to interpret without official semantics\. This is now the PRIMARY blocker\./.test(blob()), "verbatim");
+  add("RC-18: the historical statement is marked superseded without being rewritten", /SUPERSEDED at 16H-J\.1, reconciled at 16H-O\.1 \(retained verbatim for provenance\)/.test(blob()) && RECONCILIATION_RESULT.historyRewritten === false, "annotated, not edited");
+  add("RC-19: 16H-I's refusal to guess is recorded as correct-when-written", /accurate when written — 16H-I correctly refused to guess/.test(blob()), "not disparaged");
+  add("RC-20: the prior conclusion was not silently discarded", /historyHandling/.test(JSON.stringify(Object.keys(RECONCILIATION_RESULT))) && /Editing it would falsify the record/.test(RECONCILIATION_RESULT.historyHandling), "explicit");
+
+  // --- Primary blocker ---
+  add("RC-21: the primary blocker is the NEAREST unresolved stage", steak().primaryBlocker === "blocked_deposit_availability" && validatePrimaryBlockerIsNearest(steak().primaryBlocker, ["blocked_deposit_availability", "blocked_risk_review"]).ok === true, "deposit availability");
+  add("RC-22: capacity being resolved is what moved primary past blocked_capacity", isNearerBlocker("blocked_capacity", "blocked_deposit_availability") === true && steak().capacityAdapterState !== "blocked", "capacity cleared");
+  add("RC-23: deposit availability ranks NEARER than risk review", isNearerBlocker("blocked_deposit_availability", "blocked_risk_review") === true, "order holds");
+  add("RC-24: the prior primary blocker is preserved as historical evidence", RECONCILIATION_RESULT.priorPrimaryBlocker === "blocked_risk_review" && /blocked_risk_review \(16H-J onward, still true, no longer primary\)/.test(blob()), "preserved");
+  add("RC-25: risk review is recorded as the LARGEST but not the NEAREST gap", /largest gap, but it is not the NEAREST one/i.test(blob()) && /names the NEAREST unresolved prerequisite, not the largest gap/.test(RECONCILIATION_RESULT.primaryBlockerRationale), "largest ≠ nearest");
+  add("RC-26: the old vocabulary constraint is recorded as the reason risk review was primary", /did not exist in the schema-1\.0\.0 vocabulary/.test(blob()), "N.5a lifted it");
+  add("RC-27: position detection ranks before deposit availability and is already resolved", steak().positionDetectionState === "adapter_implemented_source_verified" && isNearerBlocker("blocked_position_detection", "blocked_deposit_availability") === true, "not a nearer gap");
+  add("RC-28: constraints are already source-verified for Steakhouse, so they are not the gap", steak().constraintsState === "adapter_implemented_source_verified", "constraints done");
+
+  // --- Immutable product boundaries ---
+  add("RC-29: the automated aggregate remains 5.37", Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005 && RECONCILIATION_CONFERS.automatedAggregateUnchanged === 5.37, "5.37");
+  add("RC-30: meetsMinimum remains false", AUTOMATED_ASSESSMENT_OUTCOME.meetsMinimum === false && RECONCILIATION_CONFERS.meetsMinimumUnchanged === false, "false");
+  add("RC-31: no human review is fabricated", RECONCILIATION_CONFERS.humanReviewOccurred === false && RECONCILIATION_CONFERS.humanReviewUnchanged === "awaiting_reviewer" && steak().riskReviewState === "blocked", "awaiting_reviewer");
+  add("RC-32: no signoff or approval occurred", RECONCILIATION_CONFERS.signoffOccurred === false && RECONCILIATION_CONFERS.productApproved === false && steak().readiness === "blocked", "none");
+  add("RC-33: no risk was reassessed", RECONCILIATION_RESULT.riskReassessed === false && RECONCILIATION_CONFERS.riskScoreAssigned === false, "not reassessed");
+  add("RC-34: no recommendation or Top Pick was created", (RECONCILIATION_CONFERS.doesNotConfer as readonly string[]).includes("recommendation eligibility") && (RECONCILIATION_CONFERS.doesNotConfer as readonly string[]).includes("Top Pick"), "none");
+  add("RC-35: no production card renders", (RECONCILIATION_CONFERS.doesNotConfer as readonly string[]).includes("a production card") && String(steak().primaryBlocker) !== "ready_for_approval_review", "no card");
+  add("RC-36: existing-position Safety Buffer recognition is unchanged", RECONCILIATION_CONFERS.existingPositionRecognitionChanged === false && RECONCILIATION_CONFERS.safetyBufferValuesChanged === false && STEAKHOUSE_BUFFER_RECOGNITION_POLICY !== undefined, "unchanged");
+  add("RC-37: Steakhouse position detection and APY are unchanged", steak().positionDetectionState === "adapter_implemented_source_verified" && steak().apyAdapterState === "adapter_implemented_source_verified" && steak().productAddress === "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E", "intact");
+  add("RC-38: the direct Kamino lending candidate is unchanged", RECONCILIATION_CONFERS.directLendingCandidateChanged === false && kam().primaryBlocker === "blocked_risk_review" && kam().capacityAdapterState === "adapter_implemented_source_verified" && kam().constraintsState === "adapter_implemented_source_verified", "N.4-N.7 intact");
+  add("RC-39: SOL staking is unchanged", RECONCILIATION_CONFERS.solStakingChanged === false && SOL_STAKING_COMPATIBILITY !== undefined, "unchanged");
+  add("RC-40: no transaction is constructed or simulated", RECONCILIATION_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction/.test(readFileSync(`${process.cwd()}/src/suggestions/steakhouseCapacityReconciliation.ts`, "utf8")), "read-only");
+  add("RC-41: exactly one candidate sits at blocked_deposit_availability", listStableYieldEvidenceManifests().filter((m) => String(m.primaryBlocker) === "blocked_deposit_availability").length === 1, "only Steakhouse");
+  add("RC-42: the three unsupported candidates are untouched", ["raydium_stable_usdc_strategy", "meteora_stable_usdc_strategy", "hubble_usdc_strategy"].every((id) => getStableYieldEvidenceManifest(id)!.primaryBlocker === "unsupported_for_mvp"), "3 unchanged");
+
+  // --- Evidence ---
+  add("RC-43: the reconciliation manifest is deterministic", RECONCILIATION_MANIFEST_HASH === computeReconciliationManifestHash() && /^reconciliation_evidence_[0-9a-f]{8}$/.test(RECONCILIATION_MANIFEST_HASH), RECONCILIATION_MANIFEST_HASH);
+  add("RC-44: evidence records what changed, why, preparer, timestamp and triggers", RECONCILIATION_EVIDENCE.whatChanged.length === 4 && RECONCILIATION_EVIDENCE.whyItChanged.length > 0 && RECONCILIATION_EVIDENCE.evidenceTimestamp.length > 0 && RECONCILIATION_EVIDENCE.invalidationTriggers.length === 3, "complete");
+  add("RC-45: the preparer is not represented as a human reviewer", RECONCILIATION_EVIDENCE.preparerIsNotHumanReviewer === true && RECONCILIATION_EVIDENCE.preparerRole === "automated_evidence_preparer", "not a reviewer");
+  add("RC-46: prior Steakhouse evidence hashes remain immutable", VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd" && computeEvidenceManifestHash() === VERIFIED_EVIDENCE_MANIFEST_HASH, "evidence_a86da1fd");
+  add("RC-47: all direct-lending evidence hashes remain immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && POSITION_EVIDENCE_MANIFEST_HASH === computePositionEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash() && CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash(), "5 intact");
 
   return checks;
 }

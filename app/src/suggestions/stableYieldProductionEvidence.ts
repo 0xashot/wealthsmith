@@ -195,8 +195,12 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     apyFreshnessPolicy: "16C canonical max age (1h) against the CHAIN block time. Stale/future/missing-blockTime all fail closed; a recent fetch never makes stale chain data fresh.",
     apyAdapterState: "adapter_implemented_source_verified",
     capacitySource: "on-chain VaultState.depositCap — read live 2026-07-16; value is 0",
-    capacityFieldOrFormula: "UNRESOLVED: depositCap exists on-chain but the official SDK NEVER reads it, and no official source documents whether 0 means 'no cap' or 'closed', nor which field is the matching used-counterpart. Guessing either way would invent capacity, so it stays `unknown`.",
-    capacityAdapterState: "blocked",
+    // 16H-O.1: RECONCILED. These two fields were 16H-G/16H-I-era text that 16H-J.1 superseded in
+    // kaminoVaultCapacitySemantics.ts but never wrote back here — leaving this manifest internally
+    // contradictory (these fields said unresolved; the comment below, the primaryBlocker and a blocker
+    // string all said 16H-J.1 resolved it). The kvault source is canonical; these fields were stale.
+    capacityFieldOrFormula: "RESOLVED at 16H-J.1, reconciled here at 16H-O.1: depositCap = 0 is EXPLICITLY mapped to u64::MAX by common::get_max_depositable_in_vault (kvault release/v2.2.2, commit 1d146d7087a76edbbadc14d848ae14295c0745a4, programs/kvault/src/operations/vault_operations.rs L1003-1012) — `let deposit_cap = if vault.deposit_cap == 0 { u64::MAX } else { vault.deposit_cap }`. That is an explicit uncapped BRANCH in the deposit path, not an absent field; `0` is the legacy encoding for vaults created before the field existed (init_vault now writes u64::MAX). Capacity is therefore verified_uncapped AT THE KVAULT LEVEL, and no used-counterpart is needed because u64::MAX - AUM is unbounded in practice. Re-verified live at slot 433466880: the vault account is owned by KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd and depositCap = 0, so the reviewed conclusion still holds for the deployed vault. SCOPE: unallocatedTokensCap = 0 is a DIFFERENT field that get_max_depositable_in_vault never reads, so it does not gate deposits; allowAllocationsInWhitelistedReservesOnly = 1 constrains ALLOCATION, not deposits. CRITICALLY: no KVault-level cap is NOT unlimited downstream availability — the vault allocates into KLend reserves that carry their own finite caps (e.g. the SOL/BTC USDC reserve is capped at 1,000,000,000 USDC), and the SDK bounds allocation by reserve cap separately (vault.js:2689-2696). Uncapped here means only that no KVAULT cap constrains a deposit. It is NOT evidence deposits are enabled — see blocked_deposit_state.",
+    capacityAdapterState: "adapter_implemented_source_verified",
     // Verified live on-chain 2026-07-16: state.minDepositAmount = 100000 raw at 6dp => exactly 0.1 USDC,
     // converted by integer math, never a float round-trip. Distinct from WealthSmith's $250 excess trigger.
     productMinimumUsd: 0.1,
@@ -213,12 +217,18 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
     positionDetectionState: "adapter_implemented_source_verified",
     positionMatchMechanism: "EXACT vault address HDsay... and/or the exact vault share (receipt) mint 7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS, both confirmed live on-chain. wallet/kaminoVaults.ts already reads vault-share balances keyed by exact vault address, read-only, via the official SDK.",
     readiness: "blocked",
-    // 16H-J.1 resolved capacity from the official kvault source, so `blocked_capacity` no longer
-    // applies. The dominant remaining blocker is the risk review: rubric v1 is only PROPOSED, no
-    // reviewer is authorized, and five evidence gaps stand.
-    primaryBlocker: "blocked_risk_review",
+    // 16H-O.1: primary CORRECTED to the nearest unresolved stage. 16H-J.1 resolved capacity, and the
+    // old note concluded the risk review was "the dominant remaining blocker" — true in the sense that
+    // it is the largest gap, but primaryBlocker names the NEAREST prerequisite, not the biggest one.
+    // Under the 16H-N.5a order (capacity → position_detection → deposit_availability → constraints →
+    // risk_review), depositAvailabilityState = "blocked" ranks nearer than riskReviewState = "blocked".
+    // Before 16H-N.5a there was no blocked_deposit_availability value, so risk review was the only
+    // expressible option; that constraint is gone.
+    primaryBlocker: "blocked_deposit_availability",
     blockers: [
-      "blocked_risk_review (PRIMARY): rubric v1.0.0 is proposed_for_approval (not approved), no authorized reviewer exists, and 8 of 12 v1 dimensions carry a mandatory blocker. No score can be assigned.",
+      "blocked_deposit_availability (PRIMARY at 16H-O.1): depositAvailabilityState = blocked. The on-chain VaultState exposes NO pause/enabled field, so a successful read is not proof deposits are enabled, and no availability adapter evaluates the kvault deposit path. Capacity being verified_uncapped is a SEPARATE question and is not evidence deposits are enabled. Nothing about kvault deposit availability was investigated at 16H-O.1 — only the capacity contradiction was reconciled.",
+      "blocked_risk_review (16H-J onward, still true, no longer primary): riskReviewState = blocked. Rubric v1 is only PROPOSED, no reviewer is authorized, and the automated assessment aggregate is 5.37 with meetsMinimum = false. This remains the LARGEST gap, but it is not the NEAREST one — deposit availability ranks earlier in the 16H-N.5a order. It was recorded as primary only because blocked_deposit_availability did not exist in the schema-1.0.0 vocabulary; that statement was accurate for that model version and is preserved rather than rewritten.",
+      "blocked_risk_review (no longer PRIMARY as of 16H-O.1 — deposit availability is nearer): rubric v1.0.0 is proposed_for_approval (not approved), no authorized reviewer exists, and 8 of 12 v1 dimensions carry a mandatory blocker. No score can be assigned.",
       "blocked_deposit_state: the on-chain VaultState exposes NO pause/enabled field. A successful read is not proof deposits are enabled. NOTE: capacity is verified_uncapped (16H-J.1) — that is a SEPARATE question and is not evidence deposits are enabled.",
       NO_RISK,
       "curation: three 'Steakhouse' USDC vaults exist - WealthSmith must choose which is the intended product (see notes).",
@@ -233,7 +243,7 @@ const MANIFESTS: StableYieldCandidateEvidence[] = [
       "Per Step 16A/16B this product stays excess-lane only. Identity verification grants NO eligibility and NO approval.",
       "16H-I LIVE VERIFICATION 2026-07-16 (Helius mainnet RPC, redacted): on-chain state.name decoded to 'Steakhouse USDC' (a THIRD independent identity confirmation), tokenMint=USDC, sharesMint matched, decimals=6, slot 433263778, chain block time 2026-07-16T11:27:33Z, getAPYs(slot).actualAPY.netAPY = 0.038774279858246 (fraction) => 3.877428%, minDepositAmount 100000 raw => 0.1 USDC, managementFeeBps=0, performanceFeeBps=500, depositCap=0.",
       "16H-I RESOLVED the freshness + net/gross blockers: chain block time is now the authoritative source time, and actualAPY.netAPY is a proven net, fraction-unit APY (SDK source: computeNetAPR deducts perf+mgmt fees; calculateAPYFromAPR compounds APR->APY).",
-      "16H-I did NOT resolve capacity: depositCap reads 0 on-chain, and 0 is unsafe to interpret without official semantics. This is now the PRIMARY blocker.",
+      "SUPERSEDED at 16H-J.1, reconciled at 16H-O.1 (retained verbatim for provenance) — 16H-I did NOT resolve capacity: depositCap reads 0 on-chain, and 0 is unsafe to interpret without official semantics. This is now the PRIMARY blocker. [16H-O.1 note: accurate when written — 16H-I correctly refused to guess. 16H-J.1 then PROVED the semantics from the kvault source, so the refusal no longer applies. The stale current-state fields that still asserted this were the contradiction 16H-O.1 fixed.]",
     ],
   },
   {
