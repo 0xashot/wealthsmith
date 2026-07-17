@@ -1,3 +1,4 @@
+import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
 import { SUPERSEDED_COVERAGE_CALCULATION } from "./steakhouseIncidentEvidence";
@@ -17842,6 +17843,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runAuthorityResolutionFixtureChecks(),
     ...runRiskEvidencePackageFixtureChecks(),
     ...runIncidentAliasAmendmentFixtureChecks(),
     ...runSteakhouseCapacityReconciliationFixtureChecks(),
@@ -19053,7 +19055,7 @@ export function runRiskEvidencePackageFixtureChecks(): FixtureCheck[] {
   add("PK-18: NO threshold targeting appears", PKG_CONFERS.thresholdTargeting === false && /minimum of 7 is not referenced as a target/.test(PKG_CONFERS.thresholdTargetingNote) && !/distanceToThreshold|thresholdDistance|needsToReach/.test(pkgSrc), "not targeted");
 
   // --- Provenance layers ---
-  add("PK-19: evidence references are stable IDs", PKG_MODULES.length === 12 && PKG_MODULES.every((m) => m.id.length > 0 && m.module.endsWith(".ts")) && PKG_MODULES.some((m) => m.id === "identity_9773ac14") && PKG_MODULES.some((m) => m.id === "capacity_evidence_e54e310a"), "12 stable IDs");
+  add("PK-19: evidence references are stable IDs", PKG_MODULES.length === 13 && PKG_MODULES.every((m) => m.id.length > 0 && m.module.endsWith(".ts")) && PKG_MODULES.some((m) => m.id === "identity_9773ac14") && PKG_MODULES.some((m) => m.id === "capacity_evidence_e54e310a"), "12 stable IDs");
   add("PK-20: immutable and current-state evidence are separated", PKG_MODULES.every((m) => m.layer === "immutable_methodology" || m.layer === "immutable_historical") && CURRENT_STATE_NOT_IDENTITY.currentStateFields.length === 7, "layers split");
   add("PK-21: current APY/capacity/liquidity are NOT immutable identity claims", /None is an immutable identity claim/.test(CURRENT_STATE_NOT_IDENTITY.rule) && (CURRENT_STATE_NOT_IDENTITY.currentStateFields as readonly string[]).includes("APY") && (CURRENT_STATE_NOT_IDENTITY.currentStateFields as readonly string[]).includes("capacity remaining"), "dated observations");
   add("PK-22: estimated APY remains labeled estimated_variable_apy", /rateKind estimated_variable_apy/.test(CURRENT_STATE_NOT_IDENTITY.apyIsEstimated) && RATE_KIND === "estimated_variable_apy", "estimated");
@@ -19075,32 +19077,124 @@ export function runRiskEvidencePackageFixtureChecks(): FixtureCheck[] {
   // --- The blocking gap ---
   add("PK-35: the KLend program upgrade authority is verified as off-curve, not a keypair", KLEND_UPGRADE_AUTH.authorityIsOnCurve === false && KLEND_UPGRADE_AUTH.authorityClassification === "off_curve_pda_not_keypair" && KLEND_UPGRADE_AUTH.upgradeAuthority === "GzFgdRJXmawPhGeBsyRCDLx4jAKPsvbUqoqitzppkzkW", "PDA");
   add("PK-36: off-curve alone does NOT establish a multisig or its threshold", /does NOT establish which multisig, nor any threshold or timelock/.test(KLEND_UPGRADE_AUTH.isNotEvidenceOf) && KLEND_UPGRADE_AUTH.whatRemainsUnverified.length === 3, "not 'safely governed'");
-  add("PK-37: KVault's verified authority does not transfer to KLend", (dim("upgrade_admin_authority").prohibitedInferences as string[]).some((p) => /5-of-10 \+ 24h upgrade authority applies to KLend — it does not/.test(p)), "different program");
-  add("PK-38: reported thresholds are not treated as verified", (dim("upgrade_admin_authority").limitations as string[]).some((l) => /REPORTED, not independently verified/.test(l)) && (dim("upgrade_admin_authority").prohibitedInferences as string[]).some((p) => /reported threshold\/timelock is a verified one/.test(p)), "reported ≠ verified");
-  add("PK-39: upgrade_admin_authority is INSUFFICIENT and not scoreable", dim("upgrade_admin_authority").readiness === "insufficient" && dim("upgrade_admin_authority").scoreable === false && /DO NOT SCORE/.test(dim("upgrade_admin_authority").scorerInstructions), "not scoreable");
-  add("PK-40: the resolution method is recorded", /Squads v4 vault-PDA derivation/.test(dim("upgrade_admin_authority").scorerInstructions) && /isOnCurve is the decisive keypair-vs-PDA test/.test(KLEND_UPGRADE_AUTH.resolutionMethod), "16H-L.1 method");
+  add("PK-37 (updated by 16H-P.1a): KVault's authority still does not transfer — and the numbers coinciding proves why that matters", (dim("upgrade_admin_authority").prohibitedInferences as string[]).some((p) => /the numbers coincide but this was verified INDEPENDENTLY/.test(p)) && KVAULT_COINCIDENCE.isEvidenceOfIdentity === false, "right by luck ≠ right");
+  add("PK-38 (updated by 16H-P.1a): the previously REPORTED thresholds are now VERIFIED against chain", (dim("upgrade_admin_authority").verifiedFacts as string[]).some((f) => /previously REPORTED 4-of-10 \/ 12h claim is now VERIFIED/.test(f)) && (dim("upgrade_admin_authority").verifiedFacts as string[]).some((f) => /previously REPORTED 2-of-7 \/ no-timelock claim is now VERIFIED/.test(f)), "reported → verified");
+  add("PK-39 (updated by 16H-P.1a): upgrade_admin_authority is now partial-but-scoreable", dim("upgrade_admin_authority").readiness === "partial" && dim("upgrade_admin_authority").scoreable === true && /RESOLVED AT 16H-P\.1a/.test(dim("upgrade_admin_authority").verifiedFacts[0]), "resolved");
+  add("PK-40 (updated by 16H-P.1a): the 16H-P.1 resolution method was recorded and then executed", /isOnCurve is the decisive keypair-vs-PDA test/.test(KLEND_UPGRADE_AUTH.resolutionMethod) && UPGRADE_LAYER.squads!.derivationMatches === true, "method → result");
 
   // --- Readiness ---
-  add("PK-41: the package is NOT ready for automated assessment", R.readiness === "not_ready_for_automated_assessment", "not ready");
-  add("PK-42: readiness is deterministic — any non-scoreable dimension blocks", evaluatePackageReadiness([{ ...dim("upgrade_admin_authority"), readiness: "complete", scoreable: true }, ...D.filter((d) => d.dimensionId !== "upgrade_admin_authority")]).readiness === "ready_for_automated_assessment" && R.readiness === "not_ready_for_automated_assessment", "deterministic");
-  add("PK-43: exactly one dimension is insufficient", R.insufficientDimensions.length === 1 && R.insufficientDimensions[0] === "upgrade_admin_authority", "1 blocker");
+  add("PK-41 (updated by 16H-P.1a): the package is now ready, and flipped on EVIDENCE", R.readiness === "ready_for_automated_assessment" && READINESS_CONSEQUENCE.priorReadiness === "not_ready_for_automated_assessment" && READINESS_CONSEQUENCE.readinessFlippedOnEvidence === true, "ready");
+  add("PK-42: readiness is deterministic — any non-scoreable dimension blocks", evaluatePackageReadiness([{ ...dim("upgrade_admin_authority"), readiness: "insufficient", scoreable: false }, ...D.filter((d) => d.dimensionId !== "upgrade_admin_authority")]).readiness === "not_ready_for_automated_assessment" && R.readiness === "ready_for_automated_assessment", "deterministic both ways");
+  add("PK-43 (updated by 16H-P.1a): no dimension remains insufficient", R.insufficientDimensions.length === 0, "0 blockers");
   add("PK-44: six dimensions are complete", R.completeDimensions.length === 6 && R.completeDimensions.includes("liquidity_withdrawal") && R.completeDimensions.includes("withdrawal_fee_transparency"), "6 complete");
-  add("PK-45: five dimensions are partial but scoreable", R.partialButScoreableDimensions.length === 5 && R.partialButScoreableDimensions.includes("audit_security") && R.partialButScoreableDimensions.includes("incident_history"), "5 partial");
+  add("PK-45 (updated by 16H-P.1a): six dimensions are partial but scoreable", R.partialButScoreableDimensions.length === 6 && R.partialButScoreableDimensions.includes("upgrade_admin_authority") && R.partialButScoreableDimensions.includes("incident_history"), "6 partial");
   add("PK-46: complete + partial + insufficient = 12", R.completeDimensions.length + R.partialButScoreableDimensions.length + R.insufficientDimensions.length === 12, "all accounted");
-  add("PK-47: blocking artifacts are identified exactly", R.blockingMissingArtifacts.length === 4 && R.blockingMissingArtifacts.some((g) => /Squads multisig/.test(g)) && R.blockingMissingArtifacts.some((g) => /threshold, member count and time_lock/.test(g)), "4 gaps named");
+  add("PK-47 (updated by 16H-P.1a): no blocking artifacts remain", R.blockingMissingArtifacts.length === 0, "0 gaps");
   add("PK-48: readiness is about evidence sufficiency, not suitability", /suffices to ATTEMPT scoring without guessing/.test(R.readinessMeaning) && (R.readinessIsNot as readonly string[]).includes("risk suitability") && (R.readinessIsNot as readonly string[]).includes("product approval"), "sufficiency only");
-  add("PK-49: NO automated assessment was created", READINESS_CONSEQUENCE.automatedAssessmentCreated === false && /Assigning an integer would be guessing/.test(READINESS_CONSEQUENCE.reason), "not created");
-  add("PK-50: the gate's purpose is recorded", /launder a guess into a score, and a score into an aggregate/.test(READINESS_CONSEQUENCE.correctBehaviour), "gate held");
+  add("PK-49: NO automated assessment was created — readiness is not the assessment", READINESS_CONSEQUENCE.automatedAssessmentCreated === false && /separate, later step/.test(READINESS_CONSEQUENCE.automatedAssessmentCreatedNote), "not created");
+  add("PK-50: the gate held at P.1 and released only on evidence", /laundered a guess into a score, and a score into an aggregate/.test(READINESS_CONSEQUENCE.correctBehaviour) && /Finding a multisig is not the bar/.test(READINESS_CONSEQUENCE.notFlippedBecauseAMultisigWasFound), "gate held then released");
 
   // --- Manifest + boundaries ---
   add("PK-51: the manifest is deterministic", PKG_MANIFEST_HASH === computePackageManifestHash() && /^risk_package_[0-9a-f]{8}$/.test(PKG_MANIFEST_HASH), PKG_MANIFEST_HASH);
-  add("PK-52: the manifest records identity, cutoff, preparer, policies and readiness", PKG_MANIFEST.includedEvidenceIds.length === 12 && PKG_MANIFEST.evidenceCutoff.length > 0 && PKG_MANIFEST.preparationRole === "evidence_preparer" && PKG_MANIFEST.rubricHash === computeRubricV1Hash() && PKG_MANIFEST.readiness === R.readiness && PKG_MANIFEST.invalidationTriggers.length === 5, "complete");
+  add("PK-52: the manifest records identity, cutoff, preparer, policies and readiness", PKG_MANIFEST.includedEvidenceIds.length === 13 && PKG_MANIFEST.evidenceCutoff.length > 0 && PKG_MANIFEST.preparationRole === "evidence_preparer" && PKG_MANIFEST.rubricHash === computeRubricV1Hash() && PKG_MANIFEST.readiness === R.readiness && PKG_MANIFEST.invalidationTriggers.length === 5, "complete");
   add("PK-53: no human review, signoff or approval occurred", PKG_CONFERS.humanReviewOccurred === false && PKG_CONFERS.signoffOccurred === false && PKG_CONFERS.productApproved === false, "none");
   add("PK-54: no selector or recommendation state changed", PKG_CONFERS.selectorChanged === false && PKG_CONFERS.recommendationChanged === false && (PKG_CONFERS.doesNotConfer as readonly string[]).includes("Top Pick") && (PKG_CONFERS.doesNotConfer as readonly string[]).includes("a production card"), "unchanged");
   add("PK-55: lifecycle and mechanical adapter states are unchanged", PKG_CONFERS.lifecycleChanged === false && getYieldStrategy("kamino_usdc_lending")!.lifecycle === "identity_verified" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.constraintsState === "adapter_implemented_source_verified", "intact");
   add("PK-56: the Steakhouse assessment is unchanged", PKG_CONFERS.steakhouseAssessmentChanged === false && Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005 && AUTOMATED_ASSESSMENT_OUTCOME.meetsMinimum === false, "5.37 / false");
   add("PK-57: no transaction behaviour exists", PKG_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction/.test(pkgSrc), "read-only");
   add("PK-58: all prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && MEASURED_APY_EVIDENCE_MANIFEST_HASH === "measured_apy_evidence_ebc7627d" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && POSITION_EVIDENCE_MANIFEST_HASH === computePositionEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash() && CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash() && ALIAS_AMENDMENT_MANIFEST_HASH === computeAliasAmendmentManifestHash(), "7 hashes intact");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-P.1a — KLend Program and Market Authority Resolution
+ * ------------------------------------------------------------------ */
+
+export function runAuthorityResolutionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const authSrc = readFileSync(`${process.cwd()}/src/suggestions/klendDirectUsdcAuthorityEvidence.ts`, "utf8");
+  const U = UPGRADE_LAYER, M = MARKET_OWNER_LAYER, E = EMERGENCY_LAYER, P = PROPOSER_LAYER;
+  const SQ = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf";
+
+  // --- Loader chain ---
+  add("AU-1: the Program account binds to the exact ProgramData", KLEND_LOADER_CHAIN.programDataPointer === "9uSbGW1y9H5Av6H5TKxQ1wnFApSq2t3oEpfF2YfjDQGA" && KLEND_LOADER_CHAIN.programDataPointerMatchesDerivation === true && KLEND_LOADER_CHAIN.programAccountVariant === 2, "pointer = derivation");
+  add("AU-2: ProgramData binds to the exact current upgrade authority", KLEND_LOADER_CHAIN.programDataVariant === 3 && KLEND_LOADER_CHAIN.upgradeAuthorityOptionPresent === true && KLEND_LOADER_CHAIN.upgradeAuthorityIsNull === false && KLEND_LOADER_CHAIN.exactUpgradeAuthority === "GzFgdRJXmawPhGeBsyRCDLx4jAKPsvbUqoqitzppkzkW", "GzFgdRJ…");
+  add("AU-3: the program is still upgradeable and the deployed slot is recorded", KLEND_LOADER_CHAIN.isUpgradeable === true && KLEND_LOADER_CHAIN.deployedCodeSlot === 422723185 && AUTHORITY_OBSERVATION.observedAtSlot === 433472706, "slot 422723185");
+  add("AU-4: both loader accounts are owned by the BPF Upgradeable Loader", KLEND_LOADER_CHAIN.programAccountOwner === "BPFLoaderUpgradeab1e11111111111111111111111" && KLEND_LOADER_CHAIN.programDataOwner === KLEND_LOADER_CHAIN.programAccountOwner, "loader-owned");
+
+  // --- Off-curve is insufficient ---
+  add("AU-5: off-curve ALONE is insufficient — proposer_authority proves it", P.isOnCurve === false && P.authorityType === "off_curve_pda_not_squads_v4_vault" && P.squads === undefined, "off-curve ≠ Squads");
+  add("AU-6: exact Squads vault derivation is required and verified", [U, M, E].every((l) => l.squads!.derivationMatches === true && l.squads!.derivedVaultPda === l.exactAddress && l.authorityType === "verified_squads_v4_vault_pda"), "3 derived");
+  add("AU-7: derivation seeds and Squads program are exact", [U, M, E].every((l) => l.squads!.derivationSeeds.includes(SQ) && /\["multisig", <multisig_state>, "vault", <index u8>\]/.test(l.squads!.derivationSeeds)), "exact seeds");
+  add("AU-8: exact multisig state is required and each is distinct", U.squads!.multisigState === "6hhBGCtmg7tPWUSgp3LG6X2rsmYWAc4tNsA6G4CnfQbM" && M.squads!.multisigState === "7idEEVRidWrahZJhxXMqniDbV6ESj7ZjyLrigcMcEt6H" && E.squads!.multisigState === "9thcmURbz3xgvv362Fy2uGVGoxMnD3ADRuwRp13nuXE5" && new Set([U, M, E].map((l) => l.squads!.multisigState)).size === 3, "3 distinct");
+  add("AU-9: exact vault index is recorded", [U, M, E].every((l) => l.squads!.vaultIndex === 0), "index 0");
+  add("AU-10: each derivation is a UNIQUE match (no faulty-search ambiguity)", [U, M, E].every((l) => l.squads!.uniqueMatch === true), "unique");
+  add("AU-11: a wrong Squads program, multisig or index cannot derive the same PDA", (() => { const seeds = U.squads!.derivationSeeds; return seeds.includes(SQ) && U.squads!.multisigState !== M.squads!.multisigState && U.squads!.derivedVaultPda !== M.squads!.derivedVaultPda; })(), "derivation is injective in practice");
+
+  // --- Decoded config ---
+  add("AU-12: upgrade threshold is decoded from the exact state", U.squads!.threshold === 5 && U.squads!.memberCount === 10, "5-of-10");
+  add("AU-13: upgrade timelock is decoded from the exact state", U.squads!.timeLockSeconds === 86400, "24h");
+  add("AU-14: market-owner threshold/timelock VERIFY the reported 4-of-10 / 12h", M.squads!.threshold === 4 && M.squads!.memberCount === 10 && M.squads!.timeLockSeconds === 43200, "reported → verified");
+  add("AU-15: emergency threshold/timelock VERIFY the reported 2-of-7 / none", E.squads!.threshold === 2 && E.squads!.memberCount === 7 && E.squads!.timeLockSeconds === 0, "reported → verified");
+  add("AU-16: member count and permissions are recorded", [U, M, E].every((l) => l.squads!.membersAllPermissions === true && l.squads!.voterCount === l.squads!.memberCount && l.squads!.executorCount === l.squads!.memberCount), "all perms");
+  add("AU-17: config authority is recorded and is default on all three", [U, M, E].every((l) => l.squads!.configAuthorityIsDefault === true && l.squads!.configAuthority === "11111111111111111111111111111111"), "autonomous");
+  add("AU-18: NO threshold bypass exists — verified, not assumed", [U, M, E].every((l) => l.squads!.configAuthorityCanBypassThreshold === false) && SQUADS_EXEC.configAuthorityBypass.exists === false && SQUADS_EXEC.configAuthorityBypass.verifiedForAllThree === true, "no bypass");
+  add("AU-19: no single member can approve alone", [U, M, E].every((l) => l.squads!.anySingleMemberCanExecuteAlone === false && l.squads!.threshold > 1), "thresholds 5/4/2");
+  add("AU-20: member identities are NOT inferred", [U, M, E].every((l) => l.limitations.some((x) => /identit(y|ies)/i.test(x))) && !/@|twitter|github\.com\/[a-z]/i.test(authSrc.split("members")[1]?.slice(0, 500) ?? ""), "keys only");
+
+  // --- Execution semantics ---
+  add("AU-21: approval, timelock, execution and cancellation are distinct", SQUADS_EXEC.proposalApprovalAndExecutionAreDistinct === true && SQUADS_EXEC.cancellationExists === true && /timelock gates EXECUTION, not approval/.test(SQUADS_EXEC.timeLockStartsAt), "4 distinct stages");
+  add("AU-22: execution is not permissionless after approval", SQUADS_EXEC.executionIsPermissionlessAfterApproval === false && SQUADS_EXEC.executionRequiresExecutePermission === true, "Execute mask required");
+  add("AU-23: 'N-of-M + timelock' is only used because bypass-absence was VERIFIED", /VERIFIED, not assumed/.test(SQUADS_EXEC.doNotSummarizeAsNofMPlusTimelock) && /non-default config_authority would have made the summary false/.test(SQUADS_EXEC.doNotSummarizeAsNofMPlusTimelock), "earned summary");
+  add("AU-24: the vault PDA can sign loader upgrades", /vault PDA is the ProgramData upgrade authority/.test(SQUADS_EXEC.vaultPdaCanSignUpgrades), "CPI signer");
+  add("AU-25: config changes require the same threshold and timelock", /proposal at the multisig's own threshold/.test(SQUADS_EXEC.configAuthorityBypass.detail) && /same constraint/.test(SQUADS_EXEC.timeLockCanBeChanged), "autonomous");
+
+  // --- Layer separation ---
+  add("AU-26: there is NO single Kamino admin", LAYERS_DISTINCT.thereIsNoSingleKaminoAdmin === true && LAYERS_DISTINCT.distinctMultisigs === 3 && AUTH_LAYERS.length === 4, "4 layers, 3 multisigs");
+  add("AU-27: program upgrade authority is separate from market owner", U.exactAddress !== M.exactAddress && U.squads!.multisigState !== M.squads!.multisigState && /is not the market owner and holds no market-admin power/.test(LAYERS_DISTINCT.upgradeCannotAdministerMarket), "separate");
+  add("AU-28: market owner is separate from emergency council", M.exactAddress !== E.exactAddress && M.squads!.multisigState !== E.squads!.multisigState && /can neither upgrade the program nor exercise market-owner powers/.test(LAYERS_DISTINCT.emergencyCouncilIsNeither), "separate");
+  add("AU-29: member overlap is NOT identity", /Overlap is not identity/.test(LAYERS_DISTINCT.memberOverlapIsNotIdentity) && U.squads!.threshold !== M.squads!.threshold, "9/10 shared, still distinct");
+  add("AU-30: the proposer_authority layer is recorded as a NEW unresolved finding", P.exactAddress === "6pwkb7uMsvqgmwPBKc3o4hnte6JnHpisSUrsdyvGcEUv" && P.limitations.some((x) => /NEW FINDING/.test(x)) && (UNRESOLVED_GAPS as readonly string[]).some((g) => /proposer_authority/.test(g)), "4th layer");
+
+  // --- KVault non-transfer ---
+  add("AU-31: KVault authority evidence is NOT reused as KLend authority evidence", KVAULT_COINCIDENCE.isEvidenceOfIdentity === false && KVAULT_COINCIDENCE.numbersCoincide === true && /right numbers BY LUCK/.test(KVAULT_COINCIDENCE.whyThisMatters), "coincidence named");
+  add("AU-32: the KVault/KLend multisig identity is explicitly not assumed", /was NOT verified here and must not be assumed/.test(KVAULT_COINCIDENCE.multisigsCompared), "not assumed");
+
+  // --- Powers ---
+  add("AU-33: market-owner powers are instruction-bound", MO_POWERS.length === 15 && MO_POWERS.every((p) => p.instruction.length > 0 && p.requiredSigner.length > 0 && p.timelockApplies.length > 0), "15 powers");
+  add("AU-34: socialize_loss signer requirement remains exact", SOCIALIZE_AUTH.requiredSigner === "lending_market_owner" && SOCIALIZE_AUTH.emergencyCouncilCanInvoke === false && /has_one/.test(SOCIALIZE_AUTH.constraint), "has_one");
+  add("AU-35: socialize_loss effective control is 4-of-10 + 12h", /4-of-10 with a 12h timelock/.test(SOCIALIZE_AUTH.effectiveThreshold) && /structural loss path, not a hypothetical/.test(SOCIALIZE_AUTH.meaning), "principal write-down");
+  add("AU-36: emergency-council powers are instruction-bound, not generalized", EC_POWERS.can.length === 3 && EC_POWERS.cannot.length === 8 && EC_POWERS.cannot.every((c) => c.allowed === false && c.note.length > 0), "power map");
+  add("AU-37: the emergency council cannot inherit market-owner powers", EC_POWERS.cannotInheritMarketOwnerPowers === true && EC_POWERS.cannot.some((c) => /socialize/.test(c.action)) && EC_POWERS.cannot.some((c) => /upgrade KLend/.test(c.action)) && EC_POWERS.cannot.some((c) => /change market owner/.test(c.action)), "bounded");
+  add("AU-38: 'restrictive-only' is not treated as harmless", /bounds the DIRECTION of harm, not its magnitude/.test(EC_POWERS.riskFraming) && /Restrictive is not harmless/.test(EC_POWERS.riskFraming), "2-of-7 / 0s can freeze exits");
+  add("AU-39: no direct asset-transfer power was found, recorded as NOT FOUND", MO_POWERS.some((p) => /direct asset transfer/.test(p.power) && /NOT FOUND rather than as proven absent/.test(p.otherAuthorityCanPerform)), "not proven absent");
+  add("AU-40: emergency-mode powers are shared but directionally bounded", MO_POWERS.filter((p) => p.emergencyCouncilCanPerform).length === 3 && MO_POWERS.filter((p) => p.emergencyCouncilCanPerform).every((p) => /restrictive direction only/.test(p.otherAuthorityCanPerform)), "3 shared");
+
+  // --- History ---
+  add("AU-41: authority tenure is UNRESOLVED and was not invented", AUTH_HISTORY.reconstructionComplete === false && AUTH_HISTORY.upgradeAuthorityPeriodStart === "UNRESOLVED" && AUTH_HISTORY.marketOwnerPeriodStart === "UNRESOLVED" && /tenure was NOT invented/.test(AUTH_HISTORY.whyUnresolved), "not invented");
+  add("AU-42: transaction_index is recorded as a WEAK signal, not tenure proof", /an index is NOT a tenure proof/.test(AUTH_HISTORY.indirectSignal) && U.squads!.transactionIndex === 92 && M.squads!.transactionIndex === 181, "weak signal");
+  add("AU-43: the history gap does not block current-authority resolution", AUTH_HISTORY.currentEvidenceUnaffected === true && /does not block current-authority resolution/.test(AUTH_HISTORY.supportsButDoesNotBlock), "non-blocking");
+
+  // --- Package integration ---
+  add("AU-44: the package registers the authority evidence module", PKG_MODULES.some((m) => m.module === "klendDirectUsdcAuthorityEvidence.ts") && PKG_MODULES.length === 13, "13 modules");
+  add("AU-45: upgrade_admin_authority readiness moved insufficient → partial-but-scoreable", PKG_DIMENSIONS.find((d) => d.dimensionId === "upgrade_admin_authority")!.readiness === "partial" && PKG_DIMENSIONS.find((d) => d.dimensionId === "upgrade_admin_authority")!.scoreable === true, "scoreable");
+  add("AU-46: manager_discretion evidence now carries the verified authority constraint", PKG_DIMENSIONS.find((d) => d.dimensionId === "manager_discretion")!.evidenceRefs.some((r) => /authority_evidence/.test(r)) && PKG_DIMENSIONS.find((d) => d.dimensionId === "manager_discretion")!.confidenceCeiling === "medium", "coupled + resolved");
+  add("AU-47: the package is ready and readiness flipped on evidence", PKG_READINESS.readiness === "ready_for_automated_assessment" && PKG_READINESS.insufficientDimensions.length === 0 && READINESS_CONSEQUENCE.readinessFlippedOnEvidence === true, "ready");
+  add("AU-48: readiness did NOT flip merely because a multisig was found", /Finding a multisig is not the bar/.test(READINESS_CONSEQUENCE.notFlippedBecauseAMultisigWasFound) && /threshold \+ timelock \+ bypass-absence \+ power map/.test(READINESS_CONSEQUENCE.notFlippedBecauseAMultisigWasFound), "bar was higher");
+  add("AU-49: the 16H-P.1 not-ready history is preserved", READINESS_CONSEQUENCE.priorReadiness === "not_ready_for_automated_assessment" && READINESS_CONSEQUENCE.priorBlockingDimension === "upgrade_admin_authority" && /HISTORY, PRESERVED/.test(readFileSync(`${process.cwd()}/src/suggestions/klendDirectUsdcRiskEvidencePackage.ts`, "utf8")), "gate worked");
+
+  // --- Boundaries ---
+  add("AU-50: the package still contains no scores and no aggregate", PKG_CONFERS.scoresAssigned === false && PKG_CONFERS.aggregateCalculated === false && AUTH_CONFERS.scoresAssigned === false && AUTH_CONFERS.aggregateCalculated === false && PKG_DIMENSIONS.every((d) => !("score" in d)), "score-free");
+  add("AU-51: resolving an authority is not judging it", /Resolving an authority structure describes it. It does not judge it/.test(AUTH_CONFERS.resolvedIsNotSafe) && (AUTH_CONFERS.doesNotConfer as readonly string[]).includes("a judgement that the authority structure is safe"), "describes, not judges");
+  add("AU-52: no review, signoff or approval occurred", AUTH_CONFERS.humanReviewOccurred === false && AUTH_CONFERS.signoffOccurred === false && AUTH_CONFERS.productApproved === false, "none");
+  add("AU-53: no automated assessment was created", READINESS_CONSEQUENCE.automatedAssessmentCreated === false, "not created");
+  add("AU-54: lifecycle and product state are unchanged", AUTH_CONFERS.lifecycleChanged === false && getYieldStrategy("kamino_usdc_lending")!.lifecycle === "identity_verified" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review", "unchanged");
+  add("AU-55: the Steakhouse assessment is unchanged", AUTH_CONFERS.steakhouseAssessmentChanged === false && Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005 && AUTOMATED_ASSESSMENT_OUTCOME.meetsMinimum === false, "5.37 / false");
+  add("AU-56: no transaction behaviour and all live calls were read-only", AUTH_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction/.test(authSrc), "read-only");
+  add("AU-57: the authority manifest is deterministic", AUTH_MANIFEST_HASH === computeAuthorityManifestHash() && /^authority_evidence_[0-9a-f]{8}$/.test(AUTH_MANIFEST_HASH), AUTH_MANIFEST_HASH);
+  add("AU-58: prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash() && CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash() && ALIAS_AMENDMENT_MANIFEST_HASH === computeAliasAmendmentManifestHash() && VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd", "6 intact");
 
   return checks;
 }

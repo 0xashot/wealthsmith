@@ -7,25 +7,27 @@
  * carries no score, no suggested score, no anchor recommendation, no aggregate, no threshold distance,
  * and no language shaped to move a scorer toward passing.
  *
- * READINESS RESULT: not_ready_for_automated_assessment.
+ * READINESS RESULT: ready_for_automated_assessment (as of 16H-P.1a).
  *
- * One dimension cannot be scored without guessing. `upgrade_admin_authority` (weight 15, joint-highest)
- * requires the KLEND PROGRAM's upgrade authority — which is a DIFFERENT program from KVault and had
- * never been verified anywhere in this repository. All prior authority work (16H-L.1) covered the
- * KVAULT program. This package establishes the first facts about it:
+ * HISTORY, PRESERVED. At 16H-P.1 this package was NOT ready. `upgrade_admin_authority` (weight 15) was
+ * insufficient: the KLEND PROGRAM's upgrade authority is a DIFFERENT program from KVault and had never
+ * been verified anywhere in this repository — all prior authority work (16H-L.1) covered KVault. 16H-P.1
+ * established only that the authority is an off-curve PDA, which proves "not a keypair" and nothing more.
+ * WHICH multisig, at what threshold, under what timelock, were unknown — precisely the facts the
+ * dimension scores. The package was marked not ready and the assessment was NOT created. The gate worked.
  *
- *   KLend program      KLend2g3cP87fffoy8q1mQqGKjrxjC8boSyAYavgmjD
- *   programData        9uSbGW1y9H5Av6H5TKxQ1wnFApSq2t3oEpfF2YfjDQGA (BPFLoaderUpgradeab1e…)
- *   upgradeable        TRUE
- *   upgrade authority  GzFgdRJXmawPhGeBsyRCDLx4jAKPsvbUqoqitzppkzkW
- *                      System-Program-owned, zero data, isOnCurve = FALSE  ⇒ a PDA, NOT a keypair
+ * 16H-P.1a resolved it against chain, and readiness now flips on EVIDENCE, not on impatience:
  *
- * Per the 16H-L.1 correction, off-curve + System-owned + zero-data is the Squads-vault-PDA signature —
- * but WHICH multisig, at what threshold, under what timelock, is UNVERIFIED. Those are precisely the
- * facts the dimension scores. Assigning an integer now would be guessing, so the package is marked not
- * ready and the automated assessment is NOT created.
+ *   layer                   vault PDA    multisig     threshold  timelock
+ *   ──────────────────────────────────────────────────────────────────────
+ *   KLend program upgrade   GzFgdRJ…     6hhBGCt…     5-of-10    24h
+ *   SOL/BTC market owner    24LjDBuk…    7idEEVR…     4-of-10    12h
+ *   emergency council       4VtJ1yC…     9thcmUR…     2-of-7     none
  *
- * This is the intended behaviour: the gate exists to catch exactly this.
+ * config_authority is default (autonomous) on all three, so no threshold bypass exists. A fourth layer,
+ * proposer_authority 6pwkb7u…, remains UNRESOLVED and is carried as a limitation.
+ *
+ * See klendDirectUsdcAuthorityEvidence.ts (authority_evidence).
  */
 import { computeRubricV1Hash, PROTOCOL_RISK_RUBRIC_V1_ID, PROTOCOL_RISK_RUBRIC_V1_SEMVER } from "./riskGovernance";
 
@@ -99,6 +101,7 @@ export const INCLUDED_EVIDENCE_MODULES = [
   { id: "constraints_evidence_7301883a", module: "klendReserveConstraints.ts", layer: "immutable_methodology" },
   { id: "incident_alias_evidence_3023570a", module: "incidentMarketAliasAmendment.ts", layer: "immutable_historical" },
   { id: "blocker_order_evidence_fae4d95f", module: "stableYieldBlockerOrderAmendment.ts", layer: "immutable_methodology" },
+  { id: "authority_evidence", module: "klendDirectUsdcAuthorityEvidence.ts", layer: "immutable_methodology" },
 ] as const;
 
 /**
@@ -196,37 +199,40 @@ export const DIMENSION_EVIDENCE: DimensionEvidence[] = [
     dimensionId: "upgrade_admin_authority",
     weight: 15,
     applicability: "directly_applicable",
-    readiness: "insufficient",
-    scoreable: false,
-    evidenceRefs: ["KLEND_PROGRAM_UPGRADE_AUTHORITY (this module)", "steakhouseEvidenceClosure.ts (KVAULT authority — NOT this program)"],
+    readiness: "partial",
+    scoreable: true,
+    evidenceRefs: ["authority_evidence (klendDirectUsdcAuthorityEvidence.ts)", "KLEND_PROGRAM_UPGRADE_AUTHORITY (this module)"],
     verifiedFacts: [
-      "The KLend program IS upgradeable: programData 9uSbGW1y9H5Av6H5TKxQ1wnFApSq2t3oEpfF2YfjDQGA under BPFLoaderUpgradeab1e…, upgrade-authority option present.",
-      "KLend upgrade authority: GzFgdRJXmawPhGeBsyRCDLx4jAKPsvbUqoqitzppkzkW — System-Program-owned, zero data, isOnCurve = FALSE, therefore a PDA and NOT a raw keypair (verified live at slot 433470825).",
-      "Market owner (a DIFFERENT authority): 24LjDBukaUSHgPowcF2wY1XscnhChcBUDETN2UhBZMMT.",
-      "socialize_loss requires lending_market_owner (has_one), NOT the emergency council.",
-      "The emergency council's powers are a restrictive-only allowlist (`_ => false` fallback).",
+      "RESOLVED AT 16H-P.1a. KLend loader chain reverified: Program → ProgramData 9uSbGW1y… (pointer matches independent seed derivation), deployed code slot 422723185, upgradeable, authority non-null.",
+      "PROGRAM UPGRADE AUTHORITY: GzFgdRJ… = Squads v4 vault PDA of multisig 6hhBGCtmg7tPWUSgp3LG6X2rsmYWAc4tNsA6G4CnfQbM at vault index 0 (derivation re-verified, unique match). THRESHOLD 5-of-10, TIME_LOCK 86,400s (24h), 10 members each holding Initiate+Vote+Execute.",
+      "MARKET OWNER: 24LjDBuk… = Squads v4 vault PDA of multisig 7idEEVRidWrahZJhxXMqniDbV6ESj7ZjyLrigcMcEt6H at index 0. THRESHOLD 4-of-10, TIME_LOCK 43,200s (12h). The previously REPORTED 4-of-10 / 12h claim is now VERIFIED.",
+      "EMERGENCY COUNCIL: 4VtJ1yC… = Squads v4 vault PDA of multisig 9thcmURbz3xgvv362Fy2uGVGoxMnD3ADRuwRp13nuXE5 at index 0. THRESHOLD 2-of-7, TIME_LOCK 0s. The previously REPORTED 2-of-7 / no-timelock claim is now VERIFIED.",
+      "NO THRESHOLD BYPASS EXISTS: config_authority = Pubkey::default on all three multisigs, i.e. autonomous — threshold, timelock and membership can only change via a proposal meeting the multisig's own threshold and timelock.",
+      "THREE DISTINCT MULTISIGS. The upgrade multisig cannot administer the market; the market owner cannot upgrade the program; the emergency council can do neither. Upgrade and market-owner multisigs share 9 of 10 member keys but are different multisigs with different thresholds — overlap is not identity.",
+      "socialize_loss requires lending_market_owner (has_one), i.e. supplier principal can be written down at 4-of-10 after a 12h delay. The emergency council cannot invoke it.",
+      "No single member can APPROVE alone at any layer (thresholds 5/4/2). Every member can EXECUTE an already-approved, timelock-elapsed proposal.",
     ],
     limitations: [
-      "THE BLOCKING GAP: the KLEND PROGRAM's upgrade authority had never been verified anywhere in this repository. All prior authority work (16H-L.1) covered the KVAULT program — a different program with a different authority. That evidence does NOT transfer.",
-      "The authority is off-curve, which is the Squads-vault-PDA signature, but WHICH multisig controls it, at what THRESHOLD, under what TIMELOCK, is unverified.",
-      "The market-owner threshold (reported 4-of-10) and timelock (reported 12h) are REPORTED, not independently verified for this market at this address.",
-      "The market-owner PERIOD is unestablished, so official statements cannot be attributed to a known administrative regime.",
+      "AUTHORITY TENURE IS UNRESOLVED for all three layers. Squads transaction_index values (92 / 181 / 6) show none is freshly created, but an index is not a tenure proof.",
+      "A FOURTH LAYER IS UNRESOLVED: LendingMarket.proposer_authority = 6pwkb7uMsvqgmwPBKc3o4hnte6JnHpisSUrsdyvGcEUv appears in no prior evidence. It is off-curve (a PDA) but does NOT derive as a Squads v4 vault PDA at indices 0-3 across all 154,461 Squads v4 multisig states. Its type, controller and powers are unknown.",
+      "Member key → real-world identity was deliberately NOT inferred.",
+      "The emergency council's 2-of-7 with ZERO timelock can freeze all exits immediately; only a 4-of-10 + 12h market-owner action can reverse it.",
     ],
     unresolvedQuestions: [
-      "Which Squads multisig is GzFgdRJXmawPhGeBsyRCDLx4jAKPsvbUqoqitzppkzkW the vault PDA of?",
-      "What are that multisig's threshold, member count and time_lock?",
-      "Is the market owner 24LjDBuk… a Squads PDA, and at what threshold/timelock?",
-      "Since when has the current market owner held the role?",
+      "What is proposer_authority 6pwkb7u…, what controls it, and what can it do under deployed KLend?",
+      "Since when has each authority held its role, and did any threshold/timelock change during the incident-evidence period?",
     ],
-    blockerRelevance: "The rubric blocker 'admin/upgradeability unverified' APPLIES. This dimension cannot be scored without guessing the threshold and timelock, which are the facts it grades.",
-    confidenceCeiling: "low",
-    confidenceCeilingJustification: "Not scoreable at all: the controlling multisig, threshold and timelock are unknown for both the program upgrade authority and (independently) the market owner.",
-    invalidationTriggers: ["upgrade authority changes", "market owner changes", "any Squads config update"],
-    scorerInstructions: "DO NOT SCORE. Resolve the missing evidence first, using the 16H-L.1 method (Squads v4 vault-PDA derivation: seeds ['multisig', <state acct>, 'vault', <index u8>] under SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf, then decode threshold/time_lock/members).",
+    blockerRelevance: "The rubric blocker 'admin/upgradeability unverified' NO LONGER APPLIES to the three principal layers. The unresolved proposer_authority is carried as a limitation, not a blocker, because it is not a known control path over supplier funds — it is an unknown one.",
+    confidenceCeiling: "medium",
+    confidenceCeilingJustification: "Thresholds, timelocks, membership and bypass-absence are all verified on-chain for the three layers that matter. Confidence is capped below high by unresolved tenure and by a fourth authority layer of unknown powers.",
+    invalidationTriggers: ["set_upgrade_authority on KLend", "update_lending_market_owner", "emergency-council reassignment", "any Squads config change on 6hhBGCt…, 7idEEVR… or 9thcmUR…", "a non-default config_authority appearing"],
+    scorerInstructions: "Score the resolved structure as it stands. Resolving an authority describes it; it does not judge it. Weigh: socialize_loss at 4-of-10 + 12h over supplier principal; an emergency council at 2-of-7 with zero timelock able to freeze exits; a 5-of-10 + 24h program upgrade authority; and one authority layer of unknown powers.",
     prohibitedInferences: [
-      "that KVault's verified 5-of-10 + 24h upgrade authority applies to KLend — it does not, it is a different program",
-      "that off-curve alone establishes a Squads multisig, or its threshold",
-      "that a reported threshold/timelock is a verified one",
+      "that KVault's 5-of-10 + 24h applies to KLend — the numbers coincide but this was verified INDEPENDENTLY; inheriting it would have been right by luck",
+      "that 'restrictive-only' means the emergency council is harmless — it bounds the direction of harm, not its magnitude",
+      "that a multisig being found means the structure is safe",
+      "that member overlap between multisigs makes them the same authority",
+      "that off-curve alone establishes a Squads multisig",
     ],
   },
   {
@@ -235,19 +241,23 @@ export const DIMENSION_EVIDENCE: DimensionEvidence[] = [
     applicability: "directly_applicable",
     readiness: "partial",
     scoreable: true,
-    evidenceRefs: ["capacity_evidence_e54e310a", "constraints_evidence_7301883a", "availability_evidence_078133b7"],
+    evidenceRefs: ["capacity_evidence_e54e310a", "constraints_evidence_7301883a", "availability_evidence_078133b7", "authority_evidence (klendDirectUsdcAuthorityEvidence.ts)"],
     verifiedFacts: [
       "NO KVault allocation manager exists for this product, and no dynamic multi-reserve reallocation occurs. The depositor remains in ONE exact reserve.",
       "The market owner CAN alter material reserve parameters. Verified mutable fields include: deposit_limit and borrow_limit (config update mode, lending_operations.rs L2606), borrow_rate_curve, protocol_take_rate_pct, host_fixed_interest_rate_bps, block_ctoken_usage (disables deposits without touching the cap), emergency_mode, status, deposit_withdrawal_cap and oracle configuration.",
       "The emergency council's powers are restrictive-only and it CANNOT invoke socialize_loss.",
+      "16H-P.1a: the market owner is Squads multisig 7idEEVR… at 4-of-10 / 12h timelock, autonomous config (no bypass). Every reserve-config mutation runs through it.",
     ],
     limitations: [
-      "The authority THRESHOLD and TIMELOCK governing these mutations are unverified (see upgrade_admin_authority). Discretion is only as constrained as the authority controlling it, so this dimension inherits that uncertainty.",
+      "RESOLVED AT 16H-P.1a: every mutation above requires lending_market_owner = Squads multisig 7idEEVR… at 4-of-10 with a 12h timelock, verified on-chain. The constraint on discretion is now a fact, not an assumption.",
+      "socialize_loss — which writes down supplier principal directly — sits behind that SAME 4-of-10 + 12h. It is a structural loss path under discretionary control, not a hypothetical.",
+      "The emergency council (2-of-7, ZERO timelock) can independently exercise the restrictive subset — emergency_mode, block_ctoken_usage, tightening caps — with no delay, and only a 4-of-10 + 12h market-owner action can reverse it.",
+      "proposer_authority 6pwkb7u… is unresolved; whether it holds any discretionary power is unknown.",
     ],
-    unresolvedQuestions: ["Under what threshold/timelock can reserve config be mutated?", "Are any of these fields subject to a governance delay?"],
-    blockerRelevance: "none — but the dimension is coupled to upgrade_admin_authority's unresolved threshold/timelock.",
-    confidenceCeiling: "low",
-    confidenceCeilingJustification: "The mutable surface is well established; the constraints on exercising it are not.",
+    unresolvedQuestions: ["What powers, if any, does proposer_authority hold?", "Since when has the current market owner held the role?"],
+    blockerRelevance: "none — the threshold/timelock coupling to upgrade_admin_authority is now resolved.",
+    confidenceCeiling: "medium",
+    confidenceCeilingJustification: "The mutable surface is enumerated from deployed code AND the authority constraining it is verified on-chain. Capped below high by the unresolved proposer_authority.",
     invalidationTriggers: ["reserve config change", "authority change"],
     scorerInstructions: "manager_discretion IS applicable to direct lending (product-owner clarification). It evaluates discretionary control over material economic and risk parameters AFTER deposit. Do not mark it not applicable.",
     prohibitedInferences: [
@@ -516,9 +526,16 @@ export const PACKAGE_READINESS = evaluatePackageReadiness();
 
 export const READINESS_CONSEQUENCE = {
   automatedAssessmentCreated: false,
+  automatedAssessmentCreatedNote: "Readiness means the evidence SUFFICES to attempt scoring. Creating the assessment is a separate, later step (16H-P.2) and was not performed here.",
+  priorReadiness: "not_ready_for_automated_assessment",
+  priorBlockingDimension: "upgrade_admin_authority",
+  resolvedAt: "16H-P.1a",
   reason:
-    "upgrade_admin_authority (weight 15) is not scoreable: the KLend program's upgrade authority is an off-curve PDA whose controlling multisig, threshold and timelock are unverified, and the market-owner threshold/timelock are reported rather than verified. Those ARE the facts the dimension grades. Assigning an integer would be guessing.",
-  correctBehaviour: "The readiness gate exists to catch exactly this. Marking the package ready anyway would launder a guess into a score, and a score into an aggregate.",
+    "upgrade_admin_authority moved insufficient → partial-but-scoreable: the KLend upgrade authority, market owner and emergency council are each resolved to an exact Squads v4 multisig with a verified threshold, timelock and autonomous config. A scorer can now assign an integer from facts rather than guesses.",
+  readinessFlippedOnEvidence: true,
+  notFlippedBecauseAMultisigWasFound:
+    "Finding a multisig is not the bar. The bar was threshold + timelock + bypass-absence + power map, each verified on-chain. Had any remained unknown the dimension would still be insufficient.",
+  correctBehaviour: "The readiness gate held at 16H-P.1 and released only once the evidence existed. Marking the package ready earlier would have laundered a guess into a score, and a score into an aggregate.",
 } as const;
 
 /* ------------------------------------------------------------------ *
