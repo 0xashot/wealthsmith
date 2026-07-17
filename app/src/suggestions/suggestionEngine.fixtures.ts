@@ -1,3 +1,4 @@
+import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
 import { SUPERSEDED_COVERAGE_CALCULATION } from "./steakhouseIncidentEvidence";
 import { CONTRADICTORY_FIELDS, CANONICAL_SOURCE, CURRENT_VAULT_VERIFICATION, NOT_A_DEPOSIT_GATE, CAPACITY_SCOPE_BOUNDARY, RECONCILED_CAPACITY_RESOLUTION, RECONCILIATION_RESULT, RECONCILIATION_CONFERS, RECONCILIATION_EVIDENCE, computeReconciliationManifestHash, RECONCILIATION_MANIFEST_HASH } from "./steakhouseCapacityReconciliation";
@@ -17841,6 +17842,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runRiskEvidencePackageFixtureChecks(),
     ...runIncidentAliasAmendmentFixtureChecks(),
     ...runSteakhouseCapacityReconciliationFixtureChecks(),
     ...runKlendConstraintsFixtureChecks(),
@@ -19007,6 +19009,98 @@ export function runIncidentAliasAmendmentFixtureChecks(): FixtureCheck[] {
   add("AL-60: the amendment adds no execution behaviour", !/sendTransaction|signTransaction|simulateTransaction/.test(amendSrc), "read-only");
   add("AL-61: prior Steakhouse evidence + capacity reconciliation are unchanged", VERIFIED_EVIDENCE_MANIFEST_HASH === "evidence_a86da1fd" && RECONCILIATION_MANIFEST_HASH === computeReconciliationManifestHash() && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.primaryBlocker === "blocked_deposit_availability" && getStableYieldEvidenceManifest("kamino_steakhouse_usdc")!.capacityAdapterState === "adapter_implemented_source_verified", "O.1 intact");
   add("AL-62: direct-lending mechanical evidence is unchanged", getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && POSITION_EVIDENCE_MANIFEST_HASH === computePositionEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash() && CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash(), "N.4-N.7 intact");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * 16H-P.1 — Canonical Direct-Lending Risk Evidence Package
+ * ------------------------------------------------------------------ */
+
+export function runRiskEvidencePackageFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const pkgSrc = readFileSync(`${process.cwd()}/src/suggestions/klendDirectUsdcRiskEvidencePackage.ts`, "utf8");
+  const B = PKG_BINDING, R = PKG_READINESS, D = PKG_DIMENSIONS;
+  const dim = (id: string) => D.find((d) => d.dimensionId === id)!;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+  const ok = { candidateId: B.candidateId, marketAddress: B.marketAddress, reserveAddress: B.reserveAddress, liquidityMint: B.liquidityMint, cTokenMint: B.cTokenMint, klendProgram: B.klendProgram, cluster: B.cluster };
+
+  // --- Identity binding ---
+  add("PK-1: exact candidate identity is required", validatePackageBinding(ok).ok === true && validatePackageBinding({ ...ok, candidateId: "kamino_steakhouse_usdc" }).failure === "candidate_mismatch", "bound");
+  add("PK-2: exact market is required", validatePackageBinding({ ...ok, marketAddress: "So11111111111111111111111111111111111111112" }).failure === "market_mismatch", "7u3He…");
+  add("PK-3: exact reserve is required", validatePackageBinding({ ...ok, reserveAddress: "So11111111111111111111111111111111111111112" }).failure === "reserve_mismatch", "D6q6…");
+  add("PK-4: exact canonical USDC mint is required", validatePackageBinding({ ...ok, liquidityMint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB" }).failure === "liquidity_mint_mismatch", "EPjFW…");
+  add("PK-5: exact cToken mint is required", validatePackageBinding({ ...ok, cTokenMint: "7D8C5pDFxug58L9zkwK7bCiDg4kD4AygzbcZUmf5usHS" }).failure === "ctoken_mint_mismatch", "B8V6W…");
+  add("PK-6: exact KLend program is required", validatePackageBinding({ ...ok, klendProgram: "KvauGMspG5k6rtzrqqn7WNn3oZdyKqLKwK2XWQ8FLjd" }).failure === "program_mismatch", "KLend2g3…");
+  add("PK-7: mainnet-beta is required", validatePackageBinding({ ...ok, cluster: "devnet" }).failure === "cluster_mismatch", "cluster bound");
+  add("PK-8: the Main Market alias is exact-address bound", B.marketHistoricalAlias === "Main Market" && B.marketAddress === MAIN_MARKET_ALIAS.marketAddress && MAIN_MARKET_ALIAS.identityConclusion === "same_exact_market_renamed_label", "alias → 7u3He…");
+
+  // --- Governance ---
+  add("PK-9: the package binds the approved rubric identity, version and hash", B.rubricId === "protocol_risk_rubric_v1" && B.rubricVersion === "1.0.0" && B.rubricHash === computeRubricV1Hash() && /^rubric_[0-9a-f]{8}$/.test(B.rubricHash), B.rubricHash);
+  add("PK-10: confidence and separation-of-duties policies are bound", B.confidencePolicyId === "risk_review_confidence_v2" && B.separationOfDutiesId === "risk_separation_of_duties_v2", "v2 policies");
+  add("PK-11: the preparer is not the scorer and not a reviewer", B.preparationRole === "evidence_preparer" && B.preparerIsNotScorer === true && B.preparerIsNotHumanReviewer === true && B.authorizedAssessor === "ws_automated_risk_assessor", "SoD held");
+
+  // --- Dimension map ---
+  add("PK-12: all 12 dimensions exist in canonical order", D.length === 12 && D.map((d) => d.dimensionId).join(",") === CANON.join(","), "canonical order");
+  add("PK-13: rubric weights match the approved rubric and sum to 100", D.reduce((a, d) => a + d.weight, 0) === 100 && dim("audit_security").weight === 15 && dim("upgrade_admin_authority").weight === 15 && dim("manager_discretion").weight === 12 && dim("liquidity_withdrawal").weight === 12 && dim("incident_history").weight === 2, "sum 100");
+  add("PK-14: every dimension carries the required evidence fields", D.every((d) => d.evidenceRefs.length > 0 && d.verifiedFacts.length > 0 && d.scorerInstructions.length > 0 && d.prohibitedInferences.length > 0 && d.confidenceCeilingJustification.length > 0 && d.invalidationTriggers.length > 0), "12 complete");
+
+  // --- No scores anywhere ---
+  add("PK-15: NO score appears in the package", D.every((d) => !("score" in d)) && PKG_CONFERS.scoresAssigned === false && PKG_MANIFEST.containsScores === false, "score-free");
+  add("PK-16: NO suggested score or anchor recommendation appears", !/suggestedScore|anchorRecommendation|recommendedScore|suggestedAnchor/.test(pkgSrc), "none");
+  add("PK-17: NO aggregate appears", !/\baggregate\s*[:=]\s*[0-9]/.test(pkgSrc) && PKG_CONFERS.aggregateCalculated === false && PKG_MANIFEST.containsAggregate === false, "no aggregate");
+  add("PK-18: NO threshold targeting appears", PKG_CONFERS.thresholdTargeting === false && /minimum of 7 is not referenced as a target/.test(PKG_CONFERS.thresholdTargetingNote) && !/distanceToThreshold|thresholdDistance|needsToReach/.test(pkgSrc), "not targeted");
+
+  // --- Provenance layers ---
+  add("PK-19: evidence references are stable IDs", PKG_MODULES.length === 12 && PKG_MODULES.every((m) => m.id.length > 0 && m.module.endsWith(".ts")) && PKG_MODULES.some((m) => m.id === "identity_9773ac14") && PKG_MODULES.some((m) => m.id === "capacity_evidence_e54e310a"), "12 stable IDs");
+  add("PK-20: immutable and current-state evidence are separated", PKG_MODULES.every((m) => m.layer === "immutable_methodology" || m.layer === "immutable_historical") && CURRENT_STATE_NOT_IDENTITY.currentStateFields.length === 7, "layers split");
+  add("PK-21: current APY/capacity/liquidity are NOT immutable identity claims", /None is an immutable identity claim/.test(CURRENT_STATE_NOT_IDENTITY.rule) && (CURRENT_STATE_NOT_IDENTITY.currentStateFields as readonly string[]).includes("APY") && (CURRENT_STATE_NOT_IDENTITY.currentStateFields as readonly string[]).includes("capacity remaining"), "dated observations");
+  add("PK-22: estimated APY remains labeled estimated_variable_apy", /rateKind estimated_variable_apy/.test(CURRENT_STATE_NOT_IDENTITY.apyIsEstimated) && RATE_KIND === "estimated_variable_apy", "estimated");
+  add("PK-23: current liquidity is NOT described as guaranteed", /NOT a guarantee of future liquidity/.test(CURRENT_STATE_NOT_IDENTITY.liquidityIsNotGuaranteed) && (dim("liquidity_withdrawal").prohibitedInferences as string[]).some((p) => /guaranteed future liquidity/.test(p)), "snapshot only");
+  add("PK-24: the API remains diagnostic only", /DIAGNOSTIC ONLY/.test(DIAGNOSTIC_ONLY_SOURCES.kaminoApi) && /was demonstrated to be cached/.test(DIAGNOSTIC_ONLY_SOURCES.kaminoApi), "never authority");
+
+  // --- Scope discipline ---
+  add("PK-25: KVault evidence is NOT generalized to the direct reserve", (dim("audit_security").limitations as string[]).some((l) => /KVault audits are NOT evidence for this product/.test(l)) && /does NOT transfer to KLend/.test(KLEND_UPGRADE_AUTH.whyThisMatters), "kvault ≠ klend");
+  add("PK-26: direct KLend evidence is NOT generalized into zero-risk claims", (dim("strategy_complexity").prohibitedInferences as string[]).some((p) => /single-reserve exposure means low risk/.test(p)) && (dim("composability_dependency").prohibitedInferences as string[]).some((p) => /no composability risk/.test(p)), "no zero-risk");
+  add("PK-27: manager_discretion remains APPLICABLE", dim("manager_discretion").applicability === "directly_applicable" && dim("manager_discretion").applicability !== "not_applicable" && /Do not mark it not applicable/.test(dim("manager_discretion").scorerInstructions), "applicable");
+  add("PK-28: manager_discretion is not inferred low from absence of KVault alone", (dim("manager_discretion").prohibitedInferences as string[]).some((p) => /absence of a KVault allocation manager alone/.test(p)) && (dim("manager_discretion").verifiedFacts as string[]).some((f) => /block_ctoken_usage/.test(f)), "mutable surface recorded");
+  add("PK-29: exact USDC oracle evidence does NOT replace collateral-side review", (dim("oracle_risk").limitations as string[]).some((l) => /BORROWER-COLLATERAL-SIDE ORACLE IS NOT ASSESSED/.test(l)) && /Do NOT let the exact USDC price controls substitute/.test(dim("oracle_risk").scorerInstructions), "collateral gap explicit");
+  add("PK-30: the direct reserve uses the corrected market evidence", (dim("incident_history").verifiedFacts as string[]).some((f) => /Main Market and SOL\/BTC Market are the same account|same account 7u3He/.test(f)) && dim("incident_history").evidenceRefs.includes("incident_alias_evidence_3023570a"), "corrected alias");
+  add("PK-31: prior 10.95% coverage remains historical", SUPERSEDED_COVERAGE_CALCULATION.coveredAllocationPct === 10.95 && OFFICIAL_EVENT_MARKET_COVERAGE.coveredAllocationPct === 98.56, "preserved");
+  add("PK-32: zero bad debt is NOT converted into zero incidents", (dim("incident_history").prohibitedInferences as string[]).some((p) => /zero bad debt means zero incidents or zero exploits/.test(p)) && (dim("incident_history").prohibitedInferences as string[]).some((p) => /SEARCH RESULT, not a clean record/.test(p)), "search result");
+  add("PK-33: Steakhouse's KVault-specific fatal gaps are NOT inherited", (dim("incident_history").limitations as string[]).some((l) => /gaps 1 .* and 2 .* do NOT apply here/.test(l)) && /do not inherit Steakhouse/i.test(dim("incident_history").scorerInstructions.replace("Do not inherit", "do not inherit")), "material difference kept");
+  add("PK-34: the take rate is not labelled a withdrawal fee", (dim("withdrawal_fee_transparency").prohibitedInferences as string[]).some((p) => /take rate is a withdrawal fee/.test(p)) && (dim("withdrawal_fee_transparency").verifiedFacts as string[]).some((f) => /INTEREST-REVENUE SHARE/.test(f)), "interest share");
+
+  // --- The blocking gap ---
+  add("PK-35: the KLend program upgrade authority is verified as off-curve, not a keypair", KLEND_UPGRADE_AUTH.authorityIsOnCurve === false && KLEND_UPGRADE_AUTH.authorityClassification === "off_curve_pda_not_keypair" && KLEND_UPGRADE_AUTH.upgradeAuthority === "GzFgdRJXmawPhGeBsyRCDLx4jAKPsvbUqoqitzppkzkW", "PDA");
+  add("PK-36: off-curve alone does NOT establish a multisig or its threshold", /does NOT establish which multisig, nor any threshold or timelock/.test(KLEND_UPGRADE_AUTH.isNotEvidenceOf) && KLEND_UPGRADE_AUTH.whatRemainsUnverified.length === 3, "not 'safely governed'");
+  add("PK-37: KVault's verified authority does not transfer to KLend", (dim("upgrade_admin_authority").prohibitedInferences as string[]).some((p) => /5-of-10 \+ 24h upgrade authority applies to KLend — it does not/.test(p)), "different program");
+  add("PK-38: reported thresholds are not treated as verified", (dim("upgrade_admin_authority").limitations as string[]).some((l) => /REPORTED, not independently verified/.test(l)) && (dim("upgrade_admin_authority").prohibitedInferences as string[]).some((p) => /reported threshold\/timelock is a verified one/.test(p)), "reported ≠ verified");
+  add("PK-39: upgrade_admin_authority is INSUFFICIENT and not scoreable", dim("upgrade_admin_authority").readiness === "insufficient" && dim("upgrade_admin_authority").scoreable === false && /DO NOT SCORE/.test(dim("upgrade_admin_authority").scorerInstructions), "not scoreable");
+  add("PK-40: the resolution method is recorded", /Squads v4 vault-PDA derivation/.test(dim("upgrade_admin_authority").scorerInstructions) && /isOnCurve is the decisive keypair-vs-PDA test/.test(KLEND_UPGRADE_AUTH.resolutionMethod), "16H-L.1 method");
+
+  // --- Readiness ---
+  add("PK-41: the package is NOT ready for automated assessment", R.readiness === "not_ready_for_automated_assessment", "not ready");
+  add("PK-42: readiness is deterministic — any non-scoreable dimension blocks", evaluatePackageReadiness([{ ...dim("upgrade_admin_authority"), readiness: "complete", scoreable: true }, ...D.filter((d) => d.dimensionId !== "upgrade_admin_authority")]).readiness === "ready_for_automated_assessment" && R.readiness === "not_ready_for_automated_assessment", "deterministic");
+  add("PK-43: exactly one dimension is insufficient", R.insufficientDimensions.length === 1 && R.insufficientDimensions[0] === "upgrade_admin_authority", "1 blocker");
+  add("PK-44: six dimensions are complete", R.completeDimensions.length === 6 && R.completeDimensions.includes("liquidity_withdrawal") && R.completeDimensions.includes("withdrawal_fee_transparency"), "6 complete");
+  add("PK-45: five dimensions are partial but scoreable", R.partialButScoreableDimensions.length === 5 && R.partialButScoreableDimensions.includes("audit_security") && R.partialButScoreableDimensions.includes("incident_history"), "5 partial");
+  add("PK-46: complete + partial + insufficient = 12", R.completeDimensions.length + R.partialButScoreableDimensions.length + R.insufficientDimensions.length === 12, "all accounted");
+  add("PK-47: blocking artifacts are identified exactly", R.blockingMissingArtifacts.length === 4 && R.blockingMissingArtifacts.some((g) => /Squads multisig/.test(g)) && R.blockingMissingArtifacts.some((g) => /threshold, member count and time_lock/.test(g)), "4 gaps named");
+  add("PK-48: readiness is about evidence sufficiency, not suitability", /suffices to ATTEMPT scoring without guessing/.test(R.readinessMeaning) && (R.readinessIsNot as readonly string[]).includes("risk suitability") && (R.readinessIsNot as readonly string[]).includes("product approval"), "sufficiency only");
+  add("PK-49: NO automated assessment was created", READINESS_CONSEQUENCE.automatedAssessmentCreated === false && /Assigning an integer would be guessing/.test(READINESS_CONSEQUENCE.reason), "not created");
+  add("PK-50: the gate's purpose is recorded", /launder a guess into a score, and a score into an aggregate/.test(READINESS_CONSEQUENCE.correctBehaviour), "gate held");
+
+  // --- Manifest + boundaries ---
+  add("PK-51: the manifest is deterministic", PKG_MANIFEST_HASH === computePackageManifestHash() && /^risk_package_[0-9a-f]{8}$/.test(PKG_MANIFEST_HASH), PKG_MANIFEST_HASH);
+  add("PK-52: the manifest records identity, cutoff, preparer, policies and readiness", PKG_MANIFEST.includedEvidenceIds.length === 12 && PKG_MANIFEST.evidenceCutoff.length > 0 && PKG_MANIFEST.preparationRole === "evidence_preparer" && PKG_MANIFEST.rubricHash === computeRubricV1Hash() && PKG_MANIFEST.readiness === R.readiness && PKG_MANIFEST.invalidationTriggers.length === 5, "complete");
+  add("PK-53: no human review, signoff or approval occurred", PKG_CONFERS.humanReviewOccurred === false && PKG_CONFERS.signoffOccurred === false && PKG_CONFERS.productApproved === false, "none");
+  add("PK-54: no selector or recommendation state changed", PKG_CONFERS.selectorChanged === false && PKG_CONFERS.recommendationChanged === false && (PKG_CONFERS.doesNotConfer as readonly string[]).includes("Top Pick") && (PKG_CONFERS.doesNotConfer as readonly string[]).includes("a production card"), "unchanged");
+  add("PK-55: lifecycle and mechanical adapter states are unchanged", PKG_CONFERS.lifecycleChanged === false && getYieldStrategy("kamino_usdc_lending")!.lifecycle === "identity_verified" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.primaryBlocker === "blocked_risk_review" && getStableYieldEvidenceManifest("kamino_usdc_lending")!.constraintsState === "adapter_implemented_source_verified", "intact");
+  add("PK-56: the Steakhouse assessment is unchanged", PKG_CONFERS.steakhouseAssessmentChanged === false && Math.abs(AUTOMATED_ASSESSMENT_OUTCOME.preCapWeightedAggregate - 5.37) < 0.005 && AUTOMATED_ASSESSMENT_OUTCOME.meetsMinimum === false, "5.37 / false");
+  add("PK-57: no transaction behaviour exists", PKG_CONFERS.transactionConstructedOrSimulated === false && !/sendTransaction|signTransaction|simulateTransaction/.test(pkgSrc), "read-only");
+  add("PK-58: all prior evidence remains immutable", SOL_BTC_USDC_IDENTITY_MANIFEST_HASH === "identity_9773ac14" && MEASURED_APY_EVIDENCE_MANIFEST_HASH === "measured_apy_evidence_ebc7627d" && CAPACITY_EVIDENCE_MANIFEST_HASH === computeCapacityEvidenceManifestHash() && POSITION_EVIDENCE_MANIFEST_HASH === computePositionEvidenceManifestHash() && AVAILABILITY_EVIDENCE_MANIFEST_HASH === computeAvailabilityEvidenceManifestHash() && CONSTRAINTS_EVIDENCE_MANIFEST_HASH === computeConstraintsEvidenceManifestHash() && ALIAS_AMENDMENT_MANIFEST_HASH === computeAliasAmendmentManifestHash(), "7 hashes intact");
 
   return checks;
 }
