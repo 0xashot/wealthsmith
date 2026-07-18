@@ -18,6 +18,7 @@ import { DIRECT_USDC_LENDING_PRODUCT_DECISION as DL_DECISION, DIRECT_USDC_LENDIN
 import { HUMAN_REVIEW_RECORD as GR_REVIEW, RISK_SIGNOFF_RECORD as GR_SIGNOFF, PRODUCT_APPROVAL_RECORD as GR_APPROVAL, PRODUCTION_ACTIVATION as GR_ACTIVATION, SEPARATION_OF_DUTIES_CHECK as GR_SOD, REVIEWER_AUTHORIZATION as GR_REV_AUTH, SIGNER_AUTHORIZATION as GR_SIGN_AUTH, APPROVER_AUTHORIZATION as GR_APP_AUTH, GOVERNANCE_RECORDS_VALIDATION as GR_VALID, ACCEPTED_LIMITATIONS as GR_LIMITS, HUMAN_REVIEW_MANIFEST_HASH as GR_REVIEW_HASH, RISK_SIGNOFF_MANIFEST_HASH as GR_SIGNOFF_HASH, PRODUCT_APPROVAL_MANIFEST_HASH as GR_APPROVAL_HASH } from "./directUsdcLendingGovernanceRecords";
 import { DIRECT_LENDING_TESTING_ROWS as TF_ROWS, DIRECT_LENDING_TESTING_CARD_ROWS as TF_CARDS, DIRECT_LENDING_TESTING_SUPPRESSED_ROWS as TF_SUPPRESSED, DIRECT_LENDING_TESTING_FIXTURES_VALIDATION as TF_VALID } from "./directUsdcLendingTestingFixtures";
 import { evaluateDirectLendingRuntime as rtEval, evaluateDirectLendingForRail as rtRail, governanceInputFromActivation as rtGov, buildDirectLendingCardState as rtCard, ALL_RUNTIME_SUPPRESSION_REASONS as RT_REASONS, RUNTIME_PRODUCT_IDENTITY as RT_ID, type DirectLendingRuntimeInput as RTInput } from "./directUsdcLendingRuntimeAdapter";
+import { buildKlendDirectUsdcMarketSnapshot as mdBuild, toRuntimeMarketInput as mdToRuntime, capacityCoversAmount as mdCovers, KLEND_DIRECT_USDC_IDENTITY as MD_ID, type KlendDirectUsdcRawRead as MDRaw, type KlendDirectUsdcMarketSnapshot as MDSnap } from "./klendDirectUsdcMarketData";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17863,6 +17864,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runKlendMarketDataFixtureChecks(),
     ...runDirectLendingRuntimeFixtureChecks(),
     ...runDirectLendingGovernanceActivationFixtureChecks(),
     ...runDirectUsdcLendingIntegrationFixtureChecks(),
@@ -20127,6 +20129,72 @@ export function runDirectLendingRuntimeFixtureChecks(): FixtureCheck[] {
   add("RT-33: revoked governance removes eligibility (fail closed)", rtEval({ ...OK, governanceEligible: false }).emit === false, "revocation");
   add("RT-34: no transaction/signature behaviour anywhere in the runtime output", rtEval(OK).emit === true && rtEval(OK).card!.cta.action === null && rtEval(OK).card!.cta.executes_transaction === false && rtEval(OK).card!.cta.completion_on_click === false, "read-only");
   add("RT-35: assessment + governance records still immutable (5.93 / activation eligible)", DA_OUTCOME.unroundedAggregate === 5.93 && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && GR_ACTIVATION.productionSuggestionEligible === true, "immutable");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 16H-S.4 — live KLend market snapshot. One raw read feeds APY/capacity/
+ * availability via the existing calc modules; exact identity enforced; fresh →
+ * runtime-eligible, stale/unresolved → fail-closed. API is never authority.
+ * ------------------------------------------------------------------ */
+export function runKlendMarketDataFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  const NOW = Date.parse("2026-07-18T12:00:00.000Z");
+  const rawFresh: MDRaw = {
+    identity: { marketAddress: MD_ID.marketAddress, reserveAddress: MD_ID.reserveAddress, liquidityMint: MD_ID.liquidityMint, cTokenMint: MD_ID.cTokenMint, klendProgramId: MD_ID.klendProgramId, cluster: MD_ID.cluster },
+    apy: { utilizationRatio: 0.85, supplyAprRatio: 0.055, supplyApyRatio: 0.0565, borrowAprRatio: 0.07, borrowApyRatio: 0.072, protocolTakeRatePct: 10, referralFeeBps: 0, rateCurveWellFormed: true, supplierFarmBound: true, rewardStreamsResolved: true, rewardApyPct: 0 },
+    slotDuration: { measuredMs: 415, observationSlot: 433465111, windowsAgree: true },
+    capacity: { depositLimitRaw: "1000000000000000", totalSupplySf: "112000000000000000000000000", totalAvailableAmountRaw: "888000000000", borrowedAmountSf: "0" },
+    availability: { reserveStatus: 0, reserveVersion: 1, reserveEmergencyMode: 0, blockCtokenUsage: 0, marketEmergencyMode: 0, marketPermissioningAuthority: "11111111111111111111111111111111", marketPermissionedOps: 0 },
+    reserveSourceSlot: 433465111, marketSourceSlot: 433465111, observedAt: "2026-07-18T12:00:00.000Z", assetDecimals: 6,
+  };
+
+  // --- One read feeds all three; exact identity enforced ---
+  const snap = mdBuild(rawFresh, NOW);
+  add("MD-1: one raw read produces APY + capacity + availability (deduplicated)", snap.apy != null && snap.capacity != null && snap.availability != null && snap.identityValid === true, "single read");
+  add("MD-2: all three sub-outputs share the same source slot (one read)", snap.apy.sourceSlot === 433465111 && snap.capacity.sourceSlot === 433465111 && snap.availability.sourceSlot === 433465111, "same slot");
+  add("MD-3: identity mismatch → invalid, all unresolved", (() => { const s = mdBuild({ ...rawFresh, identity: { ...rawFresh.identity, reserveAddress: "WrongReserve1111111111111111111111111111111" } }, NOW); return s.identityValid === false && s.invalidationReason === "identity_mismatch" && s.apy.freshness === "unresolved" && s.availability.depositsMechanicallyAllowed === false; })(), "identity gate");
+
+  // --- No hardcoded slot duration (measured value flows through) ---
+  add("MD-4: measured slot duration flows through (no hardcode)", snap.apy.measuredSlotDurationMs === 415 && mdBuild({ ...rawFresh, slotDuration: { measuredMs: 402, observationSlot: 433465111, windowsAgree: true } }, NOW).apy.measuredSlotDurationMs === 402, "measured");
+  add("MD-5: missing/unagreeing slot measurement → APY not slot-fresh", mdToRuntime(mdBuild({ ...rawFresh, slotDuration: { measuredMs: null, observationSlot: null, windowsAgree: false } }, NOW)).apy.slotDurationFresh === false, "slot gate");
+
+  // --- Rewards exhausted remain zero, excluded from total ---
+  add("MD-6: exhausted rewards remain zero", snap.apy.rewardApyPct === 0, "rewards 0");
+
+  // --- Freshness → runtime mapping (deterministic on literal snapshots) ---
+  const freshLit: MDSnap = { identityValid: true, invalidationReason: null,
+    apy: { baseSupplyApyPct: 5.65, rewardApyPct: 0, totalApyPct: 5.65, rateKind: "estimated_variable_apy", measuredSlotDurationMs: 415, calculationVersion: "v1", sourceSlot: 1, observedAt: "x", freshness: "fresh", invalidationReason: null },
+    capacity: { remainingCapacityRaw: "888000000000", remainingCapacityTokenAmount: 888000, capacityKind: "capped", sourceSlot: 1, freshness: "fresh", invalidationReason: null },
+    availability: { depositsMechanicallyAllowed: true, availabilityState: "available", blockingReasons: [], marketEmergencyState: "inactive", reserveEmergencyState: "inactive", sourceSlot: 1, freshness: "fresh" },
+    overallFreshness: "fresh" };
+  const staleLit: MDSnap = { ...freshLit, apy: { ...freshLit.apy, freshness: "stale" }, overallFreshness: "stale" };
+
+  const rF = mdToRuntime(freshLit);
+  add("MD-7: fresh snapshot → runtime APY present, fresh, identity matches, estimated_variable_apy", rF.apy.measuredApyPct === 5.65 && rF.apy.fresh === true && rF.apy.reserveIdentityMatches === true && rF.apy.rateKind === "estimated_variable_apy", "fresh apy");
+  add("MD-8: fresh snapshot → deposits available, capacity fresh", rF.availability.depositsAvailable === true && rF.availability.emergencyModeActive === false && rF.capacity.fresh === true, "fresh avail");
+  add("MD-9: stale APY is not fresh (never merged into eligible; adapter suppresses apy_stale)", mdToRuntime(staleLit).apy.fresh === false, "stale not fresh");
+  add("MD-10: emergency state maps through", mdToRuntime({ ...freshLit, availability: { ...freshLit.availability, marketEmergencyState: "active" } }).availability.emergencyModeActive === true, "emergency");
+
+  // --- Capacity vs configured cap ---
+  add("MD-11: capacity coverage uses current remaining, not the configured cap", mdCovers(freshLit, 500000) === true && mdCovers(freshLit, 2_000_000) === false, "remaining not cap");
+  add("MD-12: stale capacity never covers", mdCovers({ ...freshLit, capacity: { ...freshLit.capacity, freshness: "stale" } }, 1) === false, "stale cap");
+
+  // --- End-to-end: fresh market emits through the adapter; stale suppresses ---
+  {
+    const base = { ...rtGov(), wallet: { usdcMint: RT_ID.canonicalUsdcMint, canonicalUsdcRawUnits: 25_000_000_000, pricesFresh: true }, safetyBuffer: { requiredResolved: true, sufficiencyResolved: true, fullyFundedByLiquidCoverage: true }, excess: { deterministicAmountUsd: 12000, isPositive: true }, suitability: { profileComplete: true, suitableForCategory: true, prohibitsDefiLending: false }, existingPosition: { holdsExactCToken: false, approvedTopUpRulePasses: false } };
+    const eligible = rtEval({ ...base, ...mdToRuntime(freshLit) });
+    add("MD-13: fresh live market → adapter emits exactly one card", eligible.emit === true && eligible.card!.apy!.display.startsWith("~") && /variable/i.test(eligible.card!.apy!.display), eligible.emit ? "emit" : eligible.suppressionReason);
+    add("MD-14: stale live market → adapter suppresses (apy_stale)", rtEval({ ...base, ...mdToRuntime(staleLit) }).suppressionReason === "apy_stale", "stale suppress");
+    add("MD-15: identity-invalid market → adapter suppresses", rtEval({ ...base, ...mdToRuntime(mdBuild({ ...rawFresh, identity: { ...rawFresh.identity, klendProgramId: "Wrong1111111111111111111111111111111111111" } }, NOW)) }).emit === false, "identity suppress");
+  }
+
+  // --- Immutability + no API authority markers ---
+  add("MD-16: assessment + activation immutable", DA_OUTCOME.unroundedAggregate === 5.93 && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && GR_ACTIVATION.productionSuggestionEligible === true, "immutable");
+  add("MD-17: snapshot carries on-chain source slots (API is not the authority)", snap.apy.sourceSlot != null && snap.capacity.sourceSlot != null && snap.availability.sourceSlot != null, "on-chain slots");
 
   return checks;
 }

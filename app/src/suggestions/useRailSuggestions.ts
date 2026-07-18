@@ -38,6 +38,7 @@ import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 import { deriveContributionSuggestion } from "./contributionProductInput";
 import { deriveStableYieldPlanSuggestion } from "./stableYieldProductInput";
 import { evaluateDirectLendingForRail, type RuntimeSuppressionReason } from "./directUsdcLendingRuntimeAdapter";
+import { KLEND_DIRECT_USDC_IDENTITY, toRuntimeMarketInput, capacityCoversAmount, type KlendDirectUsdcMarketSnapshot } from "./klendDirectUsdcMarketData";
 import type { StableYieldReviewPresentation } from "./yieldStrategyPlanPresentationTypes";
 import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID } from "./contributionPricePolicy";
 import type { ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
@@ -90,8 +91,17 @@ export function deriveRailSuggestions(args: {
    * with explicitly fixture-scoped price/liquidity classification.
    */
   dataMode?: "real_wallet" | "demo_fixture";
+  /**
+   * Step 16H-S.4 — optional LIVE Kamino Direct inputs supplied by the component layer (a hook that
+   * reads the reserve via the existing RPC provider builds the snapshot; the deterministic excess
+   * amount comes from the 16F eligible-capital snapshot; suitability from the user profile). When any
+   * is absent the direct-lending adapter fail-closes and appends no card. The pure rail never fetches.
+   */
+  klendMarketSnapshot?: KlendDirectUsdcMarketSnapshot;
+  directLendingExcessUsd?: number | null;
+  directLendingSuitability?: { profileComplete: boolean; suitableForCategory: boolean; prohibitsDefiLending: boolean };
 }): RailSuggestionsData {
-  const { positions, pricedAsOf, goal } = args;
+  const { positions, pricedAsOf, goal, klendMarketSnapshot, directLendingExcessUsd, directLendingSuitability } = args;
   const dataMode = args.dataMode ?? "real_wallet";
 
   const value = deriveValueBreakdown(positions);
@@ -162,25 +172,42 @@ export function deriveRailSuggestions(args: {
   );
   const cards = toSuggestionCards(engineResult.suggestions);
 
-  // Step 16H-S.3 — the approved Kamino Direct USDC-lending suggestion, evaluated through the SAME
+  // Step 16H-S.3/S.4 — the approved Kamino Direct USDC-lending suggestion, evaluated through the SAME
   // deterministic runtime adapter the /testing page uses. Governance is derived from the activation
-  // record (never hardcoded); the KLend market feed (APY/availability/capacity), verified liquid
-  // buffer coverage, and the deterministic excess amount are not plumbed into the pure rail yet, so
-  // in real-wallet mode the adapter FAIL-CLOSES and appends no card (production output unchanged).
-  // Demo mode never emits (real-wallet-only path). Appended last → never Top Pick, never reorders.
+  // record (never hardcoded). LIVE inputs wired here: exact-canonical-USDC raw balance (16H-S.4),
+  // verified liquid Safety Buffer coverage, and — when supplied by the caller's live market hook — the
+  // on-chain KLend APY/availability/capacity snapshot. The deterministic excess amount (16F
+  // eligible-capital) and the live market snapshot are supplied by the component layer; when absent
+  // the adapter FAIL-CLOSES and appends no card (production output unchanged). Demo never emits
+  // (real-wallet-only path). Appended last → never Top Pick, never reorders other suggestions.
   let directLendingSuppression: RuntimeSuppressionReason | null = null;
   if (dataMode === "real_wallet") {
+    // Exact-mint canonical USDC only (16H-S.4): aggregate direct wallet balances of the exact mint —
+    // never symbol matches, never cTokens/vault shares/bridged/receipt tokens.
+    let canonicalUsdcRawUnits: bigint | null = null;
+    for (const p of positions) {
+      if (p.mint === KLEND_DIRECT_USDC_IDENTITY.liquidityMint && p.type === "token" && p.detection === "direct_wallet_balance") {
+        try { canonicalUsdcRawUnits = (canonicalUsdcRawUnits ?? 0n) + BigInt(p.amount); } catch { /* malformed base units → ignore leg */ }
+      }
+    }
+    const market: KlendDirectUsdcMarketSnapshot | undefined = klendMarketSnapshot;
+    const excessUsd = directLendingExcessUsd ?? null; // deterministic 16F amount, supplied by the component layer
+    const capacityCovers = market != null && excessUsd != null ? capacityCoversAmount(market, excessUsd) : false;
+    const marketInput = market ? toRuntimeMarketInput(market) : undefined;
     const dl = evaluateDirectLendingForRail({
-      canonicalUsdcMint: null,
-      canonicalUsdcRawUnits: null,
+      canonicalUsdcMint: canonicalUsdcRawUnits != null ? KLEND_DIRECT_USDC_IDENTITY.liquidityMint : null,
+      canonicalUsdcRawUnits: canonicalUsdcRawUnits != null ? Number(canonicalUsdcRawUnits) : null,
       pricesFresh: pricedAsOf != null,
       bufferRequiredResolved: buffer != null,
       bufferSufficiencyResolved: buffer != null,
       bufferFullyFundedByLiquidCoverage: buffer?.fullyFunded === true,
-      excessDeterministicAmountUsd: null, // deterministic excess feed not yet wired into the pure rail
-      suitability: { profileComplete: goal != null, suitableForCategory: false, prohibitsDefiLending: false },
+      excessDeterministicAmountUsd: excessUsd,
+      suitability: directLendingSuitability ?? { profileComplete: goal != null, suitableForCategory: false, prohibitsDefiLending: false },
       holdsExactCToken: false,
       approvedTopUpRulePasses: false,
+      klendMarket: marketInput && capacityCovers
+        ? { apy: marketInput.apy, availability: marketInput.availability, capacity: { fresh: marketInput.capacity.fresh, sufficientForAmount: capacityCovers } }
+        : marketInput, // when capacity does not cover the amount, keep the snapshot's own (insufficient) capacity
     });
     if (dl.emit) cards.push(dl.card);
     else directLendingSuppression = dl.suppressionReason;
