@@ -34,6 +34,27 @@ import { buildSteakhouseExistingPosition as stBuild, toSteakhouseWalletPosition 
 // block_ctoken_usage fixtures assert against deployed definitions (not a name-inferred assumption).
 import { ReserveConfig as KLEND_RESERVE_CONFIG } from "@kamino-finance/klend-sdk/dist/@codegen/klend/types/ReserveConfig";
 import * as KLEND_UPDATE_CONFIG_MODE from "@kamino-finance/klend-sdk/dist/@codegen/klend/types/UpdateConfigMode";
+// Step 17D — Jupiter Lend USDC (jlUSDC) read-only existing-position detection.
+import {
+  JUPITER_LEND_IDENTITY as JL_ID, JUPITER_LEND_POSITION_ID as JL_POS_ID, JUPITER_LEND_POSITION_DEDUPE_KEY as JL_KEY,
+  JUPITER_LEND_IDENTITY_MANIFEST_HASH as JL_MANIFEST_HASH, computeJupiterLendIdentityManifestHash as jlManifestHash,
+  validateJupiterLendIdentity as jlValidateIdentity, isJupiterLendReceiptMint as jlIsReceiptMint,
+  discoverJlUsdcAccounts as jlDiscover, buildJupiterLendExistingPosition as jlBuild,
+  toJupiterLendWalletPosition as jlToWallet, dedupeJupiterLendPosition as jlDedupe, mergeJupiterLendPosition as jlMerge,
+  JUPITER_LEND_EXISTING_POSITION_SUPPORT_BINDING as JL_SUPPORT_BINDING,
+  JUPITER_LEND_EXISTING_POSITION_SUPPORT_BINDING_HASH as JL_SUPPORT_HASH, computeExistingPositionSupportBindingHash as jlSupportHash,
+  type JupiterLendTokenAccountInput as JLAcct, type JupiterLendPositionInput as JLInput,
+} from "../wallet/jupiterLendExistingPosition";
+import type { WalletPosition as JLWalletPos } from "../wallet/walletPosition";
+// Step 17D.1 — Jupiter Lend share-accounting verification + applicability determination.
+import {
+  JUPITER_LEND_POOL_IDENTITY as JL_POOL, SOURCE_TO_ACCOUNT_APPLICABILITY as JL_APPLIC,
+  SHARE_ACCOUNTING_MANIFEST_HASH as JL_SA_HASH, computeShareAccountingManifestHash as jlSaHash,
+  mayMountRecognizedAccounting as jlMayMount, resolveJupiterLendExchangeRate as jlResolveRate,
+  computeRecognizedFromAccounting as jlConvert, decodePoolShareAccounting as jlDecodePool,
+  type PoolAccountObservation as JLPoolObs,
+} from "../wallet/jupiterLendShareAccounting";
+import { DISPOSITIONS_MANIFEST as DL_DISPO_MANIFEST, computeDispositionsManifestHash as dlDispoHashFn } from "./directUsdcLendingDispositions";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17881,6 +17902,8 @@ export function printFixtureResults(): void {
   const checks = [
     ...runSteakhouseGateFixtureChecks(),
     ...runSteakhouseBlockCtokenFixtureChecks(),
+    ...runJupiterLendExistingPositionFixtureChecks(),
+    ...runJupiterLendShareAccountingFixtureChecks(),
     ...runSteakhouseExistingPositionFixtureChecks(),
     ...runSafetyBufferCoverageFixtureChecks(),
     ...runKlendDirectPositionFailClosedFixtureChecks(),
@@ -19970,7 +19993,7 @@ export function runDirectUsdcLendingIntegrationFixtureChecks(): FixtureCheck[] {
   add("DL-31: no automatic Top Pick (sole candidate does not auto-Top-Pick)", DL_DISPOS.every((d) => d.topPickEligibility === false), "no auto top pick");
   add("DL-32: existing Kamino position support retained, separate from suggestion", dlGetDispo("kamino_usdc_lending")?.existingPositionSupport === true, "kamino pos");
   add("DL-33: Steakhouse existing-position support unchanged; never suggested", (() => { const s = dlGetDispo("kamino_steakhouse_usdc"); return s?.disposition === "existing_position_only" && s?.existingPositionSupport === true && s?.suggestionEligibility === false && s?.safetyBufferRecognition === "unchanged"; })(), "steak ok");
-  add("DL-34: Jupiter remains research-only, not_ready, no existing-position adapter", (() => { const j = dlGetDispo("jupiter_lend_usdc"); return j?.disposition === "excluded_from_suggestions" && j?.finalAssessmentStatus === "not_ready" && j?.provisionalSensitivityPreserved === true && j?.existingPositionSupport === false; })(), "jup ok");
+  add("DL-34: Jupiter research-only, not_ready; 17D read-only existing-position detection, still no eligibility", (() => { const j = dlGetDispo("jupiter_lend_usdc"); return j?.disposition === "excluded_from_suggestions" && j?.finalAssessmentStatus === "not_ready" && j?.provisionalSensitivityPreserved === true && j?.existingPositionSupport === true && j?.selectorEligibility === false && j?.topPickEligibility === false && j?.suggestionEligibility === false && j?.safetyBufferFundingEligible === false; })(), "jup ok");
 
   // --- /testing states + decision artifact ---
   add("DL-35: /testing includes all 24 required states", DL_TESTING.length === 24 && DL_DECISION_VALID.valid === true, `n=${DL_TESTING.length}`);
@@ -20694,6 +20717,195 @@ export function runSteakhouseBlockCtokenFixtureChecks(): FixtureCheck[] {
   // --- Immutability: no eligibility, no transaction behaviour ---
   add("BC-17: Steakhouse remains existing-only; selector/Top-Pick false; score/threshold immutable", dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("kamino_steakhouse_usdc")?.selectorEligibility === false && DA_OUTCOME.unroundedAggregate === 5.93 && DL_CATMIN === 5.5, "existing-only");
   add("BC-18: mapped position has no cta/transaction affordance", (() => { const w = stToWallet(stBuild(stInp("permitted"))); return !!w && !("cta" in w) && !("signature" in w) && !("transaction" in w); })(), "no tx");
+
+  return checks;
+}
+
+/**
+ * Step 17D — Jupiter Lend USDC (jlUSDC) read-only existing-position detection. Proves exact-identity
+ * detection/aggregation, fail-closed recognized-claim + liquidity (no verified methodology in production),
+ * dedup, portfolio + Safety Buffer treatment, and immutability (Jupiter stays excluded_from_suggestions).
+ */
+export function runJupiterLendExistingPositionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const RECEIPT = JL_ID.receiptTokenMint;
+  const USDC = JL_ID.underlyingUsdcMint;
+  const OWNER = "OwnerWa11et1111111111111111111111111111111";
+  const CLASSIC = JL_ID.receiptTokenProgram;
+  const TOKEN2022 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
+  const acct = (over: Partial<JLAcct> = {}): JLAcct => ({
+    address: "AtaAccount1111111111111111111111111111111", mint: RECEIPT, tokenProgram: CLASSIC,
+    amountRaw: "1000000000", decimals: 6, owner: OWNER, ...over,
+  });
+  // Production default: NO verified conversion, NO verified liquidity, stale price → fully unresolved.
+  const jinp = (over: Partial<JLInput> = {}): JLInput => ({
+    receiptBalanceRaw: "1000000000", exchangeRate: null, liquidity: null,
+    price: { usdcPriceUsd: null, fresh: false }, observedAt: "2026-07-18T00:00:00.000Z",
+    sourceSlot: 0, walletFresh: true, ...over,
+  });
+  // A VERIFIED exact-integer rate (1.05 underlying USDC per share) — only ever supplied by proven methodology.
+  const RATE = { underlyingPerShareNum: "105", underlyingPerShareDen: "100", calculationVersion: "test_v1", sourceAccounts: [JL_ID.poolAccount], sourceSlot: 100 };
+  const freshPrice = { usdcPriceUsd: 0.9999, fresh: true };
+  const wpos = (over: Partial<JLWalletPos>): JLWalletPos => ({ id: "x", source: "wallet", type: "token", symbol: "X", amount: "0", detection: "direct_wallet_balance", valueUsd: null, ...over });
+
+  // ---- Identity (exact, never symbol) ----
+  add("JL-1: exact jlUSDC receipt mint required (isReceiptMint)", jlIsReceiptMint(RECEIPT) === true && jlIsReceiptMint(USDC) === false && jlIsReceiptMint("jlUSDC") === false, "exact mint");
+  add("JL-2: identity validator rejects wrong mint/underlying/program/candidate", (() => {
+    const ok = jlValidateIdentity({ candidateId: JL_ID.candidateId, receiptTokenMint: RECEIPT, underlyingUsdcMint: USDC, tokenProgram: CLASSIC, cluster: "mainnet-beta" }).ok === true;
+    const badR = jlValidateIdentity({ candidateId: JL_ID.candidateId, receiptTokenMint: USDC, underlyingUsdcMint: USDC, tokenProgram: CLASSIC, cluster: "mainnet-beta" }).failure === "receipt_mint_mismatch";
+    const badU = jlValidateIdentity({ candidateId: JL_ID.candidateId, receiptTokenMint: RECEIPT, underlyingUsdcMint: RECEIPT, tokenProgram: CLASSIC, cluster: "mainnet-beta" }).failure === "underlying_mint_mismatch";
+    const badP = jlValidateIdentity({ candidateId: JL_ID.candidateId, receiptTokenMint: RECEIPT, underlyingUsdcMint: USDC, tokenProgram: TOKEN2022, cluster: "mainnet-beta" }).failure === "token_program_mismatch";
+    const badC = jlValidateIdentity({ candidateId: "kamino_usdc_lending", receiptTokenMint: RECEIPT, underlyingUsdcMint: USDC, tokenProgram: CLASSIC, cluster: "mainnet-beta" }).failure === "candidate_mismatch";
+    return ok && badR && badU && badP && badC;
+  })(), "validator");
+  add("JL-3: identity is classic SPL, 6 decimals, canonical USDC underlying, no freeze authority", JL_ID.receiptTokenProgram === CLASSIC && JL_ID.receiptTokenDecimals === 6 && JL_ID.underlyingUsdcMint === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" && JL_ID.receiptTokenFreezeAuthority === null, "spl/6/usdc");
+  add("JL-4: identity manifest is deterministic + stable", jlManifestHash() === JL_MANIFEST_HASH && JL_MANIFEST_HASH.startsWith("jup_lend_identity_"), JL_MANIFEST_HASH);
+  add("JL-5: identity bound to program chain (lending + liquidity + pool), not a label", JL_ID.lendingProgram === "jup3YeL8QhtSx1e253b2FDvsMNC87fDrgQZivbrndc9" && JL_ID.liquidityProgram === "jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC" && JL_ID.poolAccount === "5nmGjA4s7ATzpBQXC5RNceRpaJ7pYw2wKsNBWyuSAZV6", "program chain");
+
+  // ---- Detection + aggregation ----
+  add("JL-6: single ATA detected + aggregated", (() => { const d = jlDiscover([acct()], OWNER); return d.accounts.length === 1 && d.aggregateRaw === "1000000000"; })(), "ata");
+  add("JL-7: non-associated account detected (owner-matched, arbitrary address)", (() => { const d = jlDiscover([acct({ address: "NonAtaXYZ" })], OWNER); return d.accounts.length === 1 && d.aggregateRaw === "1000000000"; })(), "non-ata");
+  add("JL-8: multiple accounts aggregate (exact integer sum)", (() => { const d = jlDiscover([acct({ address: "A", amountRaw: "1000000000" }), acct({ address: "B", amountRaw: "2500000" })], OWNER); return d.accounts.length === 2 && d.aggregateRaw === "1002500000"; })(), "sum");
+  add("JL-9: zero-balance account excluded", (() => { const d = jlDiscover([acct({ address: "Z", amountRaw: "0" })], OWNER); return d.accounts.length === 0 && d.aggregateRaw === "0" && d.rejected[0]?.reason === "zero_balance"; })(), "zero");
+  add("JL-10: malformed amount fails closed (excluded)", (() => { const d = jlDiscover([acct({ address: "M", amountRaw: "12.3x" })], OWNER); return d.accounts.length === 0 && d.rejected[0]?.reason === "malformed_amount"; })(), "malformed");
+  add("JL-11: canonical USDC NOT matched as jlUSDC (wrong mint)", (() => { const d = jlDiscover([acct({ mint: USDC })], OWNER); return d.accounts.length === 0 && d.rejected[0]?.reason === "wrong_mint"; })(), "wrong mint");
+  add("JL-12: wrong token program excluded", (() => { const d = jlDiscover([acct({ tokenProgram: TOKEN2022 })], OWNER); return d.accounts.length === 0 && d.rejected[0]?.reason === "wrong_token_program"; })(), "wrong prog");
+  add("JL-13: foreign-owner account excluded", (() => { const d = jlDiscover([acct({ owner: "SomeoneElse" })], OWNER); return d.accounts.length === 0 && d.rejected[0]?.reason === "foreign_owner"; })(), "foreign");
+  add("JL-14: closed account excluded", (() => { const d = jlDiscover([acct({ isClosed: true })], OWNER); return d.accounts.length === 0 && d.rejected[0]?.reason === "closed_account"; })(), "closed");
+  add("JL-15: same account address never double-counted", (() => { const d = jlDiscover([acct({ address: "DUP" }), acct({ address: "DUP" })], OWNER); return d.accounts.length === 1 && d.aggregateRaw === "1000000000"; })(), "no double");
+  add("JL-16: exact raw units preserved (large value, no float)", (() => { const d = jlDiscover([acct({ amountRaw: "123456789012345" })], OWNER); return d.aggregateRaw === "123456789012345"; })(), "exact raw");
+
+  // ---- Recognition (ownership vs claim) ----
+  add("JL-17: unresolved conversion preserves ownership (balance visible, recognized null)", (() => { const r = jlBuild(jinp()); return r.positionExists === true && r.receiptBalanceRaw === "1000000000" && r.recognizedUnderlyingRaw === null && r.recognizedValueUsd === null && r.enrichmentState === "unresolved" && r.unresolvedReasons.some((x) => /no verified jlUSDC/.test(x)); })(), "A survives ¬B");
+  add("JL-18: verified conversion → exact integer floor(receipt × num/den)", (() => { const r = jlBuild(jinp({ receiptBalanceRaw: "1000000000", exchangeRate: RATE })); return r.recognizedUnderlyingRaw === "1050000000" && r.enrichmentState === "recognized_only"; })(), "1.05x");
+  add("JL-19: conversion rounds DOWN (floor), never up", (() => { const r = jlBuild(jinp({ receiptBalanceRaw: "100", exchangeRate: { ...RATE, underlyingPerShareNum: "1", underlyingPerShareDen: "3" } })); return r.recognizedUnderlyingRaw === "33"; })(), "floor 1/3");
+  add("JL-20: no 1:1 assumption — null rate does NOT set recognized = receipt", (() => { const r = jlBuild(jinp()); return r.recognizedUnderlyingRaw !== r.receiptBalanceRaw && r.recognizedUnderlyingRaw === null; })(), "not 1:1");
+  add("JL-21: malformed rate fails closed (recognized null, ownership kept)", (() => { const r = jlBuild(jinp({ exchangeRate: { ...RATE, underlyingPerShareDen: "0" } })); return r.recognizedUnderlyingRaw === null && r.receiptBalanceRaw === "1000000000"; })(), "bad rate");
+
+  // ---- Liquidity ----
+  add("JL-22: no positive liquid without verified methodology", (() => { const r = jlBuild(jinp({ exchangeRate: RATE })); return r.currentlyLiquidUnderlyingRaw === null && r.liquidValueUsd === null && r.withdrawalState === "unresolved"; })(), "no liquid");
+  add("JL-23: protocol pause respected → paused, no liquid", (() => { const r = jlBuild(jinp({ exchangeRate: RATE, liquidity: { currentlyLiquidUnderlyingRaw: "500000000", limited: false, paused: true, sourceSlot: 1, fresh: true } })); return r.withdrawalState === "paused" && r.currentlyLiquidUnderlyingRaw === null; })(), "paused");
+  add("JL-24: stale liquidity → no verified amount (unresolved)", (() => { const r = jlBuild(jinp({ exchangeRate: RATE, liquidity: { currentlyLiquidUnderlyingRaw: "500000000", limited: false, paused: false, sourceSlot: 1, fresh: false } })); return r.withdrawalState === "unresolved" && r.currentlyLiquidUnderlyingRaw === null; })(), "stale liq");
+  add("JL-25: verified liquid never exceeds recognized (capped)", (() => { const r = jlBuild(jinp({ receiptBalanceRaw: "1000000000", exchangeRate: RATE, liquidity: { currentlyLiquidUnderlyingRaw: "999999999999", limited: true, paused: false, sourceSlot: 1, fresh: true } })); return r.currentlyLiquidUnderlyingRaw === "1050000000" && r.withdrawalState === "fully_withdrawable"; })(), "cap");
+  add("JL-26: partial liquidity classified partially_withdrawable", (() => { const r = jlBuild(jinp({ receiptBalanceRaw: "1000000000", exchangeRate: RATE, liquidity: { currentlyLiquidUnderlyingRaw: "500000000", limited: true, paused: false, sourceSlot: 1, fresh: true } })); return r.currentlyLiquidUnderlyingRaw === "500000000" && r.withdrawalState === "partially_withdrawable"; })(), "partial");
+  add("JL-27: full liquidity classified fully_withdrawable (limiter permits)", (() => { const r = jlBuild(jinp({ receiptBalanceRaw: "1000000000", exchangeRate: RATE, liquidity: { currentlyLiquidUnderlyingRaw: "1050000000", limited: false, paused: false, sourceSlot: 1, fresh: true } })); return r.withdrawalState === "fully_withdrawable"; })(), "full");
+
+  // ---- Pricing ----
+  add("JL-28: recognized USD uses exact underlying price when fresh", (() => { const r = jlBuild(jinp({ receiptBalanceRaw: "1000000000", exchangeRate: RATE, price: freshPrice })); return typeof r.recognizedValueUsd === "number" && Math.abs((r.recognizedValueUsd as number) - 1050 * 0.9999) < 1e-6; })(), "usd = amt×price");
+  add("JL-29: no permanent $1 — stale price → recognized USD null, tokens preserved", (() => { const r = jlBuild(jinp({ receiptBalanceRaw: "1000000000", exchangeRate: RATE, price: { usdcPriceUsd: 1, fresh: false } })); return r.recognizedValueUsd === null && r.recognizedUnderlyingRaw === "1050000000"; })(), "no $1");
+  add("JL-30: liquid USD only when verified liquidity + fresh price", (() => { const r = jlBuild(jinp({ receiptBalanceRaw: "1000000000", exchangeRate: RATE, price: freshPrice, liquidity: { currentlyLiquidUnderlyingRaw: "500000000", limited: true, paused: false, sourceSlot: 1, fresh: true } })); return typeof r.liquidValueUsd === "number" && Math.abs((r.liquidValueUsd as number) - 500 * 0.9999) < 1e-6; })(), "liquid usd");
+
+  // ---- Deduplication + portfolio merge ----
+  const jlPos = jlToWallet(jlBuild(jinp()))!;
+  add("JL-31: generic unknown jlUSDC row removed on merge", (() => {
+    const rows: JLWalletPos[] = [wpos({ id: `mint-${RECEIPT}`, mint: RECEIPT, name: "Unknown token", symbol: "9BEc…PA2D", amount: "1000000000", uiAmount: 1000 })];
+    const merged = jlMerge(rows, jlBuild(jinp()));
+    return merged.filter((p) => p.mint === RECEIPT).length === 0 && merged.filter((p) => p.id === JL_POS_ID).length === 1;
+  })(), "unknown removed");
+  add("JL-32: canonical wallet USDC untouched by dedupe", (() => { const rows: JLWalletPos[] = [wpos({ id: "mint-usdc", mint: USDC, name: "USD Coin", symbol: "USDC", type: "token", valueUsd: 100 }), jlPos]; return jlDedupe(rows).some((p) => p.mint === USDC && p.symbol === "USDC"); })(), "usdc kept");
+  add("JL-33: JupSOL untouched by dedupe", (() => { const rows: JLWalletPos[] = [wpos({ id: "mint-jupsol", mint: "jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v", symbol: "JupSOL", type: "lst" }), jlPos]; return jlDedupe(rows).some((p) => p.symbol === "JupSOL"); })(), "jupsol kept");
+  add("JL-34: unrelated other-mint receipt untouched", (() => { const rows: JLWalletPos[] = [wpos({ id: "mint-other", mint: "OtherReceiptMint1111111111111111111111111", symbol: "xTOK" }), jlPos]; return jlDedupe(rows).some((p) => p.mint === "OtherReceiptMint1111111111111111111111111"); })(), "other kept");
+  add("JL-35: exactly one canonical Jupiter row after repeated merge", (() => { let rows: JLWalletPos[] = []; rows = jlMerge(rows, jlBuild(jinp())); rows = jlMerge(rows, jlBuild(jinp())); return rows.filter((p) => p.id === JL_POS_ID).length === 1; })(), "one row");
+  add("JL-36: dedupe key bound to program+mints+pool (not label)", jlPos.dedupeKey === JL_KEY && JL_KEY.includes(JL_ID.lendingProgram) && JL_KEY.includes(RECEIPT) && JL_KEY.includes(USDC) && JL_KEY.includes(JL_ID.poolAccount) && !JL_KEY.includes("Jupiter Lend USDC"), "key");
+
+  // ---- Portfolio + Safety Buffer ----
+  add("JL-37: fresh recognized value reaches portfolio valueUsd", (() => { const w = jlToWallet(jlBuild(jinp({ receiptBalanceRaw: "1000000000", exchangeRate: RATE, price: freshPrice }))); return !!w && typeof w.valueUsd === "number" && Math.abs((w.valueUsd as number) - 1050 * 0.9999) < 1e-6; })(), "reaches total");
+  add("JL-38: unresolved value → valueUsd null (excluded from total, NOT zero)", (() => { const w = jlToWallet(jlBuild(jinp())); return !!w && w.valueUsd === null && w.recognizedValueUsd === null; })(), "null not zero");
+  add("JL-39: Safety Buffer — recognized-only/unresolved contributes 0 verified liquid", (() => { const c = sbClassify(jlToWallet(jlBuild(jinp()))!); return c.verifiedLiquidValueUsd === 0 && c.inclusionState === "excluded_unresolved" && c.positionClass === "protocol_existing"; })(), "0 liquid");
+  add("JL-40: Safety Buffer — jlUSDC does NOT count as direct wallet USDC", (() => { const c = sbClassify(jlToWallet(jlBuild(jinp({ receiptBalanceRaw: "1000000000", exchangeRate: RATE, price: freshPrice })))!); return c.positionClass !== "wallet_stable" && c.verifiedLiquidValueUsd === 0; })(), "not wallet usdc");
+  add("JL-41: verified-liquid counts ONLY when withdrawal proven (included when fresh liquidity)", (() => { const c = sbClassify(jlToWallet(jlBuild(jinp({ receiptBalanceRaw: "1000000000", exchangeRate: RATE, price: freshPrice, liquidity: { currentlyLiquidUnderlyingRaw: "1050000000", limited: false, paused: false, sourceSlot: 1, fresh: true } })))!); return c.verifiedLiquidValueUsd > 0 && (c.inclusionState === "included_liquid" || c.inclusionState === "included_partial"); })(), "counts when proven");
+  add("JL-42: already-complete buffer stays complete despite unresolved jlUSDC", (() => {
+    const usdc = wpos({ id: "mint-usdc", mint: USDC, name: "USD Coin", symbol: "USDC", type: "token", valueUsd: 1000 });
+    const cov = sbCoverage([usdc, jlToWallet(jlBuild(jinp()))!], 500);
+    return cov.coverageState === "complete" && cov.verifiedLiquidStableValueUsd === 1000;
+  })(), "complete despite unresolved");
+
+  // ---- Immutability / no eligibility / no transaction ----
+  add("JL-43: Jupiter excluded_from_suggestions, not_ready, provisional preserved, no eligibility", (() => { const j = dlGetDispo("jupiter_lend_usdc"); return j?.disposition === "excluded_from_suggestions" && j?.finalAssessmentStatus === "not_ready" && j?.provisionalSensitivityPreserved === true && j?.selectorEligibility === false && j?.topPickEligibility === false && j?.suggestionEligibility === false; })(), "excluded");
+  add("JL-44: Kamino + Steakhouse dispositions unchanged", dlGetDispo("kamino_usdc_lending")?.disposition === "selected_category_candidate" && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only", "others intact");
+  add("JL-45: position row is existing-only with NO score/range/cta/transaction affordance", (() => { const w = jlToWallet(jlBuild(jinp({ exchangeRate: RATE, price: freshPrice })))!; return w.existingPositionOnly === true && w.apy === null && !("cta" in w) && !("score" in w) && !("provisionalRange" in w) && !("transaction" in w) && !("signature" in w); })(), "existing-only");
+  add("JL-46: adapter exposes no provisional sensitivity range (4.12–4.32 stays research-only)", (() => { const s = JSON.stringify(jlBuild(jinp({ exchangeRate: RATE }))); return !s.includes("4.12") && !s.includes("4.32"); })(), "no range leak");
+
+  return checks;
+}
+
+/**
+ * Step 17D.1 — Jupiter Lend jlUSDC verified share accounting + applicability. Proves the pool-decoder
+ * fail-closes on identity, the conversion function's invariants, the `unresolved` applicability
+ * determination (no invented decoder), and the §13 manifest/support-binding audit.
+ */
+export function runJupiterLendShareAccountingFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const obs = (over: Partial<JLPoolObs> = {}): JLPoolObs => ({
+    poolAddress: JL_POOL.poolAccount, ownerProgram: JL_POOL.expectedOwnerProgram,
+    discriminatorHex: JL_POOL.expectedDiscriminatorHex, dataLenBytes: JL_POOL.expectedDataLenBytes,
+    sourceSlot: 433500000, ...over,
+  });
+
+  // ---- Pool decoder: identity gates fail closed ----
+  add("JA-1: wrong pool address rejected (identity fail-closed)", jlDecodePool(obs({ poolAddress: "WrongPool111" })).status === "rejected_identity" && jlDecodePool(obs({ poolAddress: "WrongPool111" })).failure === "wrong_pool", "wrong pool");
+  add("JA-2: wrong owner program rejected", jlDecodePool(obs({ ownerProgram: "jupeiUmn818Jg1ekPURTpr4mFo29p46vygyykFJ3wZC" })).failure === "wrong_owner", "wrong owner");
+  add("JA-3: wrong discriminator rejected", jlDecodePool(obs({ discriminatorHex: "0000000000000000" })).failure === "wrong_discriminator", "wrong disc");
+  add("JA-4: unsupported account length rejected", jlDecodePool(obs({ dataLenBytes: 200 })).failure === "unsupported_length", "wrong len");
+  add("JA-5: malformed observation rejected", jlDecodePool(obs({ dataLenBytes: NaN as unknown as number })).status === "rejected_identity", "malformed");
+  add("JA-6: identity PASS but no verified layout → unresolved (no invented offsets)", (() => { const r = jlDecodePool(obs()); return r.status === "unresolved_no_verified_layout" && r.exchangeRate === null; })(), "no layout");
+
+  // ---- Conversion function invariants (verified-input, integer only) ----
+  add("JA-7: floor(receipt × num/den) exact integer (1.05×)", jlConvert("1000000000", "105", "100").recognizedUnderlyingRaw === "1050000000", "1.05x");
+  add("JA-8: rounds DOWN (floor), never up", jlConvert("100", "1", "3").recognizedUnderlyingRaw === "33", "floor 1/3");
+  add("JA-9: zero shares → zero underlying", jlConvert("0", "105", "100").recognizedUnderlyingRaw === "0", "0 shares");
+  add("JA-10: denominator zero fails closed", (() => { const r = jlConvert("1000", "105", "0"); return r.ok === false && r.recognizedUnderlyingRaw === null && r.failure === "denominator_non_positive"; })(), "den 0");
+  add("JA-11: negative shares/numerator fail closed", jlConvert("-5", "105", "100").failure === "negative_shares" && jlConvert("1000", "-1", "100").failure === "negative_numerator", "negatives");
+  add("JA-12: large values no overflow (BigInt)", jlConvert("999999999999999999999", "1000001", "1000000").recognizedUnderlyingRaw === (((999999999999999999999n) * 1000001n) / 1000000n).toString(), "no overflow");
+  add("JA-13: monotonic with receipt balance", (() => { const a = BigInt(jlConvert("1000", "105", "100").recognizedUnderlyingRaw!); const b = BigInt(jlConvert("2000", "105", "100").recognizedUnderlyingRaw!); return b >= a; })(), "monotonic");
+  add("JA-14: accounting-bound — shares ≤ denominator ⇒ claim ≤ numerator", (() => { const r = BigInt(jlConvert("100", "500", "100").recognizedUnderlyingRaw!); return r <= 500n; })(), "≤ assets");
+  add("JA-15: malformed numeric inputs fail closed", jlConvert("1e9", "105", "100").failure === "malformed_inputs" && jlConvert("100", "abc", "100").failure === "malformed_inputs", "malformed");
+
+  // ---- Applicability determination = unresolved (no invented decoder) ----
+  add("JA-16: source-to-account applicability is UNRESOLVED", JL_APPLIC.status === "unresolved", JL_APPLIC.status);
+  add("JA-17: deployed binary NOT claimed audited / no full source-to-binary verification", JL_APPLIC.deployedBinaryClaimedAudited === false && JL_APPLIC.claimsFullSourceToBinaryVerification === false, "not audited");
+  add("JA-18: the two share-accounting BLOCKER criteria are unresolved; owner-match resolved", (() => {
+    const c = (id: string) => JL_APPLIC.criteria.find((x) => x.id === id)?.resolved;
+    return c("live_pool_owner_matches_program") === true && c("supplier_share_fields_have_source_backed_layout") === false && c("mint_burn_semantics_map_jlusdc_to_claim") === false;
+  })(), "criteria");
+  add("JA-19: blockers are explicit and non-empty", JL_APPLIC.blockers.length >= 3 && JL_APPLIC.blockers.some((b) => /rust/i.test(b)) && JL_APPLIC.blockers.some((b) => /vendored|idl/i.test(b)), "blockers");
+  add("JA-20: mayMount false → resolver returns null WITHOUT decoding (no RPC/fetch)", jlMayMount() === false && jlResolveRate() === null && jlResolveRate(obs({ numerator: "105", denominator: "100" } as Partial<JLPoolObs>)) === null, "gated null");
+  add("JA-21: applicability manifest deterministic", jlSaHash() === JL_SA_HASH && JL_SA_HASH.startsWith("jup_lend_share_accounting_"), JL_SA_HASH);
+
+  // ---- Production consequence: recognized stays null, ownership preserved ----
+  add("JA-22: production (null rate) → recognized null, receipt balance visible, position exists", (() => {
+    const r = jlBuild({ receiptBalanceRaw: "1000000000", exchangeRate: jlResolveRate(), liquidity: null, price: { usdcPriceUsd: null, fresh: false }, observedAt: "2026-07-18T00:00:00.000Z", sourceSlot: 0, walletFresh: true });
+    return r.positionExists === true && r.recognizedUnderlyingRaw === null && r.recognizedValueUsd === null && r.receiptBalanceRaw === "1000000000";
+  })(), "unresolved preserved");
+  add("JA-23: FUTURE verified path works — decode with source-backed num/den yields a rate (gated off in prod)", (() => {
+    const r = jlDecodePool(obs({ numerator: "1050000000", denominator: "1000000000" } as Partial<JLPoolObs>));
+    return r.status === "verified" && r.exchangeRate?.underlyingPerShareNum === "1050000000" && r.exchangeRate?.sourceAccounts[0] === JL_POOL.poolAccount;
+  })(), "verified path ready");
+
+  // ---- §13 manifest + existingPositionSupport binding ----
+  add("JA-24: full Jupiter identity manifest hash deterministic + exact", jlManifestHash() === JL_MANIFEST_HASH && JL_MANIFEST_HASH === "jup_lend_identity_5fcc60e6", JL_MANIFEST_HASH);
+  add("JA-25: existingPositionSupport has an explicit immutable binding (read-only detection only)", JL_SUPPORT_BINDING.existingPositionSupport === true && JL_SUPPORT_BINDING.supportKind === "read_only_detection_only" && JL_SUPPORT_BINDING.boundToIdentityManifest === JL_MANIFEST_HASH && jlSupportHash() === JL_SUPPORT_HASH, "bound");
+  add("JA-26: support binding grants NO recommendation/selector/TopPick/optimization eligibility", (() => { const d = JL_SUPPORT_BINDING.doesNotGrant.join("|"); return /recommendation/.test(d) && /selector/.test(d) && /Top Pick/.test(d) && /Position Optimization/.test(d); })(), "no grants");
+  add("JA-27: dispositions manifest binds disposition+selector, NOT existingPositionSupport", (() => {
+    const material = JSON.stringify(DL_DISPO_MANIFEST.dispositions);
+    return material.includes("disposition") && material.includes("selector") && !material.includes("existingPositionSupport") && dlDispoHashFn() === DL_DISPO_HASH;
+  })(), "manifest scope");
+  add("JA-28: recommendation disposition still excluded_from_suggestions; prior history preserved", dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && JL_SUPPORT_BINDING.recommendationDispositionUnchanged === "excluded_from_suggestions" && JL_SUPPORT_BINDING.priorDispositionHistoryPreserved === true, "disposition");
+
+  // ---- Liquidity/actionability + immutability (recognized ≠ liquid; nothing actionable) ----
+  add("JA-29: even a (hypothetical) recognized value does NOT imply liquid; Safety Buffer stays 0", (() => {
+    const RATE = { underlyingPerShareNum: "105", underlyingPerShareDen: "100", calculationVersion: "t", sourceAccounts: [JL_POOL.poolAccount], sourceSlot: 1 };
+    const w = jlToWallet(jlBuild({ receiptBalanceRaw: "1000000000", exchangeRate: RATE, liquidity: null, price: { usdcPriceUsd: 0.9999, fresh: true }, observedAt: "2026-07-18T00:00:00.000Z", sourceSlot: 0, walletFresh: true }))!;
+    const c = sbClassify(w);
+    return typeof w.recognizedValueUsd === "number" && w.liquidValueUsd === null && w.withdrawalState === "unresolved" && c.verifiedLiquidValueUsd === 0;
+  })(), "recognized≠liquid");
+  add("JA-30: Jupiter research-only unchanged; Kamino + Steakhouse intact; no tx in accounting result", (() => {
+    const j = dlGetDispo("jupiter_lend_usdc"); const s = JSON.stringify(jlDecodePool(obs()));
+    return j?.finalAssessmentStatus === "not_ready" && j?.provisionalSensitivityPreserved === true && dlGetDispo("kamino_usdc_lending")?.disposition === "selected_category_candidate" && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && !s.includes("cta") && !s.includes("signature") && !s.includes("transaction");
+  })(), "immutable");
 
   return checks;
 }

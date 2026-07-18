@@ -117,10 +117,13 @@ export const CANDIDATE_DISPOSITIONS: CandidateDisposition[] = [
     suggestionEligibility: false,
     selectorEligibility: false,
     topPickEligibility: false,
-    existingPositionSupport: false, // no existing-position adapter in this task
+    // Step 17D — READ-ONLY existing-position detection is now mounted (jlUSDC ownership stays visible).
+    // This does NOT change the recommendation disposition: still excluded_from_suggestions, not_ready,
+    // provisional preserved, no selector/Top-Pick/optimization eligibility, no Safety Buffer funding.
+    existingPositionSupport: true,
     safetyBufferFundingEligible: false,
     excessUsdcYieldEligible: false,
-    safetyBufferRecognition: "n/a",
+    safetyBufferRecognition: "unchanged",
     finalAssessmentStatus: "not_ready",
     provisionalSensitivityPreserved: true,
     reasons: [
@@ -129,6 +132,7 @@ export const CANDIDATE_DISPOSITIONS: CandidateDisposition[] = [
       "source-to-binary linkage unresolved; authority weaker than Kamino; materially newer",
       "multiple program dependencies; collateral/oracle exposure unresolved; withdrawal limiter restrictive",
       "research-only — the provisional bound must NOT be represented as a completed assessment",
+      "17D: read-only existing-position detection only — recognized underlying + liquidity fail closed to unresolved (no verified conversion/withdrawal methodology); never a suggestion",
     ],
     neverArchivedOrDeleted: true,
   },
@@ -282,10 +286,12 @@ export function validateDispositions(): { valid: boolean; errors: string[] } {
   if (!steak || steak.disposition !== "existing_position_only" || steak.existingPositionSupport !== true || steak.safetyBufferRecognition !== "unchanged")
     errors.push("Steakhouse must be existing_position_only with unchanged support");
 
-  // Jupiter stays research-only, not_ready, provisional preserved, no existing-position adapter here.
+  // Jupiter stays research-only, not_ready, provisional preserved. Step 17D mounts READ-ONLY existing-
+  // position detection (existingPositionSupport true) WITHOUT changing the recommendation disposition:
+  // still excluded_from_suggestions, no selector/Top-Pick eligibility, no Safety Buffer funding.
   const jup = getDisposition("jupiter_lend_usdc");
-  if (!jup || jup.disposition !== "excluded_from_suggestions" || jup.finalAssessmentStatus !== "not_ready" || jup.provisionalSensitivityPreserved !== true || jup.existingPositionSupport !== false)
-    errors.push("Jupiter must be excluded_from_suggestions, not_ready, provisional preserved, no existing-position adapter");
+  if (!jup || jup.disposition !== "excluded_from_suggestions" || jup.finalAssessmentStatus !== "not_ready" || jup.provisionalSensitivityPreserved !== true || jup.existingPositionSupport !== true || jup.selectorEligibility !== false || jup.topPickEligibility !== false || jup.suggestionEligibility !== false || jup.safetyBufferFundingEligible !== false)
+    errors.push("Jupiter must be excluded_from_suggestions, not_ready, provisional preserved, existing-position detection only, no selector/Top-Pick/suggestion/funding eligibility");
 
   // Category evaluation must not have mutated the assessment or rewritten history.
   if (KAMINO_CATEGORY_EVALUATION.assessmentMutated !== false) errors.push("assessment must not be mutated");

@@ -39,6 +39,15 @@ import {
   type KlendDirectReserveSnapshot,
 } from "../suggestions/klendDirectUsdcExistingPosition";
 import { POSITION_IDENTITY as KLEND_DIRECT_IDENTITY, EXPECTED_TOKEN_PROGRAM_ID as KLEND_CLASSIC_TOKEN_PROGRAM, type WalletTokenAccountInput } from "../suggestions/klendDirectLendingPosition";
+import {
+  JUPITER_LEND_IDENTITY,
+  JUPITER_LEND_TOKEN_PROGRAM,
+  discoverJlUsdcAccounts,
+  buildJupiterLendExistingPosition,
+  mergeJupiterLendPosition,
+  type JupiterLendTokenAccountInput,
+} from "./jupiterLendExistingPosition";
+import { resolveJupiterLendExchangeRate } from "./jupiterLendShareAccounting";
 import type { VrtInfo } from "./jitoRestaking";
 import type { SanctumLstInfo } from "./sanctumLsts";
 import {
@@ -803,6 +812,50 @@ export function useWalletPortfolio(): WalletPortfolio {
               if (record.positionExists) merged = mergeKlendDirectPosition(merged, record);
             }
           }
+        }
+      } catch { /* strict no-op on any failure — portfolio unchanged */ }
+      if (cancelled || myReq !== reqId.current) return;
+
+      // Step 17D/17D.1 — Jupiter Lend USDC (jlUSDC) existing-position mount (additive + fail-closed). Detect
+      // exact jlUSDC receipt-token accounts from the already-read classic SPL token accounts and, when a
+      // confirmed holding exists, produce ONE canonical existing-position row.
+      //
+      // RECOGNIZED underlying is gated on the source-to-account applicability determination
+      // (jupiterLendShareAccounting.ts): it is currently `unresolved` (no vendored IDL / no Rust source; the
+      // governing liquidity binary postdates the only published IDL), so resolveJupiterLendExchangeRate()
+      // returns null WITHOUT any RPC — recognized + USD stay null, exactly the Step 17D behavior. The wiring
+      // is future-ready: a verified layout flips applicability and supplies a decoded pool observation here.
+      // LIQUIDITY stays unresolved (no limiter-aware methodology). Ownership stays visible; the generic
+      // "Unknown token" jlUSDC row is deduped. Jupiter is excluded_from_suggestions; this NEVER makes it
+      // suggestion/selector/Top-Pick/optimization eligible. Never symbol-matched; any failure → strict no-op.
+      try {
+        const jlAccounts: JupiterLendTokenAccountInput[] = (splOk ? accountsOf(splRes.value) : [])
+          .map((a) => a?.account?.data?.parsed?.info)
+          .filter((info) => info?.mint === JUPITER_LEND_IDENTITY.receiptTokenMint && info?.tokenAmount?.amount !== "0")
+          .map((info, idx) => ({
+            address: `jlusdc-${idx}`,
+            mint: info!.mint as string,
+            tokenProgram: JUPITER_LEND_TOKEN_PROGRAM,
+            amountRaw: String(info!.tokenAmount!.amount),
+            decimals: Number(info!.tokenAmount!.decimals),
+            owner: owner.toBase58(),
+          }));
+        const discovery = discoverJlUsdcAccounts(jlAccounts, owner.toBase58());
+        if (BigInt(discovery.aggregateRaw) > 0n) {
+          // Applicability-gated: null while share accounting is unresolved (no pool fetch performed).
+          const exchangeRate = resolveJupiterLendExchangeRate();
+          const usdcPrice = pricedAsOf != null ? merged.find((p) => p.mint === JUPITER_LEND_IDENTITY.underlyingUsdcMint)?.priceUsd ?? null : null;
+          const record = buildJupiterLendExistingPosition({
+            receiptBalanceRaw: discovery.aggregateRaw,
+            exchangeRate,               // null (unresolved) → recognized stays null
+            liquidity: null,            // unresolved (no verified withdrawal methodology)
+            price: { usdcPriceUsd: usdcPrice, fresh: pricedAsOf != null && typeof usdcPrice === "number" },
+            observedAt: new Date().toISOString(),
+            sourceSlot: 0,
+            walletFresh: true,
+            sourceAccounts: discovery.accounts.map((a) => a.address),
+          });
+          if (record.positionExists) merged = mergeJupiterLendPosition(merged, record);
         }
       } catch { /* strict no-op on any failure — portfolio unchanged */ }
       if (cancelled || myReq !== reqId.current) return;
