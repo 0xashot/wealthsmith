@@ -11,10 +11,8 @@
  */
 import type { SuggestionCardState } from "../types/dashboard";
 import { DIRECT_LENDING_TESTING_STATES, type TestingState } from "./directUsdcLendingProductDecision";
-import {
-  DIRECT_USDC_LENDING_CARD_COPY,
-  formatDirectLendingApy,
-} from "./directUsdcLendingSuggestionCard";
+import { DIRECT_USDC_LENDING_CARD_COPY } from "./directUsdcLendingSuggestionCard";
+import { buildDirectLendingCardState } from "./directUsdcLendingRuntimeAdapter";
 
 /** A clearly fixture-only sample APY (NOT the production value; production uses the fresh measured source). */
 export const DIRECT_LENDING_TESTING_SAMPLE_APY_PCT = 5.87 as const;
@@ -37,29 +35,13 @@ function slug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
-/** Build a production-shaped card for a state that renders one. */
+/** Build a production-shaped card for a state that renders one — via the SHARED runtime builder. */
 function buildCard(state: TestingState, opts: { showApy: boolean; showAmount: boolean }): SuggestionCardState {
-  return {
-    id: `direct-lending-${state.id}-${slug(state.name)}`,
-    title: DIRECT_USDC_LENDING_CARD_COPY.title,
-    type: "stable_yield",
-    category: "stable_yield",
-    badge: DIRECT_USDC_LENDING_CARD_COPY.eyebrow, // "Yield strategy"
-    is_top_pick: false, // never auto Top Pick
-    status: "review_only",
-    actionability: "actionable",
-    severity: "info",
-    description: DIRECT_USDC_LENDING_CARD_COPY.description,
-    impact_text: opts.showAmount ? "Estimated for your eligible excess USDC" : "Amount shown once eligible excess USDC is determined",
-    cta: {
-      label: "View details",
-      action: null,
-      executes_transaction: false,
-      requires_wallet_signature: false,
-      completion_on_click: false,
-    },
-    ...(opts.showApy ? { apy: { status: "estimated", display: formatDirectLendingApy(DIRECT_LENDING_TESTING_SAMPLE_APY_PCT) } } : {}),
-  };
+  return buildDirectLendingCardState({
+    idSuffix: `${state.id}-${slug(state.name)}`,
+    measuredApyPct: opts.showApy ? DIRECT_LENDING_TESTING_SAMPLE_APY_PCT : null,
+    amountText: opts.showAmount ? "Estimated for your eligible excess USDC" : null,
+  });
 }
 
 /** Which states render a card, and with what variations. */

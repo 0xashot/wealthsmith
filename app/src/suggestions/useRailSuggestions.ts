@@ -37,6 +37,7 @@ import { runSuggestionEngine } from "./engine";
 import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 import { deriveContributionSuggestion } from "./contributionProductInput";
 import { deriveStableYieldPlanSuggestion } from "./stableYieldProductInput";
+import { evaluateDirectLendingForRail, type RuntimeSuppressionReason } from "./directUsdcLendingRuntimeAdapter";
 import type { StableYieldReviewPresentation } from "./yieldStrategyPlanPresentationTypes";
 import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID } from "./contributionPricePolicy";
 import type { ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
@@ -62,6 +63,12 @@ export interface RailSuggestionsData {
   notice?: string;
   /** True when the engine produced at least one card. */
   available: boolean;
+  /**
+   * Step 16H-S.3 — the exact machine-readable reason the Kamino Direct USDC-lending suggestion was
+   * suppressed this run (null when it emitted). Internal diagnostic; never rendered as user copy and
+   * never carries a score or threshold.
+   */
+  directLendingSuppression?: RuntimeSuppressionReason | null;
 }
 
 /** The lifted rail payload (adds the live-read loading flag). */
@@ -154,6 +161,31 @@ export function deriveRailSuggestions(args: {
     stableYield.suggestion
   );
   const cards = toSuggestionCards(engineResult.suggestions);
+
+  // Step 16H-S.3 — the approved Kamino Direct USDC-lending suggestion, evaluated through the SAME
+  // deterministic runtime adapter the /testing page uses. Governance is derived from the activation
+  // record (never hardcoded); the KLend market feed (APY/availability/capacity), verified liquid
+  // buffer coverage, and the deterministic excess amount are not plumbed into the pure rail yet, so
+  // in real-wallet mode the adapter FAIL-CLOSES and appends no card (production output unchanged).
+  // Demo mode never emits (real-wallet-only path). Appended last → never Top Pick, never reorders.
+  let directLendingSuppression: RuntimeSuppressionReason | null = null;
+  if (dataMode === "real_wallet") {
+    const dl = evaluateDirectLendingForRail({
+      canonicalUsdcMint: null,
+      canonicalUsdcRawUnits: null,
+      pricesFresh: pricedAsOf != null,
+      bufferRequiredResolved: buffer != null,
+      bufferSufficiencyResolved: buffer != null,
+      bufferFullyFundedByLiquidCoverage: buffer?.fullyFunded === true,
+      excessDeterministicAmountUsd: null, // deterministic excess feed not yet wired into the pure rail
+      suitability: { profileComplete: goal != null, suitableForCategory: false, prohibitsDefiLending: false },
+      holdsExactCToken: false,
+      approvedTopUpRulePasses: false,
+    });
+    if (dl.emit) cards.push(dl.card);
+    else directLendingSuppression = dl.suppressionReason;
+  }
+
   // Engine-owned review details, keyed by the SAME stable suggestion id the
   // cards use, so the rail can open the Review modal without re-running anything.
   const reviewDetailsById: Record<string, SuggestionReviewDetails> = {};
@@ -167,6 +199,7 @@ export function deriveRailSuggestions(args: {
     stableYieldReviewById: stableYield.reviewById,
     notice: warningsToNotice(engineResult.warnings),
     available: cards.length > 0,
+    directLendingSuppression,
   };
 }
 

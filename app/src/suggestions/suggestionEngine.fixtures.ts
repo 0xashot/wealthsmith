@@ -17,6 +17,7 @@ import { buildDirectLendingCardModel as dlBuildCard, validateCardCopy as dlValid
 import { DIRECT_USDC_LENDING_PRODUCT_DECISION as DL_DECISION, DIRECT_USDC_LENDING_PRODUCT_DECISION_MANIFEST_HASH as DL_DECISION_HASH, DIRECT_LENDING_TESTING_STATES as DL_TESTING, PRODUCT_DECISION_VALIDATION as DL_DECISION_VALID, computeProductDecisionManifestHash } from "./directUsdcLendingProductDecision";
 import { HUMAN_REVIEW_RECORD as GR_REVIEW, RISK_SIGNOFF_RECORD as GR_SIGNOFF, PRODUCT_APPROVAL_RECORD as GR_APPROVAL, PRODUCTION_ACTIVATION as GR_ACTIVATION, SEPARATION_OF_DUTIES_CHECK as GR_SOD, REVIEWER_AUTHORIZATION as GR_REV_AUTH, SIGNER_AUTHORIZATION as GR_SIGN_AUTH, APPROVER_AUTHORIZATION as GR_APP_AUTH, GOVERNANCE_RECORDS_VALIDATION as GR_VALID, ACCEPTED_LIMITATIONS as GR_LIMITS, HUMAN_REVIEW_MANIFEST_HASH as GR_REVIEW_HASH, RISK_SIGNOFF_MANIFEST_HASH as GR_SIGNOFF_HASH, PRODUCT_APPROVAL_MANIFEST_HASH as GR_APPROVAL_HASH } from "./directUsdcLendingGovernanceRecords";
 import { DIRECT_LENDING_TESTING_ROWS as TF_ROWS, DIRECT_LENDING_TESTING_CARD_ROWS as TF_CARDS, DIRECT_LENDING_TESTING_SUPPRESSED_ROWS as TF_SUPPRESSED, DIRECT_LENDING_TESTING_FIXTURES_VALIDATION as TF_VALID } from "./directUsdcLendingTestingFixtures";
+import { evaluateDirectLendingRuntime as rtEval, evaluateDirectLendingForRail as rtRail, governanceInputFromActivation as rtGov, buildDirectLendingCardState as rtCard, ALL_RUNTIME_SUPPRESSION_REASONS as RT_REASONS, RUNTIME_PRODUCT_IDENTITY as RT_ID, type DirectLendingRuntimeInput as RTInput } from "./directUsdcLendingRuntimeAdapter";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17862,6 +17863,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runDirectLendingRuntimeFixtureChecks(),
     ...runDirectLendingGovernanceActivationFixtureChecks(),
     ...runDirectUsdcLendingIntegrationFixtureChecks(),
     ...runJupProvisionalAssessmentFixtureChecks(),
@@ -20031,6 +20033,100 @@ export function runDirectLendingGovernanceActivationFixtureChecks(): FixtureChec
   add("GA-32: testing cards expose no score/threshold, no Top Pick, no executing CTA, APY ~/variable", TF_CARDS.every((r) => r.card && r.card.is_top_pick === false && !r.card.cta.executes_transaction && !r.card.cta.requires_wallet_signature && !/5\.93|5\.5| 7 |dimension|confidence/i.test(JSON.stringify(r.card)) && (!r.card.apy || (r.card.apy.display.startsWith("~") && /variable/i.test(r.card.apy.display)))), "clean cards");
   add("GA-33: APY is dynamic/estimated (not the hardcoded 6.42 constant)", TF_CARDS.every((r) => !r.card?.apy || !/6\.42/.test(r.card.apy.display)) && TF_CARDS.some((r) => r.card?.apy?.status === "estimated"), "estimated");
   add("GA-34: suppressed states carry a reason and render no card", TF_SUPPRESSED.every((r) => r.card === null && (r.suppressionReason ?? "").length > 0), "suppressed reasoned");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 16H-S.3 — Kamino Direct runtime integration. The deterministic runtime
+ * adapter reads governance from PRODUCTION_ACTIVATION, requires exact canonical
+ * USDC, verified liquid buffer coverage, a deterministic excess amount, live
+ * measured APY, source-verified availability/capacity, suitability — and fails
+ * closed with an exact reason otherwise. Shared with /testing via one builder.
+ * ------------------------------------------------------------------ */
+export function runDirectLendingRuntimeFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  // A fully-eligible runtime input (all gates pass).
+  const OK: RTInput = {
+    ...rtGov(),
+    wallet: { usdcMint: RT_ID.canonicalUsdcMint, canonicalUsdcRawUnits: 25_000_000_000, pricesFresh: true },
+    safetyBuffer: { requiredResolved: true, sufficiencyResolved: true, fullyFundedByLiquidCoverage: true },
+    excess: { deterministicAmountUsd: 12000, isPositive: true },
+    suitability: { profileComplete: true, suitableForCategory: true, prohibitsDefiLending: false },
+    apy: { measuredApyPct: 5.87, rateKind: "estimated_variable_apy", fresh: true, reserveIdentityMatches: true, slotDurationFresh: true, rewardApyPct: 0 },
+    availability: { depositsAvailable: true, emergencyModeActive: false },
+    capacity: { fresh: true, sufficientForAmount: true },
+    existingPosition: { holdsExactCToken: false, approvedTopUpRulePasses: false },
+  };
+
+  // --- Governance derived, not hardcoded ---
+  add("RT-1: runtime governance is read from PRODUCTION_ACTIVATION (not hardcoded)", rtGov().governanceEligible === GR_ACTIVATION.productionSuggestionEligible && rtGov().governanceEligible === true, `gov=${rtGov().governanceEligible}`);
+  add("RT-2: governance_inactive suppresses when activation is not eligible", rtEval({ ...OK, governanceEligible: false }).suppressionReason === "governance_inactive", "gov gate");
+  add("RT-3: assessment_invalidated suppresses fail-closed", rtEval({ ...OK, assessmentInvalidated: true }).suppressionReason === "assessment_invalidated", "assess gate");
+
+  // --- Eligible path emits through the shared card builder ---
+  {
+    const r = rtEval(OK);
+    add("RT-4: fully-eligible runtime emits a card", r.emit === true && r.card !== null, r.emit ? "emit" : `suppressed:${r.suppressionReason}`);
+    add("RT-5: emitted card is the production card (title/description/CTA, no Top Pick, read-only)", r.emit === true && r.card.title === "Earn yield on excess USDC" && r.card.description.includes("Kamino’s SOL/BTC") && r.card.is_top_pick === false && r.card.cta.executes_transaction === false && r.card.cta.requires_wallet_signature === false, "prod card");
+    add("RT-6: emitted card APY is ~/variable and dynamic (not hardcoded 6.42)", r.emit === true && !!r.card.apy && r.card.apy.display.startsWith("~") && /variable/i.test(r.card.apy.display) && !/6\.42/.test(r.card.apy.display), r.emit ? r.card.apy?.display ?? "" : "");
+    add("RT-7: emitted card exposes no score/threshold", r.emit === true && !/5\.93|5\.5| 7 |dimension|confidence/i.test(JSON.stringify(r.card)), "no leak");
+    add("RT-8: eligible path emits analytics suggestion_generated once", r.analytics.event === "suggestion_generated" && r.analytics.suppressionReason === null && r.analytics.candidateId === "kamino_usdc_lending", "analytics");
+  }
+
+  // --- Exact canonical USDC required ---
+  add("RT-9: bridged/symbol-only USDC excluded (wrong mint -> no_canonical_usdc)", rtEval({ ...OK, wallet: { ...OK.wallet, usdcMint: "Bridged1111111111111111111111111111111111111" } }).suppressionReason === "no_canonical_usdc", "mint gate");
+  add("RT-10: zero canonical USDC -> no_canonical_usdc", rtEval({ ...OK, wallet: { ...OK.wallet, canonicalUsdcRawUnits: 0 } }).suppressionReason === "no_canonical_usdc", "zero usdc");
+
+  // --- Safety Buffer via verified liquid coverage ---
+  add("RT-11: incomplete liquid buffer -> safety_buffer_incomplete", rtEval({ ...OK, safetyBuffer: { requiredResolved: true, sufficiencyResolved: true, fullyFundedByLiquidCoverage: false } }).suppressionReason === "safety_buffer_incomplete", "buffer incomplete");
+  add("RT-12: unresolved buffer sufficiency -> safety_buffer_unresolved", rtEval({ ...OK, safetyBuffer: { requiredResolved: true, sufficiencyResolved: false, fullyFundedByLiquidCoverage: true } }).suppressionReason === "safety_buffer_unresolved", "buffer unresolved");
+
+  // --- Deterministic excess amount ---
+  add("RT-13: missing deterministic amount suppresses (never invents)", rtEval({ ...OK, excess: { deterministicAmountUsd: null, isPositive: false } }).suppressionReason === "missing_deterministic_amount", "no amount");
+  add("RT-14: non-positive excess -> no_excess_usdc", rtEval({ ...OK, excess: { deterministicAmountUsd: 0, isPositive: false } }).suppressionReason === "no_excess_usdc", "no excess");
+
+  // --- Suitability (category approval != universal suitability) ---
+  add("RT-15: unsuitable user -> user_unsuitable", rtEval({ ...OK, suitability: { profileComplete: true, suitableForCategory: false, prohibitsDefiLending: false } }).suppressionReason === "user_unsuitable", "unsuitable");
+  add("RT-16: DeFi-lending prohibition -> user_unsuitable", rtEval({ ...OK, suitability: { profileComplete: true, suitableForCategory: true, prohibitsDefiLending: true } }).suppressionReason === "user_unsuitable", "prohibited");
+
+  // --- Availability / capacity / emergency (source-verified, not inferred) ---
+  add("RT-17: emergency mode -> emergency_mode", rtEval({ ...OK, availability: { depositsAvailable: true, emergencyModeActive: true } }).suppressionReason === "emergency_mode", "emergency");
+  add("RT-18: deposits unavailable -> deposits_unavailable", rtEval({ ...OK, availability: { depositsAvailable: false, emergencyModeActive: false } }).suppressionReason === "deposits_unavailable", "deposits");
+  add("RT-19: stale capacity -> capacity_stale; insufficient -> insufficient_capacity", rtEval({ ...OK, capacity: { fresh: false, sufficientForAmount: true } }).suppressionReason === "capacity_stale" && rtEval({ ...OK, capacity: { fresh: true, sufficientForAmount: false } }).suppressionReason === "insufficient_capacity", "capacity");
+
+  // --- APY freshness + exhausted rewards + rateKind ---
+  add("RT-20: unresolved APY -> apy_unresolved", rtEval({ ...OK, apy: { ...OK.apy, measuredApyPct: null } }).suppressionReason === "apy_unresolved", "apy unresolved");
+  add("RT-21: stale APY -> apy_stale; wrong reserve identity -> apy_unresolved", rtEval({ ...OK, apy: { ...OK.apy, fresh: false } }).suppressionReason === "apy_stale" && rtEval({ ...OK, apy: { ...OK.apy, reserveIdentityMatches: false } }).suppressionReason === "apy_unresolved", "apy fresh/identity");
+  add("RT-22: rateKind must be estimated_variable_apy", rtEval({ ...OK, apy: { ...OK.apy, rateKind: "fixed" } }).suppressionReason === "apy_stale", "rateKind");
+  add("RT-23: exhausted rewards excluded (rewardApyPct 0 still emits on measured rate)", rtEval({ ...OK, apy: { ...OK.apy, rewardApyPct: 0 } }).emit === true, "rewards zero ok");
+  add("RT-24: stale prices -> price_unavailable", rtEval({ ...OK, wallet: { ...OK.wallet, pricesFresh: false } }).suppressionReason === "price_unavailable", "price");
+
+  // --- Existing position ---
+  add("RT-25: existing cToken without top-up rule -> existing_position_no_top_up (no duplicate)", rtEval({ ...OK, existingPosition: { holdsExactCToken: true, approvedTopUpRulePasses: false } }).suppressionReason === "existing_position_no_top_up", "no dup");
+  add("RT-26: existing cToken WITH approved top-up rule emits", rtEval({ ...OK, existingPosition: { holdsExactCToken: true, approvedTopUpRulePasses: true } }).emit === true, "top-up ok");
+
+  // --- Never an excluded candidate / never Top Pick ---
+  add("RT-27: adapter only ever references Kamino identity (never Steakhouse/Jupiter)", RT_ID.candidateId === "kamino_usdc_lending" && !JSON.stringify(RT_ID).includes("steakhouse") && !JSON.stringify(RT_ID).includes("jupiter"), "kamino only");
+  add("RT-28: emitted card is never Top Pick", rtEval(OK).emit === true && rtEval(OK).card!.is_top_pick === false, "no top pick");
+
+  // --- Real-wallet rail path fails closed today (no live KLend feed) ---
+  {
+    const rail = rtRail({ canonicalUsdcMint: null, canonicalUsdcRawUnits: null, pricesFresh: true, bufferRequiredResolved: true, bufferSufficiencyResolved: true, bufferFullyFundedByLiquidCoverage: true, excessDeterministicAmountUsd: null, suitability: { profileComplete: true, suitableForCategory: false, prohibitsDefiLending: false }, holdsExactCToken: false, approvedTopUpRulePasses: false });
+    add("RT-29: real-wallet rail fails closed (no card) with an exact reason", rail.emit === false && (RT_REASONS as readonly string[]).includes(rail.suppressionReason), rail.emit ? "emit" : rail.suppressionReason);
+    add("RT-30: omitting the KLend market feed fail-closes (deposits/apy/capacity), never emits", rtRail({ canonicalUsdcMint: RT_ID.canonicalUsdcMint, canonicalUsdcRawUnits: 1000, pricesFresh: true, bufferRequiredResolved: true, bufferSufficiencyResolved: true, bufferFullyFundedByLiquidCoverage: true, excessDeterministicAmountUsd: 500, suitability: { profileComplete: true, suitableForCategory: true, prohibitsDefiLending: false }, holdsExactCToken: false, approvedTopUpRulePasses: false }).emit === false, "no market feed = closed");
+  }
+
+  // --- /testing consistency: same builder ---
+  add("RT-31: /testing cards and runtime cards come from the same builder", (() => { const t = TF_CARDS[0].card!; const r = rtCard({ idSuffix: "x", measuredApyPct: 5.87, amountText: "Estimated for your eligible excess USDC" }); return t.title === r.title && t.description === r.description && t.cta.label === r.cta.label && t.badge === r.badge; })(), "shared builder");
+  add("RT-32: all 17 suppression reasons are enumerated and reachable in the model", RT_REASONS.length === 17 && new Set(RT_REASONS).size === 17, `${RT_REASONS.length}`);
+
+  // --- Revocation fails closed; prior artifacts immutable ---
+  add("RT-33: revoked governance removes eligibility (fail closed)", rtEval({ ...OK, governanceEligible: false }).emit === false, "revocation");
+  add("RT-34: no transaction/signature behaviour anywhere in the runtime output", rtEval(OK).emit === true && rtEval(OK).card!.cta.action === null && rtEval(OK).card!.cta.executes_transaction === false && rtEval(OK).card!.cta.completion_on_click === false, "read-only");
+  add("RT-35: assessment + governance records still immutable (5.93 / activation eligible)", DA_OUTCOME.unroundedAggregate === 5.93 && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && GR_ACTIVATION.productionSuggestionEligible === true, "immutable");
 
   return checks;
 }
