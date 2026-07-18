@@ -19,6 +19,7 @@ import {
   getProtocolPositions,
 } from "../wallet/walletSummary";
 import { useRailSuggestions, type RailSuggestions } from "../suggestions/useRailSuggestions";
+import PortfolioCompletenessBanner from "./PortfolioCompletenessBanner";
 import { useKlendDirectUsdcMarketSnapshot, freshSnapshotOrNull } from "../suggestions/useKlendDirectUsdcMarketSnapshot";
 import type { SavedGoal } from "../types/goal";
 import PortfolioAllocationDonuts from "./PortfolioAllocationDonuts";
@@ -53,7 +54,7 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
   // SAME shared hook + engine the Dashboard uses — no Portfolio-specific
   // suggestion logic. It reuses THIS component's single wallet read.
   const klendMarket = useKlendDirectUsdcMarketSnapshot();
-  useRailSuggestions({ positions, pricedAsOf, goal, loading, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket) });
+  const rail = useRailSuggestions({ positions, pricedAsOf, goal, loading, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket) });
 
   const liquid = getLiquidPositions(positions);
   const staked = getStakedPositions(positions);
@@ -73,8 +74,11 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
         <EmptyStateCard title={LIVE_WALLET_ERROR_TITLE} description={error ?? LIVE_WALLET_ERROR_DESC} />
       ) : (
         <>
+          {/* Step 17H.2 — one primary portfolio-completeness notice (from the already-mounted result). */}
+          <PortfolioCompletenessBanner completeness={rail.portfolioCompleteness} />
+
           {/* Balance Overview + Crypto Assets Allocation composition donuts. */}
-          <PortfolioAllocationDonuts positions={positions} loading={reading} />
+          <PortfolioAllocationDonuts positions={positions} loading={reading} completeness={rail.portfolioCompleteness} />
 
           {/* Asset Deployment Overview — the three category tables under one
               section heading. */}
@@ -82,7 +86,7 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
             <h2 className="dash-section__title">{PORT_DEPLOYMENT_TITLE}</h2>
 
             {/* Liquid Assets — native + wallet-held tokens (incl. stables). */}
-            <LiquidAssetsCard positions={liquid} />
+            <LiquidAssetsCard positions={liquid} completeness={rail.portfolioCompleteness} />
 
             {/* Staked Assets — recognized LSTs + native stake; APY sourced or "—".
                 The asset sub-label is the PROTOCOL: an LST's protocol (Marinade/…),
@@ -94,6 +98,7 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
               valueHeader="USD Value"
               positions={staked}
               onManageOpen={onManageOpen}
+              completeness={rail.portfolioCompleteness}
             />
 
             {/* Yield Strategies — live protocol positions (vaults/lending); the
@@ -104,6 +109,7 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
               valueHeader="Value"
               positions={protocol}
               onManageOpen={onManageOpen}
+              completeness={rail.portfolioCompleteness}
             />
           </section>
         </>

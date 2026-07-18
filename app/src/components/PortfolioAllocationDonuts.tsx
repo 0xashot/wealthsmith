@@ -11,6 +11,8 @@ import type { WalletPosition } from "../wallet/walletPosition";
 import { deriveValueBreakdown, deriveStableValue } from "../wallet/walletSummary";
 import { deriveAssetAllocation } from "../wallet/assetAllocation";
 import DonutAllocationChart, { type DonutSegment } from "./DonutAllocationChart";
+import type { PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
+import { portfolioTotalDisplay, COMPLETENESS_COPY } from "./portfolioCompletenessUi";
 import {
   ALLOCATION_NEEDS_PRICING,
   ALLOCATION_LABEL_CRYPTO,
@@ -27,11 +29,18 @@ interface Props {
   positions: WalletPosition[];
   /** True while the underlying data is still loading (shows donut skeletons). */
   loading?: boolean;
+  /** Step 17H.3 — mounted completeness result; gates the AUTHORITATIVE total ("—" when net worth unresolved). */
+  completeness?: PortfolioCompletenessResult | null;
 }
 
-export default function PortfolioAllocationDonuts({ positions, loading }: Props) {
+export default function PortfolioAllocationDonuts({ positions, loading, completeness }: Props) {
   const value = deriveValueBreakdown(positions);
   const total = value.totalUsd;
+  // Step 17H.3 — the Balance Overview center value is the AUTHORITATIVE total: "—" (never a partial
+  // subtotal or $0) unless the mounted completeness says net worth is complete. Absent completeness
+  // (e.g. before the rail computes it) falls back to the existing formatted value.
+  const formattedTotal = total != null ? usd0(total) : "";
+  const totalDisplay = completeness ? portfolioTotalDisplay(completeness, formattedTotal) : { text: formattedTotal, authoritative: true as boolean, ariaLabel: undefined as string | undefined };
 
   // Balance Overview — Crypto vs Stables from sourced value only.
   const stableUsd = deriveStableValue(positions);
@@ -76,11 +85,11 @@ export default function PortfolioAllocationDonuts({ positions, loading }: Props)
         <h2 className="dash-section__title">{PORT_BALANCE_TITLE}</h2>
         <DonutAllocationChart
           totalValueUsd={total}
-          centerLabel={total != null ? usd0(total) : ""}
+          centerLabel={totalDisplay.text}
           segments={balanceSegments}
           emptyState={ALLOCATION_NEEDS_PRICING}
           warning={value.anyUnpriced ? VALUE_EXCLUDES_UNPRICED : undefined}
-          ariaSummary={balanceSummary}
+          ariaSummary={totalDisplay.authoritative ? balanceSummary : `${COMPLETENESS_COPY.unresolvedTotalAria}. ${balanceSummary}`}
           loading={loading && total == null}
         />
       </section>

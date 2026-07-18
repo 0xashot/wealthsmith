@@ -25,6 +25,7 @@ import { deriveStableYieldSuggestion } from "./stableYieldSuggestion";
 import { deriveDcaSuggestion } from "./dcaSuggestion";
 import { derivePositionOptimizationSuggestion } from "./positionOptimizationSuggestion";
 import { deriveOnTrackSuggestion } from "./onTrackSuggestion";
+import { completenessAllows, type CompletenessGateMap, type CompletenessDecision } from "../wallet/portfolioCompleteness";
 import { selectTopPick } from "./topPick";
 import { ensureExecutionGuardrails } from "./guardrails";
 import { reconcileProtocolGuardrail } from "./protocolSelection";
@@ -64,10 +65,18 @@ export function runSuggestionEngine(
    * the Stable Yield slot and suppresses the legacy "Put Stablecoins to Work" rule (one stable-yield
    * card). It is merged BEFORE the sort/Top-Pick pass so the frontend receives already-ordered output.
    */
-  stableYieldPlanSuggestion?: EngineSuggestion | null
+  stableYieldPlanSuggestion?: EngineSuggestion | null,
+  /**
+   * Step 17H.1 — optional portfolio-completeness gate map. Each present entry can only SUPPRESS a candidate
+   * whose existing rule already produced it (AND-narrowing): `newAllowed = existingEligibility AND
+   * gate==="allowed"`. Absent map (or entry) ⇒ no additional gating, so all prior behavior is preserved.
+   * It NEVER enables an otherwise-ineligible suggestion, reorders candidates, or changes Top Pick.
+   */
+  completenessGates?: CompletenessGateMap
 ): SuggestionEngineResult {
   const warnings: SuggestionReasonCode[] = [];
   if (inputs.value.anyUnpriced) warnings.push("partial_pricing");
+  const allows = (d: CompletenessDecision) => completenessAllows(completenessGates, d);
 
   const suggestions: EngineSuggestion[] = [];
   const planBuffer = contributionSuggestion?.category === "buffer" ? contributionSuggestion : null;
@@ -84,38 +93,39 @@ export function runSuggestionEngine(
     // 3) Actionable candidates in engine (category-priority) order.
     const candidates: EngineSuggestion[] = [];
     const rebalance = deriveRebalanceSuggestion(inputs, generatedAt);
-    if (rebalance) candidates.push(rebalance);
+    if (rebalance && allows("rebalance")) candidates.push(rebalance);
     // Capital Efficiency ranks above Staking/Stable Yield; may coexist with all.
     const capitalEfficiency = deriveCapitalEfficiencySuggestion(inputs, generatedAt);
     if (capitalEfficiency) candidates.push(capitalEfficiency);
     // Trim (non-core long-tail review) — separate intent from Capital Efficiency;
     // both may fire and neither suppresses the other.
     const trim = deriveTrimSuggestion(inputs, generatedAt);
-    if (trim) candidates.push(trim);
+    if (trim && allows("trim")) candidates.push(trim);
     const staking = deriveStakingSuggestion(inputs, generatedAt);
-    if (staking) candidates.push(staking);
+    if (staking && allows("staking")) candidates.push(staking);
     // Stable Yield and DCA only when Rebalance does not apply (allocation
     // already close enough to target); Staking is unaffected (SOL, not stables).
     if (!rebalance) {
       // Step 16H-A — prefer the plan-backed Stable Yield suggestion; it suppresses the legacy rule
       // (one stable-yield card per run). Production passes none (no approved product → no ready plan).
+      // 17H.1 — the direct-USDC-lending completeness gate narrows this (never enables it).
       const stableYield = planStableYield ?? deriveStableYieldSuggestion(inputs, generatedAt);
-      if (stableYield) candidates.push(stableYield);
+      if (stableYield && allows("directLending")) candidates.push(stableYield);
       // Step 15H — prefer the plan-backed DCA; it suppresses the legacy DCA (one DCA per plan).
       const dca = planDca ?? deriveDcaSuggestion(inputs, generatedAt);
-      if (dca) candidates.push(dca);
+      if (dca && allows("dca")) candidates.push(dca);
     }
     // Position Optimization is the lowest-priority actionable candidate and may
     // coexist with any of the above (it reviews already-deployed positions).
     const positionOpt = derivePositionOptimizationSuggestion(inputs, generatedAt);
-    if (positionOpt) candidates.push(positionOpt);
+    if (positionOpt && allows("positionOptimization")) candidates.push(positionOpt);
 
     if (candidates.length > 0) {
       suggestions.push(...candidates);
     } else {
-      // 4) Nothing actionable → informational On Track.
+      // 4) Nothing actionable → informational On Track (gated: unresolved completeness hides it).
       const onTrack = deriveOnTrackSuggestion(inputs, generatedAt);
-      if (onTrack) suggestions.push(onTrack);
+      if (onTrack && allows("onTrack")) suggestions.push(onTrack);
     }
   }
 

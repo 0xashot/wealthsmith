@@ -282,6 +282,15 @@
   padding: var(--spacing-card-padding-sm) var(--spacing-card-padding-md);
 }
 
+/* Step 17H.2 — soft "could not be verified" completeness notice (warning, not danger). Reuses the
+   .alert structure with a warning severity; no new visual style. */
+.alert--notice {
+  border-left-color: var(--color-feedback-warning-background-solid);
+}
+.alert--notice .alert__title {
+  color: var(--color-feedback-warning-text-tint);
+}
+
 .alert__content {
   display: grid;
   gap: var(--spacing-stack-gap-xs);
@@ -1646,6 +1655,13 @@
 .asset-identity__symbol {
   font: var(--typography-caption-default-font);
   color: var(--color-text-secondary);
+}
+
+/* Step 17H.3 — a small per-row completeness note ("Withdrawal availability could not be verified", …).
+   Supplements existing row content; warning-toned, not color-only (it is explanatory text). */
+.asset-identity__note {
+  font: var(--typography-caption-default-font);
+  color: var(--color-feedback-warning-text-tint);
 }
 
 /* protocol identity cell: icon + visible name (no protocol fallback icon —

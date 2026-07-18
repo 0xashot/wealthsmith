@@ -129,6 +129,21 @@ export interface WalletPosition {
   transferabilityState?: string;
   restrictionReasons?: string[];
   /**
+   * Step 17G — supported-LST underlying-SOL normalization. Present only on supported `type: "lst"` rows;
+   * all optional and backward-compatible. `valueUsd` REMAINS the market value (authoritative net worth);
+   * `underlyingSolValueUsd` is analytical staking exposure only and never enters portfolio totals. Backing
+   * is source-backed (SPL stake-pool ratio), never market-price-derived, never liquid native SOL.
+   */
+  marketValueUsd?: number | null;
+  lstProductId?: string;
+  underlyingSolLamports?: string | null;
+  underlyingSolAmount?: number | null;
+  underlyingSolValueUsd?: number | null;
+  lstExchangeRateNumerator?: string | null;
+  lstExchangeRateDenominator?: string | null;
+  lstNormalizationState?: string;
+  marketToBackingDifferenceUsd?: number | null;
+  /**
    * Step 17F — native Solana stake lifecycle + lamport decomposition. Present only on `type: "stake"`
    * rows; all optional and backward-compatible. Critical accounting values live HERE on the canonical
    * model (not UI metadata). `valueUsd`/`recognizedValueUsd` = recognized total; `liquidValueUsd` =

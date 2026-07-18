@@ -15,6 +15,8 @@
  */
 import { useId } from "react";
 import type { WalletPosition } from "../wallet/walletPosition";
+import type { PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
+import { positionCompletenessNote } from "./portfolioCompletenessUi";
 import { usd0, formatAmount, explorerUrl, manageUrlFor } from "./deployTable";
 import ManageHandoff from "./ManageHandoff";
 import { resolveTokenIcon } from "../state/iconRegistry";
@@ -46,6 +48,8 @@ interface Props {
   subLabel?: (p: WalletPosition) => string | undefined;
   /** Approved toast on the Manage handoff click (navigation only, no state change). */
   onManageOpen?: () => void;
+  /** Step 17H.3 — the already-mounted completeness result (never recomputed here); drives per-row notes. */
+  completeness?: PortfolioCompletenessResult | null;
 }
 
 export default function EarningAssetsCard({
@@ -56,6 +60,7 @@ export default function EarningAssetsCard({
   primaryLabel = (p) => p.symbol,
   subLabel = (p) => p.protocol,
   onManageOpen,
+  completeness,
 }: Props) {
   const headingId = useId();
 
@@ -142,6 +147,10 @@ export default function EarningAssetsCard({
                             <span className="asset-identity__name">{primary}</span>
                           )}
                           {sub && <span className="asset-identity__symbol">{sub}</span>}
+                          {(() => {
+                            const note = positionCompletenessNote(completeness, p.id);
+                            return note ? <span className="asset-identity__note" role="note">{note}</span> : null;
+                          })()}
                         </span>
                       </span>
                     </td>

@@ -27,6 +27,12 @@ import { toSuggestionCard } from "../suggestions/toSuggestionCard";
 import { STABLE_YIELD_TESTING_CARD_FIXTURES, STABLE_YIELD_TESTING_REVIEW_FIXTURES, STABLE_YIELD_TESTING_NON_RENDER_FIXTURES, STABLE_YIELD_TESTING_FIXTURES } from "../suggestions/stableYieldTestingFixtures";
 import { DIRECT_LENDING_TESTING_ROWS, DIRECT_LENDING_PROFILE_TESTING_ROWS } from "../suggestions/directUsdcLendingTestingFixtures";
 import { buildStableYieldPlanPresentation } from "../suggestions/yieldStrategyPlanPresentation";
+import PortfolioCompletenessBanner from "../components/PortfolioCompletenessBanner";
+import LiquidAssetsCard from "../components/LiquidAssetsCard";
+import EarningAssetsCard from "../components/EarningAssetsCard";
+import { portfolioTotalDisplay } from "../components/portfolioCompletenessUi";
+import { getPortfolioCompletenessTestingFixtures } from "./portfolioCompletenessTestingFixtures";
+import { getLiquidPositions, getStakedPositions, getProtocolPositions } from "../wallet/walletSummary";
 import "./testingPage.css";
 
 type Filter = "All" | TestingGroup;
@@ -34,6 +40,7 @@ const FILTERS: Filter[] = ["All", ...TESTING_GROUPS];
 
 export default function TestingPage() {
   const fixtures = useMemo(() => getTestingPageFixtures(), []);
+  const completenessFixtures = useMemo(() => getPortfolioCompletenessTestingFixtures(), []);
   const [filter, setFilter] = useState<Filter>("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -268,6 +275,44 @@ export default function TestingPage() {
               <p className="testing-page__contrib-name">{r.name}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Step 17H.3 — Portfolio Completeness gallery. Each fixture uses the PRODUCTION completeness
+          derivation + PRODUCTION components (banner, donuts total, position-row cards). Fixture-only,
+          RPC-independent; no suggestion cards created (the gate inspector is testing information only). */}
+      <section className="testing-page__contrib" aria-label="Portfolio completeness states">
+        <h2 className="testing-page__section-title">Portfolio completeness</h2>
+        <p className="testing-page__subtext">
+          Dedicated visual states for the mounted completeness result: authoritative total vs “—”,
+          per-row unresolved reasons, and the future decision-gate inspector. Production components and
+          production derivation only.
+        </p>
+        <div className="testing-page__contrib-grid">
+          {completenessFixtures.map((f) => {
+            const total = portfolioTotalDisplay(f.completeness, "$—");
+            return (
+              <div key={f.id} className="testing-page__contrib-cell" style={{ display: "grid", gap: "12px" }}>
+                <div className="testing-page__contrib-head">
+                  <span className="testing-page__badge">TEST FIXTURE</span>
+                  <span className="testing-page__contrib-id">{f.id}</span>
+                </div>
+                <p className="testing-page__contrib-name">{f.label}</p>
+                <p className="testing-page__contrib-noplan">
+                  Total: <strong aria-label={total.authoritative ? undefined : total.ariaLabel}>{total.authoritative ? "authoritative" : total.text}</strong>
+                  {" · "}On Track: <strong>{f.completeness.onTrackState === "complete" ? "available" : "unavailable"}</strong>
+                </p>
+                <PortfolioCompletenessBanner completeness={f.completeness} />
+                <LiquidAssetsCard positions={getLiquidPositions(f.positions)} completeness={f.completeness} />
+                <EarningAssetsCard title="Yield Strategies" caption="Detected protocol/staked positions" valueHeader="Value" positions={[...getStakedPositions(f.positions), ...getProtocolPositions(f.positions)]} completeness={f.completeness} />
+                {f.id === "gate_inspector" && (
+                  <p className="testing-page__contrib-noplan">
+                    Gates — Rebalance: <strong>{f.gates.rebalance}</strong>, Trim: <strong>{f.gates.trim}</strong>, Position Optimization: <strong>{f.gates.positionOptimization}</strong> (no cards created)
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
     </main>

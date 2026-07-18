@@ -20,6 +20,7 @@ import SuggestionReviewModal from "./SuggestionReviewModal";
 import { useSolStakingSelectorPresentation } from "../hooks/useSolStakingSelectorPresentation";
 import type { RailSuggestions } from "../suggestions/useRailSuggestions";
 import type { RightRailState, SuggestionCardState } from "../types/dashboard";
+import { railOnTrackUnavailableMessage } from "./portfolioCompletenessUi";
 import {
   REAL_WALLET_SUGGESTIONS_TITLE,
   SUGGESTIONS_RAIL_DESC,
@@ -111,11 +112,16 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
     );
   }
 
+  // Step 17H.4 — when nothing actionable renders AND the mounted completeness result blocks/leaves On Track
+  // unresolved, explain that state rather than falling back to the generic unavailable copy. Uses the
+  // already-mounted result (never recomputed). Shown ONLY when completeness is present and On Track is not
+  // available for a COMPLETENESS reason — never merely because the rail is empty for another reason.
+  const onTrackUnavailable = railOnTrackUnavailableMessage(rail?.portfolioCompleteness);
   return (
     <aside className="suggestion-rail" aria-label={railLabel}>
       <EmptyStateCard
         title={REAL_WALLET_SUGGESTIONS_TITLE}
-        description={SUGGESTIONS_UNAVAILABLE}
+        description={onTrackUnavailable ?? SUGGESTIONS_UNAVAILABLE}
       />
     </aside>
   );

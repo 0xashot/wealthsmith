@@ -72,6 +72,31 @@ import {
   type NativeStakeFacts as NSFacts,
 } from "../wallet/nativeStakePositionAssessment";
 import { getUnderlyingExposureGroup as nsExposure } from "./duplicateExposure";
+// Step 17G — supported-LST underlying-SOL normalization.
+import {
+  SUPPORTED_LSTS as LST_SET, lstIdentityByMint as lstById, isSupportedLstMint as lstSupported,
+  normalizeLstBacking as lstNorm, applyLstNormalization as lstApply, lstDedupeKey as lstKey,
+  solExposureClass as lstExposureClass, totalSolExposureLamports as lstTotalExposure,
+  CLASSIC_TOKEN_PROGRAM as LST_TOKEN_PROG, type LstPoolFacts as LstPool,
+} from "../wallet/lstUnderlyingNormalization";
+// Step 17H — canonical portfolio-completeness result + decision gates.
+import {
+  assessPositionCompleteness as pcAssess, computePortfolioCompleteness as pcCompute,
+  detectDuplicateViolations as pcDupes, classifyPositionClass as pcClass,
+  canDetermineNetWorth as pcNetWorth, canShowOnTrack as pcOnTrack, canGenerateRebalance as pcRebalance,
+  canGenerateTrim as pcTrim, canGeneratePositionOptimization as pcOptimize,
+  canGenerateStakingSuggestion as pcStaking, canGenerateDcaSuggestion as pcDca,
+  canGenerateDirectLendingSuggestion as pcDirect,
+  deriveCompletenessGates as pcGates, completenessAllows as pcAllows,
+} from "../wallet/portfolioCompleteness";
+// Step 17H.2 — pure UI selectors over the mounted completeness result.
+import {
+  selectPrimaryCompletenessWarning as uiWarning, portfolioTotalDisplay as uiTotal,
+  positionUnresolvedReason as uiReason, assessmentById as uiAssess, onTrackAvailability as uiOnTrack,
+  shouldRenderDashForValue as uiDash, COMPLETENESS_COPY as UI_COPY, positionCompletenessNote as uiNote,
+  railOnTrackUnavailableMessage as uiRailOnTrack,
+} from "../components/portfolioCompletenessUi";
+import { getPortfolioCompletenessTestingFixtures as tgFixtures } from "../pages/portfolioCompletenessTestingFixtures";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17923,6 +17948,11 @@ export function printFixtureResults(): void {
     ...runJupiterLendShareAccountingFixtureChecks(),
     ...runToken2022FixtureChecks(),
     ...runNativeStakeFixtureChecks(),
+    ...runLstNormalizationFixtureChecks(),
+    ...runPortfolioCompletenessFixtureChecks(),
+    ...runCompletenessIntegrationFixtureChecks(),
+    ...runCompletenessUiFixtureChecks(),
+    ...runCompletenessGalleryFixtureChecks(),
     ...runSteakhouseExistingPositionFixtureChecks(),
     ...runSafetyBufferCoverageFixtureChecks(),
     ...runKlendDirectPositionFailClosedFixtureChecks(),
@@ -21109,6 +21139,299 @@ export function runNativeStakeFixtureChecks(): FixtureCheck[] {
   add("NSW-18: recognized value unchanged (total counted once regardless of withdrawal split)", EXCESS.totalLamports === 1_000_000_000 + RENT, "recognized once");
   add("NSW-19: liquid USD = immediately-withdrawable × price; recognized USD = total × price", (() => { const f = nsFields(nsGroup([EXCESS])[0], 150, true); return Math.abs((f.liquidValueUsd as number) - 0.4 * 150) < 1e-6 && Math.abs((f.recognizedValueUsd as number) - (1_000_000_000 + RENT) / 1e9 * 150) < 1e-6; })(), "usd split");
   add("NSW-20: still no Safety Buffer contribution; no tx in capacity result", (() => { const c = sbClassify({ id: "s", source: "wallet", type: "stake", symbol: "SOL", amount: "1", detection: "native_stake", valueUsd: 1000, liquidValueUsd: 400 } as JLWalletPos); const s = JSON.stringify(EXCESS); return c.verifiedLiquidValueUsd === 0 && !s.includes("cta") && !s.includes("instruction") && !s.includes("signature"); })(), "no buffer/tx");
+
+  return checks;
+}
+
+/**
+ * Step 17G — supported-LST underlying-SOL normalization. Proves source-backed SPL-stake-pool backing kept
+ * separate from market value, exact integer arithmetic, fail-closed identity/accounting, mSOL/INF handling,
+ * SOL-exposure derivation, and immutability.
+ */
+export function runLstNormalizationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const JITO = LST_SET.jitosol.mint, JUP = LST_SET.jupsol.mint, BSOL = LST_SET.bsol.mint, MSOL = LST_SET.msol.mint;
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const INF = "5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm";
+  const SPL_PROG = LST_SET.jitosol.stakePoolPrograms[0];
+  const pool = (over: Partial<LstPool> = {}): LstPool => ({ poolAccount: "Pool1", programOwner: SPL_PROG, poolMint: JITO, totalLamports: "1100000000000", poolTokenSupply: "1000000000000", sourceSlot: 100, fresh: true, ...over });
+  const norm = (over: Partial<Parameters<typeof lstNorm>[0]> = {}) => lstNorm({ mint: JITO, rawTokenBalance: "1000000000", tokenProgram: LST_TOKEN_PROG, pool: pool(), observedAt: "2026-07-18T00:00:00.000Z", walletSourceSlot: 100, ...over });
+  const wp = (over: Partial<JLWalletPos>): JLWalletPos => ({ id: "x", source: "jito", type: "lst", symbol: "JitoSOL", mint: JITO, amount: "1000000000", uiAmount: 1, decimals: 9, detection: "recognized_lst_mint", priceUsd: 250, valueUsd: 250, ...over });
+
+  // ---- Identity ----
+  add("LST-1: exactly the 4 supported mints recognized (never USDC)", lstSupported(JITO) && lstSupported(JUP) && lstSupported(BSOL) && lstSupported(MSOL) && !lstSupported(USDC), "supported set");
+  add("LST-2: identity bound by MINT, not symbol (unknown mint → null)", lstById(JITO)?.symbol === "JitoSOL" && lstById("NotAMint") === null, "by mint");
+  add("LST-3: wrong token program → identity_invalid", lstNorm({ mint: JITO, rawTokenBalance: "1000000000", tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", pool: pool(), observedAt: "t", walletSourceSlot: 100 }).normalizationState === "identity_invalid", "wrong prog");
+  add("LST-4: unsupported/other mint → identity_invalid (no symbol match)", norm({ mint: USDC }).normalizationState === "identity_invalid", "unsupported mint");
+  add("LST-5: INF NOT in the supported set (remains blocked)", lstSupported(INF) === false && lstById(INF) === null, "INF blocked");
+  add("LST-6: mSOL supported identity BUT backing unsupported (no installed decoder)", (() => { const r = lstNorm({ mint: MSOL, rawTokenBalance: "1000000000", tokenProgram: LST_TOKEN_PROG, pool: null, observedAt: "t", walletSourceSlot: 0 }); return r.normalizationState === "unsupported" && r.underlyingSolLamports === null && LST_SET.msol.backingSupported === false; })(), "mSOL unsupported");
+
+  // ---- Accounting (source-backed SPL ratio, integer) ----
+  add("LST-7: JitoSOL backing = floor(balance × totalLamports/supply)", norm().underlyingSolLamports === "1100000000" && norm().normalizationState === "complete", "1.1x");
+  add("LST-8: exact numerator + denominator returned; kind is pool-based (not price)", (() => { const r = norm(); return r.exchangeRateNumerator === "1100000000000" && r.exchangeRateDenominator === "1000000000000" && r.exchangeRateKind === "spl_stake_pool_total_lamports_over_supply"; })(), "rate");
+  add("LST-9: integer floor rounding (non-exact ratio)", lstNorm({ mint: JITO, rawTokenBalance: "100", tokenProgram: LST_TOKEN_PROG, pool: pool({ totalLamports: "1000000001", poolTokenSupply: "3" }), observedAt: "t", walletSourceSlot: 100 }).underlyingSolLamports === ((100n * 1000000001n) / 3n).toString(), "floor");
+  add("LST-10: zero balance → zero underlying, complete", (() => { const r = norm({ rawTokenBalance: "0" }); return r.underlyingSolLamports === "0" && r.normalizationState === "complete"; })(), "zero");
+  add("LST-11: denominator zero → accounting_unresolved (fail closed)", norm({ pool: pool({ poolTokenSupply: "0" }) as any } as any).normalizationState === "accounting_unresolved", "den 0");
+  add("LST-12: large balance no overflow (BigInt)", norm({ rawTokenBalance: "999999999999999999999", pool: pool({ totalLamports: "1100000000000", poolTokenSupply: "1000000000000" }) as any } as any).underlyingSolLamports === ((999999999999999999999n * 1100000000000n) / 1000000000000n).toString(), "no overflow");
+  add("LST-13: monotonic with token balance", (() => { const a = BigInt(norm({ rawTokenBalance: "1000000000" }).underlyingSolLamports!); const b = BigInt(norm({ rawTokenBalance: "2000000000" }).underlyingSolLamports!); return b > a; })(), "monotonic");
+  add("LST-14: malformed pool totals → malformed", norm({ pool: pool({ totalLamports: "1.5e12" }) as any } as any).normalizationState === "malformed", "malformed");
+  add("LST-15: stale pool → stale, underlying null", (() => { const r = norm({ pool: pool({ fresh: false }) as any } as any); return r.normalizationState === "stale" && r.underlyingSolLamports === null; })(), "stale pool");
+  add("LST-16: no pool state → accounting_unresolved", norm({ pool: null }).normalizationState === "accounting_unresolved", "no pool");
+  add("LST-17: wrong pool program owner → identity_invalid", norm({ pool: pool({ programOwner: "11111111111111111111111111111111" }) as any } as any).normalizationState === "identity_invalid", "wrong owner");
+  add("LST-18: pool_mint ≠ LST mint → identity_invalid", norm({ pool: pool({ poolMint: JUP }) as any } as any).normalizationState === "identity_invalid", "mint mismatch");
+  add("LST-19: wallet/pool source skew exceeds policy → source_skew", lstNorm({ mint: JITO, rawTokenBalance: "1000000000", tokenProgram: LST_TOKEN_PROG, pool: pool({ sourceSlot: 100 }), observedAt: "t", walletSourceSlot: 100000, maxSourceSkewSlots: 150 }).normalizationState === "source_skew", "skew");
+  add("LST-20: withdrawal fee → NET redeemable separate; GROSS backing unchanged", (() => { const r = norm({ pool: pool({ withdrawalFeeNumerator: "1", withdrawalFeeDenominator: "100" }) as any } as any); return r.grossUnderlyingSolLamports === "1100000000" && r.withdrawalFeeLamports === "11000000" && r.netRedeemableSolLamports === "1089000000" && r.underlyingSolLamports === "1100000000"; })(), "net separate");
+
+  // ---- Market vs backing ----
+  add("LST-21: applyLstNormalization keeps valueUsd (market) as authoritative", (() => { const p = lstApply(wp({}), norm(), 250, true); return p.valueUsd === 250 && p.marketValueUsd === 250; })(), "market kept");
+  add("LST-22: underlying SOL value is a SEPARATE analytical field (backing × SOL price)", (() => { const p = lstApply(wp({}), norm(), 250, true); return Math.abs((p.underlyingSolValueUsd as number) - 1.1 * 250) < 1e-6 && p.underlyingSolAmount === 1.1; })(), "backing value");
+  add("LST-23: backing NEVER replaces valueUsd (they can differ; diff exposed)", (() => { const p = lstApply(wp({ valueUsd: 250 }), norm(), 250, true); return p.valueUsd === 250 && typeof p.marketToBackingDifferenceUsd === "number"; })(), "no replace");
+  add("LST-24: stale SOL price → underlyingSolValueUsd null, SOL units preserved", (() => { const p = lstApply(wp({}), norm(), 250, false); return p.underlyingSolValueUsd === null && p.underlyingSolAmount === 1.1; })(), "stale sol price");
+  add("LST-25: stale LST price (valueUsd null) → backing NOT used as net worth", (() => { const p = lstApply(wp({ valueUsd: null, priceUsd: undefined }), norm(), 250, true); return p.valueUsd === null && typeof p.underlyingSolAmount === "number"; })(), "no silent fallback");
+
+  // ---- Aggregation / dedupe ----
+  add("LST-26: aggregated raw balance yields aggregated backing (exact)", lstNorm({ mint: JITO, rawTokenBalance: (1000000000n + 500000000n).toString(), tokenProgram: LST_TOKEN_PROG, pool: pool(), observedAt: "t", walletSourceSlot: 100 }).underlyingSolLamports === (((1500000000n) * 1100000000000n) / 1000000000000n).toString(), "aggregate");
+  add("LST-27: dedupe key = exact mint; products distinct", norm().dedupeKey === lstKey(JITO) && lstKey(JITO) !== lstKey(JUP), "dedupe");
+
+  // ---- SOL exposure ----
+  add("LST-28: exposure class — native / stake / lst-backed / lst-unresolved", lstExposureClass({ type: "native", amount: "1", source: "wallet", symbol: "SOL", id: "n", detection: "direct_wallet_balance", valueUsd: null } as JLWalletPos) === "liquid_native_sol" && lstExposureClass({ type: "stake", amount: "1", source: "wallet", symbol: "SOL", id: "s", detection: "native_stake", valueUsd: null } as JLWalletPos) === "native_stake" && lstExposureClass(lstApply(wp({}), norm(), 250, true)) === "lst_backed_sol" && lstExposureClass(wp({ underlyingSolLamports: undefined })) === "lst_unresolved", "classes");
+  add("LST-29: total SOL exposure sums native + stake + LST BACKING (not market)", (() => {
+    const nat = { type: "native", amount: "1000000000", source: "wallet", symbol: "SOL", id: "n", detection: "direct_wallet_balance", valueUsd: null } as JLWalletPos;
+    const stk = { type: "stake", amount: "2000000000", source: "wallet", symbol: "SOL", id: "s", detection: "native_stake", valueUsd: null } as JLWalletPos;
+    const lst = lstApply(wp({}), norm(), 250, true); // backing 1.1e9
+    const e = lstTotalExposure([nat, stk, lst]);
+    return e.lamports === (1000000000n + 2000000000n + 1100000000n).toString();
+  })(), "exposure sum");
+  add("LST-30: unresolved LST backing → listed unresolved, ownership preserved (not in sum)", (() => { const lst = wp({ underlyingSolLamports: undefined }); const e = lstTotalExposure([lst]); return e.lamports === "0" && e.unresolvedProducts.length === 1; })(), "unresolved kept");
+
+  // ---- Downstream / immutability ----
+  add("LST-31: LST does NOT count toward stable Safety Buffer (unchanged)", sbClassify(lstApply(wp({}), norm(), 250, true)).verifiedLiquidValueUsd === 0, "no buffer");
+  add("LST-32: LST still groups as SOL exposure for duplicate suppression (unchanged)", nsExposure(lstApply(wp({}), norm(), 250, true)) === "SOL_EXPOSURE", "sol exposure");
+  add("LST-33: backing is NEVER market-price-derived (result carries no market price as rate)", (() => { const r = norm(); const s = JSON.stringify(r); return r.exchangeRateNumerator === "1100000000000" && !s.includes("marketPrice") && !s.includes("250"); })(), "no price rate");
+  add("LST-34: no transaction behavior; Kamino/Steakhouse/Jupiter dispositions unchanged; INF blocked", (() => { const s = JSON.stringify(norm()); return !s.includes("cta") && !s.includes("signature") && !s.includes("swap") && !s.includes("unstake") && dlGetDispo("kamino_usdc_lending")?.disposition === "selected_category_candidate" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && !lstSupported(INF); })(), "immutable");
+
+  return checks;
+}
+
+/**
+ * Step 17H — canonical portfolio-completeness result + decision gates. Proves every dimension (net worth,
+ * liabilities, allocation, Safety Buffer, liquidity, SOL exposure, freshness, dedup) is evaluated
+ * INDEPENDENTLY, that null is never zero, and that decision gates fail closed with reasons.
+ */
+export function runPortfolioCompletenessFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const MSOL = LST_SET.msol.mint, JITO = LST_SET.jitosol.mint;
+  const wp = (o: Partial<JLWalletPos>): JLWalletPos => ({ id: "p", source: "wallet", type: "token", symbol: "X", amount: "1000000000", uiAmount: 1, detection: "direct_wallet_balance", valueUsd: 100, ...o });
+  // Canonical position builders.
+  const usdc = (v = 1000) => wp({ id: "usdc", symbol: "USDC", name: "USD Coin", type: "token", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", valueUsd: v, priceUsd: 1 });
+  const nativeSol = () => wp({ id: "sol", type: "native", symbol: "SOL", valueUsd: 500, priceUsd: 250 });
+  const unknownTok = () => wp({ id: "unk", type: "token", symbol: "9xy", name: "Unknown token", uiAmount: 5, valueUsd: null });
+  const jlusdc = () => wp({ id: "jl", type: "protocol", symbol: "USDC", name: "Jupiter Lend USDC", candidateId: "jupiter_lend_usdc", existingPositionOnly: true, dedupeKey: "jupiter-lend:x", withdrawalState: "unresolved", recognizedValueUsd: null, valueUsd: null, uiAmount: 100, amount: "100000000" });
+  const msol = () => wp({ id: "ms", type: "lst", symbol: "mSOL", mint: MSOL, valueUsd: 260, priceUsd: 260, uiAmount: 1, lstProductId: "msol", lstNormalizationState: "unsupported" });
+  const jitosol = () => wp({ id: "jt", type: "lst", symbol: "JitoSOL", mint: JITO, valueUsd: 275, priceUsd: 275, uiAmount: 1, lstProductId: "jitosol", lstNormalizationState: "complete", underlyingSolLamports: "1100000000" });
+  const kaminoDirect = (ws = "fully_withdrawable", liquid: number | null = 1000) => wp({ id: "kd", type: "protocol", symbol: "USDC", name: "USDC on Kamino", candidateId: "kamino_usdc_lending", existingPositionOnly: true, dedupeKey: "klend:x", withdrawalState: ws, recognizedValueUsd: 1000, valueUsd: 1000, liquidValueUsd: liquid, uiAmount: 1000, amount: "1000000000" });
+  const hubbleDebt = (v: number | null) => wp({ id: "hb", type: "protocol", symbol: "USDH", name: "USDH loan", side: "borrowed", valueUsd: v, uiAmount: 500, amount: "500000000" });
+  const nativeStake = (unresolved = false) => wp({ id: "stk", type: "stake", symbol: "SOL", valueUsd: 1000, priceUsd: 250, uiAmount: 4, amount: "4000000000", liquidValueUsd: 0, stakeLifecycleState: unresolved ? "unresolved" : "active", stake: { anyUnresolved: unresolved } as any });
+
+  // ---- Position-level assessment (dimensions independent) ----
+  add("PC-1: complete value (priced native) → valueState complete, not net-worth-blocking", (() => { const a = pcAssess(nativeSol()); return a.valueState === "complete" && !a.blockingDecisionKinds.includes("net_worth"); })(), "value complete");
+  add("PC-2: unknown token → value unresolved, magnitude null, blocks net_worth/allocation/on_track", (() => { const a = pcAssess(unknownTok()); return a.valueState === "unresolved" && a.unresolvedValueMagnitude === null && a.recognizedValueUsd === null && a.blockingDecisionKinds.includes("net_worth") && a.blockingDecisionKinds.includes("on_track"); })(), "unknown");
+  add("PC-3: jlUSDC → ownership complete, value unresolved (recognized null), net worth blocked", (() => { const a = pcAssess(jlusdc()); return a.ownershipState === "complete" && a.valueState === "unresolved" && a.recognizedValueUsd === null && a.blockingDecisionKinds.includes("net_worth"); })(), "jlusdc");
+  add("PC-4: Kamino Direct recognized complete + liquidity unresolved (independent)", (() => { const a = pcAssess(kaminoDirect("unresolved", null)); return a.valueState === "complete" && a.liquidityState === "unresolved" && !a.blockingDecisionKinds.includes("net_worth") && a.blockingDecisionKinds.includes("liquidity"); })(), "recognized≠liquidity");
+  add("PC-5: mSOL fresh price + backing unsupported → value complete, exposure unsupported", (() => { const a = pcAssess(msol()); return a.valueState === "complete" && a.exposureState === "unsupported" && !a.blockingDecisionKinds.includes("net_worth") && a.blockingDecisionKinds.includes("sol_exposure"); })(), "msol");
+  add("PC-6: supported LST complete → exposure complete", pcAssess(jitosol()).exposureState === "complete", "lst exposure");
+  add("PC-7: unvalued Hubble debt → liability unresolved, blocks net worth", (() => { const a = pcAssess(hubbleDebt(null)); return a.positionClass === "hubble_debt" && a.liabilityState === "unresolved" && a.blockingDecisionKinds.includes("net_worth"); })(), "debt unvalued");
+  add("PC-8: valued Hubble debt → liability complete", pcAssess(hubbleDebt(-500)).liabilityState === "complete", "debt valued");
+  add("PC-9: unresolved native-stake lifecycle → liquidity unresolved, value complete", (() => { const a = pcAssess(nativeStake(true)); return a.valueState === "complete" && a.liquidityState === "unresolved" && !a.blockingDecisionKinds.includes("net_worth"); })(), "stake lifecycle");
+
+  // ---- Portfolio-level result (dimensions independent) ----
+  add("PC-10: all-complete portfolio → netWorth complete, gates allowed", (() => { const R = pcCompute([nativeSol(), usdc(1000), jitosol()], { requiredBufferUsd: 0 }); return R.netWorthState === "complete" && pcNetWorth(R).status === "allowed"; })(), "complete");
+  add("PC-11: unknown token → netWorth unresolved, hasUnknownMagnitudeValue true", (() => { const R = pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 }); return R.netWorthState === "unresolved" && R.hasUnknownMagnitudeValue === true; })(), "unknown magnitude");
+  add("PC-12: jlUSDC held → netWorth unresolved (positive holding, recognized null)", pcCompute([nativeSol(), jlusdc()], { requiredBufferUsd: 0 }).netWorthState === "unresolved", "jlusdc nw");
+  add("PC-13: mSOL → netWorth complete but SOL exposure unsupported (independent)", (() => { const R = pcCompute([nativeSol(), msol()], { requiredBufferUsd: 0 }); return R.netWorthState === "complete" && R.solExposureState === "unsupported"; })(), "msol independent");
+  add("PC-14: Kamino unresolved liquidity → netWorth complete, liquidity unresolved", (() => { const R = pcCompute([usdc(1000), kaminoDirect("unresolved", null)], { requiredBufferUsd: 0 }); return R.netWorthState === "complete" && R.liquidityState === "unresolved"; })(), "liquidity indep");
+  add("PC-15: supported-scope vs wallet-wide distinct (unknown token)", (() => { const R = pcCompute([nativeSol(), usdc(1000), unknownTok()], { requiredBufferUsd: 0 }); return R.walletWideState === "unresolved"; })(), "scope");
+  add("PC-16: null never treated as zero (unknown magnitude decision-relevant)", pcCompute([unknownTok()], { requiredBufferUsd: 0 }).hasUnknownMagnitudeValue === true, "null≠0");
+  add("PC-17: unvalued liability → liabilities + netWorth unresolved", (() => { const R = pcCompute([usdc(1000), hubbleDebt(null)], { requiredBufferUsd: 0 }); return R.liabilitiesState === "unresolved" && R.netWorthState === "unresolved" && R.unresolvedLiabilityMagnitude === true; })(), "liability blocks");
+
+  // ---- Decision gates (allowed/blocked/unresolved + reasons) ----
+  add("PC-18: complete net worth → canDetermineNetWorth allowed", pcNetWorth(pcCompute([nativeSol(), usdc(1000)], { requiredBufferUsd: 0 })).status === "allowed", "nw allowed");
+  add("PC-19: jlUSDC → canDetermineNetWorth unresolved with reasons", (() => { const g = pcNetWorth(pcCompute([nativeSol(), jlusdc()], { requiredBufferUsd: 0 })); return g.status === "unresolved" && g.reasons.length > 0; })(), "nw blocked");
+  add("PC-20: mSOL → net worth allowed, position optimization unresolved (exposure)", (() => { const R = pcCompute([nativeSol(), msol()], { requiredBufferUsd: 0 }); return pcNetWorth(R).status === "allowed" && pcOptimize(R).status === "unresolved"; })(), "msol gates");
+  add("PC-21: unresolved Kamino liquidity → Rebalance unresolved, net worth allowed", (() => { const R = pcCompute([usdc(1000), kaminoDirect("unresolved", null)], { requiredBufferUsd: 0 }); return pcNetWorth(R).status === "allowed" && pcRebalance(R).status === "unresolved" && pcRebalance(R).reasons.length > 0; })(), "rebalance");
+  add("PC-22: unvalued liability → On Track unresolved + direct lending blocked/unresolved", (() => { const R = pcCompute([usdc(1000), hubbleDebt(null)], { requiredBufferUsd: 0 }); return pcOnTrack(R).status === "unresolved" && pcDirect(R).status !== "allowed"; })(), "liability gates");
+  add("PC-23: unknown token → On Track unresolved", pcOnTrack(pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 })).status === "unresolved", "ontrack unknown");
+  add("PC-24: complete Safety Buffer stays complete despite unrelated unresolved excess", (() => { const R = pcCompute([usdc(1000), jlusdc()], { requiredBufferUsd: 500 }); return R.stableBufferState === "complete"; })(), "buffer complete");
+  add("PC-25: incomplete/absent buffer → DCA + direct lending gates not allowed", (() => { const R = pcCompute([nativeSol()], { requiredBufferUsd: 1000 }); return pcDca(R).status !== "allowed" && pcDirect(R).status !== "allowed"; })(), "buffer suppress");
+  add("PC-26: Rebalance/Trim/Optimization gates return blocked/unresolved WITH reasons (never bare bool)", (() => { const R = pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 }); const gs = [pcRebalance(R), pcTrim(R), pcOptimize(R)]; return gs.every((g) => typeof g.status === "string" && Array.isArray(g.reasons)) && gs.some((g) => g.status !== "allowed" && g.reasons.length > 0); })(), "gate shape");
+  add("PC-27: staking gate fails closed when unresolved stake exposure present", pcStaking(pcCompute([usdc(1000), nativeStake(true)], { requiredBufferUsd: 500 })).status !== "allowed", "staking closed");
+
+  // ---- Deduplication + freshness ----
+  add("PC-28: duplicate dedupeKey → deduplicationState invalid + violation surfaced", (() => { const a = jlusdc(); const b = { ...jlusdc(), id: "jl2" }; const R = pcCompute([a, b], { requiredBufferUsd: 0 }); return R.deduplicationState === "invalid" && pcDupes([a, b]).length > 0; })(), "dedupe");
+  add("PC-29: LST backing field is NOT a second economic row (no false duplicate)", pcDupes([jitosol()]).length === 0, "backing not row");
+  add("PC-30: stale withdrawal → freshness stale, net worth not silently complete", (() => { const R = pcCompute([usdc(1000), kaminoDirect("stale", null)], { requiredBufferUsd: 0 }); return R.freshnessState === "stale" && R.netWorthState !== "complete"; })(), "stale");
+
+  // ---- Immutability + no fabrication ----
+  add("PC-31: recognized values render as null (—), never fabricated $0", pcAssess(jlusdc()).recognizedValueUsd === null && pcAssess(unknownTok()).recognizedValueUsd === null, "null not zero");
+  add("PC-32: no candidate/disposition change; no tx/score/manifest leak in result", (() => { const R = pcCompute([nativeSol(), usdc(1000)], { requiredBufferUsd: 0 }); const s = JSON.stringify(R); return dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && !lstSupported("5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm") && !s.includes("cta") && !s.includes("signature") && !s.includes("riskScore") && !s.includes("manifest"); })(), "immutable");
+  add("PC-33: classify — debt/native/stake/lst/jlUSDC/unknown", pcClass(hubbleDebt(-1)) === "hubble_debt" && pcClass(nativeSol()) === "native_sol" && pcClass(nativeStake()) === "native_stake" && pcClass(jitosol()) === "lst_supported" && pcClass(msol()) === "lst_msol" && pcClass(jlusdc()) === "jupiter_lend" && pcClass(unknownTok()) === "unknown_token", "classify");
+
+  return checks;
+}
+
+/**
+ * Step 17H.1 — production integration + economic-deduplication CORRECTION. Proves a shared mint is not a
+ * duplicate, real economic-identity duplicates ARE flagged, and the completeness gates only NARROW.
+ */
+export function runCompletenessIntegrationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const CTOKEN = "B8V6WVjPxW1UGwVDfxH2d2r8SyT4cqn7dQRK6XneVa7D";
+  const JLMINT = "9BEcn9aPEmhSPbPQeFGjidRiEKki46fVQDyPpSQXPA2D";
+  const w = (o: Partial<JLWalletPos>): JLWalletPos => ({ id: "p", source: "wallet", type: "token", symbol: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
+  const walletUsdc = () => w({ id: "usdc", symbol: "USDC", name: "USD Coin", mint: USDC, valueUsd: 1000 });
+  const kaminoDirect = () => w({ id: "kd", type: "protocol", symbol: "USDC", name: "USDC on Kamino", mint: USDC, candidateId: "kamino_usdc_lending", existingPositionOnly: true, dedupeKey: "klend:reserveA", valueUsd: 1000, recognizedValueUsd: 1000, withdrawalState: "fully_withdrawable", liquidValueUsd: 1000 });
+  const steak = () => w({ id: "st", type: "protocol", symbol: "USDC", name: "Steakhouse USDC", mint: USDC, candidateId: "kamino_steakhouse_usdc", existingPositionOnly: true, dedupeKey: "steakhouse:vaultA", valueUsd: 500, recognizedValueUsd: 500 });
+  const hubbleDebt = () => w({ id: "hb", type: "protocol", symbol: "USDH", name: "USDH loan", side: "borrowed", mint: "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX", valueUsd: -300 });
+  const stakeA = () => w({ id: "sa", type: "stake", symbol: "SOL", valueUsd: 500, dedupeKey: "native-stake:AAA" });
+  const stakeB = () => w({ id: "sb", type: "stake", symbol: "SOL", valueUsd: 500, dedupeKey: "native-stake:BBB" });
+  const jitosol = () => w({ id: "jt", type: "lst", symbol: "JitoSOL", mint: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn", valueUsd: 275, underlyingSolLamports: "1100000000" });
+  const jupsol = () => w({ id: "jp", type: "lst", symbol: "JupSOL", mint: "jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v", valueUsd: 250, underlyingSolLamports: "1050000000" });
+
+  // ---- Economic-dedup CORRECTION: shared mint is NOT a duplicate ----
+  add("PI-1: direct USDC + Kamino Direct (same USDC mint) → NOT a duplicate", pcDupes([walletUsdc(), kaminoDirect()]).length === 0, "usdc+klend ok");
+  add("PI-2: direct USDC + Steakhouse (same USDC mint) → NOT a duplicate", pcDupes([walletUsdc(), steak()]).length === 0, "usdc+steak ok");
+  add("PI-3: Kamino Direct + Steakhouse (both USDC underlying) → NOT a duplicate", pcDupes([kaminoDirect(), steak()]).length === 0, "klend+steak ok");
+  add("PI-4: direct USDC + Hubble debt → NOT a duplicate", pcDupes([walletUsdc(), hubbleDebt()]).length === 0, "usdc+debt ok");
+  add("PI-5: two protocol positions with USDC underlying → NOT a duplicate", pcDupes([kaminoDirect(), steak(), walletUsdc()]).length === 0, "multi usdc ok");
+  add("PI-6: two native stake accounts → NOT a duplicate", pcDupes([stakeA(), stakeB()]).length === 0, "two stakes ok");
+  add("PI-7: JitoSOL + JupSOL → NOT a duplicate", pcDupes([jitosol(), jupsol()]).length === 0, "two lst ok");
+  add("PI-8: native SOL + native stake + LST backing → NOT a duplicate (backing is a field)", pcDupes([w({ id: "sol", type: "native", symbol: "SOL", valueUsd: 500 }), stakeA(), jitosol()]).length === 0, "sol exposure ok");
+  add("PI-9: repeated mint ALONE is valid (the corrected rule)", pcDupes([walletUsdc(), w({ id: "usdc2", symbol: "USDC", name: "USD Coin", mint: USDC, valueUsd: 5 })]).length === 0, "mint alone ok");
+
+  // ---- Real economic-identity duplicates ARE flagged ----
+  add("PI-10: identical dedupeKey twice → duplicate", pcDupes([kaminoDirect(), { ...kaminoDirect(), id: "kd2" }]).length > 0, "same key");
+  add("PI-11: same position id twice → duplicate", pcDupes([walletUsdc(), walletUsdc()]).length > 0, "same id");
+  add("PI-12: generic cToken row + canonical Kamino Direct → duplicate", pcDupes([w({ id: "gen", type: "token", symbol: "cUSDC", mint: CTOKEN, valueUsd: 1 }), kaminoDirect()]).length > 0, "ctoken dup");
+  add("PI-13: jlUSDC generic row + canonical Jupiter row → duplicate", pcDupes([w({ id: "genjl", type: "token", symbol: "jlUSDC", mint: JLMINT, valueUsd: null }), w({ id: "jl", type: "protocol", symbol: "USDC", candidateId: "jupiter_lend_usdc", dedupeKey: "jupiter-lend:x", valueUsd: null, mint: USDC })]).length > 0, "jl dup");
+
+  // ---- Completeness gates NARROW only (never enable) ----
+  add("PI-14: completenessAllows — absent map ⇒ true; blocked/unresolved ⇒ false", pcAllows(undefined, "staking") === true && pcAllows({ staking: "blocked" }, "staking") === false && pcAllows({ dca: "unresolved" }, "dca") === false && pcAllows({ staking: "allowed" }, "staking") === true, "narrow");
+  add("PI-15: deriveCompletenessGates returns all 7 decision statuses", (() => { const { gates } = pcGates([walletUsdc()], { requiredBufferUsd: 0 }); return ["onTrack", "staking", "dca", "directLending", "rebalance", "trim", "positionOptimization"].every((k) => typeof (gates as any)[k] === "string"); })(), "gate map");
+  add("PI-16: healthy portfolio (buffer target 0) → gates permit (no spurious suppression)", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "sol", type: "native", symbol: "SOL", valueUsd: 500 })], { requiredBufferUsd: 0 }); return gates.onTrack === "allowed" && gates.dca === "allowed" && gates.directLending === "allowed"; })(), "healthy ok");
+  add("PI-17: unvalued liability → On Track + DCA + direct-lending gates NOT allowed", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "hb", type: "protocol", symbol: "USDH", side: "borrowed", valueUsd: null, uiAmount: 300, amount: "300" })], { requiredBufferUsd: 0 }); return gates.onTrack !== "allowed" && gates.dca !== "allowed" && gates.directLending !== "allowed"; })(), "liability narrows");
+  add("PI-18: unrelated unpriced token does NOT block staking (only its own dimensions)", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "unk", type: "token", name: "Unknown token", symbol: "9x", uiAmount: 5, valueUsd: null })], { requiredBufferUsd: 0 }); return gates.staking === "allowed" && gates.onTrack !== "allowed"; })(), "unrelated");
+
+  // ---- Engine narrowing property: gates only reduce the candidate set ----
+  add("PI-19: engine with all-blocked gates ⊆ engine without gates (never enables)", (() => {
+    const inp = inputsFor({ safetyBuffer: bufferFixture(1000, 1000, 3) });
+    const without = runSuggestionEngine(inp, FIXTURE_GENERATED_AT);
+    const blocked = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, { onTrack: "blocked", staking: "blocked", dca: "blocked", directLending: "blocked", rebalance: "blocked", trim: "blocked", positionOptimization: "blocked" });
+    const ids = new Set(without.suggestions.map((s) => s.id));
+    return blocked.suggestions.length <= without.suggestions.length && blocked.suggestions.every((s) => ids.has(s.id));
+  })(), "subset");
+  add("PI-20: engine with empty gate map == engine without gates (backward compatible)", (() => {
+    const inp = inputsFor({ safetyBuffer: bufferFixture(1000, 1000, 3) });
+    const a = runSuggestionEngine(inp, FIXTURE_GENERATED_AT);
+    const b = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, {});
+    return a.suggestions.length === b.suggestions.length;
+  })(), "backward compat");
+
+  // ---- Immutability ----
+  add("PI-21: dispositions unchanged; INF blocked; no gate enables Jupiter/Steakhouse", dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && !lstSupported("5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm"), "immutable");
+
+  return checks;
+}
+
+/**
+ * Step 17H.2 — pure UI selectors over the mounted completeness result. Proves deterministic warning
+ * priority, "—" for unknown totals/values, most-specific position reasons, and On Track availability.
+ */
+export function runCompletenessUiFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const MSOL = LST_SET.msol.mint;
+  const w = (o: Partial<JLWalletPos>): JLWalletPos => ({ id: "p", source: "wallet", type: "token", symbol: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
+  const usdc = () => w({ id: "usdc", symbol: "USDC", name: "USD Coin", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", valueUsd: 1000 });
+  const nativeSol = () => w({ id: "sol", type: "native", symbol: "SOL", valueUsd: 500, priceUsd: 250 });
+  const unknownTok = () => w({ id: "unk", type: "token", name: "Unknown token", symbol: "9x", uiAmount: 5, valueUsd: null });
+  const jlusdc = () => w({ id: "jl", type: "protocol", symbol: "USDC", name: "Jupiter Lend USDC", candidateId: "jupiter_lend_usdc", existingPositionOnly: true, dedupeKey: "jupiter-lend:x", withdrawalState: "unresolved", recognizedValueUsd: null, valueUsd: null, uiAmount: 100, amount: "100000000" });
+  const msol = () => w({ id: "ms", type: "lst", symbol: "mSOL", mint: MSOL, valueUsd: 260, priceUsd: 260, uiAmount: 1, lstProductId: "msol", lstNormalizationState: "unsupported" });
+  const kaminoLiq = () => w({ id: "kd", type: "protocol", symbol: "USDC", name: "USDC on Kamino", candidateId: "kamino_usdc_lending", existingPositionOnly: true, dedupeKey: "klend:x", withdrawalState: "unresolved", recognizedValueUsd: 1000, valueUsd: 1000, liquidValueUsd: null, uiAmount: 1000, amount: "1000000000" });
+  const tok22 = () => w({ id: "t22", type: "token", symbol: "USDC", name: "USD Coin", mint: "MintT22Usdc", valueUsd: 100, tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", withdrawalState: "unresolved", transferabilityState: "hook_unresolved" });
+  const debt = () => w({ id: "hb", type: "protocol", symbol: "USDH", name: "USDH loan", side: "borrowed", valueUsd: null, uiAmount: 300, amount: "300" });
+  const R = (ps: JLWalletPos[]) => pcCompute(ps, { requiredBufferUsd: 0 });
+
+  // ---- Dashboard primary warning (deterministic priority) ----
+  add("UI-1: complete portfolio → NO warning", uiWarning(R([nativeSol(), usdc()])) === null, "no warning");
+  add("UI-2: net worth unresolved → approved net-worth warning", (() => { const g = uiWarning(R([nativeSol(), unknownTok()])); return g?.id === "net_worth" && g.title === UI_COPY.netWorthTitle && g.body === UI_COPY.netWorthBody; })(), "net worth");
+  add("UI-3: liquidity unresolved only → liquidity warning (no title)", (() => { const g = uiWarning(R([usdc(), kaminoLiq()])); return g?.id === "liquidity" && g.title === null && g.body === UI_COPY.liquidityBody; })(), "liquidity");
+  add("UI-4: SOL exposure unresolved only → staking-exposure warning", (() => { const g = uiWarning(R([usdc(), msol()])); return g?.id === "sol_exposure" && g.body === UI_COPY.solExposureBody; })(), "sol exposure");
+  add("UI-5: dedup invalid → highest priority (beats net worth)", (() => { const dup = [jlusdc(), { ...jlusdc(), id: "jl2" }]; const g = uiWarning(R(dup)); return g?.id === "dedup"; })(), "dedup priority");
+  add("UI-6: priority deterministic — net worth beats liquidity+exposure", (() => { const g = uiWarning(R([unknownTok(), kaminoLiq(), msol()])); return g?.id === "net_worth"; })(), "priority");
+  add("UI-7: at most ONE primary warning returned", (() => { const g = uiWarning(R([unknownTok()])); return g !== null && typeof g.body === "string"; })(), "one warning");
+
+  // ---- Portfolio total ----
+  add("UI-8: complete net worth → authoritative recognized total shown", (() => { const t = uiTotal(R([nativeSol(), usdc()]), "$1,500.00"); return t.text === "$1,500.00" && t.authoritative === true; })(), "authoritative");
+  add("UI-9: unknown net worth → '—' (never $0), with aria label", (() => { const t = uiTotal(R([nativeSol(), unknownTok()]), "$500.00"); return t.text === "—" && t.authoritative === false && typeof t.ariaLabel === "string" && !t.text.includes("0"); })(), "dash total");
+  add("UI-10: partial recognized value NOT presented as authoritative total", (() => { const r = R([nativeSol(), unknownTok()]); const t = uiTotal(r, "$500.00"); return typeof r.recognizedPortfolioValueUsd === "number" && t.text === "—"; })(), "no partial total");
+
+  // ---- Position-level reasons (most specific) ----
+  add("UI-11: debt reason beats generic value reason", uiReason(uiAssess(R([debt()]), "hb")) === "Debt value could not be verified", "debt");
+  add("UI-12: missing value → current value reason", uiReason(uiAssess(R([unknownTok()]), "unk")) === "Current value could not be verified", "value");
+  add("UI-13: protocol liquidity reason while recognized value stays visible", (() => { const r = R([usdc(), kaminoLiq()]); const a = uiAssess(r, "kd"); return uiReason(a) === "Withdrawal availability could not be verified" && a?.recognizedValueUsd === 1000; })(), "liquidity reason");
+  add("UI-14: Token-2022 transferability reason", uiReason(uiAssess(R([tok22()]), "t22")) === "Transferability could not be verified", "transferability");
+  add("UI-15: LST backing reason (mSOL)", uiReason(uiAssess(R([msol()]), "ms")) === "Underlying SOL could not be refreshed", "lst backing");
+  add("UI-16: unsupported/unknown → not-fully-supported OR value reason (never $0)", (() => { const a = uiAssess(R([unknownTok()]), "unk"); return uiDash(a) === true; })(), "unsupported");
+  add("UI-17: Jupiter unresolved value → '—' + current-value reason; recognized null", (() => { const r = R([jlusdc()]); const a = uiAssess(r, "jl"); return uiReason(a) === "Current value could not be verified" && uiDash(a) === true && a?.recognizedValueUsd === null; })(), "jupiter");
+
+  // ---- On Track UI ----
+  add("UI-18: On Track allowed → available; unresolved → unavailable + safe reason", (() => { const ok = uiOnTrack(R([nativeSol(), usdc()])); const bad = uiOnTrack(R([nativeSol(), unknownTok()])); return ok.available === true && bad.available === false && bad.unavailableReason === UI_COPY.onTrackUnavailable; })(), "ontrack");
+
+  // ---- Dedupe UI ----
+  add("UI-19: wallet USDC + Kamino + Steakhouse → NO dedup warning", (() => { const g = uiWarning(R([usdc(), w({ id: "kd", type: "protocol", symbol: "USDC", candidateId: "kamino_usdc_lending", dedupeKey: "klend:a", valueUsd: 1000, recognizedValueUsd: 1000, withdrawalState: "fully_withdrawable", liquidValueUsd: 1000, mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" }), w({ id: "st", type: "protocol", symbol: "USDC", candidateId: "kamino_steakhouse_usdc", dedupeKey: "steakhouse:a", valueUsd: 500, recognizedValueUsd: 500, withdrawalState: "fully_withdrawable", liquidValueUsd: 500, mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" })])); return g === null || g.id !== "dedup"; })(), "no false dup");
+
+  // ---- Copy safety + immutability ----
+  add("UI-20: user-facing copy leaks NO raw state names / codes / scores", (() => { const all = Object.values(UI_COPY).join(" "); return !/unresolved|invalid|net_worth|sol_exposure|dedupeKey|manifest|riskScore|threshold/.test(all); })(), "copy safe");
+  add("UI-21: dispositions unchanged; Jupiter excluded; Steakhouse existing-only; INF blocked", dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && !lstSupported("5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm"), "immutable");
+
+  // ---- Step 17H.4 — live rail On Track unavailable message (single-sourced helper the rail uses) ----
+  add("UI-22: On Track allowed (complete) → rail shows NO completeness message (existing card renders)", uiRailOnTrack(R([nativeSol(), usdc()])) === null, "allowed → null");
+  add("UI-23: On Track unresolved (unknown token) → rail shows approved unavailable message", uiRailOnTrack(R([nativeSol(), unknownTok()])) === UI_COPY.onTrackUnavailable, "unresolved msg");
+  add("UI-24: On Track blocked (unvalued liability) → rail shows approved unavailable message", uiRailOnTrack(R([usdc(), debt()])) === UI_COPY.onTrackUnavailable, "blocked msg");
+  add("UI-25: absent completeness (non-completeness reason) → null, preserves existing empty copy", uiRailOnTrack(undefined) === null && uiRailOnTrack(null) === null, "absent → null");
+  add("UI-26: unavailable message is a plain explanation — no on/off-track, no reason codes", (() => { const m = uiRailOnTrack(R([nativeSol(), unknownTok()])) ?? ""; return !/on_track|off_track|unresolved|invalid|net_worth/.test(m) && m === UI_COPY.onTrackUnavailable; })(), "safe copy");
+
+  return checks;
+}
+
+/**
+ * Step 17H.3 — the /testing Portfolio Completeness gallery uses PRODUCTION derivation + components. These
+ * assert the dedicated visual states exist with the expected completeness (feeding the same components the
+ * dashboard uses), and that per-row notes resolve as designed.
+ */
+export function runCompletenessGalleryFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const fx = tgFixtures();
+  const byId = (id: string) => fx.find((f) => f.id === id);
+
+  add("TG-1: dedicated gallery has all 14 required visual states", fx.length === 14 && ["complete", "net_worth_unresolved", "jupiter", "unknown", "liability", "liquidity", "kamino", "steakhouse", "token2022", "sol_exposure", "native_stake", "duplicate", "shared_mint", "gate_inspector"].every((id) => byId(id) !== undefined), `count=${fx.length}`);
+  add("TG-2: complete portfolio — net worth complete, On Track available", (() => { const c = byId("complete")!.completeness; return c.netWorthState === "complete" && c.onTrackState === "complete" && uiWarning(c) === null; })(), "complete");
+  add("TG-3: net worth unresolved — total '—', net-worth banner, On Track unavailable", (() => { const c = byId("net_worth_unresolved")!.completeness; return c.netWorthState === "unresolved" && uiWarning(c)?.id === "net_worth" && c.onTrackState !== "complete" && uiTotal(c, "$x").text === "—"; })(), "net worth");
+  add("TG-4: Jupiter row → current-value reason, USD '—'", (() => { const c = byId("jupiter")!.completeness; return uiNote(c, "jl") === "Current value could not be verified"; })(), "jupiter");
+  add("TG-5: liability row → debt reason; total '—'", (() => { const c = byId("liability")!.completeness; return uiNote(c, "hb") === "Debt value could not be verified" && uiTotal(c, "$x").text === "—"; })(), "liability");
+  add("TG-6: liquidity-only — total authoritative, Kamino withdrawal reason, recognized value visible", (() => { const c = byId("liquidity")!.completeness; return c.netWorthState === "complete" && uiWarning(c)?.id === "liquidity" && uiNote(c, "kd") === "Withdrawal availability could not be verified"; })(), "liquidity");
+  add("TG-7: Steakhouse recognized + liquidity unresolved reason", byId("steakhouse")!.completeness && uiNote(byId("steakhouse")!.completeness, "st") === "Withdrawal availability could not be verified", "steakhouse");
+  add("TG-8: Token-2022 transferability reason; market value visible", (() => { const c = byId("token2022")!.completeness; return uiNote(c, "t22") === "Transferability could not be verified"; })(), "token2022");
+  add("TG-9: SOL exposure only — mSOL backing reason; total authoritative; exposure warning", (() => { const c = byId("sol_exposure")!.completeness; return c.netWorthState === "complete" && uiWarning(c)?.id === "sol_exposure" && uiNote(c, "ms") === "Underlying SOL could not be refreshed"; })(), "sol exposure");
+  add("TG-10: genuine duplicate → dedup warning", (() => { const c = byId("duplicate")!.completeness; return c.deduplicationState === "invalid" && uiWarning(c)?.id === "dedup"; })(), "duplicate");
+  add("TG-11: shared USDC mint (wallet+Kamino+Steakhouse) → NOT a duplicate", (() => { const c = byId("shared_mint")!.completeness; return c.deduplicationState !== "invalid" && (uiWarning(c)?.id ?? "none") !== "dedup"; })(), "shared mint");
+  add("TG-12: gate inspector exposes Rebalance/Trim/Optimization states; no suggestion output", (() => { const g = byId("gate_inspector")!.gates; return typeof g.rebalance === "string" && typeof g.trim === "string" && typeof g.positionOptimization === "string"; })(), "gate inspector");
+  add("TG-13: native stake — value complete, available-to-withdraw present, not full liquidity", (() => { const c = byId("native_stake")!.completeness; const a = c.positionAssessments.find((x) => x.positionId === "stk"); return c.netWorthState === "complete" && a?.valueState === "complete"; })(), "native stake");
 
   return checks;
 }

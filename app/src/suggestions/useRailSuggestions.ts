@@ -34,6 +34,7 @@ import {
 import { getSafetyBufferTargetMonths } from "../wallet/safetyBufferTarget";
 import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
+import { deriveCompletenessGates, type PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
 import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 import { deriveContributionSuggestion } from "./contributionProductInput";
 import { deriveStableYieldPlanSuggestion } from "./stableYieldProductInput";
@@ -71,6 +72,12 @@ export interface RailSuggestionsData {
    * never carries a score or threshold.
    */
   directLendingSuppression?: RuntimeSuppressionReason | null;
+  /**
+   * Step 17H.1 — the canonical portfolio-completeness result, computed ONCE over the final merged
+   * positions. The dashboard reads `blockingIssues`/`warnings`; Smith AI reads the dimension states. Never
+   * recomputed by the UI. Optional so non-real-wallet callers omit it.
+   */
+  portfolioCompleteness?: PortfolioCompletenessResult;
 }
 
 /** The lifted rail payload (adds the live-read loading flag). */
@@ -158,6 +165,12 @@ export function deriveRailSuggestions(args: {
   // Top Pick here). The presentation review is keyed by the SAME suggestion id the card uses.
   const stableYield = deriveStableYieldPlanSuggestion({ dataMode, positions, pricedAsOf, goal, buffer });
 
+  // Step 17H.1 — the canonical portfolio-completeness gates, computed ONCE over the SAME final merged
+  // positions + the production Safety Buffer target. Passed to the engine to NARROW (never enable) the
+  // On Track / staking / DCA / direct-lending candidates; the completeness result + blockingIssues/warnings
+  // are returned for the dashboard + Smith AI to consume without recomputing.
+  const completeness = deriveCompletenessGates(positions, { requiredBufferUsd: buffer?.targetUsd ?? 0 });
+
   const engineResult = runSuggestionEngine(
     buildSuggestionEngineInputs({
       positions,
@@ -169,7 +182,8 @@ export function deriveRailSuggestions(args: {
     }),
     pricedAsOf ?? 0,
     contribution.suggestion,
-    stableYield.suggestion
+    stableYield.suggestion,
+    completeness.gates
   );
   const cards = toSuggestionCards(engineResult.suggestions);
 
@@ -219,7 +233,8 @@ export function deriveRailSuggestions(args: {
         ? { apy: marketInput.apy, availability: marketInput.availability, capacity: { fresh: marketInput.capacity.fresh, sufficientForAmount: capacityCovers } }
         : marketInput, // when capacity does not cover the amount, keep the snapshot's own (insufficient) capacity
     });
-    if (dl.emit) cards.push(dl.card);
+    // 17H.1 — AND-narrow with the completeness direct-lending gate (never enables; only suppresses).
+    if (dl.emit && completeness.gates.directLending === "allowed") cards.push(dl.card);
     else directLendingSuppression = dl.suppressionReason;
   }
 
@@ -237,6 +252,8 @@ export function deriveRailSuggestions(args: {
     notice: warningsToNotice(engineResult.warnings),
     available: cards.length > 0,
     directLendingSuppression,
+    // 17H.1 — canonical completeness for the dashboard + Smith AI (computed once; never recomputed).
+    portfolioCompleteness: completeness.result,
   };
 }
 
@@ -253,9 +270,9 @@ export function useRailSuggestions(args: {
   onSuggestions?: (data: RailSuggestions) => void;
   /** Step 16H-S.5 — the live Kamino Direct market snapshot from useKlendDirectUsdcMarketSnapshot (fresh or null). */
   klendMarketSnapshot?: KlendDirectUsdcMarketSnapshot | null;
-}): void {
+}): { portfolioCompleteness?: PortfolioCompletenessResult } {
   const { positions, pricedAsOf, goal, loading, onSuggestions, klendMarketSnapshot } = args;
-  const { cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available } = deriveRailSuggestions({
+  const { cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available, portfolioCompleteness } = deriveRailSuggestions({
     positions,
     pricedAsOf,
     goal,
@@ -285,8 +302,12 @@ export function useRailSuggestions(args: {
     if (!onSuggestions) return;
     if (signature === lastSignature.current) return;
     lastSignature.current = signature;
-    onSuggestions({ cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available, loading });
+    onSuggestions({ cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available, loading, portfolioCompleteness });
     // Signature gates the update; card objects are intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, onSuggestions]);
+
+  // Step 17H.2 — expose the SAME already-computed completeness result to the portfolio body (banner +
+  // position reasons + On Track UI). No second computation: it is destructured from deriveRailSuggestions.
+  return { portfolioCompleteness };
 }

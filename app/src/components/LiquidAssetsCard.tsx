@@ -12,6 +12,8 @@
  */
 import { useId, useState } from "react";
 import type { WalletPosition } from "../wallet/walletPosition";
+import type { PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
+import { positionCompletenessNote } from "./portfolioCompletenessUi";
 import { usd0, formatAmount, explorerUrl } from "./deployTable";
 import { resolveTokenIcon } from "../state/iconRegistry";
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
@@ -78,9 +80,11 @@ function ChangeCell({ pct }: { pct: number | null | undefined }) {
 
 interface Props {
   positions: WalletPosition[];
+  /** Step 17H.3 — mounted completeness result (never recomputed here); drives per-row notes. */
+  completeness?: PortfolioCompletenessResult | null;
 }
 
-export default function LiquidAssetsCard({ positions }: Props) {
+export default function LiquidAssetsCard({ positions, completeness }: Props) {
   const headingId = useId();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS_PER_PAGE);
@@ -163,6 +167,10 @@ export default function LiquidAssetsCard({ positions }: Props) {
                           ) : (
                             <span className="asset-identity__name">{p.symbol}</span>
                           )}
+                          {(() => {
+                            const note = positionCompletenessNote(completeness, p.id);
+                            return note ? <span className="asset-identity__note" role="note">{note}</span> : null;
+                          })()}
                         </span>
                       </td>
                       <td className="portfolio-table__cell portfolio-table__cell--right">

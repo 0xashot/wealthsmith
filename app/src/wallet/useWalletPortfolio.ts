@@ -49,6 +49,7 @@ import {
 } from "./jupiterLendExistingPosition";
 import { resolveJupiterLendExchangeRate } from "./jupiterLendShareAccounting";
 import { applyToken2022Assessment, type Token2022PositionResult } from "./token2022PositionAssessment";
+import { isSupportedLstMint, normalizeLstBacking, applyLstNormalization, type LstPoolFacts } from "./lstUnderlyingNormalization";
 import type { VrtInfo } from "./jitoRestaking";
 import type { SanctumLstInfo } from "./sanctumLsts";
 import {
@@ -112,6 +113,7 @@ type ReadName =
   | "meteora_damm"
   | "hubble"
   | "token_2022_assess"
+  | "lst_pool"
   | "token_prices";
 
 /**
@@ -235,6 +237,15 @@ async function loadHubbleLoans(
 ): Promise<WalletPosition[]> {
   const mod = await import("./hubble");
   return mod.fetchHubbleLoans(connection, ownerB58);
+}
+
+/** Step 17G — supported-LST SPL stake-pool facts (per mint), via a code-split dynamic import. */
+async function loadLstPoolFacts(
+  connection: Connection,
+  mints: string[]
+): Promise<Map<string, LstPoolFacts>> {
+  const mod = await import("./lstEnrichment");
+  return mod.fetchLstPoolFacts(connection, mints);
 }
 
 /** Step 17E — Token-2022 transferability assessments (per mint), via a code-split dynamic import. */
@@ -907,6 +918,50 @@ export function useWalletPortfolio(): WalletPortfolio {
               if (!r) return p;
               const decimalsKnown = typeof p.decimals === "number";
               return applyToken2022Assessment(p, r, p.decimals ?? 0, p.priceUsd ?? null, decimalsKnown && pricedAsOf != null && typeof p.priceUsd === "number");
+            });
+          }
+        }
+      } catch { /* strict no-op on any failure — portfolio unchanged */ }
+      if (cancelled || myReq !== reqId.current) return;
+
+      // Step 17G — supported-LST underlying-SOL normalization (additive + fail-closed). For JitoSOL/JupSOL/
+      // bSOL, decode the SPL stake pool once per mint and compute the exact backing (floor(balance ×
+      // totalLamports/poolTokenSupply)); mSOL has no installed decoder → fail-closed `unsupported`. Also
+      // AGGREGATES multiple wallet token accounts of one LST mint (§10). MARKET value (valueUsd) stays
+      // authoritative; underlying SOL is exposure-only, never a second net-worth value, never liquid SOL.
+      // Any failure → strict no-op.
+      try {
+        const supportedLstMints = [...new Set(merged.filter((p) => p.type === "lst" && typeof p.mint === "string" && isSupportedLstMint(p.mint)).map((p) => p.mint as string))];
+        if (supportedLstMints.length > 0) {
+          // Exact integer aggregation across every classic SPL account of each supported LST mint.
+          const aggByMint = new Map<string, bigint>();
+          for (const a of (splOk ? accountsOf(splRes.value) : [])) {
+            const info = a?.account?.data?.parsed?.info;
+            const m = info?.mint; const amt = info?.tokenAmount?.amount;
+            if (typeof m === "string" && supportedLstMints.includes(m) && typeof amt === "string" && /^[0-9]+$/.test(amt)) {
+              aggByMint.set(m, (aggByMint.get(m) ?? 0n) + BigInt(amt));
+            }
+          }
+          const poolFacts = await withTimeout(loadLstPoolFacts(connection, supportedLstMints), PROTOCOL_TIMEOUT_MS, "lst_pool").catch(() => new Map<string, LstPoolFacts>());
+          if (!cancelled && myReq === reqId.current) {
+            const solPrice = merged.find((p) => p.type === "native")?.priceUsd ?? null;
+            const solFresh = pricedAsOf != null && typeof solPrice === "number";
+            const nowIso = new Date().toISOString();
+            merged = merged.map((p) => {
+              if (p.type !== "lst" || typeof p.mint !== "string" || !isSupportedLstMint(p.mint)) return p;
+              const aggRaw = aggByMint.get(p.mint);
+              const rawBalance = (aggRaw ?? (typeof p.amount === "string" && /^[0-9]+$/.test(p.amount) ? BigInt(p.amount) : 0n)).toString();
+              // Reflect the aggregated balance in the market position (multi-account holders).
+              const dec = typeof p.decimals === "number" ? p.decimals : 9;
+              const uiAgg = Number(BigInt(rawBalance)) / 10 ** dec;
+              const marketP: WalletPosition = typeof p.priceUsd === "number"
+                ? { ...p, amount: rawBalance, uiAmount: uiAgg, valueUsd: p.priceUsd * uiAgg }
+                : { ...p, amount: rawBalance, uiAmount: uiAgg };
+              const r = normalizeLstBacking({
+                mint: p.mint, rawTokenBalance: rawBalance, tokenProgram: TOKEN_PROGRAM_ID,
+                pool: poolFacts.get(p.mint) ?? null, observedAt: nowIso, walletSourceSlot: 0,
+              });
+              return applyLstNormalization(marketP, r, solPrice, solFresh);
             });
           }
         }
