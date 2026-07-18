@@ -39,6 +39,7 @@ import { deriveContributionSuggestion } from "./contributionProductInput";
 import { deriveStableYieldPlanSuggestion } from "./stableYieldProductInput";
 import { evaluateDirectLendingForRail, type RuntimeSuppressionReason } from "./directUsdcLendingRuntimeAdapter";
 import { KLEND_DIRECT_USDC_IDENTITY, toRuntimeMarketInput, capacityCoversAmount, type KlendDirectUsdcMarketSnapshot } from "./klendDirectUsdcMarketData";
+import { deriveDirectLendingExcessUsd, deriveDirectLendingSuitability } from "./directUsdcLendingRailInputs";
 import type { StableYieldReviewPresentation } from "./yieldStrategyPlanPresentationTypes";
 import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID } from "./contributionPricePolicy";
 import type { ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
@@ -185,13 +186,21 @@ export function deriveRailSuggestions(args: {
     // Exact-mint canonical USDC only (16H-S.4): aggregate direct wallet balances of the exact mint —
     // never symbol matches, never cTokens/vault shares/bridged/receipt tokens.
     let canonicalUsdcRawUnits: bigint | null = null;
+    let canonicalUsdcUsd = 0;
     for (const p of positions) {
       if (p.mint === KLEND_DIRECT_USDC_IDENTITY.liquidityMint && p.type === "token" && p.detection === "direct_wallet_balance") {
         try { canonicalUsdcRawUnits = (canonicalUsdcRawUnits ?? 0n) + BigInt(p.amount); } catch { /* malformed base units → ignore leg */ }
+        if (typeof p.uiAmount === "number" && typeof p.priceUsd === "number") canonicalUsdcUsd += p.uiAmount * p.priceUsd;
       }
     }
+    const checkedAt = pricedAsOf != null ? new Date(pricedAsOf).toISOString() : new Date().toISOString();
+    // Deterministic excess via the EXISTING 16F builder (component override wins if supplied).
+    const excessUsd = directLendingExcessUsd !== undefined
+      ? directLendingExcessUsd
+      : deriveDirectLendingExcessUsd({ buffer, canonicalUsdcUsd, bufferCountedUsdcUsd: buffer?.stableUsd ?? 0, pricesFresh: pricedAsOf != null, checkedAt });
+    // Suitability via the EXISTING rule (fail-closed; no invented questionnaire).
+    const suitability = directLendingSuitability ?? deriveDirectLendingSuitability(goal);
     const market: KlendDirectUsdcMarketSnapshot | undefined = klendMarketSnapshot;
-    const excessUsd = directLendingExcessUsd ?? null; // deterministic 16F amount, supplied by the component layer
     const capacityCovers = market != null && excessUsd != null ? capacityCoversAmount(market, excessUsd) : false;
     const marketInput = market ? toRuntimeMarketInput(market) : undefined;
     const dl = evaluateDirectLendingForRail({
@@ -202,7 +211,7 @@ export function deriveRailSuggestions(args: {
       bufferSufficiencyResolved: buffer != null,
       bufferFullyFundedByLiquidCoverage: buffer?.fullyFunded === true,
       excessDeterministicAmountUsd: excessUsd,
-      suitability: directLendingSuitability ?? { profileComplete: goal != null, suitableForCategory: false, prohibitsDefiLending: false },
+      suitability,
       holdsExactCToken: false,
       approvedTopUpRulePasses: false,
       klendMarket: marketInput && capacityCovers
@@ -241,12 +250,15 @@ export function useRailSuggestions(args: {
   goal?: SavedGoal | null;
   loading: boolean;
   onSuggestions?: (data: RailSuggestions) => void;
+  /** Step 16H-S.5 — the live Kamino Direct market snapshot from useKlendDirectUsdcMarketSnapshot (fresh or null). */
+  klendMarketSnapshot?: KlendDirectUsdcMarketSnapshot | null;
 }): void {
-  const { positions, pricedAsOf, goal, loading, onSuggestions } = args;
+  const { positions, pricedAsOf, goal, loading, onSuggestions, klendMarketSnapshot } = args;
   const { cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available } = deriveRailSuggestions({
     positions,
     pricedAsOf,
     goal,
+    klendMarketSnapshot: klendMarketSnapshot ?? undefined,
   });
 
   const signature = JSON.stringify({

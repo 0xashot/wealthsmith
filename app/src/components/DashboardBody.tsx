@@ -25,6 +25,7 @@ import { deriveProjection } from "../wallet/projectedGrowth";
 import { deriveRecommendedAllocation } from "../wallet/recommendedAllocation";
 import { getSafetyBufferTargetMonths } from "../wallet/safetyBufferTarget";
 import { useRailSuggestions, type RailSuggestions } from "../suggestions/useRailSuggestions";
+import { useKlendDirectUsdcMarketSnapshot, freshSnapshotOrNull } from "../suggestions/useKlendDirectUsdcMarketSnapshot";
 import { dashboardState as s } from "../state/dashboardState";
 import { RISK_OPTIONS, labelFor } from "../state/goalState";
 import type { SavedGoal } from "../types/goal";
@@ -159,7 +160,11 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
   // Portfolio uses, so both pages show identical suggestions. It re-derives its
   // inputs from the live positions + saved goal (recalculating no pricing,
   // buffer target, allocation target, or Top Pick) and lifts the rail payload.
-  useRailSuggestions({ positions, pricedAsOf, goal, loading: loading === true, onSuggestions });
+  // Step 16H-S.5 — live Kamino Direct market snapshot (read-only; fetches only when a real wallet is
+  // connected and governance is active; idle/no-fetch otherwise). Fed into the rail as a fresh-or-null
+  // snapshot so the direct-lending adapter stays fail-closed on any unresolved/stale/error state.
+  const klendMarket = useKlendDirectUsdcMarketSnapshot();
+  useRailSuggestions({ positions, pricedAsOf, goal, loading: loading === true, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket) });
 
   // Deterministic Projected Growth — priced starting value + saved plan inputs.
   const projection = deriveProjection({

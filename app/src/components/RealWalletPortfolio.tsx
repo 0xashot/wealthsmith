@@ -19,6 +19,7 @@ import {
   getProtocolPositions,
 } from "../wallet/walletSummary";
 import { useRailSuggestions, type RailSuggestions } from "../suggestions/useRailSuggestions";
+import { useKlendDirectUsdcMarketSnapshot, freshSnapshotOrNull } from "../suggestions/useKlendDirectUsdcMarketSnapshot";
 import type { SavedGoal } from "../types/goal";
 import PortfolioAllocationDonuts from "./PortfolioAllocationDonuts";
 import LiquidAssetsCard from "./LiquidAssetsCard";
@@ -51,7 +52,8 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
 
   // SAME shared hook + engine the Dashboard uses — no Portfolio-specific
   // suggestion logic. It reuses THIS component's single wallet read.
-  useRailSuggestions({ positions, pricedAsOf, goal, loading, onSuggestions });
+  const klendMarket = useKlendDirectUsdcMarketSnapshot();
+  useRailSuggestions({ positions, pricedAsOf, goal, loading, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket) });
 
   const liquid = getLiquidPositions(positions);
   const staked = getStakedPositions(positions);

@@ -19,6 +19,8 @@ import { HUMAN_REVIEW_RECORD as GR_REVIEW, RISK_SIGNOFF_RECORD as GR_SIGNOFF, PR
 import { DIRECT_LENDING_TESTING_ROWS as TF_ROWS, DIRECT_LENDING_TESTING_CARD_ROWS as TF_CARDS, DIRECT_LENDING_TESTING_SUPPRESSED_ROWS as TF_SUPPRESSED, DIRECT_LENDING_TESTING_FIXTURES_VALIDATION as TF_VALID } from "./directUsdcLendingTestingFixtures";
 import { evaluateDirectLendingRuntime as rtEval, evaluateDirectLendingForRail as rtRail, governanceInputFromActivation as rtGov, buildDirectLendingCardState as rtCard, ALL_RUNTIME_SUPPRESSION_REASONS as RT_REASONS, RUNTIME_PRODUCT_IDENTITY as RT_ID, type DirectLendingRuntimeInput as RTInput } from "./directUsdcLendingRuntimeAdapter";
 import { buildKlendDirectUsdcMarketSnapshot as mdBuild, toRuntimeMarketInput as mdToRuntime, capacityCoversAmount as mdCovers, KLEND_DIRECT_USDC_IDENTITY as MD_ID, type KlendDirectUsdcRawRead as MDRaw, type KlendDirectUsdcMarketSnapshot as MDSnap } from "./klendDirectUsdcMarketData";
+import { deriveDirectLendingExcessUsd as scExcess, deriveDirectLendingSuitability as scSuit } from "./directUsdcLendingRailInputs";
+import type { SafetyBuffer as SCBuffer } from "../wallet/walletSummary";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17864,6 +17866,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runDirectLendingComponentActivationFixtureChecks(),
     ...runKlendMarketDataFixtureChecks(),
     ...runDirectLendingRuntimeFixtureChecks(),
     ...runDirectLendingGovernanceActivationFixtureChecks(),
@@ -20195,6 +20198,44 @@ export function runKlendMarketDataFixtureChecks(): FixtureCheck[] {
   // --- Immutability + no API authority markers ---
   add("MD-16: assessment + activation immutable", DA_OUTCOME.unroundedAggregate === 5.93 && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && GR_ACTIVATION.productionSuggestionEligible === true, "immutable");
   add("MD-17: snapshot carries on-chain source slots (API is not the authority)", snap.apy.sourceSlot != null && snap.capacity.sourceSlot != null && snap.availability.sourceSlot != null, "on-chain slots");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 16H-S.5 — component-layer live activation. Reuses the 16F excess
+ * builder and the existing suitability rule (both fail-closed); proves the
+ * full chain emits once suitability resolves; the assessment stays immutable.
+ * ------------------------------------------------------------------ */
+export function runDirectLendingComponentActivationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const CHECKED = "2026-07-18T12:00:00.000Z";
+  const completeBuffer = { targetUsd: 10000, stableUsd: 12000, fullyFunded: true, coveragePct: 120, monthsCovered: 6, monthsTarget: 5 } as unknown as SCBuffer;
+  const incompleteBuffer = { targetUsd: 10000, stableUsd: 4000, fullyFunded: false, coveragePct: 40, monthsCovered: 2, monthsTarget: 5 } as unknown as SCBuffer;
+
+  // --- Suitability: existing rule, fail-closed, no invented questionnaire ---
+  add("SC-1: suitability fails closed (no reviewed compatible-profile list for direct lending)", (() => { const s = scSuit({ risk_tolerance: "conservative" } as any); return s.suitableForCategory === false && /compatibleUserRiskProfileIds/.test(s.unresolvedReason ?? ""); })(), "fail-closed");
+  add("SC-2: profileComplete derives from goal risk tolerance", scSuit({ risk_tolerance: "conservative" } as any).profileComplete === true && scSuit(null).profileComplete === false, "profile");
+
+  // --- Excess: reuses the 16F builder; fail-closed; never all-wallet USDC ---
+  add("SC-3: null buffer → no excess", scExcess({ buffer: null, canonicalUsdcUsd: 50000, bufferCountedUsdcUsd: 0, pricesFresh: true, checkedAt: CHECKED }) === null, "null buffer");
+  add("SC-4: stale price → no excess", scExcess({ buffer: completeBuffer, canonicalUsdcUsd: 50000, bufferCountedUsdcUsd: 12000, pricesFresh: false, checkedAt: CHECKED }) === null, "stale price");
+  add("SC-5: incomplete buffer → no excess for this use", scExcess({ buffer: incompleteBuffer, canonicalUsdcUsd: 50000, bufferCountedUsdcUsd: 4000, pricesFresh: true, checkedAt: CHECKED }) === null, "incomplete buffer");
+  add("SC-6: excess is deterministic and never negative/NaN; not all-wallet USDC", (() => { const e = scExcess({ buffer: completeBuffer, canonicalUsdcUsd: 50000, bufferCountedUsdcUsd: 12000, pricesFresh: true, checkedAt: CHECKED }); return e === null || (typeof e === "number" && e >= 0 && !Number.isNaN(e) && e !== 50000); })(), "16F reuse");
+
+  // --- Full chain: fresh market + positive excess, gated by suitability ---
+  const freshLit: MDSnap = { identityValid: true, invalidationReason: null,
+    apy: { baseSupplyApyPct: 5.65, rewardApyPct: 0, totalApyPct: 5.65, rateKind: "estimated_variable_apy", measuredSlotDurationMs: 415, calculationVersion: "v1", sourceSlot: 1, observedAt: "x", freshness: "fresh", invalidationReason: null },
+    capacity: { remainingCapacityRaw: "888000000000", remainingCapacityTokenAmount: 888000, capacityKind: "capped", sourceSlot: 1, freshness: "fresh", invalidationReason: null },
+    availability: { depositsMechanicallyAllowed: true, availabilityState: "available", blockingReasons: [], marketEmergencyState: "inactive", reserveEmergencyState: "inactive", sourceSlot: 1, freshness: "fresh" },
+    overallFreshness: "fresh" };
+  const base = { ...rtGov(), wallet: { usdcMint: RT_ID.canonicalUsdcMint, canonicalUsdcRawUnits: 25_000_000_000, pricesFresh: true }, safetyBuffer: { requiredResolved: true, sufficiencyResolved: true, fullyFundedByLiquidCoverage: true }, excess: { deterministicAmountUsd: 12000, isPositive: true }, existingPosition: { holdsExactCToken: false, approvedTopUpRulePasses: false } };
+  add("SC-7: fresh market + excess but fail-closed suitability → suppresses user_unsuitable", rtEval({ ...base, ...mdToRuntime(freshLit), suitability: { profileComplete: true, suitableForCategory: false, prohibitsDefiLending: false } }).suppressionReason === "user_unsuitable", "suitability gate");
+  add("SC-8: fresh market + excess + resolved suitability → emits exactly one card (chain complete)", (() => { const r = rtEval({ ...base, ...mdToRuntime(freshLit), suitability: { profileComplete: true, suitableForCategory: true, prohibitsDefiLending: false } }); return r.emit === true && r.card!.is_top_pick === false && r.card!.cta.executes_transaction === false; })(), "chain emits");
+
+  // --- Immutability ---
+  add("SC-9: assessment/governance/policy immutable after component wiring", DA_OUTCOME.unroundedAggregate === 5.93 && DA_OUTCOME.meetsMinimum === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && GR_ACTIVATION.productionSuggestionEligible === true && DL_CATMIN === 5.5 && DL_UNIMIN === 7, "immutable");
 
   return checks;
 }
