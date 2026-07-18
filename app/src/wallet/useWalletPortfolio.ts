@@ -749,6 +749,14 @@ export function useWalletPortfolio(): WalletPortfolio {
         if (prices.size > 0) {
           merged = merged.map((p) => applyPrice(p, prices));
           pricedAsOf = Date.now();
+          // Step 17C — fill the Steakhouse existing-position USD from the fresh USDC price. applyPrice
+          // already set valueUsd (recognized); here recognized/liquid USD are derived from the token
+          // amounts × the fresh exact-mint price (never a $1 assumption). Stale price → USD stays null.
+          merged = merged.map((p) =>
+            p.candidateId === "kamino_steakhouse_usdc" && typeof p.priceUsd === "number"
+              ? { ...p, recognizedValueUsd: p.valueUsd ?? null, liquidValueUsd: typeof p.liquidUnderlyingAmount === "number" ? p.priceUsd * p.liquidUnderlyingAmount : null }
+              : p
+          );
         }
       }
 

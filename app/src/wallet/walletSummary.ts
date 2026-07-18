@@ -255,17 +255,33 @@ export function deriveStableValue(positions: WalletPosition[]): number {
   return positions.reduce((s, p) => s + stableValueOf(p), 0);
 }
 
+import { computeSafetyBufferCoverage, type SafetyBufferCoverageState } from "./safetyBufferCoverage";
+
 export interface SafetyBuffer {
-  /** Stablecoin reserve value (USD). */
+  /**
+   * Step 17B — the AUTHORITATIVE reserve value is now VERIFIED IMMEDIATELY-WITHDRAWABLE stable value
+   * (not recognized value). `stableUsd` mirrors `verifiedLiquidStableUsd` so every existing consumer of
+   * `stableUsd`/`fullyFunded` uses verified-liquid coverage with no change.
+   */
   stableUsd: number;
   /** Target reserve = monthlyExpenses × targetMonths. */
   targetUsd: number;
   targetMonths: number;
-  /** Coverage %, capped at 100 for the bar. */
+  /** Coverage %, capped at 100 for the bar (over verified-liquid value). */
   coveragePct: number;
-  /** Months of expenses covered by the reserve (uncapped). */
+  /** Months of expenses covered by the reserve (uncapped, verified-liquid). */
   monthsCovered: number;
+  /** True ONLY when coverageState === "complete" (verified liquid ≥ target). */
   fullyFunded: boolean;
+  /** Step 17B — verified-liquid coverage breakdown (visible for explanation; drives completion).
+   *  Optional so existing SafetyBuffer literals stay valid; deriveSafetyBuffer always populates them. */
+  recognizedStableUsd?: number;
+  verifiedLiquidStableUsd?: number;
+  delayedStableUsd?: number;
+  unavailableStableUsd?: number;
+  unresolvedStableUsd?: number;
+  coverageState?: SafetyBufferCoverageState;
+  unresolvedReasons?: string[];
 }
 
 /**
@@ -284,8 +300,10 @@ export function deriveSafetyBuffer(
 ): SafetyBuffer | null {
   if (!(typeof monthlyExpenses === "number" && monthlyExpenses > 0)) return null;
   if (!(typeof targetMonths === "number" && targetMonths > 0)) return null;
-  const stableUsd = deriveStableValue(positions);
   const targetUsd = monthlyExpenses * targetMonths;
+  // Step 17B — completion is driven by VERIFIED IMMEDIATELY-WITHDRAWABLE value, not recognized value.
+  const coverage = computeSafetyBufferCoverage(positions, targetUsd);
+  const stableUsd = coverage.verifiedLiquidStableValueUsd; // authoritative reserve value
   const coveragePct = targetUsd > 0 ? Math.min(100, (stableUsd / targetUsd) * 100) : 0;
   const monthsCovered = stableUsd / monthlyExpenses;
   return {
@@ -294,6 +312,13 @@ export function deriveSafetyBuffer(
     targetMonths,
     coveragePct,
     monthsCovered,
-    fullyFunded: stableUsd >= targetUsd,
+    fullyFunded: coverage.fullyFunded, // === "complete" only
+    recognizedStableUsd: coverage.recognizedStableValueUsd,
+    verifiedLiquidStableUsd: coverage.verifiedLiquidStableValueUsd,
+    delayedStableUsd: coverage.delayedStableValueUsd,
+    unavailableStableUsd: coverage.unavailableStableValueUsd,
+    unresolvedStableUsd: coverage.unresolvedStableValueUsd,
+    coverageState: coverage.coverageState,
+    unresolvedReasons: coverage.unresolvedReasons,
   };
 }

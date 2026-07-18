@@ -101,6 +101,8 @@ export interface WalletPosition {
    */
   recognizedValueUsd?: number | null;
   liquidValueUsd?: number | null;
+  /** Step 17C — verified currently-withdrawable underlying token amount (for post-price liquid USD). */
+  liquidUnderlyingAmount?: number;
   /** User/diagnostic withdrawal state, e.g. "fully_withdrawable" | "currently_unavailable" | "stale". */
   withdrawalState?: string;
   /** True when the position is visible for existing holders but is not a new-capital suggestion source. */

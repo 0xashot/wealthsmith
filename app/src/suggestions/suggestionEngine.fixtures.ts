@@ -26,6 +26,14 @@ import { DIRECT_LENDING_PROFILE_TESTING_ROWS as AM_PROFILE_ROWS } from "./direct
 import { buildKlendDirectUsdcExistingPosition as epBuild, toWalletPosition as epToWallet, dedupeKlendDirectPosition as epDedupe, mergeKlendDirectPosition as epMerge, KLEND_DIRECT_POSITION_DEDUPE_KEY as EP_KEY, KLEND_DIRECT_POSITION_ID as EP_ID, type KlendDirectExistingPositionInput as EPInput } from "./klendDirectUsdcExistingPosition";
 import { POSITION_IDENTITY as EP_POS_ID, EXPECTED_TOKEN_PROGRAM_ID as EP_TOKPROG } from "./klendDirectLendingPosition";
 import { ONE_SF as EP_ONE_SF } from "./klendReserveCapacity";
+import { computeSafetyBufferCoverage as sbCoverage, classifyPositionCoverage as sbClassify } from "../wallet/safetyBufferCoverage";
+import { deriveSafetyBuffer as sbDerive } from "../wallet/walletSummary";
+import type { WalletPosition as SBPos } from "../wallet/walletPosition";
+import { buildSteakhouseExistingPosition as stBuild, toSteakhouseWalletPosition as stToWallet, mergeSteakhousePosition as stMerge, deriveReserveGate as stDeriveGate, STEAKHOUSE_IDENTITY as ST_ID, STEAKHOUSE_POSITION_DEDUPE_KEY as ST_KEY, STEAKHOUSE_POSITION_ID as ST_POS_ID, type SteakhousePositionInput as STInput, type ReserveGateInput as STGateInput } from "../wallet/steakhouseExistingPosition";
+// Step 17C.2 — source-backed binding: the INSTALLED KLend codegen decoder + config-update enum, so the
+// block_ctoken_usage fixtures assert against deployed definitions (not a name-inferred assumption).
+import { ReserveConfig as KLEND_RESERVE_CONFIG } from "@kamino-finance/klend-sdk/dist/@codegen/klend/types/ReserveConfig";
+import * as KLEND_UPDATE_CONFIG_MODE from "@kamino-finance/klend-sdk/dist/@codegen/klend/types/UpdateConfigMode";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17871,6 +17879,10 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runSteakhouseGateFixtureChecks(),
+    ...runSteakhouseBlockCtokenFixtureChecks(),
+    ...runSteakhouseExistingPositionFixtureChecks(),
+    ...runSafetyBufferCoverageFixtureChecks(),
     ...runKlendDirectPositionFailClosedFixtureChecks(),
     ...runKlendDirectExistingPositionFixtureChecks(),
     ...runDirectLendingProfileCompatibilityFixtureChecks(),
@@ -20425,6 +20437,263 @@ export function runKlendDirectPositionFailClosedFixtureChecks(): FixtureCheck[] 
   // --- Liquidity invariant + immutability + Safety Buffer unchanged ---
   add("FC-14: liquid raw never exceeds recognized raw (when both resolved)", (() => { const r = epBuild(inp()); return r.currentlyLiquidUnderlyingRaw !== null && r.recognizedUnderlyingRaw !== null && BigInt(r.currentlyLiquidUnderlyingRaw) <= BigInt(r.recognizedUnderlyingRaw); })(), "invariant");
   add("FC-15: Safety Buffer methodology unchanged; assessment/governance immutable; no tx behavior", DA_OUTCOME.unroundedAggregate === 5.93 && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && DL_CATMIN === 5.5 && DL_UNIMIN === 7 && (() => { const w = epToWallet(epBuild(inp({ reserve: null }))); return !!w && !("cta" in w); })(), "unchanged");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 17B — Safety Buffer verified-liquid coverage. Completion uses only
+ * fresh, verified, immediately-withdrawable stable capital. Recognized but
+ * delayed/unavailable/unresolved protocol value stays visible but cannot
+ * falsely complete the buffer. Target formula unchanged.
+ * ------------------------------------------------------------------ */
+export function runSafetyBufferCoverageFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const usdc = (v: number | null, over: Partial<SBPos> = {}): SBPos => ({ id: `usdc-${Math.random()}`, source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", amount: "1", detection: "direct_wallet_balance", valueUsd: v, ...over } as SBPos);
+  const kamino = (recognized: number | null, liquid: number | null, state: string): SBPos => ({ id: "klend-direct-x", source: "kamino", type: "protocol", symbol: "USDC", name: "Kamino Direct USDC", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", amount: "1", detection: "protocol_api", protocol: "Kamino", side: "supplied", valueUsd: recognized, recognizedValueUsd: recognized, liquidValueUsd: liquid, withdrawalState: state, existingPositionOnly: true, candidateId: "kamino_usdc_lending" } as SBPos);
+  const steak = (v: number | null): SBPos => ({ id: "steak-x", source: "kamino", type: "protocol", symbol: "USDC", name: "Steakhouse USDC", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", amount: "1", detection: "protocol_api", protocol: "Kamino", side: "supplied", valueUsd: v } as SBPos);
+  const cov = (positions: SBPos[], target: number) => sbCoverage(positions, target);
+
+  // --- Direct wallet ---
+  add("SB-1: exact recognized USDC (priced) counts as verified liquid", cov([usdc(6000)], 5000).verifiedLiquidStableValueUsd === 6000, "6000");
+  add("SB-2: symbol-only stable (Unknown token) does not count", cov([usdc(6000, { name: "Unknown token" })], 5000).verifiedLiquidStableValueUsd === 0, "excluded");
+  add("SB-3: stale price (valueUsd null) → no verified liquid, unresolved-magnitude unknown", (() => { const c = cov([usdc(null)], 5000); return c.verifiedLiquidStableValueUsd === 0 && c.hasUnknownUnresolvedMagnitude === true; })(), "stale");
+  add("SB-4: token marked non-transferable → excluded_unavailable, not liquid", sbClassify(usdc(6000, { withdrawalState: "currently_unavailable" })).inclusionState === "excluded_unavailable", "frozen");
+
+  // --- Kamino Direct ---
+  add("SB-5: Kamino full liquid counts; recognized-only does NOT complete", cov([kamino(6000, 6000, "fully_withdrawable")], 5000).verifiedLiquidStableValueUsd === 6000 && cov([kamino(6000, null, "unresolved")], 5000).verifiedLiquidStableValueUsd === 0, "full/none");
+  add("SB-6: Kamino partial liquid counts partially; delayed = recognized − liquid", (() => { const s = sbClassify(kamino(6000, 4000, "partially_withdrawable")); return s.verifiedLiquidValueUsd === 4000 && s.delayedValueUsd === 2000 && s.inclusionState === "included_partial"; })(), "partial");
+  add("SB-7: Kamino liquid null → unresolved (never zero-as-fact)", sbClassify(kamino(6000, null, "unresolved")).inclusionState === "excluded_unresolved", "unresolved");
+  add("SB-8: Kamino emergency paused → excluded_unavailable, zero liquid", (() => { const s = sbClassify(kamino(6000, null, "emergency_paused")); return s.verifiedLiquidValueUsd === 0 && s.inclusionState === "excluded_unavailable"; })(), "emergency");
+  add("SB-9: Kamino liquid never exceeds recognized (capped)", sbClassify(kamino(4000, 9999, "fully_withdrawable")).verifiedLiquidValueUsd === 4000, "capped");
+
+  // --- Steakhouse & other protocol ---
+  add("SB-10: Steakhouse recognized value alone does NOT count (no mounted methodology → unresolved)", (() => { const s = sbClassify(steak(10000)); return s.verifiedLiquidValueUsd === 0 && s.inclusionState === "excluded_unresolved" && s.unresolvedValueUsd === 10000; })(), "steak unresolved");
+  add("SB-11: debt never adds positive coverage", (() => { const s = sbClassify({ id: "d", source: "hubble", type: "protocol", symbol: "USDH", amount: "1", detection: "protocol_api", side: "borrowed", valueUsd: 5000 } as SBPos); return s.verifiedLiquidValueUsd === 0 && s.inclusionState === "excluded_unsupported"; })(), "debt");
+  add("SB-12: stable LP (both legs stable) does not count as liquid buffer", (() => { const s = sbClassify({ id: "lp", source: "orca", type: "protocol", symbol: "LP", amount: "1", detection: "protocol_api", protocol: "Orca", valueUsd: 8000, legs: [{ mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", uiAmount: 4000, side: "long" }, { mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", uiAmount: 4000, side: "long" }] } as SBPos); return s.verifiedLiquidValueUsd === 0; })(), "lp");
+
+  // --- Completion (interval reasoning) ---
+  add("SB-13: fullyFunded/shortfall use verified liquid only", (() => { const c = cov([usdc(6000)], 5000); return c.fullyFunded === true && c.shortfallUsd === 0 && cov([usdc(3000)], 5000).shortfallUsd === 2000; })(), "verified only");
+  add("SB-14: recognized above target but verified below → NOT complete", (() => { const c = cov([kamino(10000, null, "unresolved")], 5000); return c.recognizedStableValueUsd === 10000 && c.verifiedLiquidStableValueUsd === 0 && c.coverageState !== "complete"; })(), "recognized≠complete");
+  add("SB-15: verified ≥ target → complete", cov([usdc(6000)], 5000).coverageState === "complete", "complete");
+  add("SB-16: verified < target, all resolved → incomplete", cov([usdc(2000)], 5000).coverageState === "incomplete", "incomplete");
+  add("SB-17: verified < target but unresolved could close gap → unresolved", cov([usdc(2000), steak(10000)], 5000).coverageState === "unresolved", "unresolved");
+  add("SB-18: unrelated unresolved excess does NOT invalidate proven completion", cov([usdc(6000), steak(10000)], 5000).coverageState === "complete", "still complete");
+  add("SB-19: unresolved could-determine → unresolved not incomplete (Kamino recognized)", cov([usdc(2000), kamino(10000, null, "unresolved")], 5000).coverageState === "unresolved", "kamino unresolved");
+  add("SB-20: required buffer zero → complete", cov([], 0).coverageState === "complete" && cov([], 0).fullyFunded === true, "zero target");
+  add("SB-21: no stable positions → incomplete (target>0)", cov([], 5000).coverageState === "incomplete", "none");
+  add("SB-22: negative/malformed valueUsd rejected (not counted)", cov([usdc(-100 as number), usdc(3000)], 5000).verifiedLiquidStableValueUsd === 3000, "negative rejected");
+
+  // --- deriveSafetyBuffer wiring ---
+  add("SB-23: deriveSafetyBuffer uses verified liquid for fullyFunded + exposes breakdown", (() => { const b = sbDerive([usdc(2000), steak(10000)], 1000, 5); return !!b && b.fullyFunded === false && b.coverageState === "unresolved" && b.stableUsd === 2000 && b.recognizedStableUsd === 12000 && b.verifiedLiquidStableUsd === 2000; })(), "wired");
+  add("SB-24: direct-wallet-USDC user unchanged (still complete)", (() => { const b = sbDerive([usdc(6000)], 1000, 5); return !!b && b.fullyFunded === true && b.stableUsd === 6000; })(), "unchanged");
+
+  // --- Downstream suppression (incomplete/unresolved buffer) ---
+  add("SB-25: incomplete/unresolved buffer suppresses Kamino suggestion (fullyFunded false)", (() => { const inc = sbDerive([usdc(2000)], 1000, 5); const unr = sbDerive([usdc(2000), steak(10000)], 1000, 5); return inc?.fullyFunded === false && unr?.fullyFunded === false; })(), "suppressed");
+
+  // --- Immutability ---
+  add("SB-26: no target-formula change; assessment/governance/policy immutable; Steakhouse/Jupiter unchanged", (() => { const b = sbDerive([usdc(3000)], 1000, 5); return b?.targetUsd === 5000 && DA_OUTCOME.unroundedAggregate === 5.93 && DL_CATMIN === 5.5 && DL_UNIMIN === 7 && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions"; })(), "immutable");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 17C — Steakhouse verified immediate-withdrawal adapter. Recognized vs
+ * verified-liquid separated (liquid = min(recognized, vault max-instant));
+ * fail-closed; flows through 17B coverage; Steakhouse stays existing-only.
+ * ------------------------------------------------------------------ */
+export function runSteakhouseExistingPositionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const inp = (over: Partial<STInput> = {}): STInput => ({
+    totalShareRaw: "5000000000", recognizedUnderlyingRaw: "10000000000", vaultMaxInstantWithdrawableRaw: "999999999999",
+    vaultGate: "permitted", reserveGate: "permitted", vaultFresh: true,
+    price: { usdcPriceUsd: 0.9998, fresh: true }, apy: { valuePct: 5.2, fresh: true },
+    observedAt: "2026-07-18T12:00:00.000Z", sourceSlot: 433465111, ...over,
+  });
+
+  // --- Recognition + full/partial/unavailable liquidity ---
+  add("ST-1: full vault liquidity → fully_withdrawable, liquid == recognized", (() => { const r = stBuild(inp()); return r.positionExists === true && r.withdrawalState === "fully_withdrawable" && r.currentlyLiquidUnderlyingRaw === r.recognizedUnderlyingRaw && r.enrichmentState === "complete"; })(), "full");
+  add("ST-2: partial vault liquidity → partially_withdrawable; delayed = recognized − liquid", (() => { const r = stBuild(inp({ vaultMaxInstantWithdrawableRaw: "4000000000" })); return r.withdrawalState === "partially_withdrawable" && r.currentlyLiquidUnderlyingRaw === "4000000000" && r.delayedUnderlyingRaw === "6000000000"; })(), "partial");
+  add("ST-3: zero instant liquidity → currently_unavailable; recognized still visible", (() => { const r = stBuild(inp({ vaultMaxInstantWithdrawableRaw: "0" })); return r.withdrawalState === "currently_unavailable" && r.currentlyLiquidUnderlyingRaw === "0" && r.recognizedUnderlyingRaw === "10000000000"; })(), "unavailable");
+  add("ST-4: vault max-instant UNRESOLVED (null) → unresolved liquid, recognized visible", (() => { const r = stBuild(inp({ vaultMaxInstantWithdrawableRaw: null })); return r.withdrawalState === "unresolved" && r.currentlyLiquidUnderlyingRaw === null && r.liquidValueUsd === null && r.recognizedUnderlyingRaw === "10000000000" && r.enrichmentState === "recognized_only"; })(), "unresolved liquid");
+
+  // --- Paused / emergency / stale → no verified liquid ---
+  add("ST-5: vault paused → paused, zero verified liquid, recognized visible", (() => { const r = stBuild(inp({ vaultGate: "paused" })); return r.withdrawalState === "paused" && r.currentlyLiquidUnderlyingRaw === null && r.recognizedUnderlyingRaw === "10000000000"; })(), "paused");
+  add("ST-6: reserve emergency → emergency_paused, zero verified liquid", (() => { const r = stBuild(inp({ reserveGate: "emergency_paused" })); return r.withdrawalState === "emergency_paused" && r.currentlyLiquidUnderlyingRaw === null; })(), "emergency");
+  add("ST-7: stale vault/reserve state → stale, zero verified liquid", (() => { const r = stBuild(inp({ vaultFresh: false })); return r.withdrawalState === "stale" && r.currentlyLiquidUnderlyingRaw === null; })(), "stale");
+
+  // --- Fail-closed invariants ---
+  add("ST-8: shares valid but recognition unresolved → position visible, recognized null, unresolved", (() => { const r = stBuild(inp({ recognizedUnderlyingRaw: null })); return r.positionExists === true && r.totalShareRaw === "5000000000" && r.recognizedUnderlyingRaw === null && r.recognizedValueUsd === null && r.enrichmentState === "unresolved"; })(), "recognition unresolved");
+  add("ST-9: liquid never exceeds recognized (huge vault max capped)", (() => { const r = stBuild(inp({ recognizedUnderlyingRaw: "3000000000", vaultMaxInstantWithdrawableRaw: "999999999999" })); return r.currentlyLiquidUnderlyingRaw === "3000000000"; })(), "capped");
+  add("ST-10: zero shares → no position", stBuild(inp({ totalShareRaw: "0" })).positionExists === false, "no position");
+  add("ST-11: fresh price → recognized/liquid USD; stale price → tokens visible, USD null", (() => { const fresh = stBuild(inp()); const stale = stBuild(inp({ price: { usdcPriceUsd: null, fresh: false } })); return fresh.recognizedValueUsd !== null && fresh.liquidValueUsd !== null && stale.recognizedUnderlyingRaw === "10000000000" && stale.recognizedValueUsd === null && stale.liquidValueUsd === null; })(), "price");
+
+  // --- Normalization + dedup ---
+  add("ST-12: canonical WalletPosition: existing-only, withdrawalState, dedupe key, mint USDC", (() => { const w = stToWallet(stBuild(inp())); return !!w && w.candidateId === "kamino_steakhouse_usdc" && w.existingPositionOnly === true && w.dedupeKey === ST_KEY && w.mint === ST_ID.usdcMint && typeof w.liquidValueUsd === "number" && !("cta" in w); })(), "normalized");
+  add("ST-13: generic share/farm-receipt row (share mint) deduped; canonical + others kept", (() => {
+    const share = { id: "share", source: "wallet", type: "token", symbol: "?", mint: ST_ID.shareMint, amount: "5000000000", detection: "direct_wallet_balance" } as any;
+    const other = { id: "kamino-vault-Other", source: "kamino", type: "protocol", amount: "", detection: "protocol_api" } as any;
+    const merged = stMerge([share, other], stBuild(inp()));
+    return merged.filter((p) => p.id === ST_POS_ID).length === 1 && !merged.some((p) => p.mint === ST_ID.shareMint) && merged.some((p) => p.id === other.id);
+  })(), "deduped");
+  add("ST-14: merge yields exactly one Steakhouse row", (() => { const m = stMerge([{ id: "share", source: "wallet", type: "token", symbol: "?", mint: ST_ID.shareMint, amount: "1", detection: "direct_wallet_balance" } as any], stBuild(inp())); return m.filter((p) => p.id === ST_POS_ID).length === 1; })(), "one row");
+
+  // --- 17B Safety Buffer integration ---
+  add("ST-15: full verified liquid counts toward buffer (17B included_liquid)", sbClassify(stToWallet(stBuild(inp()))!).inclusionState === "included_liquid", "counts");
+  add("ST-16: partial verified liquid counts partially", (() => { const s = sbClassify(stToWallet(stBuild(inp({ vaultMaxInstantWithdrawableRaw: "4000000000" })))!); return s.inclusionState === "included_partial" && s.verifiedLiquidValueUsd > 0 && s.delayedValueUsd > 0; })(), "partial");
+  add("ST-17: recognized-only (unresolved liquid) → 0 verified, excluded_unresolved", (() => { const s = sbClassify(stToWallet(stBuild(inp({ vaultMaxInstantWithdrawableRaw: null })))!); return s.verifiedLiquidValueUsd === 0 && s.inclusionState === "excluded_unresolved"; })(), "unresolved");
+  add("ST-18: emergency → 0 verified, excluded_unavailable", (() => { const s = sbClassify(stToWallet(stBuild(inp({ reserveGate: "emergency_paused" })))!); return s.verifiedLiquidValueUsd === 0 && s.inclusionState === "excluded_unavailable"; })(), "emergency");
+  add("ST-19: direct-wallet buffer already ≥ target stays complete despite unresolved Steakhouse", (() => {
+    const usdc = { id: "u", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: ST_ID.usdcMint, amount: "1", detection: "direct_wallet_balance", valueUsd: 6000 } as any;
+    const steak = stToWallet(stBuild(inp({ vaultMaxInstantWithdrawableRaw: null })))!;
+    return sbCoverage([usdc, steak], 5000).coverageState === "complete";
+  })(), "still complete");
+
+  // --- Immutability + existing-position-only ---
+  add("ST-20: Steakhouse stays existing_position_only, not selector/Top-Pick eligible; scores immutable", dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("kamino_steakhouse_usdc")?.selectorEligibility === false && dlGetDispo("kamino_steakhouse_usdc")?.topPickEligibility === false && DA_OUTCOME.unroundedAggregate === 5.93 && DL_CATMIN === 5.5 && DL_UNIMIN === 7, "existing-only");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 17C.1 — Steakhouse vault/reserve gate verification. No positive
+ * verified liquid may depend on an assumed-false pause/emergency; every gate
+ * is explicitly permitted, blocking, or fail-closed unresolved.
+ * ------------------------------------------------------------------ */
+export function runSteakhouseGateFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const g = (over: Partial<STInput> = {}): STInput => ({
+    totalShareRaw: "5000000000", recognizedUnderlyingRaw: "10000000000", vaultMaxInstantWithdrawableRaw: "999999999999",
+    vaultGate: "permitted", reserveGate: "permitted", vaultFresh: true,
+    price: { usdcPriceUsd: 0.9998, fresh: true }, apy: { valuePct: 5.2, fresh: true },
+    observedAt: "2026-07-18T12:00:00.000Z", sourceSlot: 433465111, ...over,
+  });
+
+  // --- Gate model replaces hardcoded booleans (compile-time proof: input requires gate states) ---
+  add("GT-1: input uses explicit gate states (no vaultPaused/reserveEmergency booleans)", (() => { const r = g(); return typeof r.vaultGate === "string" && typeof r.reserveGate === "string" && !("vaultPaused" in r) && !("reserveEmergency" in r); })(), "gate model");
+
+  // --- Vault gate (KVault has no pause field → permitted is PROVEN) ---
+  add("GT-2: vault permitted + reserves permitted → verified liquid possible", stBuild(g()).withdrawalState === "fully_withdrawable" && stBuild(g()).currentlyLiquidUnderlyingRaw === "10000000000", "permitted liquidity");
+  add("GT-3: vault paused → paused, zero verified liquid, recognized visible", (() => { const r = stBuild(g({ vaultGate: "paused" })); return r.withdrawalState === "paused" && r.currentlyLiquidUnderlyingRaw === null && r.liquidValueUsd === null && r.recognizedUnderlyingRaw === "10000000000"; })(), "paused");
+  add("GT-4: unknown vault gate → unresolved, null liquid (never treated as permitted)", (() => { const r = stBuild(g({ vaultGate: "unresolved" })); return r.withdrawalState === "unresolved" && r.currentlyLiquidUnderlyingRaw === null; })(), "vault unknown");
+  add("GT-5: stale vault gate → stale, null liquid", stBuild(g({ vaultGate: "stale" })).currentlyLiquidUnderlyingRaw === null, "vault stale");
+
+  // --- Reserve gate ---
+  add("GT-6: reserve emergency → no verified liquid from vault; recognized visible", (() => { const r = stBuild(g({ reserveGate: "emergency_paused" })); return r.withdrawalState === "emergency_paused" && r.currentlyLiquidUnderlyingRaw === null && r.recognizedUnderlyingRaw === "10000000000"; })(), "reserve emergency");
+  add("GT-7: reserve withdrawal_blocked → no verified liquid", stBuild(g({ reserveGate: "withdrawal_blocked" })).currentlyLiquidUnderlyingRaw === null, "blocked");
+  add("GT-8: unknown material reserve gate → unresolved, null liquid", (() => { const r = stBuild(g({ reserveGate: "unresolved" })); return r.withdrawalState === "unresolved" && r.currentlyLiquidUnderlyingRaw === null; })(), "reserve unknown");
+  add("GT-9: stale reserve gate → stale, null liquid", stBuild(g({ reserveGate: "stale" })).currentlyLiquidUnderlyingRaw === null, "reserve stale");
+
+  // --- Positive liquidity impossible when any applicable gate is not permitted+resolved ---
+  add("GT-10: positive liquidity impossible unless BOTH gates permitted + fresh + resolved", (() => {
+    const blocked = [{ vaultGate: "paused" as const }, { vaultGate: "unresolved" as const }, { vaultGate: "stale" as const }, { reserveGate: "emergency_paused" as const }, { reserveGate: "withdrawal_blocked" as const }, { reserveGate: "unresolved" as const }, { reserveGate: "stale" as const }, { vaultFresh: false }, { vaultMaxInstantWithdrawableRaw: null }];
+    return blocked.every((o) => stBuild(g(o)).currentlyLiquidUnderlyingRaw === null && stBuild(g(o)).liquidValueUsd === null);
+  })(), "no positive on any gate");
+  add("GT-11: recognized value + share ownership survive every gate failure", stBuild(g({ vaultGate: "paused" })).recognizedUnderlyingRaw === "10000000000" && stBuild(g({ reserveGate: "unresolved" })).totalShareRaw === "5000000000" && stBuild(g({ reserveGate: "emergency_paused" })).positionExists === true, "recognized survives");
+
+  // --- Safety Buffer counts corrected amount only ---
+  add("GT-12: paused/emergency → 0 verified-liquid coverage; unresolved → excluded_unresolved", (() => {
+    const paused = sbClassify(stToWallet(stBuild(g({ vaultGate: "paused" })))!);
+    const emerg = sbClassify(stToWallet(stBuild(g({ reserveGate: "emergency_paused" })))!);
+    const unres = sbClassify(stToWallet(stBuild(g({ reserveGate: "unresolved" })))!);
+    return paused.verifiedLiquidValueUsd === 0 && emerg.verifiedLiquidValueUsd === 0 && unres.inclusionState === "excluded_unresolved";
+  })(), "buffer corrected");
+  add("GT-13: permitted gates + fresh → verified liquid counts (included_liquid)", sbClassify(stToWallet(stBuild(g()))!).inclusionState === "included_liquid", "counts when permitted");
+
+  // --- Immutability / existing-only ---
+  add("GT-14: Steakhouse existing-only unchanged; no transaction behaviour", dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("kamino_steakhouse_usdc")?.selectorEligibility === false && (() => { const w = stToWallet(stBuild(g())); return !!w && !("cta" in w); })() && DA_OUTCOME.unroundedAggregate === 5.93 && DL_CATMIN === 5.5, "unchanged");
+
+  return checks;
+}
+
+/**
+ * Step 17C.2 — block_ctoken_usage applicability + final reserve-gate completion. Binds the gate decision to
+ * the INSTALLED KLend decoder (ReserveConfig borsh layout) and the KVault withdrawal-path account model.
+ */
+export function runSteakhouseBlockCtokenFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  // A single MATERIAL reserve with all gates clear except the field under test.
+  const R = (over: Partial<STGateInput> = {}): STGateInput => ({
+    reserveAddress: "Reserve1111111111111111111111111111111111111", ctokenAllocation: "1000000000",
+    status: 0, emergencyMode: 0, blockCtokenUsage: 0, lendingMarket: "Market111111111111111111111111111111111111",
+    marketEmergency: false, sourceSlot: 433465111, fresh: true, ...over,
+  });
+  // Adapter input pinned to a decoded reserveGate (the mount folds deriveReserveGate() into this single gate).
+  const stInp = (reserveGate: STInput["reserveGate"]): STInput => ({
+    totalShareRaw: "5000000000", recognizedUnderlyingRaw: "10000000000", vaultMaxInstantWithdrawableRaw: "999999999999",
+    vaultGate: "permitted", reserveGate, vaultFresh: true,
+    price: { usdcPriceUsd: 0.9998, fresh: true }, apy: { valuePct: 5.2, fresh: true },
+    observedAt: "2026-07-18T12:00:00.000Z", sourceSlot: 433465111,
+  });
+
+  // --- Source-backed semantics (installed definitions, not name inference) ---
+  const layoutFields: string[] = (() => {
+    try { const l: any = (KLEND_RESERVE_CONFIG as any).layout?.("x") ?? (KLEND_RESERVE_CONFIG as any).layout?.(); return (l?.fields ?? []).map((f: any) => f?.property).filter((s: any) => typeof s === "string"); }
+    catch { return []; }
+  })();
+  add("BC-1: block_ctoken_usage is a decoded u8 field of the INSTALLED KLend ReserveConfig layout", layoutFields.includes("blockCtokenUsage") && layoutFields.includes("emergencyMode") && layoutFields.includes("status"), `layout fields: ${layoutFields.length}`);
+  add("BC-2: installed KLend config-update enum exposes UpdateBlockCTokenUsage (a governed reserve gate)", (KLEND_UPDATE_CONFIG_MODE as any).UpdateBlockCTokenUsage?.kind === "UpdateBlockCTokenUsage", "update-mode variant present");
+
+  // --- Applicability is explicit, not inferred ---
+  add("BC-3: every material reserve is marked block_ctoken_usage APPLICABLE (explicit)", (() => { const { breakdown } = stDeriveGate([R()]); return breakdown.length === 1 && breakdown[0].blockCtokenApplicable === "applicable"; })(), "explicit applicable");
+
+  // --- Applicable + disabled → permitted (further evaluation allowed) ---
+  add("BC-4: applicable + disabled (flag=0) + all gates clear → reserve gate permitted", (() => { const d = stDeriveGate([R({ blockCtokenUsage: 0 })]); return d.gate === "permitted" && d.breakdown[0].blockCtokenValue === "disabled" && d.breakdown[0].combinedGate === "permitted"; })(), "disabled → permitted");
+
+  // --- Applicable + enabled → blocked reserve ---
+  add("BC-5: applicable + enabled (flag≠0) → combined gate withdrawal_blocked", (() => { const d = stDeriveGate([R({ blockCtokenUsage: 1 })]); return d.gate === "withdrawal_blocked" && d.breakdown[0].blockCtokenValue === "enabled" && d.breakdown[0].combinedGate === "withdrawal_blocked" && d.breakdown[0].limitingCondition === "block_ctoken_usage enabled"; })(), "enabled → blocked");
+  add("BC-5b: any non-zero flag value blocks (e.g. 2)", stDeriveGate([R({ blockCtokenUsage: 2 })]).gate === "withdrawal_blocked", "u8 non-zero blocks");
+
+  // --- Unresolved applicability/value → unresolved (never assumed disabled) ---
+  add("BC-6: missing block_ctoken_usage (null) → unresolved, NOT treated as disabled", (() => { const d = stDeriveGate([R({ blockCtokenUsage: null })]); return d.gate === "unresolved" && d.breakdown[0].blockCtokenValue === "unresolved" && d.breakdown[0].limitingCondition === "block_ctoken_usage unresolved"; })(), "null → unresolved");
+
+  // --- Non-material reserve ignored ---
+  add("BC-7: non-material reserve (allocation 0) with flag enabled is ignored (not material)", (() => { const d = stDeriveGate([R({ ctokenAllocation: 0, blockCtokenUsage: 1 })]); return d.gate === "permitted" && d.breakdown.length === 0; })(), "immaterial ignored");
+
+  // --- Blocked reserve contributes no immediate liquidity (adapter) ---
+  add("BC-8: blocked reserve → no verified immediate liquidity from that reserve", stBuild(stInp("withdrawal_blocked")).currentlyLiquidUnderlyingRaw === null, "blocked → null liquid");
+  add("BC-9: material blocked reserve → whole-position fails closed (liquid null, recognized visible)", (() => { const r = stBuild(stInp("withdrawal_blocked")); return r.currentlyLiquidUnderlyingRaw === null && r.liquidValueUsd === null && r.recognizedUnderlyingRaw === "10000000000" && r.positionExists === true; })(), "whole-position closed");
+
+  // --- Idle-liquidity: no partial estimate even though vaultMax > 0 (fail-closed) ---
+  add("BC-10: blocked reserve → NO partial idle amount estimated despite positive vaultMax", (() => { const r = stBuild(stInp("withdrawal_blocked")); return r.currentlyLiquidUnderlyingRaw === null && r.currentlyLiquidUnderlyingAmount === null; })(), "no idle estimate");
+
+  // --- Recognized survives; liquid never exceeds recognized ---
+  add("BC-11: recognized value + shares survive a blocked gate", (() => { const r = stBuild(stInp("withdrawal_blocked")); return r.recognizedUnderlyingRaw === "10000000000" && r.totalShareRaw === "5000000000"; })(), "recognized survives");
+  add("BC-12: liquid never exceeds recognized (permitted path: min(vaultMax, recognized))", (() => { const r = stBuild(stInp("permitted")); return r.currentlyLiquidUnderlyingRaw === "10000000000"; })(), "min cap");
+
+  // --- Safety Buffer counts only corrected amount ---
+  add("BC-13: Safety Buffer — blocked reserve yields 0 verified-liquid coverage; permitted counts", (() => {
+    const blocked = sbClassify(stToWallet(stBuild(stInp("withdrawal_blocked")))!);
+    const ok = sbClassify(stToWallet(stBuild(stInp("permitted")))!);
+    return blocked.verifiedLiquidValueUsd === 0 && ok.inclusionState === "included_liquid";
+  })(), "buffer corrected");
+
+  // --- Multi-reserve: first blocker sets combined gate; breakdown records all material reserves ---
+  add("BC-14: multi-reserve — one enabled flag blocks the whole vault; breakdown records every material reserve", (() => {
+    const d = stDeriveGate([R({ reserveAddress: "A" }), R({ reserveAddress: "B", blockCtokenUsage: 1 }), R({ reserveAddress: "C" })]);
+    return d.gate === "withdrawal_blocked" && d.breakdown.length === 3 && d.breakdown.find((e) => e.reserveAddress === "B")?.combinedGate === "withdrawal_blocked";
+  })(), "first blocker wins");
+  add("BC-15: combined gate permitted ONLY when every material reserve permitted", (() => {
+    const allOk = stDeriveGate([R({ reserveAddress: "A" }), R({ reserveAddress: "B" })]).gate === "permitted";
+    const oneBad = stDeriveGate([R({ reserveAddress: "A" }), R({ reserveAddress: "B", blockCtokenUsage: null })]).gate !== "permitted";
+    return allOk && oneBad;
+  })(), "all-or-nothing");
+
+  // --- No assumed default false; other gates still enforced alongside block flag ---
+  add("BC-16: block flag decoded independently of status/emergency (both still enforced)", (() => {
+    const emerg = stDeriveGate([R({ emergencyMode: 1, blockCtokenUsage: 0 })]).gate === "emergency_paused";
+    const mkt = stDeriveGate([R({ marketEmergency: true, blockCtokenUsage: 0 })]).gate === "emergency_paused";
+    return emerg && mkt;
+  })(), "gates independent");
+
+  // --- Immutability: no eligibility, no transaction behaviour ---
+  add("BC-17: Steakhouse remains existing-only; selector/Top-Pick false; score/threshold immutable", dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("kamino_steakhouse_usdc")?.selectorEligibility === false && DA_OUTCOME.unroundedAggregate === 5.93 && DL_CATMIN === 5.5, "existing-only");
+  add("BC-18: mapped position has no cta/transaction affordance", (() => { const w = stToWallet(stBuild(stInp("permitted"))); return !!w && !("cta" in w) && !("signature" in w) && !("transaction" in w); })(), "no tx");
 
   return checks;
 }

@@ -18,6 +18,7 @@
 import * as klend from "@kamino-finance/klend-sdk";
 import { createSolanaRpc, address } from "@solana/kit";
 import { lookupMint, shortMint, type WalletPosition } from "./walletPosition";
+import { STEAKHOUSE_IDENTITY, buildSteakhouseExistingPosition, toSteakhouseWalletPosition, deriveReserveGate, type ReserveWithdrawalGate, type SteakhouseReserveEntry, type ReserveGateInput } from "./steakhouseExistingPosition";
 
 /**
  * Slot duration (ms) is MEASURED, never assumed. The SDK scales slot-age math by
@@ -82,6 +83,9 @@ export async function fetchKaminoVaultPositions(
 
     let mint: string | undefined;
     let vaultName: string | undefined;
+    let steakhouseVaultMaxRaw: string | null = null;
+    let steakhouseReserveGate: ReserveWithdrawalGate = "unresolved"; // fail-closed default
+    const steakhouseBreakdown: SteakhouseReserveEntry[] = [];
     let uiAmount: number | undefined;
     let apy: number | undefined;
     try {
@@ -105,6 +109,54 @@ export async function fetchKaminoVaultPositions(
           uiAmount = Number(shares.totalShares.mul(tokensPerShare));
           const apys = await client.getVaultActualAPY(state, currentSlot, reserves);
           apy = Number(apys.netAPY) * 100;
+          // Step 17C — for the EXACT approved Steakhouse vault, capture the deployed-program maximum
+          // instant-withdrawable amount (idle + per-reserve available, capped by the vault's claim).
+          // Guarded → null (UNRESOLVED) on any failure; never a positive estimate.
+          if (vaultAddress.toString() === STEAKHOUSE_IDENTITY.vaultAddress) {
+            try { steakhouseVaultMaxRaw = (await client.getMaxInstantWithdrawableAmount(state, currentSlot, reserves)).floor().toString(); } catch { steakhouseVaultMaxRaw = null; }
+            // Step 17C.1/17C.2 — getMaxInstantWithdrawableAmount does NOT gate on reserve status,
+            // emergency mode, or block_ctoken_usage (verified: vault.js references none of them; reserve.js
+            // references blockCtokenUsage only in the config-UPDATE builder, never in liquidity math). So we
+            // decode all of them explicitly per MATERIAL reserve (ctokenAllocation > 0), plus each market's
+            // emergency mode. block_ctoken_usage is treated as APPLICABLE because the KVault `withdraw`
+            // instruction's withdrawFromReserveAccounts context redeems the reserve's cTokens (accounts:
+            // reserve, ctokenVault, reserveCollateralMint, reserveLiquiditySupply, klendProgram) to source
+            // underlying beyond idle; the client SDK cannot prove the on-chain redemption CPI ignores the
+            // flag, so an enabled flag ⇒ withdrawal_blocked. Any blocking → block/emergency; any undecodable
+            // → unresolved. Never assumed permitted. The whole position fails closed on any blocking reserve
+            // because the aggregate max-instant sum cannot be safely decomposed to isolate idle liquidity.
+            try {
+              // Gather raw config for every MATERIAL reserve (ctokenAllocation > 0), resolve each distinct
+              // market's emergency mode, then derive the combined gate + breakdown via the pure fail-closed
+              // helper. Missing values pass as null → unresolved (never coerced permissive).
+              const marketEmergency = new Map<string, boolean | null>();
+              const gateInputs: ReserveGateInput[] = [];
+              for (const alloc of (state as any).vaultAllocationStrategy ?? []) {
+                const rAddr = alloc?.reserve?.toString?.();
+                if (!rAddr || rAddr === "11111111111111111111111111111111" || !(Number(alloc?.ctokenAllocation ?? 0) > 0)) continue; // not material
+                const reserve: any = (reserves as any).get?.(alloc.reserve);
+                const mktAddr = reserve?.state?.lendingMarket?.toString?.() ?? null;
+                if (mktAddr && !marketEmergency.has(mktAddr)) {
+                  try { const mkt: any = await (klend as any).LendingMarket?.fetch?.(rpc, address(mktAddr)); marketEmergency.set(mktAddr, mkt ? Number(mkt.emergencyMode ?? mkt.data?.emergencyMode ?? 0) !== 0 : null); }
+                  catch { marketEmergency.set(mktAddr, null); }
+                }
+                gateInputs.push({
+                  reserveAddress: rAddr,
+                  ctokenAllocation: alloc?.ctokenAllocation ?? null,
+                  status: reserve?.state?.config?.status ?? null,
+                  emergencyMode: reserve?.state?.config?.emergencyMode ?? null,
+                  blockCtokenUsage: reserve?.state?.config?.blockCtokenUsage ?? null,
+                  lendingMarket: mktAddr,
+                  marketEmergency: mktAddr ? (marketEmergency.get(mktAddr) ?? null) : null,
+                  sourceSlot: currentSlot != null ? Number(currentSlot) : 0,
+                  fresh: currentSlot != null,
+                });
+              }
+              const derived = deriveReserveGate(gateInputs);
+              steakhouseReserveGate = derived.gate;
+              steakhouseBreakdown.push(...derived.breakdown);
+            } catch { steakhouseReserveGate = "unresolved"; }
+          }
         } catch {
           // amount/apy are best-effort
         }
@@ -114,6 +166,31 @@ export async function fetchKaminoVaultPositions(
     }
 
     const known = mint ? lookupMint(mint) : undefined;
+
+    // Step 17C — the exact Steakhouse vault gets a canonical existing-position with SEPARATE recognized
+    // and verified currently-withdrawable values (fail-closed). USD is applied later (post-price) from
+    // the token amounts; here recognized/liquid USD stay null.
+    if (vaultAddress.toString() === STEAKHOUSE_IDENTITY.vaultAddress) {
+      const recognizedRaw = uiAmount != null && Number.isFinite(uiAmount) ? BigInt(Math.round(uiAmount * 1e6)).toString() : null;
+      const record = buildSteakhouseExistingPosition({
+        totalShareRaw: shares.totalShares.toString(),
+        recognizedUnderlyingRaw: recognizedRaw,
+        vaultMaxInstantWithdrawableRaw: steakhouseVaultMaxRaw,
+        // 17C.1 — vault gate is PROVEN permitted: the KVault VaultState (SDK 9.1.2) has no pause/withdrawal-
+        // disable field (only minWithdrawAmount + withdrawalPenalty). Reserve gate is DECODED, fail-closed.
+        vaultGate: "permitted",
+        reserveGate: steakhouseReserveGate,
+        perReserveBreakdown: steakhouseBreakdown,
+        vaultFresh: currentSlot != null && uiAmount != null,
+        price: { usdcPriceUsd: null, fresh: false },
+        apy: { valuePct: apy ?? null, fresh: apy != null },
+        observedAt: new Date().toISOString(),
+        sourceSlot: currentSlot != null ? Number(currentSlot) : 0,
+      });
+      const wp = toSteakhouseWalletPosition(record, { name: vaultName ?? known?.name, icon: known?.icon });
+      if (wp) { positions.push({ ...wp, liquidUnderlyingAmount: record.currentlyLiquidUnderlyingAmount ?? undefined }); continue; }
+    }
+
     positions.push({
       id: `kamino-vault-${vaultAddress.toString()}`,
       source: "kamino",
