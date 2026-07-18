@@ -48,6 +48,7 @@ import {
   type JupiterLendTokenAccountInput,
 } from "./jupiterLendExistingPosition";
 import { resolveJupiterLendExchangeRate } from "./jupiterLendShareAccounting";
+import { applyToken2022Assessment, type Token2022PositionResult } from "./token2022PositionAssessment";
 import type { VrtInfo } from "./jitoRestaking";
 import type { SanctumLstInfo } from "./sanctumLsts";
 import {
@@ -73,6 +74,7 @@ interface PortfolioState {
 
 /** Loosely-typed parsed token account — validated defensively before use. */
 interface ParsedTokenAccount {
+  pubkey?: { toBase58?: () => string } | string;
   account?: {
     data?: {
       parsed?: {
@@ -109,6 +111,7 @@ type ReadName =
   | "meteora_dlmm"
   | "meteora_damm"
   | "hubble"
+  | "token_2022_assess"
   | "token_prices";
 
 /**
@@ -232,6 +235,15 @@ async function loadHubbleLoans(
 ): Promise<WalletPosition[]> {
   const mod = await import("./hubble");
   return mod.fetchHubbleLoans(connection, ownerB58);
+}
+
+/** Step 17E — Token-2022 transferability assessments (per mint), via a code-split dynamic import. */
+async function loadToken2022Assessments(
+  connection: Connection,
+  accounts: Array<{ address: string; mint: string }>
+): Promise<Map<string, Token2022PositionResult>> {
+  const mod = await import("./token2022Enrichment");
+  return mod.fetchToken2022Assessments(connection, accounts);
 }
 
 /** Canonical wrapped-SOL mint — prices native SOL and native stake. */
@@ -766,6 +778,13 @@ export function useWalletPortfolio(): WalletPortfolio {
               ? { ...p, recognizedValueUsd: p.valueUsd ?? null, liquidValueUsd: typeof p.liquidUnderlyingAmount === "number" ? p.priceUsd * p.liquidUnderlyingAmount : null }
               : p
           );
+          // Step 17F — native stake: recognized USD = full account value; liquid USD = ONLY the
+          // immediately-withdrawable SOL × the fresh SOL price. Stale price → USD stays null.
+          merged = merged.map((p) =>
+            p.type === "stake" && p.stake && typeof p.priceUsd === "number"
+              ? { ...p, recognizedValueUsd: p.valueUsd ?? null, liquidValueUsd: typeof p.liquidUnderlyingAmount === "number" ? p.priceUsd * p.liquidUnderlyingAmount : null }
+              : p
+          );
         }
       }
 
@@ -856,6 +875,40 @@ export function useWalletPortfolio(): WalletPortfolio {
             sourceAccounts: discovery.accounts.map((a) => a.address),
           });
           if (record.positionExists) merged = mergeJupiterLendPosition(merged, record);
+        }
+      } catch { /* strict no-op on any failure — portfolio unchanged */ }
+      if (cancelled || myReq !== reqId.current) return;
+
+      // Step 17E — Token-2022 transferability hardening (additive + fail-closed). For each Token-2022
+      // account (from the Token-2022 program read), decode its mint + account extensions once per mint and
+      // classify the balance into nominal / recognized / transferable / unavailable / withheld / unresolved.
+      // A nominal balance is NEVER assumed fully transferable: frozen/non-transferable/paused → 0; hook/
+      // confidential/unsupported/stale → unresolved (null); transfer-fee → deterministic net. The verified
+      // transferable portion drives liquidValueUsd + withdrawalState so the Safety Buffer counts only what
+      // can actually move. Classic SPL positions are untouched. Any failure → strict no-op.
+      try {
+        const t22Accounts = (tok22Ok ? accountsOf(tok22Res.value) : [])
+          .map((a) => ({
+            address: typeof a?.pubkey === "string" ? a.pubkey : a?.pubkey?.toBase58?.() ?? "",
+            mint: a?.account?.data?.parsed?.info?.mint ?? "",
+            amount: a?.account?.data?.parsed?.info?.tokenAmount?.amount ?? "0",
+          }))
+          .filter((a) => a.address && a.mint && a.amount !== "0")
+          .map((a) => ({ address: a.address, mint: a.mint }));
+        if (t22Accounts.length > 0) {
+          const assessments = await withTimeout(
+            loadToken2022Assessments(connection, t22Accounts),
+            PROTOCOL_TIMEOUT_MS,
+            "token_2022_assess"
+          ).catch(() => new Map<string, Token2022PositionResult>());
+          if (!cancelled && myReq === reqId.current && assessments.size > 0) {
+            merged = merged.map((p) => {
+              const r = p.mint ? assessments.get(p.mint) : undefined;
+              if (!r) return p;
+              const decimalsKnown = typeof p.decimals === "number";
+              return applyToken2022Assessment(p, r, p.decimals ?? 0, p.priceUsd ?? null, decimalsKnown && pricedAsOf != null && typeof p.priceUsd === "number");
+            });
+          }
         }
       } catch { /* strict no-op on any failure — portfolio unchanged */ }
       if (cancelled || myReq !== reqId.current) return;

@@ -55,6 +55,23 @@ import {
   type PoolAccountObservation as JLPoolObs,
 } from "../wallet/jupiterLendShareAccounting";
 import { DISPOSITIONS_MANIFEST as DL_DISPO_MANIFEST, computeDispositionsManifestHash as dlDispoHashFn } from "./directUsdcLendingDispositions";
+// Step 17E — Token-2022 transferability assessment + source binding to the installed spl-token library.
+import {
+  EXT as T22_EXT, EXTENSION_IMPACT_MATRIX as T22_MATRIX, classifyExtension as t22Classify,
+  calculateTransferFeeRaw as t22Fee, assessToken2022Account as t22AssessAcct, assessToken2022Position as t22AssessPos,
+  applyToken2022Assessment as t22Apply, transferabilityToWithdrawalState as t22ToWs,
+  TOKEN_2022_PROGRAM_ID as T22_PROGRAM,
+  type Token2022MintFacts as T22Mint, type Token2022AccountFacts as T22Acct,
+} from "../wallet/token2022PositionAssessment";
+import { ExtensionType as SPL_EXT, calculateFee as splCalculateFee } from "@solana/spl-token";
+// Step 17F — native Solana stake lifecycle + decomposition.
+import {
+  assessNativeStakeAccount as nsAssess, groupNativeStakeByValidator as nsGroup,
+  toNativeStakeWalletFields as nsFields, nativeStakeDedupeKey as nsKey,
+  STAKE_PROGRAM_ID as NS_STAKE_PROG, EPOCH_NEVER as NS_EPOCH_NEVER,
+  type NativeStakeFacts as NSFacts,
+} from "../wallet/nativeStakePositionAssessment";
+import { getUnderlyingExposureGroup as nsExposure } from "./duplicateExposure";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17904,6 +17921,8 @@ export function printFixtureResults(): void {
     ...runSteakhouseBlockCtokenFixtureChecks(),
     ...runJupiterLendExistingPositionFixtureChecks(),
     ...runJupiterLendShareAccountingFixtureChecks(),
+    ...runToken2022FixtureChecks(),
+    ...runNativeStakeFixtureChecks(),
     ...runSteakhouseExistingPositionFixtureChecks(),
     ...runSafetyBufferCoverageFixtureChecks(),
     ...runKlendDirectPositionFailClosedFixtureChecks(),
@@ -20906,6 +20925,190 @@ export function runJupiterLendShareAccountingFixtureChecks(): FixtureCheck[] {
     const j = dlGetDispo("jupiter_lend_usdc"); const s = JSON.stringify(jlDecodePool(obs()));
     return j?.finalAssessmentStatus === "not_ready" && j?.provisionalSensitivityPreserved === true && dlGetDispo("kamino_usdc_lending")?.disposition === "selected_category_candidate" && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && !s.includes("cta") && !s.includes("signature") && !s.includes("transaction");
   })(), "immutable");
+
+  return checks;
+}
+
+/**
+ * Step 17E — Token-2022 transferability, effective-balance and verified-liquidity hardening. Binds numeric
+ * extension ids + the fee formula to the INSTALLED @solana/spl-token 0.4.14, then proves the balance splits,
+ * fail-closed extension handling, aggregation, mapping, and Safety Buffer integration.
+ */
+export function runToken2022FixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const mfacts = (over: Partial<T22Mint> = {}): T22Mint => ({ mint: "MintT22xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", mintOwnerProgram: T22_PROGRAM, mintExtensionTypes: [], nonTransferable: false, hasTransferHook: false, hasConfidentialMint: false, transferFee: null, fresh: true, sourceSlot: 100, ...over });
+  const afacts = (over: Partial<T22Acct> = {}): T22Acct => ({ address: "Acc1", mint: "MintT22xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", owner: "Wallet", ownerProgram: T22_PROGRAM, amountRaw: "1000000", accountState: 1, accountExtensionTypes: [], withheldRaw: null, fresh: true, sourceSlot: 100, ...over });
+  const A = (o: Partial<T22Acct> = {}) => t22AssessAcct(afacts(o), mfacts());
+  const AM = (acc: Partial<T22Acct>, mint: Partial<T22Mint>) => t22AssessAcct(afacts(acc), mfacts(mint));
+  const t22stable = (over: Partial<JLWalletPos> = {}): JLWalletPos => ({ id: "t22usdc", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: "MintT22Usdc", amount: "1000000000", uiAmount: 1000, decimals: 6, detection: "direct_wallet_balance", valueUsd: 1000, ...over });
+
+  // ---- Source binding to installed @solana/spl-token 0.4.14 ----
+  add("T22-1: extension ids match the INSTALLED ExtensionType enum", T22_EXT.TransferFeeConfig === SPL_EXT.TransferFeeConfig && T22_EXT.NonTransferable === SPL_EXT.NonTransferable && T22_EXT.TransferHook === SPL_EXT.TransferHook && T22_EXT.PausableConfig === SPL_EXT.PausableConfig && T22_EXT.ConfidentialTransferAccount === SPL_EXT.ConfidentialTransferAccount && T22_EXT.PermanentDelegate === SPL_EXT.PermanentDelegate, "ids bound");
+  add("T22-2: fee formula equals installed calculateFee (below max, capped, zero)", (() => {
+    const cases = [[1000000n, 100, 1000000000n], [1000000n, 100, 5000n], [1000000n, 0, 1000000000n], [0n, 100, 1000000000n]] as const;
+    return cases.every(([amt, bps, max]) => t22Fee(amt, bps, max) === splCalculateFee({ transferFeeBasisPoints: bps, maximumFee: max, epoch: 0n }, amt));
+  })(), "fee bound");
+
+  // ---- Impact matrix (source-backed; unknown fails closed) ----
+  add("T22-3: every installed extension type is classified (none silently unsupported)", (() => {
+    const vals = Object.values(SPL_EXT).filter((v) => typeof v === "number" && v !== 0) as number[];
+    return vals.every((v) => v in T22_MATRIX);
+  })(), "all classified");
+  add("T22-4: unknown extension id fails closed to unsupported_by_decoder", t22Classify(99).impact === "unsupported_by_decoder", "unknown");
+  add("T22-5: key impacts source-backed (fee/non-transferable/hook/delegate/memo/cpiGuard)", t22Classify(T22_EXT.TransferFeeConfig).impact === "deterministic_reduction" && t22Classify(T22_EXT.NonTransferable).impact === "explicitly_unavailable" && t22Classify(T22_EXT.TransferHook).impact === "unresolved_without_tx_context" && t22Classify(T22_EXT.PermanentDelegate).impact === "no_liquidity_effect" && t22Classify(T22_EXT.MemoTransfer).impact === "no_liquidity_effect" && t22Classify(T22_EXT.CpiGuard).impact === "no_liquidity_effect", "impacts");
+
+  // ---- Per-account balance splits ----
+  add("T22-6: ordinary transferable → fully_transferable, transferable == nominal", (() => { const r = A(); return r.transferabilityState === "fully_transferable" && r.transferableRaw === "1000000" && r.unavailableRaw === "0"; })(), "full");
+  add("T22-7: frozen account → transferable 0, unavailable == nominal, recognized preserved", (() => { const r = A({ accountState: 2 }); return r.transferabilityState === "frozen" && r.transferableRaw === "0" && r.unavailableRaw === "1000000" && r.nominalRaw === "1000000"; })(), "frozen");
+  add("T22-8: non-transferable mint → transferable 0, unavailable nominal", (() => { const r = AM({}, { nonTransferable: true, mintExtensionTypes: [T22_EXT.NonTransferable] }); return r.transferabilityState === "non_transferable" && r.transferableRaw === "0" && r.unavailableRaw === "1000000"; })(), "non-transferable");
+  add("T22-9: paused mint → transferable 0, paused", (() => { const r = AM({}, { paused: true, mintExtensionTypes: [T22_EXT.PausableConfig] }); return r.transferabilityState === "paused" && r.transferableRaw === "0"; })(), "paused");
+  add("T22-10: pause state unread → unresolved, transferable null (never assumed unpaused)", (() => { const r = AM({}, { paused: null, mintExtensionTypes: [T22_EXT.PausableConfig] }); return r.transferabilityState === "unresolved" && r.transferableRaw === null; })(), "pause unread");
+  add("T22-11: transfer fee below max → net = nominal − fee", (() => { const r = AM({}, { transferFee: { currentBps: 100, currentMaxFeeRaw: "1000000000" }, mintExtensionTypes: [T22_EXT.TransferFeeConfig] }); return r.transferabilityState === "transferable_with_deterministic_fee" && r.estimatedTransferFeeRaw === "10000" && r.transferableRaw === "990000"; })(), "fee net");
+  add("T22-12: transfer fee capped at maximumFee", (() => { const r = AM({}, { transferFee: { currentBps: 100, currentMaxFeeRaw: "5000" }, mintExtensionTypes: [T22_EXT.TransferFeeConfig] }); return r.estimatedTransferFeeRaw === "5000" && r.transferableRaw === "995000"; })(), "cap");
+  add("T22-13: fee config with 0 bps this epoch → fully transferable, no fee due", (() => { const r = AM({}, { transferFee: { currentBps: 0, currentMaxFeeRaw: "1000000000" }, mintExtensionTypes: [T22_EXT.TransferFeeConfig] }); return r.transferabilityState === "fully_transferable" && r.transferableRaw === "1000000"; })(), "0 bps");
+  add("T22-14: withheld amount reported separately, not in nominal/transferable", (() => { const r = AM({ withheldRaw: "7777", accountExtensionTypes: [T22_EXT.TransferFeeAmount] }, { transferFee: { currentBps: 100, currentMaxFeeRaw: "1000000000" }, mintExtensionTypes: [T22_EXT.TransferFeeConfig] }); return r.withheldRaw === "7777" && r.nominalRaw === "1000000" && r.transferableRaw === "990000"; })(), "withheld sep");
+  add("T22-15: transfer hook → hook_unresolved, transferable null, recognized preserved", (() => { const r = AM({}, { hasTransferHook: true, mintExtensionTypes: [T22_EXT.TransferHook] }); return r.transferabilityState === "hook_unresolved" && r.transferableRaw === null && r.nominalRaw === "1000000"; })(), "hook");
+  add("T22-16: confidential mint+account → confidential_unresolved, transferable null", (() => { const r = AM({ accountExtensionTypes: [T22_EXT.ConfidentialTransferAccount] }, { hasConfidentialMint: true, mintExtensionTypes: [T22_EXT.ConfidentialTransferMint] }); return r.transferabilityState === "confidential_unresolved" && r.transferableRaw === null; })(), "confidential");
+  add("T22-17: unsupported extension → extension_unsupported, transferable null (fail closed)", (() => { const r = AM({ accountExtensionTypes: [99] }, {}); return r.transferabilityState === "extension_unsupported" && r.transferableRaw === null; })(), "unsupported");
+  add("T22-18: stale mint/account → transferable null, state stale", (() => { const r = AM({ fresh: false }, {}); return r.transferabilityState === "stale" && r.transferableRaw === null; })(), "stale");
+  add("T22-19: malformed amount → unresolved, transferable null", (() => { const r = A({ amountRaw: "12.3x" }); return r.transferabilityState === "unresolved" && r.transferableRaw === null; })(), "malformed");
+  add("T22-20: zero balance skipped (not a position)", A({ amountRaw: "0" }).include === false, "zero");
+  add("T22-21: interest-bearing mint has NO transfer effect (raw units are authority)", (() => { const r = AM({}, { mintExtensionTypes: [T22_EXT.InterestBearingConfig] }); return r.transferabilityState === "fully_transferable" && r.transferableRaw === "1000000"; })(), "interest");
+  add("T22-22: scaled-UI mint has NO transfer effect", (() => { const r = AM({}, { mintExtensionTypes: [T22_EXT.ScaledUiAmountConfig] }); return r.transferabilityState === "fully_transferable"; })(), "scaled-ui");
+  add("T22-23: memo-required account does NOT block owner transfer", (() => { const r = A({ accountExtensionTypes: [T22_EXT.MemoTransfer] }); return r.transferabilityState === "fully_transferable"; })(), "memo");
+  add("T22-24: CPI-guard account does NOT block owner transfer", (() => { const r = A({ accountExtensionTypes: [T22_EXT.CpiGuard] }); return r.transferabilityState === "fully_transferable"; })(), "cpiguard");
+  add("T22-25: permanent delegate does NOT zero liquidity (control risk ≠ balance restriction)", (() => { const r = AM({}, { mintExtensionTypes: [T22_EXT.PermanentDelegate] }); return r.transferabilityState === "fully_transferable" && r.transferableRaw === "1000000"; })(), "delegate");
+
+  // ---- Aggregation across accounts of one mint ----
+  add("T22-26: transferable + frozen → partially_transferable; buckets separated", (() => { const r = t22AssessPos([afacts({ address: "A", amountRaw: "600000" }), afacts({ address: "B", amountRaw: "400000", accountState: 2 })], mfacts()); return r.transferabilityState === "partially_transferable" && r.transferableRaw === "600000" && r.unavailableRaw === "400000" && r.nominalRaw === "1000000"; })(), "partial agg");
+  add("T22-27: transferable + hook-unresolved → partially_transferable; unresolved bucket set", (() => { const r = t22AssessPos([afacts({ address: "A", amountRaw: "600000" }), afacts({ address: "B", amountRaw: "400000", accountExtensionTypes: [T22_EXT.TransferHookAccount] })], mfacts()); return r.transferabilityState === "partially_transferable" && r.transferableRaw === "600000" && r.unresolvedRaw === "400000"; })(), "unresolved agg");
+  add("T22-28: all accounts frozen → frozen, transferable 0", (() => { const r = t22AssessPos([afacts({ address: "A", accountState: 2 }), afacts({ address: "B", accountState: 2, amountRaw: "500000" })], mfacts()); return r.transferabilityState === "frozen" && r.transferableRaw === "0" && r.unavailableRaw === "1500000"; })(), "all frozen");
+  add("T22-29: multi-account fee aggregation sums net + fee", (() => { const m = mfacts({ transferFee: { currentBps: 100, currentMaxFeeRaw: "1000000000" }, mintExtensionTypes: [T22_EXT.TransferFeeConfig] }); const r = t22AssessPos([afacts({ address: "A", amountRaw: "1000000" }), afacts({ address: "B", amountRaw: "1000000" })], m); return r.transferableRaw === "1980000" && r.estimatedTransferFeeRaw === "20000"; })(), "fee agg");
+
+  // ---- WalletPosition mapping ----
+  add("T22-30: mapping sets withdrawalState + verified-transferable USD from fresh price", (() => { const r = t22AssessPos([afacts()], mfacts()); const w = t22Apply(t22stable({ valueUsd: null }), r, 6, 0.9999, true); return w.withdrawalState === "fully_withdrawable" && typeof w.liquidValueUsd === "number" && w.transferableRaw === "1000000"; })(), "map full");
+  add("T22-31: hook-unresolved → liquidValueUsd null, transferableRaw null", (() => { const r = t22AssessPos([afacts({ accountExtensionTypes: [T22_EXT.TransferHookAccount] })], mfacts({ hasTransferHook: true, mintExtensionTypes: [T22_EXT.TransferHook] })); const w = t22Apply(t22stable(), r, 6, 0.9999, true); return w.transferableRaw === null && w.liquidValueUsd === null && w.withdrawalState === "unresolved"; })(), "map hook");
+  add("T22-32: state→withdrawalState mapping is source-consistent", t22ToWs("fully_transferable") === "fully_withdrawable" && t22ToWs("frozen") === "currently_unavailable" && t22ToWs("non_transferable") === "currently_unavailable" && t22ToWs("paused") === "emergency_paused" && t22ToWs("hook_unresolved") === "unresolved", "mapping");
+
+  // ---- Safety Buffer integration ----
+  add("T22-33: verified transferable stable counts toward buffer", (() => { const c = sbClassify(t22stable({ withdrawalState: "fully_withdrawable", liquidValueUsd: 1000 })); return c.verifiedLiquidValueUsd === 1000 && c.inclusionState === "included_liquid"; })(), "counts");
+  add("T22-34: fee-reduced stable counts only NET transferable value", (() => { const c = sbClassify(t22stable({ withdrawalState: "partially_withdrawable", liquidValueUsd: 990 })); return c.verifiedLiquidValueUsd === 990 && c.delayedValueUsd === 10 && (c.inclusionState === "included_partial" || c.inclusionState === "included_liquid"); })(), "net only");
+  add("T22-35: frozen stable counts ZERO verified liquid", (() => { const c = sbClassify(t22stable({ withdrawalState: "currently_unavailable" })); return c.verifiedLiquidValueUsd === 0 && c.inclusionState === "excluded_unavailable"; })(), "frozen 0");
+  add("T22-36: hook-unresolved stable → unresolved coverage, 0 verified liquid", (() => { const c = sbClassify(t22stable({ withdrawalState: "unresolved" })); return c.verifiedLiquidValueUsd === 0 && c.inclusionState === "excluded_unresolved"; })(), "hook unresolved");
+  add("T22-37: partial with null liquid → unresolved (never full v)", (() => { const c = sbClassify(t22stable({ withdrawalState: "partially_withdrawable", liquidValueUsd: null })); return c.verifiedLiquidValueUsd === 0 && c.inclusionState === "excluded_unresolved"; })(), "null net");
+  add("T22-38: already-complete buffer stays complete despite unrelated unresolved T22", (() => { const classicUsdc = t22stable({ id: "usdc", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", valueUsd: 1000 }); const t22 = t22stable({ withdrawalState: "unresolved" }); const cov = sbCoverage([classicUsdc, t22], 500); return cov.coverageState === "complete" && cov.verifiedLiquidStableValueUsd === 1000; })(), "complete");
+  add("T22-39: classic SPL stable (no withdrawalState) unchanged — counts full", (() => { const c = sbClassify(t22stable()); return c.verifiedLiquidValueUsd === 1000 && c.inclusionState === "included_liquid" && c.positionClass === "wallet_stable"; })(), "classic unchanged");
+
+  // ---- Downstream actionability + immutability ----
+  add("T22-40: unavailable/unresolved amounts are not actionable (transferable 0/null)", (() => { const frozen = A({ accountState: 2 }); const hook = AM({}, { hasTransferHook: true, mintExtensionTypes: [T22_EXT.TransferHook] }); return frozen.transferableRaw === "0" && hook.transferableRaw === null; })(), "not actionable");
+  add("T22-41: Kamino/Steakhouse/Jupiter dispositions unchanged; no tx in assessment", (() => { const s = JSON.stringify(t22AssessPos([afacts()], mfacts())); return dlGetDispo("kamino_usdc_lending")?.disposition === "selected_category_candidate" && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && !s.includes("cta") && !s.includes("signature") && !s.includes("transaction"); })(), "immutable");
+
+  return checks;
+}
+
+/**
+ * Step 17F — native Solana stake lifecycle, valuation, and liquidity classification. Proves the six-way
+ * decomposition, source-backed lifecycle (from getStakeActivation, never epoch guessing), lockup/authority
+ * classification, and that only immediately-withdrawable SOL is treated as liquid.
+ */
+export function runNativeStakeFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const RENT = 2282880;
+  // Default: fully active account. active+inactive == total − rent == 1_000_000_000.
+  const facts = (over: Partial<NSFacts> = {}): NSFacts => ({
+    stakeAccount: "Stk1", wallet: "W", ownerProgram: NS_STAKE_PROG, accountType: "delegated",
+    totalLamports: 1_000_000_000 + RENT, rentExemptReserveLamports: RENT,
+    authorizedStaker: "W", authorizedWithdrawer: "W", lockup: null,
+    delegation: { voter: "Vote1", stakeLamports: 1_000_000_000, activationEpoch: "100", deactivationEpoch: NS_EPOCH_NEVER },
+    currentEpoch: 300, currentUnixTime: 1_700_000_000, activation: { state: "active", activeLamports: 1_000_000_000, inactiveLamports: 0 },
+    validatorStatus: null, apy: 6.5, apyFresh: true, observedAt: "2026-07-18T00:00:00.000Z", sourceSlot: 123, fresh: true, ...over,
+  });
+  const A = (o: Partial<NSFacts> = {}) => nsAssess(facts(o));
+  const grp = (o: Partial<NSFacts> = {}) => nsGroup([nsAssess(facts(o))])[0];
+
+  // ---- Ownership + identity ----
+  add("NS-1: wrong Stake Program owner → unresolved, not counted", (() => { const r = A({ ownerProgram: "11111111111111111111111111111111" }); return r.lifecycleState === "unresolved" && r.positionExists === false; })(), "wrong owner");
+  add("NS-2: ownership = authorized withdrawer (staker may differ)", A().owned === true && A({ authorizedWithdrawer: "SomeoneElse" }).owned === false, "withdrawer");
+  add("NS-3: dedupe key is the stake account address (never validator)", A().dedupeKey === nsKey("Stk1") && A().dedupeKey.includes("Stk1"), "dedupe");
+  add("NS-4: two accounts, one validator → grouped but breakdown preserved (not merged away)", (() => { const g = nsGroup([nsAssess(facts({ stakeAccount: "A" })), nsAssess(facts({ stakeAccount: "B" }))]); return g.length === 1 && g[0].accounts.length === 2 && g[0].totalLamports === 2 * (1_000_000_000 + RENT); })(), "grouped");
+  add("NS-5: malformed lamports → unresolved, ownership still known", (() => { const r = A({ totalLamports: null }); return r.lifecycleState === "unresolved" && r.owned === true && r.unresolvedLamports >= 0; })(), "malformed");
+  add("NS-6: differing staker preserved; still owned via withdrawer", (() => { const r = A({ authorizedStaker: "Other" }); return r.owned === true && r.controlState === "wallet_controls_withdrawal"; })(), "staker differs");
+
+  // ---- Lifecycle (source-backed via getStakeActivation, never epoch math) ----
+  add("NS-7: active → lifecycle active, activeLamports from RPC", (() => { const r = A(); return r.lifecycleState === "active" && r.activeLamports === 1_000_000_000; })(), "active");
+  add("NS-8: activating → activatingLamports (RPC inactive), active portion separate", (() => { const r = A({ activation: { state: "activating", activeLamports: 0, inactiveLamports: 1_000_000_000 } }); return r.lifecycleState === "activating" && r.activatingLamports === 1_000_000_000 && r.activeLamports === 0; })(), "activating");
+  add("NS-9: deactivating → deactivatingLamports (RPC active), not counted active", (() => { const r = A({ activation: { state: "deactivating", activeLamports: 1_000_000_000, inactiveLamports: 0 } }); return r.lifecycleState === "deactivating" && r.deactivatingLamports === 1_000_000_000 && r.activeLamports === 0; })(), "deactivating");
+  add("NS-10: inactive → inactiveLamports, active 0", (() => { const r = A({ activation: { state: "inactive", activeLamports: 0, inactiveLamports: 1_000_000_000 } }); return r.lifecycleState === "inactive" && r.inactiveLamports === 1_000_000_000 && r.activeLamports === 0; })(), "inactive");
+  add("NS-11: initialized-not-delegated → all stakeable inactive", (() => { const r = A({ accountType: "initialized", delegation: null, activation: null }); return r.lifecycleState === "initialized_not_delegated" && r.inactiveLamports === 1_000_000_000 && r.activeLamports === 0; })(), "init");
+  add("NS-12: activation unavailable → lifecycle unresolved, active NOT invented", (() => { const r = A({ activation: null }); return r.lifecycleState === "unresolved" && r.activeLamports === null && r.unresolvedLamports === 1_000_000_000 + RENT; })(), "no activation");
+  add("NS-13: lifecycle uses RPC state, NOT activationEpoch<=currentEpoch", (() => { const r = A({ delegation: { voter: "V", stakeLamports: 1_000_000_000, activationEpoch: "999999", deactivationEpoch: NS_EPOCH_NEVER }, activation: { state: "active", activeLamports: 1_000_000_000, inactiveLamports: 0 } }); return r.lifecycleState === "active"; })(), "no epoch guess");
+
+  // ---- Accounting invariants ----
+  add("NS-14: total lamports preserved", A().totalLamports === 1_000_000_000 + RENT, "total");
+  add("NS-15: delegated lamports preserved", A().delegatedLamports === 1_000_000_000, "delegated");
+  add("NS-16: active account — reserve is REQUIRED to remain (not close-only), separated", (() => { const r = A(); return r.rentExemptReserveLamports === RENT && r.closeOnlyWithdrawableLamports === 0 && r.requiredRemainingLamports === 1_000_000_000 + RENT; })(), "rent required");
+  add("NS-17: active+activating+deactivating+inactive == total − rent (reconciles)", (() => { const r = A({ activation: { state: "active", activeLamports: 600_000_000, inactiveLamports: 400_000_000 } }); return (r.activeLamports! + r.activatingLamports! + r.deactivatingLamports! + r.inactiveLamports!) === r.totalLamports - r.rentExemptReserveLamports; })(), "reconcile");
+  add("NS-18: immediately-withdrawable = inactive (unlocked), never exceeds total", (() => { const r = A({ activation: { state: "active", activeLamports: 600_000_000, inactiveLamports: 400_000_000 } }); return r.immediatelyWithdrawableLamports === 400_000_000 && r.immediatelyWithdrawableLamports! <= r.totalLamports; })(), "withdrawable");
+  add("NS-19: active stake is NOT immediately withdrawable", A().immediatelyWithdrawableLamports === 0, "active not liquid");
+  add("NS-20: deactivating stake is NOT liquid", A({ activation: { state: "deactivating", activeLamports: 1_000_000_000, inactiveLamports: 0 } }).immediatelyWithdrawableLamports === 0, "deactivating not liquid");
+  add("NS-21: no negative components", (() => { const r = A({ activation: { state: "active", activeLamports: 1_000_000_000, inactiveLamports: 0 } }); return [r.activeLamports, r.activatingLamports, r.deactivatingLamports, r.inactiveLamports, r.immediatelyWithdrawableLamports, r.lockedLamports].every((v) => (v ?? 0) >= 0); })(), "no negatives");
+
+  // ---- Lockup ----
+  add("NS-22: timestamp lockup (now < ts) → locked_by_timestamp, not withdrawable (whole account locked)", (() => { const r = A({ lockup: { unixTimestamp: 1_800_000_000, epoch: null, custodian: null }, activation: { state: "inactive", activeLamports: 0, inactiveLamports: 1_000_000_000 } }); return r.lockupState === "locked_by_timestamp" && r.immediatelyWithdrawableLamports === 0 && r.lockedLamports === 1_000_000_000 + RENT && r.withdrawalCapacityState === "locked"; })(), "ts lock");
+  add("NS-23: epoch lockup (currentEpoch < epoch) → locked_by_epoch", (() => { const r = A({ lockup: { unixTimestamp: null, epoch: 999, custodian: null }, activation: { state: "inactive", activeLamports: 0, inactiveLamports: 1_000_000_000 } }); return r.lockupState === "locked_by_epoch" && r.immediatelyWithdrawableLamports === 0; })(), "epoch lock");
+  add("NS-24: combined lockup → locked_by_both", (() => { const r = A({ lockup: { unixTimestamp: 1_800_000_000, epoch: 999, custodian: null } }); return r.lockupState === "locked_by_both"; })(), "both");
+  add("NS-25: custodian ≠ wallet on an active lockup → custodian_override_required", (() => { const r = A({ lockup: { unixTimestamp: 1_800_000_000, epoch: null, custodian: "Custodian" } }); return r.lockupState === "custodian_override_required" && r.lockupCustodian === "Custodian"; })(), "custodian");
+  add("NS-26: lockup with epoch set but currentEpoch unknown → fail closed (not unlocked)", (() => { const r = A({ currentEpoch: null, lockup: { unixTimestamp: null, epoch: 999, custodian: null } }); return r.lockupState === "unresolved"; })(), "lock unresolved");
+  add("NS-27: recognized value survives lockup (locked value still recognized)", (() => { const r = A({ lockup: { unixTimestamp: 1_800_000_000, epoch: null, custodian: null } }); return r.totalLamports === 1_000_000_000 + RENT; })(), "recognized survives");
+
+  // ---- Authorities / control ----
+  add("NS-28: control states — both / withdrawal-only / custodian", A({ authorizedStaker: "W", authorizedWithdrawer: "W" }).controlState === "wallet_controls_both" && A({ authorizedStaker: "X" }).controlState === "wallet_controls_withdrawal", "control");
+  add("NS-29: WalletPosition stake summary leaks NO authority addresses", (() => { const f = nsFields(grp(), 150, true); const s = JSON.stringify(f); return !s.includes("authorizedStaker") && !s.includes("authorizedWithdrawer") && !s.includes("custodian"); })(), "no auth leak");
+
+  // ---- Valuation ----
+  add("NS-30: fresh SOL price → recognized USD = total SOL × price; liquid USD = withdrawable × price", (() => { const f = nsFields(grp({ activation: { state: "active", activeLamports: 600_000_000, inactiveLamports: 400_000_000 } }), 150, true); return Math.abs((f.recognizedValueUsd as number) - (1_000_000_000 + RENT) / 1e9 * 150) < 1e-6 && Math.abs((f.liquidValueUsd as number) - 0.4 * 150) < 1e-6; })(), "usd");
+  add("NS-31: stale price → USD null, SOL units visible", (() => { const f = nsFields(grp(), 150, false); return f.recognizedValueUsd === null && f.liquidValueUsd === null && typeof f.uiAmount === "number"; })(), "stale price");
+  add("NS-32: fully active → liquid USD = 0 (only immediate-withdrawable counts)", (() => { const f = nsFields(grp(), 150, true); return f.liquidValueUsd === 0; })(), "active liquid 0");
+
+  // ---- Downstream / Safety Buffer / immutability ----
+  add("NS-33: native stake contributes ZERO to the Safety Buffer (never stable capital)", (() => { const c = sbClassify({ id: "stk", source: "wallet", type: "stake", symbol: "SOL", amount: "1", detection: "native_stake", valueUsd: 1000, liquidValueUsd: 400 } as JLWalletPos); return c.verifiedLiquidValueUsd === 0 && c.inclusionState === "excluded_unsupported"; })(), "no buffer");
+  add("NS-34: stake still groups as SOL exposure for duplicate suppression (unchanged)", nsExposure({ id: "stk", source: "wallet", type: "stake", symbol: "SOL", amount: "1", detection: "native_stake", valueUsd: 1000 } as JLWalletPos) === "SOL_EXPOSURE", "sol exposure");
+  add("NS-35: mixed active+deactivating group is NOT labelled simply 'active'", (() => { const g = nsGroup([nsAssess(facts({ stakeAccount: "A" })), nsAssess(facts({ stakeAccount: "B", activation: { state: "deactivating", activeLamports: 1_000_000_000, inactiveLamports: 0 } }))]); return g[0].lifecycleSummary.startsWith("mixed:") && g[0].lifecycleSummary.includes("deactivating"); })(), "mixed label");
+  add("NS-36: unresolved account preserved alongside a valid one (not dropped, not liquid)", (() => { const g = nsGroup([nsAssess(facts({ stakeAccount: "A" })), nsAssess(facts({ stakeAccount: "B", activation: null }))]); return g[0].accounts.length === 2 && g[0].anyUnresolved === true; })(), "unresolved kept");
+  add("NS-37: no transaction/instruction behavior in the assessment result", (() => { const s = JSON.stringify(A()); return !s.includes("cta") && !s.includes("signature") && !s.includes("instruction") && !s.includes("transaction"); })(), "no tx");
+  add("NS-38: candidate/ranking/governance unchanged; Kamino+Steakhouse+Jupiter intact", dlGetDispo("kamino_usdc_lending")?.disposition === "selected_category_candidate" && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions", "immutable");
+
+  // ---- Step 17F.1 — exact immediate-withdrawal capacity for mixed lifecycle accounts ----
+  // active-with-excess: effective 600M, inactive/excess 400M, reserve RENT. total = 1e9 + RENT.
+  const EXCESS = A({ totalLamports: 1_000_000_000 + RENT, activation: { state: "active", activeLamports: 600_000_000, inactiveLamports: 400_000_000 } });
+  add("NSW-1: active with NO excess → 0 withdrawable, reserve+stake required to remain", (() => { const r = A(); return r.immediatelyWithdrawableLamports === 0 && r.withdrawalCapacityState === "currently_unavailable" && r.requiredRemainingLamports === 1_000_000_000 + RENT; })(), "active none");
+  add("NSW-2: active WITH excess → only the excess (inactive) is withdrawable; effective stays", EXCESS.immediatelyWithdrawableLamports === 400_000_000 && EXCESS.withdrawalCapacityState === "partially_withdrawable" && EXCESS.requiredRemainingLamports === 600_000_000 + RENT, "active excess");
+  add("NSW-2b: active-with-excess: reserve is NOT close-only (account stays open, effective>0)", EXCESS.closeOnlyWithdrawableLamports === 0, "reserve required");
+  add("NSW-3: activating mixed → non-effective portion withdrawable per deployed rule (effective=active)", (() => { const r = A({ activation: { state: "activating", activeLamports: 200_000_000, inactiveLamports: 800_000_000 } }); return r.immediatelyWithdrawableLamports === 800_000_000 && r.requiredRemainingLamports === 200_000_000 + RENT && r.lifecycleState === "activating"; })(), "activating");
+  add("NSW-4: deactivating partially cooled → cooled (inactive) withdrawable, still-effective stays", (() => { const r = A({ activation: { state: "deactivating", activeLamports: 300_000_000, inactiveLamports: 700_000_000 } }); return r.immediatelyWithdrawableLamports === 700_000_000 && r.requiredRemainingLamports === 300_000_000 + RENT && r.lifecycleState === "deactivating"; })(), "deactivating cooled");
+  add("NSW-5: deactivating with NO cooled value → 0 withdrawable (effective not liquid)", (() => { const r = A({ activation: { state: "deactivating", activeLamports: 1_000_000_000, inactiveLamports: 0 } }); return r.immediatelyWithdrawableLamports === 0 && r.withdrawalCapacityState === "currently_unavailable"; })(), "deactivating none");
+  add("NSW-6: fully inactive unlocked → entire account withdrawable (incl. reserve via close)", (() => { const r = A({ activation: { state: "inactive", activeLamports: 0, inactiveLamports: 1_000_000_000 } }); return r.immediatelyWithdrawableLamports === 1_000_000_000 + RENT && r.closeOnlyWithdrawableLamports === RENT && r.requiredRemainingLamports === 0 && r.withdrawalCapacityState === "fully_withdrawable"; })(), "inactive full");
+  add("NSW-7: initialized-not-delegated → fully closeable (total withdrawable, reserve close-only)", (() => { const r = A({ accountType: "initialized", delegation: null, activation: null }); return r.immediatelyWithdrawableLamports === 1_000_000_000 + RENT && r.closeOnlyWithdrawableLamports === RENT && r.withdrawalCapacityState === "fully_withdrawable"; })(), "init closeable");
+  add("NSW-8: rent reserve EXCLUDED from ordinary partial withdrawal (staked>0)", A({ activation: { state: "active", activeLamports: 600_000_000, inactiveLamports: 400_000_000 } }).immediatelyWithdrawableLamports === 400_000_000, "reserve excluded");
+  add("NSW-9: rent reserve INCLUDED only when full closure verified (staked==0)", A({ activation: { state: "inactive", activeLamports: 0, inactiveLamports: 1_000_000_000 } }).closeOnlyWithdrawableLamports === RENT && A().closeOnlyWithdrawableLamports === 0, "reserve close-only");
+  add("NSW-10: epoch lockup blocks withdrawal (capacity locked)", (() => { const r = A({ lockup: { unixTimestamp: null, epoch: 999, custodian: null }, activation: { state: "inactive", activeLamports: 0, inactiveLamports: 1_000_000_000 } }); return r.immediatelyWithdrawableLamports === 0 && r.withdrawalCapacityState === "locked"; })(), "epoch lock");
+  add("NSW-11: custodian ≠ wallet → not withdrawable (address presence ≠ availability)", (() => { const r = A({ lockup: { unixTimestamp: 1_800_000_000, epoch: null, custodian: "Custodian" }, activation: { state: "inactive", activeLamports: 0, inactiveLamports: 1_000_000_000 } }); return r.immediatelyWithdrawableLamports === 0 && r.lockupState === "custodian_override_required"; })(), "custodian");
+  add("NSW-12: unresolved activation → NO fabricated withdrawal value (null)", (() => { const r = A({ activation: null }); return r.immediatelyWithdrawableLamports === null && r.requiredRemainingLamports === null && r.withdrawalCapacityState === "unresolved"; })(), "unresolved");
+  add("NSW-13: stale → NO fabricated withdrawal value (null, capacity stale)", (() => { const r = A({ fresh: false }); return r.immediatelyWithdrawableLamports === null && r.withdrawalCapacityState === "stale"; })(), "stale");
+  add("NSW-14: immediately-withdrawable NEVER exceeds total", (() => { const cases = [A(), EXCESS, A({ activation: { state: "inactive", activeLamports: 0, inactiveLamports: 1_000_000_000 } })]; return cases.every((r) => (r.immediatelyWithdrawableLamports ?? 0) <= r.totalLamports); })(), "≤ total");
+  add("NSW-15: requiredRemaining + immediatelyWithdrawable reconciles to total (unlocked, resolved)", (() => { const cases = [A(), EXCESS, A({ activation: { state: "deactivating", activeLamports: 300_000_000, inactiveLamports: 700_000_000 } }), A({ activation: { state: "inactive", activeLamports: 0, inactiveLamports: 1_000_000_000 } })]; return cases.every((r) => (r.immediatelyWithdrawableLamports as number) + (r.requiredRemainingLamports as number) === r.totalLamports); })(), "reconcile");
+  add("NSW-16: no negative capacity values", (() => { const r = EXCESS; return [r.immediatelyWithdrawableLamports, r.closeOnlyWithdrawableLamports, r.requiredRemainingLamports].every((v) => (v ?? 0) >= 0); })(), "no neg");
+  add("NSW-17: group liquid = SUM of account-level immediately-withdrawable (mixed group)", (() => {
+    const active = nsAssess(facts({ stakeAccount: "A", activation: { state: "active", activeLamports: 600_000_000, inactiveLamports: 400_000_000 } }));
+    const deact = nsAssess(facts({ stakeAccount: "B", activation: { state: "deactivating", activeLamports: 1_000_000_000, inactiveLamports: 0 } }));
+    const g = nsGroup([active, deact])[0];
+    return g.immediatelyWithdrawableLamports === 400_000_000 + 0 && g.withdrawalCapacitySummary.startsWith("mixed:");
+  })(), "group sum");
+  add("NSW-18: recognized value unchanged (total counted once regardless of withdrawal split)", EXCESS.totalLamports === 1_000_000_000 + RENT, "recognized once");
+  add("NSW-19: liquid USD = immediately-withdrawable × price; recognized USD = total × price", (() => { const f = nsFields(nsGroup([EXCESS])[0], 150, true); return Math.abs((f.liquidValueUsd as number) - 0.4 * 150) < 1e-6 && Math.abs((f.recognizedValueUsd as number) - (1_000_000_000 + RENT) / 1e9 * 150) < 1e-6; })(), "usd split");
+  add("NSW-20: still no Safety Buffer contribution; no tx in capacity result", (() => { const c = sbClassify({ id: "s", source: "wallet", type: "stake", symbol: "SOL", amount: "1", detection: "native_stake", valueUsd: 1000, liquidValueUsd: 400 } as JLWalletPos); const s = JSON.stringify(EXCESS); return c.verifiedLiquidValueUsd === 0 && !s.includes("cta") && !s.includes("instruction") && !s.includes("signature"); })(), "no buffer/tx");
 
   return checks;
 }

@@ -111,6 +111,52 @@ export interface WalletPosition {
   dedupeKey?: string;
   /** Approved product candidate id, when the position maps to one. */
   candidateId?: string;
+  /**
+   * Step 17E — Token-2022 (Token Extensions) transferability hardening. All optional and backward-
+   * compatible; a classic SPL (TOKEN_PROGRAM_ID) position leaves them undefined and behaves exactly as
+   * before. `transferableRaw`/`unresolvedRaw` are null-vs-"0" distinct: null = transferability unresolved,
+   * never zero-as-fact. `withdrawalState` (already above) carries the transferability signal into the
+   * Safety Buffer classifier; `liquidValueUsd` carries the verified net-transferable USD.
+   */
+  tokenProgram?: string;
+  nominalRaw?: string;
+  recognizedRaw?: string;
+  transferableRaw?: string | null;
+  unavailableRaw?: string;
+  withheldRaw?: string;
+  unresolvedRaw?: string;
+  /** e.g. "fully_transferable" | "frozen" | "non_transferable" | "hook_unresolved" | … */
+  transferabilityState?: string;
+  restrictionReasons?: string[];
+  /**
+   * Step 17F — native Solana stake lifecycle + lamport decomposition. Present only on `type: "stake"`
+   * rows; all optional and backward-compatible. Critical accounting values live HERE on the canonical
+   * model (not UI metadata). `valueUsd`/`recognizedValueUsd` = recognized total; `liquidValueUsd` =
+   * ONLY the immediately-withdrawable portion (never active/activating/deactivating/locked/unresolved).
+   */
+  stakeLifecycleState?: string;
+  stake?: NativeStakeSummary;
+}
+
+/** Step 17F — canonical native-stake lamport decomposition attached to a grouped stake position. */
+export interface NativeStakeSummary {
+  voteAccount: string | null;
+  totalLamports: string;
+  activeLamports: string;
+  activatingLamports: string;
+  deactivatingLamports: string;
+  inactiveLamports: string;
+  rentExemptReserveLamports: string;
+  immediatelyWithdrawableLamports: string;
+  closeOnlyWithdrawableLamports: string;
+  requiredRemainingLamports: string;
+  lockedLamports: string;
+  unresolvedLamports: string;
+  lifecycleSummary: string;
+  withdrawalCapacitySummary: string;
+  anyUnresolved: boolean;
+  accountCount: number;
+  stakeAccounts: string[];
 }
 
 /** SPL Token programs (constants — @solana/spl-token is not a dependency). */

@@ -89,12 +89,27 @@ export function classifyPositionCoverage(p: WalletPosition): SafetyBufferCoverag
   if (isStablecoin(p)) {
     const v = num(p.valueUsd);
     if (v === null) return zero("excluded_stale", "stable price unavailable/stale", null, { unresolvedMagnitudeUnknown: true, unresolvedValueUsd: 0 });
-    // NOTE: frozen / Token-2022 transferability is 17D; when that metadata says non-transferable the
-    // position must NOT count here. `withdrawalState` carries it when present.
+    // Step 17E — Token-2022 transferability. `withdrawalState` carries the assessed transferability of a
+    // Token Extensions stable; a nominal balance is NEVER counted as liquid unless verified transferable.
+    // Classic SPL positions leave withdrawalState undefined and count in full (unchanged).
     if (p.withdrawalState === "currently_unavailable" || p.withdrawalState === "emergency_paused")
-      return zero("excluded_unavailable", "stable token not transferable", v, { unavailableValueUsd: v });
+      return zero("excluded_unavailable", "stable token not transferable (frozen/non-transferable/paused)", v, { unavailableValueUsd: v });
     if (p.withdrawalState === "unresolved" || p.withdrawalState === "stale")
-      return zero("excluded_unresolved", "stable token transferability unresolved", v, { unresolvedValueUsd: v });
+      return zero("excluded_unresolved", "stable token transferability unresolved (hook/confidential/unsupported/stale)", v, { unresolvedValueUsd: v });
+    // Partial / transfer-fee transferability → count ONLY the verified net-transferable USD (never full v).
+    if (p.withdrawalState === "partially_withdrawable") {
+      const liquid = num(p.liquidValueUsd);
+      if (liquid === null) return zero("excluded_unresolved", "stable net-transferable amount unresolved", v, { unresolvedValueUsd: v });
+      const capped = Math.min(liquid, v);
+      const delayed = Math.max(v - capped, 0);
+      return {
+        ...base, positionClass: "wallet_stable", recognizedValueUsd: v,
+        verifiedLiquidValueUsd: capped, delayedValueUsd: delayed,
+        inclusionState: capped > 0 && delayed === 0 ? "included_liquid" : capped > 0 ? "included_partial" : "excluded_delayed",
+        exclusionReason: capped > 0 ? null : "no net-transferable amount",
+      };
+    }
+    // fully_withdrawable (verified transferable) OR undefined (classic SPL) → full verified liquid.
     return { ...base, positionClass: "wallet_stable", recognizedValueUsd: v, verifiedLiquidValueUsd: v, inclusionState: "included_liquid" };
   }
 

@@ -22,6 +22,16 @@
  */
 import { Connection, PublicKey } from "@solana/web3.js";
 import { lookupMint, shortMint, type WalletPosition } from "./walletPosition";
+import {
+  STAKE_PROGRAM_ID as STAKE_PROG,
+  assessNativeStakeAccount,
+  groupNativeStakeByValidator,
+  toNativeStakeWalletFields,
+  nativeStakeDedupeKey,
+  type NativeStakeFacts,
+  type StakeActivationFacts,
+  type NativeStakePositionResult,
+} from "./nativeStakePositionAssessment";
 
 /** Native Stake program. Withdraw authority sits at byte offset 44 in the account. */
 export const STAKE_PROGRAM_ID = "Stake11111111111111111111111111111111111111";
@@ -55,14 +65,37 @@ const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 interface ParsedStakeAccount {
   pubkey: PublicKey;
   account: {
+    lamports?: number;
+    owner?: PublicKey;
     data: {
       parsed?: {
+        type?: string; // "delegated" | "initialized" | "uninitialized" | "rewardsPool"
         info?: {
-          stake?: { delegation?: { voter?: string; stake?: string } };
+          meta?: {
+            rentExemptReserve?: string;
+            authorized?: { staker?: string; withdrawer?: string };
+            lockup?: { unixTimestamp?: number; epoch?: number; custodian?: string };
+          };
+          stake?: {
+            delegation?: {
+              voter?: string; stake?: string; activationEpoch?: string; deactivationEpoch?: string;
+            };
+          };
         };
       };
     };
   };
+}
+
+/** Bounded-concurrency map (§4/§10 — avoid one unbounded RPC per account). */
+async function mapBounded<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let i = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) { const idx = i++; out[idx] = await fn(items[idx]); }
+  });
+  await Promise.all(workers);
+  return out;
 }
 
 interface StakeEntry {
@@ -123,69 +156,101 @@ export async function fetchNativeStakePositions(
   connection: Connection,
   owner: PublicKey
 ): Promise<WalletPosition[]> {
+  // Step 17F — ownership rule (preserved): the AUTHORIZED WITHDRAWER is the economic owner
+  // (memcmp at offset 44). A differing staker does not remove ownership.
   const accounts = await connection.getParsedProgramAccounts(
     new PublicKey(STAKE_PROGRAM_ID),
     {
       filters: [{ memcmp: { offset: STAKE_WITHDRAWER_OFFSET, bytes: owner.toBase58() } }],
     }
   );
+  const parsed = accounts as unknown as ParsedStakeAccount[];
+  if (parsed.length === 0) return [];
 
-  const entries: StakeEntry[] = [];
-  for (const raw of accounts as unknown as ParsedStakeAccount[]) {
-    const delegation = raw.account?.data?.parsed?.info?.stake?.delegation;
-    if (!delegation) continue; // initialized-but-undelegated stake account
-    const stakeLamports = Number(delegation.stake ?? "0");
-    if (!Number.isFinite(stakeLamports) || stakeLamports <= 0) continue;
-    entries.push({ pubkey: raw.pubkey.toBase58(), stakeLamports, voter: delegation.voter });
-  }
-  if (entries.length === 0) return [];
+  // Current epoch + a source-backed cluster Unix time — fetched ONCE (never per account). Fail-closed to
+  // null so lockup/lifecycle become unresolved rather than guessed.
+  let currentEpoch: number | null = null;
+  let currentUnixTime: number | null = null;
+  let sourceSlot = 0;
+  try {
+    const epochInfo = await connection.getEpochInfo();
+    currentEpoch = epochInfo.epoch;
+    sourceSlot = Number(epochInfo.absoluteSlot);
+    try { const t = await connection.getBlockTime(epochInfo.absoluteSlot); currentUnixTime = t ?? null; } catch { currentUnixTime = null; }
+  } catch { /* epoch unresolved → lifecycle/lockup fail closed */ }
 
-  const apyByPubkey = await computeStakeApy(connection, entries);
-
-  // Merge stake accounts that share the same validator AND APY into one position
-  // (a wallet often has several stake accounts to the same validator). Grouped by
-  // voter + APY (rounded to 2dp so float noise doesn't split a group); amounts sum.
-  interface Group {
-    stakeLamports: number;
-    voter?: string;
-    apy: number | null;
-    count: number;
-    key: string;
-  }
-  const groups = new Map<string, Group>();
-  for (const e of entries) {
-    const apy = apyByPubkey.get(e.pubkey) ?? null;
-    const key = `${e.voter ?? "unknown"}|${apy == null ? "none" : apy.toFixed(2)}`;
-    const g = groups.get(key);
-    if (g) {
-      g.stakeLamports += e.stakeLamports;
-      g.count += 1;
-    } else {
-      groups.set(key, { stakeLamports: e.stakeLamports, voter: e.voter, apy, count: 1, key });
-    }
+  const nowIso = new Date().toISOString();
+  // getStakeActivation is the exact activation decomposition (active + inactive lamports + state). Called
+  // with BOUNDED CONCURRENCY (never one unbounded request per account). Any failure → null (unresolved).
+  const delegatedAddrs = parsed
+    .filter((r) => r.account?.data?.parsed?.type === "delegated")
+    .map((r) => r.pubkey);
+  const activationByAddr = new Map<string, StakeActivationFacts | null>();
+  if (currentEpoch !== null && delegatedAddrs.length > 0) {
+    const results = await mapBounded(delegatedAddrs, 6, async (pk) => {
+      try {
+        const a: any = await (connection as any).getStakeActivation(pk);
+        if (!a || typeof a.state !== "string") return null;
+        return { state: a.state, activeLamports: Number(a.active ?? 0), inactiveLamports: Number(a.inactive ?? 0) } as StakeActivationFacts;
+      } catch { return null; }
+    });
+    delegatedAddrs.forEach((pk, i) => activationByAddr.set(pk.toBase58(), results[i] ?? null));
   }
 
-  return [...groups.values()].map((g) => ({
-    id: `stake-${g.key}`,
-    source: "wallet",
-    type: "stake",
-    symbol: "SOL",
-    name: g.count > 1 ? `Staked SOL (${g.count} accounts)` : "Staked SOL",
-    icon: "assets/icons/token/sol.svg",
-    amount: String(g.stakeLamports),
-    uiAmount: g.stakeLamports / 1e9,
-    decimals: 9,
-    // Recognized validator → the operator's name ("Jupiter"); otherwise generic.
-    protocol: (g.voter && KNOWN_VALIDATORS[g.voter]?.name) ?? "Native Stake",
-    detection: "native_stake",
-    valueUsd: null,
-    apy: g.apy,
-    // Review-only handoff: a recognized validator's app page, else the validator's
-    // explorer page (the vote account is the sourced on-chain destination).
-    manageUrl: g.voter
-      ? (KNOWN_VALIDATORS[g.voter]?.manageUrl ?? `https://solscan.io/account/${g.voter}`)
-      : undefined,
-  }));
+  // Realized APY per stake account (reuses the existing on-chain inflation-reward path).
+  const apyEntries: StakeEntry[] = parsed
+    .map((r) => ({ pubkey: r.pubkey.toBase58(), stakeLamports: Number(r.account?.data?.parsed?.info?.stake?.delegation?.stake ?? "0"), voter: r.account?.data?.parsed?.info?.stake?.delegation?.voter }))
+    .filter((e) => e.stakeLamports > 0);
+  const apyByPubkey = apyEntries.length > 0 ? await computeStakeApy(connection, apyEntries) : new Map<string, number>();
+
+  // Decode + assess each account (pure, fail-closed). Ownership double-checked in the assessor.
+  const records: NativeStakePositionResult[] = parsed.map((r) => {
+    const info = r.account?.data?.parsed?.info;
+    const meta = info?.meta;
+    const del = info?.stake?.delegation;
+    const addr = r.pubkey.toBase58();
+    const facts: NativeStakeFacts = {
+      stakeAccount: addr, wallet: owner.toBase58(),
+      ownerProgram: r.account?.owner?.toBase58?.() ?? STAKE_PROG,
+      accountType: (r.account?.data?.parsed?.type as NativeStakeFacts["accountType"]) ?? null,
+      totalLamports: typeof r.account?.lamports === "number" ? r.account.lamports : null,
+      rentExemptReserveLamports: meta?.rentExemptReserve != null ? Number(meta.rentExemptReserve) : null,
+      authorizedStaker: meta?.authorized?.staker ?? null,
+      authorizedWithdrawer: meta?.authorized?.withdrawer ?? null,
+      lockup: meta?.lockup ? { unixTimestamp: meta.lockup.unixTimestamp ?? null, epoch: meta.lockup.epoch ?? null, custodian: meta.lockup.custodian ?? null } : null,
+      delegation: del ? { voter: del.voter ?? null, stakeLamports: del.stake != null ? Number(del.stake) : null, activationEpoch: del.activationEpoch ?? null, deactivationEpoch: del.deactivationEpoch ?? null } : null,
+      currentEpoch, currentUnixTime, activation: activationByAddr.get(addr) ?? null,
+      validatorStatus: null, apy: apyByPubkey.get(addr) ?? null, apyFresh: apyByPubkey.has(addr),
+      observedAt: nowIso, sourceSlot, fresh: true,
+    };
+    return assessNativeStakeAccount(facts);
+  });
+
+  // Group OWNED account records by validator; preserve the account breakdown + strictest state.
+  const groups = groupNativeStakeByValidator(records);
+  return groups.map((g) => {
+    const fields = toNativeStakeWalletFields(g, null, false); // USD applied later (post-price)
+    const name = g.accounts.length > 1
+      ? `Staked SOL (${g.accounts.length} accounts)`
+      : g.lifecycleSummary === "active" ? "Staked SOL" : "Native stake";
+    return {
+      id: `stake-${g.voteAccount ?? "none"}-${g.accounts[0]?.stakeAccount ?? "x"}`,
+      source: "wallet",
+      type: "stake",
+      symbol: "SOL",
+      name,
+      icon: "assets/icons/token/sol.svg",
+      decimals: 9,
+      protocol: (g.voteAccount && KNOWN_VALIDATORS[g.voteAccount]?.name) ?? "Native Stake",
+      detection: "native_stake",
+      apy: g.apy,
+      dedupeKey: g.accounts.length === 1 ? nativeStakeDedupeKey(g.accounts[0].stakeAccount) : `native-stake-group:${g.voteAccount ?? "none"}`,
+      manageUrl: g.voteAccount
+        ? (KNOWN_VALIDATORS[g.voteAccount]?.manageUrl ?? `https://solscan.io/account/${g.voteAccount}`)
+        : undefined,
+      ...fields,
+    } as WalletPosition;
+  });
 }
 
 /* -------------------------------------------------------------------------- */
