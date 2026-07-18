@@ -23,6 +23,9 @@ import { deriveDirectLendingExcessUsd as scExcess, deriveDirectLendingSuitabilit
 import type { SafetyBuffer as SCBuffer } from "../wallet/walletSummary";
 import { HUMAN_REVIEW_AMENDMENT_RECORD as AM_RECORD, AMENDMENT_REVIEWER_AUTHORIZATION as AM_AUTH, EFFECTIVE_REVIEW_CHAIN as AM_CHAIN, getEffectiveCompatibleRiskProfileIds as amCompatible, isRiskProfileCompatible as amIsCompat, REVIEW_AMENDMENT_VALIDATION as AM_VALID, HUMAN_REVIEW_AMENDMENT_MANIFEST_HASH as AM_HASH } from "./directUsdcLendingHumanReviewAmendment";
 import { DIRECT_LENDING_PROFILE_TESTING_ROWS as AM_PROFILE_ROWS } from "./directUsdcLendingTestingFixtures";
+import { buildKlendDirectUsdcExistingPosition as epBuild, toWalletPosition as epToWallet, dedupeKlendDirectPosition as epDedupe, mergeKlendDirectPosition as epMerge, KLEND_DIRECT_POSITION_DEDUPE_KEY as EP_KEY, KLEND_DIRECT_POSITION_ID as EP_ID, type KlendDirectExistingPositionInput as EPInput } from "./klendDirectUsdcExistingPosition";
+import { POSITION_IDENTITY as EP_POS_ID, EXPECTED_TOKEN_PROGRAM_ID as EP_TOKPROG } from "./klendDirectLendingPosition";
+import { ONE_SF as EP_ONE_SF } from "./klendReserveCapacity";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17868,6 +17871,8 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runKlendDirectPositionFailClosedFixtureChecks(),
+    ...runKlendDirectExistingPositionFixtureChecks(),
     ...runDirectLendingProfileCompatibilityFixtureChecks(),
     ...runDirectLendingComponentActivationFixtureChecks(),
     ...runKlendMarketDataFixtureChecks(),
@@ -20287,6 +20292,139 @@ export function runDirectLendingProfileCompatibilityFixtureChecks(): FixtureChec
   add("AM-21: Steakhouse/Jupiter remain excluded; no Top Pick", dlGetDispo("kamino_steakhouse_usdc")?.selectorEligibility === false && dlGetDispo("jupiter_lend_usdc")?.selectorEligibility === false && DL_DISPOS.every((d) => d.topPickEligibility === false), "excluded");
   add("AM-22: aggregate 5.93, meetsMinimum false, thresholds 7/5.5, all governance manifests immutable", DA_OUTCOME.unroundedAggregate === 5.93 && DA_OUTCOME.meetsMinimum === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && DL_UNIMIN === 7 && DL_CATMIN === 5.5 && GR_SIGNOFF_HASH === "risk_signoff_8f1829f4" && GR_APPROVAL_HASH === "product_approval_c0d5912c", "immutable");
   add("AM-23: no transaction behaviour introduced by the amendment", AM_PROFILE_ROWS.filter((r) => r.card).every((r) => r.card!.cta.action === null && !r.card!.cta.requires_wallet_signature), "read-only");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 17A — Kamino Direct existing-position mounting. Pure normalization
+ * reuses deriveKlendDirectLendingPosition (recognized) + evaluateWithdrawal-
+ * Accessibility (liquid); exact cToken mint only; recognized/liquid separate;
+ * dedupes the API/generic rows; fail-closed; assessment/governance immutable.
+ * ------------------------------------------------------------------ */
+export function runKlendDirectExistingPositionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const NOW = Date.parse("2026-07-18T12:00:00.000Z");
+  const acct = (over: Partial<{ address: string; mint: string; tokenProgram: string; amountRaw: string; decimals: number; owner: string; isClosed: boolean }> = {}) => ({
+    address: over.address ?? "acctA", mint: over.mint ?? EP_POS_ID.cTokenMint, tokenProgram: over.tokenProgram ?? EP_TOKPROG,
+    amountRaw: over.amountRaw ?? "1000000", decimals: over.decimals ?? EP_POS_ID.cTokenDecimals, owner: over.owner ?? "WALLET1", isClosed: over.isClosed,
+  });
+  // rate 1.191805 USDC/cToken: totalSupplySf = ONE_SF × 1191805, collateralSupply = 1_000_000.
+  const reserve = {
+    estimatedTotalSupplySf: (EP_ONE_SF * 1191805n).toString(), collateralMintTotalSupplyRaw: "1000000",
+    totalAvailableLiquidityRaw: "100000000000", queuedLiquidityRaw: "0",
+    reserveStatus: 0, reserveVersion: 1, reserveEmergencyMode: 0, marketEmergencyMode: 0,
+    reserveSourceSlot: 433465111, marketSourceSlot: 433465111, cTokenMintSourceSlot: 433465111,
+  };
+  const input = (over: Partial<EPInput> = {}): EPInput => ({
+    accounts: [acct()], walletAddress: "WALLET1", walletSourceSlot: 433465111, reserve,
+    price: { usdcPriceUsd: 0.9998, fresh: true }, apy: { valuePct: 6.42, fresh: true, rateKind: "estimated_variable_apy" },
+    observedAt: "2026-07-18T12:00:00.000Z", nowMs: NOW, ...over,
+  });
+
+  // --- Detection: exact cToken mint only ---
+  add("EP-1: exact cToken account detected, position exists", (() => { const r = epBuild(input()); return r.positionExists === true && r.cTokenBalanceRaw === "1000000"; })(), "detected");
+  add("EP-2: multiple cToken accounts aggregate", (() => { const r = epBuild(input({ accounts: [acct({ address: "a", amountRaw: "1000000" }), acct({ address: "b", amountRaw: "2000000" })] })); return r.cTokenBalanceRaw === "3000000"; })(), "aggregate");
+  add("EP-3: wrong cToken mint → no position", epBuild(input({ accounts: [acct({ mint: "So11111111111111111111111111111111111111112" })] })).positionExists === false, "no symbol match");
+  add("EP-4: wrong token program → account rejected → no position", epBuild(input({ accounts: [acct({ tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" })] })).positionExists === false, "token program");
+  add("EP-5: zero balance → verified no position", epBuild(input({ accounts: [acct({ amountRaw: "0" })] })).positionExists === false, "zero");
+  add("EP-6: no accounts → no position", epBuild(input({ accounts: [] })).positionExists === false, "none");
+
+  // --- Redemption math (reused deployed-program methodology) ---
+  add("EP-7: recognized = FLOOR(balance × totalSupply / collateralSupply) via exact integer math", (() => { const r = epBuild(input()); return r.recognizedUnderlyingRaw === "1191805" && r.positionExists === true; })(), "1191805");
+  add("EP-8: recognized token amount ≈ 1.191805 USDC", (() => { const r = epBuild(input()); return Math.abs((r.recognizedUnderlyingTokenAmount ?? NaN) - 1.191805) < 1e-6; })(), "tokens");
+
+  // --- Liquidity: recognized vs currently-liquid ---
+  add("EP-9: ample liquidity → fully withdrawable, liquid == recognized", (() => { const r = epBuild(input()); return r.withdrawalState === "fully_withdrawable" && r.currentlyLiquidUnderlyingRaw === r.recognizedUnderlyingRaw && r.delayedOrUnavailableUnderlyingRaw === "0"; })(), "full");
+  add("EP-10: constrained liquidity → partial; liquid < recognized; delayed = remainder", (() => { const r = epBuild(input({ reserve: { ...reserve, totalAvailableLiquidityRaw: "500000" } })); return (r.withdrawalState === "partially_withdrawable" || r.withdrawalState === "currently_unavailable") && BigInt(r.currentlyLiquidUnderlyingRaw ?? "0") <= BigInt(r.recognizedUnderlyingRaw ?? "0") && BigInt(r.delayedOrUnavailableUnderlyingRaw ?? "0") === BigInt(r.recognizedUnderlyingRaw ?? "0") - BigInt(r.currentlyLiquidUnderlyingRaw ?? "0"); })(), "partial");
+  add("EP-11: emergency mode → not withdrawable, but position still recognized/visible", (() => { const r = epBuild(input({ reserve: { ...reserve, reserveEmergencyMode: 1 } })); return (r.withdrawalState === "emergency_paused" || r.withdrawalState === "currently_unavailable") && r.positionExists === true && r.recognizedUnderlyingRaw === "1191805"; })(), "emergency");
+  add("EP-12: liquid never exceeds recognized", (() => { const r = epBuild(input({ reserve: { ...reserve, totalAvailableLiquidityRaw: "999999999999999" } })); return BigInt(r.currentlyLiquidUnderlyingRaw ?? "0") <= BigInt(r.recognizedUnderlyingRaw ?? "0"); })(), "cap");
+
+  // --- Pricing (fresh only) ---
+  add("EP-13: fresh price → recognized & liquid USD computed (no $1 assumption)", (() => { const r = epBuild(input()); return r.recognizedValueUsd !== null && Math.abs((r.recognizedValueUsd as number) - 1.191805 * 0.9998) < 1e-4 && r.liquidValueUsd !== null; })(), "usd");
+  add("EP-14: stale/absent price → token units visible, USD null (never zero, never removed)", (() => { const r = epBuild(input({ price: { usdcPriceUsd: null, fresh: false } })); return r.positionExists === true && r.recognizedUnderlyingRaw === "1191805" && r.recognizedValueUsd === null && r.liquidValueUsd === null; })(), "no price");
+
+  // --- Freshness fail-closed ---
+  add("EP-15: stale wallet data → position visible but recognized unresolved (fail-closed)", (() => { const r = epBuild(input({ nowMs: NOW + 5 * 60 * 1000 })); return r.positionExists === true && r.freshnessState !== "fresh"; })(), "stale");
+  add("EP-16: source-slot skew beyond bound → unresolved, still visible", (() => { const r = epBuild(input({ reserve: { ...reserve, reserveSourceSlot: 433465111 + 1000 } })); return r.positionExists === true && (r.freshnessState === "unresolved" || r.freshnessState === "stale"); })(), "skew");
+  add("EP-17: missing conversion inputs → visible, unresolved (no fabricated value)", (() => { const r = epBuild(input({ reserve: { ...reserve, estimatedTotalSupplySf: null } })); return r.positionExists === true && r.recognizedValueUsd === null && r.freshnessState === "unresolved"; })(), "missing supply");
+
+  // --- Normalization + dedup ---
+  add("EP-18: normalized WalletPosition carries recognized/liquid/withdrawalState + dedup key + existing-only", (() => { const w = epToWallet(epBuild(input())); return !!w && w.type === "protocol" && w.protocol === "Kamino" && w.dedupeKey === EP_KEY && w.existingPositionOnly === true && w.mint === EP_POS_ID.liquidityMint && typeof w.liquidValueUsd === "number"; })(), "normalized");
+  add("EP-19: generic cToken row + API obligation row for the exact reserve are deduped; unrelated preserved", (() => {
+    const generic = { id: "tok-ctoken", source: "wallet", type: "token", symbol: "?", mint: EP_POS_ID.cTokenMint, amount: "1000000", detection: "direct_wallet_balance" } as any;
+    const apiRow = { id: `kamino-supplied-${EP_POS_ID.reserveAddress}`, source: "kamino", type: "protocol", symbol: "USDC", mint: EP_POS_ID.liquidityMint, amount: "", detection: "protocol_api" } as any;
+    const other = { id: "kamino-supplied-OtherReserve111", source: "kamino", type: "protocol", symbol: "SOL", amount: "", detection: "protocol_api" } as any;
+    const out = epDedupe([generic, apiRow, other]);
+    return !out.some((p) => p.mint === EP_POS_ID.cTokenMint) && !out.some((p) => p.id.includes(EP_POS_ID.reserveAddress)) && out.some((p) => p.id === other.id);
+  })(), "deduped");
+  add("EP-20: merge yields exactly one Kamino Direct row (one economic position)", (() => {
+    const generic = { id: "tok-ctoken", source: "wallet", type: "token", symbol: "?", mint: EP_POS_ID.cTokenMint, amount: "1000000", detection: "direct_wallet_balance" } as any;
+    const merged = epMerge([generic], epBuild(input()));
+    const rows = merged.filter((p) => p.id === EP_ID);
+    return rows.length === 1 && !merged.some((p) => p.mint === EP_POS_ID.cTokenMint && p.id !== EP_ID);
+  })(), "one row");
+  add("EP-21: no position → merge appends nothing (no fake row)", (() => { const merged = epMerge([], epBuild(input({ accounts: [] }))); return merged.length === 0; })(), "no fake");
+
+  // --- Immutability + read-only ---
+  add("EP-22: assessment/governance/policy immutable; Steakhouse/Jupiter unaffected", DA_OUTCOME.unroundedAggregate === 5.93 && DA_OUTCOME.meetsMinimum === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && DL_CATMIN === 5.5 && DL_UNIMIN === 7 && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions", "immutable");
+  add("EP-23: normalized position carries no transaction/execution affordance", (() => { const w = epToWallet(epBuild(input())); return !!w && !("cta" in w) && w.detection === "protocol_api"; })(), "read-only");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 17A.1 — fail-closed queued liquidity + visible unresolved position.
+ * Unknown queue never becomes zero/positive liquid; a confirmed cToken holding
+ * stays visible as ONE canonical unresolved row when enrichment fails.
+ * ------------------------------------------------------------------ */
+export function runKlendDirectPositionFailClosedFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const NOW = Date.parse("2026-07-18T12:00:00.000Z");
+  const acct = { address: "a", mint: EP_POS_ID.cTokenMint, tokenProgram: EP_TOKPROG, amountRaw: "1000000", decimals: EP_POS_ID.cTokenDecimals, owner: "WALLET1" };
+  const reserveResolved = {
+    estimatedTotalSupplySf: (EP_ONE_SF * 1191805n).toString(), collateralMintTotalSupplyRaw: "1000000",
+    totalAvailableLiquidityRaw: "100000000000", queuedLiquidityRaw: "0" as string | null,
+    reserveStatus: 0, reserveVersion: 1, reserveEmergencyMode: 0, marketEmergencyMode: 0,
+    reserveSourceSlot: 433465111, marketSourceSlot: 433465111, cTokenMintSourceSlot: 433465111,
+  };
+  const inp = (over: Partial<EPInput> = {}): EPInput => ({
+    accounts: [acct], walletAddress: "WALLET1", walletSourceSlot: 433465111, reserve: reserveResolved,
+    price: { usdcPriceUsd: 0.9998, fresh: true }, apy: { valuePct: null, fresh: false, rateKind: "estimated_variable_apy" },
+    observedAt: "2026-07-18T12:00:00.000Z", nowMs: NOW, ...over,
+  });
+
+  // --- Issue 1: queued liquidity fail-closed ---
+  add("FC-1: explicitly decoded queued=0 is accepted (recognized+liquid resolve)", (() => { const r = epBuild(inp()); return r.enrichmentState === "complete" && r.currentlyLiquidUnderlyingRaw !== null; })(), "zero ok");
+  add("FC-2: MISSING queued liquidity (null) → liquid UNRESOLVED, never zero/positive", (() => { const r = epBuild(inp({ reserve: { ...reserveResolved, queuedLiquidityRaw: null } })); return r.positionExists === true && r.recognizedUnderlyingRaw !== null && r.currentlyLiquidUnderlyingRaw === null && r.liquidValueUsd === null && r.withdrawalState === "unresolved" && r.enrichmentState === "recognized_only"; })(), "unknown queue");
+  add("FC-3: unknown queue never produces positive liquid value", (() => { const r = epBuild(inp({ reserve: { ...reserveResolved, queuedLiquidityRaw: null } })); return r.currentlyLiquidUnderlyingTokenAmount === null && r.liquidValueUsd === null; })(), "no positive");
+  add("FC-4: missing total available liquidity (null) → liquid unresolved", (() => { const r = epBuild(inp({ reserve: { ...reserveResolved, totalAvailableLiquidityRaw: null } })); return r.currentlyLiquidUnderlyingRaw === null && r.liquidValueUsd === null; })(), "no available");
+  add("FC-5: emergency mode → no verified liquid value, recognized still visible", (() => { const r = epBuild(inp({ reserve: { ...reserveResolved, reserveEmergencyMode: 1 } })); return r.recognizedUnderlyingRaw !== null && r.currentlyLiquidUnderlyingRaw === null && r.liquidValueUsd === null && (r.withdrawalState === "emergency_paused" || r.withdrawalState === "currently_unavailable"); })(), "emergency");
+  add("FC-6: recognized may resolve while ONLY withdrawal data is unresolved", (() => { const r = epBuild(inp({ reserve: { ...reserveResolved, queuedLiquidityRaw: null } })); return r.recognizedValueUsd !== null && r.liquidValueUsd === null; })(), "recognized kept");
+
+  // --- Issue 2: confirmed cToken visible when enrichment fails ---
+  add("FC-7: reserve enrichment failure (reserve=null) → ONE visible unresolved position, cToken balance preserved", (() => { const r = epBuild(inp({ reserve: null })); return r.positionExists === true && r.cTokenBalanceRaw === "1000000" && r.recognizedUnderlyingRaw === null && r.recognizedValueUsd === null && r.liquidValueUsd === null && r.withdrawalState === "unresolved" && r.enrichmentState === "unresolved"; })(), "visible unresolved");
+  add("FC-8: missing total supply → visible, recognized unresolved (no fabricated underlying)", (() => { const r = epBuild(inp({ reserve: { ...reserveResolved, estimatedTotalSupplySf: null } })); return r.positionExists === true && r.recognizedUnderlyingRaw === null && r.recognizedValueUsd === null; })(), "no supply");
+  add("FC-9: unresolved position never fabricates underlying USDC value", (() => { const r = epBuild(inp({ reserve: null })); const w = epToWallet(r); return !!w && w.valueUsd === null && w.recognizedValueUsd === null && w.liquidValueUsd === null; })(), "no fabrication");
+  add("FC-10: unresolved WalletPosition keeps the confirmed cToken balance visible + existing-only", (() => { const w = epToWallet(epBuild(inp({ reserve: null }))); return !!w && w.amount === "1000000" && w.mint === EP_POS_ID.cTokenMint && w.existingPositionOnly === true && w.candidateId === "kamino_usdc_lending"; })(), "cToken kept");
+  add("FC-11: no cTokens → still no position even with reserve=null", epBuild(inp({ accounts: [], reserve: null })).positionExists === false, "no position");
+
+  // --- Dedup holds for the unresolved row ---
+  add("FC-12: unresolved position replaces generic cToken row + suppresses exact-reserve API row; unrelated kept", (() => {
+    const generic = { id: "tok", source: "wallet", type: "token", symbol: "?", mint: EP_POS_ID.cTokenMint, amount: "1000000", detection: "direct_wallet_balance" } as any;
+    const apiRow = { id: `kamino-supplied-${EP_POS_ID.reserveAddress}`, source: "kamino", type: "protocol", mint: EP_POS_ID.liquidityMint, amount: "", detection: "protocol_api" } as any;
+    const other = { id: "kamino-supplied-Other111", source: "kamino", type: "protocol", amount: "", detection: "protocol_api" } as any;
+    const merged = epMerge([generic, apiRow, other], epBuild(inp({ reserve: null })));
+    const canon = merged.filter((p) => p.id === EP_ID);
+    return canon.length === 1 && !merged.some((p) => p.id === "tok") && !merged.some((p) => p.id.includes(EP_POS_ID.reserveAddress) && p.id !== EP_ID) && merged.some((p) => p.id === other.id);
+  })(), "dedup unresolved");
+  add("FC-13: enrichment failure does not restore duplicate rows (one economic position)", (() => { const merged = epMerge([{ id: "tok", source: "wallet", type: "token", symbol: "?", mint: EP_POS_ID.cTokenMint, amount: "1", detection: "direct_wallet_balance" } as any], epBuild(inp({ reserve: null }))); return merged.filter((p) => p.mint === EP_POS_ID.cTokenMint).length === 1 && merged.filter((p) => p.mint === EP_POS_ID.cTokenMint)[0].id === EP_ID; })(), "no restore");
+
+  // --- Liquidity invariant + immutability + Safety Buffer unchanged ---
+  add("FC-14: liquid raw never exceeds recognized raw (when both resolved)", (() => { const r = epBuild(inp()); return r.currentlyLiquidUnderlyingRaw !== null && r.recognizedUnderlyingRaw !== null && BigInt(r.currentlyLiquidUnderlyingRaw) <= BigInt(r.recognizedUnderlyingRaw); })(), "invariant");
+  add("FC-15: Safety Buffer methodology unchanged; assessment/governance immutable; no tx behavior", DA_OUTCOME.unroundedAggregate === 5.93 && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && DL_CATMIN === 5.5 && DL_UNIMIN === 7 && (() => { const w = epToWallet(epBuild(inp({ reserve: null }))); return !!w && !("cta" in w); })(), "unchanged");
 
   return checks;
 }

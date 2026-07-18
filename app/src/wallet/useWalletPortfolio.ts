@@ -33,6 +33,12 @@ import {
   type WalletPosition,
 } from "./walletPosition";
 import { fetchNativeStakePositions, fetchKaminoPositions } from "./protocolPositions";
+import {
+  buildKlendDirectUsdcExistingPosition,
+  mergeKlendDirectPosition,
+  type KlendDirectReserveSnapshot,
+} from "../suggestions/klendDirectUsdcExistingPosition";
+import { POSITION_IDENTITY as KLEND_DIRECT_IDENTITY, EXPECTED_TOKEN_PROGRAM_ID as KLEND_CLASSIC_TOKEN_PROGRAM, type WalletTokenAccountInput } from "../suggestions/klendDirectLendingPosition";
 import type { VrtInfo } from "./jitoRestaking";
 import type { SanctumLstInfo } from "./sanctumLsts";
 import {
@@ -83,6 +89,8 @@ type ReadName =
   | "native_stake"
   | "kamino"
   | "kamino_vault"
+  | "klend_direct_reserve"
+  | "klend_reserve_slot"
   | "jito_vault"
   | "sanctum_lst"
   | "lst_apy"
@@ -101,6 +109,46 @@ type ReadName =
 async function fetchKaminoVaults(rpcUrl: string, ownerB58: string): Promise<WalletPosition[]> {
   const mod = await import("./kaminoVaults");
   return mod.fetchKaminoVaultPositions(rpcUrl, ownerB58);
+}
+
+/**
+ * Step 17A — read the EXACT approved Kamino Direct reserve (D6q6…) via the Kamino SDK for the fields
+ * the existing-position redemption + withdrawal-accessibility math require. Dynamically imported and
+ * FULLY GUARDED: any decode/identity/read failure returns null so the mount is a strict no-op (the
+ * portfolio is unchanged). Never used as a fallback for anything else; never values by API or price.
+ */
+async function fetchKlendDirectReserveSnapshot(rpcUrl: string, currentSlot: number): Promise<KlendDirectReserveSnapshot | null> {
+  // Each accessor is wrapped: an unsupported/throwing/absent value returns null (UNRESOLVED), never 0.
+  const s = (fn: () => unknown): string | null => { try { const v = fn(); return v == null ? null : String(v); } catch { return null; } };
+  const n = (fn: () => unknown): number | null => { try { const v = fn(); return v == null ? null : Number(v); } catch { return null; } };
+  try {
+    const [klend, kit] = await Promise.all([import("@kamino-finance/klend-sdk"), import("@solana/kit")]);
+    const rpc = (kit as any).createSolanaRpc(rpcUrl);
+    // Installed SDK 9.1.2: KaminoReserve.initializeFromAddress (NOT Reserve.load). Guarded.
+    const reserve: any = await (klend as any).KaminoReserve?.initializeFromAddress?.(
+      (kit as any).address(KLEND_DIRECT_IDENTITY.reserveAddress),
+      rpc,
+      450 /* recentSlotDurationMs — affects estimates only; getTotalSupplySf is the exact SF value */
+    );
+    if (!reserve) return null;
+    // Exact identity via the SDK accessors, or nothing.
+    if (s(() => reserve.getLiquidityMint()) !== KLEND_DIRECT_IDENTITY.liquidityMint || s(() => reserve.getCTokenMint()) !== KLEND_DIRECT_IDENTITY.cTokenMint) return null;
+    return {
+      estimatedTotalSupplySf: s(() => reserve.getTotalSupplySf().toString()),                        // BN, 2^60 SF
+      collateralMintTotalSupplyRaw: s(() => reserve.state.collateral.mintTotalSupply.toString()),     // BN base units
+      totalAvailableLiquidityRaw: s(() => reserve.getLiquidityAvailableAmount().floor().toString()),  // Decimal lamports
+      queuedLiquidityRaw: s(() => reserve.getQueuedLiquidityAmountAtCurrentRate().floor().toString()), // null = UNRESOLVED, never 0
+      reserveStatus: n(() => reserve.state.config.status) ?? 0,
+      reserveVersion: n(() => reserve.state.version) ?? 1,
+      reserveEmergencyMode: n(() => reserve.state.config.emergencyMode) ?? 0,
+      marketEmergencyMode: 0,
+      reserveSourceSlot: currentSlot,
+      marketSourceSlot: currentSlot,
+      cTokenMintSourceSlot: currentSlot,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** LST APY (stake-pool math) via a dynamically-imported module (off main bundle). */
@@ -703,6 +751,53 @@ export function useWalletPortfolio(): WalletPortfolio {
           pricedAsOf = Date.now();
         }
       }
+
+      // Step 17A — Kamino Direct existing-position mount (additive + fail-closed). Detect exact-cToken
+      // accounts from the already-read classic SPL token accounts; if present, read the exact reserve and
+      // produce ONE normalized existing-position record (recognized + currently-liquid separate), then
+      // dedupe the generic cToken row / API obligation row. ANY failure → strict no-op (portfolio
+      // unchanged). Never symbol-matched; never valued by API/price fallback.
+      try {
+        const cTokenAccounts: WalletTokenAccountInput[] = (splOk ? accountsOf(splRes.value) : [])
+          .map((a) => a?.account?.data?.parsed?.info)
+          .filter((info) => info?.mint === KLEND_DIRECT_IDENTITY.cTokenMint && info?.tokenAmount?.amount !== "0")
+          .map((info, idx) => ({
+            address: `klend-ctoken-${idx}`,
+            mint: info!.mint as string,
+            tokenProgram: KLEND_CLASSIC_TOKEN_PROGRAM,
+            amountRaw: String(info!.tokenAmount!.amount),
+            decimals: Number(info!.tokenAmount!.decimals),
+            owner: owner.toBase58(),
+          }));
+        if (cTokenAccounts.length > 0) {
+          const nowIso = new Date().toISOString();
+          const currentSlot = await withTimeout(connection.getSlot(), TOKEN_TIMEOUT_MS, "klend_reserve_slot").catch(() => 0);
+          if (!cancelled && myReq === reqId.current) {
+            const reserveSnap = await withTimeout(
+              fetchKlendDirectReserveSnapshot(connection.rpcEndpoint, currentSlot),
+              PROTOCOL_TIMEOUT_MS,
+              "klend_direct_reserve"
+            ).catch(() => null);
+            if (!cancelled && myReq === reqId.current) {
+              // Build ALWAYS when a confirmed cToken holding exists — reserveSnap may be null (enrichment
+              // failed), which yields ONE canonical UNRESOLVED row (cToken balance visible, USD null).
+              const usdcPrice = pricedAsOf != null ? merged.find((p) => p.mint === KLEND_DIRECT_IDENTITY.liquidityMint)?.priceUsd ?? null : null;
+              const record = buildKlendDirectUsdcExistingPosition({
+                accounts: cTokenAccounts,
+                walletAddress: owner.toBase58(),
+                walletSourceSlot: currentSlot,
+                reserve: reserveSnap, // KlendDirectReserveSnapshot | null
+                price: { usdcPriceUsd: usdcPrice, fresh: pricedAsOf != null && typeof usdcPrice === "number" },
+                apy: { valuePct: null, fresh: false, rateKind: "estimated_variable_apy" },
+                observedAt: nowIso,
+                nowMs: Date.now(),
+              });
+              if (record.positionExists) merged = mergeKlendDirectPosition(merged, record);
+            }
+          }
+        }
+      } catch { /* strict no-op on any failure — portfolio unchanged */ }
+      if (cancelled || myReq !== reqId.current) return;
 
       // Final update of the read: apply any APY/LP/price changes and clear the
       // loading flag (always runs, even if nothing changed, so skeletons resolve).

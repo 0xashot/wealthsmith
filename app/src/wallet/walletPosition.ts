@@ -93,6 +93,22 @@ export interface WalletPosition {
    * app page, or show no Manage link at all — never an invented URL).
    */
   manageUrl?: string;
+  /**
+   * Step 17A — existing-position enrichment for products that expose a recognized vs currently-liquid
+   * split (e.g. Kamino Direct USDC lending). All optional and backward-compatible; a position without
+   * them behaves exactly as before. `valueUsd` remains the recognized value for portfolio totals;
+   * `liquidValueUsd` is the separately-verified currently-withdrawable value (never auto Safety Buffer).
+   */
+  recognizedValueUsd?: number | null;
+  liquidValueUsd?: number | null;
+  /** User/diagnostic withdrawal state, e.g. "fully_withdrawable" | "currently_unavailable" | "stale". */
+  withdrawalState?: string;
+  /** True when the position is visible for existing holders but is not a new-capital suggestion source. */
+  existingPositionOnly?: boolean;
+  /** Canonical economic-position dedup key — binds to the position (reserve+cTokenMint), not a label. */
+  dedupeKey?: string;
+  /** Approved product candidate id, when the position maps to one. */
+  candidateId?: string;
 }
 
 /** SPL Token programs (constants — @solana/spl-token is not a dependency). */

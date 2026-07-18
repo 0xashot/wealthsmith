@@ -212,7 +212,8 @@ export function deriveRailSuggestions(args: {
       bufferFullyFundedByLiquidCoverage: buffer?.fullyFunded === true,
       excessDeterministicAmountUsd: excessUsd,
       suitability,
-      holdsExactCToken: false,
+      // 17A — read the canonical mounted existing-position (never an independent cToken scan that can drift).
+      holdsExactCToken: positions.some((p) => p.candidateId === "kamino_usdc_lending" && p.existingPositionOnly === true),
       approvedTopUpRulePasses: false,
       klendMarket: marketInput && capacityCovers
         ? { apy: marketInput.apy, availability: marketInput.availability, capacity: { fresh: marketInput.capacity.fresh, sufficientForAmount: capacityCovers } }
