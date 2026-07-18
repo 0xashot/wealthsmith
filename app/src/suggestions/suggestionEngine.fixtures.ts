@@ -10,6 +10,11 @@ import { DIRECT_ASSESSMENT_PROVENANCE as DA_PROVENANCE, DIRECT_DIMENSION_ASSESSM
 import { AGGREGATE_COMPUTATION_VERSION as AGG_VERSION } from "./steakhouseAutomatedAssessment";
 import { REVIEW_BRIEF_PROVENANCE as RB_PROV, BOUND_ASSESSMENT_MANIFEST_HASH as RB_BOUND, DECISION_HEADLINE as RB_HEADLINE, projectRows, REVIEW_BRIEF_ROWS as RB_ROWS, CAPPING_RISKS as RB_CAPS, partitionEvidenceStrength, EVIDENCE_STRENGTH as RB_STRENGTH, DECISION_OPTIONS as RB_OPTIONS, MITIGATION_CONDITIONS as RB_MITIG, BRIEF_STATE as RB_STATE, validateReviewBrief, REVIEW_BRIEF_VALIDATION as RB_VALIDATION, REVIEW_BRIEF_MANIFEST as RB_MANIFEST, computeReviewBriefHash, REVIEW_BRIEF_HASH as RB_HASH, REVIEW_BRIEF_CONFERS as RB_CONFERS } from "./klendDirectUsdcReviewBrief";
 import { JUP_PROVISIONAL_PROVENANCE as JP_PROV, BOUND_PACKAGE_MANIFEST as JP_BOUND_PKG, BOUND_IDL_AMENDMENT_MANIFEST as JP_BOUND_IDL, BOUND_TEAM_DISCLOSURE_MANIFEST as JP_BOUND_TD, JUP_PROVISIONAL_SCORES as JP_SCORES, HELD_OUT_INCIDENT_HISTORY as JP_HELDOUT, scoredWeightedPoints, computeBoundedAggregate, JUP_BOUNDED_AGGREGATE as JP_AGG, JUP_PROVISIONAL_OUTCOME as JP_OUTCOME, ROBUSTNESS_NOTE as JP_ROBUST, JUP_PROVISIONAL_STATE as JP_STATE, validateJupProvisional, JUP_PROVISIONAL_VALIDATION as JP_VALIDATION, JUP_PROVISIONAL_MANIFEST as JP_MANIFEST, computeJupProvisionalHash, JUP_PROVISIONAL_HASH as JP_HASH, JUP_PROVISIONAL_CONFERS as JP_CONFERS } from "./jupiterLendUsdcProvisionalAssessment";
+import { DIRECT_USDC_LENDING_CATEGORY_MINIMUM as DL_CATMIN, UNIVERSAL_MINIMUM as DL_UNIMIN, MIN_PROTOCOL_RISK_SCORE as DL_MINPROTO, evaluateCategoryFloor as dlEvalFloor, DIRECT_USDC_LENDING_POLICY_MANIFEST_HASH as DL_POLICY_HASH, computeDirectPolicyManifestHash, DIRECT_USDC_LENDING_POLICY_VALIDATION as DL_POLICY_VALID, PASSING_CATEGORY_FLOOR_DOES_NOT_MEAN as DL_DISCLAIMER, DIRECT_USDC_LENDING_ELIGIBILITY_POLICY_ID as DL_POLICY_ID } from "./directUsdcLendingEligibilityPolicy";
+import { CANDIDATE_DISPOSITIONS as DL_DISPOS, getDisposition as dlGetDispo, EXCLUDED_CANDIDATE_IDS as DL_EXCLUDED, KAMINO_CATEGORY_EVALUATION as DL_KCAT, KAMINO_GOVERNANCE_RESOLUTION as DL_GOV, DISPOSITIONS_VALIDATION as DL_DISPO_VALID, DISPOSITIONS_MANIFEST_HASH as DL_DISPO_HASH } from "./directUsdcLendingDispositions";
+import { selectDirectUsdcLendingCandidate as dlSelect, evaluateSuggestionTrigger as dlTrigger, SELECTOR_VALIDATION as DL_SEL_VALID, type SelectorProductState as DLProductState } from "./directUsdcLendingSelector";
+import { buildDirectLendingCardModel as dlBuildCard, validateCardCopy as dlValidateCard, DIRECT_USDC_LENDING_CARD_COPY as DL_COPY, formatDirectLendingApy as dlFmtApy, CARD_COPY_VALIDATION as DL_CARD_VALID, SMITH_AI_DIRECT_LENDING_EXPLANATION as DL_SMITH, validateSmithAiExplanation as dlValidateSmith, buildAnalyticsPayload as dlAnalytics, ANALYTICS_FORBIDDEN_FIELDS as DL_ANALYTICS_FORBIDDEN, DIRECT_USDC_LENDING_CARD_ACTIONS as DL_ACTIONS } from "./directUsdcLendingSuggestionCard";
+import { DIRECT_USDC_LENDING_PRODUCT_DECISION as DL_DECISION, DIRECT_USDC_LENDING_PRODUCT_DECISION_MANIFEST_HASH as DL_DECISION_HASH, DIRECT_LENDING_TESTING_STATES as DL_TESTING, PRODUCT_DECISION_VALIDATION as DL_DECISION_VALID, computeProductDecisionManifestHash } from "./directUsdcLendingProductDecision";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17855,6 +17860,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runDirectUsdcLendingIntegrationFixtureChecks(),
     ...runJupProvisionalAssessmentFixtureChecks(),
     ...runDirectReviewBriefFixtureChecks(),
     ...runTeamDisclosureFixtureChecks(),
@@ -19868,6 +19874,88 @@ export function runJupProvisionalAssessmentFixtureChecks(): FixtureCheck[] {
   // --- Manifest determinism + provisional score comparison ---
   add("JP-28: manifest hash is deterministic and well-formed", JP_HASH === computeJupProvisionalHash() && /^jup_provisional_[0-9a-f]{8}$/.test(JP_HASH) && JP_MANIFEST.upperBound === 4.32, JP_HASH);
   add("JP-29: Jupiter's upper bound (4.32) is below both scored candidates (Kamino 5.93, Steakhouse 5.37)", JP_AGG.upperBound < 5.37 && JP_AGG.upperBound < DA_OUTCOME.unroundedAggregate && DA_OUTCOME.unroundedAggregate === 5.93, `${JP_AGG.upperBound}<5.37<5.93`);
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 16H-S.1 — Direct USDC Lending category policy, dispositions,
+ * selector, card, product decision. Production stays DISABLED (blocked on
+ * human review); everything else is built and fail-closed.
+ * ------------------------------------------------------------------ */
+export function runDirectUsdcLendingIntegrationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const FRESH: DLProductState = { identityValid: true, assessmentValid: true, categoryFloorPassed: true, assessmentInvalidated: false, governanceComplete: true, depositsAvailable: true, emergencyModeActive: false, capacityFreshAndSufficient: true, apyFreshAndComparisonReady: true, riskPolicyVersionActive: true };
+  const USER = { holdsCanonicalUsdc: true, safetyBufferFullySatisfiedByVerifiedLiquidCoverage: true, relevantUsdcIsExcessCapital: true, deterministicEligibleAmountIsPositive: true, userSuitableForCategory: true, noSuitabilityRuleProhibitsDefiLending: true };
+
+  // --- Thresholds ---
+  add("DL-1: direct-USDC category minimum is exactly 5.5", DL_CATMIN === 5.5, `min=${DL_CATMIN}`);
+  add("DL-2: universal threshold 7 is preserved (not lowered)", DL_UNIMIN === 7 && DL_MINPROTO === 7 && DL_POLICY_VALID.valid === true, `uni=${DL_UNIMIN}`);
+  add("DL-3: category floor is strictly below the universal floor", DL_CATMIN < DL_UNIMIN, `${DL_CATMIN}<${DL_UNIMIN}`);
+  add("DL-4: policy manifest is deterministic", DL_POLICY_HASH === computeDirectPolicyManifestHash() && /^direct_policy_[0-9a-f]{8}$/.test(DL_POLICY_HASH), DL_POLICY_HASH);
+
+  // --- Kamino original assessment preserved ---
+  add("DL-5: Kamino original meetsMinimum remains false", DA_OUTCOME.meetsMinimum === false && DL_KCAT.originalMeetsMinimumUnchanged === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3", "false");
+  add("DL-6: Kamino aggregate 5.93 and universal threshold 7 unchanged", DL_KCAT.automatedAggregate === 5.93 && DL_KCAT.originalUniversalThreshold === 7 && DA_OUTCOME.unroundedAggregate === 5.93, "5.93/7");
+  add("DL-7: Kamino category-floor result is pass; universal-floor result is fail", DL_KCAT.categoryFloorResult === "pass" && DL_KCAT.universalFloorResult === "fail", `${DL_KCAT.categoryFloorResult}/${DL_KCAT.universalFloorResult}`);
+  add("DL-8: category-floor passage is NOT product approval", DL_KCAT.recommendationResult === "pending_governance" && DL_KCAT.assessmentMutated === false && DL_KCAT.doesNotClaimHistoricalPass === true, "pending");
+
+  // --- Governance mandatory + missing ---
+  add("DL-9: human review / risk signoff / product approval all remain mandatory and MISSING", DL_GOV.humanReviewState === "absent" && DL_GOV.riskSignoffState === "absent" && DL_GOV.productApprovalState === "absent" && DL_GOV.missingGates.length === 3, DL_GOV.missingGates.join(","));
+  add("DL-10: missing governance prevents production suggestion", DL_GOV.productionSuggestionEligible === false && DL_GOV.firstMissingGate === "human_review", `blocker=${DL_GOV.firstMissingGate}`);
+  add("DL-11: product-owner decision is explicitly not governance", DL_GOV.productOwnerDecisionIsNotGovernance === true && DL_GOV.fabricationRefused === true && DL_DECISION.isNotHumanRiskReview === true && DL_DECISION.isNotRiskSignoff === true && DL_DECISION.isNotProductApproval === true, "not governance");
+
+  // --- Selector: only Kamino, never excluded, no fallback ---
+  add("DL-12: only Kamino can be selected (fresh gates)", dlSelect(FRESH).selectedCandidateId === "kamino_usdc_lending" && dlSelect(FRESH).state === "eligible_candidate_selected", "kamino");
+  add("DL-13: Steakhouse and Jupiter can never be selected", DL_EXCLUDED.includes("kamino_steakhouse_usdc") && DL_EXCLUDED.includes("jupiter_lend_usdc") && DL_SEL_VALID.valid === true, DL_SEL_VALID.errors.join("|") || "clean");
+  add("DL-14: excluded candidates are never fallback candidates", (() => { const blocked = [{ governanceComplete: false }, { depositsAvailable: false }, { assessmentInvalidated: true }, { capacityFreshAndSufficient: false }]; return blocked.every((b) => { const r = dlSelect({ ...FRESH, ...b }); return r.selectedCandidateId === null && r.fallbackUsed === false; }); })(), "no fallback");
+  add("DL-15: APY/TVL/brand cannot override disposition (only Kamino is selector-eligible)", DL_DISPOS.filter((d) => d.selectorEligibility).length === 1 && dlGetDispo("kamino_usdc_lending")?.selectorEligibility === true, "1 eligible");
+
+  // --- Blocked states are distinguished ---
+  add("DL-16: emergency mode suppresses suggestion (blocked_availability)", dlSelect({ ...FRESH, emergencyModeActive: true }).state === "blocked_availability", "avail");
+  add("DL-17: invalidated assessment suppresses suggestion (blocked_invalidation)", dlSelect({ ...FRESH, assessmentInvalidated: true }).state === "blocked_invalidation", "inval");
+  add("DL-18: stale APY -> blocked_freshness; stale capacity -> blocked_capacity", dlSelect({ ...FRESH, apyFreshAndComparisonReady: false }).state === "blocked_freshness" && dlSelect({ ...FRESH, capacityFreshAndSufficient: false }).state === "blocked_capacity", "fresh/cap");
+  add("DL-19: no approved candidate when category floor not passed", dlSelect({ ...FRESH, categoryFloorPassed: false }).state === "no_approved_candidate", "no cand");
+
+  // --- Suggestion trigger user conditions ---
+  add("DL-20: only excess USDC is eligible", dlTrigger(FRESH, { ...USER, relevantUsdcIsExcessCapital: false }).generate === false, "excess only");
+  add("DL-21: incomplete Safety Buffer prevents suggestion", dlTrigger(FRESH, { ...USER, safetyBufferFullySatisfiedByVerifiedLiquidCoverage: false }).generate === false, "buffer");
+  add("DL-22: fresh availability/capacity/APY required for the trigger", dlTrigger({ ...FRESH, depositsAvailable: false }, USER).generate === false && dlTrigger({ ...FRESH, capacityFreshAndSufficient: false }, USER).generate === false && dlTrigger({ ...FRESH, apyFreshAndComparisonReady: false }, USER).generate === false, "freshness");
+  add("DL-23: zero deterministic amount prevents suggestion", dlTrigger(FRESH, { ...USER, deterministicEligibleAmountIsPositive: false }).generate === false, "amount");
+
+  // --- Card copy: no score, no threshold, required disclosures, no guaranteed ---
+  const card = dlBuildCard({ measuredApyPct: 6.42, amountText: null });
+  add("DL-24: card contains no numeric risk score and no internal threshold", DL_CARD_VALID.valid === true && dlValidateCard(card).valid === true, DL_CARD_VALID.errors.join("|") || "clean");
+  add("DL-25: APY includes ~ and is labelled variable", dlFmtApy(6.42) === "~6.42% variable APY" && card.apyText === "~6.42% variable APY", card.apyText ?? "null");
+  add("DL-26: risk disclosure mentions principal loss and delayed/paused withdrawals", /principal can be reduced/i.test(DL_COPY.riskDisclosure) && /(delayed|paused)/i.test(DL_COPY.riskDisclosure), "disclosed");
+  add("DL-27: no guaranteed language in card copy", !/guaranteed|risk-free|cash equivalent|instant withdrawal/i.test([DL_COPY.title, DL_COPY.description, DL_COPY.riskDisclosure, ...DL_COPY.keyFacts].join(" ")), "no guarantees");
+  add("DL-28: no transaction/signature/deposit CTA in actions", DL_ACTIONS.every((a) => a.actionKind === "review_only" && !a.executesTransaction && !a.requiresWalletSignature && !a.completionOnClick) && !DL_ACTIONS.some((a) => /deposit now|move funds|start earning/i.test(a.label)), "read-only");
+
+  // --- Smith AI + analytics ---
+  add("DL-29: Smith AI copy acknowledges risk, exposes no score/threshold", dlValidateSmith(DL_SMITH).valid === true && !/safe|risk-free|5\.93|5\.5/i.test(DL_SMITH), "bounded");
+  add("DL-30: analytics payload carries only approved fields (no score/reviewer/balance)", (() => { const p = dlAnalytics({ event: "governance_blocked", candidateId: "kamino_usdc_lending", suggestionType: "direct_usdc_lending", policyVersion: "1.0.0", suppressionReason: "human_review_missing", freshnessState: "n/a" }); const keys = Object.keys(p); return DL_ANALYTICS_FORBIDDEN.every((f) => !keys.includes(f)) && keys.includes("policyVersion") && keys.includes("suppressionReason"); })(), "clean payload");
+
+  // --- Top Pick + existing positions + Jupiter ---
+  add("DL-31: no automatic Top Pick (sole candidate does not auto-Top-Pick)", DL_DISPOS.every((d) => d.topPickEligibility === false), "no auto top pick");
+  add("DL-32: existing Kamino position support retained, separate from suggestion", dlGetDispo("kamino_usdc_lending")?.existingPositionSupport === true, "kamino pos");
+  add("DL-33: Steakhouse existing-position support unchanged; never suggested", (() => { const s = dlGetDispo("kamino_steakhouse_usdc"); return s?.disposition === "existing_position_only" && s?.existingPositionSupport === true && s?.suggestionEligibility === false && s?.safetyBufferRecognition === "unchanged"; })(), "steak ok");
+  add("DL-34: Jupiter remains research-only, not_ready, no existing-position adapter", (() => { const j = dlGetDispo("jupiter_lend_usdc"); return j?.disposition === "excluded_from_suggestions" && j?.finalAssessmentStatus === "not_ready" && j?.provisionalSensitivityPreserved === true && j?.existingPositionSupport === false; })(), "jup ok");
+
+  // --- /testing states + decision artifact ---
+  add("DL-35: /testing includes all 24 required states", DL_TESTING.length === 24 && DL_DECISION_VALID.valid === true, `n=${DL_TESTING.length}`);
+  add("DL-36: the real current state (2) is blocked_governance with no card", (() => { const s = DL_TESTING.find((x) => x.id === 2)!; return s.selectorState === "blocked_governance" && s.suggestionGenerated === false && s.showsCard === false; })(), "state2");
+  add("DL-37: fixture-only eligible state (1) selects Kamino", DL_TESTING.find((x) => x.id === 1)!.selectorState === "eligible_candidate_selected", "state1");
+  add("DL-38: product-decision artifact is deterministic and preserves assessment", DL_DECISION_HASH === computeProductDecisionManifestHash() && /^direct_decision_[0-9a-f]{8}$/.test(DL_DECISION_HASH) && DL_DECISION.originalAssessmentPreserved.mutated === false, DL_DECISION_HASH);
+
+  // --- Dispositions validation + immutability of prior evidence ---
+  add("DL-39: dispositions validate; excluded candidates never archived/deleted", DL_DISPO_VALID.valid === true && DL_DISPOS.every((d) => d.neverArchivedOrDeleted === true) && /^direct_dispositions_[0-9a-f]{8}$/.test(DL_DISPO_HASH), DL_DISPO_VALID.errors.join("|") || "clean");
+  add("DL-40: prior assessments immutable (Kamino 5.93, Steakhouse 5.37, Jupiter bound 4.32)", DA_OUTCOME.unroundedAggregate === 5.93 && JP_AGG.upperBound === 4.32 && DL_POLICY_ID === "direct_usdc_lending_eligibility_policy_v1", "immutable");
+
+  // --- No production activation ---
+  add("DL-41: production suggestion eligibility is FALSE (blocked on human_review)", DL_GOV.productionSuggestionEligible === false && DL_DECISION.governanceResolution.productionSuggestionEligible === false && DL_DECISION.governanceResolution.firstMissingGate === "human_review", "disabled");
+  add("DL-42: category floor does not apply to Safety Buffer funding", dlGetDispo("kamino_usdc_lending")?.safetyBufferFundingEligible === false && dlEvalFloor({ category: "direct_usdc_lending", purpose: "excess_usdc_yield", productType: "direct_lending", asset: "canonical_solana_usdc", topology: "one_exact_identifiable_lending_reserve_or_pool", automatedAggregate: 5.37, hasUnresolvedLossMechanics: false, hasUnresolvedAuthorityStructure: false, hasUnresolvedWithdrawalMechanics: false, hasUnresolvedBorrowerCollateralScope: false, isManagedVault: false, usesDynamicAllocation: false, usesCrossProtocolRouting: false }).result === "fail_below_floor", "5.37 fails 5.5");
+  add("DL-43: disclaimer states passing 5.5 is not safe/approved/recommended", (DL_DISCLAIMER as readonly string[]).includes("safe") && (DL_DISCLAIMER as readonly string[]).includes("approved") && (DL_DISCLAIMER as readonly string[]).includes("recommended"), "disclaimer");
 
   return checks;
 }
