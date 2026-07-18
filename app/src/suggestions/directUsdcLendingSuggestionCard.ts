@@ -148,6 +148,11 @@ export const SMITH_AI_DIRECT_LENDING_EXPLANATION =
   "It is simpler and better evidenced than the alternatives we assessed, but it still carries lending, " +
   "oracle, liquidity and smart-contract risk." ;
 
+/** Step 16H-S.6 — risk-profile compatibility, safe to surface. Never guarantees eligibility. */
+export const SMITH_AI_DIRECT_LENDING_COMPATIBILITY =
+  "This yield strategy is considered only for users with a Medium or High risk profile, after their Safety " +
+  "Buffer is complete and other suitability checks pass.";
+
 export const SMITH_AI_MAY_EXPLAIN: readonly string[] = [
   "why Kamino Direct was selected",
   "why it is direct lending rather than a managed vault",

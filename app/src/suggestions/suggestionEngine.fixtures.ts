@@ -21,6 +21,8 @@ import { evaluateDirectLendingRuntime as rtEval, evaluateDirectLendingForRail as
 import { buildKlendDirectUsdcMarketSnapshot as mdBuild, toRuntimeMarketInput as mdToRuntime, capacityCoversAmount as mdCovers, KLEND_DIRECT_USDC_IDENTITY as MD_ID, type KlendDirectUsdcRawRead as MDRaw, type KlendDirectUsdcMarketSnapshot as MDSnap } from "./klendDirectUsdcMarketData";
 import { deriveDirectLendingExcessUsd as scExcess, deriveDirectLendingSuitability as scSuit } from "./directUsdcLendingRailInputs";
 import type { SafetyBuffer as SCBuffer } from "../wallet/walletSummary";
+import { HUMAN_REVIEW_AMENDMENT_RECORD as AM_RECORD, AMENDMENT_REVIEWER_AUTHORIZATION as AM_AUTH, EFFECTIVE_REVIEW_CHAIN as AM_CHAIN, getEffectiveCompatibleRiskProfileIds as amCompatible, isRiskProfileCompatible as amIsCompat, REVIEW_AMENDMENT_VALIDATION as AM_VALID, HUMAN_REVIEW_AMENDMENT_MANIFEST_HASH as AM_HASH } from "./directUsdcLendingHumanReviewAmendment";
+import { DIRECT_LENDING_PROFILE_TESTING_ROWS as AM_PROFILE_ROWS } from "./directUsdcLendingTestingFixtures";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17866,6 +17868,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runDirectLendingProfileCompatibilityFixtureChecks(),
     ...runDirectLendingComponentActivationFixtureChecks(),
     ...runKlendMarketDataFixtureChecks(),
     ...runDirectLendingRuntimeFixtureChecks(),
@@ -20215,8 +20218,8 @@ export function runDirectLendingComponentActivationFixtureChecks(): FixtureCheck
   const incompleteBuffer = { targetUsd: 10000, stableUsd: 4000, fullyFunded: false, coveragePct: 40, monthsCovered: 2, monthsTarget: 5 } as unknown as SCBuffer;
 
   // --- Suitability: existing rule, fail-closed, no invented questionnaire ---
-  add("SC-1: suitability fails closed (no reviewed compatible-profile list for direct lending)", (() => { const s = scSuit({ risk_tolerance: "conservative" } as any); return s.suitableForCategory === false && /compatibleUserRiskProfileIds/.test(s.unresolvedReason ?? ""); })(), "fail-closed");
-  add("SC-2: profileComplete derives from goal risk tolerance", scSuit({ risk_tolerance: "conservative" } as any).profileComplete === true && scSuit(null).profileComplete === false, "profile");
+  add("SC-1: incompatible/unrecognized profile fails closed (governance-derived, S.6)", (() => { const s = scSuit({ risk_tolerance: "low" } as any); return s.suitableForCategory === false && /not in the effective compatible set/.test(s.unresolvedReason ?? ""); })(), "fail-closed");
+  add("SC-2: profileComplete derives from a recognized goal risk tolerance", scSuit({ risk_tolerance: "medium" } as any).profileComplete === true && scSuit(null).profileComplete === false && scSuit({ risk_tolerance: "conservative" } as any).profileComplete === false, "profile");
 
   // --- Excess: reuses the 16F builder; fail-closed; never all-wallet USDC ---
   add("SC-3: null buffer → no excess", scExcess({ buffer: null, canonicalUsdcUsd: 50000, bufferCountedUsdcUsd: 0, pricesFresh: true, checkedAt: CHECKED }) === null, "null buffer");
@@ -20236,6 +20239,54 @@ export function runDirectLendingComponentActivationFixtureChecks(): FixtureCheck
 
   // --- Immutability ---
   add("SC-9: assessment/governance/policy immutable after component wiring", DA_OUTCOME.unroundedAggregate === 5.93 && DA_OUTCOME.meetsMinimum === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && GR_ACTIVATION.productionSuggestionEligible === true && DL_CATMIN === 5.5 && DL_UNIMIN === 7, "immutable");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 16H-S.6 — risk-profile compatibility governance amendment. Records the
+ * human Medium/High compatibility judgment (ws_product_owner) as an immutable
+ * amendment; suitability derives from governance; other gates still apply.
+ * ------------------------------------------------------------------ */
+export function runDirectLendingProfileCompatibilityFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const row = (n: string) => AM_PROFILE_ROWS.find((r) => r.name.startsWith(n))!;
+
+  // --- Effective compatible set (canonical IDs, allowlist) ---
+  add("AM-1: effective compatible set is exactly [medium, high]", [...amCompatible()].sort().join(",") === "high,medium", amCompatible().join(","));
+  add("AM-2: canonical Medium and High are compatible", amIsCompat("medium") === true && amIsCompat("high") === true, "medium/high");
+  add("AM-3: Low / very_low / very_high / unknown / incomplete are NOT compatible", !amIsCompat("low") && !amIsCompat("very_low") && !amIsCompat("very_high") && !amIsCompat("unknown") && !amIsCompat(null), "fail-closed");
+  add("AM-4: compatibility is governance-derived (from the amendment record, not hardcoded)", AM_RECORD.compatibleUserRiskProfileIds.join(",") === "medium,high" && amCompatible() === AM_RECORD.compatibleUserRiskProfileIds, "from record");
+
+  // --- Immutable amendment + authorization ---
+  add("AM-5: amendment binds to the original review id and manifest (unchanged)", AM_RECORD.amendsReviewId === "direct_usdc_lending_human_review_v1" && AM_RECORD.amendsReviewManifest === "human_review_5cdc7569", "bound");
+  add("AM-6: original human-review manifest is preserved (not mutated)", GR_REVIEW.recordId === "direct_usdc_lending_human_review_v1" && GR_REVIEW_HASH === "human_review_5cdc7569", "preserved");
+  add("AM-7: reviewer is ws_product_owner (human), authorized as risk_reviewer", AM_RECORD.reviewerId === "ws_product_owner" && AM_RECORD.reviewerActorKind === "human" && AM_AUTH.authorized === true, "authorized");
+  add("AM-8: not an automated conclusion; no automated actor made the judgment", AM_RECORD.authoredByAutomatedAgent === false && AM_RECORD.isAutomatedConclusion === false && String(AM_RECORD.reviewerId) !== "ws_automated_risk_assessor" && String(AM_RECORD.reviewerId) !== "claude_automated_evidence_preparer", "human judgment");
+  add("AM-9: amendment validates; manifest is well-formed", AM_VALID.valid === true && /^review_amendment_[0-9a-f]{8}$/.test(AM_HASH), AM_VALID.errors.join("|") || AM_HASH);
+
+  // --- No unnecessary signoff/approval amendments ---
+  add("AM-10: no signoff/approval amendment required (bind to review by identity)", AM_CHAIN.signoffAmendmentRequired === false && AM_CHAIN.approvalAmendmentRequired === false && AM_CHAIN.signoffBindsToReviewId === GR_REVIEW.recordId, "not required");
+  add("AM-11: amendment joins the effective review chain; activation still eligible", AM_CHAIN.chain.length === 2 && AM_CHAIN.chain[1] === AM_RECORD.recordId && GR_ACTIVATION.productionSuggestionEligible === true, "chain");
+
+  // --- Runtime suitability derives from governance ---
+  add("AM-12: Medium/High derive suitableForCategory true; Low/unknown false", scSuit({ risk_tolerance: "medium" } as any).suitableForCategory === true && scSuit({ risk_tolerance: "high" } as any).suitableForCategory === true && scSuit({ risk_tolerance: "low" } as any).suitableForCategory === false && scSuit(null).suitableForCategory === false, "derived");
+  add("AM-13: unknown/incomplete fail closed (not treated as Medium)", scSuit({ risk_tolerance: "banana" } as any).suitableForCategory === false && scSuit({ risk_tolerance: "banana" } as any).userRiskProfileId === null, "fail-closed");
+
+  // --- Profile /testing states: exact outcomes ---
+  add("AM-14: Medium profile eligible → emits one card", row("Medium profile eligible").emits === true && row("Medium profile eligible").card?.is_top_pick === false, "medium emits");
+  add("AM-15: High profile eligible → emits one card", row("High profile eligible").emits === true && row("High profile eligible").card !== null, "high emits");
+  add("AM-16: Low / Unknown / Incomplete / very_low → user_unsuitable, no card", row("Low profile").suppressionReason === "user_unsuitable" && row("Unknown profile").suppressionReason === "user_unsuitable" && row("Incomplete profile").suppressionReason === "user_unsuitable" && row("Medium + very_low").suppressionReason === "user_unsuitable", "suppressed");
+  add("AM-17: other gates still apply — Medium+incomplete buffer → safety_buffer_incomplete", row("Medium + incomplete Safety Buffer").suppressionReason === "safety_buffer_incomplete", "buffer gate");
+  add("AM-18: High + no excess → no_excess_usdc", row("High + no excess USDC").suppressionReason === "no_excess_usdc", "excess gate");
+  add("AM-19: Medium + stale APY → apy_stale; High + emergency → emergency_mode", row("Medium + stale APY").suppressionReason === "apy_stale" && row("High + emergency mode").suppressionReason === "emergency_mode", "market gates");
+  add("AM-20: eligible profile cards expose no score/threshold, no executing CTA", AM_PROFILE_ROWS.filter((r) => r.card).every((r) => r.card && !/5\.93|5\.5| 7 |dimension|confidence/i.test(JSON.stringify(r.card)) && r.card.is_top_pick === false && !r.card.cta.executes_transaction), "clean");
+
+  // --- Excluded candidates + immutability ---
+  add("AM-21: Steakhouse/Jupiter remain excluded; no Top Pick", dlGetDispo("kamino_steakhouse_usdc")?.selectorEligibility === false && dlGetDispo("jupiter_lend_usdc")?.selectorEligibility === false && DL_DISPOS.every((d) => d.topPickEligibility === false), "excluded");
+  add("AM-22: aggregate 5.93, meetsMinimum false, thresholds 7/5.5, all governance manifests immutable", DA_OUTCOME.unroundedAggregate === 5.93 && DA_OUTCOME.meetsMinimum === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && DL_UNIMIN === 7 && DL_CATMIN === 5.5 && GR_SIGNOFF_HASH === "risk_signoff_8f1829f4" && GR_APPROVAL_HASH === "product_approval_c0d5912c", "immutable");
+  add("AM-23: no transaction behaviour introduced by the amendment", AM_PROFILE_ROWS.filter((r) => r.card).every((r) => r.card!.cta.action === null && !r.card!.cta.requires_wallet_signature), "read-only");
 
   return checks;
 }

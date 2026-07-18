@@ -25,7 +25,7 @@ import {
 import { runAllContributionTestingScenarios } from "../suggestions/contributionTestingScenarios";
 import { toSuggestionCard } from "../suggestions/toSuggestionCard";
 import { STABLE_YIELD_TESTING_CARD_FIXTURES, STABLE_YIELD_TESTING_REVIEW_FIXTURES, STABLE_YIELD_TESTING_NON_RENDER_FIXTURES, STABLE_YIELD_TESTING_FIXTURES } from "../suggestions/stableYieldTestingFixtures";
-import { DIRECT_LENDING_TESTING_ROWS } from "../suggestions/directUsdcLendingTestingFixtures";
+import { DIRECT_LENDING_TESTING_ROWS, DIRECT_LENDING_PROFILE_TESTING_ROWS } from "../suggestions/directUsdcLendingTestingFixtures";
 import { buildStableYieldPlanPresentation } from "../suggestions/yieldStrategyPlanPresentation";
 import "./testingPage.css";
 
@@ -245,6 +245,27 @@ export default function TestingPage() {
               </div>
               <p className="testing-page__contrib-name">{r.name}</p>
               <p className="testing-page__contrib-noplan">{r.suppressionReason}. {r.notes}</p>
+            </div>
+          ))}
+        </div>
+        {/* Step 16H-S.6 — risk-profile compatibility (Medium/High compatible; governance-derived). */}
+        <h3 className="testing-page__section-subtitle">Risk-profile compatibility (Medium/High only)</h3>
+        <div className="testing-page__grid">
+          {DIRECT_LENDING_PROFILE_TESTING_ROWS.filter((r) => r.card).map((r) => (
+            <div key={r.id} className="testing-page__cell">
+              <p className="testing-page__cell-label">{r.name} — <span className="testing-page__badge">{r.profile}</span></p>
+              <SuggestionCard card={r.card!} onReview={() => undefined} />
+            </div>
+          ))}
+        </div>
+        <div className="testing-page__contrib-grid">
+          {DIRECT_LENDING_PROFILE_TESTING_ROWS.filter((r) => !r.card).map((r) => (
+            <div key={r.id} className="testing-page__contrib-cell">
+              <div className="testing-page__contrib-head">
+                <span className="testing-page__badge">{r.profile}</span>
+                <span className="testing-page__contrib-id">{r.suppressionReason}</span>
+              </div>
+              <p className="testing-page__contrib-name">{r.name}</p>
             </div>
           ))}
         </div>

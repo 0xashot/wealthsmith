@@ -8,6 +8,8 @@ import type { SafetyBuffer } from "../wallet/walletSummary";
 import type { SavedGoal } from "../types/goal";
 import { buildYieldStrategyEligibleCapitalSnapshot } from "./yieldStrategyEligibleCapital";
 import { buildYieldStrategyPositionSet } from "./yieldStrategyPositionEngine";
+import { RECOGNIZED_PROFILE_RISK_IDS } from "./contributionTargetSuitability";
+import { getEffectiveCompatibleRiskProfileIds, isRiskProfileCompatible } from "./directUsdcLendingHumanReviewAmendment";
 
 const PROD_OWNER = "wealthsmith_real_wallet";
 
@@ -46,24 +48,35 @@ export interface DirectLendingSuitability {
   profileComplete: boolean;
   suitableForCategory: boolean;
   prohibitsDefiLending: boolean;
+  userRiskProfileId: string | null;
+  riskProfileCompatible: boolean;
   unresolvedReason: string | null;
 }
 
 /**
- * Suitability from EXISTING rules. The excess-lane rule (yieldStrategyEligibility) requires the risk
- * review to enumerate `compatibleUserRiskProfileIds`. The Kamino Direct human review (16H-S.2) did not
- * record any, so under the existing rule NO user is established as compatible → fail closed. This code
- * refuses to invent which profiles are suitable — that is a risk-review judgement, not a runtime guess.
+ * Suitability from EXISTING rules + the governance-derived effective compatible profile list (16H-S.6
+ * human-review amendment → getEffectiveCompatibleRiskProfileIds). Medium/High may PASS the risk-profile
+ * gate; Low/very_low/very_high/unknown/incomplete fail closed. Compatibility is NOT hardcoded here — it
+ * is read from the amendment record. Profile compatibility is only one gate: the adapter still enforces
+ * buffer, excess, market freshness, capacity, availability and existing-position rules.
  */
 export function deriveDirectLendingSuitability(goal: SavedGoal | null | undefined): DirectLendingSuitability {
-  const profileComplete = !!(goal && goal.risk_tolerance);
+  const rawId = goal?.risk_tolerance ?? null;
+  const recognized = typeof rawId === "string" && RECOGNIZED_PROFILE_RISK_IDS.includes(rawId);
+  const profileComplete = !!(goal && recognized);
+  const userRiskProfileId = recognized ? rawId : null;
+  // Governance-derived compatibility (fail-closed for unknown/incomplete).
+  const riskProfileCompatible = profileComplete && isRiskProfileCompatible(userRiskProfileId);
   return {
     profileComplete,
-    // Fail-closed: no reviewed compatible-user-risk-profile list exists for direct lending yet.
-    suitableForCategory: false,
+    suitableForCategory: riskProfileCompatible, // one gate; all other adapter gates still apply
     prohibitsDefiLending: false,
-    unresolvedReason: profileComplete
-      ? "no reviewed compatibleUserRiskProfileIds recorded for kamino_usdc_lending — suitability cannot be established under the existing rule"
-      : "user profile incomplete (no risk tolerance)",
+    userRiskProfileId,
+    riskProfileCompatible,
+    unresolvedReason: !profileComplete
+      ? "user profile incomplete or unknown risk tolerance (fail-closed)"
+      : riskProfileCompatible
+        ? null
+        : `risk profile '${userRiskProfileId}' is not in the effective compatible set [${getEffectiveCompatibleRiskProfileIds().join(", ")}]`,
   };
 }

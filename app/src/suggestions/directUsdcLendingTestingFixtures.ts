@@ -12,7 +12,8 @@
 import type { SuggestionCardState } from "../types/dashboard";
 import { DIRECT_LENDING_TESTING_STATES, type TestingState } from "./directUsdcLendingProductDecision";
 import { DIRECT_USDC_LENDING_CARD_COPY } from "./directUsdcLendingSuggestionCard";
-import { buildDirectLendingCardState } from "./directUsdcLendingRuntimeAdapter";
+import { buildDirectLendingCardState, evaluateDirectLendingRuntime, governanceInputFromActivation, RUNTIME_PRODUCT_IDENTITY, type DirectLendingRuntimeInput } from "./directUsdcLendingRuntimeAdapter";
+import { deriveDirectLendingSuitability } from "./directUsdcLendingRailInputs";
 
 /** A clearly fixture-only sample APY (NOT the production value; production uses the fresh measured source). */
 export const DIRECT_LENDING_TESTING_SAMPLE_APY_PCT = 5.87 as const;
@@ -83,6 +84,57 @@ export const DIRECT_LENDING_TESTING_ROWS: DirectLendingTestingRow[] = DIRECT_LEN
 export const DIRECT_LENDING_TESTING_CARD_ROWS = DIRECT_LENDING_TESTING_ROWS.filter((r) => r.card !== null);
 /** The suppressed subset (no card) — shown as testing diagnostics only. */
 export const DIRECT_LENDING_TESTING_SUPPRESSED_ROWS = DIRECT_LENDING_TESTING_ROWS.filter((r) => r.card === null);
+
+/* ------------------------------------------------------------------ *
+ * Step 16H-S.6 — risk-profile compatibility states, evaluated through the SAME runtime adapter.
+ * Governance-derived suitability (medium/high compatible); other gates still apply.
+ * ------------------------------------------------------------------ */
+
+const FRESH_MARKET: Pick<DirectLendingRuntimeInput, "apy" | "availability" | "capacity"> = {
+  apy: { measuredApyPct: DIRECT_LENDING_TESTING_SAMPLE_APY_PCT, rateKind: "estimated_variable_apy", fresh: true, reserveIdentityMatches: true, slotDurationFresh: true, rewardApyPct: 0 },
+  availability: { depositsAvailable: true, emergencyModeActive: false },
+  capacity: { fresh: true, sufficientForAmount: true },
+};
+
+function profileInput(riskId: string | null, overrides: Partial<DirectLendingRuntimeInput> = {}): DirectLendingRuntimeInput {
+  return {
+    ...governanceInputFromActivation(),
+    wallet: { usdcMint: RUNTIME_PRODUCT_IDENTITY.canonicalUsdcMint, canonicalUsdcRawUnits: 25_000_000_000, pricesFresh: true },
+    safetyBuffer: { requiredResolved: true, sufficiencyResolved: true, fullyFundedByLiquidCoverage: true },
+    excess: { deterministicAmountUsd: 12000, isPositive: true },
+    suitability: deriveDirectLendingSuitability(riskId ? ({ risk_tolerance: riskId } as any) : null),
+    existingPosition: { holdsExactCToken: false, approvedTopUpRulePasses: false },
+    ...FRESH_MARKET,
+    ...overrides,
+  };
+}
+
+export interface ProfileTestingRow {
+  id: string;
+  name: string;
+  profile: string;
+  emits: boolean;
+  suppressionReason: string | null;
+  card: SuggestionCardState | null;
+}
+
+function profileRow(id: number, name: string, profile: string, input: DirectLendingRuntimeInput): ProfileTestingRow {
+  const r = evaluateDirectLendingRuntime(input);
+  return { id: `direct-lending-profile-${id}`, name, profile, emits: r.emit, suppressionReason: r.emit ? null : r.suppressionReason, card: r.emit ? r.card : null };
+}
+
+export const DIRECT_LENDING_PROFILE_TESTING_ROWS: ProfileTestingRow[] = [
+  profileRow(1, "Medium profile eligible", "medium", profileInput("medium")),
+  profileRow(2, "High profile eligible", "high", profileInput("high")),
+  profileRow(3, "Low profile suppressed", "low", profileInput("low")),
+  profileRow(4, "Unknown profile suppressed", "unknown", profileInput(null)),
+  profileRow(5, "Incomplete profile suppressed", "incomplete", profileInput(null)),
+  profileRow(6, "Medium + incomplete Safety Buffer suppressed", "medium", profileInput("medium", { safetyBuffer: { requiredResolved: true, sufficiencyResolved: true, fullyFundedByLiquidCoverage: false } })),
+  profileRow(7, "High + no excess USDC suppressed", "high", profileInput("high", { excess: { deterministicAmountUsd: 0, isPositive: false } })),
+  profileRow(8, "Medium + stale APY suppressed", "medium", profileInput("medium", { apy: { ...FRESH_MARKET.apy, fresh: false } })),
+  profileRow(9, "High + emergency mode suppressed", "high", profileInput("high", { availability: { depositsAvailable: true, emergencyModeActive: true } })),
+  profileRow(10, "Medium + very_low profile mismatch suppressed", "very_low", profileInput("very_low")),
+];
 
 /** Validation: every state is represented; cards never leak scores/thresholds or executing CTAs. */
 export function validateTestingFixtures(): { valid: boolean; errors: string[] } {
