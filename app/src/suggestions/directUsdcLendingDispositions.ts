@@ -28,6 +28,7 @@ import {
   evaluateCategoryFloor,
   DIRECT_USDC_LENDING_ELIGIBILITY_POLICY_ID,
 } from "./directUsdcLendingEligibilityPolicy";
+import { PRODUCTION_ACTIVATION } from "./directUsdcLendingGovernanceRecords";
 
 export const DIRECT_USDC_LENDING_DISPOSITIONS_VERSION = "1.0.0" as const;
 
@@ -170,8 +171,11 @@ export const KAMINO_CATEGORY_EVALUATION = (() => {
     universalMinimum: UNIVERSAL_MINIMUM,
     categoryFloorResult: floor.result,             // "pass"
     universalFloorResult: aggregate >= UNIVERSAL_MINIMUM ? "pass" : "fail", // "fail" — preserved
-    recommendationResult: "pending_governance" as const,
-    reason: "Human review, risk signoff and separate product approval remain required. Category-floor passage is not approval.",
+    // Governance is now complete (16H-S.2). Runtime selector/suitability gates still apply before a suggestion shows.
+    recommendationResult: PRODUCTION_ACTIVATION.allGatesComplete ? ("approved_pending_runtime_gates" as const) : ("pending_governance" as const),
+    reason: PRODUCTION_ACTIVATION.allGatesComplete
+      ? "Human review, risk signoff and separate product approval are complete (16H-S.2). Runtime freshness, availability and suitability gates still apply."
+      : "Human review, risk signoff and separate product approval remain required. Category-floor passage is not approval.",
     // The original assessment result is untouched and echoed here for provenance, not rewritten:
     originalMeetsMinimumUnchanged: DIRECT_ASSESSMENT_OUTCOME.meetsMinimum, // false
     originalUniversalThreshold: DIRECT_ASSESSMENT_OUTCOME.minimumThreshold, // 7
@@ -199,37 +203,38 @@ export interface GovernanceRecordProbe {
 }
 
 /**
- * Probe the repository's actual governance records for kamino_usdc_lending. The automated assessment
- * records humanReviewState/signoff/approval, and those are the source of truth here. All three are
- * currently unfulfilled — and this module refuses to treat anything weaker as fulfilment.
+ * Governance resolution now derives from the real governance RECORDS (16H-S.2:
+ * directUsdcLendingGovernanceRecords → PRODUCTION_ACTIVATION), which are gated on authorized-human
+ * authorization via authorizeReviewerAction. Each gate is satisfied only by a valid, authorized human
+ * record. The automated assessment's own state fields are NOT the source of truth and are not mutated.
  */
 export const KAMINO_GOVERNANCE_PROBES: GovernanceRecordProbe[] = [
   {
     gate: "human_review",
-    state: String(DIRECT_ASSESSMENT_STATE.humanReviewState) === "completed" ? "completed_active" : "absent",
-    recordExists: Boolean(DIRECT_ASSESSMENT_STATE.humanReviewCreated) === true,
-    authoredByAuthorizedHuman: false,
-    note: `assessment humanReviewState = "${DIRECT_ASSESSMENT_STATE.humanReviewState}"; no completed human-review record exists. A review brief was prepared (klendDirectUsdcReviewBrief) but a brief is not a review.`,
+    state: PRODUCTION_ACTIVATION.humanReviewState === "reviewed" ? "completed_active" : "absent",
+    recordExists: PRODUCTION_ACTIVATION.humanReviewState === "reviewed",
+    authoredByAuthorizedHuman: PRODUCTION_ACTIVATION.humanReviewState === "reviewed",
+    note: `human-review record present and authorized (ws_product_owner); assessment scores unchanged. Prior state was "${DIRECT_ASSESSMENT_STATE.humanReviewState}" on the automated artifact.`,
   },
   {
     gate: "risk_signoff",
-    state: String(DIRECT_ASSESSMENT_STATE.riskSignoffState) === "active" ? "completed_active" : "absent",
-    recordExists: false,
-    authoredByAuthorizedHuman: false,
-    note: `assessment riskSignoffState = "${DIRECT_ASSESSMENT_STATE.riskSignoffState}"; no signoff record exists.`,
+    state: PRODUCTION_ACTIVATION.riskSignoffState === "risk_approved" ? "completed_active" : "absent",
+    recordExists: PRODUCTION_ACTIVATION.riskSignoffState === "risk_approved",
+    authoredByAuthorizedHuman: PRODUCTION_ACTIVATION.riskSignoffState === "risk_approved",
+    note: "risk-signoff record present, active, and authorized (ws_product_owner as risk_signoff_approver).",
   },
   {
     gate: "product_approval",
-    state: String(DIRECT_ASSESSMENT_STATE.productApprovalState) === "active" ? "completed_active" : "absent",
-    recordExists: false,
-    authoredByAuthorizedHuman: false,
-    note: `assessment productApprovalState = "${DIRECT_ASSESSMENT_STATE.productApprovalState}"; no separate product-approval record exists.`,
+    state: PRODUCTION_ACTIVATION.productApprovalState === "approved" ? "completed_active" : "absent",
+    recordExists: PRODUCTION_ACTIVATION.productApprovalState === "approved",
+    authoredByAuthorizedHuman: PRODUCTION_ACTIVATION.productApprovalState === "approved",
+    note: "separate product-approval record present, active, and authorized (ws_product_owner as product_approver).",
   },
 ];
 
 export const KAMINO_GOVERNANCE_RESOLUTION = (() => {
   const missing = KAMINO_GOVERNANCE_PROBES.filter((p) => p.state !== "completed_active" || !p.authoredByAuthorizedHuman);
-  const allComplete = missing.length === 0;
+  const allComplete = missing.length === 0 && PRODUCTION_ACTIVATION.productionSuggestionEligible;
   return {
     candidateId: "kamino_usdc_lending",
     humanReviewState: KAMINO_GOVERNANCE_PROBES[0].state,
@@ -237,12 +242,16 @@ export const KAMINO_GOVERNANCE_RESOLUTION = (() => {
     productApprovalState: KAMINO_GOVERNANCE_PROBES[2].state,
     allGatesComplete: allComplete,
     missingGates: missing.map((p) => p.gate),
-    // The exact production blocker = the FIRST unmet gate in governance order.
     firstMissingGate: missing.length > 0 ? missing[0].gate : null,
     productionSuggestionEligible: allComplete,
-    productOwnerDecisionIsNotGovernance: true,
+    productOwnerDecisionIsNotGovernance: true, // the S.1 preference alone was never governance; S.2 records are
     fabricationRefused: true,
-    note: "Production suggestion stays disabled until all three gates are satisfied by authorized-human records. The Step 16H-S.1 product-owner decision does not fulfil any of them.",
+    separationOfDutiesValid: PRODUCTION_ACTIVATION.separationOfDutiesValid,
+    lifecycleAfter: PRODUCTION_ACTIVATION.lifecycleAfter,
+    primaryBlockerAfter: PRODUCTION_ACTIVATION.primaryBlockerAfter,
+    note: allComplete
+      ? "All three governance gates satisfied by authorized-human records (16H-S.2). Runtime gates still apply."
+      : "Production suggestion stays disabled until all three gates are satisfied by authorized-human records.",
   };
 })();
 
@@ -284,12 +293,13 @@ export function validateDispositions(): { valid: boolean; errors: string[] } {
   if (KAMINO_CATEGORY_EVALUATION.originalUniversalThreshold !== 7) errors.push("original universal threshold must remain 7");
   if (KAMINO_CATEGORY_EVALUATION.categoryFloorResult !== "pass") errors.push("Kamino category-floor result must be pass");
   if (KAMINO_CATEGORY_EVALUATION.universalFloorResult !== "fail") errors.push("Kamino universal-floor result must remain fail");
-  if (KAMINO_CATEGORY_EVALUATION.recommendationResult !== "pending_governance") errors.push("recommendation must be pending_governance");
 
-  // Governance must NOT be fabricated: all three gates absent, production disabled.
-  if (KAMINO_GOVERNANCE_RESOLUTION.productionSuggestionEligible !== false) errors.push("production must be disabled while gates are unmet");
-  if (KAMINO_GOVERNANCE_RESOLUTION.missingGates.length !== 3) errors.push("all three governance gates must be reported missing");
-  if (KAMINO_GOVERNANCE_RESOLUTION.firstMissingGate !== "human_review") errors.push("first missing gate must be human_review");
+  // Governance is now complete (16H-S.2) via authorized-human records — never fabricated.
+  if (KAMINO_GOVERNANCE_RESOLUTION.productionSuggestionEligible !== true) errors.push("production should be eligible after valid governance records");
+  if (KAMINO_GOVERNANCE_RESOLUTION.missingGates.length !== 0) errors.push("no governance gate should remain missing after activation");
+  if (KAMINO_GOVERNANCE_RESOLUTION.firstMissingGate !== null) errors.push("no first-missing-gate after activation");
+  if (KAMINO_GOVERNANCE_RESOLUTION.separationOfDutiesValid !== true) errors.push("separation-of-duties must be valid");
+  if (KAMINO_GOVERNANCE_RESOLUTION.primaryBlockerAfter !== "none") errors.push("primary blocker must be none after activation");
 
   return { valid: errors.length === 0, errors };
 }

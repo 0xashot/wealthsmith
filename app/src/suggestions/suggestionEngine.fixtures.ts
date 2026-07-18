@@ -15,6 +15,8 @@ import { CANDIDATE_DISPOSITIONS as DL_DISPOS, getDisposition as dlGetDispo, EXCL
 import { selectDirectUsdcLendingCandidate as dlSelect, evaluateSuggestionTrigger as dlTrigger, SELECTOR_VALIDATION as DL_SEL_VALID, type SelectorProductState as DLProductState } from "./directUsdcLendingSelector";
 import { buildDirectLendingCardModel as dlBuildCard, validateCardCopy as dlValidateCard, DIRECT_USDC_LENDING_CARD_COPY as DL_COPY, formatDirectLendingApy as dlFmtApy, CARD_COPY_VALIDATION as DL_CARD_VALID, SMITH_AI_DIRECT_LENDING_EXPLANATION as DL_SMITH, validateSmithAiExplanation as dlValidateSmith, buildAnalyticsPayload as dlAnalytics, ANALYTICS_FORBIDDEN_FIELDS as DL_ANALYTICS_FORBIDDEN, DIRECT_USDC_LENDING_CARD_ACTIONS as DL_ACTIONS } from "./directUsdcLendingSuggestionCard";
 import { DIRECT_USDC_LENDING_PRODUCT_DECISION as DL_DECISION, DIRECT_USDC_LENDING_PRODUCT_DECISION_MANIFEST_HASH as DL_DECISION_HASH, DIRECT_LENDING_TESTING_STATES as DL_TESTING, PRODUCT_DECISION_VALIDATION as DL_DECISION_VALID, computeProductDecisionManifestHash } from "./directUsdcLendingProductDecision";
+import { HUMAN_REVIEW_RECORD as GR_REVIEW, RISK_SIGNOFF_RECORD as GR_SIGNOFF, PRODUCT_APPROVAL_RECORD as GR_APPROVAL, PRODUCTION_ACTIVATION as GR_ACTIVATION, SEPARATION_OF_DUTIES_CHECK as GR_SOD, REVIEWER_AUTHORIZATION as GR_REV_AUTH, SIGNER_AUTHORIZATION as GR_SIGN_AUTH, APPROVER_AUTHORIZATION as GR_APP_AUTH, GOVERNANCE_RECORDS_VALIDATION as GR_VALID, ACCEPTED_LIMITATIONS as GR_LIMITS, HUMAN_REVIEW_MANIFEST_HASH as GR_REVIEW_HASH, RISK_SIGNOFF_MANIFEST_HASH as GR_SIGNOFF_HASH, PRODUCT_APPROVAL_MANIFEST_HASH as GR_APPROVAL_HASH } from "./directUsdcLendingGovernanceRecords";
+import { DIRECT_LENDING_TESTING_ROWS as TF_ROWS, DIRECT_LENDING_TESTING_CARD_ROWS as TF_CARDS, DIRECT_LENDING_TESTING_SUPPRESSED_ROWS as TF_SUPPRESSED, DIRECT_LENDING_TESTING_FIXTURES_VALIDATION as TF_VALID } from "./directUsdcLendingTestingFixtures";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17860,6 +17862,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
 /** CLI entry: prints each check and exits non-zero on failure. */
 export function printFixtureResults(): void {
   const checks = [
+    ...runDirectLendingGovernanceActivationFixtureChecks(),
     ...runDirectUsdcLendingIntegrationFixtureChecks(),
     ...runJupProvisionalAssessmentFixtureChecks(),
     ...runDirectReviewBriefFixtureChecks(),
@@ -19899,11 +19902,11 @@ export function runDirectUsdcLendingIntegrationFixtureChecks(): FixtureCheck[] {
   add("DL-5: Kamino original meetsMinimum remains false", DA_OUTCOME.meetsMinimum === false && DL_KCAT.originalMeetsMinimumUnchanged === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3", "false");
   add("DL-6: Kamino aggregate 5.93 and universal threshold 7 unchanged", DL_KCAT.automatedAggregate === 5.93 && DL_KCAT.originalUniversalThreshold === 7 && DA_OUTCOME.unroundedAggregate === 5.93, "5.93/7");
   add("DL-7: Kamino category-floor result is pass; universal-floor result is fail", DL_KCAT.categoryFloorResult === "pass" && DL_KCAT.universalFloorResult === "fail", `${DL_KCAT.categoryFloorResult}/${DL_KCAT.universalFloorResult}`);
-  add("DL-8: category-floor passage is NOT product approval", DL_KCAT.recommendationResult === "pending_governance" && DL_KCAT.assessmentMutated === false && DL_KCAT.doesNotClaimHistoricalPass === true, "pending");
+  add("DL-8: category-floor passage is NOT product approval (recommendation now approved-pending-runtime after S.2)", DL_KCAT.recommendationResult === "approved_pending_runtime_gates" && DL_KCAT.assessmentMutated === false && DL_KCAT.doesNotClaimHistoricalPass === true, DL_KCAT.recommendationResult);
 
   // --- Governance mandatory + missing ---
-  add("DL-9: human review / risk signoff / product approval all remain mandatory and MISSING", DL_GOV.humanReviewState === "absent" && DL_GOV.riskSignoffState === "absent" && DL_GOV.productApprovalState === "absent" && DL_GOV.missingGates.length === 3, DL_GOV.missingGates.join(","));
-  add("DL-10: missing governance prevents production suggestion", DL_GOV.productionSuggestionEligible === false && DL_GOV.firstMissingGate === "human_review", `blocker=${DL_GOV.firstMissingGate}`);
+  add("DL-9: after S.2 all three governance gates are satisfied by authorized-human records", DL_GOV.humanReviewState === "completed_active" && DL_GOV.riskSignoffState === "completed_active" && DL_GOV.productApprovalState === "completed_active" && DL_GOV.missingGates.length === 0, DL_GOV.missingGates.join(",") || "complete");
+  add("DL-10: after S.2 governance no longer blocks production", DL_GOV.productionSuggestionEligible === true && DL_GOV.firstMissingGate === null && DL_GOV.separationOfDutiesValid === true, `blocker=${DL_GOV.firstMissingGate}`);
   add("DL-11: product-owner decision is explicitly not governance", DL_GOV.productOwnerDecisionIsNotGovernance === true && DL_GOV.fabricationRefused === true && DL_DECISION.isNotHumanRiskReview === true && DL_DECISION.isNotRiskSignoff === true && DL_DECISION.isNotProductApproval === true, "not governance");
 
   // --- Selector: only Kamino, never excluded, no fallback ---
@@ -19953,9 +19956,81 @@ export function runDirectUsdcLendingIntegrationFixtureChecks(): FixtureCheck[] {
   add("DL-40: prior assessments immutable (Kamino 5.93, Steakhouse 5.37, Jupiter bound 4.32)", DA_OUTCOME.unroundedAggregate === 5.93 && JP_AGG.upperBound === 4.32 && DL_POLICY_ID === "direct_usdc_lending_eligibility_policy_v1", "immutable");
 
   // --- No production activation ---
-  add("DL-41: production suggestion eligibility is FALSE (blocked on human_review)", DL_GOV.productionSuggestionEligible === false && DL_DECISION.governanceResolution.productionSuggestionEligible === false && DL_DECISION.governanceResolution.firstMissingGate === "human_review", "disabled");
+  add("DL-41: production eligible after S.2; S.1 decision snapshot stays frozen (history preserved)", DL_GOV.productionSuggestionEligible === true && DL_DECISION.governanceResolution.productionSuggestionEligible === false && DL_DECISION.governanceResolution.firstMissingGate === "human_review", "activated; S.1 frozen");
   add("DL-42: category floor does not apply to Safety Buffer funding", dlGetDispo("kamino_usdc_lending")?.safetyBufferFundingEligible === false && dlEvalFloor({ category: "direct_usdc_lending", purpose: "excess_usdc_yield", productType: "direct_lending", asset: "canonical_solana_usdc", topology: "one_exact_identifiable_lending_reserve_or_pool", automatedAggregate: 5.37, hasUnresolvedLossMechanics: false, hasUnresolvedAuthorityStructure: false, hasUnresolvedWithdrawalMechanics: false, hasUnresolvedBorrowerCollateralScope: false, isManagedVault: false, usesDynamicAllocation: false, usesCrossProtocolRouting: false }).result === "fail_below_floor", "5.37 fails 5.5");
   add("DL-43: disclaimer states passing 5.5 is not safe/approved/recommended", (DL_DISCLAIMER as readonly string[]).includes("safe") && (DL_DISCLAIMER as readonly string[]).includes("approved") && (DL_DISCLAIMER as readonly string[]).includes("recommended"), "disclaimer");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 16H-S.2 — Kamino Direct governance activation. Records human review,
+ * signoff and product approval (ws_product_owner), verifies separation of
+ * duties, and activates production eligibility — all fail-closed, assessment
+ * untouched.
+ * ------------------------------------------------------------------ */
+export function runDirectLendingGovernanceActivationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  // --- Authorized reviewer / signer / approver ---
+  add("GA-1: authorized reviewer identity exists and is a human (ws_product_owner)", GR_REV_AUTH.authorized === true && GR_REVIEW.reviewerId === "ws_product_owner" && GR_REVIEW.reviewerActorKind === "human", "authorized");
+  add("GA-2: signer authorization valid (risk_signoff_approver)", GR_SIGN_AUTH.authorized === true && GR_SIGNOFF.signerId === "ws_product_owner" && GR_SIGNOFF.signerRole === "risk_signoff_approver", "signer ok");
+  add("GA-3: approver authorization valid (product_approver)", GR_APP_AUTH.authorized === true && GR_APPROVAL.approverId === "ws_product_owner" && GR_APPROVAL.approverRole === "product_approver", "approver ok");
+
+  // --- Bindings + immutability of the assessment ---
+  add("GA-4: review binds to direct_assessment_54a11ba3 + evidence + authority manifests", GR_REVIEW.assessmentManifest === "direct_assessment_54a11ba3" && GR_REVIEW.evidencePackageManifest === "risk_package_3711fd25" && GR_REVIEW.authorityEvidenceManifest === "authority_evidence_a99ace84", "bound");
+  add("GA-5: review does not change scores/confidence/aggregate", /unchanged/.test(GR_REVIEW.reviewedScores) && /unchanged/.test(GR_REVIEW.reviewedConfidenceValues) && GR_ACTIVATION.aggregate === 5.93 && GR_ACTIVATION.assessmentMutated === false && DA_OUTCOME.unroundedAggregate === 5.93, "5.93 intact");
+  add("GA-6: original universal meetsMinimum remains false; threshold 7", GR_ACTIVATION.universalMeetsMinimum === false && GR_ACTIVATION.universalThreshold === 7 && DA_OUTCOME.meetsMinimum === false, "false/7");
+  add("GA-7: review records accepted limitations (all 12 material findings)", GR_REVIEW.acceptedLimitations.length === 12 && GR_LIMITS.length === 12 && GR_REVIEW.acceptedLimitations.some((l) => /socialize_loss/.test(l)) && GR_REVIEW.acceptedLimitations.some((l) => /2026-05-28/.test(l)), "12 limits");
+
+  // --- Distinct acts ---
+  add("GA-8: review is distinct from signoff (review is not signoff/approval)", GR_REVIEW.constitutesSignoff === false && GR_REVIEW.constitutesProductApproval === false && String(GR_REVIEW.recordId) !== String(GR_SIGNOFF.recordId), "distinct");
+  add("GA-9: signoff is distinct from approval; signoff does not imply approval", GR_SIGNOFF.impliesProductApproval === false && GR_APPROVAL.derivedFromSignoff === false && String(GR_SIGNOFF.recordId) !== String(GR_APPROVAL.recordId), "separate");
+  add("GA-10: approval requires an active signoff", GR_APPROVAL.requiresActiveSignoff === true && GR_APPROVAL.signoffIsActive === true && GR_APPROVAL.boundRiskSignoffId === GR_SIGNOFF.recordId, "chained");
+
+  // --- Separation of duties ---
+  add("GA-11: separation-of-duties v2 satisfied", GR_SOD.valid === true && GR_SOD.policyId === "risk_separation_of_duties_v2" && GR_SOD.reviewerIsHuman === true && GR_SOD.assessorIsAutomated === true, "sod ok");
+  add("GA-12: no automated actor performs a human action", GR_SOD.reviewerIsNotAssessor === true && GR_SOD.reviewerIsNotPreparer === true && GR_SOD.noAutomatedActorPerformsHumanAct === true && GR_REVIEW.authoredByAutomatedAgent === false, "no automated human act");
+  add("GA-13: all three roles authorized under one human per SoD MVP allowance", GR_SOD.allThreeRolesAuthorized === true && /permits one authorized human to hold multiple roles/.test(GR_SOD.policyBasis), "multi-role ok");
+
+  // --- All three records valid ---
+  add("GA-14: governance records validate", GR_VALID.valid === true, GR_VALID.errors.join("|") || "clean");
+  add("GA-15: review=reviewed, signoff=risk_approved, approval=approved (native states)", GR_ACTIVATION.humanReviewState === "reviewed" && GR_ACTIVATION.riskSignoffState === "risk_approved" && GR_ACTIVATION.productApprovalState === "approved", "native states");
+
+  // --- Activation only after all three ---
+  add("GA-16: productionSuggestionEligible true only after all three valid records", GR_ACTIVATION.allGatesComplete === true && GR_ACTIVATION.productionSuggestionEligible === true && GR_ACTIVATION.missingGates.length === 0, "eligible");
+  add("GA-17: category floor remains 5.5; universal remains 7; meetsMinimum false", GR_ACTIVATION.categoryMinimum === 5.5 && GR_ACTIVATION.universalThreshold === 7 && GR_ACTIVATION.universalMeetsMinimum === false, "thresholds intact");
+  add("GA-18: prior governance blocker was blocked_risk_review; resulting is none", GR_ACTIVATION.primaryBlockerBefore === "blocked_risk_review" && GR_ACTIVATION.primaryBlockerAfter === "none" && GR_ACTIVATION.governanceBlocker === "none", "blocker cleared");
+  add("GA-19: lifecycle moves identity_verified -> production_eligible", GR_ACTIVATION.lifecycleBefore === "identity_verified" && GR_ACTIVATION.lifecycleAfter === "production_eligible", "lifecycle");
+
+  // --- Runtime gates still fail-closed after activation ---
+  {
+    const GOV_OK: DLProductState = { identityValid: true, assessmentValid: true, categoryFloorPassed: true, assessmentInvalidated: false, governanceComplete: GR_ACTIVATION.productionSuggestionEligible, depositsAvailable: true, emergencyModeActive: false, capacityFreshAndSufficient: true, apyFreshAndComparisonReady: true, riskPolicyVersionActive: true };
+    add("GA-20: selector returns Kamino only when runtime gates pass", dlSelect(GOV_OK).state === "eligible_candidate_selected" && dlSelect(GOV_OK).selectedCandidateId === "kamino_usdc_lending", "kamino");
+    add("GA-21: runtime blockers still suppress after activation", dlSelect({ ...GOV_OK, apyFreshAndComparisonReady: false }).state === "blocked_freshness" && dlSelect({ ...GOV_OK, emergencyModeActive: true }).state === "blocked_availability" && dlSelect({ ...GOV_OK, assessmentInvalidated: true }).state === "blocked_invalidation", "fail-closed");
+    add("GA-22: revocation fails closed (signoff/approval inactive -> no candidate)", dlSelect({ ...GOV_OK, governanceComplete: false }).state === "blocked_governance" && dlSelect({ ...GOV_OK, governanceComplete: false }).selectedCandidateId === null, "revocation closed");
+  }
+
+  // --- Excluded candidates unchanged ---
+  add("GA-23: Steakhouse never selected; existing-position support unchanged", dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("kamino_steakhouse_usdc")?.selectorEligibility === false && dlGetDispo("kamino_steakhouse_usdc")?.existingPositionSupport === true, "steak intact");
+  add("GA-24: Jupiter never selected; research-only, not_ready, provisional preserved", dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && dlGetDispo("jupiter_lend_usdc")?.finalAssessmentStatus === "not_ready" && dlGetDispo("jupiter_lend_usdc")?.provisionalSensitivityPreserved === true, "jup intact");
+  add("GA-25: no automatic Top Pick from activation", DL_DISPOS.every((d) => d.topPickEligibility === false), "no auto top pick");
+
+  // --- Manifests deterministic + S.1 history preserved ---
+  add("GA-26: three governance-record manifests are deterministic and well-formed", /^human_review_[0-9a-f]{8}$/.test(GR_REVIEW_HASH) && /^risk_signoff_[0-9a-f]{8}$/.test(GR_SIGNOFF_HASH) && /^product_approval_[0-9a-f]{8}$/.test(GR_APPROVAL_HASH), `${GR_REVIEW_HASH}/${GR_SIGNOFF_HASH}/${GR_APPROVAL_HASH}`);
+  add("GA-27: S.1 product-decision history is frozen (manifest unchanged, snapshot pending)", DL_DECISION_HASH === computeProductDecisionManifestHash() && DL_DECISION.governanceResolution.productionSuggestionEligible === false && DL_DECISION_VALID.valid === true, DL_DECISION_HASH);
+  add("GA-28: assessment score identity provably unchanged (still direct_assessment_54a11ba3, 5.93)", DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && DA_MANIFEST_HASH === computeDirectAssessmentManifestHash() && DA_OUTCOME.unroundedAggregate === 5.93, "immutable");
+
+  // --- No execution behaviour ---
+  add("GA-29: no transaction/signature/deposit behaviour introduced by activation", GR_APPROVAL.execution === "unsupported" && GR_APPROVAL.safetyBufferFunding === "prohibited" && DL_ACTIONS.every((a) => !a.executesTransaction && !a.requiresWalletSignature), "read-only");
+
+  // --- /testing visual integration: all 24 states, production card, no leaks ---
+  add("GA-30: /testing renders all 24 direct-lending states", TF_ROWS.length === 24 && TF_VALID.valid === true, TF_VALID.errors.join("|") || "24 states");
+  add("GA-31: card states + suppressed states account for all 24", TF_CARDS.length + TF_SUPPRESSED.length === 24 && TF_CARDS.length > 0 && TF_SUPPRESSED.length > 0, `${TF_CARDS.length}+${TF_SUPPRESSED.length}`);
+  add("GA-32: testing cards expose no score/threshold, no Top Pick, no executing CTA, APY ~/variable", TF_CARDS.every((r) => r.card && r.card.is_top_pick === false && !r.card.cta.executes_transaction && !r.card.cta.requires_wallet_signature && !/5\.93|5\.5| 7 |dimension|confidence/i.test(JSON.stringify(r.card)) && (!r.card.apy || (r.card.apy.display.startsWith("~") && /variable/i.test(r.card.apy.display)))), "clean cards");
+  add("GA-33: APY is dynamic/estimated (not the hardcoded 6.42 constant)", TF_CARDS.every((r) => !r.card?.apy || !/6\.42/.test(r.card.apy.display)) && TF_CARDS.some((r) => r.card?.apy?.status === "estimated"), "estimated");
+  add("GA-34: suppressed states carry a reason and render no card", TF_SUPPRESSED.every((r) => r.card === null && (r.suppressionReason ?? "").length > 0), "suppressed reasoned");
 
   return checks;
 }

@@ -17,7 +17,6 @@ import {
 import {
   CANDIDATE_DISPOSITIONS,
   KAMINO_CATEGORY_EVALUATION,
-  KAMINO_GOVERNANCE_RESOLUTION,
   DISPOSITIONS_MANIFEST_HASH,
 } from "./directUsdcLendingDispositions";
 import { DIRECT_ASSESSMENT_MANIFEST_HASH } from "./klendDirectUsdcAutomatedAssessment";
@@ -65,11 +64,15 @@ export const DIRECT_USDC_LENDING_PRODUCT_DECISION = {
   universalFloorResult: KAMINO_CATEGORY_EVALUATION.universalFloorResult, // fail
 
   governanceGatesStillRequired: ["human_review", "risk_signoff", "separate_product_approval"],
+  // FROZEN S.1-time snapshot — this artifact is history. At S.1, governance was pending. The three
+  // gates were later satisfied by authorized-human records in 16H-S.2 (see directUsdcLendingGovernanceRecords).
+  // This snapshot is NOT rewritten so the S.1 decision manifest stays immutable.
   governanceResolution: {
-    missingGates: KAMINO_GOVERNANCE_RESOLUTION.missingGates,
-    firstMissingGate: KAMINO_GOVERNANCE_RESOLUTION.firstMissingGate,
-    productionSuggestionEligible: KAMINO_GOVERNANCE_RESOLUTION.productionSuggestionEligible, // false
+    missingGates: ["human_review", "risk_signoff", "product_approval"],
+    firstMissingGate: "human_review",
+    productionSuggestionEligible: false,
   },
+  supersededByActivation: "direct_usdc_lending_production_activation (16H-S.2) records the completed human review, signoff and approval that satisfy these gates.",
 
   safetyBufferExclusion: "Direct USDC lending is NOT eligible to fund the Safety Buffer.",
   excessUsdcOnlyRule: "Only USDC classified as excess capital, after the Safety Buffer is fully satisfied by verified liquid coverage, is eligible.",

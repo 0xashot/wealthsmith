@@ -25,6 +25,7 @@ import {
 import { runAllContributionTestingScenarios } from "../suggestions/contributionTestingScenarios";
 import { toSuggestionCard } from "../suggestions/toSuggestionCard";
 import { STABLE_YIELD_TESTING_CARD_FIXTURES, STABLE_YIELD_TESTING_REVIEW_FIXTURES, STABLE_YIELD_TESTING_NON_RENDER_FIXTURES, STABLE_YIELD_TESTING_FIXTURES } from "../suggestions/stableYieldTestingFixtures";
+import { DIRECT_LENDING_TESTING_ROWS } from "../suggestions/directUsdcLendingTestingFixtures";
 import { buildStableYieldPlanPresentation } from "../suggestions/yieldStrategyPlanPresentation";
 import "./testingPage.css";
 
@@ -214,6 +215,40 @@ export default function TestingPage() {
           onClose={() => setSelectedStableYieldId(null)}
         />
       )}
+
+      {/* Step 16H-S.2 — Direct USDC lending: all 24 governance/runtime states through the production card. */}
+      <section className="testing-page__contrib" aria-label="Direct USDC lending suggestions">
+        <h2 className="testing-page__section-title">Direct USDC lending (Kamino)</h2>
+        <p className="testing-page__subtext">
+          All 24 direct-lending states rendered through the SAME production SuggestionCard. Read-only:
+          the CTA opens details only — never a transaction, signature, deposit, or external page. Cards
+          never show a risk score or threshold; the state name, selector result, and risk disclosure are
+          shown only in these internal testing diagnostics. APY is estimated and dynamic (fixture sample).
+        </p>
+        <h3 className="testing-page__section-subtitle">States that render a card</h3>
+        <div className="testing-page__grid">
+          {DIRECT_LENDING_TESTING_ROWS.filter((r) => r.card).map((r) => (
+            <div key={r.id} className="testing-page__cell">
+              <p className="testing-page__cell-label">{r.stateId}. {r.name} — <span className="testing-page__badge">{r.selectorState}</span></p>
+              <SuggestionCard card={r.card!} onReview={() => undefined} />
+              <p className="testing-page__contrib-noplan">Risk disclosure: {r.riskDisclosure}</p>
+            </div>
+          ))}
+        </div>
+        <h3 className="testing-page__section-subtitle">Suppressed / fail-closed states (no card)</h3>
+        <div className="testing-page__contrib-grid">
+          {DIRECT_LENDING_TESTING_ROWS.filter((r) => !r.card).map((r) => (
+            <div key={r.id} className="testing-page__contrib-cell">
+              <div className="testing-page__contrib-head">
+                <span className="testing-page__badge">{r.selectorState}</span>
+                <span className="testing-page__contrib-id">#{r.stateId}</span>
+              </div>
+              <p className="testing-page__contrib-name">{r.name}</p>
+              <p className="testing-page__contrib-noplan">{r.suppressionReason}. {r.notes}</p>
+            </div>
+          ))}
+        </div>
+      </section>
     </main>
   );
 }
