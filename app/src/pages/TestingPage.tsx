@@ -33,7 +33,7 @@ import EarningAssetsCard from "../components/EarningAssetsCard";
 import { portfolioTotalDisplay } from "../components/portfolioCompletenessUi";
 import { getPortfolioCompletenessTestingFixtures } from "./portfolioCompletenessTestingFixtures";
 import { getLiquidPositions, getStakedPositions, getProtocolPositions } from "../wallet/walletSummary";
-import { getRebalanceTestingFixtures } from "./rebalanceTestingFixtures";
+import { getRebalanceTestingFixtures, getNativeSolSourceTestingFixtures, getStakingConflictTestingFixtures } from "./rebalanceTestingFixtures";
 import "./testingPage.css";
 
 type Filter = "All" | TestingGroup;
@@ -43,8 +43,13 @@ export default function TestingPage() {
   const fixtures = useMemo(() => getTestingPageFixtures(), []);
   const completenessFixtures = useMemo(() => getPortfolioCompletenessTestingFixtures(), []);
   const rebalanceFixtures = useMemo(() => getRebalanceTestingFixtures(), []);
+  const nativeSolFixtures = useMemo(() => getNativeSolSourceTestingFixtures(), []);
+  const stakingConflictFixtures = useMemo(() => getStakingConflictTestingFixtures(), []);
   const [filter, setFilter] = useState<Filter>("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Step 18G — click-through for the dedicated Rebalance gallery into the SAME production review modal.
+  const [selectedRebalanceId, setSelectedRebalanceId] = useState<string | null>(null);
+  const selectedRebalance = selectedRebalanceId ? rebalanceFixtures.find((f) => f.id === selectedRebalanceId && f.card) : undefined;
 
   const visible = filter === "All" ? fixtures : fixtures.filter((f) => f.group === filter);
 
@@ -284,10 +289,12 @@ export default function TestingPage() {
           selector + card mapper + one canonical SafetyBufferCoverage. Full/partial cards render through
           the production SuggestionCard; no-card states show the deterministic reason. Fixture-only. */}
       <section className="testing-page__contrib" aria-label="Rebalance phase-one states">
-        <h2 className="testing-page__section-title">Rebalance (phase one: USDC → SOL)</h2>
+        <h2 className="testing-page__section-title">Rebalance (both directions: USDC ↔ SOL)</h2>
         <p className="testing-page__subtext">
-          Verified excess direct-wallet USDC → native SOL, Safety Buffer protected, amount capped. Review-only.
-          crypto_to_stables / within-threshold / unresolved never render a card (no legacy fallback).
+          Two verified directions via the SAME rebalance_to_plan mapper: verified excess direct-wallet USDC → native
+          SOL (Safety Buffer protected), and available direct-wallet native SOL (minus the approved 0.1 SOL operating
+          reserve) → canonical USDC. Amount capped by both correction and verified source. Review-only; no route,
+          quote, slippage, or received-amount. within-threshold / unresolved never render a card (no legacy fallback).
         </p>
         <div className="testing-page__grid">
           {rebalanceFixtures.map((f) => (
@@ -296,7 +303,11 @@ export default function TestingPage() {
                 {f.label} — <span className="testing-page__badge">{f.card ? (f.card.amount?.label?.includes("partial") ? "PARTIAL" : "FULL") : `no card · ${f.assessment.direction}`}</span>
               </p>
               {f.card ? (
-                <SuggestionCard card={toSuggestionCard(f.card)} onReview={() => undefined} />
+                <SuggestionCard card={toSuggestionCard(f.card)} onReview={() => setSelectedRebalanceId(f.id)} />
+              ) : f.assessment.direction === "crypto_to_stables" ? (
+                <p className="testing-page__contrib-noplan">
+                  No Rebalance card — direction: <strong>crypto_to_stables</strong>, native-SOL source: <strong>{f.nativeSolSource.sourceEligibilityState}</strong>, recognized: <strong>{f.nativeSolSource.recognizedSol ?? "—"} SOL</strong>, reserve: <strong>0.1 SOL</strong>, available: <strong>{f.nativeSolSource.technicallyAvailableValueUsd === null ? "—" : `$${f.nativeSolSource.technicallyAvailableValueUsd}`}</strong>, material need: <strong>{String(f.material)}</strong>.{f.nativeSolSource.exclusionReasons.length > 0 ? <> Excluded: <strong>{f.nativeSolSource.exclusionReasons.join("; ")}</strong>.</> : null}
+                </p>
               ) : (
                 <p className="testing-page__contrib-noplan">
                   No Rebalance card — direction: <strong>{f.assessment.direction}</strong>, source: <strong>{f.source.selectionState}</strong>, material need: <strong>{String(f.material)}</strong>. Canonical coverage (shared): required ${f.coverageIdentity.requiredBufferUsd}, verified-liquid ${f.coverageIdentity.verifiedLiquidStableValueUsd}.
@@ -304,6 +315,79 @@ export default function TestingPage() {
               )}
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Step 18G — the dedicated Rebalance gallery opens the SAME production review modal the live card uses
+          (production reviewDetails; no testing-only modal or details calculation). */}
+      {selectedRebalance?.card?.reviewDetails && (
+        <SuggestionReviewModal
+          details={selectedRebalance.card.reviewDetails}
+          isTopPick={selectedRebalance.card.is_top_pick === true}
+          onClose={() => setSelectedRebalanceId(null)}
+        />
+      )}
+
+      {/* Step 18E — crypto-overweight staking-conflict policy. A PROVEN material crypto_to_stables NEED
+          suppresses an otherwise-eligible new staking suggestion (narrow only, card-independent, directional).
+          Decision is derived from the PRODUCTION assessment direction. Fixture-only; no cards created. */}
+      <section className="testing-page__contrib" aria-label="Crypto-overweight staking conflict">
+        <h2 className="testing-page__section-title">Staking conflict (crypto-overweight)</h2>
+        <p className="testing-page__subtext">
+          newStakingAllowed = existingStakingEligibility AND NOT provenMaterialCryptoToStablesNeed. Only a
+          material crypto_to_stables need suppresses a new staking suggestion; stables_to_crypto and
+          within-threshold never do, and suppression never enables staking that wasn’t already eligible.
+        </p>
+        <div className="testing-page__contrib-grid">
+          {stakingConflictFixtures.map((f) => (
+            <div key={f.id} className="testing-page__contrib-cell" style={{ display: "grid", gap: "8px" }}>
+              <div className="testing-page__contrib-head">
+                <span className="testing-page__badge">{f.newStakingAllowed ? "STAKING KEPT" : "STAKING SUPPRESSED"}</span>
+                <span className="testing-page__contrib-id">{f.id}</span>
+              </div>
+              <p className="testing-page__contrib-name">{f.label}</p>
+              <p className="testing-page__contrib-noplan">
+                direction: <strong>{f.direction}</strong> · material crypto→stables: <strong>{String(f.materialCryptoToStables)}</strong> ·
+                existing staking eligible: <strong>{String(f.existingStakingEligible)}</strong> · new staking allowed: <strong>{String(f.newStakingAllowed)}</strong>
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Step 18E — NON-MOUNTED direct-wallet native-SOL source foundation for a FUTURE crypto_to_stables
+          source. No approved native-SOL fee-reserve policy exists, so availability stays “—” (fail-closed);
+          stake / LST / wrapped SOL are excluded. Never renders a Rebalance card. Fixture-only. */}
+      <section className="testing-page__contrib" aria-label="Native-SOL source foundation">
+        <h2 className="testing-page__section-title">Native-SOL source (future crypto → stables foundation)</h2>
+        <p className="testing-page__subtext">
+          Direct-wallet native SOL only. Recognized ≠ available: with no approved fee-reserve policy the
+          technically-available amount stays “—” (never zero-reserve). Native stake, LSTs/backing, and
+          wrapped SOL are excluded. The future source gate never emits a card in this build.
+        </p>
+        <div className="testing-page__contrib-grid">
+          {nativeSolFixtures.map((f) => {
+            const a = f.assessment;
+            const fmt = (n: number | null) => (n === null ? "—" : `$${Math.round(n * 100) / 100}`);
+            return (
+              <div key={f.id} className="testing-page__contrib-cell" style={{ display: "grid", gap: "8px" }}>
+                <div className="testing-page__contrib-head">
+                  <span className="testing-page__badge">{a.sourceEligibilityState}</span>
+                  <span className="testing-page__contrib-id">{f.id}</span>
+                </div>
+                <p className="testing-page__contrib-name">{f.label}</p>
+                <p className="testing-page__contrib-noplan">
+                  recognized: <strong>{fmt(a.recognizedValueUsd)}</strong> · reserve: <strong>{fmt(a.requiredNativeReserveUsd)}</strong> ·
+                  available: <strong aria-label={a.technicallyAvailableValueUsd === null ? "not available — reserve policy or freshness unresolved" : undefined}>{fmt(a.technicallyAvailableValueUsd)}</strong> ·
+                  unresolved potential: <strong>{fmt(a.unresolvedPotentialValueUsd)}</strong>
+                </p>
+                <p className="testing-page__contrib-noplan">
+                  reserve policy: <strong>{a.reservePolicyState}</strong> · future source gate: <strong>{f.futureGate.status}</strong>
+                  {a.exclusionReasons.length > 0 ? <> · excluded: <strong>{a.exclusionReasons.join("; ")}</strong></> : null}
+                </p>
+              </div>
+            );
+          })}
         </div>
       </section>
 

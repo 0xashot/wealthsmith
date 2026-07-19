@@ -17,7 +17,6 @@ import type {
   EngineSuggestion,
 } from "./engineTypes";
 import { deriveBufferSuggestion } from "./bufferSuggestion";
-import { deriveRebalanceSuggestion } from "./rebalanceSuggestion";
 import { deriveCapitalEfficiencySuggestion } from "./capitalEfficiencySuggestion";
 import { deriveTrimSuggestion } from "./trimSuggestion";
 import { deriveStakingSuggestion } from "./stakingSuggestion";
@@ -74,13 +73,13 @@ export function runSuggestionEngine(
    */
   completenessGates?: CompletenessGateMap,
   /**
-   * Step 18C — the phase-one production Rebalance override. When present, `card` (or null) is the ONE
-   * authoritative Rebalance result (built from the canonical RebalanceAssessment behind `rebalance_to_plan`);
-   * the legacy bucket calculation is NOT run. `material` is the SEPARATE "material Rebalance need" signal
-   * (drift breach + valid calculation) used to preserve conflict suppression even when no card is emitted.
-   * Absent → legacy behavior (deriveRebalanceSuggestion + card-presence signal) for existing callers.
+   * Step 18C/18G — the production Rebalance result. `card` (or null) is the ONE authoritative Rebalance
+   * suggestion (built from the canonical RebalanceAssessment behind `rebalance_to_plan`). `material` is the
+   * SEPARATE "material Rebalance need" signal (drift breach + valid calculation) that preserves conflict
+   * suppression even when no card is emitted. There is NO legacy bucket fallback: when this is ABSENT the
+   * engine produces NO Rebalance candidate (fail closed). The mounted rail always supplies it.
    */
-  rebalanceOverride?: { card: EngineSuggestion | null; material: boolean }
+  rebalanceOverride?: { card: EngineSuggestion | null; material: boolean; materialCryptoToStables?: boolean }
 ): SuggestionEngineResult {
   const warnings: SuggestionReasonCode[] = [];
   if (inputs.value.anyUnpriced) warnings.push("partial_pricing");
@@ -100,12 +99,14 @@ export function runSuggestionEngine(
   if (bufferSatisfied) {
     // 3) Actionable candidates in engine (category-priority) order.
     const candidates: EngineSuggestion[] = [];
-    // Step 18C — one authoritative Rebalance result. With the override (production), the assessment-built
-    // card is used and its OWN direction-specific gates apply (the over-broad completeness `allows` is NOT
-    // re-applied — the assessment already gated correctly). Legacy callers keep the bucket calc + gate.
-    const rebalance = rebalanceOverride !== undefined ? rebalanceOverride.card : deriveRebalanceSuggestion(inputs, generatedAt);
-    const rebalanceApplies = rebalanceOverride !== undefined ? rebalanceOverride.material : !!rebalance;
-    if (rebalance && (rebalanceOverride !== undefined || allows("rebalance"))) candidates.push(rebalance);
+    // Step 18C/18G — the ONE authoritative Rebalance result comes exclusively from the canonical assessment
+    // via `rebalanceOverride`; its OWN direction-specific gates already applied (the over-broad completeness
+    // `allows` is NOT re-applied). There is NO legacy bucket fallback: when the override is absent (missing
+    // canonical input), the engine produces NO Rebalance candidate (fail closed). The mounted rail always
+    // passes the override, so production never depends on this default.
+    const rebalance = rebalanceOverride?.card ?? null;
+    const rebalanceApplies = rebalanceOverride?.material ?? false;
+    if (rebalance) candidates.push(rebalance);
     // Capital Efficiency ranks above Staking/Stable Yield; may coexist with all.
     const capitalEfficiency = deriveCapitalEfficiencySuggestion(inputs, generatedAt);
     if (capitalEfficiency) candidates.push(capitalEfficiency);
@@ -113,8 +114,11 @@ export function runSuggestionEngine(
     // both may fire and neither suppresses the other.
     const trim = deriveTrimSuggestion(inputs, generatedAt);
     if (trim && allows("trim")) candidates.push(trim);
+    // Step 18E — a PROVEN material crypto_to_stables need suppresses a new staking suggestion (staking
+    // preserves crypto exposure and reduces liquid SOL; Rebalance outranks yield optimization). Narrows
+    // only — never enables staking. Keyed on the material NEED, independent of Rebalance-card presence.
     const staking = deriveStakingSuggestion(inputs, generatedAt);
-    if (staking && allows("staking")) candidates.push(staking);
+    if (staking && allows("staking") && rebalanceOverride?.materialCryptoToStables !== true) candidates.push(staking);
     // Stable Yield and DCA only when Rebalance does not apply. 18C: keyed on MATERIAL Rebalance NEED
     // (rebalanceApplies), not card presence — so crypto_to_stables (or insufficient-USDC) material drift
     // still suppresses conflicting deployment even when no Rebalance card can safely be shown.

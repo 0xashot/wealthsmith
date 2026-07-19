@@ -36,7 +36,7 @@ import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
 import { deriveCompletenessGates, type PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
 import { computeSafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
-import { deriveRebalanceAssessment, selectRebalanceUsdcSource, isRebalanceMaterial } from "./rebalanceAssessment";
+import { deriveRebalanceAssessment, selectRebalanceUsdcSource, isRebalanceMaterial, isMaterialCryptoToStables, deriveNativeSolRebalanceSource, REBALANCE_NATIVE_SOL_RESERVE_POLICY } from "./rebalanceAssessment";
 import { buildRebalanceCardFromAssessment } from "./rebalanceSuggestion";
 import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 import { deriveContributionSuggestion } from "./contributionProductInput";
@@ -187,8 +187,19 @@ export function deriveRailSuggestions(args: {
   });
   const usdcSource = selectRebalanceUsdcSource(positions, requiredBufferUsd, pricedAsOf ?? Date.now());
   const solPrice = positions.find((p) => p.type === "native")?.priceUsd ?? null;
-  const rebalanceCard = buildRebalanceCardFromAssessment(rebalanceAssessment, usdcSource, solPrice, pricedAsOf != null && typeof solPrice === "number", pricedAsOf ?? 0);
-  const rebalanceOverride = { card: rebalanceCard, material: isRebalanceMaterial(rebalanceAssessment) };
+  const solPriceFresh = pricedAsOf != null && typeof solPrice === "number";
+  // Step 18F — ONE canonical native-SOL source derivation per refresh (over the SAME merged positions),
+  // with the APPROVED fixed 0.1 SOL Rebalance operating reserve. Wallet freshness reuses the shared
+  // completeness result (no new portfolio/buffer/completeness derivation). No RPC.
+  const walletFresh = completeness.result.freshnessState !== "stale";
+  const nativeSolSource = deriveNativeSolRebalanceSource(positions, solPrice, solPriceFresh, REBALANCE_NATIVE_SOL_RESERVE_POLICY, walletFresh, pricedAsOf ?? Date.now());
+  const rebalanceCard = buildRebalanceCardFromAssessment(rebalanceAssessment, usdcSource, nativeSolSource, solPrice, solPriceFresh, pricedAsOf ?? 0);
+  // Step 18E — a PROVEN material crypto_to_stables need (calculation allowed) suppresses new staking.
+  const rebalanceOverride = {
+    card: rebalanceCard,
+    material: isRebalanceMaterial(rebalanceAssessment),
+    materialCryptoToStables: isMaterialCryptoToStables(rebalanceAssessment),
+  };
 
   const engineResult = runSuggestionEngine(
     buildSuggestionEngineInputs({

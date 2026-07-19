@@ -101,6 +101,12 @@ import { getPortfolioCompletenessTestingFixtures as tgFixtures } from "../pages/
 import {
   deriveRebalanceAssessment as rbAssess, REBALANCE_DESTINATIONS as RB_DEST, CANONICAL_USDC_MINT as RB_USDC,
   selectRebalanceUsdcSource as rbSource,
+  deriveNativeSolRebalanceSource as rbNativeSol, cryptoToStablesSourceGate as rbFutureGate,
+  isMaterialCryptoToStables as rbIsCryptoToStables,
+  NATIVE_SOL_RESERVE_POLICY_MISSING as RB_RESERVE_MISSING, NATIVE_SOL_RESERVE_POLICY_OPTIONS as RB_RESERVE_OPTIONS,
+  REBALANCE_NATIVE_SOL_RESERVE_POLICY as RB_RESERVE_POLICY, REBALANCE_NATIVE_SOL_RESERVE_LAMPORTS as RB_RESERVE_LAMPORTS,
+  CLASSIC_TOKEN_PROGRAM as RB_CLASSIC,
+  WRAPPED_SOL_MINT as RB_WSOL_MINT, type NativeSolReservePolicy as RbReservePolicy,
 } from "./rebalanceAssessment";
 import { buildRebalanceCardFromAssessment as rbBuildCard, REBALANCE_SUGGESTION_ID as RB_ID } from "./rebalanceSuggestion";
 import { getRebalanceTestingFixtures as rbTestFixtures } from "../pages/rebalanceTestingFixtures";
@@ -153,7 +159,27 @@ import type { SavedGoal } from "../types/goal";
 import type { EngineSuggestion, ProtocolStrategyType } from "./engineTypes";
 import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
+import { deriveLegacyBucketRebalanceSuggestion as rbLegacyBucket } from "./rebalanceSuggestionLegacy";
 import { selectTopPick } from "./topPick";
+
+/**
+ * Step 18G — ISOLATED-REGRESSION helper. The engine no longer has any legacy bucket fallback (missing
+ * canonical input → no Rebalance candidate). The pre-18G ordering / Top-Pick / review-detail fixtures still
+ * need a rebalance candidate present, so this helper reproduces the EXACT pre-18G default by building the
+ * DEPRECATED legacy bucket card and passing it to the engine as an explicit override (never a silent
+ * fallback). It is used ONLY by isolated fixtures — no mounted/Demo/testing-production path touches it.
+ */
+function runEngineWithLegacyRebalance(
+  inputs: Parameters<typeof runSuggestionEngine>[0],
+  generatedAt: number,
+  contribution: Parameters<typeof runSuggestionEngine>[2] = null,
+  stableYield: Parameters<typeof runSuggestionEngine>[3] = null,
+  gates: Parameters<typeof runSuggestionEngine>[4] = undefined,
+): ReturnType<typeof runSuggestionEngine> {
+  const legacy = rbLegacyBucket(inputs, generatedAt);
+  const card = legacy && pcAllows(gates, "rebalance") ? legacy : null;
+  return runSuggestionEngine(inputs, generatedAt, contribution, stableYield, gates, { card, material: !!legacy });
+}
 import { toSuggestionCard, toSuggestionCards } from "./toSuggestionCard";
 import {
   passedGuardrail,
@@ -1751,7 +1777,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // A. Buffer not funded → one actionable buffer suggestion, amount = shortfall.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3) }), // shortfall 2200
       FIXTURE_GENERATED_AT
     );
@@ -1774,7 +1800,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // B. Buffer fully funded, no positions/allocation → no suggestion, not "missing
   //    data". (Empty positions so no stable_yield/staking fires from defaults.)
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), positions: [cryptoPosition()] }),
       FIXTURE_GENERATED_AT
     );
@@ -1787,7 +1813,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // C. Below minimum shortfall ($25 < $50) → disabled suggestion, min_trade failed.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: bufferFixture(2975, 1000, 3) }), // shortfall 25
       FIXTURE_GENERATED_AT
     );
@@ -1806,7 +1832,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // D. Missing Safety Buffer → no suggestion + unavailable_reason missing_data.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: null }),
       FIXTURE_GENERATED_AT
     );
@@ -1819,7 +1845,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // E. Partial pricing → warning present, suggestion still generated.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), anyUnpriced: true }),
       FIXTURE_GENERATED_AT
     );
@@ -1833,14 +1859,14 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // F. Risk-based target consumed as-is: 6-month and 1-month targets pass
   //    through to post_buffer_months unchanged.
   {
-    const r6 = runSuggestionEngine(
+    const r6 = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(800, 1000, 6),
         goal: { ...goalFixture, risk_tolerance: "very_low" },
       }),
       FIXTURE_GENERATED_AT
     );
-    const r1 = runSuggestionEngine(
+    const r1 = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(400, 1000, 1),
         goal: { ...goalFixture, risk_tolerance: "very_high" },
@@ -1858,7 +1884,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // G. Buffer NOT funded + allocation overweight → only the buffer suggestion
   //    (Buffer Override suppresses rebalance even though a delta exists).
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(800, 1000, 3), // underfunded
         allocation: allocationFixture(15000, 90, 15), // overweight 15%
@@ -1877,7 +1903,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // H. Buffer funded + crypto overweight 15% → one rebalance crypto→stables,
   //    amount = total × 15%.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3), // funded
         allocation: allocationFixture(15000, 75, 15),
@@ -1902,7 +1928,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   //    stables→crypto, amount capped by stable excess above the buffer.
   {
     // stableUsd 5000, targetUsd 3000 → excess 2000; deviation 15% × 15000 = 2250
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 45, -15),
@@ -1924,7 +1950,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // I2. Underweight but NO excess stables above the buffer → no rebalance.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(3000, 1000, 3), // exactly funded, zero excess
         allocation: allocationFixture(15000, 45, -15),
@@ -1940,7 +1966,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // J. Buffer funded + crypto delta below 10% → no rebalance.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 65, 5),
@@ -1957,7 +1983,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // K. Missing allocation (buffer funded) → no rebalance, no missing_data
   //    (the Safety Buffer input is present, so nothing is "missing").
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: null }),
       FIXTURE_GENERATED_AT
     );
@@ -1972,7 +1998,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // L. Rebalance amount below $50 → disabled rebalance, min_trade failed.
   {
     // total 400 × 10% = $40 < $50
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         totalUsd: 400,
@@ -1994,7 +2020,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // M. Partial pricing + funded + overweight → warning present, rebalance appears.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 75, 15),
@@ -2013,7 +2039,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // N. Buffer funded + allocation within threshold (delta 5%) + no deployable
   //    assets → On Track. (Empty positions so no staking/stable_yield fires.)
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3), // funded
         allocation: allocationFixture(15000, 62, 5),
@@ -2036,7 +2062,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // O. Buffer NOT funded + allocation within threshold → buffer only, no On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(800, 1000, 3), // underfunded
         allocation: allocationFixture(15000, 62, 5),
@@ -2054,7 +2080,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // P. Buffer funded + rebalance threshold met (delta 15%) → Rebalance only.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 75, 15),
@@ -2073,7 +2099,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // Q. Missing allocation (buffer funded) → no On Track, no missing_data
   //    (the Safety Buffer input is present, so nothing required is missing).
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: null }),
       FIXTURE_GENERATED_AT
     );
@@ -2088,7 +2114,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // R. Partial pricing + otherwise aligned + no deployable assets → warning +
   //    On Track. (Empty positions so no staking/stable_yield fires.)
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 62, 5),
@@ -2107,7 +2133,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // S. Missing Safety Buffer → no On Track + unavailable_reason missing_data.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: null, allocation: allocationFixture(15000, 62, 5) }),
       FIXTURE_GENERATED_AT
     );
@@ -2121,7 +2147,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // T. Underfunded buffer, actionable amount → Buffer is Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3) }), // shortfall 2200
       FIXTURE_GENERATED_AT
     );
@@ -2135,7 +2161,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // U. Underfunded buffer below minimum (disabled) → no Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: bufferFixture(2975, 1000, 3) }), // shortfall 25
       FIXTURE_GENERATED_AT
     );
@@ -2149,7 +2175,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // V. Funded + rebalance actionable → Rebalance is Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 75, 15),
@@ -2166,7 +2192,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
 
   // W. Funded + On Track only (no deployable assets) → no Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 62, 5),
@@ -2295,7 +2321,7 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
     checks.push({ name, pass, detail });
 
   const engineCard = (args: FixtureArgs) => {
-    const r = runSuggestionEngine(inputsFor(args), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor(args), FIXTURE_GENERATED_AT);
     return { card: r.suggestions[0] ? toSuggestionCard(r.suggestions[0]) : undefined, r };
   };
 
@@ -2628,7 +2654,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
 
   // 9B-A. Underfunded buffer + idle SOL → Buffer only, no staking.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
@@ -2641,7 +2667,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
 
   // 9B-B. Funded + aligned (no rebalance) + eligible SOL → Staking Top Pick, no On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
@@ -2658,7 +2684,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
 
   // 9B-C. Funded + rebalance + eligible SOL → Rebalance first (Top Pick), Staking second.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: fundedBuffer(), allocation: offTarget(), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
@@ -2675,7 +2701,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
 
   // 9B-D. Funded + only the reserve (0.1 SOL) → no staking; aligned → On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(0.1)] }),
       FIXTURE_GENERATED_AT
     );
@@ -2689,7 +2715,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   // 9B-E. Funded + eligible SOL worth < $50 → no staking; aligned → On Track.
   {
     // 0.5 SOL @ $75 → eligible 0.4 SOL = $30 < $50
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(0.5)] }),
       FIXTURE_GENERATED_AT
     );
@@ -2702,7 +2728,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
 
   // 9B-F. Only LSTs (JupSOL/mSOL), no liquid SOL → no staking.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: fundedBuffer(),
         allocation: aligned(),
@@ -2715,7 +2741,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
 
   // 9B-G. SOL present but unpriced → no staking, no invented amount.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: fundedBuffer(),
         allocation: aligned(),
@@ -2728,7 +2754,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
 
   // 9B-H. Liquid priced WSOL (token) → counts as liquid SOL → staking emitted.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: fundedBuffer(),
         allocation: aligned(),
@@ -2741,7 +2767,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
 
   // 9B-I. Partial pricing + priced SOL → staking still emits + partial_pricing warning.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: fundedBuffer(),
         allocation: aligned(),
@@ -2759,7 +2785,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
 
   // 9B-J. Mapper renders the staking card safely.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
@@ -2802,7 +2828,7 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
 
   // 9C-A. Underfunded buffer + liquid USDC → Buffer only.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(800, 1000, 3),
         allocation: aligned(),
@@ -2820,7 +2846,7 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   // 9C-B. Funded + no rebalance + liquid USDC ≥ $100 → stable_yield Top Pick,
   //       amount = FULL liquid wallet stable value (no buffer subtraction).
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -2841,7 +2867,7 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
 
   // 9C-C. Funded + Rebalance applies + liquid USDC → Rebalance only, no stable_yield.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: offTarget(),
@@ -2858,7 +2884,7 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
 
   // 9C-D. Funded + Staking + Stable Yield + no Rebalance → Staking first (Top Pick), stable_yield second.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -2879,7 +2905,7 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
 
   // 9C-E. Funded + liquid stable value < $100 → no stable_yield → On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -2896,7 +2922,7 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
 
   // 9C-F. Stables held in a PROTOCOL position (not liquid wallet) → no new stable_yield.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -2913,7 +2939,7 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
 
   // 9C-G. Unknown stable-like wallet token (not in approved set) → no stable_yield.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -2930,7 +2956,7 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
 
   // 9C-H. Stable price/value missing → no stable_yield, no invented amount.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -2947,7 +2973,7 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
 
   // 9C-I. Partial pricing + priced wallet USDC → stable_yield still emits + warning.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -2965,7 +2991,7 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
 
   // 9C-J. Mapper renders the stable_yield card safely.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3012,7 +3038,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-A. Underfunded buffer + flagged yield position → Buffer only.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(800, 1000, 3),
         allocation: aligned(),
@@ -3029,7 +3055,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-B. Funded + no higher candidate + deployed position missing APY ≥ $100 → Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3050,7 +3076,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-C. Funded + deployed position APY < 1% and ≥ $100 → low_yield_position.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3067,7 +3093,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-D. Funded + healthy position (APY ≥ 1%, not concentrated) → no position_optimization → On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3084,7 +3110,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-E. Funded + concentrated position (≥ 50% of portfolio, ≥ $1,000) → concentration_risk.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3102,7 +3128,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-F. Flagged deployed position below $100 → no position_optimization.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3119,7 +3145,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-G. Liquid wallet token with missing APY → not a deployed position → none.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3136,7 +3162,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-H. Unpriced deployed position → no position_optimization, no invented amount.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3153,7 +3179,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-I. Rebalance + flagged position → Rebalance first (Top Pick), position_optimization second.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: offTarget(),
@@ -3173,7 +3199,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-J. Staking + Stable Yield + Position Optimization, no Rebalance → engine order, Staking Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3191,7 +3217,7 @@ export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
 
   // 9D-K. Mapper renders the position_optimization card safely.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3238,7 +3264,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-A. Underfunded buffer + eligible idle token → Buffer only.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(800, 1000, 3),
         allocation: aligned(),
@@ -3255,7 +3281,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-B. Funded + no higher candidate + idle token ≥ $100 and ≥ 2% → Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       // $400 = 2.67% share → Capital Efficiency only (below Trim's 5% threshold).
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }),
       FIXTURE_GENERATED_AT
@@ -3272,7 +3298,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-C. Funded + Rebalance applies + idle token → Rebalance first (Top Pick), capital_efficiency second.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [cryptoPosition(400)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3286,7 +3312,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-D. Funded + Capital Efficiency + Staking + Stable Yield, no Rebalance → engine order, capEff Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3304,7 +3330,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-E. Idle token value < $100 → no capital_efficiency → On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(50)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3317,7 +3343,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-F. Idle token ≥ $100 but < 2% of portfolio ($200 / 15,000 = 1.3%) → no capital_efficiency.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(200)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3330,7 +3356,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-G. Only liquid SOL → no capital_efficiency (staking may apply).
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3343,7 +3369,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-H. Only liquid wallet stablecoins → no capital_efficiency (stable_yield may apply).
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3356,7 +3382,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-I. Only deployed positions → no capital_efficiency (position_optimization may apply).
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3382,7 +3408,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
       priceUsd: null,
       valueUsd: null,
     };
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [unpriced] }),
       FIXTURE_GENERATED_AT
     );
@@ -3395,7 +3421,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-K. Partial pricing + priced idle token → capital_efficiency + warning.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: aligned(),
@@ -3413,7 +3439,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
 
   // 9E-L. Mapper renders the capital_efficiency card safely.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(5000)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3462,7 +3488,7 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
   // QA-1. No Rebalance → capEff, staking, stable_yield, position_optimization
   //       (4 cards), capEff Top Pick, engine order preserved.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 62, 2), // no rebalance
@@ -3483,7 +3509,7 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
   // QA-2. Rebalance present → rebalance, capEff, staking, position_optimization
   //       (stable_yield suppressed), 4 cards, rebalance Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 75, 15), // rebalance applies
@@ -3503,7 +3529,7 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
 
   // QA-3. Underfunded buffer overrides EVERYTHING (all else eligible) → buffer only.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(800, 1000, 3), // underfunded
         allocation: allocationFixture(15000, 75, 15),
@@ -3520,7 +3546,7 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
 
   // QA-4. Realistic maximum card count never exceeds 4 actionable cards.
   {
-    const noReb = runSuggestionEngine(
+    const noReb = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 62, 2),
@@ -3528,7 +3554,7 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
       }),
       FIXTURE_GENERATED_AT
     );
-    const withReb = runSuggestionEngine(
+    const withReb = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(5000, 1000, 3),
         allocation: allocationFixture(15000, 75, 15),
@@ -3572,7 +3598,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-A. Underfunded buffer + DCA conditions otherwise true → Buffer only.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(800, 1000, 3),
         allocation: dcaUnder(3),
@@ -3585,7 +3611,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-B. Funded + Rebalance applies + contribution → Rebalance, no DCA.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [cryptoPosition(100)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3594,7 +3620,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-C. Funded + crypto 3pts under target + contribution ≥ $50 + no higher → DCA Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3608,7 +3634,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-D. Crypto at/above target → no DCA → On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 60, 0), positions: [cryptoPosition(100)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3617,7 +3643,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-E. Underweight below 2 points → no DCA → On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(1), positions: [cryptoPosition(100)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3626,7 +3652,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-F. Monthly contribution missing → no DCA → On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)], goal: noContribGoal }),
       FIXTURE_GENERATED_AT
     );
@@ -3635,7 +3661,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-G. Monthly contribution below $50 → no DCA → On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)], goal: smallContribGoal }),
       FIXTURE_GENERATED_AT
     );
@@ -3644,7 +3670,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-H. Target crypto gap below $50 (small portfolio, 2pt gap = $40) → no DCA → On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: bufferFixture(2000, 300, 3),
         totalUsd: 2000,
@@ -3658,7 +3684,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-I. capEff + staking + stable_yield + DCA, no rebalance → engine order, capEff Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: dcaUnder(3),
@@ -3676,7 +3702,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-J. DCA + Position Optimization, no higher candidates → DCA first (Top Pick), posOpt second.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: dcaUnder(3),
@@ -3693,7 +3719,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-K. Mapper renders the DCA card safely.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3714,7 +3740,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-L. DCA output names no specific token (only the generic crypto bucket).
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3761,7 +3787,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-A. Underfunded buffer + trim conditions otherwise true → Buffer only.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3770,7 +3796,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-B. Funded + trim fires as the ONLY candidate (no Capital Efficiency) → Trim Top Pick.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }),
       FIXTURE_GENERATED_AT
     );
@@ -3784,7 +3810,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-C. Funded + Rebalance applies + trim conditions → Rebalance first/Top Pick, Trim later.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [nonCoreToken("BONK", 5000)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3798,7 +3824,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-D. Funded + Capital Efficiency and Trim both fire → capEff first/Top Pick, trim second.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3812,7 +3838,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-E. Single non-core token ≥ 10% of portfolio → token_concentration_review.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 2000)] }), // 13.3%
       FIXTURE_GENERATED_AT
     );
@@ -3825,7 +3851,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-F. 3+ small non-core tokens (≤ $50, combined ≥ $100) → small_position_cleanup.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }),
       FIXTURE_GENERATED_AT
     );
@@ -3839,7 +3865,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-G. Non-core token < $100 and < 5%, no concentration/cleanup → no Trim → On Track.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 80)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3848,7 +3874,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-H. Only SOL/WSOL → no Trim (SOL/WSOL are core).
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3857,7 +3883,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-I. Only stablecoins → no Trim (stables are core).
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3866,7 +3892,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-J. Only deployed positions → no Trim (not liquid wallet tokens).
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3888,7 +3914,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
       priceUsd: null,
       valueUsd: null,
     };
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [unpriced] }),
       FIXTURE_GENERATED_AT
     );
@@ -3897,7 +3923,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-L. Partial pricing + priced non-core token → Trim + warning.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)], anyUnpriced: true }),
       FIXTURE_GENERATED_AT
     );
@@ -3910,7 +3936,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-M. Mapper renders the trim card safely.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }),
       FIXTURE_GENERATED_AT
     );
@@ -3931,7 +3957,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
 
   // 9H-N. Trim output/copy contains no sell/buy/swap/bad/unsafe/illiquid-as-fact.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)] }),
       FIXTURE_GENERATED_AT
     );
@@ -3962,14 +3988,14 @@ export function runGuardrailFixtureChecks(): FixtureCheck[] {
 
   // One run that isolates each actionable category.
   const runs: Record<string, ReturnType<typeof runSuggestionEngine>> = {
-    buffer: runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    rebalance: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    capital_efficiency: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
-    trim: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
-    staking: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
-    stable_yield: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
-    dca: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    position_optimization: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
+    buffer: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    rebalance: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
+    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
+    staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
+    stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
+    dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
   };
   const find = (r: ReturnType<typeof runSuggestionEngine>, c: string) => r.suggestions.find((s) => s.category === c);
   const execStatuses = (s: { guardrails: { code: string; status: string }[] } | undefined) =>
@@ -3990,7 +4016,7 @@ export function runGuardrailFixtureChecks(): FixtureCheck[] {
 
   // 9I-B. On Track's execution guardrails are not_applicable (not fake pass/fail).
   {
-    const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
     const st = execStatuses(find(r, "on_track"));
     add(
       "9I-B: On Track execution guardrails are not_applicable",
@@ -4003,7 +4029,7 @@ export function runGuardrailFixtureChecks(): FixtureCheck[] {
   {
     const allSuggestions = [
       ...Object.values(runs).flatMap((r) => r.suggestions),
-      ...runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT).suggestions,
+      ...runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT).suggestions,
     ];
     const anyPassed = allSuggestions.some((s) =>
       s.guardrails.some((g) => (EXEC_CODES as readonly string[]).includes(g.code) && g.status === "passed")
@@ -4082,15 +4108,15 @@ export function runProtocolSelectionFixtureChecks(): FixtureCheck[] {
   const smallTokens = [nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), nonCoreToken("DDD", 40)];
 
   const runs: Record<string, ReturnType<typeof runSuggestionEngine>> = {
-    buffer: runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    rebalance: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    capital_efficiency: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
-    trim: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
-    staking: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
-    stable_yield: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
-    dca: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    position_optimization: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
-    on_track: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    buffer: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    rebalance: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
+    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
+    staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
+    stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
+    dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
+    on_track: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
   };
   const find = (r: ReturnType<typeof runSuggestionEngine>, c: string) => r.suggestions.find((s) => s.category === c);
   const gStatus = (s: EngineSuggestion | undefined, code: string) => s?.guardrails.find((g) => g.code === code)?.status;
@@ -4225,15 +4251,15 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
   const smallTokens = [nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), nonCoreToken("DDD", 40)];
 
   const runs: Record<string, ReturnType<typeof runSuggestionEngine>> = {
-    buffer: runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    rebalance: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    capital_efficiency: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
-    trim: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
-    staking: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
-    stable_yield: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
-    dca: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    position_optimization: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
-    on_track: runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    buffer: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    rebalance: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
+    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
+    staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
+    stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
+    dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
+    on_track: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
   };
   const find = (c: string) => runs[c].suggestions.find((s) => s.category === c);
   const rd = (c: string) => find(c)?.reviewDetails;
@@ -4376,7 +4402,7 @@ export function runReviewModalFixtureChecks(): FixtureCheck[] {
   const add = (name: string, pass: boolean, detail: string) =>
     checks.push({ name, pass, detail });
 
-  const run = runSuggestionEngine(
+  const run = runEngineWithLegacyRebalance(
     inputsFor({
       safetyBuffer: bufferFixture(5000, 1000, 3),
       allocation: allocationFixture(15000, 75, 15),
@@ -4452,19 +4478,19 @@ export function runReviewRefinementFixtureChecks(): FixtureCheck[] {
   const rd = (r: ReturnType<typeof runSuggestionEngine>, c: string) =>
     r.suggestions.find((s) => s.category === c)?.reviewDetails;
 
-  const rebalanceOver = runSuggestionEngine(
+  const rebalanceOver = runEngineWithLegacyRebalance(
     inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }),
     FIXTURE_GENERATED_AT
   );
-  const rebalanceUnder = runSuggestionEngine(
+  const rebalanceUnder = runEngineWithLegacyRebalance(
     inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 20, -40), positions: [cryptoPosition(100)] }),
     FIXTURE_GENERATED_AT
   );
-  const posOptConc = runSuggestionEngine(
+  const posOptConc = runEngineWithLegacyRebalance(
     inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), totalUsd: 5000, allocation: allocationFixture(5000, 62, 2), positions: [yieldPosition(5000, 3)] }),
     FIXTURE_GENERATED_AT
   );
-  const stableYield = runSuggestionEngine(
+  const stableYield = runEngineWithLegacyRebalance(
     inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [stablePosition("USDC", 10000)] }),
     FIXTURE_GENERATED_AT
   );
@@ -4529,7 +4555,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
 
   // A. Buffer underfunded → Safety Buffer only, Top Pick, modal-openable.
   {
-    const r = runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
     add(
       "SMOKE-A: buffer underfunded → buffer only, Top Pick, modal-openable",
       cats(r) === "buffer" && topPickCat(r) === "buffer" && r.suggestions[0]?.reviewDetails != null,
@@ -4538,7 +4564,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // B. Rebalance + Position Optimization → rebalance first & Top Pick.
   {
-    const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT);
     const reb = r.suggestions.find((s) => s.category === "rebalance");
     const po = r.suggestions.find((s) => s.category === "position_optimization");
     add(
@@ -4552,7 +4578,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // C. Six categories fire → engine order preserved, capEff Top Pick, no UI sorting.
   {
-    const r = runSuggestionEngine(
+    const r = runEngineWithLegacyRebalance(
       inputsFor({
         safetyBuffer: funded(),
         allocation: dcaUnder(3),
@@ -4571,7 +4597,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // D. On Track only → no Top Pick, no CTA (no modal).
   {
-    const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
     const card = toSuggestionCard(r.suggestions[0]);
     add(
       "SMOKE-D: On Track only, no Top Pick, no CTA (no modal)",
@@ -4581,7 +4607,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // E. Partial pricing → warning appears and calculable suggestions still render.
   {
-    const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), anyUnpriced: true, positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), anyUnpriced: true, positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT);
     add(
       "SMOKE-E: partial pricing → partial_pricing warning + suggestions still render",
       r.warnings.includes("partial_pricing") && r.suggestions.length > 0,
@@ -4590,7 +4616,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // F. Missing data → unavailable state, no suggestions (no demo fallback).
   {
-    const r = runSuggestionEngine(inputsFor({ safetyBuffer: null, positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: null, positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
     add(
       "SMOKE-F: missing data → unavailable_reason=missing_data, no suggestions",
       r.suggestions.length === 0 && r.unavailable_reason === "missing_data",
@@ -15765,8 +15791,9 @@ export function runYieldStrategyPlanSuggestionFixtureChecks(): FixtureCheck[] {
     add("16H-A-AJ: an existing higher-priority buffer correction outranks (suppresses) excess Stable Yield", r.suggestions.every((s) => s.category !== "stable_yield") && r.suggestions.some((s) => s.category === "buffer"), "buffer wins");
   }
   {
-    // Rebalance fires → stable yield is suppressed (canonical hierarchy).
-    const r = runSuggestionEngine(engInputs(rebalanceAlloc()), FIXTURE_GENERATED_AT, null, engSugg);
+    // Rebalance fires → stable yield is suppressed (canonical hierarchy). 18G: the isolated-regression helper
+    // supplies the rebalance candidate (the engine no longer has a silent legacy fallback).
+    const r = runEngineWithLegacyRebalance(engInputs(rebalanceAlloc()), FIXTURE_GENERATED_AT, null, engSugg);
     add("16H-A-AK: rebalance + Stable Yield ordering follows the canonical hierarchy (rebalance suppresses stable yield)", r.suggestions.some((s) => s.category === "rebalance") && r.suggestions.every((s) => s.category !== "stable_yield"), "rebalance suppresses");
   }
   {
@@ -17964,6 +17991,9 @@ export function printFixtureResults(): void {
     ...runRebalanceAssessmentFixtureChecks(),
     ...runRebalanceProductionFixtureChecks(),
     ...runRebalancePhaseOneCloseoutFixtureChecks(),
+    ...runRebalanceStep18EFixtureChecks(),
+    ...runRebalanceStep18FFixtureChecks(),
+    ...runRebalanceStep18GFixtureChecks(),
     ...runSteakhouseExistingPositionFixtureChecks(),
     ...runSafetyBufferCoverageFixtureChecks(),
     ...runKlendDirectPositionFailClosedFixtureChecks(),
@@ -21531,16 +21561,17 @@ export function runRebalanceProductionFixtureChecks(): FixtureCheck[] {
   const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
   const w = (o: Partial<JLWalletPos>): JLWalletPos => ({ id: "x", source: "wallet", type: "token", symbol: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
   const usdc = (v: number, id = "usdc") => w({ id, symbol: "USDC", name: "USD Coin", mint: RB_USDC, valueUsd: v, uiAmount: v, priceUsd: 1 });
-  const sol = (v: number) => w({ id: "sol", type: "native", symbol: "SOL", valueUsd: v, uiAmount: v / 250, priceUsd: 250 });
+  const sol = (v: number) => w({ id: "sol", type: "native", symbol: "SOL", valueUsd: v, uiAmount: v / 250, amount: String(Math.round((v / 250) * 1e9)), decimals: 9, priceUsd: 250 });
   const kaminoStable = (v: number) => w({ id: "kd", type: "protocol", symbol: "USDC", name: "USDC on Kamino", candidateId: "kamino_usdc_lending", existingPositionOnly: true, dedupeKey: "klend:x", valueUsd: v, recognizedValueUsd: v, withdrawalState: "fully_withdrawable", liquidValueUsd: v, mint: RB_USDC });
   const t22usdc = (v: number) => w({ id: "t22u", symbol: "USDC", name: "USD Coin", mint: "FakeUsdcMint111", valueUsd: v, tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" });
   const jlusdc = () => w({ id: "jl", type: "protocol", symbol: "USDC", candidateId: "jupiter_lend_usdc", existingPositionOnly: true, dedupeKey: "jupiter-lend:x", withdrawalState: "unresolved", recognizedValueUsd: null, valueUsd: null, uiAmount: 100, amount: "100000000", mint: RB_USDC });
   const debt = (v: number | null) => w({ id: "hb", type: "protocol", symbol: "USDH", side: "borrowed", valueUsd: v, uiAmount: 300, amount: "300000000" });
-  // Build the production card exactly as the rail does.
-  const card = (positions: JLWalletPos[], risk: string | undefined, buf: number, solFresh = true) => {
+  // Build the production card exactly as the rail does (both directions share the canonical mapper).
+  const card = (positions: JLWalletPos[], risk: string | undefined, buf: number, solFresh = true, walletFresh = true) => {
     const a = rbAssess({ positions, riskTolerance: risk, requiredBufferUsd: buf, generatedAt: 1_700_000_000_000 });
     const src = rbSource(positions, buf, 1_700_000_000_000);
-    return rbBuildCard(a, src, 250, solFresh, 1_700_000_000_000);
+    const nsol = rbNativeSol(positions, 250, solFresh, RB_RESERVE_POLICY, walletFresh, 1_700_000_000_000);
+    return rbBuildCard(a, src, nsol, 250, solFresh, 1_700_000_000_000);
   };
 
   // ---- Source selection (exact canonical USDC only) ----
@@ -21568,10 +21599,10 @@ export function runRebalanceProductionFixtureChecks(): FixtureCheck[] {
 
   // ---- Directional rollout ----
   add("RC-18: stables_to_crypto CAN produce a card", card([sol(100), usdc(900)], "high", 100) !== null, "stables produces");
-  add("RC-19: crypto_to_stables produces NO card (no legacy uncapped fallback)", (() => { const c = card([sol(900), usdc(100)], "low", 0); const a = rbAssess({ positions: [sol(900), usdc(100)], riskTolerance: "low", requiredBufferUsd: 0, generatedAt: 1 }); return c === null && a.direction === "crypto_to_stables"; })(), "crypto no card");
+  add("RC-19: crypto_to_stables NOW produces a capped native-SOL→USDC card (18F)", (() => { const c = card([sol(900), usdc(100)], "low", 0); const a = rbAssess({ positions: [sol(900), usdc(100)], riskTolerance: "low", requiredBufferUsd: 0, generatedAt: 1 }); return c !== null && a.direction === "crypto_to_stables" && c!.id === "rebalance_to_plan" && c!.from?.bucket === "crypto" && c!.to?.bucket === "stables" && c!.reason_codes.includes("crypto_overweight"); })(), "crypto card");
   add("RC-20: within_threshold → no card", card([sol(620), usdc(380)], "medium", 0) === null, "within no card");
   add("RC-21: unresolved (unvalued liability) → no card", card([sol(100), usdc(900), debt(null)], "high", 100) === null, "unresolved no card");
-  add("RC-22: card amount is NOT the legacy bucket deviation for crypto_to_stables", (() => { const c = card([sol(900), usdc(100)], "low", 0); return c === null; /* legacy would size 500; new emits nothing */ })(), "no legacy amount");
+  add("RC-22: crypto card amount = min(required correction, verified available native-SOL value) — capped", (() => { const positions = [sol(900), usdc(100)]; const c = card(positions, "low", 0); const a = rbAssess({ positions, riskTolerance: "low", requiredBufferUsd: 0, generatedAt: 1 }); const nsol = rbNativeSol(positions, 250, true, RB_RESERVE_POLICY, true, 1); const expected = Math.min(a.requiredCorrectionUsd, nsol.technicallyAvailableValueUsd ?? 0); return c !== null && c!.amount?.valueUsd === expected; })(), "capped");
 
   // ---- Material need + conflict suppression (engine override) ----
   const dcaSug = mkSug15H("dca-plan", "dca");
@@ -21619,14 +21650,14 @@ export function runRebalancePhaseOneCloseoutFixtureChecks(): FixtureCheck[] {
   })(), "coverage passed");
 
   // ---- /testing gallery states ----
-  add("RD-8: dedicated Rebalance /testing gallery has all required states", (() => { const ids = ["full", "partial", "exact_50", "below_50", "all_reserved", "multi_usdc", "protocol_stable", "kamino", "steakhouse", "jupiter", "liability", "lookalike", "crypto_to_stables", "within_threshold", "stale_sol_price"]; return ids.every((id) => byId(id) !== undefined); })(), `count=${fx.length}`);
+  add("RD-8: dedicated Rebalance /testing gallery has all required states", (() => { const ids = ["full", "partial", "exact_50", "below_50", "all_reserved", "multi_usdc", "protocol_stable", "kamino", "steakhouse", "jupiter", "liability", "lookalike", "within_threshold", "stale_sol_price", "crypto_full", "crypto_partial", "crypto_exact_50", "crypto_below_50", "sol_below_reserve", "sol_exactly_reserve", "sol_above_reserve", "crypto_stale_price", "crypto_stale_wallet", "native_plus_active_stake", "native_plus_lst", "native_plus_wsol", "native_plus_collateral"]; return ids.every((id) => byId(id) !== undefined); })(), `count=${fx.length}`);
   add("RD-9: full state → card via production mapper (rebalance_to_plan)", (() => { const c = byId("full")!.card; return c?.id === "rebalance_to_plan" && c.category === "rebalance"; })(), "full card");
   add("RD-10: partial state → card + partial label", (() => { const c = byId("partial")!.card; return c !== null && (c.amount?.label ?? "").includes("partial"); })(), "partial card");
   add("RD-11: exact $50 → card; below $50 → no card", byId("exact_50")!.card !== null && byId("below_50")!.card === null, "50 boundary");
   add("RD-12: USDC fully reserved → no source, no card", byId("all_reserved")!.card === null && byId("all_reserved")!.source.selectionState === "no_excess", "reserved");
   add("RD-13: multiple USDC accounts → one aggregated source", byId("multi_usdc")!.source.selectedSourcePositionIds.length === 2 && byId("multi_usdc")!.card !== null, "aggregate");
   add("RD-14: protocol/Kamino/Steakhouse/jlUSDC/lookalike never a source", (() => { const noSrc = ["kamino", "steakhouse", "lookalike"].every((id) => byId(id)!.source.verifiedTransferableValueUsd === 0); const protoAlloc = byId("protocol_stable")!.assessment.stableAssetValueUsd > 0; return noSrc && protoAlloc; })(), "excluded sources");
-  add("RD-15: crypto_to_stables → no card, material need true (no legacy fallback)", (() => { const f = byId("crypto_to_stables")!; return f.card === null && f.assessment.direction === "crypto_to_stables" && f.material === true; })(), "crypto no card");
+  add("RD-15: crypto_to_stables → capped native-SOL→USDC card via the SAME mapper (18F), material true", (() => { const f = byId("crypto_full")!; return f.card !== null && f.card!.id === "rebalance_to_plan" && f.assessment.direction === "crypto_to_stables" && f.material === true && f.card!.from?.bucket === "crypto" && f.card!.to?.bucket === "stables"; })(), "crypto card");
   add("RD-16: within_threshold → no card, NOT material (no conflict suppression)", (() => { const f = byId("within_threshold")!; return f.card === null && f.material === false; })(), "within");
   add("RD-17: liability/jupiter unresolved → no card (calculation not allowed)", byId("liability")!.card === null && byId("jupiter")!.card === null, "unresolved no card");
   add("RD-18: stale SOL price → no approximate SOL units in the card", (() => { const s = JSON.stringify(byId("stale_sol_price")!.card); return byId("stale_sol_price")!.card !== null && !s.includes("Approx. SOL"); })(), "stale sol");
@@ -21637,3 +21668,263 @@ export function runRebalancePhaseOneCloseoutFixtureChecks(): FixtureCheck[] {
 
   return checks;
 }
+
+/**
+ * Step 18E — crypto-overweight staking-conflict policy + the NON-MOUNTED direct-wallet native-SOL source
+ * foundation. Proves: (1) a proven material crypto_to_stables NEED suppresses an otherwise-eligible new
+ * staking suggestion (narrow-only, card-independent, direction-specific); (2) the fail-closed native-SOL
+ * source assessment (recognized/transferable/reserved/available split, exclusions, missing-reserve → null
+ * available, arithmetic, freshness) and the future crypto_to_stables source gate that never emits a card.
+ */
+export function runRebalanceStep18EFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const GEN = 1_700_000_000_000;
+  const APPROVED: RbReservePolicy = { state: "approved", requiredReserveLamports: 100_000_000 /* 0.1 SOL */, policyId: "test_reserve_v1" };
+  // Native SOL (10 SOL @ $75), plus non-native SOL-adjacent rows that must NEVER count as direct-wallet SOL.
+  const nativeSol = (ui: number) => solPosition(ui); // native, priced $75, amount = lamports
+  const stakePos = (ui: number): WalletPosition => ({ id: "stk", source: "wallet", type: "stake", symbol: "SOL", name: "Stake", amount: String(Math.round(ui * 1e9)), uiAmount: ui, decimals: 9, detection: "native_stake", priceUsd: 75, valueUsd: ui * 75 });
+  const lstPos = (ui: number): WalletPosition => ({ id: "ms", source: "jito", type: "lst", symbol: "JitoSOL", name: "JitoSOL", mint: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn", amount: String(Math.round(ui * 1e9)), uiAmount: ui, decimals: 9, detection: "recognized_lst_mint", priceUsd: 80, valueUsd: ui * 80 });
+  const wsolPos = (ui: number): WalletPosition => ({ id: "wsol", source: "wallet", type: "token", symbol: "SOL", name: "Wrapped SOL", mint: RB_WSOL_MINT, amount: String(Math.round(ui * 1e9)), uiAmount: ui, decimals: 9, detection: "direct_wallet_balance", priceUsd: 75, valueUsd: ui * 75 });
+
+  // ---- Native-SOL source: recognition + fail-closed reserve ----
+  add("RE-1: direct native SOL recognized as lamports/SOL/value", (() => { const a = rbNativeSol([nativeSol(10)], 75, true, RB_RESERVE_MISSING, true, GEN); return a.recognizedLamports === 10_000_000_000 && a.recognizedSol === 10 && a.recognizedValueUsd === 750; })(), "recognized");
+  add("RE-2: NO approved reserve → technicallyAvailable stays NULL (never zero-reserve default)", (() => { const a = rbNativeSol([nativeSol(10)], 75, true, RB_RESERVE_MISSING, true, GEN); return a.technicallyAvailableLamports === null && a.technicallyAvailableValueUsd === null && a.requiredNativeReserveLamports === null && a.sourceEligibilityState === "reserve_policy_missing"; })(), "fail closed");
+  add("RE-3: missing-reserve recognized SOL surfaces as UNRESOLVED potential (not available, not zero)", (() => { const a = rbNativeSol([nativeSol(10)], 75, true, RB_RESERVE_MISSING, true, GEN); return a.unresolvedPotentialValueUsd === 750 && a.reservePolicyState === "missing"; })(), "unresolved potential");
+  add("RE-4: native STAKE excluded from direct-wallet SOL (requires withdrawal)", (() => { const a = rbNativeSol([stakePos(10)], 75, true, APPROVED, true, GEN); return a.positionIds.length === 0 && a.recognizedLamports === null && a.exclusionReasons.some((r) => /stake/i.test(r)) && a.sourceEligibilityState === "unavailable"; })(), "stake excluded");
+  add("RE-5: LST (and its SOL backing) excluded as native SOL", (() => { const a = rbNativeSol([lstPos(10)], 75, true, APPROVED, true, GEN); return a.positionIds.length === 0 && a.exclusionReasons.some((r) => /LST/i.test(r)); })(), "lst excluded");
+  add("RE-6: WRAPPED SOL (WSOL mint) excluded — no wrapped-without-policy source", (() => { const a = rbNativeSol([wsolPos(10)], 75, true, APPROVED, true, GEN); return a.positionIds.length === 0 && a.exclusionReasons.some((r) => /wrapped/i.test(r)) && a.recognizedLamports === null; })(), "wsol excluded");
+  add("RE-7: multiple direct native SOL rows aggregate lamports; siblings excluded", (() => { const a = rbNativeSol([nativeSol(4), stakePos(3), lstPos(2), wsolPos(1)], 75, true, APPROVED, true, GEN); return a.recognizedLamports === 4_000_000_000 && a.positionIds.length === 1; })(), "aggregate + exclude");
+
+  // ---- Native-SOL source: approved-policy arithmetic + freshness ----
+  add("RE-8: approved reserve → technicallyAvailable = recognized − reserve; eligible", (() => { const a = rbNativeSol([nativeSol(10)], 75, true, APPROVED, true, GEN); return a.technicallyAvailableLamports === 9_900_000_000 && a.sourceEligibilityState === "eligible" && a.reservePolicyState === "approved"; })(), "available");
+  add("RE-9: approved reserve arithmetic exact (9.9 SOL / $742.50); reserve = $7.50", (() => { const a = rbNativeSol([nativeSol(10)], 75, true, APPROVED, true, GEN); return a.technicallyAvailableSol === 9.9 && a.technicallyAvailableValueUsd === 742.5 && a.requiredNativeReserveSol === 0.1 && a.requiredNativeReserveUsd === 7.5; })(), "exact math");
+  add("RE-10: approved reserve but STALE wallet → not eligible, available NULL", (() => { const a = rbNativeSol([nativeSol(10)], 75, true, APPROVED, false, GEN); return a.sourceEligibilityState === "stale" && a.technicallyAvailableLamports === null && a.freshnessState === "stale"; })(), "stale wallet");
+  add("RE-11: approved reserve but STALE SOL price → price_unresolved, no USD available", (() => { const a = rbNativeSol([nativeSol(10)], 75, false, APPROVED, true, GEN); return a.sourceEligibilityState === "price_unresolved" && a.priceState === "stale" && a.technicallyAvailableValueUsd === null; })(), "stale price");
+  add("RE-12: no direct native SOL at all → unavailable (not eligible, not zero-available)", (() => { const a = rbNativeSol([], 75, true, APPROVED, true, GEN); return a.sourceEligibilityState === "unavailable" && a.technicallyAvailableLamports === null && a.freshnessState === "unresolved"; })(), "none");
+  add("RE-13: approved STATE but null reserve lamports → still fail-closed (reserve_policy_missing)", (() => { const a = rbNativeSol([nativeSol(10)], 75, true, { state: "approved", requiredReserveLamports: null, policyId: "bad" }, true, GEN); return a.sourceEligibilityState === "reserve_policy_missing" && a.technicallyAvailableLamports === null; })(), "defensive null");
+
+  // ---- Native-SOL source: identity, exclusion metadata, no execution ----
+  add("RE-14: canonical identity/sourceType/methodologyVersion", (() => { const a = rbNativeSol([nativeSol(10)], 75, true, RB_RESERVE_MISSING, true, GEN); return a.assetId === "SOL" && a.identity === "native_sol" && a.sourceType === "direct_wallet_native_sol" && a.methodologyVersion.startsWith("native_sol_rebalance_source_"); })(), "identity");
+  add("RE-15: exclusionReasons names the missing-policy block", (() => { const a = rbNativeSol([nativeSol(10)], 75, true, RB_RESERVE_MISSING, true, GEN); return a.exclusionReasons.some((r) => /no approved native-SOL fee-reserve policy/i.test(r)); })(), "reason");
+  add("RE-16: assessment carries NO route/swap/signature/transaction execution fields", (() => { const s = JSON.stringify(rbNativeSol([nativeSol(10)], 75, true, APPROVED, true, GEN)); return !s.includes("swapRoute") && !s.includes("instruction") && !s.includes("signTransaction") && !s.includes("aggregator"); })(), "no exec");
+  add("RE-17: freshnessState unresolved when there is no native row", rbNativeSol([usdcOnly()], 75, true, APPROVED, true, GEN).freshnessState === "unresolved", "fresh unresolved");
+
+  // ---- Future crypto_to_stables source GATE (non-mounted; never a card) ----
+  add("RE-18: reserve missing → future gate UNRESOLVED (never allowed)", (() => { const a = rbNativeSol([nativeSol(10)], 75, true, RB_RESERVE_MISSING, true, GEN); const g = rbFutureGate(a); return g.status === "unresolved" && g.reasons.includes("native_sol_reserve_policy_missing"); })(), "gate unresolved");
+  add("RE-19: approved + ≥ $50 available → future gate ALLOWED", (() => { const g = rbFutureGate(rbNativeSol([nativeSol(10)], 75, true, APPROVED, true, GEN)); return g.status === "allowed"; })(), "gate allowed");
+  add("RE-20: approved but < $50 available → future gate BLOCKED (below minimum)", (() => { const g = rbFutureGate(rbNativeSol([nativeSol(0.5)], 75, true, APPROVED, true, GEN)); return g.status === "blocked" && g.reasons.includes("below_minimum_native_sol_source"); })(), "gate below min");
+  add("RE-21: stale inputs → future gate UNRESOLVED", (() => { const g = rbFutureGate(rbNativeSol([nativeSol(10)], 75, true, APPROVED, false, GEN)); return g.status === "unresolved"; })(), "gate stale");
+  add("RE-22: no native SOL → future gate BLOCKED", (() => { const g = rbFutureGate(rbNativeSol([], 75, true, APPROVED, true, GEN)); return g.status === "blocked"; })(), "gate unavailable");
+  add("RE-23: source gate returns a Gate ONLY (no suggestion/card object); the card mapper owns emission (18F)", (() => { const g = rbFutureGate(rbNativeSol([nativeSol(10)], 75, true, APPROVED, true, GEN)) as unknown as Record<string, unknown>; return typeof g.status === "string" && Array.isArray(g.reasons) && !("id" in g) && !("category" in g) && !("amount" in g); })(), "gate only");
+
+  // ---- Reserve-policy options (missing; documented A–D; staking 0.1 NOT reused) ----
+  add("RE-24: missing policy = state 'missing' + null reserve (never invented)", RB_RESERVE_MISSING.state === "missing" && RB_RESERVE_MISSING.requiredReserveLamports === null, "missing policy");
+  add("RE-25: four documented options (fixed_sol / fixed_usd_to_sol / transaction_budget / hybrid) each with failure behavior", (() => { const ids = RB_RESERVE_OPTIONS.map((o) => o.id); return ids.length === 4 && ids.includes("fixed_sol") && ids.includes("fixed_usd_to_sol") && ids.includes("transaction_budget") && ids.includes("hybrid") && RB_RESERVE_OPTIONS.every((o) => o.failureBehavior.length > 0); })(), "options A–D");
+  add("RE-26: options note the staking 0.1-SOL reserve is NOT an approved Rebalance reserve", RB_RESERVE_OPTIONS.some((o) => /product-approved/i.test(o.summary)), "not reused");
+
+  // ---- Staking-conflict suppression (engine; narrow-only, card-independent, directional) ----
+  const stakingInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 5), positions: [solPosition(10)] });
+  const noStakeInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 5), positions: [cryptoPosition(100)] });
+  const runOv = (inp: ReturnType<typeof stakingInp>, ov: { card: null; material: boolean; materialCryptoToStables: boolean } | undefined) => runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, ov);
+  add("RE-27: material crypto_to_stables NEED suppresses otherwise-eligible staking (no card needed)", (() => { const r = runOv(stakingInp(), { card: null, material: true, materialCryptoToStables: true }); return !r.suggestions.some((s) => s.category === "staking"); })(), "suppressed");
+  add("RE-28: baseline (no override) → the same input DOES emit staking (proves it was eligible)", (() => { const r = runOv(stakingInp(), undefined); return r.suggestions.some((s) => s.category === "staking"); })(), "eligible baseline");
+  add("RE-29: stables_to_crypto material (materialCryptoToStables=false) does NOT suppress staking", (() => { const r = runOv(stakingInp(), { card: null, material: true, materialCryptoToStables: false }); return r.suggestions.some((s) => s.category === "staking"); })(), "directional");
+  add("RE-30: within_threshold (not material) does NOT suppress staking", (() => { const r = runOv(stakingInp(), { card: null, material: false, materialCryptoToStables: false }); return r.suggestions.some((s) => s.category === "staking"); })(), "within keeps");
+  add("RE-31: suppression NARROWS only — never enables staking when SOL is not idle-eligible", (() => { const on = runOv(noStakeInp(), { card: null, material: true, materialCryptoToStables: true }); const off = runOv(noStakeInp(), undefined); return !on.suggestions.some((s) => s.category === "staking") && !off.suggestions.some((s) => s.category === "staking"); })(), "narrow only");
+  add("RE-32: suppressing the only candidate falls back to informational On Track (no crash/empty rail)", (() => { const r = runOv(stakingInp(), { card: null, material: true, materialCryptoToStables: true }); return r.suggestions.some((s) => s.category === "on_track") && !r.suggestions.some((s) => s.category === "staking"); })(), "on track fallback");
+  add("RE-33: rail derives materialCryptoToStables via isMaterialCryptoToStables and passes it to the engine", (() => { const rail = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/useRailSuggestions.ts`, "utf8"); } catch { return ""; } })(); return rail.includes("isMaterialCryptoToStables") && rail.includes("materialCryptoToStables"); })(), "rail wired");
+  add("RE-34: engine gate keys on materialCryptoToStables ONLY (staking), leaving other categories' logic intact", (() => { const eng = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/engine.ts`, "utf8"); } catch { return ""; } })(); const stakeLine = eng.split("\n").find((l) => l.includes("candidates.push(staking)")) ?? ""; return stakeLine.includes("materialCryptoToStables !== true") && rbIsCryptoToStables !== undefined; })(), "staking-only gate");
+
+  return checks;
+}
+
+/** A priced direct-wallet USDC (non-native) helper for RE-17 (proves freshness stays unresolved w/o native SOL). */
+function usdcOnly(): WalletPosition {
+  return { id: "u", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: RB_USDC, amount: "500000000", uiAmount: 500, decimals: 6, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: 500 };
+}
+
+/**
+ * Step 18F — direct-wallet native SOL → canonical USDC PRODUCTION mounting. Proves the approved Rebalance-
+ * owned 0.1 SOL operating reserve (exact BigInt, price-independent, separate from staking), the mounted
+ * native-SOL source, strict source identity/exclusions, full/partial/exact-$50/below-min amounts (capped by
+ * BOTH correction and verified source; approx-SOL capped in lamports; no invented USDC output), the canonical
+ * USDC destination, the shared card contract + copy, conflict preservation, and the unchanged USDC→SOL path.
+ */
+export function runRebalanceStep18FFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const GEN = 1_700_000_000_000;
+  const P = 250; // SOL price
+  const w = (o: Partial<WalletPosition>): WalletPosition => ({ id: "x", source: "wallet", type: "token", symbol: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
+  const nsol = (uiSol: number, id = "nsol"): WalletPosition => w({ id, type: "native", symbol: "SOL", name: "Solana", amount: String(Math.round(uiSol * 1e9)), uiAmount: uiSol, decimals: 9, priceUsd: P, valueUsd: uiSol * P });
+  const usdc = (v: number, id = "usdc"): WalletPosition => w({ id, symbol: "USDC", name: "USD Coin", mint: RB_USDC, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
+  const other = (v: number): WalletPosition => w({ id: "bonk", type: "token", symbol: "BONK", mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263", amount: "1", uiAmount: v, decimals: 5, priceUsd: 1, valueUsd: v });
+  const stake = (uiSol: number, withdrawable = false): WalletPosition => w({ id: "stk", type: "stake", symbol: "SOL", amount: String(Math.round(uiSol * 1e9)), uiAmount: uiSol, decimals: 9, detection: "native_stake", priceUsd: P, valueUsd: uiSol * P, liquidValueUsd: withdrawable ? uiSol * P : 0, stakeLifecycleState: withdrawable ? "deactivating" : "active" });
+  const lst = (uiSol: number): WalletPosition => w({ id: "ms", source: "jito", type: "lst", symbol: "JitoSOL", mint: "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn", amount: String(Math.round(uiSol * 1e9)), uiAmount: uiSol, decimals: 9, detection: "recognized_lst_mint", priceUsd: P + 5, valueUsd: uiSol * (P + 5) });
+  const wsol = (uiSol: number): WalletPosition => w({ id: "wsol", type: "token", symbol: "SOL", name: "Wrapped SOL", mint: RB_WSOL_MINT, amount: String(Math.round(uiSol * 1e9)), uiAmount: uiSol, decimals: 9, priceUsd: P, valueUsd: uiSol * P });
+  const collat = (v: number): WalletPosition => w({ id: "kcol", type: "protocol", symbol: "SOL", name: "SOL on Kamino", protocol: "Kamino", candidateId: "kamino_sol_collateral", existingPositionOnly: true, dedupeKey: "klend:sol", valueUsd: v, recognizedValueUsd: v, withdrawalState: "fully_withdrawable", liquidValueUsd: v });
+  const lpLeg = (v: number): WalletPosition => w({ id: "lp", type: "protocol", symbol: "SOL-USDC", name: "SOL-USDC LP", protocol: "Orca", legs: [{ mint: "SoLLeg", uiAmount: v / P, side: "long" }], valueUsd: v });
+  const borrowedSol = (v: number): WalletPosition => w({ id: "bsol", type: "protocol", symbol: "SOL", name: "Borrowed SOL", side: "borrowed", valueUsd: v, uiAmount: v / P, amount: "1" });
+
+  const ns = (positions: WalletPosition[], solFresh = true, walletFresh = true, policy = RB_RESERVE_POLICY) => rbNativeSol(positions, P, solFresh, policy, walletFresh, GEN);
+  const build = (positions: WalletPosition[], risk: string | undefined, buf: number, solFresh = true, walletFresh = true) => {
+    const a = rbAssess({ positions, riskTolerance: risk, requiredBufferUsd: buf, generatedAt: GEN });
+    const src = rbSource(positions, buf, GEN);
+    const nsol = ns(positions, solFresh, walletFresh);
+    const c = rbBuildCard(a, src, nsol, P, solFresh, GEN);
+    return { a, nsol, c };
+  };
+  const metricVal = (c: import("./engineTypes").EngineSuggestion | null, label: string): number | undefined => { const v = c?.reviewDetails?.metrics?.find((m) => m.label === label)?.value; return typeof v === "number" ? v : undefined; };
+
+  // ---- Reserve policy ----
+  add("RF-1: Rebalance reserve constant = 100,000,000 lamports (exact BigInt)", RB_RESERVE_LAMPORTS === 100_000_000n, "0.1 SOL");
+  add("RF-2: reserve is Rebalance-owned, NOT imported/aliased from the staking reserve", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/rebalanceAssessment.ts`, "utf8"); } catch { return ""; } })(); const importsStakingReserve = src.split("\n").some((l) => /^\s*import/.test(l) && l.includes("SOL_FEE_RESERVE")); return RB_RESERVE_POLICY.policyId === "rebalance_native_sol_reserve" && (RB_RESERVE_POLICY.methodologyVersion ?? "").startsWith("rebalance_native_sol_reserve") && RB_RESERVE_LAMPORTS === 100_000_000n && !importsStakingReserve; })(), "separate");
+  add("RF-3: fixed-SOL policy approved", RB_RESERVE_POLICY.state === "approved" && RB_RESERVE_POLICY.kind === "fixed_sol", "approved");
+  add("RF-4: missing policy is NOT used in the mounted crypto→stables direction", (() => { const rail = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/useRailSuggestions.ts`, "utf8"); } catch { return ""; } })(); return rail.includes("REBALANCE_NATIVE_SOL_RESERVE_POLICY") && !rail.includes("NATIVE_SOL_RESERVE_POLICY_MISSING"); })(), "approved mounted");
+  add("RF-5: balance below reserve → zero available", ns([nsol(0.05)]).technicallyAvailableLamports === 0, "below→0");
+  add("RF-6: balance exactly reserve → zero available", ns([nsol(0.1)]).technicallyAvailableLamports === 0, "equal→0");
+  add("RF-7: balance above reserve → exact excess", ns([nsol(1)]).technicallyAvailableLamports === 900_000_000, "excess");
+  add("RF-8: reserve is price-independent (identical lamports across prices)", rbNativeSol([nsol(1)], 10, true, RB_RESERVE_POLICY, true, GEN).requiredNativeReserveLamports === 100_000_000 && rbNativeSol([nsol(1)], 1000, true, RB_RESERVE_POLICY, true, GEN).requiredNativeReserveLamports === 100_000_000, "price-independent");
+  add("RF-9: stale SOL price does not alter the lamport reserve", ns([nsol(1)], false).requiredNativeReserveLamports === 100_000_000, "stale-price reserve");
+  add("RF-10: available never negative and never exceeds recognized", (() => { const a = ns([nsol(0.05)]); const b = ns([nsol(5)]); return (a.technicallyAvailableLamports ?? -1) >= 0 && (b.technicallyAvailableLamports ?? 0) <= (b.recognizedLamports ?? 0); })(), "bounds");
+
+  // ---- Source identity + exclusions ----
+  add("RF-11: direct-wallet native SOL only", (() => { const a = ns([nsol(4)]); return a.positionIds.length === 1 && a.recognizedSol === 4 && a.identity === "native_sol"; })(), "native only");
+  add("RF-12: native (active) stake excluded", (() => { const a = ns([stake(4)]); return a.positionIds.length === 0 && a.exclusionReasons.some((r) => /stake/i.test(r)); })(), "stake");
+  add("RF-13: immediately-withdrawable stake excluded from direct source", (() => { const a = ns([stake(4, true)]); return a.positionIds.length === 0; })(), "withdrawable stake");
+  add("RF-14: LST excluded", (() => { const a = ns([lst(4)]); return a.positionIds.length === 0 && a.exclusionReasons.some((r) => /LST/i.test(r)); })(), "lst");
+  add("RF-15: LST backing excluded (never source liquidity)", ns([lst(4)]).technicallyAvailableLamports === null, "backing");
+  add("RF-16: wrapped SOL excluded", (() => { const a = ns([wsol(4)]); return a.positionIds.length === 0 && a.exclusionReasons.some((r) => /wrapped/i.test(r)); })(), "wsol");
+  add("RF-17: LP SOL leg excluded", ns([lpLeg(1000)]).positionIds.length === 0, "lp");
+  add("RF-18: protocol collateral excluded", ns([collat(1000)]).positionIds.length === 0, "collateral");
+  add("RF-19: borrowed SOL excluded", ns([borrowedSol(500)]).positionIds.length === 0, "borrowed");
+  add("RF-20: duplicate native economic identity fails closed", ns([nsol(4, "a"), nsol(4, "b")]).sourceEligibilityState === "duplicate_invalid", "dup");
+
+  // ---- Amount ----
+  add("RF-21: full correction — available covers correction", (() => { const { a, nsol: n, c } = build([nsol(4), usdc(100)], "low", 0); return c !== null && (n.technicallyAvailableValueUsd ?? 0) >= a.requiredCorrectionUsd && c!.amount?.valueUsd === a.requiredCorrectionUsd && c!.description_key === "suggestion.rebalance.crypto_to_stables.full.description"; })(), "full");
+  add("RF-22: partial correction — available < correction, ≥ $50", (() => { const { a, nsol: n, c } = build([nsol(2), other(2000), usdc(100)], "low", 0); return c !== null && (n.technicallyAvailableValueUsd ?? 0) < a.requiredCorrectionUsd && c!.amount?.valueUsd === n.technicallyAvailableValueUsd && c!.description_key === "suggestion.rebalance.crypto_to_stables.partial.description"; })(), "partial");
+  add("RF-23: exact $50 native-SOL source → card visible", (() => { const { nsol: n, c } = build([nsol(0.3), other(925), usdc(100)], "low", 0); return (n.technicallyAvailableValueUsd) === 50 && c !== null && c!.amount?.valueUsd === 50; })(), "exact 50");
+  add("RF-24: below $50 native-SOL source → no card", build([nsol(0.25), other(1000), usdc(100)], "low", 0).c === null, "below 50");
+  add("RF-25: amount capped by required correction", (() => { const { a, c } = build([nsol(4), usdc(100)], "low", 0); return c!.amount?.valueUsd === a.requiredCorrectionUsd; })(), "cap correction");
+  add("RF-26: amount capped by source capacity", (() => { const { nsol: n, c } = build([nsol(2), other(2000), usdc(100)], "low", 0); return c!.amount?.valueUsd === n.technicallyAvailableValueUsd; })(), "cap source");
+  add("RF-27: approximate source SOL never exceeds available lamports", (() => { const { nsol: n, c } = build([nsol(2), other(2000), usdc(100)], "low", 0); const approx = metricVal(c, "Approx. SOL to move (informational)") ?? 0; return approx <= (n.technicallyAvailableSol ?? 0) + 1e-9; })(), "approx capped");
+  add("RF-28: no destination USDC output invented", (() => { const { c } = build([nsol(4), usdc(100)], "low", 0); const s = JSON.stringify(c); return !/received|estimatedUsdc|outputAmount|guaranteed/i.test(s) && (c!.reviewDetails?.involvedAssets ?? []).filter((x) => x.role === "target_bucket").every((x) => x.valueUsd === undefined); })(), "no output");
+  add("RF-29: stale price → no card; recognized SOL units preserved", (() => { const { nsol: n, c } = build([nsol(4), usdc(100)], "low", 0, false); return c === null && n.priceState === "stale" && n.recognizedSol === 4; })(), "stale price");
+  add("RF-30: stale wallet → available stays NULL (null never becomes 0)", (() => { const { nsol: n, c } = build([nsol(4), usdc(100)], "low", 0, true, false); return c === null && n.technicallyAvailableLamports === null; })(), "stale wallet null");
+
+  // ---- Destination ----
+  add("RF-31: canonical USDC exact mint destination", RB_DEST.crypto_to_stables.mint === RB_USDC && RB_DEST.crypto_to_stables.assetId === "usdc", "usdc mint");
+  add("RF-32: destination is wallet stable (classic SPL); native false, bucket stable", RB_DEST.crypto_to_stables.native === false && RB_DEST.crypto_to_stables.bucket === "stable" && RB_DEST.crypto_to_stables.destinationRole === "wallet_stable" && RB_CLASSIC === "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", "wallet stable");
+  add("RF-33: registry entry enabled + recommendation-eligible", RB_DEST.crypto_to_stables.enabled && RB_DEST.crypto_to_stables.recommendationEligible, "enabled");
+  add("RF-34: Kamino/Steakhouse/Jupiter/INF/LP never destinations (only USDC/SOL)", [RB_DEST.crypto_to_stables.assetId, RB_DEST.stables_to_crypto.assetId].every((x) => x === "usdc" || x === "sol"), "no excluded dest");
+
+  // ---- Card ----
+  add("RF-35: same rebalance_to_plan contract", (() => { const { c } = build([nsol(4), usdc(100)], "low", 0); return c!.id === "rebalance_to_plan" && c!.category === "rebalance" && c!.title_key === "suggestion.rebalance.title" && c!.action_kind === "review_only" && c!.is_top_pick === false; })(), "contract");
+  add("RF-36: crypto full copy names SOL", /\bSOL\b/.test(RB_COPY["suggestion.rebalance.crypto_to_stables.full.description"]), "full SOL");
+  add("RF-37: crypto full copy names USDC", /USDC/.test(RB_COPY["suggestion.rebalance.crypto_to_stables.full.description"]), "full USDC");
+  add("RF-38: copy states 0.1 SOL remains available (both full + partial)", /0\.1 SOL/.test(RB_COPY["suggestion.rebalance.crypto_to_stables.full.description"]) && /0\.1 SOL/.test(RB_COPY["suggestion.rebalance.crypto_to_stables.partial.description"]), "reserve copy");
+  add("RF-39: partial copy says 'part of the gap'", /part of the gap/i.test(RB_COPY["suggestion.rebalance.crypto_to_stables.partial.description"]), "partial gap");
+  add("RF-40: card is review-only + actionable", (() => { const { c } = build([nsol(4), usdc(100)], "low", 0); return c!.action_kind === "review_only" && c!.is_actionable === true; })(), "review only");
+  add("RF-41: no route/quote/execution/signature fields (guardrail codes aside)", (() => { const s = JSON.stringify(build([nsol(4), usdc(100)], "low", 0).c); return !s.includes("swapRoute") && !s.includes("instruction") && !s.includes("signTransaction") && !s.includes("aggregator") && !s.includes("liveQuote") && !s.includes("routePlan"); })(), "read-only");
+  add("RF-42: supporting data carries operating reserve + available source SOL", (() => { const { c } = build([nsol(4), usdc(100)], "low", 0); return metricVal(c, "Operating reserve (kept)") === 0.1 && typeof metricVal(c, "Available SOL after reserve") === "number"; })(), "supporting");
+
+  // ---- Conflict ----
+  const dcaSug = mkSug15H("dca-plan", "dca");
+  const sySug = mkSug15H("sy-plan", "stable_yield");
+  const stakingInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 5), positions: [solPosition(10)] });
+  const cryptoCard = build([nsol(4), usdc(100)], "low", 0).c;
+  add("RF-43: crypto_to_stables card present → staking suppressed", (() => { const r = runSuggestionEngine(stakingInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: cryptoCard, material: true, materialCryptoToStables: true }); return r.suggestions.some((s) => s.id === "rebalance_to_plan") && !r.suggestions.some((s) => s.category === "staking"); })(), "card + suppress staking");
+  add("RF-44: material crypto overweight WITHOUT a card still suppresses staking", (() => { const r = runSuggestionEngine(stakingInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true, materialCryptoToStables: true }); return !r.suggestions.some((s) => s.category === "staking"); })(), "no card suppress");
+  add("RF-45: DCA suppression preserved under material crypto overweight", (() => { const r = runSuggestionEngine(stakingInp(), FIXTURE_GENERATED_AT, dcaSug, null, undefined, { card: cryptoCard, material: true, materialCryptoToStables: true }); return !r.suggestions.some((s) => s.category === "dca"); })(), "dca");
+  add("RF-46: direct-lending (stable_yield) suppression preserved", (() => { const r = runSuggestionEngine(stakingInp(), FIXTURE_GENERATED_AT, null, sySug, undefined, { card: cryptoCard, material: true, materialCryptoToStables: true }); return !r.suggestions.some((s) => s.category === "stable_yield"); })(), "direct lending");
+  add("RF-47: within-threshold does NOT suppress staking/DCA", (() => { const r = runSuggestionEngine(stakingInp(), FIXTURE_GENERATED_AT, dcaSug, null, undefined, { card: null, material: false, materialCryptoToStables: false }); return r.suggestions.some((s) => s.category === "staking") && r.suggestions.some((s) => s.category === "dca"); })(), "within keeps");
+  add("RF-48: USDC→SOL (stables_to_crypto) behavior unchanged", (() => { const c = build([nsol(0.4), usdc(900)], "high", 100).c; return c !== null && c!.description_key === "suggestion.rebalance.stables_to_crypto.full.description" && c!.from?.bucket === "stables" && c!.to?.bucket === "crypto" && c!.amount?.valueUsd === 700; })(), "usdc→sol");
+
+  // ---- Regression ----
+  add("RF-49: ±10pt threshold unchanged", build([nsol(4), usdc(100)], "low", 0).a.thresholdSource.includes("10"), "threshold");
+  add("RF-50: $50 minimum unchanged", build([nsol(4), usdc(100)], "low", 0).a.thresholdSource.includes("50"), "minimum");
+  add("RF-51: target allocations unchanged (low → 40% crypto)", build([nsol(4), usdc(100)], "low", 0).a.targetCryptoPct === 40, "targets");
+  add("RF-52: Safety Buffer precedence unchanged (incomplete buffer blocks crypto card)", build([nsol(4), usdc(50)], "low", 1000).c === null, "buffer blocks");
+  add("RF-53: dispositions intact (Jupiter excluded / Steakhouse existing-only)", dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only", "dispositions");
+  add("RF-54: no risk-score/governance/route in the crypto card", (() => { const s = JSON.stringify(build([nsol(4), usdc(100)], "low", 0).c); return !s.includes("riskScore") && !s.includes("governance") && !s.includes("swapRoute"); })(), "immutable");
+  add("RF-55: exact BigInt subtraction — available = recognized − reserve, price-independent", (() => { const a = ns([nsol(3)]); return a.recognizedLamports === 3_000_000_000 && a.technicallyAvailableLamports === 2_900_000_000 && a.requiredNativeReserveLamports === 100_000_000; })(), "bigint exact");
+
+  return checks;
+}
+
+/**
+ * Step 18G — FINAL Rebalance workstream closeout: proves ONE canonical mounted calculation, NO mounted legacy
+ * fallback (missing canonical input → no Rebalance candidate), the deprecated legacy module has zero mounted
+ * callers, shared canonical inputs, the /testing modal wiring, and full cross-cutting regression across both
+ * directions, conflicts, ordering, Top Pick, Safety Buffer, dispositions, and read-only behavior.
+ */
+export function runRebalanceStep18GFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const read = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const engineSrc = read("src/suggestions/engine.ts");
+  const railSrc = read("src/suggestions/useRailSuggestions.ts");
+  const rebSuggSrc = read("src/suggestions/rebalanceSuggestion.ts");
+  const legacySrc = read("src/suggestions/rebalanceSuggestionLegacy.ts");
+  const testingPageSrc = read("src/pages/TestingPage.tsx");
+  const fx = rbTestFixtures();
+  const byId = (id: string) => fx.find((f) => f.id === id);
+  const offTargetFundedInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 90, 25), positions: [solPosition(10)] });
+
+  // ---- Legacy disposition / no silent fallback ----
+  add("RG-1: engine.ts imports NO legacy bucket rebalance function", !/deriveRebalanceSuggestion|rebalanceSuggestionLegacy|deriveLegacyBucketRebalanceSuggestion/.test(engineSrc), "no legacy import");
+  add("RG-2: engine with NO override → NO Rebalance candidate (fail closed)", (() => { const r = runSuggestionEngine(offTargetFundedInp(), FIXTURE_GENERATED_AT); return !r.suggestions.some((s) => s.category === "rebalance"); })(), "fail closed");
+  add("RG-3: override {card:null, material:true} → no card but suppression active (DCA suppressed)", (() => { const r = runSuggestionEngine(offTargetFundedInp(), FIXTURE_GENERATED_AT, mkSug15H("dca", "dca"), null, undefined, { card: null, material: true }); return !r.suggestions.some((s) => s.category === "rebalance") && !r.suggestions.some((s) => s.category === "dca"); })(), "material no card");
+  add("RG-4: canonical rebalanceSuggestion.ts no longer defines the legacy bucket function", !/export function deriveRebalanceSuggestion\b/.test(rebSuggSrc) && /buildRebalanceCardFromAssessment/.test(rebSuggSrc), "relocated");
+  add("RG-5: legacy module exists, is @deprecated, and exports only the isolated bucket fn", /@deprecated/.test(legacySrc) && /deriveLegacyBucketRebalanceSuggestion/.test(legacySrc) && /LEGACY \/ DO NOT MOUNT/i.test(legacySrc), "deprecated");
+  add("RG-6: legacy module has ZERO production callers (only fixtures import it)", (() => { const callers = ["src/suggestions/useRailSuggestions.ts", "src/suggestions/engine.ts", "src/pages/TestingPage.tsx", "src/pages/rebalanceTestingFixtures.ts", "src/pages/DemoPortfolioPage.tsx"].filter((f) => /rebalanceSuggestionLegacy/.test(read(f))); return callers.length === 0; })(), "no prod callers");
+  add("RG-7: mounted rail ALWAYS passes rebalanceOverride into runSuggestionEngine", /runSuggestionEngine\([\s\S]*rebalanceOverride[\s\S]*\)/.test(railSrc), "override passed");
+
+  // ---- Shared canonical inputs (one derivation each; no UI recompute / no RPC) ----
+  add("RG-8: rail computes ONE SafetyBufferCoverage, shared by completeness + assessment", (railSrc.match(/computeSafetyBufferCoverage\(/g) ?? []).length === 1 && /bufferCoverage/.test(railSrc), "one coverage");
+  add("RG-9: rail computes ONE completeness, ONE assessment, ONE USDC source, ONE native-SOL source, ONE card", (railSrc.match(/deriveCompletenessGates\(/g) ?? []).length === 1 && (railSrc.match(/deriveRebalanceAssessment\(/g) ?? []).length === 1 && (railSrc.match(/selectRebalanceUsdcSource\(/g) ?? []).length === 1 && (railSrc.match(/deriveNativeSolRebalanceSource\(/g) ?? []).length === 1 && (railSrc.match(/buildRebalanceCardFromAssessment\(/g) ?? []).length === 1, "one each");
+  add("RG-10: rail mounts the APPROVED reserve policy (not the fail-closed MISSING policy)", /REBALANCE_NATIVE_SOL_RESERVE_POLICY/.test(railSrc) && !/NATIVE_SOL_RESERVE_POLICY_MISSING/.test(railSrc), "approved reserve");
+  add("RG-11: no RPC / fetch from the Rebalance mounted path or testing cards", !/fetch\(|axios|Connection\(|rpcRequest/.test(railSrc) && !/fetch\(|axios|Connection\(/.test(read("src/pages/rebalanceTestingFixtures.ts")), "no rpc");
+
+  // ---- Both directions via the SAME contract (mounted testing derivation) ----
+  add("RG-12: USDC→SOL full uses the same rebalance_to_plan card", (() => { const c = byId("full")!.card; return c?.id === "rebalance_to_plan" && c.from?.bucket === "stables" && c.to?.bucket === "crypto"; })(), "usdc→sol");
+  add("RG-13: SOL→USDC full uses the same rebalance_to_plan card", (() => { const c = byId("crypto_full")!.card; return c?.id === "rebalance_to_plan" && c.from?.bucket === "crypto" && c.to?.bucket === "stables"; })(), "sol→usdc");
+  add("RG-14: both directions occupy the SAME category (rebalance)", byId("full")!.card?.category === "rebalance" && byId("crypto_full")!.card?.category === "rebalance", "same category");
+  add("RG-15: USDC→SOL exact $50 shows a card; below $50 shows none", byId("exact_50")!.card !== null && byId("below_50")!.card === null, "usdc boundary");
+  add("RG-16: SOL→USDC exact $50 shows a card; below $50 shows none", byId("crypto_exact_50")!.card !== null && byId("crypto_below_50")!.card === null, "sol boundary");
+  add("RG-17: SOL→USDC below/at 0.1 reserve → no card; above → card", byId("sol_below_reserve")!.card === null && byId("sol_exactly_reserve")!.card === null && byId("sol_above_reserve")!.card !== null, "reserve boundary");
+  add("RG-18: SOL→USDC exclusions (stake/withdrawable-stake/LST/wsol/collateral/duplicate) never source", (() => { const ids = ["native_plus_active_stake", "native_plus_withdrawable_stake", "native_plus_lst", "native_plus_wsol", "native_plus_collateral"]; const excluded = ids.every((id) => (byId(id)!.nativeSolSource.recognizedSol ?? 0) === 4); return excluded && byId("duplicate_native")!.nativeSolSource.sourceEligibilityState === "duplicate_invalid" && byId("duplicate_native")!.card === null; })(), "exclusions");
+  add("RG-19: stale-price / stale-wallet crypto states produce no card", byId("crypto_stale_price")!.card === null && byId("crypto_stale_wallet")!.card === null, "stale no card");
+
+  // ---- Destinations / dispositions unchanged ----
+  add("RG-20: destinations are exactly USDC (crypto→stables) + SOL (stables→crypto)", RB_DEST.crypto_to_stables.mint === RB_USDC && RB_DEST.crypto_to_stables.assetId === "usdc" && RB_DEST.stables_to_crypto.assetId === "sol" && RB_DEST.stables_to_crypto.native === true, "dests");
+  add("RG-21: dispositions intact (Jupiter excluded / Steakhouse existing-only / INF unsupported)", dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && !lstSupported("5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm"), "dispositions");
+
+  // ---- /testing modal wiring (production modal reused; no testing-only modal) ----
+  add("RG-22: /testing Rebalance gallery opens the production SuggestionReviewModal", /setSelectedRebalanceId/.test(testingPageSrc) && /selectedRebalance[\s\S]*SuggestionReviewModal/.test(testingPageSrc), "modal wired");
+  add("RG-23: modal fed by production reviewDetails (no testing-only details calc)", /details=\{selectedRebalance\.card\.reviewDetails\}/.test(testingPageSrc), "prod details");
+  add("RG-24: full USDC→SOL + full SOL→USDC cards carry renderable reviewDetails", (() => { const a = byId("full")!.card?.reviewDetails; const b = byId("crypto_full")!.card?.reviewDetails; return !!a && a.metrics.length > 0 && !!b && b.metrics.length > 0; })(), "review details");
+  add("RG-25: SOL→USDC modal metrics include the 0.1 SOL reserve + available-after-reserve", (() => { const m = byId("crypto_full")!.card?.reviewDetails?.metrics ?? []; const has = (l: string) => m.some((x) => x.label === l); return has("Operating reserve (kept)") && has("Available SOL after reserve"); })(), "reserve metrics");
+  add("RG-26: USDC→SOL modal metrics include verified excess USDC + buffer-protected calc", (() => { const rd = byId("full")!.card?.reviewDetails; const m = rd?.metrics ?? []; const calcs = rd?.calculations ?? []; return m.some((x) => x.label.includes("Verified excess USDC")) && calcs.some((c) => /Safety Buffer/i.test(c.label)); })(), "buffer metrics");
+
+  // ---- Read-only across the whole Rebalance path ----
+  add("RG-27: no route/quote/transaction/signature/execution behavior in the Rebalance path", (() => { const blob = read("src/suggestions/rebalanceAssessment.ts") + rebSuggSrc + railSrc; const bad = ["swapRoute", "routePlan", "signTransaction", "sendTransaction", "simulateTransaction", "aggregator", "getQuote", "buildSwap"]; return bad.every((t) => !blob.includes(t)); })(), "read-only");
+  add("RG-28: cards are review_only, non-actionable-below-min, never a transaction CTA", (() => { const c1 = byId("full")!.card; const c2 = byId("crypto_full")!.card; return c1?.action_kind === "review_only" && c2?.action_kind === "review_only"; })(), "review only");
+
+  // ---- Regression: thresholds / targets / ordering / Top Pick / candidate sets ----
+  add("RG-29: ±10pt threshold + $50 minimum unchanged", byId("full")!.assessment.thresholdSource.includes("10") && byId("full")!.assessment.thresholdSource.includes("50"), "thresholds");
+  add("RG-30: target allocations unchanged (low→40 crypto, high→80 crypto)", byId("crypto_full")!.assessment.targetCryptoPct === 40 && byId("full")!.assessment.targetCryptoPct === 80, "targets");
+  add("RG-31: canonical two-bucket accounting — current crypto% + stable% = 100", (() => { const a = byId("full")!.assessment; return a.currentCryptoPct !== null && a.currentStablePct !== null && Math.abs(a.currentCryptoPct + a.currentStablePct - 100) < 0.01; })(), "sums 100");
+  add("RG-32: liabilities are a separate dimension (net worth = assets − liabilities)", (() => { const a = rbAssess({ positions: [sol18g(400), usdc18g(600), debt18g(300)], riskTolerance: "medium", requiredBufferUsd: 0, generatedAt: 1 }); return a.recognizedLiabilitiesUsd === 300 && a.netWorthUsd === 700 && a.grossAssetValueUsd === 1000 && a.cryptoAssetValueUsd === 400; })(), "liabilities");
+  add("RG-33: full Rebalance participates in Top Pick when scoring selects it (impact = ratio×0.9)", (() => { const c = byId("full")!.card; return c !== null && typeof c!.scores?.impact === "number" && c!.scores!.impact! > 0 && c!.is_top_pick === false; })(), "top pick");
+  add("RG-34: card id/category/title immutable across both directions", (() => { const a = byId("full")!.card; const b = byId("crypto_full")!.card; return a?.id === "rebalance_to_plan" && b?.id === "rebalance_to_plan" && a?.title_key === "suggestion.rebalance.title" && b?.title_key === "suggestion.rebalance.title"; })(), "identity");
+  add("RG-35: no risk-score/governance change referenced by the Rebalance path", (() => { const blob = read("src/suggestions/rebalanceAssessment.ts") + rebSuggSrc; return !/riskGovernance|getApprovedRiskRubricV1|riskReviewerRegistry/.test(blob); })(), "no governance");
+
+  return checks;
+}
+
+// 18G local helpers for liability accounting (RG-32) — kept out of the shared RB helpers to avoid name clashes.
+const sol18g = (v: number): WalletPosition => ({ id: "sol18g", source: "wallet", type: "native", symbol: "SOL", amount: String(Math.round((v / 250) * 1e9)), uiAmount: v / 250, decimals: 9, detection: "direct_wallet_balance", priceUsd: 250, valueUsd: v });
+const usdc18g = (v: number): WalletPosition => ({ id: "usdc18g", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: RB_USDC, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: v });
+const debt18g = (v: number): WalletPosition => ({ id: "debt18g", source: "hubble", type: "protocol", symbol: "USDH", name: "USDH loan", side: "borrowed", amount: "1", uiAmount: v, detection: "protocol_api", valueUsd: v });

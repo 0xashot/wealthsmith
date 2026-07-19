@@ -213,6 +213,13 @@ export const SUGGESTION_REBALANCE_STABLES_FULL_DESCRIPTION =
   "Your stablecoin allocation is above your target. Consider directing verified excess USDC toward SOL while keeping your Safety Buffer covered.";
 export const SUGGESTION_REBALANCE_STABLES_PARTIAL_DESCRIPTION =
   "Your stablecoin allocation is above your target. Verified excess USDC could reduce part of the gap toward SOL while keeping your Safety Buffer covered.";
+/* Step 18F — phase-one crypto→stables copy: names the direct-wallet SOL source, the USDC destination, and
+ * the protected 0.1 SOL operating reserve; distinguishes full vs partial correction. Review-only; no
+ * execution/guarantee, no received-USDC amount, no route/slippage. Dynamic amounts live in supporting data. */
+export const SUGGESTION_REBALANCE_CRYPTO_FULL_DESCRIPTION =
+  "Your crypto allocation is above your target. Consider redirecting direct-wallet SOL value toward USDC while keeping 0.1 SOL available for wallet operations.";
+export const SUGGESTION_REBALANCE_CRYPTO_PARTIAL_DESCRIPTION =
+  "Your crypto allocation is above your target. Available direct-wallet SOL could reduce part of the gap toward USDC while keeping 0.1 SOL available for wallet operations.";
 export const SUGGESTION_ON_TRACK_TITLE = "Your Plan Is On Track";
 export const SUGGESTION_ON_TRACK_DESCRIPTION =
   "Your Safety Buffer is funded and your allocation is close to your target.";
@@ -255,6 +262,10 @@ export const SUGGESTION_COPY: Record<string, string> = {
     SUGGESTION_REBALANCE_STABLES_FULL_DESCRIPTION,
   "suggestion.rebalance.stables_to_crypto.partial.description":
     SUGGESTION_REBALANCE_STABLES_PARTIAL_DESCRIPTION,
+  "suggestion.rebalance.crypto_to_stables.full.description":
+    SUGGESTION_REBALANCE_CRYPTO_FULL_DESCRIPTION,
+  "suggestion.rebalance.crypto_to_stables.partial.description":
+    SUGGESTION_REBALANCE_CRYPTO_PARTIAL_DESCRIPTION,
   "suggestion.on_track.title": SUGGESTION_ON_TRACK_TITLE,
   "suggestion.on_track.description": SUGGESTION_ON_TRACK_DESCRIPTION,
   // Contracted (Step 9A) — future categories, no trigger logic yet.

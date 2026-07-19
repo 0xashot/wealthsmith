@@ -1,22 +1,15 @@
 /**
- * rebalanceSuggestion — the deterministic bucket-level "Rebalance" rule
- * (rules/suggestion-engine-rules.md — APPROVED MVP scope; top-pick-rules.md —
- * Rebalance trigger ±10% and category weight 0.9).
+ * rebalanceSuggestion — the canonical production Rebalance card mapper (Steps 18C/18D/18F).
  *
- * Pure function over SuggestionEngineInputs: no fetching, no pricing, no AI.
- * MVP Rebalance is BUCKET-LEVEL (Crypto ↔ Stables) by approved product
- * decision — it never selects sell/buy tokens and never invents token-level
- * targets. The allocation delta it reads comes from the approved risk-based
- * recommended allocation (recommendedAllocation.ts), already derived upstream.
+ * `buildRebalanceCardFromAssessment` is the ONE authoritative card builder. It renders BOTH supported
+ * directions behind the same `rebalance_to_plan` contract, from the canonical `RebalanceAssessment` plus the
+ * direction-specific verified source (direct-wallet USDC for stables→crypto; direct-wallet native SOL for
+ * crypto→stables). Amounts are capped by both the required correction and the verified source; review-only;
+ * no route/quote/transaction/signature/execution behavior.
  *
- * SAFETY BUFFER COMES FIRST (Buffer Override): no Rebalance exists until the
- * Safety Buffer is fully funded, and an underweight-crypto rebalance may only
- * use stablecoins ABOVE the buffer target — it never dips into the buffer.
- *
- * "Actionable" output is REVIEW-ONLY. Nothing here executes a transaction,
- * requests a signature, or moves funds.
+ * The pre-canonical bucket calculation was relocated to `rebalanceSuggestionLegacy.ts` (Step 18G) and is no
+ * longer reachable from any mounted/Demo/testing-production path — the engine no longer falls back to it.
  */
-import type { SuggestionEngineInputs } from "./engineInputs";
 import type { EngineSuggestion, SuggestionGuardrail } from "./engineTypes";
 import {
   SUGGESTION_ENGINE_VERSION,
@@ -26,205 +19,48 @@ import {
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
 import { buildReviewDetails, usdMetric, pctMetric, metric } from "./suggestionReviewDetails";
-import type { RebalanceAssessment, RebalanceUsdcSource } from "./rebalanceAssessment";
+import type { RebalanceAssessment, RebalanceUsdcSource, NativeSolRebalanceSourceAssessment } from "./rebalanceAssessment";
+import { cryptoToStablesSourceGate } from "./rebalanceAssessment";
+
+const LAMPORTS_PER_SOL = 1_000_000_000;
 
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
 export const REBALANCE_SUGGESTION_ID = "rebalance_to_plan";
 
 /**
- * Trigger: buffer fully funded ∧ allocation + recommended target + delta all
- * derived ∧ priced total > 0 ∧ |crypto delta| ≥ the ±10% threshold. Any
- * missing input → null (nothing invented). Underweight crypto with no excess
- * stables above the buffer target → null (the buffer is never reduced).
- * An in-threshold amount under the $50 minimum → DISABLED suggestion with a
- * failed min_trade_size guardrail.
- */
-export function deriveRebalanceSuggestion(
-  inputs: SuggestionEngineInputs,
-  generatedAt: number
-): EngineSuggestion | null {
-  const sb = inputs.safetyBuffer;
-  const alloc = inputs.allocation;
-  const totalUsd = inputs.value.totalUsd;
-
-  // Buffer Override: no rebalance until the Safety Buffer is fully funded.
-  if (!sb || !sb.fullyFunded) return null;
-
-  if (!inputs.dataQuality.hasPricing) return null;
-  if (totalUsd == null || totalUsd <= 0) return null;
-  if (
-    !alloc ||
-    alloc.currentCryptoPct == null ||
-    alloc.recommendedCryptoPct == null ||
-    alloc.cryptoDeltaPct == null
-  ) {
-    return null;
-  }
-
-  const delta = alloc.cryptoDeltaPct; // current − target; positive = overweight
-  if (Math.abs(delta) < REBALANCE_DELTA_THRESHOLD_PCT) return null;
-
-  const overweight = delta > 0;
-
-  // Amount: the USD size of the bucket deviation. An underweight-crypto move
-  // is CAPPED at the stables held ABOVE the buffer target (never the buffer).
-  const deviationUsd = (totalUsd * Math.abs(delta)) / 100;
-  let amountUsd = deviationUsd;
-  if (!overweight) {
-    const availableStableExcessUsd = Math.max(0, sb.stableUsd - sb.targetUsd);
-    if (availableStableExcessUsd <= 0) return null;
-    amountUsd = Math.min(deviationUsd, availableStableExcessUsd);
-  }
-
-  const belowMin = amountUsd < MIN_SUGGESTION_AMOUNT_USD;
-
-  // Rebalance impact (top-pick-rules.md): deviation share, category weight 0.9.
-  const ratio = Math.min(Math.abs(delta) / 100, 1);
-
-  const guardrails: SuggestionGuardrail[] = [
-    { code: "pricing_available", status: "passed" },
-    // Fully funded buffer required + underweight amounts capped above it.
-    { code: "buffer_protection", status: "passed" },
-    { code: "allocation_delta", status: "passed" },
-    {
-      code: "min_trade_size",
-      status: belowMin ? "failed" : "passed",
-      message: belowMin
-        ? `Amount is below the $${MIN_SUGGESTION_AMOUNT_USD} minimum suggestion size.`
-        : undefined,
-    },
-    { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
-    { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
-    { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
-  ];
-
-  const currentStablesPct = alloc.currentStablesPct ?? 100 - alloc.currentCryptoPct;
-  const recommendedStablesPct =
-    alloc.recommendedStablesPct ?? 100 - alloc.recommendedCryptoPct;
-  // Sourced bucket values (may be null) so the source/target buckets show real $.
-  const sourceValueUsd = overweight ? alloc.currentCryptoUsd : alloc.currentStablesUsd;
-  const targetValueUsd = overweight ? alloc.currentStablesUsd : alloc.currentCryptoUsd;
-  // Underweight moves ONLY stables above the buffer target (buffer stays whole).
-  const stablesAboveBufferUsd = Math.max(0, sb.stableUsd - sb.targetUsd);
-  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
-  const reviewDetails = buildReviewDetails({
-    category: "rebalance",
-    actionKind: belowMin ? "disabled" : "review_only",
-    guardrails,
-    protocolSelection,
-    reason: overweight
-      ? "Your crypto allocation is above your target."
-      : "Your crypto allocation is below your target.",
-    metrics: [
-      pctMetric("Current crypto allocation", alloc.currentCryptoPct),
-      pctMetric("Target crypto allocation", alloc.recommendedCryptoPct),
-      pctMetric("Current stablecoin allocation", currentStablesPct),
-      pctMetric("Target stablecoin allocation", recommendedStablesPct),
-      pctMetric("Allocation delta", delta),
-      usdMetric("Suggested review amount", amountUsd),
-    ],
-    involvedAssets: [
-      {
-        symbol: overweight ? "Crypto" : "Stablecoins",
-        role: "source_asset",
-        ...(typeof sourceValueUsd === "number" ? { valueUsd: sourceValueUsd } : {}),
-      },
-      {
-        symbol: overweight ? "Stablecoins" : "Crypto",
-        role: "target_bucket",
-        ...(typeof targetValueUsd === "number" ? { valueUsd: targetValueUsd } : {}),
-      },
-    ],
-    calculations: [
-      {
-        label: "Allocation drift",
-        formula: "current − target",
-        currentValue: alloc.currentCryptoPct,
-        targetValue: alloc.recommendedCryptoPct,
-        difference: delta,
-        threshold: REBALANCE_DELTA_THRESHOLD_PCT,
-        unit: "%",
-      },
-      // Make "Safety Buffer protected" concrete: an underweight move only draws
-      // from stables held ABOVE the buffer target; the buffer itself is untouched.
-      ...(!overweight
-        ? [
-            {
-              label: "Safety Buffer protected",
-              formula: "only stables above the buffer target are used",
-              currentValue: sb.stableUsd,
-              targetValue: sb.targetUsd,
-              difference: stablesAboveBufferUsd,
-              unit: "USD",
-            },
-          ]
-        : []),
-    ],
-  });
-
-  return {
-    id: REBALANCE_SUGGESTION_ID,
-    category: "rebalance",
-    reason_codes: [
-      overweight ? "crypto_overweight" : "crypto_underweight",
-      ...(belowMin ? (["below_min_size"] as const) : []),
-    ],
-
-    title_key: "suggestion.rebalance.title",
-    description_key: overweight
-      ? "suggestion.rebalance.crypto_overweight.description"
-      : "suggestion.rebalance.crypto_underweight.description",
-
-    action_kind: belowMin ? "disabled" : "review_only",
-    is_actionable: !belowMin,
-    // Top Pick is assigned only by Top Pick Logic (a later step).
-    is_top_pick: false,
-
-    amount: {
-      valueUsd: amountUsd,
-      label: "Suggested rebalance amount",
-    },
-    // Bucket-level only (approved MVP decision) — no token selection.
-    from: { bucket: overweight ? "crypto" : "stables" },
-    to: { bucket: overweight ? "stables" : "crypto" },
-
-    delta_percent: delta,
-
-    // Bucket-level rebalance — no protocol involved (token/cost/liquidity/
-    // slippage stay not_evaluated via their guardrails).
-    protocolSelection,
-    reviewDetails,
-
-    scores: {
-      impact: ratio * 0.9,
-      urgency: ratio,
-      efficiency: null,
-    },
-    guardrails,
-
-    engine_version: SUGGESTION_ENGINE_VERSION,
-    timestamp: generatedAt,
-  };
-}
-
-/**
- * Step 18C — the PHASE-ONE production Rebalance card, built from the canonical RebalanceAssessment behind
- * the SAME `rebalance_to_plan` contract (id/category/title/review-only unchanged). Emits a card ONLY for
- * the fully-verifiable `stables_to_crypto` direction with a selected direct-wallet USDC source above the
- * Safety Buffer and a capped amount ≥ $50. Never falls back to the legacy uncapped bucket amount; never
- * emits for `crypto_to_stables` / `within_threshold` / `unresolved`. Read-only; no route/transaction.
+ * Step 18C/18F — the PHASE-ONE production Rebalance card, built from the canonical RebalanceAssessment behind
+ * the SAME `rebalance_to_plan` contract (id/category/title/review-only unchanged). Emits a card for the two
+ * fully-verifiable directions:
+ *   • stables_to_crypto — selected direct-wallet USDC source above the Safety Buffer → native SOL (18C/18D);
+ *   • crypto_to_stables — available direct-wallet native SOL (minus the approved 0.1 SOL operating reserve)
+ *     → canonical wallet USDC (18F).
+ * Both are capped by BOTH the required correction and verified source availability, ≥ $50, read-only. Never
+ * falls back to the legacy uncapped bucket amount; never emits for `within_threshold` / `unresolved`. No
+ * route, quote, swap venue, slippage, execution fee, or received-amount is ever computed.
  */
 export function buildRebalanceCardFromAssessment(
+  assessment: RebalanceAssessment,
+  usdcSource: RebalanceUsdcSource,
+  nativeSolSource: NativeSolRebalanceSourceAssessment,
+  solPriceUsd: number | null,
+  solPriceFresh: boolean,
+  generatedAt: number
+): EngineSuggestion | null {
+  if (assessment.calculationGate.status !== "allowed") return null;
+  if (assessment.destinationEligibilityGate.status !== "allowed") return null;
+  if (assessment.direction === "stables_to_crypto") return buildStablesToCryptoCard(assessment, usdcSource, solPriceUsd, solPriceFresh, generatedAt);
+  if (assessment.direction === "crypto_to_stables") return buildCryptoToStablesCard(assessment, nativeSolSource, solPriceUsd, solPriceFresh, generatedAt);
+  return null;
+}
+
+/** 18C/18D — verified excess direct-wallet USDC → native SOL (unchanged output). */
+function buildStablesToCryptoCard(
   assessment: RebalanceAssessment,
   source: RebalanceUsdcSource,
   solPriceUsd: number | null,
   solPriceFresh: boolean,
   generatedAt: number
 ): EngineSuggestion | null {
-  // Phase-one gate: direction + calculation + destination + selected exact-USDC source ≥ $50.
-  if (assessment.direction !== "stables_to_crypto") return null;
-  if (assessment.calculationGate.status !== "allowed") return null;
-  if (assessment.destinationEligibilityGate.status !== "allowed") return null;
   if (source.selectionState !== "selected") return null;
   const requiredCorrectionUsd = assessment.requiredCorrectionUsd;
   // Cap by BOTH required correction and verified USDC excess (never the Safety Buffer, never negative).
@@ -290,6 +126,112 @@ export function buildRebalanceCardFromAssessment(
     amount: { valueUsd: suggestedAmountUsd, label: partial ? "Suggested partial rebalance amount" : "Suggested rebalance amount" },
     from: { bucket: "stables" },
     to: { bucket: "crypto" },
+    delta_percent: delta,
+    protocolSelection,
+    reviewDetails,
+    scores: { impact: ratio * 0.9, urgency: ratio, efficiency: null },
+    guardrails,
+    engine_version: SUGGESTION_ENGINE_VERSION,
+    timestamp: generatedAt,
+  };
+}
+
+/**
+ * Step 18F — available direct-wallet native SOL (minus the approved fixed 0.1 SOL operating reserve) →
+ * canonical wallet USDC. A card requires: crypto_to_stables direction, calc gate allowed, canonical USDC
+ * destination allowed, native-SOL source gate allowed, a fresh authoritative SOL price, technically-available
+ * source value ≥ $50, and a suggested amount ≥ $50. The suggested amount is capped by BOTH the required
+ * correction and the verified source value; the approximate source SOL is additionally capped in EXACT
+ * lamports so it can never exceed the available (post-reserve) balance. The 0.1 SOL reserve is never part of
+ * the source. NO route/quote/swap-venue/slippage/execution-fee/received-USDC amount is computed — review-only.
+ */
+function buildCryptoToStablesCard(
+  assessment: RebalanceAssessment,
+  nativeSol: NativeSolRebalanceSourceAssessment,
+  solPriceUsd: number | null,
+  solPriceFresh: boolean,
+  generatedAt: number
+): EngineSuggestion | null {
+  // Source gate: reserve approved + wallet fresh + price fresh + ≥ $50 available (fail-closed otherwise).
+  if (cryptoToStablesSourceGate(nativeSol).status !== "allowed") return null;
+  const solOk = solPriceFresh && typeof solPriceUsd === "number" && solPriceUsd > 0;
+  if (!solOk) return null; // a fresh authoritative SOL price is REQUIRED for a crypto→stables card
+  const availableValueUsd = nativeSol.technicallyAvailableValueUsd ?? 0;
+  if (availableValueUsd < MIN_SUGGESTION_AMOUNT_USD) return null;
+
+  const requiredCorrectionUsd = assessment.requiredCorrectionUsd;
+  // Cap by BOTH required correction and verified available native-SOL value (never negative, never the reserve).
+  const suggestedAmountUsd = Math.min(requiredCorrectionUsd, availableValueUsd);
+  if (suggestedAmountUsd < MIN_SUGGESTION_AMOUNT_USD) return null;
+  const partial = availableValueUsd < requiredCorrectionUsd; // available cannot cover the whole correction
+
+  // Approximate source SOL for the informational metric — capped in EXACT lamports so it never exceeds the
+  // available (post-reserve) balance. Deterministic floor when converting USD→SOL→lamports.
+  const availableLamports = nativeSol.technicallyAvailableLamports ?? 0;
+  const rawApproxLamports = BigInt(Math.floor((suggestedAmountUsd / (solPriceUsd as number)) * LAMPORTS_PER_SOL));
+  const cappedApproxLamports = rawApproxLamports < BigInt(availableLamports) ? rawApproxLamports : BigInt(availableLamports);
+  const approximateSourceSol = Number(cappedApproxLamports) / LAMPORTS_PER_SOL;
+
+  const delta = assessment.cryptoDeltaPct ?? 0;
+  const ratio = Math.min(Math.abs(delta) / 100, 1);
+  const dest = assessment.proposedDestination; // canonical wallet USDC (registry-bound)
+
+  const guardrails: SuggestionGuardrail[] = [
+    { code: "pricing_available", status: "passed" },
+    { code: "buffer_protection", status: "passed" }, // Safety Buffer governed separately; still gated by calc
+    { code: "allocation_delta", status: "passed" },
+    { code: "min_trade_size", status: "passed" },
+    // No route/quote/slippage infrastructure is used — honestly not_evaluated (never invented).
+    { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+  ];
+  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
+  const reviewDetails = buildReviewDetails({
+    category: "rebalance",
+    actionKind: "review_only",
+    guardrails,
+    protocolSelection,
+    reason: "Your crypto allocation is above your target; available direct-wallet SOL could move toward USDC while 0.1 SOL is kept for wallet operations.",
+    metrics: [
+      pctMetric("Current crypto allocation", assessment.currentCryptoPct ?? 0),
+      pctMetric("Target crypto allocation", assessment.targetCryptoPct ?? 0),
+      pctMetric("Current stablecoin allocation", assessment.currentStablePct ?? 0),
+      pctMetric("Target stablecoin allocation", assessment.targetStablePct ?? 0),
+      pctMetric("Allocation delta", delta),
+      usdMetric("Required correction", requiredCorrectionUsd),
+      metric("Recognized wallet SOL", nativeSol.recognizedSol ?? 0, "token_amount", "SOL"),
+      metric("Operating reserve (kept)", nativeSol.requiredNativeReserveSol ?? 0, "token_amount", "SOL"),
+      metric("Available SOL after reserve", nativeSol.technicallyAvailableSol ?? 0, "token_amount", "SOL"),
+      usdMetric("Available SOL value (source)", availableValueUsd),
+      usdMetric("Suggested review amount", suggestedAmountUsd),
+      metric("Approx. SOL to move (informational)", approximateSourceSol, "token_amount", "SOL"),
+    ],
+    involvedAssets: [
+      { symbol: "SOL", role: "source_asset", ...(nativeSol.technicallyAvailableValueUsd !== null ? { valueUsd: nativeSol.technicallyAvailableValueUsd } : {}) },
+      { symbol: dest?.assetId === "usdc" ? "USDC" : "Stablecoins", role: "target_bucket" },
+    ],
+    calculations: [
+      { label: "Allocation drift", formula: "current − target", currentValue: assessment.currentCryptoPct ?? 0, targetValue: assessment.targetCryptoPct ?? 0, difference: delta, threshold: REBALANCE_DELTA_THRESHOLD_PCT, unit: "%" },
+      { label: "Wallet operating reserve protected", formula: "0.1 SOL is withheld from source capacity", currentValue: nativeSol.recognizedSol ?? 0, targetValue: nativeSol.requiredNativeReserveSol ?? 0, difference: nativeSol.technicallyAvailableSol ?? 0, unit: "SOL" },
+      { label: "Amount capped to available source", formula: "min(required correction, available SOL value)", currentValue: requiredCorrectionUsd, targetValue: availableValueUsd, difference: suggestedAmountUsd, unit: "USD" },
+    ],
+  });
+
+  return {
+    id: REBALANCE_SUGGESTION_ID,
+    category: "rebalance",
+    reason_codes: ["crypto_overweight"], // full/partial is conveyed via review details, not a new code
+    title_key: "suggestion.rebalance.title",
+    description_key: partial
+      ? "suggestion.rebalance.crypto_to_stables.partial.description"
+      : "suggestion.rebalance.crypto_to_stables.full.description",
+    action_kind: "review_only",
+    is_actionable: true,
+    is_top_pick: false,
+    amount: { valueUsd: suggestedAmountUsd, label: partial ? "Suggested partial rebalance amount" : "Suggested rebalance amount" },
+    from: { bucket: "crypto" },
+    to: { bucket: "stables" },
     delta_percent: delta,
     protocolSelection,
     reviewDetails,

@@ -396,3 +396,198 @@ export function selectRebalanceUsdcSource(positions: WalletPosition[], requiredB
 export function isRebalanceMaterial(a: RebalanceAssessment): boolean {
   return a.calculationGate.status === "allowed" && (a.direction === "crypto_to_stables" || a.direction === "stables_to_crypto");
 }
+
+/** True only for a PROVEN material crypto_to_stables need (used to suppress a contradictory new staking suggestion). */
+export function isMaterialCryptoToStables(a: RebalanceAssessment): boolean {
+  return a.calculationGate.status === "allowed" && a.direction === "crypto_to_stables";
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 18E — canonical DIRECT-WALLET native-SOL source assessment (NON-MOUNTED foundation for a future
+ * crypto_to_stables source). Fail-closed: NO approved native-SOL fee-reserve policy exists in the
+ * repository, so `technicallyAvailable` stays null and eligibility is `reserve_policy_missing` — missing
+ * policy is NEVER treated as "all SOL available", and the reserve is NEVER defaulted to zero.
+ * ------------------------------------------------------------------ */
+export const WRAPPED_SOL_MINT = "So11111111111111111111111111111111111111112" as const;
+
+export type NativeSolReservePolicyState = "approved" | "missing" | "stale" | "unsupported" | "unresolved";
+export type NativeSolSourceEligibilityState =
+  | "eligible" | "reserve_policy_missing" | "stale" | "price_unresolved" | "duplicate_invalid" | "unsupported" | "unavailable" | "unresolved";
+
+export type NativeSolReserveKind = "fixed_sol" | "fixed_usd_to_sol" | "transaction_budget" | "hybrid";
+
+/** A native-SOL fee-reserve policy (supplied ONLY when product-approved; never invented here). */
+export interface NativeSolReservePolicy {
+  state: NativeSolReservePolicyState;
+  requiredReserveLamports: number | null; // exact integer lamports, only when state === "approved"
+  policyId: string | null;
+  kind?: NativeSolReserveKind;
+  methodologyVersion?: string;
+}
+/** The current repository state: NO approved Rebalance native-SOL reserve policy (fail-closed default). */
+export const NATIVE_SOL_RESERVE_POLICY_MISSING: NativeSolReservePolicy = { state: "missing", requiredReserveLamports: null, policyId: null };
+
+/* ------------------------------------------------------------------ *
+ * Step 18F — the APPROVED Rebalance-owned native-SOL operating reserve.
+ *
+ * PRODUCT DECISION: a FIXED 0.1 SOL (100,000,000 lamports) operating reserve is withheld from Rebalance
+ * source capacity for the crypto_to_stables (direct-wallet native SOL → canonical USDC) direction.
+ *
+ *   • It is a PRODUCT OPERATING RESERVE that protects normal wallet operability — NOT a transaction-fee
+ *     estimate, gas prediction, or rent calculation. No transaction is ever constructed here.
+ *   • It is INTENTIONALLY EXCLUDED from Rebalance source capacity (available = recognized − this reserve).
+ *   • It is REBALANCE-OWNED and MAY CHANGE INDEPENDENTLY of staking policy. It deliberately does NOT
+ *     import, alias, or reuse the staking `SOL_FEE_RESERVE` (engineThresholds.ts), even though that value
+ *     currently also happens to be 0.1 SOL — the two policies are unrelated and may diverge.
+ *   • It is a FIXED lamport amount: not price-dependent (a stale/missing SOL price never changes it), never
+ *     negative, no env-var fallback, no hidden default, and not UI-configurable.
+ * ------------------------------------------------------------------ */
+export const REBALANCE_NATIVE_SOL_RESERVE_LAMPORTS = 100_000_000n; // 0.1 SOL, exact BigInt (source of truth)
+export const REBALANCE_NATIVE_SOL_RESERVE_POLICY: NativeSolReservePolicy = {
+  state: "approved",
+  kind: "fixed_sol",
+  // 100_000_000 is well within Number.MAX_SAFE_INTEGER; the BigInt const above is the exact source of truth
+  // and the derivation converts back to BigInt for the raw lamport subtraction (no float raw-unit authority).
+  requiredReserveLamports: Number(REBALANCE_NATIVE_SOL_RESERVE_LAMPORTS),
+  policyId: "rebalance_native_sol_reserve",
+  methodologyVersion: "rebalance_native_sol_reserve_1.0.0",
+};
+
+export interface NativeSolRebalanceSourceAssessment {
+  assetId: "SOL";
+  identity: "native_sol";
+  sourceType: "direct_wallet_native_sol";
+  positionIds: string[];
+  recognizedLamports: number | null;
+  recognizedSol: number | null;
+  recognizedValueUsd: number | null;
+  transferableLamports: number | null;
+  transferableSol: number | null;
+  transferableValueUsd: number | null;
+  requiredNativeReserveLamports: number | null;
+  requiredNativeReserveSol: number | null;
+  requiredNativeReserveUsd: number | null;
+  technicallyAvailableLamports: number | null;
+  technicallyAvailableSol: number | null;
+  technicallyAvailableValueUsd: number | null;
+  priceUsd: number | null;
+  priceState: "fresh" | "stale" | "unresolved";
+  freshnessState: "fresh" | "stale" | "unresolved";
+  reservePolicyState: NativeSolReservePolicyState;
+  sourceEligibilityState: NativeSolSourceEligibilityState;
+  unresolvedPotentialValueUsd: number;
+  exclusionReasons: string[];
+  observedAt: string;
+  methodologyVersion: string;
+}
+
+const LAMPORTS_PER_SOL = 1_000_000_000;
+
+/**
+ * Direct-wallet native SOL ONLY (WalletPosition `type: "native"`). Excludes wrapped SOL, native stake,
+ * immediately-withdrawable stake, LSTs/backing, LP legs, protocol collateral, borrowed SOL. `walletFresh`
+ * gates transferability. Missing/absent reserve policy → technicallyAvailable null, eligibility fail-closed.
+ */
+export function deriveNativeSolRebalanceSource(
+  positions: WalletPosition[],
+  solPriceUsd: number | null,
+  solPriceFresh: boolean,
+  reservePolicy: NativeSolReservePolicy = NATIVE_SOL_RESERVE_POLICY_MISSING,
+  walletFresh = true,
+  generatedAt?: number,
+): NativeSolRebalanceSourceAssessment {
+  const exclusionReasons = new Set<string>();
+  const ids: string[] = [];
+  const dedupeKeys = new Set<string>();
+  let duplicateNative = false;
+  let lamports = 0n;
+  for (const p of positions) {
+    if (p.type !== "native") {
+      if (p.type === "stake") exclusionReasons.add("native stake excluded (requires withdrawal)");
+      else if (p.type === "lst") exclusionReasons.add("LST / LST backing excluded");
+      else if (p.mint === WRAPPED_SOL_MINT) exclusionReasons.add("wrapped SOL excluded (separate policy)");
+      continue;
+    }
+    // native SOL row: amount is lamports. A wallet has exactly ONE native (system-account) balance, so a
+    // second native row is a duplicate economic identity → fail closed (never double-count SOL).
+    if (typeof p.amount === "string" && /^[0-9]+$/.test(p.amount)) {
+      if (ids.length > 0) duplicateNative = true;
+      if (p.dedupeKey) { if (dedupeKeys.has(p.dedupeKey)) duplicateNative = true; dedupeKeys.add(p.dedupeKey); }
+      ids.push(p.id); lamports += BigInt(p.amount);
+    }
+  }
+  const recognizedLamports = ids.length > 0 ? Number(lamports) : null;
+  const recognizedSol = recognizedLamports !== null ? recognizedLamports / LAMPORTS_PER_SOL : null;
+  const priceOk = solPriceFresh && typeof solPriceUsd === "number" && solPriceUsd > 0;
+  const priceState: NativeSolRebalanceSourceAssessment["priceState"] = priceOk ? "fresh" : typeof solPriceUsd === "number" ? "stale" : "unresolved";
+  const freshnessState: NativeSolRebalanceSourceAssessment["freshnessState"] = ids.length === 0 ? "unresolved" : walletFresh ? "fresh" : "stale";
+  const recognizedValueUsd = priceOk && recognizedSol !== null ? recognizedSol * (solPriceUsd as number) : null;
+  // Transferable only when wallet ownership + freshness are complete.
+  const transferableLamports = ids.length > 0 && walletFresh ? recognizedLamports : null;
+  const transferableSol = transferableLamports !== null ? transferableLamports / LAMPORTS_PER_SOL : null;
+  const transferableValueUsd = priceOk && transferableSol !== null ? transferableSol * (solPriceUsd as number) : null;
+  const reserveLamports = reservePolicy.state === "approved" ? reservePolicy.requiredReserveLamports : null;
+  const requiredNativeReserveSol = reserveLamports !== null ? reserveLamports / LAMPORTS_PER_SOL : null;
+  const requiredNativeReserveUsd = priceOk && requiredNativeReserveSol !== null ? requiredNativeReserveSol * (solPriceUsd as number) : null;
+
+  // Technically available: ONLY when the reserve policy is approved AND inputs are fresh. Never default reserve to 0.
+  // The raw lamport subtraction is EXACT BigInt (no float raw-unit authority); it is clamped at 0 (never negative)
+  // and can never exceed the recognized balance. USD conversion happens only at the presentation boundary below.
+  let technicallyAvailableLamports: number | null = null;
+  let sourceEligibilityState: NativeSolSourceEligibilityState;
+  if (ids.length === 0) { sourceEligibilityState = "unavailable"; exclusionReasons.add("no direct-wallet native SOL"); }
+  else if (duplicateNative) { sourceEligibilityState = "duplicate_invalid"; exclusionReasons.add("duplicate native SOL economic identity — fail closed"); }
+  else if (reservePolicy.state !== "approved" || reserveLamports === null) { sourceEligibilityState = "reserve_policy_missing"; exclusionReasons.add("no approved native-SOL fee-reserve policy — source sizing blocked"); }
+  else if (!walletFresh) { sourceEligibilityState = "stale"; exclusionReasons.add("wallet balance stale"); }
+  else if (!priceOk) { sourceEligibilityState = "price_unresolved"; exclusionReasons.add("SOL price stale/unresolved"); }
+  else {
+    const reserveBig = BigInt(reserveLamports);
+    const availableBig = lamports > reserveBig ? lamports - reserveBig : 0n; // exact; clamped ≥ 0; ≤ recognized
+    technicallyAvailableLamports = Number(availableBig);
+    sourceEligibilityState = "eligible";
+  }
+
+  const technicallyAvailableSol = technicallyAvailableLamports !== null ? technicallyAvailableLamports / LAMPORTS_PER_SOL : null;
+  const technicallyAvailableValueUsd = priceOk && technicallyAvailableSol !== null ? technicallyAvailableSol * (solPriceUsd as number) : null;
+  const unresolvedPotentialValueUsd = sourceEligibilityState !== "eligible" && sourceEligibilityState !== "unavailable" ? round2(recognizedValueUsd ?? 0) : 0;
+
+  return {
+    assetId: "SOL", identity: "native_sol", sourceType: "direct_wallet_native_sol", positionIds: ids,
+    recognizedLamports, recognizedSol, recognizedValueUsd,
+    transferableLamports, transferableSol, transferableValueUsd,
+    requiredNativeReserveLamports: reserveLamports, requiredNativeReserveSol, requiredNativeReserveUsd,
+    technicallyAvailableLamports, technicallyAvailableSol, technicallyAvailableValueUsd,
+    priceUsd: priceOk ? solPriceUsd : null, priceState, freshnessState, reservePolicyState: reservePolicy.state,
+    sourceEligibilityState, unresolvedPotentialValueUsd, exclusionReasons: [...exclusionReasons],
+    observedAt: new Date(generatedAt ?? Date.now()).toISOString(),
+    methodologyVersion: `native_sol_rebalance_source_${REBALANCE_ASSESSMENT_VERSION}`,
+  };
+}
+
+/**
+ * §11 — the FUTURE crypto_to_stables direct-SOL source gate (NON-MOUNTED; never emits a card in this task).
+ * allowed only when reserve policy approved AND ≥ $50 technically available; blocked when conclusively < $50;
+ * unresolved when reserve missing / price stale / balance stale / duplicate.
+ */
+export function cryptoToStablesSourceGate(src: NativeSolRebalanceSourceAssessment): Gate {
+  const reasons: string[] = [];
+  if (src.sourceEligibilityState === "reserve_policy_missing") return { status: "unresolved", reasons: ["native_sol_reserve_policy_missing"] };
+  if (src.sourceEligibilityState === "stale" || src.sourceEligibilityState === "price_unresolved" || src.sourceEligibilityState === "unresolved" || src.sourceEligibilityState === "duplicate_invalid") return { status: "unresolved", reasons: [src.sourceEligibilityState] };
+  if (src.sourceEligibilityState === "unavailable" || src.sourceEligibilityState === "unsupported") return { status: "blocked", reasons: [src.sourceEligibilityState] };
+  const usd = src.technicallyAvailableValueUsd ?? 0;
+  if (usd >= MIN_SUGGESTION_AMOUNT_USD) return { status: "allowed", reasons: [] };
+  reasons.push("below_minimum_native_sol_source");
+  return { status: "blocked", reasons };
+}
+
+/**
+ * §8 — product-policy OPTIONS for the missing native-SOL fee reserve (informational; no amount selected).
+ * A `fixed_sol` floor of 0.1 SOL already exists for the STAKING product (`SOL_FEE_RESERVE`), but it is NOT
+ * an approved REBALANCE native-SOL reserve and is not reused here.
+ */
+export const NATIVE_SOL_RESERVE_POLICY_OPTIONS = [
+  { id: "fixed_sol", summary: "One configured SOL floor; deterministic, price-independent; must be product-approved.", failureBehavior: "n/a (always available once approved)" },
+  { id: "fixed_usd_to_sol", summary: "Configured USD reserve ÷ fresh SOL price; stable user-value protection; unusable when price stale.", failureBehavior: "unresolved when SOL price stale" },
+  { id: "transaction_budget", summary: "Expected ops × approved max fee/rent budget; precise but needs a source-backed fee methodology.", failureBehavior: "inappropriate before transaction construction exists" },
+  { id: "hybrid", summary: "max(fixed SOL floor, USD reserve → SOL, tx budget); conservative; needs explicit policy ownership.", failureBehavior: "unresolved if any required input is stale" },
+] as const;
