@@ -207,6 +207,12 @@ export const SUGGESTION_REBALANCE_OVERWEIGHT_DESCRIPTION =
   "Your crypto allocation is above your target. Review whether you want to move part of it toward stablecoins.";
 export const SUGGESTION_REBALANCE_UNDERWEIGHT_DESCRIPTION =
   "Your crypto allocation is below your target. Review whether you want to move excess stablecoins toward crypto exposure.";
+/* Step 18D — phase-one stables→crypto copy: names the verified USDC source, the SOL destination, and the
+ * protected Safety Buffer; distinguishes full vs partial correction. Review-only; no execution/guarantee. */
+export const SUGGESTION_REBALANCE_STABLES_FULL_DESCRIPTION =
+  "Your stablecoin allocation is above your target. Consider directing verified excess USDC toward SOL while keeping your Safety Buffer covered.";
+export const SUGGESTION_REBALANCE_STABLES_PARTIAL_DESCRIPTION =
+  "Your stablecoin allocation is above your target. Verified excess USDC could reduce part of the gap toward SOL while keeping your Safety Buffer covered.";
 export const SUGGESTION_ON_TRACK_TITLE = "Your Plan Is On Track";
 export const SUGGESTION_ON_TRACK_DESCRIPTION =
   "Your Safety Buffer is funded and your allocation is close to your target.";
@@ -245,6 +251,10 @@ export const SUGGESTION_COPY: Record<string, string> = {
     SUGGESTION_REBALANCE_OVERWEIGHT_DESCRIPTION,
   "suggestion.rebalance.crypto_underweight.description":
     SUGGESTION_REBALANCE_UNDERWEIGHT_DESCRIPTION,
+  "suggestion.rebalance.stables_to_crypto.full.description":
+    SUGGESTION_REBALANCE_STABLES_FULL_DESCRIPTION,
+  "suggestion.rebalance.stables_to_crypto.partial.description":
+    SUGGESTION_REBALANCE_STABLES_PARTIAL_DESCRIPTION,
   "suggestion.on_track.title": SUGGESTION_ON_TRACK_TITLE,
   "suggestion.on_track.description": SUGGESTION_ON_TRACK_DESCRIPTION,
   // Contracted (Step 9A) — future categories, no trigger logic yet.

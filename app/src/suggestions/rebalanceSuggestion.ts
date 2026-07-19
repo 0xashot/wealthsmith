@@ -25,7 +25,8 @@ import {
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
-import { buildReviewDetails, usdMetric, pctMetric } from "./suggestionReviewDetails";
+import { buildReviewDetails, usdMetric, pctMetric, metric } from "./suggestionReviewDetails";
+import type { RebalanceAssessment, RebalanceUsdcSource } from "./rebalanceAssessment";
 
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
 export const REBALANCE_SUGGESTION_ID = "rebalance_to_plan";
@@ -201,6 +202,99 @@ export function deriveRebalanceSuggestion(
     },
     guardrails,
 
+    engine_version: SUGGESTION_ENGINE_VERSION,
+    timestamp: generatedAt,
+  };
+}
+
+/**
+ * Step 18C — the PHASE-ONE production Rebalance card, built from the canonical RebalanceAssessment behind
+ * the SAME `rebalance_to_plan` contract (id/category/title/review-only unchanged). Emits a card ONLY for
+ * the fully-verifiable `stables_to_crypto` direction with a selected direct-wallet USDC source above the
+ * Safety Buffer and a capped amount ≥ $50. Never falls back to the legacy uncapped bucket amount; never
+ * emits for `crypto_to_stables` / `within_threshold` / `unresolved`. Read-only; no route/transaction.
+ */
+export function buildRebalanceCardFromAssessment(
+  assessment: RebalanceAssessment,
+  source: RebalanceUsdcSource,
+  solPriceUsd: number | null,
+  solPriceFresh: boolean,
+  generatedAt: number
+): EngineSuggestion | null {
+  // Phase-one gate: direction + calculation + destination + selected exact-USDC source ≥ $50.
+  if (assessment.direction !== "stables_to_crypto") return null;
+  if (assessment.calculationGate.status !== "allowed") return null;
+  if (assessment.destinationEligibilityGate.status !== "allowed") return null;
+  if (source.selectionState !== "selected") return null;
+  const requiredCorrectionUsd = assessment.requiredCorrectionUsd;
+  // Cap by BOTH required correction and verified USDC excess (never the Safety Buffer, never negative).
+  const suggestedAmountUsd = Math.min(requiredCorrectionUsd, source.verifiedExcessValueUsd);
+  if (suggestedAmountUsd < MIN_SUGGESTION_AMOUNT_USD) return null;
+  const partial = suggestedAmountUsd < requiredCorrectionUsd;
+  const dest = assessment.proposedDestination; // native SOL (registry-bound)
+  const solOk = solPriceFresh && typeof solPriceUsd === "number" && solPriceUsd > 0;
+  const estimatedDestinationSol = solOk ? suggestedAmountUsd / (solPriceUsd as number) : null;
+  const delta = assessment.cryptoDeltaPct ?? 0;
+  const ratio = Math.min(Math.abs(delta) / 100, 1);
+
+  const guardrails: SuggestionGuardrail[] = [
+    { code: "pricing_available", status: "passed" },
+    { code: "buffer_protection", status: "passed" }, // source is excess ABOVE the buffer; buffer untouched
+    { code: "allocation_delta", status: "passed" },
+    { code: "min_trade_size", status: "passed" },
+    { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+  ];
+  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
+  const reviewDetails = buildReviewDetails({
+    category: "rebalance",
+    actionKind: "review_only",
+    guardrails,
+    protocolSelection,
+    reason: "Your stablecoin allocation is above your target; excess direct-wallet USDC could move toward SOL while the Safety Buffer stays covered.",
+    metrics: [
+      pctMetric("Current crypto allocation", assessment.currentCryptoPct ?? 0),
+      pctMetric("Target crypto allocation", assessment.targetCryptoPct ?? 0),
+      pctMetric("Current stablecoin allocation", assessment.currentStablePct ?? 0),
+      pctMetric("Target stablecoin allocation", assessment.targetStablePct ?? 0),
+      pctMetric("Allocation delta", delta),
+      usdMetric("Required correction", requiredCorrectionUsd),
+      usdMetric("Verified excess USDC (above buffer)", source.verifiedExcessValueUsd),
+      usdMetric("Suggested review amount", suggestedAmountUsd),
+      ...(estimatedDestinationSol !== null ? [metric("Approx. SOL (informational)", estimatedDestinationSol, "token_amount", "SOL")] : []),
+    ],
+    involvedAssets: [
+      { symbol: "USDC", role: "source_asset", valueUsd: source.verifiedExcessValueUsd },
+      { symbol: dest?.native ? "SOL" : "Crypto", role: "target_bucket" },
+    ],
+    calculations: [
+      { label: "Allocation drift", formula: "current − target", currentValue: assessment.currentCryptoPct ?? 0, targetValue: assessment.targetCryptoPct ?? 0, difference: delta, threshold: REBALANCE_DELTA_THRESHOLD_PCT, unit: "%" },
+      { label: "Safety Buffer protected", formula: "only direct-wallet USDC above the buffer is used", currentValue: source.verifiedTransferableValueUsd, targetValue: source.reservedForSafetyBufferUsd, difference: source.verifiedExcessValueUsd, unit: "USD" },
+      { label: "Amount capped to verified source", formula: "min(required correction, verified excess USDC)", currentValue: requiredCorrectionUsd, targetValue: source.verifiedExcessValueUsd, difference: suggestedAmountUsd, unit: "USD" },
+    ],
+  });
+
+  return {
+    id: REBALANCE_SUGGESTION_ID,
+    category: "rebalance",
+    reason_codes: ["crypto_underweight"], // full/partial is conveyed via review details, not a new code
+    title_key: "suggestion.rebalance.title",
+    // 18D — source/destination/buffer + full-vs-partial are communicated in the PRIMARY card copy.
+    description_key: partial
+      ? "suggestion.rebalance.stables_to_crypto.partial.description"
+      : "suggestion.rebalance.stables_to_crypto.full.description",
+    action_kind: "review_only",
+    is_actionable: true,
+    is_top_pick: false,
+    amount: { valueUsd: suggestedAmountUsd, label: partial ? "Suggested partial rebalance amount" : "Suggested rebalance amount" },
+    from: { bucket: "stables" },
+    to: { bucket: "crypto" },
+    delta_percent: delta,
+    protocolSelection,
+    reviewDetails,
+    scores: { impact: ratio * 0.9, urgency: ratio, efficiency: null },
+    guardrails,
     engine_version: SUGGESTION_ENGINE_VERSION,
     timestamp: generatedAt,
   };

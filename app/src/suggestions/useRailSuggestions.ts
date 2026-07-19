@@ -35,6 +35,9 @@ import { getSafetyBufferTargetMonths } from "../wallet/safetyBufferTarget";
 import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
 import { deriveCompletenessGates, type PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
+import { computeSafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
+import { deriveRebalanceAssessment, selectRebalanceUsdcSource, isRebalanceMaterial } from "./rebalanceAssessment";
+import { buildRebalanceCardFromAssessment } from "./rebalanceSuggestion";
 import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 import { deriveContributionSuggestion } from "./contributionProductInput";
 import { deriveStableYieldPlanSuggestion } from "./stableYieldProductInput";
@@ -169,7 +172,23 @@ export function deriveRailSuggestions(args: {
   // positions + the production Safety Buffer target. Passed to the engine to NARROW (never enable) the
   // On Track / staking / DCA / direct-lending candidates; the completeness result + blockingIssues/warnings
   // are returned for the dashboard + Smith AI to consume without recomputing.
-  const completeness = deriveCompletenessGates(positions, { requiredBufferUsd: buffer?.targetUsd ?? 0 });
+  // Step 18D — ONE canonical SafetyBufferCoverage per refresh, shared by completeness AND the Rebalance
+  // assessment (same positions + same requiredBufferUsd; no methodology change, no recomputation).
+  const requiredBufferUsd = buffer?.targetUsd ?? 0;
+  const bufferCoverage = computeSafetyBufferCoverage(positions, requiredBufferUsd);
+  const completeness = deriveCompletenessGates(positions, { requiredBufferUsd, bufferCoverage });
+
+  // Step 18C — one authoritative Rebalance result from the canonical assessment (phase-one:
+  // stables_to_crypto only), computed ONCE over the same merged positions + mounted completeness +
+  // the SAME canonical coverage object. `material` preserves conflict suppression even without a card.
+  const rebalanceAssessment = deriveRebalanceAssessment({
+    positions, portfolioCompleteness: completeness.result, safetyBufferCoverage: bufferCoverage,
+    riskTolerance: goal?.risk_tolerance, requiredBufferUsd, generatedAt: pricedAsOf ?? Date.now(),
+  });
+  const usdcSource = selectRebalanceUsdcSource(positions, requiredBufferUsd, pricedAsOf ?? Date.now());
+  const solPrice = positions.find((p) => p.type === "native")?.priceUsd ?? null;
+  const rebalanceCard = buildRebalanceCardFromAssessment(rebalanceAssessment, usdcSource, solPrice, pricedAsOf != null && typeof solPrice === "number", pricedAsOf ?? 0);
+  const rebalanceOverride = { card: rebalanceCard, material: isRebalanceMaterial(rebalanceAssessment) };
 
   const engineResult = runSuggestionEngine(
     buildSuggestionEngineInputs({
@@ -183,7 +202,8 @@ export function deriveRailSuggestions(args: {
     pricedAsOf ?? 0,
     contribution.suggestion,
     stableYield.suggestion,
-    completeness.gates
+    completeness.gates,
+    rebalanceOverride
   );
   const cards = toSuggestionCards(engineResult.suggestions);
 

@@ -72,7 +72,15 @@ export function runSuggestionEngine(
    * gate==="allowed"`. Absent map (or entry) ⇒ no additional gating, so all prior behavior is preserved.
    * It NEVER enables an otherwise-ineligible suggestion, reorders candidates, or changes Top Pick.
    */
-  completenessGates?: CompletenessGateMap
+  completenessGates?: CompletenessGateMap,
+  /**
+   * Step 18C — the phase-one production Rebalance override. When present, `card` (or null) is the ONE
+   * authoritative Rebalance result (built from the canonical RebalanceAssessment behind `rebalance_to_plan`);
+   * the legacy bucket calculation is NOT run. `material` is the SEPARATE "material Rebalance need" signal
+   * (drift breach + valid calculation) used to preserve conflict suppression even when no card is emitted.
+   * Absent → legacy behavior (deriveRebalanceSuggestion + card-presence signal) for existing callers.
+   */
+  rebalanceOverride?: { card: EngineSuggestion | null; material: boolean }
 ): SuggestionEngineResult {
   const warnings: SuggestionReasonCode[] = [];
   if (inputs.value.anyUnpriced) warnings.push("partial_pricing");
@@ -92,8 +100,12 @@ export function runSuggestionEngine(
   if (bufferSatisfied) {
     // 3) Actionable candidates in engine (category-priority) order.
     const candidates: EngineSuggestion[] = [];
-    const rebalance = deriveRebalanceSuggestion(inputs, generatedAt);
-    if (rebalance && allows("rebalance")) candidates.push(rebalance);
+    // Step 18C — one authoritative Rebalance result. With the override (production), the assessment-built
+    // card is used and its OWN direction-specific gates apply (the over-broad completeness `allows` is NOT
+    // re-applied — the assessment already gated correctly). Legacy callers keep the bucket calc + gate.
+    const rebalance = rebalanceOverride !== undefined ? rebalanceOverride.card : deriveRebalanceSuggestion(inputs, generatedAt);
+    const rebalanceApplies = rebalanceOverride !== undefined ? rebalanceOverride.material : !!rebalance;
+    if (rebalance && (rebalanceOverride !== undefined || allows("rebalance"))) candidates.push(rebalance);
     // Capital Efficiency ranks above Staking/Stable Yield; may coexist with all.
     const capitalEfficiency = deriveCapitalEfficiencySuggestion(inputs, generatedAt);
     if (capitalEfficiency) candidates.push(capitalEfficiency);
@@ -103,9 +115,10 @@ export function runSuggestionEngine(
     if (trim && allows("trim")) candidates.push(trim);
     const staking = deriveStakingSuggestion(inputs, generatedAt);
     if (staking && allows("staking")) candidates.push(staking);
-    // Stable Yield and DCA only when Rebalance does not apply (allocation
-    // already close enough to target); Staking is unaffected (SOL, not stables).
-    if (!rebalance) {
+    // Stable Yield and DCA only when Rebalance does not apply. 18C: keyed on MATERIAL Rebalance NEED
+    // (rebalanceApplies), not card presence — so crypto_to_stables (or insufficient-USDC) material drift
+    // still suppresses conflicting deployment even when no Rebalance card can safely be shown.
+    if (!rebalanceApplies) {
       // Step 16H-A — prefer the plan-backed Stable Yield suggestion; it suppresses the legacy rule
       // (one stable-yield card per run). Production passes none (no approved product → no ready plan).
       // 17H.1 — the direct-USDC-lending completeness gate narrows this (never enables it).

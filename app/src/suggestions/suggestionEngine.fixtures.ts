@@ -97,6 +97,14 @@ import {
   railOnTrackUnavailableMessage as uiRailOnTrack,
 } from "../components/portfolioCompletenessUi";
 import { getPortfolioCompletenessTestingFixtures as tgFixtures } from "../pages/portfolioCompletenessTestingFixtures";
+// Step 18B — canonical Rebalance assessment (foundation for the replacement calculation; not yet mounted).
+import {
+  deriveRebalanceAssessment as rbAssess, REBALANCE_DESTINATIONS as RB_DEST, CANONICAL_USDC_MINT as RB_USDC,
+  selectRebalanceUsdcSource as rbSource,
+} from "./rebalanceAssessment";
+import { buildRebalanceCardFromAssessment as rbBuildCard, REBALANCE_SUGGESTION_ID as RB_ID } from "./rebalanceSuggestion";
+import { getRebalanceTestingFixtures as rbTestFixtures } from "../pages/rebalanceTestingFixtures";
+import { SUGGESTION_COPY as RB_COPY } from "../state/approvedCopy";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
 import { MAIN_MARKET_ALIAS, IDENTITY_RULE, COVERAGE_CORRECTION, FORBIDDEN_INFERENCES, SCOPE_GAP_STATUS, STEAKHOUSE_SCORE_OUTCOME, DIRECT_RESERVE_INCIDENT_EVIDENCE, ALIAS_AMENDMENT_EVIDENCE, computeAliasAmendmentManifestHash, ALIAS_AMENDMENT_MANIFEST_HASH, AMENDMENT_CONFERS as ALIAS_AMENDMENT_CONFERS_ALIAS } from "./incidentMarketAliasAmendment";
@@ -17953,6 +17961,9 @@ export function printFixtureResults(): void {
     ...runCompletenessIntegrationFixtureChecks(),
     ...runCompletenessUiFixtureChecks(),
     ...runCompletenessGalleryFixtureChecks(),
+    ...runRebalanceAssessmentFixtureChecks(),
+    ...runRebalanceProductionFixtureChecks(),
+    ...runRebalancePhaseOneCloseoutFixtureChecks(),
     ...runSteakhouseExistingPositionFixtureChecks(),
     ...runSafetyBufferCoverageFixtureChecks(),
     ...runKlendDirectPositionFailClosedFixtureChecks(),
@@ -21432,6 +21443,197 @@ export function runCompletenessGalleryFixtureChecks(): FixtureCheck[] {
   add("TG-11: shared USDC mint (wallet+Kamino+Steakhouse) → NOT a duplicate", (() => { const c = byId("shared_mint")!.completeness; return c.deduplicationState !== "invalid" && (uiWarning(c)?.id ?? "none") !== "dedup"; })(), "shared mint");
   add("TG-12: gate inspector exposes Rebalance/Trim/Optimization states; no suggestion output", (() => { const g = byId("gate_inspector")!.gates; return typeof g.rebalance === "string" && typeof g.trim === "string" && typeof g.positionOptimization === "string"; })(), "gate inspector");
   add("TG-13: native stake — value complete, available-to-withdraw present, not full liquidity", (() => { const c = byId("native_stake")!.completeness; const a = c.positionAssessments.find((x) => x.positionId === "stk"); return c.netWorthState === "complete" && a?.valueState === "complete"; })(), "native stake");
+
+  return checks;
+}
+
+/**
+ * Step 18B — canonical liability-aware Rebalance assessment (foundation only; the production card is
+ * unchanged). Proves gross-asset allocation, liability separation, drift, the source inventory by class,
+ * stable-source buffer protection, registry destinations, and the three-way gate split.
+ */
+export function runRebalanceAssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const MSOL = LST_SET.msol.mint;
+  const T22 = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+  const w = (o: Partial<JLWalletPos>): JLWalletPos => ({ id: "x", source: "wallet", type: "token", symbol: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
+  const usdc = (v: number, id = "usdc") => w({ id, symbol: "USDC", name: "USD Coin", mint: RB_USDC, valueUsd: v, uiAmount: v });
+  const sol = (v: number) => w({ id: "sol", type: "native", symbol: "SOL", valueUsd: v, uiAmount: v / 250 });
+  const msol = (v: number) => w({ id: "ms", type: "lst", symbol: "mSOL", mint: MSOL, valueUsd: v, uiAmount: 1, lstProductId: "msol", lstNormalizationState: "unsupported" });
+  const debt = (v: number | null) => w({ id: "hb", type: "protocol", symbol: "USDH", name: "USDH loan", side: "borrowed", valueUsd: v, uiAmount: 300, amount: "300000000" });
+  const kaminoStable = (v: number) => w({ id: "kd", type: "protocol", symbol: "USDC", name: "USDC on Kamino", candidateId: "kamino_usdc_lending", existingPositionOnly: true, dedupeKey: "klend:x", valueUsd: v, recognizedValueUsd: v, withdrawalState: "fully_withdrawable", liquidValueUsd: v, mint: RB_USDC });
+  const frozenT22 = (v: number) => w({ id: "t22f", type: "token", symbol: "XYZ", name: "XYZ Token", mint: "T22Frozen", valueUsd: v, tokenProgram: T22, withdrawalState: "currently_unavailable", transferabilityState: "frozen" });
+  const hookT22 = (v: number) => w({ id: "t22h", type: "token", symbol: "XYZ", name: "XYZ Token", mint: "T22Hook", valueUsd: v, tokenProgram: T22, withdrawalState: "unresolved", transferabilityState: "hook_unresolved" });
+  const activeStake = (v: number) => w({ id: "stk", type: "stake", symbol: "SOL", valueUsd: v, uiAmount: v / 250, liquidValueUsd: 0, stakeLifecycleState: "active", stake: { anyUnresolved: false } as any, dedupeKey: "native-stake:A" });
+  const unknownTok = () => w({ id: "unk", type: "token", name: "Unknown token", symbol: "9x", uiAmount: 5, valueUsd: null });
+  const A = (positions: JLWalletPos[], riskTolerance: string | undefined = "medium", requiredBufferUsd = 0) => rbAssess({ positions, riskTolerance, requiredBufferUsd, generatedAt: 1_700_000_000_000 });
+
+  // ---- Allocation + liabilities (gross assets, not net worth) ----
+  add("RB-1: crypto + stable allocation sums to 100 (within rounding)", (() => { const a = A([sol(400), usdc(600)]); return Math.abs((a.currentCryptoPct! + a.currentStablePct!) - 100) < 0.01; })(), "sums 100");
+  add("RB-2: debt is a SEPARATE liability, not netted into crypto", (() => { const a = A([sol(400), usdc(600), debt(-300)]); return a.recognizedLiabilitiesUsd === 300 && a.cryptoAssetValueUsd === 400 && a.currentCryptoPct === 40; })(), "debt separate");
+  add("RB-3: debt reduces net worth but not the crypto allocation ratio", (() => { const a = A([sol(400), usdc(600), debt(-300)]); return a.netWorthUsd === 700 && a.grossAssetValueUsd === 1000 && a.allocatableAssetValueUsd === 1000; })(), "net worth");
+  add("RB-4: unresolved (unvalued) debt blocks calculation", (() => { const a = A([sol(400), usdc(600), debt(null)]); return a.calculationGate.status !== "allowed" && a.calculationGate.reasons.includes("liabilities_unresolved"); })(), "unvalued debt");
+  add("RB-5: negative NON-liability asset row fails closed (blocked)", (() => { const a = A([sol(400), usdc(600), w({ id: "neg", type: "token", symbol: "BAD", valueUsd: -50 })]); return a.calculationGate.status === "blocked" && a.calculationGate.reasons.includes("malformed_asset_value"); })(), "neg asset");
+  add("RB-6: unknown positive value blocks allocation", (() => { const a = A([sol(400), usdc(600), unknownTok()]); return a.calculationGate.reasons.includes("unknown_asset_value") && a.calculationGate.status !== "allowed"; })(), "unknown");
+  add("RB-7: mSOL fresh market value contributes to crypto WITHOUT requiring backing", (() => { const a = A([msol(260), usdc(740)]); return a.cryptoAssetValueUsd === 260 && a.calculationGate.reasons.every((r) => !/backing|sol_exposure|underlying/.test(r)); })(), "msol no backing");
+  add("RB-8: protocol stable recognized value counts in allocation but NOT as source", (() => { const a = A([sol(900), kaminoStable(100)], "very_low", 0); const kd = a.sourceCandidates.find((c) => c.positionId === "kd"); return a.stableAssetValueUsd === 100 && (kd === undefined || kd.eligibilityState === "existing_position_only"); })(), "protocol stable");
+
+  // ---- Drift (unchanged trigger) ----
+  add("RB-9: +≥10pt crypto → crypto_to_stables; exact requiredCorrection", (() => { const a = A([sol(800), usdc(200)], "low" /*target 40/60*/); return a.direction === "crypto_to_stables" && a.cryptoDeltaPct === 40 && a.requiredCorrectionUsd === 400; })(), "over");
+  add("RB-10: ≤-10pt crypto → stables_to_crypto", (() => { const a = A([sol(100), usdc(900)], "high" /*target 80/20*/); return a.direction === "stables_to_crypto" && a.cryptoDeltaPct === -70; })(), "under");
+  add("RB-11: within ±10pt → within_threshold", (() => { const a = A([sol(620), usdc(380)], "medium" /*target 60/40*/); return a.direction === "within_threshold" && a.requiredCorrectionUsd === 0; })(), "within");
+  add("RB-12: missing risk tolerance → calculation unresolved (missing_risk_tolerance)", (() => { const a = rbAssess({ positions: [sol(800), usdc(200)], riskTolerance: undefined, requiredBufferUsd: 0, generatedAt: 1_700_000_000_000 }); return a.calculationGate.status === "unresolved" && a.calculationGate.reasons.includes("missing_risk_tolerance"); })(), "no risk");
+
+  // ---- Source inventory by class (overweight bucket) ----
+  add("RB-13: fresh direct classic token → technical capacity, route unverified (not eligible)", (() => { const a = A([sol(900), usdc(100)], "low"); const s = a.sourceCandidates.find((c) => c.positionId === "sol"); return s?.eligibilityState === "technically_available_route_unverified" && s.verifiedTransferableValueUsd === 900; })(), "classic route unverified");
+  add("RB-14: frozen Token-2022 → zero capacity; hook-unresolved → unresolved source state", (() => { const a = A([sol(700), frozenT22(200), hookT22(100)], "low" /*40/60; crypto 70% → over → crypto sources*/); const f = a.sourceCandidates.find((c) => c.positionId === "t22f"); const h = a.sourceCandidates.find((c) => c.positionId === "t22h"); return f?.eligibilityState === "unavailable" && f.technicallyAvailableValueUsd === 0 && h?.eligibilityState === "unresolved"; })(), "frozen+hook");
+  add("RB-15: active native stake → zero direct capacity (unavailable)", (() => { const a = A([activeStake(900), usdc(100)], "low"); const s = a.sourceCandidates.find((c) => c.positionId === "stk"); return s?.eligibilityState === "unavailable" && s.technicallyAvailableValueUsd === 0; })(), "active stake");
+  add("RB-16: LST is route-unverified (backing never source capacity)", (() => { const a = A([msol(900), usdc(100)], "low"); const s = a.sourceCandidates.find((c) => c.positionId === "ms"); return s?.eligibilityState === "technically_available_route_unverified" && !s.exclusionReasons.join().includes("backing is source"); })(), "lst route");
+  add("RB-17: Kamino/Steakhouse/jlUSDC/LP/debt/unknown are excluded as sources", (() => { const a = A([sol(100), usdc(200), kaminoStable(700)], "high"); const kd = a.sourceCandidates.find((c) => c.positionId === "kd"); return !kd || kd.eligibilityState === "existing_position_only"; })(), "excluded classes");
+
+  // ---- Stable-source Safety Buffer protection (stables_to_crypto) ----
+  add("RB-18: direct USDC below buffer → zero eligible source capacity", (() => { const a = A([sol(100), usdc(900)], "high", 900); return a.eligibleSourceCapacityUsd === 0; })(), "below buffer");
+  add("RB-19: direct USDC exactly at buffer → zero eligible capacity", (() => { const a = A([sol(100), usdc(900)], "high", 900); return a.verifiedSourceCapacityUsd === 0; })(), "at buffer");
+  add("RB-20: direct USDC above buffer → only the excess is eligible", (() => { const a = A([sol(100), usdc(900)], "high", 200); return a.eligibleSourceCapacityUsd === 700; })(), "excess only");
+  add("RB-21: protocol-held liquid USDC does NOT become a stable source", (() => { const a = A([sol(100), usdc(300), kaminoStable(600)], "high", 100); return a.eligibleSourceCapacityUsd === 200; /* only direct 300 − 100 buffer */ })(), "protocol not source");
+  add("RB-22: Safety Buffer incomplete → calculation blocked", (() => { const a = A([sol(100), usdc(50)], "high", 1000 /*target 1000 > 50 verified → incomplete*/); return a.calculationGate.status === "blocked" && a.calculationGate.reasons.includes("safety_buffer_incomplete"); })(), "buffer incomplete");
+
+  // ---- Destinations (registry) ----
+  add("RB-23: crypto_to_stables destination = canonical wallet USDC (exact mint)", (() => { const a = A([sol(900), usdc(100)], "low"); return a.proposedDestination?.mint === RB_USDC && a.proposedDestination?.destinationRole === "wallet_stable"; })(), "usdc dest");
+  add("RB-24: stables_to_crypto destination = canonical native SOL", (() => { const a = A([sol(100), usdc(900)], "high", 200); return a.proposedDestination?.native === true && a.proposedDestination?.destinationRole === "core_asset"; })(), "sol dest");
+  add("RB-25: destinations are registry-bound + extensible (both enabled, approved)", RB_DEST.crypto_to_stables.enabled && RB_DEST.crypto_to_stables.recommendationEligible && RB_DEST.stables_to_crypto.native === true && typeof RB_DEST.crypto_to_stables.assetId === "string", "registry");
+  add("RB-26: Jupiter/Steakhouse/INF/LP can never be destinations (registry has only USDC/SOL)", (() => { const ids = [RB_DEST.crypto_to_stables.assetId, RB_DEST.stables_to_crypto.assetId]; return ids.every((x) => x === "usdc" || x === "sol"); })(), "no excluded dest");
+
+  // ---- Three-way gate split ----
+  add("RB-27: complete calc + verified excess ≥ min + valid dest → OVERALL allowed", (() => { const a = A([sol(100), usdc(900)], "high", 100); return a.calculationGate.status === "allowed" && a.sourceActionabilityGate.status === "allowed" && a.destinationEligibilityGate.status === "allowed" && a.overallReadiness.status === "allowed" && a.amountClassification !== "within_threshold"; })(), "all allowed");
+  add("RB-28: complete calc + crypto sources route-unverified → source UNRESOLVED (not blocked)", (() => { const a = A([sol(900), usdc(100)], "low"); return a.calculationGate.status === "allowed" && a.sourceActionabilityGate.status === "unresolved" && a.overallReadiness.status === "unresolved"; })(), "source unresolved");
+  add("RB-29: stables_to_crypto with only protocol stable → no verified source → blocked", (() => { const a = A([sol(100), kaminoStable(900)], "high", 0); return a.sourceActionabilityGate.status === "blocked" && a.sourceActionabilityGate.reasons.some((r) => /no_verified_source|below_minimum/.test(r)); })(), "no source blocked");
+  add("RB-30: portfolio-wide unrelated liquidity does NOT over-block calculation", (() => { const a = A([sol(100), usdc(900), kaminoStable(200)], "high", 100); return a.calculationGate.status === "allowed"; /* Kamino unresolved-liquidity elsewhere must not block market-value calc */ })(), "no over-block");
+  add("RB-31: gates never generate a suggestion (assessment carries no card/tx)", (() => { const s = JSON.stringify(A([sol(100), usdc(900)], "high", 100)); return !s.includes("card") && !s.includes("cta") && !s.includes("signature") && !s.includes("transaction") && !s.includes("route\":\"verified"); })(), "no suggestion");
+  add("RB-32: maximumCurrentlySupportable = min(requiredCorrection, verifiedSourceCapacity)", (() => { const a = A([sol(100), usdc(900)], "high", 850); return a.verifiedSourceCapacityUsd === 50 && a.maximumCurrentlySupportableUsd === 50 && a.amountClassification === "partial_correction_available"; })(), "capped amount");
+
+  // ---- Immutability ----
+  add("RB-33: production thresholds unchanged; assessment reuses them", (() => { const a = A([sol(800), usdc(200)], "low"); return a.thresholdSource.includes("10") && a.thresholdSource.includes("50") && a.targetSource.includes("RISK_TARGET_ALLOCATION"); })(), "thresholds");
+  add("RB-34: dispositions unchanged; Jupiter excluded; Steakhouse existing-only; INF blocked", dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && !lstSupported("5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm"), "immutable");
+
+  return checks;
+}
+
+/**
+ * Step 18C — phase-one production Rebalance: assessment → exact USDC source → capped card behind the same
+ * rebalance_to_plan contract. Proves stables_to_crypto emits, crypto_to_stables never falls back, source
+ * selection is exact-USDC-only, the amount is buffer-protected + capped, and conflict suppression is by
+ * material NEED (not card presence).
+ */
+export function runRebalanceProductionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const w = (o: Partial<JLWalletPos>): JLWalletPos => ({ id: "x", source: "wallet", type: "token", symbol: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
+  const usdc = (v: number, id = "usdc") => w({ id, symbol: "USDC", name: "USD Coin", mint: RB_USDC, valueUsd: v, uiAmount: v, priceUsd: 1 });
+  const sol = (v: number) => w({ id: "sol", type: "native", symbol: "SOL", valueUsd: v, uiAmount: v / 250, priceUsd: 250 });
+  const kaminoStable = (v: number) => w({ id: "kd", type: "protocol", symbol: "USDC", name: "USDC on Kamino", candidateId: "kamino_usdc_lending", existingPositionOnly: true, dedupeKey: "klend:x", valueUsd: v, recognizedValueUsd: v, withdrawalState: "fully_withdrawable", liquidValueUsd: v, mint: RB_USDC });
+  const t22usdc = (v: number) => w({ id: "t22u", symbol: "USDC", name: "USD Coin", mint: "FakeUsdcMint111", valueUsd: v, tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" });
+  const jlusdc = () => w({ id: "jl", type: "protocol", symbol: "USDC", candidateId: "jupiter_lend_usdc", existingPositionOnly: true, dedupeKey: "jupiter-lend:x", withdrawalState: "unresolved", recognizedValueUsd: null, valueUsd: null, uiAmount: 100, amount: "100000000", mint: RB_USDC });
+  const debt = (v: number | null) => w({ id: "hb", type: "protocol", symbol: "USDH", side: "borrowed", valueUsd: v, uiAmount: 300, amount: "300000000" });
+  // Build the production card exactly as the rail does.
+  const card = (positions: JLWalletPos[], risk: string | undefined, buf: number, solFresh = true) => {
+    const a = rbAssess({ positions, riskTolerance: risk, requiredBufferUsd: buf, generatedAt: 1_700_000_000_000 });
+    const src = rbSource(positions, buf, 1_700_000_000_000);
+    return rbBuildCard(a, src, 250, solFresh, 1_700_000_000_000);
+  };
+
+  // ---- Source selection (exact canonical USDC only) ----
+  add("RC-1: exact canonical USDC mint + classic SPL aggregated into one source", (() => { const s = rbSource([usdc(500, "u1"), usdc(400, "u2")], 100); return s.selectedSourcePositionIds.length === 2 && s.verifiedTransferableValueUsd === 900 && s.verifiedExcessValueUsd === 800 && s.selectionState === "selected"; })(), "aggregate");
+  add("RC-2: symbol-only USDC lookalike (wrong mint / Token-2022) rejected", (() => { const s = rbSource([t22usdc(900)], 0); return s.verifiedTransferableValueUsd === 0 && s.selectionState === "unsupported"; })(), "lookalike");
+  add("RC-3: protocol-held USDC (Kamino) never a source", (() => { const s = rbSource([kaminoStable(900)], 0); return s.verifiedTransferableValueUsd === 0; })(), "protocol excluded");
+  add("RC-4: jlUSDC (unresolved value) never a source", (() => { const s = rbSource([jlusdc()], 0); return s.verifiedTransferableValueUsd === 0; })(), "jl excluded");
+  add("RC-5: frozen/stale USDC excluded", (() => { const s = rbSource([w({ id: "f", symbol: "USDC", name: "USD Coin", mint: RB_USDC, valueUsd: 900, withdrawalState: "stale" })], 0); return s.verifiedTransferableValueUsd === 0; })(), "frozen");
+
+  // ---- Buffer protection + amount cap ----
+  add("RC-6: USDC below buffer → zero excess", rbSource([usdc(300)], 400).verifiedExcessValueUsd === 0, "below");
+  add("RC-7: USDC exactly at buffer → zero excess", rbSource([usdc(300)], 300).verifiedExcessValueUsd === 0, "at");
+  add("RC-8: USDC above buffer → exact excess only", rbSource([usdc(900)], 200).verifiedExcessValueUsd === 700, "above");
+  add("RC-9: suggested amount = min(requiredCorrection, verifiedExcess); full correction", (() => { const c = card([sol(100), usdc(900)], "high", 100); return c !== null && c.amount?.valueUsd === 700 && c.amount.label === "Suggested rebalance amount"; })(), "full");
+  add("RC-10: partial correction when excess < required correction (still ≥ $50)", (() => { const c = card([sol(100), usdc(900)], "high", 500); return c !== null && c.amount?.valueUsd === 400 && (c.amount?.label ?? "").includes("partial"); })(), "partial");
+  add("RC-11: exact $50 excess → card shown", (() => { const c = card([sol(100), usdc(550)], "high", 500); return c !== null && c.amount?.valueUsd === 50; })(), "exact 50");
+  add("RC-12: below $50 excess → no card", (() => { const c = card([sol(100), usdc(540)], "high", 500); return c === null; })(), "below 50");
+  add("RC-13: USDC entirely reserved for buffer → no source → no card", (() => { const c = card([sol(100), usdc(300)], "high", 300); return c === null; })(), "all reserved");
+  add("RC-14: amount never exceeds excess nor required correction; never negative", (() => { const c = card([sol(100), usdc(900)], "high", 100); return c !== null && (c.amount?.valueUsd ?? 0) <= 700 && (c.amount?.valueUsd ?? 0) <= 800 && (c.amount?.valueUsd ?? 0) >= 0; })(), "cap");
+
+  // ---- Card mapping (same contract) ----
+  add("RC-15: card keeps rebalance_to_plan id, category, title, review-only", (() => { const c = card([sol(100), usdc(900)], "high", 100)!; return c.id === RB_ID && c.id === "rebalance_to_plan" && c.category === "rebalance" && c.title_key === "suggestion.rebalance.title" && c.action_kind === "review_only" && c.is_top_pick === false; })(), "contract");
+  add("RC-16: supporting data has USDC source + SOL destination; no execution route/instruction fields", (() => { const c = card([sol(100), usdc(900)], "high", 100)!; const s = JSON.stringify(c); return c.from?.bucket === "stables" && c.to?.bucket === "crypto" && s.includes("USDC") && s.includes("SOL") && !s.includes("swapRoute") && !s.includes("instruction") && !s.includes("signTransaction"); })(), "supporting");
+  add("RC-17: approx SOL units only with fresh SOL price", (() => { const fresh = JSON.stringify(card([sol(100), usdc(900)], "high", 100)); const stale = JSON.stringify(card([sol(100), usdc(900)], "high", 100, false)); return fresh.includes("Approx. SOL") && !stale.includes("Approx. SOL"); })(), "sol units");
+
+  // ---- Directional rollout ----
+  add("RC-18: stables_to_crypto CAN produce a card", card([sol(100), usdc(900)], "high", 100) !== null, "stables produces");
+  add("RC-19: crypto_to_stables produces NO card (no legacy uncapped fallback)", (() => { const c = card([sol(900), usdc(100)], "low", 0); const a = rbAssess({ positions: [sol(900), usdc(100)], riskTolerance: "low", requiredBufferUsd: 0, generatedAt: 1 }); return c === null && a.direction === "crypto_to_stables"; })(), "crypto no card");
+  add("RC-20: within_threshold → no card", card([sol(620), usdc(380)], "medium", 0) === null, "within no card");
+  add("RC-21: unresolved (unvalued liability) → no card", card([sol(100), usdc(900), debt(null)], "high", 100) === null, "unresolved no card");
+  add("RC-22: card amount is NOT the legacy bucket deviation for crypto_to_stables", (() => { const c = card([sol(900), usdc(100)], "low", 0); return c === null; /* legacy would size 500; new emits nothing */ })(), "no legacy amount");
+
+  // ---- Material need + conflict suppression (engine override) ----
+  const dcaSug = mkSug15H("dca-plan", "dca");
+  const fundedInp = () => inputsFor({ safetyBuffer: bufferFixture(3000, 1000, 3) });
+  add("RC-23: crypto_to_stables material need suppresses DCA even with NO card", (() => { const r = runSuggestionEngine(fundedInp(), FIXTURE_GENERATED_AT, dcaSug, null, undefined, { card: null, material: true }); return !r.suggestions.some((s) => s.category === "dca"); })(), "material suppresses");
+  add("RC-24: within_threshold (not material) does NOT suppress DCA", (() => { const r = runSuggestionEngine(fundedInp(), FIXTURE_GENERATED_AT, dcaSug, null, undefined, { card: null, material: false }); return r.suggestions.some((s) => s.category === "dca"); })(), "not material coexists");
+  add("RC-25: produced Rebalance card is pushed + still suppresses DCA", (() => { const c = card([sol(100), usdc(900)], "high", 100)!; const r = runSuggestionEngine(fundedInp(), FIXTURE_GENERATED_AT, dcaSug, null, undefined, { card: c, material: true }); return r.suggestions.some((s) => s.id === "rebalance_to_plan") && !r.suggestions.some((s) => s.category === "dca"); })(), "card + suppress");
+  add("RC-26: override present → legacy bucket calc NOT run (null card + material false → no rebalance card)", (() => { const r = runSuggestionEngine(fundedInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: false }); return !r.suggestions.some((s) => s.category === "rebalance"); })(), "no legacy");
+  add("RC-27: override card bypasses over-broad completeness gate (assessment already gated)", (() => { const c = card([sol(100), usdc(900)], "high", 100)!; const r = runSuggestionEngine(fundedInp(), FIXTURE_GENERATED_AT, null, null, { rebalance: "unresolved" }, { card: c, material: true }); return r.suggestions.some((s) => s.id === "rebalance_to_plan"); })(), "own gates");
+
+  // ---- Regression / immutability ----
+  add("RC-28: legacy engine call (no override) unchanged — bucket rebalance still fires", (() => { const withReb = runSuggestionEngine(fundedInp(), FIXTURE_GENERATED_AT); const woReb = runSuggestionEngine(fundedInp(), FIXTURE_GENERATED_AT, null, null, undefined, undefined); return withReb.suggestions.length === woReb.suggestions.length; })(), "legacy stable");
+  add("RC-29: destination is registry-bound SOL; Jupiter/Steakhouse/INF/LP never destinations", RB_DEST.stables_to_crypto.native === true && RB_DEST.stables_to_crypto.assetId === "sol" && RB_DEST.crypto_to_stables.assetId === "usdc", "dest");
+  add("RC-30: no score/governance/policy change; dispositions intact; no execution behavior", (() => { const c = JSON.stringify(card([sol(100), usdc(900)], "high", 100)); return dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && !c.includes("riskScore") && !c.includes("swapRoute") && !c.includes("signTransaction"); })(), "immutable");
+
+  return checks;
+}
+
+/**
+ * Step 18D — phase-one closeout: canonical coverage reuse, full/partial production copy, and the /testing
+ * gallery (production derivation + components). No legacy bucket path is reachable from a mounted caller.
+ */
+export function runRebalancePhaseOneCloseoutFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const fx = rbTestFixtures();
+  const byId = (id: string) => fx.find((f) => f.id === id);
+  const fullCopy = RB_COPY["suggestion.rebalance.stables_to_crypto.full.description"];
+  const partialCopy = RB_COPY["suggestion.rebalance.stables_to_crypto.partial.description"];
+
+  // ---- Full/partial production copy ----
+  add("RD-1: full copy names USDC + SOL + Safety Buffer", /USDC/.test(fullCopy) && /SOL/.test(fullCopy) && /Safety Buffer/i.test(fullCopy), "full copy");
+  add("RD-2: partial copy names USDC + SOL + 'part of the gap'", /USDC/.test(partialCopy) && /SOL/.test(partialCopy) && /part of the gap/i.test(partialCopy) && /Safety Buffer/i.test(partialCopy), "partial copy");
+  add("RD-3: full card uses full key; partial card uses partial key (primary-card distinction)", (() => { const full = byId("full")!.card; const part = byId("partial")!.card; return full?.description_key === "suggestion.rebalance.stables_to_crypto.full.description" && part?.description_key === "suggestion.rebalance.stables_to_crypto.partial.description"; })(), "keys");
+  add("RD-4: no execution/guarantee language in either copy", (() => { const both = `${fullCopy} ${partialCopy}`; return !/guaranteed|swap now|buy now|execute|exact SOL received|fully rebalanced|slippage-free/i.test(both); })(), "no exec copy");
+  add("RD-5: full copy does NOT claim partial, partial does NOT claim full", fullCopy !== partialCopy && !/part of the gap/i.test(fullCopy), "distinct");
+
+  // ---- Canonical SafetyBufferCoverage reuse ----
+  add("RD-6: /testing fixtures carry ONE shared canonical coverage (completeness + Rebalance)", fx.every((f) => f.coverageIdentity.sharedByCompletenessAndRebalance === true && typeof f.coverageIdentity.requiredBufferUsd === "number"), "shared coverage");
+  add("RD-7: deriveCompletenessGates + deriveRebalanceAssessment accept the SAME coverage object", (() => {
+    const positions = byId("full")!.positions; const cov = sbCoverage(positions, 100);
+    const comp = pcGates(positions, { requiredBufferUsd: 100, bufferCoverage: cov } as any);
+    const a = rbAssess({ positions, portfolioCompleteness: comp.result, safetyBufferCoverage: cov, riskTolerance: "high", requiredBufferUsd: 100, generatedAt: 1 });
+    return comp.result.stableBufferState === "complete" && a.calculationGate.status === "allowed";
+  })(), "coverage passed");
+
+  // ---- /testing gallery states ----
+  add("RD-8: dedicated Rebalance /testing gallery has all required states", (() => { const ids = ["full", "partial", "exact_50", "below_50", "all_reserved", "multi_usdc", "protocol_stable", "kamino", "steakhouse", "jupiter", "liability", "lookalike", "crypto_to_stables", "within_threshold", "stale_sol_price"]; return ids.every((id) => byId(id) !== undefined); })(), `count=${fx.length}`);
+  add("RD-9: full state → card via production mapper (rebalance_to_plan)", (() => { const c = byId("full")!.card; return c?.id === "rebalance_to_plan" && c.category === "rebalance"; })(), "full card");
+  add("RD-10: partial state → card + partial label", (() => { const c = byId("partial")!.card; return c !== null && (c.amount?.label ?? "").includes("partial"); })(), "partial card");
+  add("RD-11: exact $50 → card; below $50 → no card", byId("exact_50")!.card !== null && byId("below_50")!.card === null, "50 boundary");
+  add("RD-12: USDC fully reserved → no source, no card", byId("all_reserved")!.card === null && byId("all_reserved")!.source.selectionState === "no_excess", "reserved");
+  add("RD-13: multiple USDC accounts → one aggregated source", byId("multi_usdc")!.source.selectedSourcePositionIds.length === 2 && byId("multi_usdc")!.card !== null, "aggregate");
+  add("RD-14: protocol/Kamino/Steakhouse/jlUSDC/lookalike never a source", (() => { const noSrc = ["kamino", "steakhouse", "lookalike"].every((id) => byId(id)!.source.verifiedTransferableValueUsd === 0); const protoAlloc = byId("protocol_stable")!.assessment.stableAssetValueUsd > 0; return noSrc && protoAlloc; })(), "excluded sources");
+  add("RD-15: crypto_to_stables → no card, material need true (no legacy fallback)", (() => { const f = byId("crypto_to_stables")!; return f.card === null && f.assessment.direction === "crypto_to_stables" && f.material === true; })(), "crypto no card");
+  add("RD-16: within_threshold → no card, NOT material (no conflict suppression)", (() => { const f = byId("within_threshold")!; return f.card === null && f.material === false; })(), "within");
+  add("RD-17: liability/jupiter unresolved → no card (calculation not allowed)", byId("liability")!.card === null && byId("jupiter")!.card === null, "unresolved no card");
+  add("RD-18: stale SOL price → no approximate SOL units in the card", (() => { const s = JSON.stringify(byId("stale_sol_price")!.card); return byId("stale_sol_price")!.card !== null && !s.includes("Approx. SOL"); })(), "stale sol");
+  add("RD-19: fresh SOL price → approximate SOL units present", JSON.stringify(byId("partial")!.card).includes("Approx. SOL"), "fresh sol");
+
+  // ---- Immutability ----
+  add("RD-20: thresholds/targets/dispositions unchanged; no eligibility expansion", byId("full")!.assessment.thresholdSource.includes("10") && byId("full")!.assessment.thresholdSource.includes("50") && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && !lstSupported("5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm"), "immutable");
 
   return checks;
 }

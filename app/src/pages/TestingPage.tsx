@@ -33,6 +33,7 @@ import EarningAssetsCard from "../components/EarningAssetsCard";
 import { portfolioTotalDisplay } from "../components/portfolioCompletenessUi";
 import { getPortfolioCompletenessTestingFixtures } from "./portfolioCompletenessTestingFixtures";
 import { getLiquidPositions, getStakedPositions, getProtocolPositions } from "../wallet/walletSummary";
+import { getRebalanceTestingFixtures } from "./rebalanceTestingFixtures";
 import "./testingPage.css";
 
 type Filter = "All" | TestingGroup;
@@ -41,6 +42,7 @@ const FILTERS: Filter[] = ["All", ...TESTING_GROUPS];
 export default function TestingPage() {
   const fixtures = useMemo(() => getTestingPageFixtures(), []);
   const completenessFixtures = useMemo(() => getPortfolioCompletenessTestingFixtures(), []);
+  const rebalanceFixtures = useMemo(() => getRebalanceTestingFixtures(), []);
   const [filter, setFilter] = useState<Filter>("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -273,6 +275,33 @@ export default function TestingPage() {
                 <span className="testing-page__contrib-id">{r.suppressionReason}</span>
               </div>
               <p className="testing-page__contrib-name">{r.name}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Step 18D — phase-one Rebalance gallery. Each fixture uses the PRODUCTION assessment + source
+          selector + card mapper + one canonical SafetyBufferCoverage. Full/partial cards render through
+          the production SuggestionCard; no-card states show the deterministic reason. Fixture-only. */}
+      <section className="testing-page__contrib" aria-label="Rebalance phase-one states">
+        <h2 className="testing-page__section-title">Rebalance (phase one: USDC → SOL)</h2>
+        <p className="testing-page__subtext">
+          Verified excess direct-wallet USDC → native SOL, Safety Buffer protected, amount capped. Review-only.
+          crypto_to_stables / within-threshold / unresolved never render a card (no legacy fallback).
+        </p>
+        <div className="testing-page__grid">
+          {rebalanceFixtures.map((f) => (
+            <div key={f.id} className="testing-page__cell">
+              <p className="testing-page__cell-label">
+                {f.label} — <span className="testing-page__badge">{f.card ? (f.card.amount?.label?.includes("partial") ? "PARTIAL" : "FULL") : `no card · ${f.assessment.direction}`}</span>
+              </p>
+              {f.card ? (
+                <SuggestionCard card={toSuggestionCard(f.card)} onReview={() => undefined} />
+              ) : (
+                <p className="testing-page__contrib-noplan">
+                  No Rebalance card — direction: <strong>{f.assessment.direction}</strong>, source: <strong>{f.source.selectionState}</strong>, material need: <strong>{String(f.material)}</strong>. Canonical coverage (shared): required ${f.coverageIdentity.requiredBufferUsd}, verified-liquid ${f.coverageIdentity.verifiedLiquidStableValueUsd}.
+                </p>
+              )}
             </div>
           ))}
         </div>
