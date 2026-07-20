@@ -255,9 +255,12 @@ export function buildReviewDetails(args: {
   externalLink?: SuggestionReviewDetails["externalLink"];
   /** Optional read-only "Other protocols to review" alternatives (Step 14L). */
   otherProtocolsToReview?: SuggestionReviewDetails["otherProtocolsToReview"];
+  /** Step 19C — extra review-only limitations appended after the standard ones (e.g. Trim transferability). */
+  additionalLimitations?: SuggestionReviewDetails["limitations"];
 }): SuggestionReviewDetails {
   const informational = args.actionKind === "informational";
   const excludeExec = args.routeEvaluationDisplay != null;
+  const extraLimitations = args.additionalLimitations ?? [];
   return {
     summary: {
       title: TITLE_BY_CATEGORY[args.category],
@@ -270,8 +273,8 @@ export function buildReviewDetails(args: {
     calculations: args.calculations ?? [],
     guardrailSummary: summarizeGuardrails(args.guardrails, args.protocolSelection, excludeExec),
     limitations: informational
-      ? []
-      : standardLimitations(args.guardrails, args.protocolSelection, excludeExec),
+      ? [...extraLimitations]
+      : [...standardLimitations(args.guardrails, args.protocolSelection, excludeExec), ...extraLimitations],
     safetyNotes: args.safetyNotesOverride
       ? [...args.safetyNotesOverride]
       : informational

@@ -422,6 +422,11 @@ function toJitoRestakingPosition(acc: ParsedTokenAccount, vrt: VrtInfo): WalletP
   };
 }
 
+/** Exact raw token base-unit amount as BigInt (0n for non-integer/absent strings). Never sums uiAmount as authority. */
+function sumRawTokenAmount(amount: string | undefined): bigint {
+  return typeof amount === "string" && /^[0-9]+$/.test(amount) ? BigInt(amount) : 0n;
+}
+
 /** Assemble positions from whatever reads succeeded (native may be null). */
 function buildPositions(
   lamports: number | null,
@@ -449,24 +454,33 @@ function buildPositions(
     });
   }
 
-  // De-dupe by id so a repeated mint (or overlapping program results) never
-  // produces duplicate rows.
-  const seen = new Set<string>(positions.map((p) => p.id));
+  // Step 19B — AGGREGATE multiple direct-wallet accounts of the same mint into ONE holding by SUMMING raw
+  // integer balances (exact BigInt), rather than keeping the first row and dropping the rest. Both a token's
+  // associated and non-associated accounts sum. VRT restaking rows and native/protocol rows are per-account /
+  // per-economic-position and are NOT aggregated. Raw `amount` is authoritative; formatted `uiAmount` follows.
+  const byId = new Map<string, WalletPosition>(positions.map((p) => [p.id, p]));
   for (const acc of tokenAccounts) {
     // A held Jito VRT becomes a "Restaked on Jito" position; otherwise a token
     // (recognized as a Sanctum LST when applicable, else known/unknown).
     const mint = acc?.account?.data?.parsed?.info?.mint;
     const vrt = mint && vrtMap ? vrtMap.get(mint) : undefined;
     const pos = vrt ? toJitoRestakingPosition(acc, vrt) : toTokenPosition(acc, sanctumMap);
-    if (pos && !seen.has(pos.id)) {
-      seen.add(pos.id);
+    if (!pos) continue;
+    const existing = byId.get(pos.id);
+    if (!existing) {
+      byId.set(pos.id, pos);
       positions.push(pos);
+    } else if (!vrt && (pos.type === "token" || pos.type === "lst") && (existing.type === "token" || existing.type === "lst")) {
+      existing.amount = (sumRawTokenAmount(existing.amount) + sumRawTokenAmount(pos.amount)).toString();
+      if (typeof existing.uiAmount === "number" || typeof pos.uiAmount === "number") {
+        existing.uiAmount = (existing.uiAmount ?? 0) + (pos.uiAmount ?? 0);
+      }
     }
   }
   // Protocol positions (native stake, Kamino) are already normalized.
   for (const pos of extra) {
-    if (!seen.has(pos.id)) {
-      seen.add(pos.id);
+    if (!byId.has(pos.id)) {
+      byId.set(pos.id, pos);
       positions.push(pos);
     }
   }

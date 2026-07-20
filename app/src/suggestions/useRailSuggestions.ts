@@ -38,6 +38,8 @@ import { deriveCompletenessGates, type PortfolioCompletenessResult } from "../wa
 import { computeSafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
 import { deriveRebalanceAssessment, selectRebalanceUsdcSource, isRebalanceMaterial, isMaterialCryptoToStables, deriveNativeSolRebalanceSource, REBALANCE_NATIVE_SOL_RESERVE_POLICY } from "./rebalanceAssessment";
 import { buildRebalanceCardFromAssessment } from "./rebalanceSuggestion";
+import { deriveTrimAssessment } from "./trimAssessment";
+import { buildTrimCardFromAssessment } from "./trimSuggestion";
 import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 import { deriveContributionSuggestion } from "./contributionProductInput";
 import { deriveStableYieldPlanSuggestion } from "./stableYieldProductInput";
@@ -201,6 +203,19 @@ export function deriveRailSuggestions(args: {
     materialCryptoToStables: isMaterialCryptoToStables(rebalanceAssessment),
   };
 
+  // Step 19C — ONE canonical Trim assessment per refresh over the SAME merged positions + shared completeness +
+  // shared SafetyBufferCoverage (no second wallet aggregation, no second completeness/buffer derivation). The
+  // card is built from the canonical assessment behind the existing trim_long_tail_assets contract; the engine
+  // never invokes the legacy symbol-based rule in production. Trim coexists with Rebalance and Capital Efficiency.
+  const trimAssessment = deriveTrimAssessment({
+    positions, portfolioCompleteness: completeness.result, safetyBufferCoverage: bufferCoverage,
+    requiredBufferUsd, generatedAt: pricedAsOf ?? Date.now(),
+  });
+  const trimOverride = {
+    candidate: buildTrimCardFromAssessment(trimAssessment, pricedAsOf ?? 0),
+    materialReviewNeed: trimAssessment.overallReadiness.status === "allowed",
+  };
+
   const engineResult = runSuggestionEngine(
     buildSuggestionEngineInputs({
       positions,
@@ -214,7 +229,8 @@ export function deriveRailSuggestions(args: {
     contribution.suggestion,
     stableYield.suggestion,
     completeness.gates,
-    rebalanceOverride
+    rebalanceOverride,
+    trimOverride
   );
   const cards = toSuggestionCards(engineResult.suggestions);
 

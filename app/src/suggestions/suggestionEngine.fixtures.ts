@@ -84,7 +84,7 @@ import {
   assessPositionCompleteness as pcAssess, computePortfolioCompleteness as pcCompute,
   detectDuplicateViolations as pcDupes, classifyPositionClass as pcClass,
   canDetermineNetWorth as pcNetWorth, canShowOnTrack as pcOnTrack, canGenerateRebalance as pcRebalance,
-  canGenerateTrim as pcTrim, canGeneratePositionOptimization as pcOptimize,
+  canGeneratePositionOptimization as pcOptimize,
   canGenerateStakingSuggestion as pcStaking, canGenerateDcaSuggestion as pcDca,
   canGenerateDirectLendingSuggestion as pcDirect,
   deriveCompletenessGates as pcGates, completenessAllows as pcAllows,
@@ -160,14 +160,20 @@ import type { EngineSuggestion, ProtocolStrategyType } from "./engineTypes";
 import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
 import { deriveLegacyBucketRebalanceSuggestion as rbLegacyBucket } from "./rebalanceSuggestionLegacy";
+import { buildTrimCardFromAssessment as trimBuildCard } from "./trimSuggestion";
+import {
+  deriveTrimAssessment as trimAssess, TRIM_CORE_ASSETS, trimCoreAssetFor,
+  TRIM_CLASSIC_TOKEN_PROGRAM, TRIM_TOKEN_2022_PROGRAM,
+} from "./trimAssessment";
 import { selectTopPick } from "./topPick";
 
 /**
- * Step 18G — ISOLATED-REGRESSION helper. The engine no longer has any legacy bucket fallback (missing
- * canonical input → no Rebalance candidate). The pre-18G ordering / Top-Pick / review-detail fixtures still
- * need a rebalance candidate present, so this helper reproduces the EXACT pre-18G default by building the
- * DEPRECATED legacy bucket card and passing it to the engine as an explicit override (never a silent
- * fallback). It is used ONLY by isolated fixtures — no mounted/Demo/testing-production path touches it.
+ * Step 18G/19C/19D — ISOLATED-REGRESSION helper. The engine no longer has any legacy Rebalance OR Trim
+ * fallback (missing canonical input → no candidate). The pre-18G ordering / Top-Pick / review-detail fixtures
+ * still need a Rebalance candidate present, so this helper reproduces the pre-18G default by building the
+ * DEPRECATED legacy bucket-rebalance card and passing it as an explicit override. An OPTIONAL explicit Trim
+ * candidate (built by the fixture, never by a production rule) may be supplied for Trim ordering tests. Used
+ * ONLY by isolated fixtures — no mounted/Demo/testing-production path touches it.
  */
 function runEngineWithLegacyRebalance(
   inputs: Parameters<typeof runSuggestionEngine>[0],
@@ -175,10 +181,29 @@ function runEngineWithLegacyRebalance(
   contribution: Parameters<typeof runSuggestionEngine>[2] = null,
   stableYield: Parameters<typeof runSuggestionEngine>[3] = null,
   gates: Parameters<typeof runSuggestionEngine>[4] = undefined,
+  trimCandidate: import("./engineTypes").EngineSuggestion | null = null,
 ): ReturnType<typeof runSuggestionEngine> {
   const legacy = rbLegacyBucket(inputs, generatedAt);
   const card = legacy && pcAllows(gates, "rebalance") ? legacy : null;
-  return runSuggestionEngine(inputs, generatedAt, contribution, stableYield, gates, { card, material: !!legacy });
+  return runSuggestionEngine(inputs, generatedAt, contribution, stableYield, gates, { card, material: !!legacy }, trimCandidate ? { candidate: trimCandidate } : undefined);
+}
+
+/**
+ * Step 19D — a clearly-named FIXTURE-ONLY Trim candidate for isolated ordering / Top-Pick / review-detail
+ * tests. It imports NO legacy calculation and reproduces NO financial eligibility logic: it runs the PRODUCTION
+ * canonical assessment + mapper over a FIXED synthetic portfolio (one non-core token above the buffer) so the
+ * resulting card carries the real contract (reviewDetails, guardrails, scores). `amountUsd` sets the candidate
+ * total. Never reachable from production. Requires amountUsd ≥ $100 (else the mapper returns no card).
+ */
+function synthTrimCandidate(amountUsd = 160): import("./engineTypes").EngineSuggestion {
+  const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const positions: WalletPosition[] = [
+    { id: "synth-usdc", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: USDC_MINT, amount: "1000000000", uiAmount: 1000, decimals: 6, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: 1000 },
+    { id: "synth-tok", source: "wallet", type: "token", symbol: "TKsynth", name: "Token synth", mint: "SynthTrimMint", amount: String(Math.max(1, Math.round(amountUsd))), uiAmount: amountUsd, decimals: 0, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: amountUsd },
+  ];
+  const card = trimBuildCard(trimAssess({ positions, requiredBufferUsd: 500, generatedAt: FIXTURE_GENERATED_AT }), FIXTURE_GENERATED_AT);
+  if (!card) throw new Error("synthTrimCandidate requires amountUsd >= 100");
+  return card;
 }
 import { toSuggestionCard, toSuggestionCards } from "./toSuggestionCard";
 import {
@@ -740,7 +765,7 @@ import {
 import { CONTRIBUTION_OPTIONS } from "../state/goalState";
 import { deriveRecommendedAllocation } from "../wallet/recommendedAllocation";
 import { SOL_MINT as PRICE_SOL_MINT } from "../wallet/tokenPrices";
-import { MIN_DCA_SUGGESTION_USD, SUGGESTION_ENGINE_VERSION } from "./engineThresholds";
+import { MIN_DCA_SUGGESTION_USD, SUGGESTION_ENGINE_VERSION, MIN_TRIM_SUGGESTION_USD, TRIM_PORTFOLIO_SHARE_THRESHOLD, TRIM_SINGLE_TOKEN_CONCENTRATION_THRESHOLD, TRIM_SMALL_POSITION_COUNT_THRESHOLD, TRIM_SMALL_POSITION_MAX_USD } from "./engineThresholds";
 import {
   CONTRIBUTION_PLANNING_POLICY_SCHEMA_VERSION,
   GROWTH_TARGET_ALLOCATION_POLICY_ID,
@@ -3494,7 +3519,7 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
         allocation: allocationFixture(15000, 62, 2), // no rebalance
         positions: everything,
       }),
-      FIXTURE_GENERATED_AT
+      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
     );
     add(
       "9F-1: no rebalance, all fire → 5 cards in order, capital_efficiency Top Pick",
@@ -3515,7 +3540,7 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
         allocation: allocationFixture(15000, 75, 15), // rebalance applies
         positions: everything,
       }),
-      FIXTURE_GENERATED_AT
+      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
     );
     add(
       "9F-2: rebalance present → rebalance,capEff,trim,staking,posOpt (no stable_yield), rebalance Top Pick",
@@ -3794,25 +3819,26 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
     add("9H-A: underfunded buffer → buffer only, no trim", cats(r) === "buffer" && !has(r, "trim"), `categories=${cats(r)}`);
   }
 
-  // 9H-B. Funded + trim fires as the ONLY candidate (no Capital Efficiency) → Trim Top Pick.
+  // 9H-B. Funded + an explicit Trim candidate is the ONLY candidate → Trim Top Pick. (19D: the isolated
+  // ordering test supplies a synthetic Trim candidate; the engine has no production Trim rule.)
   {
     const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }),
-      FIXTURE_GENERATED_AT
+      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate(160)
     );
     const s = trim(r);
     add(
-      "9H-B: funded + non-core exposure, no capEff → trim Top Pick",
+      "9H-B: funded + explicit Trim only → trim Top Pick",
       cats(r) === "trim" && s?.is_top_pick === true && s?.amount?.valueUsd === 160,
       `categories=${cats(r)} topPick=${s?.is_top_pick} amount=${s?.amount?.valueUsd}`
     );
   }
 
-  // 9H-C. Funded + Rebalance applies + trim conditions → Rebalance first/Top Pick, Trim later.
+  // 9H-C. Funded + Rebalance applies + an explicit Trim candidate → Rebalance first/Top Pick, Trim later.
   {
     const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [nonCoreToken("BONK", 5000)] }),
-      FIXTURE_GENERATED_AT
+      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
     );
     const reb = r.suggestions.find((s) => s.category === "rebalance");
     add(
@@ -3822,11 +3848,11 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
     );
   }
 
-  // 9H-D. Funded + Capital Efficiency and Trim both fire → capEff first/Top Pick, trim second.
+  // 9H-D. Funded + Capital Efficiency (idle token) + an explicit Trim candidate → capEff first/Top Pick, trim second.
   {
     const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)] }),
-      FIXTURE_GENERATED_AT
+      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
     );
     const ce = r.suggestions.find((s) => s.category === "capital_efficiency");
     add(
@@ -3836,32 +3862,8 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
     );
   }
 
-  // 9H-E. Single non-core token ≥ 10% of portfolio → token_concentration_review.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 2000)] }), // 13.3%
-      FIXTURE_GENERATED_AT
-    );
-    add(
-      "9H-E: single token ≥ 10% → trim with token_concentration_review",
-      trim(r)?.reason_codes.includes("token_concentration_review") === true,
-      `reasons=${trim(r)?.reason_codes.join(",")}`
-    );
-  }
-
-  // 9H-F. 3+ small non-core tokens (≤ $50, combined ≥ $100) → small_position_cleanup.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }),
-      FIXTURE_GENERATED_AT
-    );
-    add(
-      "9H-F: 3+ small tokens → trim with small_position_cleanup",
-      trim(r)?.reason_codes.includes("small_position_cleanup") === true &&
-        trim(r)?.reason_codes.includes("liquidity_not_evaluated") === true,
-      `reasons=${trim(r)?.reason_codes.join(",")}`
-    );
-  }
+  // (9H-E / 9H-F removed in 19D — legacy symbol-rule reason-code eligibility is superseded by the canonical
+  //  TrimAssessment suite: TB-25/TB-27 (concentration/small triggers) + TB-31 / TC-12 (deterministic reason order).)
 
   // 9H-G. Non-core token < $100 and < 5%, no concentration/cleanup → no Trim → On Track.
   {
@@ -3921,37 +3923,32 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
     add("9H-K: unpriced non-core token → no trim", !has(r, "trim"), `categories=${cats(r)}`);
   }
 
-  // 9H-L. Partial pricing + priced non-core token → Trim + warning.
+  // 9H-L. Partial pricing + an explicit Trim candidate → Trim coexists with the partial_pricing warning.
   {
     const r = runEngineWithLegacyRebalance(
       inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)], anyUnpriced: true }),
-      FIXTURE_GENERATED_AT
+      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
     );
     add(
-      "9H-L: partial pricing + priced non-core token → trim + warning",
+      "9H-L: partial pricing + trim candidate → trim + warning",
       has(r, "trim") && r.warnings.includes("partial_pricing"),
       `categories=${cats(r)} warnings=${r.warnings.join(",")}`
     );
   }
 
-  // 9H-M. Mapper renders the trim card safely.
+  // 9H-M. The CANONICAL trim card maps safely through the shared card mapper (copy, review-only, no CTA action).
   {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }),
-      FIXTURE_GENERATED_AT
-    );
-    const s = trim(r);
-    const card = s ? toSuggestionCard(s) : undefined;
+    const s = synthTrimCandidate();
+    const card = toSuggestionCard(s);
     add(
-      "9H-M: trim card maps safely (copy, amount, review-only, non-transactional)",
+      "9H-M: canonical trim card maps safely (copy, review-only, non-transactional)",
       card?.title === "Review Long-Tail Assets" &&
         card?.description ===
           "Some non-core wallet assets may deserve review because they make up a meaningful part of your portfolio." &&
-        card?.impact_text.includes("Long-tail assets to review") === true &&
         card?.cta.label === "Review" &&
         card?.cta.executes_transaction === false &&
         card?.cta.action === null,
-      `title="${card?.title}" impact="${card?.impact_text}"`
+      `title="${card?.title}"`
     );
   }
 
@@ -3991,7 +3988,7 @@ export function runGuardrailFixtureChecks(): FixtureCheck[] {
     buffer: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
     rebalance: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
     capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
-    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
+    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
     staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
     stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
     dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
@@ -4111,7 +4108,7 @@ export function runProtocolSelectionFixtureChecks(): FixtureCheck[] {
     buffer: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
     rebalance: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
     capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
-    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
+    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
     staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
     stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
     dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
@@ -4254,7 +4251,7 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
     buffer: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
     rebalance: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
     capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
-    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT),
+    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
     staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
     stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
     dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
@@ -4327,11 +4324,12 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
   {
     const d = rd("trim");
     const gs = d?.guardrailSummary;
+    const reason = d?.summary.reason ?? "";
     const ok =
-      (d?.summary.reason ?? "").startsWith("Flagged for review:") &&
+      /non-core/i.test(reason) && !/sell|swap|dispose|clean up|remove/i.test(reason) &&
       (gs?.notEvaluated ?? []).includes("Liquidity depth") &&
       !(gs?.checked ?? []).includes("Liquidity depth");
-    add("10A-G: trim details include trigger reason and never claim liquidity evaluated", ok, `reason="${d?.summary.reason}"`);
+    add("10A-G: canonical trim details use a review reason and never claim liquidity evaluated", ok, `reason="${reason}"`);
   }
   // 10A-H. Position Optimization: flagged value, triggered reasons, no replacement protocol.
   {
@@ -4584,7 +4582,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
         allocation: dcaUnder(3),
         positions: [cryptoPosition(400), nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), solPosition(10), stablePosition("USDC", 10000), yieldPosition(3000, null)],
       }),
-      FIXTURE_GENERATED_AT
+      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
     );
     add(
       "SMOKE-C: six categories in engine order, capEff Top Pick, one Top Pick, all modal-openable",
@@ -8791,7 +8789,7 @@ export function runTestingPageFixtureChecks(): FixtureCheck[] {
   add("13H-H: testing fixtures include Safety Buffer", byCategory("Safety Buffer") != null, `has=${byCategory("Safety Buffer") != null}`);
   add("13H-I: testing fixtures include Rebalance", byCategory("Allocation") != null, `has=${byCategory("Allocation") != null}`);
   add("13H-J: testing fixtures include Capital Efficiency", byCategory("Capital Efficiency") != null, `has=${byCategory("Capital Efficiency") != null}`);
-  add("13H-K: testing fixtures include Trim Long-Tail", fixtures.some((f) => f.card.type === "trim_long_tail"), `has=${fixtures.some((f) => f.card.type === "trim_long_tail")}`);
+  add("13H-K: Trim moved to the production-derived /testing gallery (hand-built testing_trim removed, 19C)", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/pages/testingPageFixtures.ts`, "utf8"); } catch { return ""; } })(); const trimGallery = (() => { try { return readFileSync(`${process.cwd()}/src/pages/trimTestingFixtures.ts`, "utf8"); } catch { return ""; } })(); return !src.includes('id: "testing_trim"') && /buildTrimCardFromAssessment/.test(trimGallery) && /deriveTrimAssessment/.test(trimGallery); })(), "production trim gallery");
   add("13H-L: testing fixtures include Staking", byCategory("Staking") != null, `has=${byCategory("Staking") != null}`);
   add("13H-M: testing fixtures include Stable Yield", byCategory("Stablecoin Yield") != null, `has=${byCategory("Stablecoin Yield") != null}`);
   add("13H-N: testing fixtures include DCA", byCategory("Contribution Plan") != null, `has=${byCategory("Contribution Plan") != null}`);
@@ -17994,6 +17992,8 @@ export function printFixtureResults(): void {
     ...runRebalanceStep18EFixtureChecks(),
     ...runRebalanceStep18FFixtureChecks(),
     ...runRebalanceStep18GFixtureChecks(),
+    ...runTrimAssessmentFixtureChecks(),
+    ...runTrimProductionFixtureChecks(),
     ...runSteakhouseExistingPositionFixtureChecks(),
     ...runSafetyBufferCoverageFixtureChecks(),
     ...runKlendDirectPositionFailClosedFixtureChecks(),
@@ -21306,7 +21306,7 @@ export function runPortfolioCompletenessFixtureChecks(): FixtureCheck[] {
   add("PC-23: unknown token → On Track unresolved", pcOnTrack(pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 })).status === "unresolved", "ontrack unknown");
   add("PC-24: complete Safety Buffer stays complete despite unrelated unresolved excess", (() => { const R = pcCompute([usdc(1000), jlusdc()], { requiredBufferUsd: 500 }); return R.stableBufferState === "complete"; })(), "buffer complete");
   add("PC-25: incomplete/absent buffer → DCA + direct lending gates not allowed", (() => { const R = pcCompute([nativeSol()], { requiredBufferUsd: 1000 }); return pcDca(R).status !== "allowed" && pcDirect(R).status !== "allowed"; })(), "buffer suppress");
-  add("PC-26: Rebalance/Trim/Optimization gates return blocked/unresolved WITH reasons (never bare bool)", (() => { const R = pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 }); const gs = [pcRebalance(R), pcTrim(R), pcOptimize(R)]; return gs.every((g) => typeof g.status === "string" && Array.isArray(g.reasons)) && gs.some((g) => g.status !== "allowed" && g.reasons.length > 0); })(), "gate shape");
+  add("PC-26: Rebalance/Optimization gates return blocked/unresolved WITH reasons (never bare bool)", (() => { const R = pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 }); const gs = [pcRebalance(R), pcOptimize(R)]; return gs.every((g) => typeof g.status === "string" && Array.isArray(g.reasons)) && gs.some((g) => g.status !== "allowed" && g.reasons.length > 0); })(), "gate shape");
   add("PC-27: staking gate fails closed when unresolved stake exposure present", pcStaking(pcCompute([usdc(1000), nativeStake(true)], { requiredBufferUsd: 500 })).status !== "allowed", "staking closed");
 
   // ---- Deduplication + freshness ----
@@ -21361,7 +21361,7 @@ export function runCompletenessIntegrationFixtureChecks(): FixtureCheck[] {
 
   // ---- Completeness gates NARROW only (never enable) ----
   add("PI-14: completenessAllows — absent map ⇒ true; blocked/unresolved ⇒ false", pcAllows(undefined, "staking") === true && pcAllows({ staking: "blocked" }, "staking") === false && pcAllows({ dca: "unresolved" }, "dca") === false && pcAllows({ staking: "allowed" }, "staking") === true, "narrow");
-  add("PI-15: deriveCompletenessGates returns all 7 decision statuses", (() => { const { gates } = pcGates([walletUsdc()], { requiredBufferUsd: 0 }); return ["onTrack", "staking", "dca", "directLending", "rebalance", "trim", "positionOptimization"].every((k) => typeof (gates as any)[k] === "string"); })(), "gate map");
+  add("PI-15: deriveCompletenessGates returns the 6 decision statuses (Trim gate retired in 19D)", (() => { const { gates } = pcGates([walletUsdc()], { requiredBufferUsd: 0 }); return ["onTrack", "staking", "dca", "directLending", "rebalance", "positionOptimization"].every((k) => typeof (gates as any)[k] === "string") && !("trim" in gates); })(), "gate map");
   add("PI-16: healthy portfolio (buffer target 0) → gates permit (no spurious suppression)", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "sol", type: "native", symbol: "SOL", valueUsd: 500 })], { requiredBufferUsd: 0 }); return gates.onTrack === "allowed" && gates.dca === "allowed" && gates.directLending === "allowed"; })(), "healthy ok");
   add("PI-17: unvalued liability → On Track + DCA + direct-lending gates NOT allowed", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "hb", type: "protocol", symbol: "USDH", side: "borrowed", valueUsd: null, uiAmount: 300, amount: "300" })], { requiredBufferUsd: 0 }); return gates.onTrack !== "allowed" && gates.dca !== "allowed" && gates.directLending !== "allowed"; })(), "liability narrows");
   add("PI-18: unrelated unpriced token does NOT block staking (only its own dimensions)", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "unk", type: "token", name: "Unknown token", symbol: "9x", uiAmount: 5, valueUsd: null })], { requiredBufferUsd: 0 }); return gates.staking === "allowed" && gates.onTrack !== "allowed"; })(), "unrelated");
@@ -21370,7 +21370,7 @@ export function runCompletenessIntegrationFixtureChecks(): FixtureCheck[] {
   add("PI-19: engine with all-blocked gates ⊆ engine without gates (never enables)", (() => {
     const inp = inputsFor({ safetyBuffer: bufferFixture(1000, 1000, 3) });
     const without = runSuggestionEngine(inp, FIXTURE_GENERATED_AT);
-    const blocked = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, { onTrack: "blocked", staking: "blocked", dca: "blocked", directLending: "blocked", rebalance: "blocked", trim: "blocked", positionOptimization: "blocked" });
+    const blocked = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, { onTrack: "blocked", staking: "blocked", dca: "blocked", directLending: "blocked", rebalance: "blocked", positionOptimization: "blocked" });
     const ids = new Set(without.suggestions.map((s) => s.id));
     return blocked.suggestions.length <= without.suggestions.length && blocked.suggestions.every((s) => ids.has(s.id));
   })(), "subset");
@@ -21471,7 +21471,7 @@ export function runCompletenessGalleryFixtureChecks(): FixtureCheck[] {
   add("TG-9: SOL exposure only — mSOL backing reason; total authoritative; exposure warning", (() => { const c = byId("sol_exposure")!.completeness; return c.netWorthState === "complete" && uiWarning(c)?.id === "sol_exposure" && uiNote(c, "ms") === "Underlying SOL could not be refreshed"; })(), "sol exposure");
   add("TG-10: genuine duplicate → dedup warning", (() => { const c = byId("duplicate")!.completeness; return c.deduplicationState === "invalid" && uiWarning(c)?.id === "dedup"; })(), "duplicate");
   add("TG-11: shared USDC mint (wallet+Kamino+Steakhouse) → NOT a duplicate", (() => { const c = byId("shared_mint")!.completeness; return c.deduplicationState !== "invalid" && (uiWarning(c)?.id ?? "none") !== "dedup"; })(), "shared mint");
-  add("TG-12: gate inspector exposes Rebalance/Trim/Optimization states; no suggestion output", (() => { const g = byId("gate_inspector")!.gates; return typeof g.rebalance === "string" && typeof g.trim === "string" && typeof g.positionOptimization === "string"; })(), "gate inspector");
+  add("TG-12: gate inspector exposes Rebalance/Optimization states; no suggestion output (Trim gate retired in 19D)", (() => { const g = byId("gate_inspector")!.gates; return typeof g.rebalance === "string" && typeof g.positionOptimization === "string" && !("trim" in g); })(), "gate inspector");
   add("TG-13: native stake — value complete, available-to-withdraw present, not full liquidity", (() => { const c = byId("native_stake")!.completeness; const a = c.positionAssessments.find((x) => x.positionId === "stk"); return c.netWorthState === "complete" && a?.valueState === "complete"; })(), "native stake");
 
   return checks;
@@ -21854,6 +21854,100 @@ export function runRebalanceStep18FFixtureChecks(): FixtureCheck[] {
 }
 
 /**
+ * Step 19C — PRODUCTION MOUNT of the canonical Trim card behind `trim_long_tail_assets`. Proves the mounted
+ * card is built from the canonical assessment (exact identity, authoritative denominator, aggregation, gates),
+ * that the engine has NO legacy fallback, coexistence with Rebalance + Capital Efficiency, and read-only safety.
+ */
+export function runTrimProductionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const GEN = 1_700_000_000_000;
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const WSOL = "So11111111111111111111111111111111111111112";
+  const T22 = TRIM_TOKEN_2022_PROGRAM;
+  const W = (o: Partial<WalletPosition>): WalletPosition => ({ id: "x", source: "wallet", type: "token", symbol: "X", name: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
+  const usdc = (v: number, id = "usdc") => W({ id, symbol: "USDC", name: "USD Coin", mint: USDC, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
+  const tok = (v: number, id: string, mint = `Mint-${id}`, raw?: string) => W({ id, symbol: `TK${id}`, name: `Token ${id}`, mint, amount: raw ?? String(Math.max(1, Math.round(v))), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v });
+  const wsol = (v: number) => W({ id: "wsol", symbol: "SOL", name: "Wrapped SOL", mint: WSOL, amount: String(Math.round(v * 1e9)), uiAmount: v, decimals: 9, priceUsd: 1, valueUsd: v });
+  const t22Candidate = (v: number, state: string, id = "t22") => W({ id, symbol: `TX${id}`, name: `T22 ${id}`, mint: `T22Mint-${id}`, tokenProgram: T22, transferabilityState: state, amount: String(Math.round(v)), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v, liquidValueUsd: state === "transferable" ? v : 0 });
+  const trimCardFor = (positions: WalletPosition[], requiredBufferUsd = 500) => trimBuildCard(trimAssess({ positions, requiredBufferUsd, generatedAt: GEN }), GEN);
+
+  // ---- Canonical card contract ----
+  const c1 = trimCardFor([usdc(1000), tok(300, "a")]);
+  add("TC-1: mounted card keeps id/category/title/action_kind/top-pick contract", c1 !== null && c1!.id === "trim_long_tail_assets" && c1!.category === "trim" && c1!.title_key === "suggestion.trim.title" && c1!.description_key === "suggestion.trim.description" && c1!.action_kind === "review_only" && c1!.is_top_pick === false, "contract");
+  add("TC-2: amount equals canonical total candidate value", c1!.amount?.valueUsd === 300 && c1!.amount?.label === "Non-core value to review", "amount");
+  add("TC-3: distinct-holdings metric equals canonical candidate count", (() => { const m = c1!.reviewDetails?.metrics?.find((x) => x.label === "Distinct holdings"); return m?.value === 1; })(), "count");
+  add("TC-4: portfolio share uses the AUTHORITATIVE gross denominator", (() => { const m = c1!.reviewDetails?.metrics?.find((x) => x.label === "Portfolio share"); return m?.value === Math.round((300 / 1300) * 1000) / 10; })(), "authoritative share");
+  add("TC-5: multiple accounts of one mint appear as ONE involved asset", (() => { const c = trimCardFor([usdc(1000), tok(60, "x1", "MintX", "60"), tok(50, "x2", "MintX", "50")]); const ia = c!.reviewDetails?.involvedAssets ?? []; return ia.filter((a) => (a.valueUsd ?? 0) === 110).length === 1 && ia.length === 1; })(), "one involved asset");
+  add("TC-6: involved assets carry NO raw balance / account id / dedupe key", (() => { const s = JSON.stringify(c1!.reviewDetails?.involvedAssets); return !s.includes("rawBalance") && !s.includes("dedupeKey") && !s.includes("holdingId") && !s.includes("sourcePositionIds"); })(), "no raw fields");
+  add("TC-7: no token selected for sale; review_only, no execution CTA", (() => { const s = JSON.stringify(c1); return c1!.action_kind === "review_only" && !s.includes("sell") && !s.includes("swapRoute") && !s.includes("signTransaction") && !(c1 as unknown as { cta?: unknown }).cta; })(), "no cta");
+  add("TC-8: involved assets in deterministic canonical order (share desc)", (() => { const c = trimCardFor([usdc(500), tok(300, "zz"), tok(100, "aa")]); const ia = c!.reviewDetails?.involvedAssets ?? []; return ia[0].symbol === "TKzz" && ia[1].symbol === "TKaa"; })(), "order");
+
+  // ---- Triggers via the mapper ----
+  add("TC-9: aggregate-only trigger produces a card", (() => { const c = trimCardFor([usdc(2600), tok(200, "a")]); return c !== null && c!.reason_codes.includes("long_tail_exposure"); })(), "aggregate");
+  add("TC-10: concentration trigger produces a card", (() => { const c = trimCardFor([usdc(1800), tok(200, "a")]); return c !== null && c!.reason_codes.includes("token_concentration_review"); })(), "concentration");
+  add("TC-11: small-position trigger produces a card", (() => { const c = trimCardFor([usdc(3000), tok(50, "s1"), tok(25, "s2"), tok(25, "s3")]); return c !== null && c!.reason_codes.includes("small_position_cleanup"); })(), "small");
+  add("TC-12: all three triggers → one card with ordered reason codes", (() => { const c = trimCardFor([usdc(500), tok(300, "big"), tok(40, "s1"), tok(40, "s2"), tok(40, "s3")]); const r = c!.reason_codes; return r.indexOf("long_tail_exposure") < r.indexOf("token_concentration_review") && r.indexOf("token_concentration_review") < r.indexOf("small_position_cleanup") && r[r.length - 1] === "liquidity_not_evaluated" && r.filter((x) => x === "non_core_token_exposure").length === 1; })(), "reason order");
+  add("TC-13: below all thresholds → NO card", trimCardFor([usdc(2000), tok(40, "a")]) === null, "below → null");
+  add("TC-14: exact $100 & 5% boundary → card", trimCardFor([usdc(1900), tok(100, "a")]) !== null, "boundary card");
+
+  // ---- Identity via the mounted card ----
+  add("TC-15: canonical USDC excluded (only the non-core token is reviewed)", (() => { const c = trimCardFor([usdc(1000), tok(300, "a")]); const ia = c!.reviewDetails?.involvedAssets ?? []; return ia.length === 1 && ia[0].symbol === "TKa"; })(), "usdc excluded");
+  add("TC-16: fake-USDC symbol (wrong mint) IS reviewed as non-core", (() => { const c = trimCardFor([usdc(1000), W({ id: "f", symbol: "USDC", name: "USD Coin", mint: "FakeUSDC", amount: "300", uiAmount: 300, priceUsd: 1, valueUsd: 300 })]); return (c!.reviewDetails?.involvedAssets ?? []).some((a) => a.symbol === "USDC"); })(), "fake usdc reviewed");
+  add("TC-17: canonical wrapped SOL excluded even with candidates present", (() => { const c = trimCardFor([usdc(1000), wsol(300), tok(250, "a")]); return !(c!.reviewDetails?.involvedAssets ?? []).some((a) => a.name === "Wrapped SOL"); })(), "wsol excluded");
+
+  // ---- Token-2022 review vs actionability in the card ----
+  add("TC-18: frozen Token-2022 candidate produces a review card with an unavailable-transferability note", (() => { const c = trimCardFor([usdc(1000), t22Candidate(300, "frozen")]); const lims = JSON.stringify(c!.reviewDetails?.limitations); return c !== null && /not currently transferable/i.test(lims) && (c!.reviewDetails?.involvedAssets ?? []).some((a) => a.actionability === "unavailable"); })(), "frozen note");
+  add("TC-19: hook-unresolved Token-2022 candidate → review card with unresolved-transferability note", (() => { const c = trimCardFor([usdc(1000), t22Candidate(300, "hook_unresolved")]); const lims = JSON.stringify(c!.reviewDetails?.limitations); return c !== null && /could not be verified/i.test(lims); })(), "hook note");
+  add("TC-20: transferability note is honestly framed (no sell/swap/dispose/remove instruction)", (() => { const c = trimCardFor([usdc(1000), t22Candidate(300, "frozen")]); const lims = JSON.stringify(c!.reviewDetails?.limitations).toLowerCase(); return !/\b(sell|swap|dispose|remove|consolidate now|clean up now|reduce immediately)\b/.test(lims) && /has not/.test(lims); })(), "honest note");
+  add("TC-21: recognized value of a frozen candidate still drives the card", (() => { const c = trimCardFor([usdc(1000), t22Candidate(300, "frozen")]); return c!.amount?.valueUsd === 300; })(), "value included");
+
+  // ---- Gates: mapper returns null unless ready ----
+  add("TC-22: incomplete Safety Buffer → no card", trimCardFor([usdc(100), tok(300, "a")], 2000) === null, "buffer blocks");
+  add("TC-23: unresolved liability → no card", trimCardFor([usdc(1000), tok(300, "a"), W({ id: "hb", type: "protocol", symbol: "USDH", name: "USDH loan", side: "borrowed", valueUsd: null, uiAmount: 1, amount: "1" })]) === null, "liab blocks");
+  add("TC-24: unrelated protocol liquidity unresolved does NOT block the card", (() => { const c = trimCardFor([usdc(1000), tok(300, "a"), W({ id: "kd", type: "protocol", symbol: "USDC", name: "USDC on Kamino", candidateId: "kamino_usdc_lending", dedupeKey: "klend:x", valueUsd: 400, recognizedValueUsd: 400, withdrawalState: "unresolved", liquidValueUsd: 400, mint: USDC })]); return c !== null; })(), "no liquidity block");
+  add("TC-25: stale candidate value → no card", trimCardFor([usdc(1000), W({ id: "st", symbol: "TKst", name: "Stale", mint: "StaleMint", amount: "300", uiAmount: 300, priceUsd: 1, valueUsd: 300, withdrawalState: "stale" })]) === null, "stale blocks");
+
+  // ---- Engine mount + coexistence ----
+  const railInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 5), positions: [solPosition(10)] });
+  add("TC-26: engine with NO trimOverride → NO Trim candidate (fail closed)", (() => { const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT); return !r.suggestions.some((s) => s.category === "trim"); })(), "fail closed");
+  add("TC-27: engine emits the canonical Trim candidate from the override", (() => { const c = trimCardFor([usdc(1000), tok(300, "a")])!; const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: c }); return r.suggestions.some((s) => s.id === "trim_long_tail_assets"); })(), "override emits");
+  add("TC-28: Rebalance + Trim COEXIST; Rebalance ordered above Trim", (() => { const t = trimCardFor([usdc(1000), tok(300, "a")])!; const reb = mkSug15H("reb", "rebalance"); const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: reb, material: true }, { candidate: t }); const cats = r.suggestions.map((s) => s.category); return cats.includes("rebalance") && cats.includes("trim") && cats.indexOf("rebalance") < cats.indexOf("trim"); })(), "reb+trim");
+  add("TC-29: material Rebalance need WITHOUT a card does not suppress Trim", (() => { const t = trimCardFor([usdc(1000), tok(300, "a")])!; const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true }, { candidate: t }); return r.suggestions.some((s) => s.category === "trim"); })(), "no card no suppress");
+  add("TC-30: Capital Efficiency + Trim COEXIST; Capital Efficiency ordered above Trim", (() => { const t = trimCardFor([usdc(1000), tok(300, "a")])!; const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [nonCoreToken("BONK", 5000)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: t }); const cats = r.suggestions.map((s) => s.category); return cats.includes("capital_efficiency") && cats.includes("trim") && cats.indexOf("capital_efficiency") < cats.indexOf("trim"); })(), "ce+trim");
+  add("TC-31: a valid Trim candidate suppresses the informational On Track fallback", (() => { const t = trimCardFor([usdc(1000), tok(300, "a")])!; const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: t }); return r.suggestions.some((s) => s.category === "trim") && !r.suggestions.some((s) => s.category === "on_track"); })(), "on track suppressed");
+
+  // ---- Disposition + regression ----
+  add("TC-32: engine no longer imports the legacy Trim rule; rail passes trimOverride", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return !/deriveTrimSuggestion/.test(eng) && /trimOverride/.test(eng) && /buildTrimCardFromAssessment/.test(rail) && /trimOverride/.test(rail); })(), "disposition");
+  add("TC-33: legacy Trim module DELETED (19D) — no file, no production callers, no canGenerateTrim gate", (() => { const legacy = readIfSrc("src/suggestions/trimSuggestionLegacy.ts"); const completeness = readIfSrc("src/wallet/portfolioCompleteness.ts"); const anyImport = ["src/suggestions/engine.ts", "src/suggestions/useRailSuggestions.ts", "src/pages/TestingPage.tsx", "src/suggestions/trimSuggestion.ts"].some((f) => /from "\.\/trimSuggestionLegacy"|deriveLegacyTrimSuggestion/.test(readIfSrc(f))); return legacy === "" && !anyImport && !/function canGenerateTrim/.test(completeness); })(), "deleted");
+  add("TC-34: rail derives ONE Trim assessment + ONE card (no second Trim card, no UI recompute)", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return (rail.match(/deriveTrimAssessment\(/g) ?? []).length === 1 && (rail.match(/buildTrimCardFromAssessment\(/g) ?? []).length === 1; })(), "one assessment");
+  add("TC-35: thresholds + scoring methodology unchanged (impact=share, urgency by trigger)", (() => { const c = trimCardFor([usdc(1000), tok(300, "a")])!; return c.scores?.impact === Math.min(300 / 1300, 1) && c.scores?.urgency === 0.45 && c.scores?.efficiency === 0.45 && MIN_TRIM_SUGGESTION_USD === 100; })(), "scoring");
+  add("TC-36: shared portfolio-asset accounting is used by BOTH Rebalance and Trim", (() => { const reb = readIfSrc("src/suggestions/rebalanceAssessment.ts"); const trim = readIfSrc("src/suggestions/trimAssessment.ts"); return /derivePortfolioAssetAccounting/.test(reb) && /derivePortfolioAssetAccounting/.test(trim) && !/deriveRebalanceAssessment/.test(trim); })(), "shared accounting");
+
+  // ---- 19D closeout: legacy removal, Top Pick, remaining interactions, copy/privacy, prohibited-behavior ----
+  const tCard = trimCardFor([usdc(1000), tok(300, "a")])!;
+  add("TD-1: legacy Trim module file no longer exists", readIfSrc("src/suggestions/trimSuggestionLegacy.ts") === "", "deleted");
+  add("TD-2: canGenerateTrim removed from portfolioCompleteness (no Rebalance-copied Trim gate)", !/canGenerateTrim/.test(readIfSrc("src/wallet/portfolioCompleteness.ts")), "no gate");
+  add("TD-3: trimState removed from PortfolioCompletenessResult", !/trimState/.test(readIfSrc("src/wallet/portfolioCompleteness.ts")), "no trimState");
+  add("TD-4: 'trim' removed from CompletenessDecision + gate map", (() => { const s = readIfSrc("src/wallet/portfolioCompleteness.ts"); return !/CompletenessDecision = [^;]*"trim"/.test(s) && !/trim: canGenerateTrim/.test(s); })(), "decision removed");
+  add("TD-5: Trim-only → Trim is Top Pick (no higher candidate)", (() => { const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: tCard }); const tp = r.suggestions.find((s) => s.is_top_pick); return tp?.category === "trim"; })(), "trim top pick");
+  add("TD-6: Trim NOT Top Pick when Rebalance present (Rebalance outranks)", (() => { const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: mkSug15H("reb", "rebalance"), material: true }, { candidate: tCard }); return r.suggestions.find((s) => s.is_top_pick)?.category === "rebalance"; })(), "reb top");
+  add("TD-7: Trim NOT Top Pick when Capital Efficiency ranks above", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [nonCoreToken("BONK", 5000)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: tCard }); return r.suggestions.find((s) => s.is_top_pick)?.category === "capital_efficiency"; })(), "ce top");
+  add("TD-8: DCA + Trim coexist (Rebalance not applying)", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 40, -8), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, mkSug15H("dca", "dca"), null, undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "dca") && r.suggestions.some((s) => s.category === "trim"); })(), "dca+trim");
+  add("TD-9: staking + Trim coexist", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [solPosition(10)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "staking") && r.suggestions.some((s) => s.category === "trim"); })(), "staking+trim");
+  add("TD-10: direct lending (stable_yield) + Trim coexist", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [stablePosition("USDC", 10000)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, mkSug15H("sy", "stable_yield"), undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "stable_yield") && r.suggestions.some((s) => s.category === "trim"); })(), "sy+trim");
+  add("TD-11: category ordering unchanged (buffer1..posOpt8, trim=4)", CATEGORY_PRIORITY.buffer === 1 && CATEGORY_PRIORITY.rebalance === 2 && CATEGORY_PRIORITY.capital_efficiency === 3 && CATEGORY_PRIORITY.trim === 4 && CATEGORY_PRIORITY.staking === 5 && CATEGORY_PRIORITY.position_optimization === 8, "ordering");
+  add("TD-12: user-facing Trim copy has no cleanup/sell/dispose/swap instruction", (() => { const copy = readIfSrc("src/state/approvedCopy.ts"); const trimLines = copy.split("\n").filter((l) => /SUGGESTION_TRIM/.test(l) && /=/.test(l)).join(" "); return !/clean ?up|\bsell\b|dispose|\bswap\b|consolidate now|\bremove\b/i.test(trimLines); })(), "review copy");
+  add("TD-13: internal small_position_cleanup remains a machine code only (not visible instruction copy)", (() => { const trim = readIfSrc("src/suggestions/trimSuggestion.ts"); return /small_position_cleanup/.test(trim) && !/"[^"]*clean ?up[^"]*"/i.test(readIfSrc("src/state/approvedCopy.ts")); })(), "internal code");
+  add("TD-14: no route/quote/transaction/signature/execution in the full Trim path", (() => { const blob = readIfSrc("src/suggestions/trimAssessment.ts") + readIfSrc("src/suggestions/trimSuggestion.ts") + readIfSrc("src/pages/trimTestingFixtures.ts"); return !/swapRoute|routePlan|getQuote|aggregator|signTransaction|sendTransaction|simulateTransaction|receivedAmount|guaranteedOutput/.test(blob); })(), "read-only path");
+  add("TD-15: card carries no wallet/account/dedupe/raw-balance analytics fields", (() => { const s = JSON.stringify(tCard); return !s.includes("dedupeKey") && !s.includes("rawBalance") && !s.includes("sourcePositionIds") && !s.includes("holdingId") && !/[1-9A-HJ-NP-Za-km-z]{40,}/.test(s); })(), "privacy");
+  add("TD-16: engine has no residual allows(\"trim\") or trim gate reference", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); return !/allows\("trim"\)/.test(eng) && !/deriveTrimSuggestion/.test(eng); })(), "no gate ref");
+
+  return checks;
+}
+
+/**
  * Step 18G — FINAL Rebalance workstream closeout: proves ONE canonical mounted calculation, NO mounted legacy
  * fallback (missing canonical input → no Rebalance candidate), the deprecated legacy module has zero mounted
  * callers, shared canonical inputs, the /testing modal wiring, and full cross-cutting regression across both
@@ -21928,3 +22022,105 @@ export function runRebalanceStep18GFixtureChecks(): FixtureCheck[] {
 const sol18g = (v: number): WalletPosition => ({ id: "sol18g", source: "wallet", type: "native", symbol: "SOL", amount: String(Math.round((v / 250) * 1e9)), uiAmount: v / 250, decimals: 9, detection: "direct_wallet_balance", priceUsd: 250, valueUsd: v });
 const usdc18g = (v: number): WalletPosition => ({ id: "usdc18g", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: RB_USDC, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: v });
 const debt18g = (v: number): WalletPosition => ({ id: "debt18g", source: "hubble", type: "protocol", symbol: "USDH", name: "USDH loan", side: "borrowed", amount: "1", uiAmount: v, detection: "protocol_api", valueUsd: v });
+
+/**
+ * Step 19B — canonical, NON-MOUNTED TrimAssessment. Proves exact-mint core classification (never symbol),
+ * direct-wallet multi-account aggregation (exact BigInt), authoritative gross-asset denominator with
+ * liabilities separate, Token-2022 review-vs-actionability separation, the three unchanged trigger rules with
+ * exact boundaries, Trim-specific gates (no Rebalance-liquidity coupling), and that production Trim is untouched.
+ */
+export function runTrimAssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const GEN = 1_700_000_000_000;
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+  const USDH = "USDH1SM1ojwWUga67PGrgFWUHibbjqMvuMaDkRJTgkX";
+  const WSOL = "So11111111111111111111111111111111111111112";
+  const T22 = TRIM_TOKEN_2022_PROGRAM;
+  const W = (o: Partial<WalletPosition>): WalletPosition => ({ id: "x", source: "wallet", type: "token", symbol: "X", name: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
+  const usdc = (v: number, id = "usdc") => W({ id, symbol: "USDC", name: "USD Coin", mint: USDC, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
+  // A non-core direct SPL token candidate (distinct mint per id so each is its own economic holding).
+  const tok = (v: number, id: string, mint = `Mint-${id}`, raw?: string) => W({ id, symbol: `TK${id}`, name: `Token ${id}`, mint, amount: raw ?? String(Math.max(1, Math.round(v))), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v });
+  const wsol = (v: number) => W({ id: "wsol", symbol: "SOL", name: "Wrapped SOL", mint: WSOL, amount: String(Math.round(v * 1e9)), uiAmount: v, decimals: 9, priceUsd: 1, valueUsd: v });
+  const fakeUsdc = (v: number) => W({ id: "fakeusdc", symbol: "USDC", name: "USD Coin", mint: "FakeUSDCMint1111", amount: String(v), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
+  const fakeSol = (v: number) => W({ id: "fakesol", symbol: "SOL", name: "Solana", mint: "FakeSOLMint1111", amount: String(v), uiAmount: v, decimals: 9, priceUsd: 1, valueUsd: v });
+  const oddCoreUsdt = (v: number) => W({ id: "oddusdt", symbol: "ZZZ", name: "Rebranded", mint: USDT, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
+  const t22Candidate = (v: number, state: string, id = "t22") => W({ id, symbol: `TX${id}`, name: `T22 ${id}`, mint: `T22Mint-${id}`, tokenProgram: T22, transferabilityState: state, amount: String(Math.round(v)), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v, liquidValueUsd: state === "transferable" ? v : 0 });
+  const nativeSol = (v: number) => W({ id: "nsol", type: "native", symbol: "SOL", name: "Solana", amount: String(Math.round((v / 250) * 1e9)), uiAmount: v / 250, decimals: 9, priceUsd: 250, valueUsd: v });
+  const stakePos = (v: number) => W({ id: "stk", type: "stake", symbol: "SOL", name: "Native stake", amount: "1", uiAmount: v / 250, detection: "native_stake", valueUsd: v, liquidValueUsd: 0 });
+  const msol = (v: number) => W({ id: "ms", type: "lst", source: "wallet", symbol: "mSOL", name: "Marinade Staked SOL", mint: "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", amount: "1", uiAmount: 1, detection: "recognized_lst_mint", valueUsd: v });
+  const kaminoStable = (v: number, withdrawal = "fully_withdrawable") => W({ id: "kd", type: "protocol", symbol: "USDC", name: "USDC on Kamino", protocol: "Kamino", candidateId: "kamino_usdc_lending", existingPositionOnly: true, dedupeKey: "klend:x", valueUsd: v, recognizedValueUsd: v, withdrawalState: withdrawal, liquidValueUsd: v, mint: USDC });
+  const jlusdc = () => W({ id: "jl", type: "protocol", symbol: "USDC", name: "Jupiter Lend USDC", candidateId: "jupiter_lend_usdc", existingPositionOnly: true, dedupeKey: "jupiter-lend:x", withdrawalState: "unresolved", recognizedValueUsd: null, valueUsd: null, uiAmount: 100, amount: "100000000", mint: USDC });
+  const debt = (v: number | null) => W({ id: "hb", type: "protocol", symbol: "USDH", name: "USDH loan", side: "borrowed", valueUsd: v, uiAmount: 300, amount: "1" });
+  const dupPair = (v: number) => [W({ id: "d1", symbol: "TKd", name: "Dup", mint: "DupMint", dedupeKey: "dup:x", amount: String(v), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v }), W({ id: "d2", symbol: "TKd", name: "Dup", mint: "DupMint", dedupeKey: "dup:x", amount: String(v), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v })];
+
+  const A = (positions: WalletPosition[], requiredBufferUsd = 500) => trimAssess({ positions, requiredBufferUsd, generatedAt: GEN });
+  const cand = (a: ReturnType<typeof trimAssess>, sym: string) => a.candidateHoldings.find((h) => h.symbol === sym);
+
+  // ---- Exact identity (never symbol) ----
+  add("TB-1: canonical USDC excluded by exact mint+program (core, not a candidate)", (() => { const a = A([usdc(1000), tok(300, "a")]); return a.excludedHoldings.some((h) => h.mint === USDC && h.coreAssetState === "core") && !a.candidateHoldings.some((h) => h.mint === USDC); })(), "usdc core");
+  add("TB-2: fake USDC symbol with different mint is NON-core (candidate)", (() => { const a = A([usdc(1000), fakeUsdc(300)]); const h = a.candidateHoldings.find((x) => x.mint === "FakeUSDCMint1111"); return h?.coreAssetState === "non_core" && h.reviewEligibilityState === "eligible"; })(), "fake usdc");
+  add("TB-3: fake SOL symbol is NON-core (candidate)", (() => { const a = A([usdc(1000), fakeSol(300)]); return a.candidateHoldings.some((h) => h.mint === "FakeSOLMint1111" && h.coreAssetState === "non_core"); })(), "fake sol");
+  add("TB-4: canonical wrapped SOL excluded regardless of display symbol", (() => { const a = A([usdc(1000), wsol(300), tok(200, "a")]); return a.excludedHoldings.some((h) => h.mint === WSOL && h.coreAssetState === "core"); })(), "wsol core");
+  add("TB-5: Token-2022 lookalike does NOT inherit classic core status", (() => { const a = A([usdc(1000), W({ id: "t22usdc", symbol: "USDC", name: "USD Coin", mint: "T22UsdcLookalike", tokenProgram: T22, amount: "300", uiAmount: 300, priceUsd: 1, valueUsd: 300, transferabilityState: "transferable" })]); return a.candidateHoldings.some((h) => h.mint === "T22UsdcLookalike" && h.coreAssetState === "non_core"); })(), "t22 lookalike");
+  add("TB-6: canonical asset with unusual symbol remains core (by mint)", (() => { const a = A([usdc(1000), oddCoreUsdt(300), tok(200, "a")]); return a.excludedHoldings.some((h) => h.mint === USDT && h.symbol === "ZZZ" && h.coreAssetState === "core"); })(), "odd symbol core");
+  add("TB-7: symbol alone never determines core — registry is exact mint+program", TRIM_CORE_ASSETS.every((c) => typeof c.mint === "string" && c.tokenProgram === TRIM_CLASSIC_TOKEN_PROGRAM) && trimCoreAssetFor(USDC, undefined)?.assetId === "usdc" && trimCoreAssetFor(USDC, T22) === null && trimCoreAssetFor("FakeUSDCMint1111", undefined) === null, "exact registry");
+  add("TB-8: USDT + USDH canonical mints are core; DAI (no approved mint) is not core", trimCoreAssetFor(USDT, undefined)?.assetClass === "canonical_stablecoin" && trimCoreAssetFor(USDH, undefined)?.assetClass === "canonical_stablecoin" && !TRIM_CORE_ASSETS.some((c) => c.assetId === "dai"), "usdt/usdh core, no dai");
+
+  // ---- Direct-wallet multi-account aggregation (exact BigInt) ----
+  add("TB-9: two accounts of the same mint aggregate into ONE holding, raw summed", (() => { const a = A([usdc(1000), tok(60, "x1", "MintX", "60"), tok(50, "x2", "MintX", "50")]); const g = a.candidateHoldings.filter((h) => h.mint === "MintX"); return g.length === 1 && g[0].rawBalance === "110" && g[0].recognizedValueUsd === 110 && g[0].sourcePositionIds.length === 2; })(), "aggregate");
+  add("TB-10: raw balances sum with EXACT integer arithmetic (no float uiAmount authority)", (() => { const big = "9007199254740993"; const a = A([usdc(1000), tok(1, "b1", "MintB", big), tok(1, "b2", "MintB", "2")]); const g = a.candidateHoldings.find((h) => h.mint === "MintB"); return g?.rawBalance === (BigInt(big) + 2n).toString(); })(), "bigint");
+  add("TB-11: classic SPL and Token-2022 of related identities do NOT merge (different program)", (() => { const a = A([usdc(1000), tok(80, "c1", "MintC"), W({ id: "c2", symbol: "TKC", name: "TKC", mint: "MintC2022", tokenProgram: T22, amount: "80", uiAmount: 80, priceUsd: 1, valueUsd: 80, transferabilityState: "transferable" })]); return a.candidateHoldings.filter((h) => h.mint === "MintC" || h.mint === "MintC2022").length === 2; })(), "no cross-program merge");
+  add("TB-12: multiple accounts produce ONE small-position candidate (not several)", (() => { const a = A([usdc(1000), tok(20, "s1", "MintS", "20"), tok(20, "s2", "MintS", "20"), tok(40, "s3", "Mint3"), tok(40, "s4", "Mint4"), tok(40, "s5", "Mint5")], 500); return a.candidateHoldings.filter((h) => h.mint === "MintS").length === 1; })(), "one small candidate");
+  add("TB-13: protocol adapter row never merges into a wallet holding", (() => { const a = A([usdc(1000), kaminoStable(400), tok(300, "a")]); return !a.candidateHoldings.some((h) => h.symbol === "USDC") && !a.excludedHoldings.some((h) => h.holdingId.includes("kd")); })(), "no adapter merge");
+
+  // ---- Denominator + liabilities ----
+  add("TB-14: gross-asset denominator counts all fresh non-liability assets once", (() => { const a = A([usdc(1000), tok(300, "a"), nativeSol(500)]); return a.denominatorValueUsd === 1800 && a.grossAssetValueUsd === 1800; })(), "gross once");
+  add("TB-15: liabilities excluded from denominator; reduce net worth separately", (() => { const a = A([usdc(1000), tok(300, "a"), debt(200)]); return a.denominatorValueUsd === 1300 && a.recognizedLiabilitiesUsd === 200 && a.netWorthUsd === 1100; })(), "liabilities separate");
+  add("TB-16: debt does NOT inflate a candidate's concentration (denominator excludes debt)", (() => { const withDebt = A([usdc(1000), tok(300, "a"), debt(500)]); const share = (cand(withDebt, "TKa")!.recognizedValueUsd as number) / withDebt.denominatorValueUsd; return Math.abs(share - 300 / 1300) < 1e-9; })(), "no debt inflation");
+  add("TB-17: native stake market value counts in the denominator", (() => { const a = A([usdc(1000), tok(300, "a"), stakePos(400)]); return a.denominatorValueUsd === 1700; })(), "stake counts");
+  add("TB-18: LST market value counts once; no backing double-count", (() => { const a = A([usdc(1000), tok(300, "a"), msol(260)]); return a.denominatorValueUsd === 1560; })(), "lst once");
+  add("TB-19: unresolved liability → calculation unresolved (no readiness)", (() => { const a = A([usdc(1000), tok(300, "a"), debt(null)]); return a.calculationGate.status === "unresolved" && a.calculationGate.reasons.includes("liabilities_unresolved") && a.overallReadiness.status !== "allowed"; })(), "liab unresolved");
+  add("TB-20: unknown positive value → denominator unresolved", (() => { const a = A([usdc(1000), tok(300, "a"), W({ id: "unk", symbol: "9x", name: "Unknown token", mint: "UnkMint", uiAmount: 5, amount: "5", valueUsd: null })]); return a.calculationGate.status === "unresolved" && (a.calculationGate.reasons.includes("unknown_asset_value") || a.calculationGate.reasons.includes("net_worth_unresolved")); })(), "unknown value");
+  add("TB-21: jlUSDC unresolved value → unresolved", (() => { const a = A([usdc(1000), tok(300, "a"), jlusdc()]); return a.calculationGate.status === "unresolved"; })(), "jl unresolved");
+  add("TB-22: duplicate economic position → invalid/unresolved (never a clean candidate)", (() => { const a = A([usdc(1000), ...dupPair(300)]); return a.calculationGate.reasons.includes("duplicate_economic_position") && a.calculationGate.status === "unresolved"; })(), "dup invalid");
+
+  // ---- Trigger rules + exact boundaries ----
+  add("TB-23: aggregate rule fires at EXACT $100 and EXACT 5%", (() => { const a = A([usdc(1900), tok(100, "a")]); return a.denominatorValueUsd === 2000 && a.totalCandidateValueUsd === 100 && a.candidatePortfolioShare === 0.05 && a.triggerStates.aggregateLongTail === "triggered"; })(), "aggregate boundary");
+  add("TB-24: aggregate does NOT fire just below $100", (() => { const a = A([usdc(1900), tok(99, "a")]); return a.triggerStates.aggregateLongTail === "not_triggered"; })(), "below 100");
+  add("TB-25: concentration fires at EXACT 10%", (() => { const a = A([usdc(1800), tok(200, "a")]); return (200 / a.denominatorValueUsd) === 0.1 && a.triggerStates.singleTokenConcentration === "triggered" && a.concentratedCandidateIds.length === 1; })(), "concentration boundary");
+  add("TB-26: concentration exposes ALL candidate IDs meeting the threshold", (() => { const a = A([usdc(600), tok(200, "a"), tok(200, "b")]); return a.concentratedCandidateIds.length === 2; })(), "all concentrated");
+  add("TB-27: small-position fires at EXACT $50 each, EXACTLY three, combined EXACTLY $100", (() => { const a = A([usdc(3000), tok(50, "s1"), tok(25, "s2"), tok(25, "s3")]); return a.smallCandidateIds.length === 3 && a.smallCandidateCombinedValueUsd === 100 && a.triggerStates.smallPositionCleanup === "triggered"; })(), "small boundary");
+  add("TB-28: a $51 token is NOT small (disqualifies only itself)", (() => { const a = A([usdc(3000), tok(51, "b1"), tok(40, "s2"), tok(40, "s3"), tok(40, "s4")]); return !a.smallCandidateIds.includes("Mint-b1") && a.smallCandidateIds.length === 3; })(), "51 not small");
+  add("TB-29: all three rules fire together", (() => { const a = A([usdc(500), tok(300, "big"), tok(40, "s1"), tok(40, "s2"), tok(40, "s3")]); const t = a.triggerStates; return t.aggregateLongTail === "triggered" && t.singleTokenConcentration === "triggered" && t.smallPositionCleanup === "triggered"; })(), "all three");
+  add("TB-30: below every threshold → no trigger, readiness blocked", (() => { const a = A([usdc(2000), tok(40, "a")]); return a.triggerStates.aggregateLongTail === "not_triggered" && a.triggerStates.singleTokenConcentration === "not_triggered" && a.overallReadiness.status === "blocked"; })(), "no trigger");
+
+  // ---- Reason ordering ----
+  add("TB-31: reason codes preserve deterministic order + dedup non_core_token_exposure once", (() => { const a = A([usdc(500), tok(300, "big"), tok(40, "s1"), tok(40, "s2"), tok(40, "s3")]); const r = a.reasonCodes; return r.indexOf("long_tail_exposure") < r.indexOf("token_concentration_review") && r.indexOf("token_concentration_review") < r.indexOf("small_position_cleanup") && r.filter((c) => c === "non_core_token_exposure").length === 1 && r.includes("liquidity_not_evaluated"); })(), "reason order");
+
+  // ---- Token-2022 review vs actionability ----
+  add("TB-32: frozen Token-2022 candidate is review-eligible; actionability unavailable", (() => { const a = A([usdc(1000), t22Candidate(300, "frozen")]); const h = cand(a, "TXt22"); return h?.reviewEligibilityState === "eligible" && h.actionabilityState === "unavailable" && h.recognizedValueUsd === 300; })(), "frozen review");
+  add("TB-33: hook-unresolved Token-2022 candidate review-eligible; actionability unresolved", (() => { const a = A([usdc(1000), t22Candidate(300, "hook_unresolved")]); const h = cand(a, "TXt22"); return h?.reviewEligibilityState === "eligible" && h.actionabilityState === "unresolved"; })(), "hook review");
+  add("TB-34: recognized value drives concentration even when transferability unavailable", (() => { const a = A([usdc(1000), t22Candidate(300, "frozen")]); return a.triggerStates.singleTokenConcentration === "triggered" && a.concentratedCandidateIds.length === 1; })(), "frozen concentration");
+  add("TB-35: transferability summary reports unavailable/unresolved value separately", (() => { const a = A([usdc(1000), t22Candidate(300, "frozen", "f"), t22Candidate(200, "hook_unresolved", "h")]); const s = a.transferabilitySummary; return s.unavailableTransferabilityCandidateValueUsd === 300 && s.unresolvedTransferabilityCandidateValueUsd === 200 && s.candidateCountByActionability.unavailable === 1; })(), "transfer summary");
+  add("TB-36: unavailable transferability does NOT block review confidence (review-only)", (() => { const a = A([usdc(1000), t22Candidate(300, "frozen")]); return a.reviewConfidenceGate.status === "allowed" && a.overallReadiness.status === "allowed"; })(), "no transfer block");
+
+  // ---- Gates ----
+  add("TB-37: complete calc + trigger → overall allowed", (() => { const a = A([usdc(1000), tok(300, "a")]); return a.calculationGate.status === "allowed" && a.overallReadiness.status === "allowed"; })(), "allowed");
+  add("TB-38: incomplete Safety Buffer → calculation blocked", (() => { const a = A([usdc(100), tok(300, "a")], 2000); return a.calculationGate.status === "blocked" && a.calculationGate.reasons.includes("safety_buffer_incomplete") && a.overallReadiness.status === "blocked"; })(), "buffer blocked");
+  add("TB-39: UNRELATED protocol liquidity unresolved does NOT block Trim (no Rebalance coupling)", (() => { const a = A([usdc(1000), tok(300, "a"), kaminoStable(400, "unresolved")]); return a.calculationGate.status === "allowed" && a.overallReadiness.status === "allowed"; })(), "no liquidity coupling");
+  add("TB-40: mSOL backing/exposure unresolved does NOT block review-only Trim", (() => { const a = A([usdc(1000), tok(300, "a"), W({ id: "ms2", type: "lst", symbol: "mSOL", name: "Marinade Staked SOL", mint: "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So", amount: "1", uiAmount: 1, detection: "recognized_lst_mint", valueUsd: 260, lstNormalizationState: "unsupported" })]); return a.overallReadiness.status === "allowed"; })(), "no backing block");
+  add("TB-41: stale candidate value DOES block (calculation unresolved)", (() => { const a = A([usdc(1000), W({ id: "st", symbol: "TKst", name: "Stale", mint: "StaleMint", amount: "300", uiAmount: 300, decimals: 0, priceUsd: 1, valueUsd: 300, withdrawalState: "stale" })]); return a.calculationGate.reasons.includes("stale_value_in_denominator") && a.overallReadiness.status !== "allowed"; })(), "stale blocks");
+  add("TB-42: assessment returns gates only — never an EngineSuggestion (no id/category/amount)", (() => { const a = A([usdc(1000), tok(300, "a")]) as unknown as Record<string, unknown>; return !("id" in a) && !("category" in a) && !("amount" in a) && typeof a.overallReadiness === "object"; })(), "no suggestion");
+
+  // ---- Candidate ordering ----
+  add("TB-43: candidates ordered by portfolio share desc (not symbol)", (() => { const a = A([usdc(500), tok(300, "zz"), tok(100, "aa")]); return a.candidateHoldings[0].symbol === "TKzz" && a.candidateHoldings[1].symbol === "TKaa"; })(), "share order");
+
+  // ---- Regression: production Trim unchanged ----
+  add("TB-44: stable trim_long_tail_assets contract id preserved across the canonical mount", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/trimSuggestion.ts`, "utf8"); } catch { return ""; } })(); return /TRIM_SUGGESTION_ID = "trim_long_tail_assets"/.test(src); })(), "contract id");
+  add("TB-45: thresholds unchanged (100 / 0.05 / 0.10 / 3 / 50)", MIN_TRIM_SUGGESTION_USD === 100 && TRIM_PORTFOLIO_SHARE_THRESHOLD === 0.05 && TRIM_SINGLE_TOKEN_CONCENTRATION_THRESHOLD === 0.1 && TRIM_SMALL_POSITION_COUNT_THRESHOLD === 3 && TRIM_SMALL_POSITION_MAX_USD === 50, "thresholds");
+  add("TB-46: no route/transaction/signature behavior in the Trim assessment path", (() => { const blob = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/trimAssessment.ts`, "utf8"); } catch { return ""; } })(); return !/swapRoute|routePlan|signTransaction|sendTransaction|getQuote|aggregator/.test(blob); })(), "read-only");
+
+  return checks;
+}

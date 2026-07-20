@@ -243,6 +243,20 @@ export const SUGGESTION_DCA_DESCRIPTION =
 export const SUGGESTION_TRIM_TITLE = "Review Long-Tail Assets";
 export const SUGGESTION_TRIM_DESCRIPTION =
   "Some non-core wallet assets may deserve review because they make up a meaningful part of your portfolio.";
+/* Step 19C — review-oriented Trim wording (never an instruction to sell/remove/consolidate). Trigger
+ * explanations + transferability limitations for the canonical Trim review details. */
+export const SUGGESTION_TRIM_REASON_AGGREGATE = "Non-core tokens collectively represent a meaningful share of your portfolio.";
+export const SUGGESTION_TRIM_REASON_CONCENTRATION = "A non-core token represents a meaningful share of your portfolio.";
+export const SUGGESTION_TRIM_REASON_SMALL = "Several small non-core positions add complexity worth reviewing.";
+export const SUGGESTION_TRIM_EXPLAIN_AGGREGATE = "Non-core holdings collectively exceed the review threshold.";
+export const SUGGESTION_TRIM_EXPLAIN_CONCENTRATION = "One or more non-core holdings represent at least 10% of gross portfolio assets.";
+export const SUGGESTION_TRIM_EXPLAIN_SMALL = "At least three non-core holdings are valued at $50 or less and total at least $100.";
+export const SUGGESTION_TRIM_LIMIT_TRANSFER_UNAVAILABLE =
+  "Some of these assets are not currently transferable. They are included because their market value affects portfolio concentration, not because WealthSmith determined they can be moved.";
+export const SUGGESTION_TRIM_LIMIT_TRANSFER_UNRESOLVED =
+  "Transferability could not be verified for some of these assets. WealthSmith has not treated them as available for an action.";
+export const SUGGESTION_TRIM_LIMIT_TRANSFER_BOTH =
+  "Some of these assets are not currently transferable and others could not be verified. They are included because their market value affects portfolio concentration — WealthSmith has not determined that any of them can be moved.";
 export const SUGGESTIONS_UNAVAILABLE =
   "Strategy Steps need wallet value, goal settings, Safety Buffer, and allocation data before they can be shown.";
 export const SUGGESTIONS_PARTIAL_PRICING =

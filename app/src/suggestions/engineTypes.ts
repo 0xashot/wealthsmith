@@ -315,6 +315,14 @@ export interface ReviewAsset {
   valueUsd?: number;
   amount?: number;
   role: ReviewAssetRole;
+  /**
+   * Step 19C (canonical Trim review) — OPTIONAL read-only review metadata. `portfolioSharePct` is the asset's
+   * share of authoritative gross portfolio value; `actionability`/`reasonCategory` are review context ONLY and
+   * never imply the asset can be sold, swapped, consolidated, or removed. Absent for all other categories.
+   */
+  portfolioSharePct?: number;
+  actionability?: "transferable" | "unavailable" | "unresolved";
+  reasonCategory?: "concentrated" | "small_position" | "part_of_aggregate_exposure";
 }
 
 export type ReviewPositionRole =
@@ -360,7 +368,11 @@ export type ReviewLimitationKind =
   | "liquidity_not_evaluated"
   | "slippage_not_evaluated"
   | "protocol_not_selected"
-  | "review_only";
+  | "review_only"
+  // Step 19C (canonical Trim review) — transferability is a REVIEW limitation, never proof an asset can be moved.
+  | "transferability_unavailable"
+  | "transferability_unresolved"
+  | "transferability_limited";
 
 export interface ReviewLimitation {
   kind: ReviewLimitationKind;

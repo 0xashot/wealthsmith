@@ -18,7 +18,6 @@ import type {
 } from "./engineTypes";
 import { deriveBufferSuggestion } from "./bufferSuggestion";
 import { deriveCapitalEfficiencySuggestion } from "./capitalEfficiencySuggestion";
-import { deriveTrimSuggestion } from "./trimSuggestion";
 import { deriveStakingSuggestion } from "./stakingSuggestion";
 import { deriveStableYieldSuggestion } from "./stableYieldSuggestion";
 import { deriveDcaSuggestion } from "./dcaSuggestion";
@@ -79,7 +78,15 @@ export function runSuggestionEngine(
    * suppression even when no card is emitted. There is NO legacy bucket fallback: when this is ABSENT the
    * engine produces NO Rebalance candidate (fail closed). The mounted rail always supplies it.
    */
-  rebalanceOverride?: { card: EngineSuggestion | null; material: boolean; materialCryptoToStables?: boolean }
+  rebalanceOverride?: { card: EngineSuggestion | null; material: boolean; materialCryptoToStables?: boolean },
+  /**
+   * Step 19C — the production Trim result. `candidate` (or null) is the ONE authoritative Trim suggestion
+   * (built from the canonical TrimAssessment behind `trim_long_tail_assets`). There is NO legacy symbol-based
+   * fallback: when this is ABSENT the engine produces NO Trim candidate (fail closed). `materialReviewNeed`
+   * mirrors overall readiness (audit signal); Trim never suppresses another suggestion. The mounted rail
+   * always supplies it. Trim coexists with Rebalance and Capital Efficiency and keeps its category-4 order.
+   */
+  trimOverride?: { candidate: EngineSuggestion | null; materialReviewNeed?: boolean }
 ): SuggestionEngineResult {
   const warnings: SuggestionReasonCode[] = [];
   if (inputs.value.anyUnpriced) warnings.push("partial_pricing");
@@ -110,10 +117,13 @@ export function runSuggestionEngine(
     // Capital Efficiency ranks above Staking/Stable Yield; may coexist with all.
     const capitalEfficiency = deriveCapitalEfficiencySuggestion(inputs, generatedAt);
     if (capitalEfficiency) candidates.push(capitalEfficiency);
-    // Trim (non-core long-tail review) — separate intent from Capital Efficiency;
-    // both may fire and neither suppresses the other.
-    const trim = deriveTrimSuggestion(inputs, generatedAt);
-    if (trim && allows("trim")) candidates.push(trim);
+    // Step 19C/19D — the ONE authoritative Trim result comes exclusively from the canonical TrimAssessment via
+    // `trimOverride` (built by `buildTrimCardFromAssessment` behind the SAME `trim_long_tail_assets` contract).
+    // Its OWN Trim-specific gates already applied; the obsolete Rebalance-copied Trim completeness gate was
+    // removed in 19D. NO legacy fallback: when the override is absent, the engine produces NO Trim candidate
+    // (fail closed). Trim coexists with Rebalance AND Capital Efficiency — neither suppresses it (both may fire).
+    const trim = trimOverride?.candidate ?? null;
+    if (trim) candidates.push(trim);
     // Step 18E — a PROVEN material crypto_to_stables need suppresses a new staking suggestion (staking
     // preserves crypto exposure and reduces liquid SOL; Rebalance outranks yield optimization). Narrows
     // only — never enables staking. Keyed on the material NEED, independent of Rebalance-card presence.

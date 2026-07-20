@@ -34,6 +34,7 @@ import { portfolioTotalDisplay } from "../components/portfolioCompletenessUi";
 import { getPortfolioCompletenessTestingFixtures } from "./portfolioCompletenessTestingFixtures";
 import { getLiquidPositions, getStakedPositions, getProtocolPositions } from "../wallet/walletSummary";
 import { getRebalanceTestingFixtures, getNativeSolSourceTestingFixtures, getStakingConflictTestingFixtures } from "./rebalanceTestingFixtures";
+import { getTrimTestingFixtures } from "./trimTestingFixtures";
 import "./testingPage.css";
 
 type Filter = "All" | TestingGroup;
@@ -50,6 +51,10 @@ export default function TestingPage() {
   // Step 18G — click-through for the dedicated Rebalance gallery into the SAME production review modal.
   const [selectedRebalanceId, setSelectedRebalanceId] = useState<string | null>(null);
   const selectedRebalance = selectedRebalanceId ? rebalanceFixtures.find((f) => f.id === selectedRebalanceId && f.card) : undefined;
+  // Step 19C — production-derived Trim gallery + click-through into the SAME production review modal.
+  const trimFixtures = useMemo(() => getTrimTestingFixtures(), []);
+  const [selectedTrimId, setSelectedTrimId] = useState<string | null>(null);
+  const selectedTrim = selectedTrimId ? trimFixtures.find((f) => f.id === selectedTrimId && f.card) : undefined;
 
   const visible = filter === "All" ? fixtures : fixtures.filter((f) => f.group === filter);
 
@@ -328,6 +333,43 @@ export default function TestingPage() {
         />
       )}
 
+      {/* Step 19C — production-derived Trim gallery. Each fixture runs the canonical TrimAssessment + production
+          card mapper; cards render through the production SuggestionCard and open the SAME production review
+          modal; no-card states show the deterministic reason. No testing-only Trim card or calculation. */}
+      <section className="testing-page__contrib" aria-label="Trim review states">
+        <h2 className="testing-page__section-title">Trim (Review Long-Tail Assets)</h2>
+        <p className="testing-page__subtext">
+          Non-core direct-wallet token review by exact mint + token program (canonical SOL/wrapped-SOL/stablecoins
+          excluded), authoritative gross-asset denominator with liabilities separate, and Token-2022 transferability
+          reported as a review limitation. Review-only; no token is selected and nothing is sold, swapped, or moved.
+          Stale / unknown / unresolved-liability / incomplete-buffer / below-threshold states never render a card.
+        </p>
+        <div className="testing-page__grid">
+          {trimFixtures.map((f) => (
+            <div key={f.id} className="testing-page__cell">
+              <p className="testing-page__cell-label">
+                {f.label} — <span className="testing-page__badge">{f.card ? `${f.card.reason_codes.filter((r) => r === "token_concentration_review" || r === "long_tail_exposure" || r === "small_position_cleanup").length} trigger(s)` : "no card"}</span>
+              </p>
+              {f.card ? (
+                <SuggestionCard card={toSuggestionCard(f.card)} onReview={() => setSelectedTrimId(f.id)} />
+              ) : (
+                <p className="testing-page__contrib-noplan">
+                  No Trim card — readiness: <strong>{f.assessment.overallReadiness.status}</strong>, candidates: <strong>{f.assessment.candidateHoldings.length}</strong>, denominator: <strong>${f.assessment.denominatorValueUsd}</strong>, total non-core: <strong>${f.assessment.totalCandidateValueUsd}</strong>{f.assessment.blockingReasons.length > 0 ? <> · reasons: <strong>{f.assessment.blockingReasons.join(", ")}</strong></> : null}.
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {selectedTrim?.card?.reviewDetails && (
+        <SuggestionReviewModal
+          details={selectedTrim.card.reviewDetails}
+          isTopPick={selectedTrim.card.is_top_pick === true}
+          onClose={() => setSelectedTrimId(null)}
+        />
+      )}
+
       {/* Step 18E — crypto-overweight staking-conflict policy. A PROVEN material crypto_to_stables NEED
           suppresses an otherwise-eligible new staking suggestion (narrow only, card-independent, directional).
           Decision is derived from the PRODUCTION assessment direction. Fixture-only; no cards created. */}
@@ -420,7 +462,7 @@ export default function TestingPage() {
                 <EarningAssetsCard title="Yield Strategies" caption="Detected protocol/staked positions" valueHeader="Value" positions={[...getStakedPositions(f.positions), ...getProtocolPositions(f.positions)]} completeness={f.completeness} />
                 {f.id === "gate_inspector" && (
                   <p className="testing-page__contrib-noplan">
-                    Gates — Rebalance: <strong>{f.gates.rebalance}</strong>, Trim: <strong>{f.gates.trim}</strong>, Position Optimization: <strong>{f.gates.positionOptimization}</strong> (no cards created)
+                    Gates — Rebalance: <strong>{f.gates.rebalance}</strong>, Position Optimization: <strong>{f.gates.positionOptimization}</strong> (no cards created; Trim now uses its own canonical assessment gates)
                   </p>
                 )}
               </div>

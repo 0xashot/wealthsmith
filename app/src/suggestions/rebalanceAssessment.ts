@@ -24,6 +24,7 @@ import {
   type PortfolioCompletenessResult, type PositionClass,
 } from "../wallet/portfolioCompleteness";
 import { computeSafetyBufferCoverage, type SafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
+import { derivePortfolioAssetAccounting } from "../wallet/portfolioAssetAccounting";
 
 export const REBALANCE_ASSESSMENT_VERSION = "1.0.0" as const;
 export const CANONICAL_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" as const;
@@ -132,7 +133,6 @@ export interface RebalanceAssessment {
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-const hasBalance = (p: WalletPosition): boolean => (typeof p.uiAmount === "number" && p.uiAmount > 0) || (typeof p.amount === "string" && /^[1-9]/.test(p.amount));
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 /** A fresh-valued STABLE asset (registry stablecoin OR a recognized stable protocol position). Never symbol-only. */
@@ -214,20 +214,22 @@ export function deriveRebalanceAssessment(input: RebalanceInput): RebalanceAsses
   const blockingReasons: string[] = [];
   const warnings: string[] = [];
 
-  // --- Allocation + liabilities (gross assets, NOT net worth). ---
-  let crypto = 0, stable = 0, liabilities = 0;
-  let unresolvedAsset = false, liabilityUnresolved = false, malformedNegativeAsset = false;
-  for (const p of input.positions) {
-    const v = num(p.valueUsd);
-    if (p.side === "borrowed") { if (v === null) liabilityUnresolved = true; else liabilities += Math.abs(v); continue; }
-    if (v === null) { if (hasBalance(p)) unresolvedAsset = true; continue; } // unknown/jlUSDC positive → blocks allocation
-    if (v < 0) { malformedNegativeAsset = true; continue; } // negative non-liability asset → fail closed
-    if (isStableAsset(p)) stable += v; else crypto += v;
+  // --- Allocation + liabilities (gross assets, NOT net worth). Step 19C: gross/liability/net-worth accounting
+  // is the SHARED canonical helper (also consumed by Trim); only the crypto↔stable SPLIT is Rebalance-specific. ---
+  const accounting = derivePortfolioAssetAccounting(input.positions, completeness);
+  const byId = new Map(input.positions.map((p) => [p.id, p]));
+  let crypto = 0, stable = 0;
+  for (const a of accounting.authoritativeAssetValues) {
+    const p = byId.get(a.positionId);
+    if (p && isStableAsset(p)) stable += a.valueUsd; else crypto += a.valueUsd;
   }
-  const grossAssetValueUsd = round2(crypto + stable);
-  const recognizedLiabilitiesUsd = round2(liabilities);
-  const netWorthUsd = round2(grossAssetValueUsd - recognizedLiabilitiesUsd);
-  const allocatableAssetValueUsd = round2(crypto + stable);
+  const unresolvedAsset = accounting.unresolvedAssetPositions.length > 0;
+  const liabilityUnresolved = accounting.unresolvedLiabilityPositions.length > 0;
+  const malformedNegativeAsset = accounting.malformedNegativeAssetPositions.length > 0;
+  const grossAssetValueUsd = accounting.grossAssetValueUsd;
+  const recognizedLiabilitiesUsd = accounting.recognizedLiabilitiesUsd;
+  const netWorthUsd = accounting.netWorthUsd;
+  const allocatableAssetValueUsd = accounting.grossAssetValueUsd;
   const otherClassifiedAssetValueUsd = 0; // MVP two-bucket: every fresh-valued asset is crypto or stable.
   const currentCryptoPct = allocatableAssetValueUsd > 0 ? round2((crypto / allocatableAssetValueUsd) * 100) : null;
   const currentStablePct = allocatableAssetValueUsd > 0 ? round2((stable / allocatableAssetValueUsd) * 100) : null;

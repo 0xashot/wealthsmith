@@ -73,7 +73,6 @@ export interface PortfolioCompletenessResult {
   deduplicationState: CompletenessState;
   onTrackState: CompletenessState;
   rebalanceState: CompletenessState;
-  trimState: CompletenessState;
   positionOptimizationState: CompletenessState;
   stakingSuggestionState: CompletenessState;
   dcaSuggestionState: CompletenessState;
@@ -257,7 +256,6 @@ export function computePortfolioCompleteness(
   // Decision-specific states (mirror the gates below).
   const onTrackState: CompletenessState = netWorthState === "complete" && liabilitiesState === "complete" && stableBufferState !== "unresolved" && !hasUnknownMagnitudeValue ? "complete" : "unresolved";
   const rebalanceState: CompletenessState = netWorthState === "complete" && allocationState === "complete" && liabilitiesState === "complete" && liquidityState === "complete" ? "complete" : "unresolved";
-  const trimState = rebalanceState;
   const positionOptimizationState: CompletenessState = solExposureState !== "complete" ? "unresolved" : netWorthState === "complete" && allocationState === "complete" ? "complete" : "unresolved";
   const stakingSuggestionState: CompletenessState = stableBufferState === "complete" && !assessments.some((a) => (a.positionClass === "native_stake" || a.positionClass.startsWith("lst")) && (a.liquidityState === "unresolved" || a.exposureState === "unresolved")) ? "complete" : "unresolved";
   // DCA/direct-lending gate ONLY on the dimensions they require (buffer + liabilities + capital-source
@@ -276,7 +274,7 @@ export function computePortfolioCompleteness(
   return {
     supportedScopeState, walletWideState, netWorthState, liabilitiesState, allocationState, stableBufferState,
     liquidityState, solExposureState, transferabilityState, freshnessState, deduplicationState,
-    onTrackState, rebalanceState, trimState, positionOptimizationState, stakingSuggestionState,
+    onTrackState, rebalanceState, positionOptimizationState, stakingSuggestionState,
     dcaSuggestionState, directLendingSuggestionState,
     recognizedPortfolioValueUsd, unresolvedKnownValueUsd, hasUnknownMagnitudeValue,
     recognizedLiabilitiesUsd, unresolvedLiabilityMagnitude, blockingIssues, warnings,
@@ -361,7 +359,6 @@ export function canGenerateRebalance(r: PortfolioCompletenessResult): DecisionGa
   if (r.liquidityState !== "complete") reasons.push("funding-source liquidity unresolved");
   return gate(reasons.length === 0, true, reasons);
 }
-export function canGenerateTrim(r: PortfolioCompletenessResult): DecisionGate { return canGenerateRebalance(r); }
 export function canGeneratePositionOptimization(r: PortfolioCompletenessResult): DecisionGate {
   const reasons: string[] = [];
   if (r.solExposureState !== "complete") reasons.push("exact SOL exposure unresolved");
@@ -393,7 +390,7 @@ export function canGenerateDirectLendingSuggestion(r: PortfolioCompletenessResul
  * §2/§14 — the canonical mounted gate map for production consumers. Each entry is a GateStatus; a consumer
  * NARROWS (AND) its existing eligibility with `gates.x === "allowed"` — it never enables on this alone.
  * ------------------------------------------------------------------ */
-export type CompletenessDecision = "onTrack" | "staking" | "dca" | "directLending" | "rebalance" | "trim" | "positionOptimization";
+export type CompletenessDecision = "onTrack" | "staking" | "dca" | "directLending" | "rebalance" | "positionOptimization";
 export type CompletenessGateMap = Partial<Record<CompletenessDecision, GateStatus>>;
 
 export function deriveCompletenessGates(
@@ -407,7 +404,6 @@ export function deriveCompletenessGates(
     dca: canGenerateDcaSuggestion(result).status,
     directLending: canGenerateDirectLendingSuggestion(result).status,
     rebalance: canGenerateRebalance(result).status,
-    trim: canGenerateTrim(result).status,
     positionOptimization: canGeneratePositionOptimization(result).status,
   };
   return { result, gates };

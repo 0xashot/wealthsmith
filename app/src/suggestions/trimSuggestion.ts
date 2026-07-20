@@ -1,140 +1,66 @@
 /**
- * trimSuggestion — the deterministic "Review Long-Tail Assets" rule (category
- * `trim`; rules/suggestion-engine-rules.md). Pure over SuggestionEngineInputs:
- * no fetching, no pricing, no AI, no token/replacement choice.
+ * trimSuggestion — the canonical production Trim card mapper (Step 19C).
  *
- * It flags NON-CORE liquid wallet tokens (not SOL/WSOL, not stablecoins, not
- * LST/stake/protocol) that reach a meaningful long-tail / concentration / noise
- * threshold, so the user can REVIEW that exposure. It never says to sell/swap,
- * never claims a token is bad/unsafe, and never asserts illiquidity — liquidity
- * is not evaluated (there is no real liquidity data), which is surfaced via the
- * `liquidity_not_evaluated` reason code and the `not_evaluated` guardrail.
+ * `buildTrimCardFromAssessment` is the ONE authoritative Trim card builder. It renders the existing
+ * `trim_long_tail_assets` review-only card from the canonical `TrimAssessment` (trimAssessment.ts): exact-mint
+ * core exclusion, direct-wallet multi-account aggregation, an authoritative gross-asset denominator, and the
+ * three unchanged trigger rules. It selects no token, adds no execution CTA, and introduces no route/quote/
+ * transaction/signature behavior. Transferability is reported as a review limitation — never as proof an asset
+ * can be sold, swapped, consolidated, or removed.
  *
- * Trim is INTENTIONALLY separate from Capital Efficiency (broad "put idle assets
- * to work"): they answer different questions and may both fire; neither
- * suppresses the other.
- *
- * SAFETY BUFFER COMES FIRST (engine-enforced). Category priority: below
- * Rebalance/Capital Efficiency, above Staking.
+ * The pre-canonical symbol-based rule was deleted in Step 19D — there is no legacy Trim calculation, no engine
+ * fallback, and no Rebalance-copied completeness gate. Missing canonical override ⇒ no Trim candidate.
  */
-import type { WalletPosition } from "../wallet/walletPosition";
-import { STABLE_SYMBOLS } from "../wallet/walletSummary";
-import type { SuggestionEngineInputs } from "./engineInputs";
-import type {
-  EngineSuggestion,
-  SuggestionGuardrail,
-  SuggestionReasonCode,
-} from "./engineTypes";
-import {
-  SUGGESTION_ENGINE_VERSION,
-  MIN_TRIM_SUGGESTION_USD,
-  TRIM_PORTFOLIO_SHARE_THRESHOLD,
-  TRIM_SINGLE_TOKEN_CONCENTRATION_THRESHOLD,
-  TRIM_SMALL_POSITION_COUNT_THRESHOLD,
-  TRIM_SMALL_POSITION_MAX_USD,
-  GUARDRAIL_STATUS_NOT_EVALUATED,
-} from "./engineThresholds";
+import type { EngineSuggestion, SuggestionGuardrail, SuggestionReasonCode, ReviewAsset } from "./engineTypes";
+import type { ReviewLimitation } from "./engineTypes";
+import { SUGGESTION_ENGINE_VERSION, MIN_TRIM_SUGGESTION_USD, TRIM_PORTFOLIO_SHARE_THRESHOLD, GUARDRAIL_STATUS_NOT_EVALUATED } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
+import { buildReviewDetails, usdMetric, pctMetric, metric } from "./suggestionReviewDetails";
+import type { TrimAssessment } from "./trimAssessment";
 import {
-  buildReviewDetails,
-  usdMetric,
-  pctMetric,
-  metric,
-} from "./suggestionReviewDetails";
-import type { ReviewAsset } from "./engineTypes";
+  SUGGESTION_TRIM_REASON_AGGREGATE, SUGGESTION_TRIM_REASON_CONCENTRATION, SUGGESTION_TRIM_REASON_SMALL,
+  SUGGESTION_TRIM_EXPLAIN_AGGREGATE, SUGGESTION_TRIM_EXPLAIN_CONCENTRATION, SUGGESTION_TRIM_EXPLAIN_SMALL,
+  SUGGESTION_TRIM_LIMIT_TRANSFER_UNAVAILABLE, SUGGESTION_TRIM_LIMIT_TRANSFER_UNRESOLVED, SUGGESTION_TRIM_LIMIT_TRANSFER_BOTH,
+} from "../state/approvedCopy";
 
-/** Stable suggestion ID. */
+/** Stable suggestion ID (unchanged; IDs must not change across runs/copy updates). */
 export const TRIM_SUGGESTION_ID = "trim_long_tail_assets";
 
-/**
- * Approved MVP core-token allowlist: SOL/WSOL + the recognized stablecoins.
- * Anything outside this set (and priced, wallet-held, non-deployed) is "non
- * core" long-tail exposure. An explicit allowlist — never inferred from name.
- */
-const CORE_TOKEN_SYMBOLS = new Set<string>(["SOL", "WSOL", ...STABLE_SYMBOLS]);
-
-/** A priced, liquid wallet token that is NOT core (and not an LST/stake/protocol). */
-function isNonCoreLiquidToken(p: WalletPosition): boolean {
-  return (
-    p.source === "wallet" &&
-    p.type === "token" &&
-    typeof p.priceUsd === "number" &&
-    typeof p.valueUsd === "number" &&
-    typeof p.uiAmount === "number" &&
-    p.uiAmount > 0 &&
-    p.symbol.length > 0 &&
-    p.name !== "Unknown token" &&
-    !CORE_TOKEN_SYMBOLS.has(p.symbol)
-  );
-}
+const round1Pct = (fraction: number): number => Math.round(fraction * 1000) / 10;
 
 /**
- * Trigger: fully funded buffer ∧ pricing ∧ a priced total ∧ eligible non-core
- * tokens that hit at least one review rule — aggregate long-tail exposure,
- * single-token concentration, or small-position cleanup. One aggregated
- * suggestion; nothing invented, no token chosen.
+ * Build the canonical `trim_long_tail_assets` card from a TrimAssessment. Returns null unless overall readiness
+ * is allowed, at least one trigger is proven, the total candidate value meets the minimum, the denominator is
+ * authoritative, and candidate holdings are non-empty. NEVER falls back to the legacy symbol-based rule.
  */
-export function deriveTrimSuggestion(
-  inputs: SuggestionEngineInputs,
-  generatedAt: number
-): EngineSuggestion | null {
-  const sb = inputs.safetyBuffer;
-  if (!sb || !sb.fullyFunded) return null;
-  if (!inputs.dataQuality.hasPricing) return null;
+export function buildTrimCardFromAssessment(assessment: TrimAssessment, generatedAt: number): EngineSuggestion | null {
+  if (assessment.overallReadiness.status !== "allowed") return null;
+  const hasAggregate = assessment.triggerStates.aggregateLongTail === "triggered";
+  const hasConcentration = assessment.triggerStates.singleTokenConcentration === "triggered";
+  const hasSmall = assessment.triggerStates.smallPositionCleanup === "triggered";
+  if (!hasAggregate && !hasConcentration && !hasSmall) return null;
+  if (assessment.totalCandidateValueUsd < MIN_TRIM_SUGGESTION_USD) return null;
+  if (!(assessment.denominatorValueUsd > 0)) return null;
+  if (assessment.candidateHoldings.length === 0) return null;
 
-  const totalPricedUsd = inputs.value.totalUsd;
-  if (totalPricedUsd == null || totalPricedUsd <= 0) return null;
+  const denom = assessment.denominatorValueUsd;
+  const total = assessment.totalCandidateValueUsd;
+  const share = assessment.candidatePortfolioShare ?? 0; // fraction of gross assets
+  const concentratedCount = assessment.concentratedCandidateIds.length;
+  const smallCount = assessment.smallCandidateIds.length;
+  const ts = assessment.transferabilitySummary;
 
-  const eligible = inputs.positions.filter(isNonCoreLiquidToken);
-  if (eligible.length === 0) return null;
+  // Reason codes — canonical ordering, mapped to the existing engine union (transferability warnings live in
+  // review limitations, not reason codes). Deterministic + deduped.
+  const reason_codes: SuggestionReasonCode[] = [];
+  if (hasAggregate) reason_codes.push("long_tail_exposure");
+  if (hasConcentration) reason_codes.push("token_concentration_review");
+  if (hasSmall) reason_codes.push("small_position_cleanup");
+  reason_codes.push("non_core_token_exposure");
+  reason_codes.push("liquidity_not_evaluated");
 
-  const totalEligibleTrimValueUsd = eligible.reduce((s, p) => s + (p.valueUsd as number), 0);
-  const reasons = new Set<SuggestionReasonCode>();
-
-  // A. Aggregate long-tail exposure.
-  if (
-    totalEligibleTrimValueUsd >= MIN_TRIM_SUGGESTION_USD &&
-    totalEligibleTrimValueUsd / totalPricedUsd >= TRIM_PORTFOLIO_SHARE_THRESHOLD
-  ) {
-    reasons.add("long_tail_exposure");
-    reasons.add("non_core_token_exposure");
-  }
-  // B. Single-token concentration.
-  const concentrated = eligible.some(
-    (p) => (p.valueUsd as number) / totalPricedUsd >= TRIM_SINGLE_TOKEN_CONCENTRATION_THRESHOLD
-  );
-  if (concentrated) {
-    reasons.add("token_concentration_review");
-    reasons.add("non_core_token_exposure");
-  }
-  // C. Small-position cleanup.
-  const small = eligible.filter((p) => (p.valueUsd as number) <= TRIM_SMALL_POSITION_MAX_USD);
-  const smallCombined = small.reduce((s, p) => s + (p.valueUsd as number), 0);
-  if (
-    small.length >= TRIM_SMALL_POSITION_COUNT_THRESHOLD &&
-    smallCombined >= MIN_TRIM_SUGGESTION_USD
-  ) {
-    reasons.add("small_position_cleanup");
-    reasons.add("non_core_token_exposure");
-  }
-
-  if (reasons.size === 0) return null;
-  // Liquidity is never inferred — always surface that it was not evaluated.
-  reasons.add("liquidity_not_evaluated");
-
-  // Deterministic reason-code order.
-  const reasonOrder: SuggestionReasonCode[] = [
-    "long_tail_exposure",
-    "non_core_token_exposure",
-    "token_concentration_review",
-    "small_position_cleanup",
-    "liquidity_not_evaluated",
-  ];
-  const reason_codes = reasonOrder.filter((c) => reasons.has(c));
-
-  const flaggedTrimValueUsd = totalEligibleTrimValueUsd;
-  const hasConcentration = reasons.has("token_concentration_review");
-  const hasLongTail = reasons.has("long_tail_exposure");
+  // Review-oriented summary reason (never an instruction). Precedence: concentration → aggregate → small.
+  const reason = hasConcentration ? SUGGESTION_TRIM_REASON_CONCENTRATION : hasAggregate ? SUGGESTION_TRIM_REASON_AGGREGATE : SUGGESTION_TRIM_REASON_SMALL;
 
   const guardrails: SuggestionGuardrail[] = [
     { code: "pricing_available", status: "passed" },
@@ -147,70 +73,83 @@ export function deriveTrimSuggestion(
     { code: "token_selection", status: GUARDRAIL_STATUS_NOT_EVALUATED },
   ];
 
-  const triggers: string[] = [];
-  if (hasLongTail) triggers.push("aggregate long-tail exposure");
-  if (hasConcentration) triggers.push("single-token concentration");
-  if (reasons.has("small_position_cleanup")) triggers.push("small-position cleanup");
-  const involvedAssets: ReviewAsset[] = eligible.map((p) => ({
-    symbol: p.symbol,
-    name: p.name,
-    valueUsd: p.valueUsd as number,
-    amount: p.uiAmount as number,
-    role: "long_tail_asset",
-  }));
+  // Involved assets — canonical order; USER-SAFE fields only (no raw balance / accounts / dedupe keys). Multiple
+  // accounts of one mint already appear as one holding. Actionability/reason are review context, never a CTA.
+  const involvedAssets: ReviewAsset[] = assessment.candidateHoldings.map((h) => {
+    const isConc = assessment.concentratedCandidateIds.includes(h.holdingId);
+    const isSmall = assessment.smallCandidateIds.includes(h.holdingId);
+    const holdingShare = denom > 0 && h.recognizedValueUsd !== null ? round1Pct(h.recognizedValueUsd / denom) : undefined;
+    return {
+      symbol: h.symbol,
+      name: h.name,
+      ...(h.recognizedValueUsd !== null ? { valueUsd: h.recognizedValueUsd } : {}),
+      ...(h.uiAmount !== null ? { amount: h.uiAmount } : {}),
+      role: "long_tail_asset" as const,
+      ...(holdingShare !== undefined ? { portfolioSharePct: holdingShare } : {}),
+      actionability: h.actionabilityState === "unavailable" ? "unavailable" : h.actionabilityState === "unresolved" ? "unresolved" : "transferable",
+      reasonCategory: isConc ? "concentrated" : isSmall ? "small_position" : "part_of_aggregate_exposure",
+    };
+  });
+
+  // Transferability limitation (review-only; never implies actionability). One concise combined line when both.
+  const additionalLimitations: ReviewLimitation[] = [];
+  const anyUnavailable = ts.unavailableTransferabilityCandidateValueUsd > 0;
+  const anyUnresolved = ts.unresolvedTransferabilityCandidateValueUsd > 0;
+  if (anyUnavailable && anyUnresolved) additionalLimitations.push({ kind: "transferability_limited", text: SUGGESTION_TRIM_LIMIT_TRANSFER_BOTH });
+  else if (anyUnavailable) additionalLimitations.push({ kind: "transferability_unavailable", text: SUGGESTION_TRIM_LIMIT_TRANSFER_UNAVAILABLE });
+  else if (anyUnresolved) additionalLimitations.push({ kind: "transferability_unresolved", text: SUGGESTION_TRIM_LIMIT_TRANSFER_UNRESOLVED });
+
+  const metrics = [
+    usdMetric("Non-core value to review", total),
+    metric("Distinct holdings", assessment.candidateHoldings.length, "count"),
+    pctMetric("Portfolio share", round1Pct(share)),
+    metric("Concentrated holdings", concentratedCount, "count"),
+    metric("Small holdings", smallCount, "count"),
+    usdMetric("Transferable value", ts.transferableCandidateValueUsd),
+    ...(anyUnavailable ? [usdMetric("Not currently transferable", ts.unavailableTransferabilityCandidateValueUsd)] : []),
+    ...(anyUnresolved ? [usdMetric("Transferability unverified", ts.unresolvedTransferabilityCandidateValueUsd)] : []),
+  ];
+
+  const calculations = [
+    { label: "Non-core share of gross assets", formula: "non-core value ÷ gross asset value", currentValue: total, targetValue: denom, threshold: round1Pct(TRIM_PORTFOLIO_SHARE_THRESHOLD), difference: round1Pct(share), unit: "USD" },
+    ...(hasAggregate ? [{ label: "Aggregate exposure", formula: SUGGESTION_TRIM_EXPLAIN_AGGREGATE, currentValue: total, targetValue: denom, unit: "USD" }] : []),
+    ...(hasConcentration ? [{ label: "Concentration review", formula: SUGGESTION_TRIM_EXPLAIN_CONCENTRATION, currentValue: concentratedCount, unit: "count" }] : []),
+    ...(hasSmall ? [{ label: "Small positions", formula: SUGGESTION_TRIM_EXPLAIN_SMALL, currentValue: smallCount, targetValue: assessment.smallCandidateCombinedValueUsd, unit: "count" }] : []),
+  ];
+
   const protocolSelection = notApplicableProtocolSelection("selection_not_required");
   const reviewDetails = buildReviewDetails({
     category: "trim",
     actionKind: "review_only",
     guardrails,
     protocolSelection,
-    reason: `Flagged for review: ${triggers.join(", ")}.`,
-    metrics: [
-      usdMetric("Long-tail assets to review", flaggedTrimValueUsd),
-      metric("Token count", eligible.length, "count"),
-      pctMetric("Portfolio share", Math.round((flaggedTrimValueUsd / totalPricedUsd) * 1000) / 10),
-    ],
+    reason,
+    metrics,
     involvedAssets,
-    calculations: [
-      {
-        label: "Long-tail exposure vs portfolio",
-        formula: "long-tail value ÷ portfolio value",
-        currentValue: flaggedTrimValueUsd,
-        targetValue: totalPricedUsd,
-        threshold: Math.round(TRIM_PORTFOLIO_SHARE_THRESHOLD * 1000) / 10,
-        unit: "USD",
-      },
-    ],
+    calculations,
+    additionalLimitations,
   });
 
   return {
     id: TRIM_SUGGESTION_ID,
     category: "trim",
     reason_codes,
-
     title_key: "suggestion.trim.title",
     description_key: "suggestion.trim.description",
-
     action_kind: "review_only",
     is_actionable: true,
     is_top_pick: false, // set only by selectTopPick
-
-    amount: {
-      valueUsd: flaggedTrimValueUsd,
-      label: "Long-tail assets to review",
-    },
-
-    // Long-tail review — proposes no protocol (token selection is also deferred).
+    amount: { valueUsd: total, label: "Non-core value to review" },
     protocolSelection,
     reviewDetails,
-
+    // Scoring methodology unchanged; the denominator is now the AUTHORITATIVE gross-asset value (not the legacy
+    // partial total). Urgency precedence: concentration → aggregate → small-only.
     scores: {
-      impact: Math.min(flaggedTrimValueUsd / totalPricedUsd, 1),
-      urgency: hasConcentration ? 0.45 : hasLongTail ? 0.35 : 0.25,
+      impact: Math.min(total / denom, 1),
+      urgency: hasConcentration ? 0.45 : hasAggregate ? 0.35 : 0.25,
       efficiency: 0.45,
     },
     guardrails,
-
     engine_version: SUGGESTION_ENGINE_VERSION,
     timestamp: generatedAt,
   };

@@ -271,35 +271,9 @@ const capitalEfficiency: TestingFixture = {
   },
 };
 
-const trim: TestingFixture = {
-  id: "testing_trim",
-  categoryLabel: "Portfolio Health",
-  group: "Review",
-  label: TESTING_PREVIEW_NOT_LIVE,
-  card: buildCard({
-    id: "testing_trim",
-    title: "Review Long-Tail Exposure",
-    type: "trim_long_tail",
-    category: "portfolio_health",
-    description: "Some non-core assets may deserve review.",
-    impact_text: "Exposure to review: $310",
-    severity: "info",
-  }),
-  details: {
-    summary: { title: "Review Long-Tail Exposure", reason: "A few long-tail assets add exposure you may want to review.", categoryLabel: "Portfolio Health" },
-    metrics: [{ label: "Long-tail exposure to review", value: 310, kind: "amount_usd", unit: "USD" }],
-    involvedAssets: [
-      { symbol: "SAMO", valueUsd: 170, role: "long_tail_asset" },
-      { symbol: "POPCAT", valueUsd: 140, role: "long_tail_asset" },
-    ],
-    involvedPositions: [],
-    calculations: [],
-    guardrailSummary: { checked: ["Concentration review", "Pricing availability"], notEvaluated: [], notApplicable: ["Protocol selection"] },
-    limitations: [REVIEW_ONLY_LIMITATION],
-    safetyNotes: REVIEW_ONLY_NOTES,
-    demoLabel: TESTING_PREVIEW_NOT_LIVE,
-  },
-};
+// Step 19C — the hand-built `testing_trim` card was REPLACED by the production-derived Trim gallery
+// (trimTestingFixtures.ts → deriveTrimAssessment + buildTrimCardFromAssessment, rendered on TestingPage via
+// the production SuggestionCard + SuggestionReviewModal). No testing-only Trim card remains.
 
 const staking: TestingFixture = {
   id: "testing_staking",
@@ -593,7 +567,6 @@ const ALL_FIXTURES: TestingFixture[] = [
   safetyBuffer,
   rebalance,
   capitalEfficiency,
-  trim,
   staking,
   stableYield,
   dca,
