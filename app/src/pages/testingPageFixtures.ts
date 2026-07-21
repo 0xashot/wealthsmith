@@ -407,36 +407,8 @@ const dca: TestingFixture = {
   },
 };
 
-const positionOptimization: TestingFixture = {
-  id: "testing_position_optimization",
-  categoryLabel: "Portfolio Health",
-  group: "Review",
-  label: TESTING_PREVIEW_NOT_LIVE,
-  card: buildCard({
-    id: "testing_position_optimization",
-    title: "Review Existing Yield Positions",
-    type: "review_yield_strategy",
-    category: "portfolio_health",
-    description: "Some existing positions may need review.",
-    impact_text: "Positions to review: $15,200",
-    severity: "info",
-  }),
-  details: {
-    summary: { title: "Review Existing Yield Positions", reason: "A large share of your yield sits in one position — worth a review.", categoryLabel: "Portfolio Health" },
-    metrics: [
-      { label: "Positions to review", value: 15200, kind: "amount_usd", unit: "USD" },
-      { label: "Concentration", value: 86, kind: "percent", unit: "%" },
-      { label: "Reported APY", value: 3.9, kind: "percent", unit: "%" },
-    ],
-    involvedAssets: [],
-    involvedPositions: [{ protocol: "Kamino", name: "Steakhouse USDC", valueUsd: 15200, apy: 3.9, role: "concentrated_position", reason: "High share of your yield exposure" }],
-    calculations: [],
-    guardrailSummary: { checked: ["Position value threshold", "Concentration review"], notEvaluated: [], notApplicable: ["Protocol selection"] },
-    limitations: [REVIEW_ONLY_LIMITATION],
-    safetyNotes: REVIEW_ONLY_NOTES,
-    demoLabel: TESTING_PREVIEW_NOT_LIVE,
-  },
-};
+// Step 20C — the hand-built Position Optimization fixture was removed. The /testing gallery now renders the
+// PRODUCTION canonical assessment + card mapper (see positionOptimizationTestingFixtures.ts / TestingPage.tsx).
 
 const onTrack: TestingFixture = {
   id: "testing_on_track",
@@ -570,7 +542,6 @@ const ALL_FIXTURES: TestingFixture[] = [
   staking,
   stableYield,
   dca,
-  positionOptimization,
   onTrack,
   msolReviewCandidate,
   infBlockedCandidate,

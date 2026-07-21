@@ -83,6 +83,13 @@ export interface WalletPosition {
    * undefined when no sourced APY is available yet (shown as "—").
    */
   apy?: number | null;
+  /**
+   * Step 20B.1 — the ISO-8601 time the APY SOURCE OBSERVATION was made (not when WealthSmith fetched it).
+   * OPTIONAL plumbing for the approved "source-provided observation timestamp" freshness path: no current APY
+   * ingestion (`fetchLstApys` / Ondo) supplies it, so it stays undefined and APY freshness remains UNRESOLVED
+   * (fail-closed for low-yield review). A future freshness-bearing integration may populate it. Never invented.
+   */
+  apyObservedAt?: string | null;
   /** For protocol positions: whether it's supplied (collateral) or borrowed. */
   side?: "supplied" | "borrowed";
   /**

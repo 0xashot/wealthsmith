@@ -35,6 +35,7 @@ import { getPortfolioCompletenessTestingFixtures } from "./portfolioCompleteness
 import { getLiquidPositions, getStakedPositions, getProtocolPositions } from "../wallet/walletSummary";
 import { getRebalanceTestingFixtures, getNativeSolSourceTestingFixtures, getStakingConflictTestingFixtures } from "./rebalanceTestingFixtures";
 import { getTrimTestingFixtures } from "./trimTestingFixtures";
+import { getPositionOptimizationTestingFixtures } from "./positionOptimizationTestingFixtures";
 import "./testingPage.css";
 
 type Filter = "All" | TestingGroup;
@@ -55,6 +56,10 @@ export default function TestingPage() {
   const trimFixtures = useMemo(() => getTrimTestingFixtures(), []);
   const [selectedTrimId, setSelectedTrimId] = useState<string | null>(null);
   const selectedTrim = selectedTrimId ? trimFixtures.find((f) => f.id === selectedTrimId && f.card) : undefined;
+  // Step 20C — production-derived Position Optimization gallery + click-through into the SAME production review modal.
+  const positionOptimizationFixtures = useMemo(() => getPositionOptimizationTestingFixtures(), []);
+  const [selectedPositionOptimizationId, setSelectedPositionOptimizationId] = useState<string | null>(null);
+  const selectedPositionOptimization = selectedPositionOptimizationId ? positionOptimizationFixtures.find((f) => f.id === selectedPositionOptimizationId && f.card) : undefined;
 
   const visible = filter === "All" ? fixtures : fixtures.filter((f) => f.group === filter);
 
@@ -370,6 +375,47 @@ export default function TestingPage() {
         />
       )}
 
+      {/* Step 20C — production-derived Position Optimization gallery. Each fixture runs the canonical
+          PositionOptimizationAssessment + production card mapper; cards render through the production
+          SuggestionCard and open the SAME production review modal; no-card states show the deterministic
+          readiness/trigger reason. No testing-only card or calculation. Review-only: no position is selected
+          and nothing is exited, switched, withdrawn, unstaked, or closed. */}
+      <section className="testing-page__contrib" aria-label="Position Optimization review states">
+        <h2 className="testing-page__section-title">Position Optimization (Review Existing Positions)</h2>
+        <p className="testing-page__subtext">
+          Existing yield positions counted once by exact economic identity (stake account, mint + token program, or
+          product + dedupe key), an authoritative gross-asset denominator with liabilities separate, honest APY state
+          (unavailable / no-comparison / freshness-unverified — production has no approved freshness policy, so
+          low-yield is unreachable), and exact shared-underlying grouping (not treated as an economic duplicate).
+          Review-only; no position is selected and nothing is exited, switched, withdrawn, unstaked, or closed.
+          Incomplete-buffer / unresolved-liability / duplicate-identity / below-$100 states never render a card.
+        </p>
+        <div className="testing-page__grid">
+          {positionOptimizationFixtures.map((f) => (
+            <div key={f.id} className="testing-page__cell">
+              <p className="testing-page__cell-label">
+                {f.label} — <span className="testing-page__badge">{f.card ? `${f.card.reason_codes.length} trigger(s)` : "no card"}</span>
+              </p>
+              {f.card ? (
+                <SuggestionCard card={toSuggestionCard(f.card)} onReview={() => setSelectedPositionOptimizationId(f.id)} />
+              ) : (
+                <p className="testing-page__contrib-noplan">
+                  No card — readiness: <strong>{f.assessment.overallReadiness.status}</strong>, positions: <strong>{f.assessment.canonicalPositions.length}</strong>, gross assets: <strong>${f.assessment.grossAssetValueUsd}</strong>, flagged: <strong>${f.assessment.totalFlaggedValueUsd}</strong>{f.assessment.blockingReasons.length > 0 ? <> · reasons: <strong>{f.assessment.blockingReasons.join(", ")}</strong></> : null}.
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {selectedPositionOptimization?.card?.reviewDetails && (
+        <SuggestionReviewModal
+          details={selectedPositionOptimization.card.reviewDetails}
+          isTopPick={selectedPositionOptimization.card.is_top_pick === true}
+          onClose={() => setSelectedPositionOptimizationId(null)}
+        />
+      )}
+
       {/* Step 18E — crypto-overweight staking-conflict policy. A PROVEN material crypto_to_stables NEED
           suppresses an otherwise-eligible new staking suggestion (narrow only, card-independent, directional).
           Decision is derived from the PRODUCTION assessment direction. Fixture-only; no cards created. */}
@@ -462,7 +508,7 @@ export default function TestingPage() {
                 <EarningAssetsCard title="Yield Strategies" caption="Detected protocol/staked positions" valueHeader="Value" positions={[...getStakedPositions(f.positions), ...getProtocolPositions(f.positions)]} completeness={f.completeness} />
                 {f.id === "gate_inspector" && (
                   <p className="testing-page__contrib-noplan">
-                    Gates — Rebalance: <strong>{f.gates.rebalance}</strong>, Position Optimization: <strong>{f.gates.positionOptimization}</strong> (no cards created; Trim now uses its own canonical assessment gates)
+                    Gates — Rebalance: <strong>{f.gates.rebalance}</strong> (no cards created; Trim and Position Optimization each use their own canonical assessment gates)
                   </p>
                 )}
               </div>

@@ -235,8 +235,28 @@ export const SUGGESTION_STABLE_YIELD_TITLE = "Put Stablecoins to Work";
 export const SUGGESTION_STABLE_YIELD_DESCRIPTION =
   "You have liquid stablecoins that may be eligible for conservative yield options while still supporting your Safety Buffer.";
 export const SUGGESTION_POSITION_OPTIMIZATION_TITLE = "Review Existing Yield Positions";
+/* Step 20C — neutral description covering ALL trigger families (incl. shared underlying exposure). Never
+ * implies a position is defective, and never an instruction to exit/switch/withdraw. */
 export const SUGGESTION_POSITION_OPTIMIZATION_DESCRIPTION =
-  "Some existing positions may need review based on yield, concentration, or missing data.";
+  "Some existing positions may deserve review based on yield data, concentration, or shared underlying exposure.";
+/* Step 20C — review-oriented trigger wording + per-position reasons + APY display labels + limitations. */
+export const SUGGESTION_PO_REASON_MISSING_APY = "Current APY data could not be verified for one or more supported positions.";
+export const SUGGESTION_PO_REASON_LOW_YIELD = "One or more positions have a fresh, comparable sourced APY below the review threshold.";
+export const SUGGESTION_PO_REASON_CONCENTRATION = "A single deployed position represents a substantial share of your gross portfolio assets.";
+export const SUGGESTION_PO_REASON_SHARED = "Multiple positions are tied to the same underlying asset.";
+export const SUGGESTION_PO_POS_MISSING_APY = "Current APY data unavailable";
+export const SUGGESTION_PO_POS_LOW_YIELD = "Fresh comparable APY below review threshold";
+export const SUGGESTION_PO_POS_CONCENTRATION = "High single-position share";
+export const SUGGESTION_PO_POS_SHARED = "Shared underlying exposure";
+export const SUGGESTION_PO_APY_FRESHNESS_UNVERIFIED = "APY freshness unverified";
+export const SUGGESTION_PO_APY_UNAVAILABLE = "Current APY unavailable";
+export const SUGGESTION_PO_APY_STALE = "APY may be stale";
+export const SUGGESTION_PO_APY_NO_COMPARISON = "Yield comparison not available";
+export const SUGGESTION_PO_APY_NOT_APPLICABLE = "Not applicable";
+export const SUGGESTION_PO_APY_UNRESOLVED = "Unable to verify";
+export const SUGGESTION_PO_LIMIT_FRESHNESS = "APY freshness could not be verified for some positions.";
+export const SUGGESTION_PO_LIMIT_NO_COMPARISON = "Yield comparison is not available for some position types.";
+export const SUGGESTION_PO_LIMIT_EXPOSURE = "Shared-exposure grouping could not be evaluated for some positions.";
 export const SUGGESTION_DCA_TITLE = "Review a DCA Plan";
 export const SUGGESTION_DCA_DESCRIPTION =
   "Your crypto allocation is below target. You may be able to use future contributions to build exposure gradually.";

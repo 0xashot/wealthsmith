@@ -21,7 +21,6 @@ import { deriveCapitalEfficiencySuggestion } from "./capitalEfficiencySuggestion
 import { deriveStakingSuggestion } from "./stakingSuggestion";
 import { deriveStableYieldSuggestion } from "./stableYieldSuggestion";
 import { deriveDcaSuggestion } from "./dcaSuggestion";
-import { derivePositionOptimizationSuggestion } from "./positionOptimizationSuggestion";
 import { deriveOnTrackSuggestion } from "./onTrackSuggestion";
 import { completenessAllows, type CompletenessGateMap, type CompletenessDecision } from "../wallet/portfolioCompleteness";
 import { selectTopPick } from "./topPick";
@@ -86,7 +85,15 @@ export function runSuggestionEngine(
    * mirrors overall readiness (audit signal); Trim never suppresses another suggestion. The mounted rail
    * always supplies it. Trim coexists with Rebalance and Capital Efficiency and keeps its category-4 order.
    */
-  trimOverride?: { candidate: EngineSuggestion | null; materialReviewNeed?: boolean }
+  trimOverride?: { candidate: EngineSuggestion | null; materialReviewNeed?: boolean },
+  /**
+   * Step 20C — the production Position Optimization result. `candidate` (or null) is the ONE authoritative
+   * review suggestion (built from the canonical PositionOptimizationAssessment behind
+   * `position_optimization_review`). There is NO legacy fallback: when ABSENT the engine produces NO card
+   * (fail closed). `reviewNeed` mirrors overall readiness (audit signal); it never suppresses another
+   * suggestion. The mounted rail always supplies it. Keeps its lowest (category-8) order; coexists with all.
+   */
+  positionOptimizationOverride?: { candidate: EngineSuggestion | null; reviewNeed?: boolean }
 ): SuggestionEngineResult {
   const warnings: SuggestionReasonCode[] = [];
   if (inputs.value.anyUnpriced) warnings.push("partial_pricing");
@@ -142,10 +149,14 @@ export function runSuggestionEngine(
       const dca = planDca ?? deriveDcaSuggestion(inputs, generatedAt);
       if (dca && allows("dca")) candidates.push(dca);
     }
-    // Position Optimization is the lowest-priority actionable candidate and may
-    // coexist with any of the above (it reviews already-deployed positions).
-    const positionOpt = derivePositionOptimizationSuggestion(inputs, generatedAt);
-    if (positionOpt && allows("positionOptimization")) candidates.push(positionOpt);
+    // Step 20C — the ONE authoritative Position Optimization result comes exclusively from the canonical
+    // PositionOptimizationAssessment via `positionOptimizationOverride` (built by
+    // `buildPositionOptimizationCardFromAssessment` behind the SAME `position_optimization_review` contract).
+    // Its OWN trigger-specific gates already applied; the obsolete Rebalance-copied SOL-exposure gate is not
+    // used. NO legacy fallback: when the override is absent, the engine produces NO card (fail closed). It is
+    // the lowest-priority actionable candidate and coexists with every higher category (reviews deployed positions).
+    const positionOpt = positionOptimizationOverride?.candidate ?? null;
+    if (positionOpt) candidates.push(positionOpt);
 
     if (candidates.length > 0) {
       suggestions.push(...candidates);

@@ -343,6 +343,17 @@ export interface ReviewPosition {
   apy?: number | null;
   role: ReviewPositionRole;
   reason?: string;
+  /**
+   * Step 20C (canonical Position Optimization review) — OPTIONAL read-only review metadata. Safe display only;
+   * never exposes account/obligation/pool/vault ids, dedupe keys, economicPositionKey, or internal codes, and
+   * never implies exit/switch/withdraw. `apyDisplayState` is a human label; `portfolioSharePct` is share of
+   * authoritative gross assets; `lifecycleLabel` reuses the Step-17 canonical lifecycle; `sharedExposureLabel`
+   * is a safe underlying label ("SOL"/"USDC"/…). Absent for all other categories.
+   */
+  portfolioSharePct?: number;
+  apyDisplayState?: string;
+  lifecycleLabel?: string;
+  sharedExposureLabel?: string;
 }
 
 export interface ReviewCalculation {
@@ -372,7 +383,11 @@ export type ReviewLimitationKind =
   // Step 19C (canonical Trim review) — transferability is a REVIEW limitation, never proof an asset can be moved.
   | "transferability_unavailable"
   | "transferability_unresolved"
-  | "transferability_limited";
+  | "transferability_limited"
+  // Step 20C (canonical Position Optimization review) — APY-data / yield-comparison / exposure limitations.
+  | "apy_freshness_unverified"
+  | "yield_comparison_unavailable"
+  | "exposure_grouping_unresolved";
 
 export interface ReviewLimitation {
   kind: ReviewLimitationKind;

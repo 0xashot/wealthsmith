@@ -1,22 +1,21 @@
 /**
- * duplicateExposure — deterministic grouping of EXISTING deployed positions by
- * their underlying exposure, so Position Optimization can flag when multiple
- * positions represent similar exposure (reason `duplicate_exposure`).
+ * duplicateExposure — deterministic single-position underlying-exposure classification
+ * (`getUnderlyingExposureGroup`). It maps a DEPLOYED position (native stake / LST / protocol) to a coarse
+ * exposure bucket (SOL / stablecoin / exact token) from detected structured fields only (type, exact symbol,
+ * mint, legs) — never from vague names.
  *
- * Pure and honest: it groups ONLY from detected structured fields (type, exact
- * symbol, mint, legs) — never from vague names — and never invents value,
- * APY, risk, or a protocol. Uncertain positions return `null` (never grouped).
- * This is review-only: it says positions "share similar exposure", never that a
- * position is bad/unsafe and never sell/swap/unwind.
+ * Consumers (Step 20D): the contribution portfolio adapter (SOL-exposure detection for allocation) and the
+ * staking/DCA duplicate-suppression fixtures. Position Optimization does NOT use this file — its canonical
+ * shared-underlying-exposure grouping lives in `positionOptimizationAssessment.ts` (exact mint + token program).
+ * The pre-canonical `findDuplicateExposureGroups` / `DuplicateExposureGroup` / `exposureGroupLabel` helpers were
+ * deleted with the legacy Position Optimization rule (Step 20D).
+ *
+ * Pure and honest: uncertain positions return `null` (never grouped); it never invents value, APY, risk, or a
+ * protocol, and never implies sell/swap/unwind.
  */
 import type { WalletPosition } from "../wallet/walletPosition";
 import { lookupMint } from "../wallet/walletPosition";
 import { STABLE_SYMBOLS } from "../wallet/walletSummary";
-import {
-  MIN_DUPLICATE_EXPOSURE_POSITION_USD,
-  MIN_DUPLICATE_EXPOSURE_GROUP_USD,
-  DUPLICATE_EXPOSURE_PORTFOLIO_SHARE_THRESHOLD,
-} from "./engineThresholds";
 
 /** Underlying exposure group key. `TOKEN:` is followed by a mint or exact symbol. */
 export type ExposureGroup = "SOL_EXPOSURE" | "STABLE_EXPOSURE" | `TOKEN:${string}`;
@@ -65,58 +64,3 @@ export function getUnderlyingExposureGroup(p: WalletPosition): ExposureGroup | n
   return null;
 }
 
-/** User-facing label for an exposure group (never a raw group key). */
-export function exposureGroupLabel(group: ExposureGroup): string {
-  if (group === "SOL_EXPOSURE") return "SOL exposure";
-  if (group === "STABLE_EXPOSURE") return "Stablecoin exposure";
-  return "Shared token exposure";
-}
-
-export interface DuplicateExposureGroup {
-  group: ExposureGroup;
-  label: string;
-  positions: WalletPosition[];
-  combinedUsd: number;
-}
-
-/**
- * Find deployed-position groups that qualify as duplicate exposure: at least two
- * priced positions (each ≥ the per-position minimum) whose combined value clears
- * both the group-dollar minimum and the portfolio-share threshold. Deterministic
- * given the input order; never invents value.
- */
-export function findDuplicateExposureGroups(
-  positions: WalletPosition[],
-  totalPricedUsd: number
-): DuplicateExposureGroup[] {
-  if (totalPricedUsd <= 0) return [];
-  const buckets = new Map<string, WalletPosition[]>();
-
-  for (const p of positions) {
-    if (p.type !== "lst" && p.type !== "stake" && p.type !== "protocol") continue;
-    if (typeof p.valueUsd !== "number" || p.valueUsd <= 0) continue;
-    if (!p.symbol) continue;
-    // Ignore dust positions below the per-position minimum.
-    if (p.valueUsd < MIN_DUPLICATE_EXPOSURE_POSITION_USD) continue;
-    const group = getUnderlyingExposureGroup(p);
-    if (!group) continue;
-    const arr = buckets.get(group) ?? [];
-    arr.push(p);
-    buckets.set(group, arr);
-  }
-
-  const out: DuplicateExposureGroup[] = [];
-  for (const [group, arr] of buckets) {
-    if (arr.length < 2) continue;
-    const combinedUsd = arr.reduce((s, p) => s + (p.valueUsd as number), 0);
-    if (combinedUsd < MIN_DUPLICATE_EXPOSURE_GROUP_USD) continue;
-    if (combinedUsd / totalPricedUsd < DUPLICATE_EXPOSURE_PORTFOLIO_SHARE_THRESHOLD) continue;
-    out.push({
-      group: group as ExposureGroup,
-      label: exposureGroupLabel(group as ExposureGroup),
-      positions: arr,
-      combinedUsd,
-    });
-  }
-  return out;
-}

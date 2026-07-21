@@ -40,6 +40,9 @@ import { deriveRebalanceAssessment, selectRebalanceUsdcSource, isRebalanceMateri
 import { buildRebalanceCardFromAssessment } from "./rebalanceSuggestion";
 import { deriveTrimAssessment } from "./trimAssessment";
 import { buildTrimCardFromAssessment } from "./trimSuggestion";
+import { derivePositionOptimizationAssessment } from "./positionOptimizationAssessment";
+import { buildPositionOptimizationCardFromAssessment } from "./positionOptimizationSuggestion";
+import { derivePortfolioAssetAccounting } from "../wallet/portfolioAssetAccounting";
 import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 import { deriveContributionSuggestion } from "./contributionProductInput";
 import { deriveStableYieldPlanSuggestion } from "./stableYieldProductInput";
@@ -216,6 +219,20 @@ export function deriveRailSuggestions(args: {
     materialReviewNeed: trimAssessment.overallReadiness.status === "allowed",
   };
 
+  // Step 20C — ONE canonical Position Optimization assessment per refresh over the SAME merged positions +
+  // shared completeness + shared SafetyBufferCoverage + the SHARED gross-asset accounting (no second wallet
+  // aggregation / completeness / buffer / accounting derivation, no RPC). Production uses the canonical APY
+  // freshness-policy registry (fixture-only approved policies are NEVER injected here). Coexists with all.
+  const portfolioAccounting = derivePortfolioAssetAccounting(positions, completeness.result);
+  const positionOptimizationAssessment = derivePositionOptimizationAssessment({
+    positions, portfolioCompleteness: completeness.result, safetyBufferCoverage: bufferCoverage,
+    requiredBufferUsd, portfolioAccounting, generatedAt: pricedAsOf ?? Date.now(),
+  });
+  const positionOptimizationOverride = {
+    candidate: buildPositionOptimizationCardFromAssessment(positionOptimizationAssessment, pricedAsOf ?? 0),
+    reviewNeed: positionOptimizationAssessment.overallReadiness.status === "allowed",
+  };
+
   const engineResult = runSuggestionEngine(
     buildSuggestionEngineInputs({
       positions,
@@ -230,7 +247,8 @@ export function deriveRailSuggestions(args: {
     stableYield.suggestion,
     completeness.gates,
     rebalanceOverride,
-    trimOverride
+    trimOverride,
+    positionOptimizationOverride
   );
   const cards = toSuggestionCards(engineResult.suggestions);
 

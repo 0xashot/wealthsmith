@@ -84,7 +84,6 @@ import {
   assessPositionCompleteness as pcAssess, computePortfolioCompleteness as pcCompute,
   detectDuplicateViolations as pcDupes, classifyPositionClass as pcClass,
   canDetermineNetWorth as pcNetWorth, canShowOnTrack as pcOnTrack, canGenerateRebalance as pcRebalance,
-  canGeneratePositionOptimization as pcOptimize,
   canGenerateStakingSuggestion as pcStaking, canGenerateDcaSuggestion as pcDca,
   canGenerateDirectLendingSuggestion as pcDirect,
   deriveCompletenessGates as pcGates, completenessAllows as pcAllows,
@@ -160,11 +159,13 @@ import type { EngineSuggestion, ProtocolStrategyType } from "./engineTypes";
 import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
 import { deriveLegacyBucketRebalanceSuggestion as rbLegacyBucket } from "./rebalanceSuggestionLegacy";
+import { buildPositionOptimizationCardFromAssessment as poBuildCard } from "./positionOptimizationSuggestion";
 import { buildTrimCardFromAssessment as trimBuildCard } from "./trimSuggestion";
 import {
   deriveTrimAssessment as trimAssess, TRIM_CORE_ASSETS, trimCoreAssetFor,
   TRIM_CLASSIC_TOKEN_PROGRAM, TRIM_TOKEN_2022_PROGRAM,
 } from "./trimAssessment";
+import { derivePositionOptimizationAssessment as poAssess, PO_APY_FRESHNESS_POLICIES, lookupApyFreshnessPolicy, type PoApyFreshnessPolicy } from "./positionOptimizationAssessment";
 import { selectTopPick } from "./topPick";
 
 /**
@@ -182,10 +183,15 @@ function runEngineWithLegacyRebalance(
   stableYield: Parameters<typeof runSuggestionEngine>[3] = null,
   gates: Parameters<typeof runSuggestionEngine>[4] = undefined,
   trimCandidate: import("./engineTypes").EngineSuggestion | null = null,
+  poCandidate: import("./engineTypes").EngineSuggestion | null = null,
 ): ReturnType<typeof runSuggestionEngine> {
   const legacy = rbLegacyBucket(inputs, generatedAt);
   const card = legacy && pcAllows(gates, "rebalance") ? legacy : null;
-  return runSuggestionEngine(inputs, generatedAt, contribution, stableYield, gates, { card, material: !!legacy }, trimCandidate ? { candidate: trimCandidate } : undefined);
+  // 20D — the legacy Position Optimization rule is DELETED. Isolated engine ordering / Top-Pick / review-detail
+  // fixtures inject an explicit fixture-only candidate via `poCandidate` (see
+  // `buildSyntheticPositionOptimizationCandidateForFixture`); absent it, the engine emits NO Position
+  // Optimization candidate (fail closed — exactly the mounted production contract).
+  return runSuggestionEngine(inputs, generatedAt, contribution, stableYield, gates, { card, material: !!legacy }, trimCandidate ? { candidate: trimCandidate } : undefined, poCandidate ? { candidate: poCandidate } : undefined);
 }
 
 /**
@@ -203,6 +209,29 @@ function synthTrimCandidate(amountUsd = 160): import("./engineTypes").EngineSugg
   ];
   const card = trimBuildCard(trimAssess({ positions, requiredBufferUsd: 500, generatedAt: FIXTURE_GENERATED_AT }), FIXTURE_GENERATED_AT);
   if (!card) throw new Error("synthTrimCandidate requires amountUsd >= 100");
+  return card;
+}
+
+/**
+ * Step 20D — a clearly-named FIXTURE-ONLY Position Optimization candidate for isolated ordering / Top-Pick /
+ * review-detail tests. It imports NO legacy calculation (the legacy rule is deleted) and reproduces NO
+ * eligibility, accounting, APY, exposure-grouping, or trigger logic: it runs the PRODUCTION canonical
+ * assessment + mapper over a FIXED synthetic single-position-concentration portfolio, so the resulting card
+ * carries the real production contract (stable id/category, review_only, is_top_pick false, no execution CTA,
+ * no wallet/account identity, real reviewDetails). `amountUsd` sets the flagged total. Never reachable from
+ * production. The fixed portfolio always clears the concentration trigger, so a card is always produced.
+ */
+function buildSyntheticPositionOptimizationCandidateForFixture(amountUsd = 1500): import("./engineTypes").EngineSuggestion {
+  const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const JITOSOL = "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn";
+  // Cash covers the $500 fixture buffer and stays ≤ the LST value so the LST clears the 50% concentration gate.
+  const cash = Math.max(500, Math.min(amountUsd, 1000));
+  const positions: WalletPosition[] = [
+    { id: "synth-po-usdc", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: USDC_MINT, amount: String(Math.round(cash * 1e6)), uiAmount: cash, decimals: 6, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: cash },
+    { id: "synth-po-lst", source: "jito", type: "lst", symbol: "JitoSOL", name: "Jito Staked SOL", mint: JITOSOL, amount: "1", uiAmount: 1, detection: "recognized_lst_mint", valueUsd: amountUsd, apy: 7, apyObservedAt: null },
+  ];
+  const card = poBuildCard(poAssess({ positions, requiredBufferUsd: 500, generatedAt: FIXTURE_GENERATED_AT }), FIXTURE_GENERATED_AT);
+  if (!card) throw new Error("buildSyntheticPositionOptimizationCandidateForFixture requires a concentration-triggering portfolio");
   return card;
 }
 import { toSuggestionCard, toSuggestionCards } from "./toSuggestionCard";
@@ -765,7 +794,7 @@ import {
 import { CONTRIBUTION_OPTIONS } from "../state/goalState";
 import { deriveRecommendedAllocation } from "../wallet/recommendedAllocation";
 import { SOL_MINT as PRICE_SOL_MINT } from "../wallet/tokenPrices";
-import { MIN_DCA_SUGGESTION_USD, SUGGESTION_ENGINE_VERSION, MIN_TRIM_SUGGESTION_USD, TRIM_PORTFOLIO_SHARE_THRESHOLD, TRIM_SINGLE_TOKEN_CONCENTRATION_THRESHOLD, TRIM_SMALL_POSITION_COUNT_THRESHOLD, TRIM_SMALL_POSITION_MAX_USD } from "./engineThresholds";
+import { MIN_DCA_SUGGESTION_USD, SUGGESTION_ENGINE_VERSION, MIN_TRIM_SUGGESTION_USD, TRIM_PORTFOLIO_SHARE_THRESHOLD, TRIM_SINGLE_TOKEN_CONCENTRATION_THRESHOLD, TRIM_SMALL_POSITION_COUNT_THRESHOLD, TRIM_SMALL_POSITION_MAX_USD, MIN_POSITION_REVIEW_USD, MIN_REVIEW_APY, MIN_CONCENTRATION_REVIEW_USD, POSITION_CONCENTRATION_THRESHOLD, MIN_DUPLICATE_EXPOSURE_POSITION_USD, MIN_DUPLICATE_EXPOSURE_GROUP_USD, DUPLICATE_EXPOSURE_PORTFOLIO_SHARE_THRESHOLD } from "./engineThresholds";
 import {
   CONTRIBUTION_PLANNING_POLICY_SCHEMA_VERSION,
   GROWTH_TARGET_ALLOCATION_POLICY_ID,
@@ -3043,231 +3072,6 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
-/* ------------------------------------------------------------------ *
- * Step 9D — existing position-optimization review trigger.
- * ------------------------------------------------------------------ */
-export function runPositionOptimizationFixtureChecks(): FixtureCheck[] {
-  const checks: FixtureCheck[] = [];
-  const add = (name: string, pass: boolean, detail: string) =>
-    checks.push({ name, pass, detail });
-  const cats = (r: ReturnType<typeof runSuggestionEngine>) =>
-    r.suggestions.map((s) => s.category).join(",") || "none";
-  const has = (r: ReturnType<typeof runSuggestionEngine>, c: string) =>
-    r.suggestions.some((s) => s.category === c);
-  const posOpt = (r: ReturnType<typeof runSuggestionEngine>) =>
-    r.suggestions.find((s) => s.category === "position_optimization");
-
-  const funded = () => bufferFixture(5000, 1000, 3);
-  const aligned = () => allocationFixture(15000, 62, 2); // no rebalance
-  const offTarget = () => allocationFixture(15000, 75, 15); // rebalance applies
-
-  // 9D-A. Underfunded buffer + flagged yield position → Buffer only.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: bufferFixture(800, 1000, 3),
-        allocation: aligned(),
-        positions: [yieldPosition(5000, null)],
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    add(
-      "9D-A: underfunded buffer + flagged position → buffer only",
-      cats(r) === "buffer" && !has(r, "position_optimization"),
-      `categories=${cats(r)}`
-    );
-  }
-
-  // 9D-B. Funded + no higher candidate + deployed position missing APY ≥ $100 → Top Pick.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: aligned(),
-        positions: [yieldPosition(5000, null)],
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    const s = posOpt(r);
-    add(
-      "9D-B: funded + missing-APY position → position_optimization Top Pick",
-      cats(r) === "position_optimization" &&
-        s?.is_top_pick === true &&
-        s?.reason_codes.includes("missing_apy_data") === true &&
-        s?.amount?.valueUsd === 5000,
-      `categories=${cats(r)} topPick=${s?.is_top_pick} reasons=${s?.reason_codes.join(",")}`
-    );
-  }
-
-  // 9D-C. Funded + deployed position APY < 1% and ≥ $100 → low_yield_position.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: aligned(),
-        positions: [yieldPosition(5000, 0.5)],
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    add(
-      "9D-C: funded + low APY position → low_yield_position",
-      posOpt(r)?.reason_codes.includes("low_yield_position") === true,
-      `reasons=${posOpt(r)?.reason_codes.join(",")}`
-    );
-  }
-
-  // 9D-D. Funded + healthy position (APY ≥ 1%, not concentrated) → no position_optimization → On Track.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: aligned(),
-        positions: [yieldPosition(2000, 5)],
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    add(
-      "9D-D: funded + healthy position → no position_optimization, On Track",
-      !has(r, "position_optimization") && cats(r) === "on_track",
-      `categories=${cats(r)}`
-    );
-  }
-
-  // 9D-E. Funded + concentrated position (≥ 50% of portfolio, ≥ $1,000) → concentration_risk.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: aligned(),
-        positions: [yieldPosition(8000, 5)], // 8000 / 15000 = 53%, healthy APY
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    add(
-      "9D-E: funded + concentrated position → concentration_risk",
-      posOpt(r)?.reason_codes.includes("concentration_risk") === true &&
-        posOpt(r)?.reason_codes.includes("low_yield_position") === false,
-      `reasons=${posOpt(r)?.reason_codes.join(",")}`
-    );
-  }
-
-  // 9D-F. Flagged deployed position below $100 → no position_optimization.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: aligned(),
-        positions: [yieldPosition(50, null)],
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    add(
-      "9D-F: deployed position < $100 → no position_optimization, On Track",
-      !has(r, "position_optimization") && cats(r) === "on_track",
-      `categories=${cats(r)}`
-    );
-  }
-
-  // 9D-G. Liquid wallet token with missing APY → not a deployed position → none.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: aligned(),
-        positions: [cryptoPosition(5000)], // type token, wallet — not deployed
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    add(
-      "9D-G: liquid wallet token → no position_optimization",
-      !has(r, "position_optimization"),
-      `categories=${cats(r)}`
-    );
-  }
-
-  // 9D-H. Unpriced deployed position → no position_optimization, no invented amount.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: aligned(),
-        positions: [yieldPosition(5000, null, { priced: false })],
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    add(
-      "9D-H: unpriced deployed position → no position_optimization",
-      !has(r, "position_optimization"),
-      `categories=${cats(r)}`
-    );
-  }
-
-  // 9D-I. Rebalance + flagged position → Rebalance first (Top Pick), position_optimization second.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: offTarget(),
-        positions: [yieldPosition(5000, null)],
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    const reb = r.suggestions.find((s) => s.category === "rebalance");
-    add(
-      "9D-I: rebalance + flagged position → rebalance first/Top Pick, position_opt second",
-      cats(r) === "rebalance,position_optimization" &&
-        reb?.is_top_pick === true &&
-        posOpt(r)?.is_top_pick === false,
-      `categories=${cats(r)} rebTop=${reb?.is_top_pick}`
-    );
-  }
-
-  // 9D-J. Staking + Stable Yield + Position Optimization, no Rebalance → engine order, Staking Top Pick.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: aligned(),
-        positions: [solPosition(10), stablePosition("USDC", 10000), yieldPosition(5000, null)],
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    const stk = r.suggestions.find((s) => s.category === "staking");
-    add(
-      "9D-J: staking + stable_yield + position_opt → engine order, staking Top Pick",
-      cats(r) === "staking,stable_yield,position_optimization" && stk?.is_top_pick === true,
-      `categories=${cats(r)} stkTop=${stk?.is_top_pick}`
-    );
-  }
-
-  // 9D-K. Mapper renders the position_optimization card safely.
-  {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: aligned(),
-        positions: [yieldPosition(5000, null)],
-      }),
-      FIXTURE_GENERATED_AT
-    );
-    const s = posOpt(r);
-    const card = s ? toSuggestionCard(s) : undefined;
-    add(
-      "9D-K: position_optimization card maps safely (copy, amount, review-only, non-transactional)",
-      card?.title === "Review Existing Yield Positions" &&
-        card?.description ===
-          "Some existing positions may need review based on yield, concentration, or missing data." &&
-        card?.impact_text.includes("Positions to review") === true &&
-        card?.cta.label === "Review" &&
-        card?.cta.executes_transaction === false &&
-        card?.cta.requires_wallet_signature === false &&
-        card?.cta.action === null,
-      `title="${card?.title}" impact="${card?.impact_text}" cta="${card?.cta.label}"`
-    );
-  }
-
-  return checks;
-}
 
 /* ------------------------------------------------------------------ *
  * Step 9E — capital efficiency / idle assets trigger.
@@ -3519,7 +3323,7 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
         allocation: allocationFixture(15000, 62, 2), // no rebalance
         positions: everything,
       }),
-      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
+      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate(), buildSyntheticPositionOptimizationCandidateForFixture()
     );
     add(
       "9F-1: no rebalance, all fire → 5 cards in order, capital_efficiency Top Pick",
@@ -3540,7 +3344,7 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
         allocation: allocationFixture(15000, 75, 15), // rebalance applies
         positions: everything,
       }),
-      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
+      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate(), buildSyntheticPositionOptimizationCandidateForFixture()
     );
     add(
       "9F-2: rebalance present → rebalance,capEff,trim,staking,posOpt (no stable_yield), rebalance Top Pick",
@@ -3731,9 +3535,9 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
       inputsFor({
         safetyBuffer: funded(),
         allocation: dcaUnder(3),
-        positions: [cryptoPosition(100), yieldPosition(5000, null)],
+        positions: [cryptoPosition(100)],
       }),
-      FIXTURE_GENERATED_AT
+      FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()
     );
     add(
       "9G-J: dca + position_optimization → dca first/Top Pick, posOpt second",
@@ -3992,7 +3796,7 @@ export function runGuardrailFixtureChecks(): FixtureCheck[] {
     staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
     stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
     dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
+    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
   };
   const find = (r: ReturnType<typeof runSuggestionEngine>, c: string) => r.suggestions.find((s) => s.category === c);
   const execStatuses = (s: { guardrails: { code: string; status: string }[] } | undefined) =>
@@ -4112,7 +3916,7 @@ export function runProtocolSelectionFixtureChecks(): FixtureCheck[] {
     staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
     stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
     dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
+    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
     on_track: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
   };
   const find = (r: ReturnType<typeof runSuggestionEngine>, c: string) => r.suggestions.find((s) => s.category === c);
@@ -4255,7 +4059,7 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
     staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
     stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
     dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT),
+    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
     on_track: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
   };
   const find = (c: string) => runs[c].suggestions.find((s) => s.category === c);
@@ -4336,7 +4140,7 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
     const d = rd("position_optimization");
     const ok =
       metricLabels("position_optimization").includes("Positions to review") &&
-      (d?.summary.reason ?? "").startsWith("Flagged for review:") &&
+      (d?.summary.reason ?? "").length > 0 &&
       (d?.involvedPositions.length ?? 0) > 0 &&
       (d?.guardrailSummary.notApplicable ?? []).includes("Protocol selection");
     add("10A-H: position_optimization details include flagged value/reasons + no replacement protocol", ok, `notApplicable=${d?.guardrailSummary.notApplicable.join(",")}`);
@@ -4379,8 +4183,10 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
     const anyChecked = allReviewDetails.some((d) =>
       ["Route cost", "Liquidity depth", "Slippage"].some((l) => d.guardrailSummary.checked.includes(l))
     );
+    // An invented APY/TVL VALUE (percent/usd) is forbidden. Honest COUNT metrics — e.g. the canonical Position
+    // Optimization "APY freshness unverified" count — are metadata, not an invented yield figure, so they are allowed.
     const anyApyTvlMetric = allReviewDetails.some((d) =>
-      d.metrics.some((m) => /\bAPY\b|\bTVL\b/i.test(m.label))
+      d.metrics.some((m) => /\bAPY\b|\bTVL\b/i.test(m.label) && m.kind !== "count")
     );
     add(
       "10A-M: no invented APY/TVL/liquidity/slippage/route/cost/protocol in reviewDetails",
@@ -4485,8 +4291,8 @@ export function runReviewRefinementFixtureChecks(): FixtureCheck[] {
     FIXTURE_GENERATED_AT
   );
   const posOptConc = runEngineWithLegacyRebalance(
-    inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), totalUsd: 5000, allocation: allocationFixture(5000, 62, 2), positions: [yieldPosition(5000, 3)] }),
-    FIXTURE_GENERATED_AT
+    inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), totalUsd: 100, allocation: allocationFixture(15000, 62, 2), positions: [cryptoPosition(100)] }),
+    FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()
   );
   const stableYield = runEngineWithLegacyRebalance(
     inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [stablePosition("USDC", 10000)] }),
@@ -4503,11 +4309,11 @@ export function runReviewRefinementFixtureChecks(): FixtureCheck[] {
       assets.some((a) => a.role === "target_bucket");
     add("10C-A: rebalance buckets show source/target with concrete USD", ok, assets.map((a) => `${a.role}:${a.valueUsd}`).join(" "));
   }
-  // 10C-B. Position Optimization shows a protocol label + concentration share.
+  // 10C-B. Position Optimization shows a protocol label + a numeric concentration share (canonical fields).
   {
     const p0 = rd(posOptConc, "position_optimization")?.involvedPositions[0];
-    const ok = !!p0 && typeof p0.protocol === "string" && p0.protocol.length > 0 && /% of portfolio/.test(p0.reason ?? "");
-    add("10C-B: position optimization shows protocol + concentration share", ok, `protocol=${p0?.protocol} reason="${p0?.reason}"`);
+    const ok = !!p0 && typeof p0.protocol === "string" && p0.protocol.length > 0 && typeof p0.portfolioSharePct === "number" && (p0.reason ?? "").length > 0;
+    add("10C-B: position optimization shows protocol + concentration share", ok, `protocol=${p0?.protocol} share=${p0?.portfolioSharePct} reason="${p0?.reason}"`);
   }
   // 10C-C. Stable Yield surfaces the funded Safety Buffer reserve as a metric.
   {
@@ -4562,7 +4368,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // B. Rebalance + Position Optimization → rebalance first & Top Pick.
   {
-    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [yieldPosition(5000, null)] }), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture());
     const reb = r.suggestions.find((s) => s.category === "rebalance");
     const po = r.suggestions.find((s) => s.category === "position_optimization");
     add(
@@ -4582,7 +4388,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
         allocation: dcaUnder(3),
         positions: [cryptoPosition(400), nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), solPosition(10), stablePosition("USDC", 10000), yieldPosition(3000, null)],
       }),
-      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
+      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate(), buildSyntheticPositionOptimizationCandidateForFixture()
     );
     add(
       "SMOKE-C: six categories in engine order, capEff Top Pick, one Top Pick, all modal-openable",
@@ -4625,138 +4431,6 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
-/* ------------------------------------------------------------------ *
- * Step 12A — duplicate_exposure inside Position Optimization.
- * ------------------------------------------------------------------ */
-export function runDuplicateExposureFixtureChecks(): FixtureCheck[] {
-  const checks: FixtureCheck[] = [];
-  const add = (name: string, pass: boolean, detail: string) =>
-    checks.push({ name, pass, detail });
-
-  const run = (positions: WalletPosition[], total: number) =>
-    runSuggestionEngine(
-      inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), totalUsd: total, allocation: allocationFixture(total, 62, 2), positions }),
-      FIXTURE_GENERATED_AT
-    );
-  const cats = (r: ReturnType<typeof runSuggestionEngine>) => r.suggestions.map((s) => s.category).join(",");
-  const posOpt = (r: ReturnType<typeof runSuggestionEngine>) => r.suggestions.find((s) => s.category === "position_optimization");
-  const hasReason = (r: ReturnType<typeof runSuggestionEngine>, code: string) =>
-    r.suggestions.some((s) => (s.reason_codes as string[]).includes(code));
-  const lst = (symbol: string, valueUsd: number, apy: number | null = 5) => yieldPosition(valueUsd, apy, { type: "lst", symbol });
-  const stake = (valueUsd: number, apy: number | null = 5) => yieldPosition(valueUsd, apy, { type: "stake", symbol: "SOL" });
-  const stableProto = (symbol: string, valueUsd: number) => yieldPosition(valueUsd, 5, { type: "protocol", symbol, source: "kamino" });
-
-  // 12A-A. Two SOL LSTs above thresholds → duplicate_exposure.
-  {
-    const r = run([lst("JupSOL", 200), lst("mSOL", 200)], 5000);
-    add("12A-A: two SOL LSTs → position_optimization with duplicate_exposure",
-      cats(r).includes("position_optimization") && hasReason(r, "duplicate_exposure"),
-      `categories=${cats(r)} reasons=${posOpt(r)?.reason_codes.join(",")}`);
-  }
-  // 12A-B. JupSOL + mSOL + native stake → one card, grouped as SOL exposure.
-  {
-    const r = run([lst("JupSOL", 200), lst("mSOL", 200), stake(200)], 5000);
-    const d = posOpt(r);
-    const solCalc = d?.reviewDetails?.calculations.some((c) => c.label.startsWith("SOL exposure"));
-    add("12A-B: JupSOL + mSOL + native stake → one card, 3 positions, SOL exposure group",
-      r.suggestions.filter((s) => s.category === "position_optimization").length === 1 &&
-        hasReason(r, "duplicate_exposure") &&
-        (d?.reviewDetails?.involvedPositions.length ?? 0) === 3 &&
-        solCalc === true,
-      `count=${d?.reviewDetails?.involvedPositions.length} solCalc=${solCalc}`);
-  }
-  // 12A-C. Two deployed stable positions → duplicate_exposure, Stablecoin exposure.
-  {
-    const r = run([stableProto("USDC", 200), stableProto("USDT", 200)], 5000);
-    const d = posOpt(r);
-    const stableCalc = d?.reviewDetails?.calculations.some((c) => c.label.startsWith("Stablecoin exposure"));
-    add("12A-C: two deployed stable positions → duplicate_exposure (Stablecoin exposure)",
-      hasReason(r, "duplicate_exposure") && stableCalc === true,
-      `reasons=${d?.reason_codes.join(",")} stableCalc=${stableCalc}`);
-  }
-  // 12A-D. Only one deployed position → no duplicate; no other reason → On Track.
-  {
-    const r = run([lst("JupSOL", 200)], 5000);
-    add("12A-D: one deployed position → no duplicate, On Track", cats(r) === "on_track" && !hasReason(r, "duplicate_exposure"), `categories=${cats(r)}`);
-  }
-  // 12A-E. Combined below $250 → no duplicate.
-  {
-    const r = run([lst("JupSOL", 100), lst("mSOL", 100)], 5000);
-    add("12A-E: duplicate group < $250 → no duplicate_exposure", !hasReason(r, "duplicate_exposure"), `categories=${cats(r)}`);
-  }
-  // 12A-F. Share below 5% → no duplicate.
-  {
-    const r = run([lst("JupSOL", 200), lst("mSOL", 200)], 20000);
-    add("12A-F: duplicate group < 5% share → no duplicate_exposure", !hasReason(r, "duplicate_exposure"), `categories=${cats(r)}`);
-  }
-  // 12A-G. One candidate below $50 is ignored → no duplicate (only one remains).
-  {
-    const r = run([lst("JupSOL", 300), lst("mSOL", 40)], 5000);
-    add("12A-G: sub-$50 duplicate candidate ignored → no duplicate_exposure", !hasReason(r, "duplicate_exposure"), `categories=${cats(r)}`);
-  }
-  // 12A-H. Unpriced duplicate-like positions → no duplicate, no invented value.
-  {
-    const r = run([yieldPosition(200, 5, { type: "lst", symbol: "JupSOL", priced: false }), yieldPosition(200, 5, { type: "lst", symbol: "mSOL", priced: false })], 5000);
-    add("12A-H: unpriced duplicate-like positions → no duplicate_exposure", !hasReason(r, "duplicate_exposure"), `categories=${cats(r)}`);
-  }
-  // 12A-I. Liquid wallet SOL + USDC only → no duplicate, no position_optimization.
-  {
-    const r = run([solPosition(5), stablePosition("USDC", 5000)], 10000);
-    add("12A-I: liquid SOL + USDC only → no duplicate, no position_optimization",
-      !hasReason(r, "duplicate_exposure") && !hasReason(r, "position_optimization") && !cats(r).includes("position_optimization"),
-      `categories=${cats(r)}`);
-  }
-  // 12A-J. Duplicate + concentration on same group → both reasons, value deduped.
-  {
-    const r = run([lst("JupSOL", 1200), lst("mSOL", 200)], 2000);
-    const d = posOpt(r);
-    add("12A-J: duplicate + concentration → both reasons, flagged value deduped ($1,400)",
-      hasReason(r, "concentration_risk") && hasReason(r, "duplicate_exposure") && Math.round(d?.amount?.valueUsd ?? 0) === 1400,
-      `reasons=${d?.reason_codes.join(",")} flagged=${d?.amount?.valueUsd}`);
-  }
-  // 12A-K. Duplicate + missing_apy → both reasons, no double-counting ($600).
-  {
-    const r = run([lst("JupSOL", 300, null), lst("mSOL", 300)], 5000);
-    const d = posOpt(r);
-    add("12A-K: duplicate + missing_apy → both reasons, flagged value deduped ($600)",
-      hasReason(r, "missing_apy_data") && hasReason(r, "duplicate_exposure") && Math.round(d?.amount?.valueUsd ?? 0) === 600,
-      `reasons=${d?.reason_codes.join(",")} flagged=${d?.amount?.valueUsd}`);
-  }
-  // 12A-L. Review details include group label, count, combined value, positions.
-  {
-    const r = run([lst("JupSOL", 300), lst("mSOL", 300), stake(300)], 5000);
-    const d = posOpt(r)?.reviewDetails;
-    const labels = (d?.metrics ?? []).map((m) => m.label);
-    add("12A-L: review details include duplicate group label/count/value/positions",
-      (d?.calculations ?? []).some((c) => c.label.startsWith("SOL exposure")) &&
-        labels.includes("Positions with similar exposure") &&
-        labels.includes("Similar-exposure value") &&
-        (d?.involvedPositions.length ?? 0) === 3,
-      `labels=${labels.join(" | ")}`);
-  }
-  // 12A-M. Mapped card + review details contain no sell/buy/swap/bad/unsafe language.
-  {
-    const r = run([lst("JupSOL", 1200), lst("mSOL", 300)], 2500);
-    const s = posOpt(r);
-    const json = (JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(stripReviewAlternatives(s?.reviewDetails))).toLowerCase();
-    const hits = ["sell", "buy", "swap", "unwind", "\\bbad\\b", "unsafe"].filter((w) => new RegExp(w).test(json));
-    add("12A-M: card + review details use no sell/buy/swap/bad/unsafe language", hits.length === 0, `hits=${hits.join(",") || "none"}`);
-  }
-  // 12A-N. No raw internal guardrail/exposure codes leak into card/review details.
-  {
-    const r = run([lst("JupSOL", 300), lst("mSOL", 300)], 5000);
-    const s = posOpt(r);
-    // Raw guardrail codes and exposure GROUP KEYS must be mapped to friendly
-    // labels, never surfaced. (ReviewPosition.role is structural display metadata
-    // rendered via a label map — like every other role — so it is not a "code".)
-    const json = JSON.stringify(toSuggestionCard(s!)) + JSON.stringify(s?.reviewDetails?.guardrailSummary) + JSON.stringify(s?.reviewDetails?.calculations) + JSON.stringify(s?.reviewDetails?.metrics);
-    const codes = ["exposure_grouping", "concentration_review", "SOL_EXPOSURE", "STABLE_EXPOSURE", "TOKEN:"];
-    const leaks = codes.filter((c) => json.includes(c));
-    add("12A-N: no raw guardrail/exposure codes leak to card/modal", leaks.length === 0, `leaks=${leaks.join(",") || "none"}`);
-  }
-
-  return checks;
-}
 
 /* ------------------------------------------------------------------ *
  * Step 12C — static protocol registry + candidate metadata (NO selection).
@@ -8793,7 +8467,7 @@ export function runTestingPageFixtureChecks(): FixtureCheck[] {
   add("13H-L: testing fixtures include Staking", byCategory("Staking") != null, `has=${byCategory("Staking") != null}`);
   add("13H-M: testing fixtures include Stable Yield", byCategory("Stablecoin Yield") != null, `has=${byCategory("Stablecoin Yield") != null}`);
   add("13H-N: testing fixtures include DCA", byCategory("Contribution Plan") != null, `has=${byCategory("Contribution Plan") != null}`);
-  add("13H-O: testing fixtures include Position Optimization", fixtures.some((f) => f.card.type === "review_yield_strategy"), `has=${fixtures.some((f) => f.card.type === "review_yield_strategy")}`);
+  add("13H-O: Position Optimization moved to the production-derived /testing gallery (hand-built testing_position_optimization removed, 20C)", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/pages/testingPageFixtures.ts`, "utf8"); } catch { return ""; } })(); const poGallery = (() => { try { return readFileSync(`${process.cwd()}/src/pages/positionOptimizationTestingFixtures.ts`, "utf8"); } catch { return ""; } })(); return !src.includes('id: "testing_position_optimization"') && /buildPositionOptimizationCardFromAssessment/.test(poGallery) && /derivePositionOptimizationAssessment/.test(poGallery); })(), "production PO gallery");
   add("13H-P: testing fixtures include On Track", byCategory("On Track") != null, `has=${byCategory("On Track") != null}`);
 
   // 13H-Q. Every fixture carries the TESTING_PREVIEW_NOT_LIVE label.
@@ -17994,6 +17668,8 @@ export function printFixtureResults(): void {
     ...runRebalanceStep18GFixtureChecks(),
     ...runTrimAssessmentFixtureChecks(),
     ...runTrimProductionFixtureChecks(),
+    ...runPositionOptimizationAssessmentFixtureChecks(),
+    ...runPositionOptimizationProductionFixtureChecks(),
     ...runSteakhouseExistingPositionFixtureChecks(),
     ...runSafetyBufferCoverageFixtureChecks(),
     ...runKlendDirectPositionFailClosedFixtureChecks(),
@@ -18028,7 +17704,6 @@ export function printFixtureResults(): void {
     ...runContractFixtureChecks(),
     ...runStakingFixtureChecks(),
     ...runStableYieldFixtureChecks(),
-    ...runPositionOptimizationFixtureChecks(),
     ...runCapitalEfficiencyFixtureChecks(),
     ...runDcaFixtureChecks(),
     ...runTrimFixtureChecks(),
@@ -18039,7 +17714,6 @@ export function printFixtureResults(): void {
     ...runReviewModalFixtureChecks(),
     ...runReviewRefinementFixtureChecks(),
     ...runFinalSmokeFixtureChecks(),
-    ...runDuplicateExposureFixtureChecks(),
     ...runProtocolRegistryFixtureChecks(),
     ...runProtocolAdapterFixtureChecks(),
     ...runProtocolEligibilityFixtureChecks(),
@@ -21300,13 +20974,13 @@ export function runPortfolioCompletenessFixtureChecks(): FixtureCheck[] {
   // ---- Decision gates (allowed/blocked/unresolved + reasons) ----
   add("PC-18: complete net worth → canDetermineNetWorth allowed", pcNetWorth(pcCompute([nativeSol(), usdc(1000)], { requiredBufferUsd: 0 })).status === "allowed", "nw allowed");
   add("PC-19: jlUSDC → canDetermineNetWorth unresolved with reasons", (() => { const g = pcNetWorth(pcCompute([nativeSol(), jlusdc()], { requiredBufferUsd: 0 })); return g.status === "unresolved" && g.reasons.length > 0; })(), "nw blocked");
-  add("PC-20: mSOL → net worth allowed, position optimization unresolved (exposure)", (() => { const R = pcCompute([nativeSol(), msol()], { requiredBufferUsd: 0 }); return pcNetWorth(R).status === "allowed" && pcOptimize(R).status === "unresolved"; })(), "msol gates");
+  add("PC-20: mSOL → net worth allowed, exact SOL exposure state unresolved (drives the PO assessment, not a completeness gate)", (() => { const R = pcCompute([nativeSol(), msol()], { requiredBufferUsd: 0 }); return pcNetWorth(R).status === "allowed" && R.solExposureState !== "complete"; })(), "msol exposure");
   add("PC-21: unresolved Kamino liquidity → Rebalance unresolved, net worth allowed", (() => { const R = pcCompute([usdc(1000), kaminoDirect("unresolved", null)], { requiredBufferUsd: 0 }); return pcNetWorth(R).status === "allowed" && pcRebalance(R).status === "unresolved" && pcRebalance(R).reasons.length > 0; })(), "rebalance");
   add("PC-22: unvalued liability → On Track unresolved + direct lending blocked/unresolved", (() => { const R = pcCompute([usdc(1000), hubbleDebt(null)], { requiredBufferUsd: 0 }); return pcOnTrack(R).status === "unresolved" && pcDirect(R).status !== "allowed"; })(), "liability gates");
   add("PC-23: unknown token → On Track unresolved", pcOnTrack(pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 })).status === "unresolved", "ontrack unknown");
   add("PC-24: complete Safety Buffer stays complete despite unrelated unresolved excess", (() => { const R = pcCompute([usdc(1000), jlusdc()], { requiredBufferUsd: 500 }); return R.stableBufferState === "complete"; })(), "buffer complete");
   add("PC-25: incomplete/absent buffer → DCA + direct lending gates not allowed", (() => { const R = pcCompute([nativeSol()], { requiredBufferUsd: 1000 }); return pcDca(R).status !== "allowed" && pcDirect(R).status !== "allowed"; })(), "buffer suppress");
-  add("PC-26: Rebalance/Optimization gates return blocked/unresolved WITH reasons (never bare bool)", (() => { const R = pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 }); const gs = [pcRebalance(R), pcOptimize(R)]; return gs.every((g) => typeof g.status === "string" && Array.isArray(g.reasons)) && gs.some((g) => g.status !== "allowed" && g.reasons.length > 0); })(), "gate shape");
+  add("PC-26: Rebalance/Staking gates return blocked/unresolved WITH reasons (never bare bool)", (() => { const R = pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 }); const gs = [pcRebalance(R), pcStaking(R)]; return gs.every((g) => typeof g.status === "string" && Array.isArray(g.reasons)) && gs.some((g) => g.status !== "allowed" && g.reasons.length > 0); })(), "gate shape");
   add("PC-27: staking gate fails closed when unresolved stake exposure present", pcStaking(pcCompute([usdc(1000), nativeStake(true)], { requiredBufferUsd: 500 })).status !== "allowed", "staking closed");
 
   // ---- Deduplication + freshness ----
@@ -21361,7 +21035,7 @@ export function runCompletenessIntegrationFixtureChecks(): FixtureCheck[] {
 
   // ---- Completeness gates NARROW only (never enable) ----
   add("PI-14: completenessAllows — absent map ⇒ true; blocked/unresolved ⇒ false", pcAllows(undefined, "staking") === true && pcAllows({ staking: "blocked" }, "staking") === false && pcAllows({ dca: "unresolved" }, "dca") === false && pcAllows({ staking: "allowed" }, "staking") === true, "narrow");
-  add("PI-15: deriveCompletenessGates returns the 6 decision statuses (Trim gate retired in 19D)", (() => { const { gates } = pcGates([walletUsdc()], { requiredBufferUsd: 0 }); return ["onTrack", "staking", "dca", "directLending", "rebalance", "positionOptimization"].every((k) => typeof (gates as any)[k] === "string") && !("trim" in gates); })(), "gate map");
+  add("PI-15: deriveCompletenessGates returns the 5 decision statuses (Trim gate retired 19D; Position Optimization gate retired 20D)", (() => { const { gates } = pcGates([walletUsdc()], { requiredBufferUsd: 0 }); return ["onTrack", "staking", "dca", "directLending", "rebalance"].every((k) => typeof (gates as any)[k] === "string") && !("trim" in gates) && !("positionOptimization" in gates); })(), "gate map");
   add("PI-16: healthy portfolio (buffer target 0) → gates permit (no spurious suppression)", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "sol", type: "native", symbol: "SOL", valueUsd: 500 })], { requiredBufferUsd: 0 }); return gates.onTrack === "allowed" && gates.dca === "allowed" && gates.directLending === "allowed"; })(), "healthy ok");
   add("PI-17: unvalued liability → On Track + DCA + direct-lending gates NOT allowed", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "hb", type: "protocol", symbol: "USDH", side: "borrowed", valueUsd: null, uiAmount: 300, amount: "300" })], { requiredBufferUsd: 0 }); return gates.onTrack !== "allowed" && gates.dca !== "allowed" && gates.directLending !== "allowed"; })(), "liability narrows");
   add("PI-18: unrelated unpriced token does NOT block staking (only its own dimensions)", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "unk", type: "token", name: "Unknown token", symbol: "9x", uiAmount: 5, valueUsd: null })], { requiredBufferUsd: 0 }); return gates.staking === "allowed" && gates.onTrack !== "allowed"; })(), "unrelated");
@@ -21370,7 +21044,7 @@ export function runCompletenessIntegrationFixtureChecks(): FixtureCheck[] {
   add("PI-19: engine with all-blocked gates ⊆ engine without gates (never enables)", (() => {
     const inp = inputsFor({ safetyBuffer: bufferFixture(1000, 1000, 3) });
     const without = runSuggestionEngine(inp, FIXTURE_GENERATED_AT);
-    const blocked = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, { onTrack: "blocked", staking: "blocked", dca: "blocked", directLending: "blocked", rebalance: "blocked", positionOptimization: "blocked" });
+    const blocked = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, { onTrack: "blocked", staking: "blocked", dca: "blocked", directLending: "blocked", rebalance: "blocked" });
     const ids = new Set(without.suggestions.map((s) => s.id));
     return blocked.suggestions.length <= without.suggestions.length && blocked.suggestions.every((s) => ids.has(s.id));
   })(), "subset");
@@ -21471,7 +21145,7 @@ export function runCompletenessGalleryFixtureChecks(): FixtureCheck[] {
   add("TG-9: SOL exposure only — mSOL backing reason; total authoritative; exposure warning", (() => { const c = byId("sol_exposure")!.completeness; return c.netWorthState === "complete" && uiWarning(c)?.id === "sol_exposure" && uiNote(c, "ms") === "Underlying SOL could not be refreshed"; })(), "sol exposure");
   add("TG-10: genuine duplicate → dedup warning", (() => { const c = byId("duplicate")!.completeness; return c.deduplicationState === "invalid" && uiWarning(c)?.id === "dedup"; })(), "duplicate");
   add("TG-11: shared USDC mint (wallet+Kamino+Steakhouse) → NOT a duplicate", (() => { const c = byId("shared_mint")!.completeness; return c.deduplicationState !== "invalid" && (uiWarning(c)?.id ?? "none") !== "dedup"; })(), "shared mint");
-  add("TG-12: gate inspector exposes Rebalance/Optimization states; no suggestion output (Trim gate retired in 19D)", (() => { const g = byId("gate_inspector")!.gates; return typeof g.rebalance === "string" && typeof g.positionOptimization === "string" && !("trim" in g); })(), "gate inspector");
+  add("TG-12: gate inspector exposes the Rebalance state; no suggestion output (Trim gate retired 19D; Position Optimization gate retired 20D)", (() => { const g = byId("gate_inspector")!.gates; return typeof g.rebalance === "string" && !("trim" in g) && !("positionOptimization" in g); })(), "gate inspector");
   add("TG-13: native stake — value complete, available-to-withdraw present, not full liquidity", (() => { const c = byId("native_stake")!.completeness; const a = c.positionAssessments.find((x) => x.positionId === "stk"); return c.netWorthState === "complete" && a?.valueState === "complete"; })(), "native stake");
 
   return checks;
@@ -21943,6 +21617,243 @@ export function runTrimProductionFixtureChecks(): FixtureCheck[] {
   add("TD-14: no route/quote/transaction/signature/execution in the full Trim path", (() => { const blob = readIfSrc("src/suggestions/trimAssessment.ts") + readIfSrc("src/suggestions/trimSuggestion.ts") + readIfSrc("src/pages/trimTestingFixtures.ts"); return !/swapRoute|routePlan|getQuote|aggregator|signTransaction|sendTransaction|simulateTransaction|receivedAmount|guaranteedOutput/.test(blob); })(), "read-only path");
   add("TD-15: card carries no wallet/account/dedupe/raw-balance analytics fields", (() => { const s = JSON.stringify(tCard); return !s.includes("dedupeKey") && !s.includes("rawBalance") && !s.includes("sourcePositionIds") && !s.includes("holdingId") && !/[1-9A-HJ-NP-Za-km-z]{40,}/.test(s); })(), "privacy");
   add("TD-16: engine has no residual allows(\"trim\") or trim gate reference", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); return !/allows\("trim"\)/.test(eng) && !/deriveTrimSuggestion/.test(eng); })(), "no gate ref");
+
+  return checks;
+}
+
+/**
+ * Step 20C — PRODUCTION MOUNT of Position Optimization. Proves the canonical
+ * `buildPositionOptimizationCardFromAssessment` mapper renders the existing `position_optimization_review`
+ * card ONLY when the assessment is ready + ≥ 1 trigger family is proven + total ≥ $100, that the engine
+ * consumes it through the fail-closed `positionOptimizationOverride` (NO legacy fallback), that it coexists
+ * with Rebalance / Trim / Capital Efficiency / staking / direct-lending / DCA at the lowest (category-8)
+ * priority, that production LST/Ondo APY can never reach low-yield, that no exit/execution/route/quote
+ * behavior exists, and that no account/dedupe/mint identity leaks into the card.
+ */
+export function runPositionOptimizationProductionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const GEN = 1_700_000_000_000;
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const JITOSOL = "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn";
+  const MSOL = "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So";
+  const W = (o: Partial<WalletPosition>): WalletPosition => ({ id: "x", source: "wallet", type: "token", symbol: "X", name: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
+  const usdc = (v: number, id = "usdc") => W({ id, symbol: "USDC", name: "USD Coin", mint: USDC, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
+  const lst = (v: number, mint = JITOSOL, apy: number | null = 7, id = "lst") => W({ id, type: "lst", source: "jito", symbol: mint === MSOL ? "mSOL" : "JitoSOL", name: mint === MSOL ? "Marinade Staked SOL" : "Jito Staked SOL", mint, amount: "1", uiAmount: 1, detection: "recognized_lst_mint", valueUsd: v, apy, apyObservedAt: null });
+  const stakeSummary = (account = "stakeAcc1") => ({ voteAccount: "V", totalLamports: "1", activeLamports: "1", activatingLamports: "0", deactivatingLamports: "0", inactiveLamports: "0", rentExemptReserveLamports: "0", immediatelyWithdrawableLamports: "0", closeOnlyWithdrawableLamports: "0", requiredRemainingLamports: "0", lockedLamports: "0", unresolvedLamports: "0", lifecycleSummary: "active", withdrawalCapacitySummary: "", anyUnresolved: false, accountCount: 1, stakeAccounts: [account] });
+  const stake = (v: number, id = "stk", account = "stakeAcc1") => W({ id, type: "stake", symbol: "SOL", name: "Native stake", detection: "native_stake", amount: "1", uiAmount: v / 250, valueUsd: v, stakeLifecycleState: "active", stake: stakeSummary(account) as WalletPosition["stake"] });
+  const debt = (v: number | null) => W({ id: "hb", type: "protocol", symbol: "USDH", name: "USDH loan", protocol: "Hubble", side: "borrowed", valueUsd: v, uiAmount: 1, amount: "1", dedupeKey: "hubble:loan" });
+
+  const poCardFor = (positions: WalletPosition[], requiredBufferUsd = 500) => poBuildCard(poAssess({ positions, requiredBufferUsd, generatedAt: GEN }), GEN);
+  // Concentration is the production-reachable single-trigger path (a single LST > 50% of gross assets).
+  const conc = () => [usdc(1000), lst(1500, JITOSOL, 7)];
+  const missing = () => [usdc(1000), lst(1500, JITOSOL, null)]; // expected-but-absent APY + concentration
+  const shared = () => [usdc(2000), lst(300, JITOSOL, 7, "j"), lst(300, MSOL, 7, "m")];
+
+  // ---- Canonical card contract ----
+  const c1 = poCardFor(conc());
+  add("PO-1: mounted card keeps id/category/title/description/action_kind/top-pick contract", c1 !== null && c1!.id === "position_optimization_review" && c1!.category === "position_optimization" && c1!.title_key === "suggestion.position_optimization.title" && c1!.description_key === "suggestion.position_optimization.description" && c1!.action_kind === "review_only" && c1!.is_actionable === true && c1!.is_top_pick === false, "contract");
+  add("PO-2: amount equals canonical total flagged value with the review label", c1!.amount?.valueUsd === 1500 && c1!.amount?.label === "Positions to review", "amount");
+  add("PO-3: portfolio-share metric uses the AUTHORITATIVE gross denominator", (() => { const m = c1!.reviewDetails?.metrics?.find((x) => x.label === "Share of gross assets"); return m?.value === Math.round((1500 / 2500) * 1000) / 10; })(), "authoritative share");
+  add("PO-4: reason_codes in canonical order (missing→low→concentration→shared)", (() => { const c = poCardFor([usdc(500), lst(1500, JITOSOL, null)]); const r = c!.reason_codes; return r.includes("missing_apy_data") && r.includes("concentration_risk") && r.indexOf("missing_apy_data") < r.indexOf("concentration_risk"); })(), "reason order");
+  add("PO-5: no position selected for exit; review_only; no execution CTA on the mapped card", (() => { const card = toSuggestionCard(c1!); return c1!.action_kind === "review_only" && card.cta.executes_transaction === false && card.cta.requires_wallet_signature === false && card.cta.action === null; })(), "no cta");
+
+  // ---- Mount fail-closed (mapper returns null unless ready) ----
+  add("PO-6: no trigger fires → NO card (fail closed)", poCardFor([usdc(2000), lst(300, JITOSOL, 7)]) === null, "no trigger null");
+  add("PO-7: total flagged value below $100 → NO card", poCardFor([usdc(2000), lst(80, JITOSOL, null)]) === null, "floor null");
+  add("PO-8: incomplete Safety Buffer → accounting blocked → NO card", poCardFor([usdc(100), lst(1500, JITOSOL, 7)], 2000) === null, "buffer null");
+  add("PO-9: unresolved liability → readiness blocked → NO card", poCardFor([usdc(1000), lst(1500, JITOSOL, 7), debt(null)]) === null, "liab null");
+
+  // ---- Trigger-family independence via the mapper ----
+  add("PO-10: concentration trigger alone → card with concentration_risk", (() => { const c = poCardFor(conc()); return c !== null && c!.reason_codes.includes("concentration_risk"); })(), "concentration");
+  add("PO-11: missing-APY trigger → card with missing_apy_data", (() => { const c = poCardFor(missing()); return c !== null && c!.reason_codes.includes("missing_apy_data"); })(), "missing");
+  add("PO-12: shared-underlying-exposure trigger → card with duplicate_exposure code + friendly group label", (() => { const c = poCardFor(shared()); const calcs = JSON.stringify(c!.reviewDetails?.calculations); return c !== null && c!.reason_codes.includes("duplicate_exposure") && /Shared underlying exposure/.test(calcs); })(), "shared");
+
+  // ---- APY governance: low-yield unreachable in production; honest display states ----
+  add("PO-13: production LST at 0.5% + concentration → card WITHOUT low_yield_position (low-yield unreachable)", (() => { const c = poCardFor([usdc(1000), lst(1500, JITOSOL, 0.5)]); return c !== null && !c!.reason_codes.includes("low_yield_position") && c!.reason_codes.includes("concentration_risk"); })(), "no low yield");
+  add("PO-14: freshness-unverified flagged APY → display label + freshness limitation (never 'fresh')", (() => { const c = poCardFor([usdc(1000), lst(1500, JITOSOL, 0.5)]); const ip = c!.reviewDetails?.involvedPositions ?? []; const lim = JSON.stringify(c!.reviewDetails?.limitations); return ip.some((p) => p.apyDisplayState === "APY freshness unverified") && /freshness/i.test(lim); })(), "freshness label");
+  add("PO-15: missing_expected APY → 'Current APY unavailable' display state, numeric apy null", (() => { const c = poCardFor(missing()); const p = (c!.reviewDetails?.involvedPositions ?? []).find((x) => x.apyDisplayState === "Current APY unavailable"); return p != null && p.apy === null; })(), "unavailable label");
+  add("PO-16: native-stake (source-not-integrated) flagged by concentration → 'Yield comparison not available', apy null", (() => { const c = poCardFor([usdc(1000), stake(1500)]); const ip = c!.reviewDetails?.involvedPositions ?? []; return c !== null && ip.some((p) => p.apyDisplayState === "Yield comparison not available" && p.apy === null); })(), "unsupported label");
+
+  // ---- Engine mount + coexistence ----
+  const funded = () => bufferFixture(5000, 1000, 3); // funded (target $3,000)
+  const aligned = () => allocationFixture(15000, 62, 2); // delta 2% → no rebalance
+  const railInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 5), positions: [solPosition(10)] });
+  const po = () => poCardFor(conc())!;
+  add("PO-17: engine with NO positionOptimizationOverride → NO position_optimization candidate (fail closed)", (() => { const r = runSuggestionEngine(railInp(), GEN); return !r.suggestions.some((s) => s.category === "position_optimization"); })(), "fail closed");
+  add("PO-18: engine emits the canonical card from the override", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.id === "position_optimization_review"); })(), "override emits");
+  add("PO-19: Rebalance + Position Optimization COEXIST; Rebalance ordered above", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, { card: mkSug15H("reb", "rebalance"), material: true }, undefined, { candidate: po() }); const cats = r.suggestions.map((s) => s.category); return cats.includes("rebalance") && cats.includes("position_optimization") && cats.indexOf("rebalance") < cats.indexOf("position_optimization"); })(), "reb above");
+  add("PO-20: Trim + Position Optimization COEXIST; Trim ordered above", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, undefined, { candidate: mkSug15H("t", "trim") }, { candidate: po() }); const cats = r.suggestions.map((s) => s.category); return cats.includes("trim") && cats.includes("position_optimization") && cats.indexOf("trim") < cats.indexOf("position_optimization"); })(), "trim above");
+  add("PO-21: Capital Efficiency + Position Optimization COEXIST; Capital Efficiency ordered above", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [nonCoreToken("BONK", 5000)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); const cats = r.suggestions.map((s) => s.category); return cats.includes("capital_efficiency") && cats.includes("position_optimization") && cats.indexOf("capital_efficiency") < cats.indexOf("position_optimization"); })(), "ce above");
+  add("PO-22: staking + Position Optimization coexist", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "staking") && r.suggestions.some((s) => s.category === "position_optimization"); })(), "staking coexist");
+  add("PO-23: direct lending (stable_yield) + Position Optimization coexist", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [stablePosition("USDC", 10000)] }); const r = runSuggestionEngine(inp, GEN, null, mkSug15H("sy", "stable_yield"), undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "stable_yield") && r.suggestions.some((s) => s.category === "position_optimization"); })(), "sy coexist");
+  add("PO-24: DCA + Position Optimization coexist", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 40, -8), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, mkSug15H("dca", "dca"), null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "dca") && r.suggestions.some((s) => s.category === "position_optimization"); })(), "dca coexist");
+  add("PO-25: a valid Position Optimization card suppresses the informational On Track fallback", (() => { const inp = inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "position_optimization") && !r.suggestions.some((s) => s.category === "on_track"); })(), "on track suppressed");
+  add("PO-26: material Rebalance need WITHOUT a card does not suppress Position Optimization", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, { card: null, material: true }, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "position_optimization"); })(), "no card no suppress");
+
+  // ---- Ordering + Top Pick ----
+  add("PO-27: category ordering unchanged; position_optimization is the lowest (8)", CATEGORY_PRIORITY.buffer === 1 && CATEGORY_PRIORITY.rebalance === 2 && CATEGORY_PRIORITY.capital_efficiency === 3 && CATEGORY_PRIORITY.trim === 4 && CATEGORY_PRIORITY.staking === 5 && CATEGORY_PRIORITY.stable_yield === 6 && CATEGORY_PRIORITY.dca === 7 && CATEGORY_PRIORITY.position_optimization === 8, "ordering");
+  add("PO-28: Position-Optimization-only → it becomes Top Pick (no higher candidate)", (() => { const inp = inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.find((s) => s.is_top_pick)?.category === "position_optimization"; })(), "po top pick");
+  add("PO-29: Position Optimization NOT Top Pick when Rebalance present (Rebalance outranks)", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, { card: mkSug15H("reb", "rebalance"), material: true }, undefined, { candidate: po() }); return r.suggestions.find((s) => s.is_top_pick)?.category === "rebalance"; })(), "reb top");
+
+  // ---- Disposition + regression ----
+  add("PO-30: engine no longer imports the legacy PO rule; rail passes positionOptimizationOverride", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return !/derivePositionOptimizationSuggestion/.test(eng) && /positionOptimizationOverride/.test(eng) && /buildPositionOptimizationCardFromAssessment/.test(rail) && /positionOptimizationOverride/.test(rail); })(), "disposition");
+  add("PO-31: rail derives ONE PO assessment + ONE card (no second card, no UI recompute)", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return (rail.match(/derivePositionOptimizationAssessment\(/g) ?? []).length === 1 && (rail.match(/buildPositionOptimizationCardFromAssessment\(/g) ?? []).length === 1; })(), "one assessment");
+  add("PO-32 (20D): legacy PO module is DELETED with zero callers, and the legacy duplicate-exposure helpers are gone", (() => { const legacy = readIfSrc("src/suggestions/positionOptimizationSuggestionLegacy.ts"); const anyImport = ["src/suggestions/engine.ts", "src/suggestions/useRailSuggestions.ts", "src/pages/TestingPage.tsx", "src/suggestions/positionOptimizationSuggestion.ts", "src/suggestions/suggestionEngine.fixtures.ts"].some((f) => /from "\.\/positionOptimizationSuggestionLegacy"/.test(readIfSrc(f))); const dup = readIfSrc("src/suggestions/duplicateExposure.ts"); return legacy === "" && !anyImport && !/export function findDuplicateExposureGroups|export interface DuplicateExposureGroup|export function exposureGroupLabel/.test(dup); })(), "legacy deleted");
+  add("PO-33: scoring methodology unchanged (impact=flagged/gross, urgency conc 0.45 else 0.35, efficiency low 0.6 else 0.5)", (() => { const c = poCardFor(conc())!; return c.scores?.impact === Math.min(1500 / 2500, 1) && c.scores?.urgency === 0.45 && c.scores?.efficiency === 0.5; })(), "scoring");
+  add("PO-34: shared portfolio-asset accounting powers the PO assessment", (() => { const a = readIfSrc("src/suggestions/positionOptimizationAssessment.ts"); return /derivePortfolioAssetAccounting/.test(a); })(), "shared accounting");
+  add("PO-35: no route/quote/transaction/signature/execution in the full PO path", (() => { const blob = readIfSrc("src/suggestions/positionOptimizationAssessment.ts") + readIfSrc("src/suggestions/positionOptimizationSuggestion.ts"); return !/swapRoute|routePlan|getQuote|aggregator|signTransaction|sendTransaction|simulateTransaction|receivedAmount|guaranteedOutput/.test(blob); })(), "read-only path");
+  add("PO-36: card carries no wallet/account/dedupe/economic-key/raw-balance or mint identity", (() => { const s = JSON.stringify(c1); return !s.includes("dedupeKey") && !s.includes("economicPositionKey") && !s.includes("rawBalance") && !s.includes("sourcePositionIds") && !s.includes("stakeAccounts") && !/[1-9A-HJ-NP-Za-km-z]{40,}/.test(s); })(), "privacy");
+  add("PO-37: user-facing PO copy carries no exit/switch/withdraw/unstake/close/sell/swap instruction", (() => { const copy = readIfSrc("src/state/approvedCopy.ts"); const poLines = copy.split("\n").filter((l) => /SUGGESTION_(POSITION_OPTIMIZATION|PO)_/.test(l) && /=/.test(l)).join(" ").toLowerCase(); return !/\b(exit|switch|withdraw|unstake|close|sell|swap|dispose|move out|pull out)\b/.test(poLines); })(), "review copy");
+
+  // ---- 20D closeout: legacy removal, gate removal, no-fallback, no UI recompute ----
+  add("PO-38: legacy PO module FILE no longer exists", readIfSrc("src/suggestions/positionOptimizationSuggestionLegacy.ts") === "", "deleted");
+  add("PO-39: engine has NO legacy PO derive, NO allows(\"positionOptimization\") gate, only the fail-closed override", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); return !/derivePositionOptimizationSuggestion|deriveLegacyPositionOptimizationSuggestion/.test(eng) && !/allows\("positionOptimization"\)/.test(eng) && /positionOptimizationOverride\?\.candidate \?\? null/.test(eng); })(), "no fallback/gate");
+  add("PO-40: obsolete completeness gate removed (canGeneratePositionOptimization + positionOptimizationState gone; not in the gate map)", (() => { const pc = readIfSrc("src/wallet/portfolioCompleteness.ts"); return !/canGeneratePositionOptimization/.test(pc) && !/positionOptimizationState/.test(pc) && !/positionOptimization:/.test(pc) && !/"positionOptimization"/.test(pc); })(), "gate removed");
+  add("PO-41: CompletenessDecision union no longer includes positionOptimization; deriveCompletenessGates omits it", (() => { const pc = readIfSrc("src/wallet/portfolioCompleteness.ts"); return /CompletenessDecision = "onTrack" \| "staking" \| "dca" \| "directLending" \| "rebalance";/.test(pc); })(), "decision removed");
+  add("PO-42: legacy duplicate-exposure helpers deleted; getUnderlyingExposureGroup (contribution/staking) retained", (() => { const dup = readIfSrc("src/suggestions/duplicateExposure.ts"); return !/export function findDuplicateExposureGroups|export interface DuplicateExposureGroup|export function exposureGroupLabel/.test(dup) && /export function getUnderlyingExposureGroup/.test(dup); })(), "helpers pruned");
+  add("PO-43: rail derives ONE assessment + ONE card; no UI/second accounting recompute for PO", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return (rail.match(/derivePositionOptimizationAssessment\(/g) ?? []).length === 1 && (rail.match(/buildPositionOptimizationCardFromAssessment\(/g) ?? []).length === 1 && (rail.match(/derivePortfolioAssetAccounting\(/g) ?? []).length <= 1; })(), "one calc");
+  add("PO-44: fixture-only synthetic candidate + approved freshness policy never imported by mounted production modules", (() => { const mounted = ["src/suggestions/engine.ts", "src/suggestions/useRailSuggestions.ts", "src/suggestions/positionOptimizationSuggestion.ts", "src/suggestions/positionOptimizationAssessment.ts"].map(readIfSrc).join("\n"); return !/buildSyntheticPositionOptimizationCandidateForFixture|TEST_LST_POLICY/.test(mounted); })(), "fixture isolation");
+  add("PO-45: incomplete Safety Buffer at the assessment boundary → no card (engine emits nothing without a candidate)", (() => { const a = poAssess({ positions: [usdc(100), lst(1500, JITOSOL, 7)], requiredBufferUsd: 2000, generatedAt: GEN }); const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, undefined, undefined, { candidate: poBuildCard(a, GEN) }); return poBuildCard(a, GEN) === null && !r.suggestions.some((s) => s.category === "position_optimization"); })(), "buffer fail closed");
+
+  return checks;
+}
+
+/**
+ * Step 20B — canonical, NON-MOUNTED PositionOptimizationAssessment. Proves exact economic-position identity,
+ * borrowed-position exclusion, the APY expectation/state/comparability model (missing-expected vs
+ * source-not-integrated), missing-data / low-yield / concentration / shared-underlying-exposure triggers with
+ * exact boundaries, an authoritative shared denominator, native-stake lifecycle, trigger-family independence,
+ * and that production Position Optimization is untouched.
+ */
+export function runPositionOptimizationAssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const GEN = 1_700_000_000_000;
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+  const JITOSOL = "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn";
+  const MSOL = "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So";
+  const W = (o: Partial<WalletPosition>): WalletPosition => ({ id: "x", source: "wallet", type: "token", symbol: "X", name: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
+  const usdc = (v: number, id = "usdc") => W({ id, symbol: "USDC", name: "USD Coin", mint: USDC, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
+  const stakeSummary = (lifecycle: string, account = "stakeAcc1") => ({ voteAccount: "V", totalLamports: "1", activeLamports: lifecycle === "active" ? "1" : "0", activatingLamports: lifecycle === "activating" ? "1" : "0", deactivatingLamports: lifecycle === "deactivating" ? "1" : "0", inactiveLamports: lifecycle === "inactive" ? "1" : "0", rentExemptReserveLamports: "0", immediatelyWithdrawableLamports: "0", closeOnlyWithdrawableLamports: "0", requiredRemainingLamports: "0", lockedLamports: "0", unresolvedLamports: "0", lifecycleSummary: lifecycle, withdrawalCapacitySummary: "", anyUnresolved: false, accountCount: 1, stakeAccounts: [account] });
+  const stake = (v: number, lifecycle = "active", id = "stk", account = "stakeAcc1") => W({ id, type: "stake", symbol: "SOL", name: "Native stake", detection: "native_stake", amount: "1", uiAmount: v / 250, valueUsd: v, stakeLifecycleState: lifecycle, stake: stakeSummary(lifecycle, account) as WalletPosition["stake"] });
+  const FRESH_OBS = new Date(GEN).toISOString(); // within the approved 24h window
+  const STALE_OBS = new Date(GEN - 48 * 60 * 60 * 1000).toISOString(); // 48h → outside the window
+  // `obs` populates WalletPosition.apyObservedAt (source observation time) — only a fresh obs establishes freshness.
+  const lst = (v: number, mint = JITOSOL, apy: number | null = 7, id = "lst", obs: string | null = null) => W({ id, type: "lst", source: "jito", symbol: mint === MSOL ? "mSOL" : "JitoSOL", name: mint === MSOL ? "Marinade Staked SOL" : "Jito Staked SOL", mint, amount: "1", uiAmount: 1, detection: "recognized_lst_mint", valueUsd: v, apy, apyObservedAt: obs });
+  const kaminoUsdc = (v: number, id = "kd", dk = "klend:1") => W({ id, type: "protocol", symbol: "USDC", name: "USDC on Kamino", protocol: "Kamino", candidateId: "kamino_usdc_lending", dedupeKey: dk, valueUsd: v, recognizedValueUsd: v, withdrawalState: "fully_withdrawable", liquidValueUsd: v, mint: USDC, apy: null });
+  const steakUsdc = (v: number, id = "st", dk = "steakhouse:1") => W({ id, type: "protocol", symbol: "USDC", name: "Steakhouse USDC", protocol: "Kamino", candidateId: "kamino_steakhouse_usdc", dedupeKey: dk, valueUsd: v, recognizedValueUsd: v, withdrawalState: "fully_withdrawable", liquidValueUsd: v, mint: USDC, apy: null });
+  const usdtSupply = (v: number, id = "kt", dk = "klend:t") => W({ id, type: "protocol", symbol: "USDT", name: "USDT on Kamino", protocol: "Kamino", candidateId: "kamino_usdc_lending", dedupeKey: dk, valueUsd: v, recognizedValueUsd: v, withdrawalState: "fully_withdrawable", liquidValueUsd: v, mint: USDT, apy: null });
+  const debt = (v: number | null) => W({ id: "hb", type: "protocol", symbol: "USDH", name: "USDH loan", protocol: "Hubble", side: "borrowed", valueUsd: v, uiAmount: 1, amount: "1", dedupeKey: "hubble:loan" });
+  const lp = (v: number, id = "lp") => W({ id, type: "protocol", symbol: "SOL-USDC", name: "SOL-USDC LP", protocol: "Orca", legs: [{ mint: "SoLLeg", uiAmount: v / 500, side: "long" }, { mint: USDC, uiAmount: v / 2, side: "long" }], valueUsd: v, dedupeKey: "orca:lp1" });
+
+  const A = (positions: WalletPosition[], requiredBufferUsd = 500) => poAssess({ positions, requiredBufferUsd, generatedAt: GEN });
+  // FIXTURE-ONLY approved freshness policy (never exported to production; the production registry is unapproved).
+  const TEST_LST_POLICY: PoApyFreshnessPolicy = { sourceId: "lst_apy_feed", methodology: "lst_net_apy", policyState: "approved", freshnessSignal: "source_observed_at", maxObservationAgeMs: 6 * 60 * 60 * 1000, evidenceSource: "FIXTURE-ONLY test policy", approvedAt: "2026-01-01T00:00:00.000Z", methodologyVersion: "test", invalidationReason: null };
+  const Afresh = (positions: WalletPosition[], requiredBufferUsd = 500, policies: PoApyFreshnessPolicy[] = [TEST_LST_POLICY]) => poAssess({ positions, requiredBufferUsd, generatedAt: GEN, apyFreshnessPolicies: policies });
+  const pos = (a: ReturnType<typeof poAssess>, id: string) => a.canonicalPositions.find((p) => p.positionId === id) ?? a.unresolvedPositions.find((p) => p.positionId === id) ?? a.excludedPositions.find((p) => p.positionId === id);
+
+  // ---- Economic identity ----
+  add("PZ-1: one native stake account = one economic position keyed by stake account", (() => { const a = A([usdc(2000), stake(3000)]); const p = pos(a, "stk"); return p?.positionType === "native_stake" && p.economicPositionKey === "stake:stakeAcc1"; })(), "stake identity");
+  add("PZ-2: two distinct stake accounts remain two positions (not duplicates)", (() => { const a = A([usdc(2000), stake(3000, "active", "s1", "acc1"), stake(1000, "active", "s2", "acc2")]); return a.canonicalPositions.filter((p) => p.positionType === "native_stake").length === 2 && !a.warnings.includes("duplicate_economic_position"); })(), "two stakes");
+  add("PZ-3: same stake account duplicated → duplicate_invalid, fails closed", (() => { const a = A([usdc(2000), stake(3000, "active", "s1", "acc1"), stake(3000, "active", "s2", "acc1")]); return a.warnings.includes("duplicate_economic_position") && a.overallReadiness.status !== "allowed"; })(), "dup stake");
+  add("PZ-4: LST holding keyed by exact mint+program; backing is not another position", (() => { const a = A([usdc(2000), lst(6000, JITOSOL, 7)]); const p = pos(a, "lst"); return p?.positionType === "lst" && p.economicPositionKey === `lst:${JITOSOL}|${TRIM_CLASSIC_TOKEN_PROGRAM}`; })(), "lst identity");
+  add("PZ-5: protocol supply keyed by product + dedupeKey", (() => { const a = A([usdc(2000), kaminoUsdc(3000)]); const p = pos(a, "kd"); return p?.positionType === "protocol_supply" && p.economicPositionKey === "kamino_usdc_lending:klend:1"; })(), "protocol identity");
+  add("PZ-6: JitoSOL + mSOL are shared exposure, NOT duplicate economic positions", (() => { const a = A([usdc(2000), lst(300, JITOSOL, 7, "j"), lst(300, MSOL, 7, "m")]); return a.canonicalPositions.filter((p) => p.positionType === "lst").length === 2 && !a.warnings.includes("duplicate_economic_position"); })(), "shared not dup");
+
+  // ---- Borrowed / liability exclusion ----
+  add("PZ-7: borrowed/debt excluded from yield-review candidates", (() => { const a = A([usdc(2000), debt(1000)]); return a.excludedPositions.some((p) => p.side === "liability") && !a.canonicalPositions.some((p) => p.side === "liability"); })(), "debt excluded");
+  add("PZ-8: debt never triggers missing/low APY and never enters shared exposure", (() => { const a = A([usdc(2000), debt(1000)]); const d = a.excludedPositions.find((p) => p.side === "liability"); return d?.missingDataEligible === false && d?.lowYieldEligible === false && d?.sharedExposureEligible === false && d?.apy.apyState === "not_applicable"; })(), "debt no trigger");
+  add("PZ-9: unresolved liability makes accounting unresolved (still tracked)", (() => { const a = A([usdc(2000), stake(3000), debt(null)]); return a.accountingGate.status === "unresolved" && a.accountingGate.reasons.includes("liabilities_unresolved"); })(), "liab unresolved");
+
+  // ---- APY model ----
+  add("PZ-10: supported LST numeric APY WITHOUT a source timestamp → sourced_freshness_unverified (not fresh)", (() => { const a = A([usdc(2000), lst(300, JITOSOL, 6.5)]); const p = pos(a, "lst"); return p?.apy.apyState === "sourced_freshness_unverified" && p.apy.apyFreshness === "unresolved" && p.apy.apyRetrieval === "retrieved_current_refresh" && p.apy.apyComparability === "comparable" && p.apy.yieldMethodology === "lst_net_apy" && p.apy.apyValuePct === 6.5; })(), "freshness unverified");
+  add("PZ-11: supported LST with null APY → missing_expected (expected source failed)", (() => { const a = A([usdc(2000), lst(300, JITOSOL, null)]); const p = pos(a, "lst"); return p?.apy.apyExpectation === "expected" && p.apy.apyState === "missing_expected"; })(), "lst missing");
+  add("PZ-12: native stake APY → source_not_integrated / unsupported (NOT missing_expected)", (() => { const a = A([usdc(2000), stake(3000)]); const p = pos(a, "stk"); return p?.apy.apyExpectation === "source_not_integrated" && p.apy.apyState === "unsupported" && p.apy.yieldMethodology === "native_staking_apy"; })(), "stake not integrated");
+  add("PZ-13: protocol lending APY → source_not_integrated (Kamino/Steakhouse not flagged missing)", (() => { const a = A([usdc(2000), kaminoUsdc(3000)]); const p = pos(a, "kd"); return p?.apy.apyExpectation === "source_not_integrated" && p.apy.apyState === "unsupported" && p.apy.yieldMethodology === "lending_supply_apy"; })(), "lending not integrated");
+  add("PZ-14: LP APY → source_not_integrated, not comparable", (() => { const a = A([usdc(2000), lp(3000)]); const p = pos(a, "lp"); return p?.apy.apyExpectation === "source_not_integrated" && p.apy.apyComparability === "not_comparable" && p.apy.yieldMethodology === "lp_fee_apr"; })(), "lp apy");
+  add("PZ-15: APY unit normalized to percentage points (7 means 7%)", (() => { const a = A([usdc(2000), lst(300, JITOSOL, 7)]); return pos(a, "lst")?.apy.normalizedUnit === "percentage_points"; })(), "unit");
+
+  // ---- Missing-data trigger ----
+  add("PZ-16: expected source missing at EXACTLY $100 → missing_apy triggers", (() => { const a = A([usdc(2000), lst(100, JITOSOL, null)]); return a.triggerStates.missingApy === "triggered" && a.reasonCodes.includes("missing_apy_data"); })(), "missing $100");
+  add("PZ-17: source_not_integrated (native stake / Kamino) does NOT trigger missing_apy", (() => { const a = A([usdc(2000), stake(3000), kaminoUsdc(3000)]); return a.triggerStates.missingApy !== "triggered"; })(), "no missing for un-integrated");
+  add("PZ-18: deactivating stake does not trigger missing/low APY", (() => { const a = A([usdc(2000), stake(3000, "deactivating")]); const p = pos(a, "stk"); return p?.missingDataEligible === false && p?.lowYieldEligible === false && p?.lifecycleState === "deactivating"; })(), "deactivating");
+
+  // ---- Low-yield trigger ----
+  add("PZ-19: FRESH (approved-policy + timestamp) comparable LST APY below 1% → low_yield triggers", (() => { const a = Afresh([usdc(2000), lst(300, JITOSOL, 0.5, "lst", FRESH_OBS)]); return a.triggerStates.lowYield === "triggered" && a.reasonCodes.includes("low_yield_position") && pos(a, "lst")?.apy.apyState === "sourced_fresh"; })(), "low yield");
+  add("PZ-20: exactly 1% APY (fresh) does NOT trigger low_yield (strict <)", Afresh([usdc(2000), lst(300, JITOSOL, 1, "lst", FRESH_OBS)]).triggerStates.lowYield !== "triggered", "exact 1%");
+  add("PZ-21: zero FRESH comparable APY triggers low_yield", Afresh([usdc(2000), lst(300, JITOSOL, 0, "lst", FRESH_OBS)]).triggerStates.lowYield === "triggered", "zero apy");
+  add("PZ-22: missing APY does NOT trigger low_yield (only missing-data)", (() => { const a = A([usdc(2000), lst(300, JITOSOL, null)]); return a.triggerStates.lowYield !== "triggered" && a.triggerStates.missingApy === "triggered"; })(), "missing not low");
+  add("PZ-23: unsupported/not-comparable APY (native stake) does not trigger low_yield", A([usdc(2000), stake(3000)]).triggerStates.lowYield !== "triggered", "stake not low");
+
+  // ---- Concentration ----
+  add("PZ-24: EXACTLY $1,000 and EXACTLY 50% → concentration triggers", (() => { const a = A([usdc(1000), lst(1000, JITOSOL, 7)]); return a.grossAssetValueUsd === 2000 && a.triggerStates.concentration === "triggered"; })(), "conc boundary");
+  add("PZ-25: below $1,000 does not trigger concentration", A([usdc(2000), lst(900, JITOSOL, 7)]).triggerStates.concentration !== "triggered", "below 1000");
+  add("PZ-26: below 50% does not trigger concentration", A([usdc(3000), lst(1500, JITOSOL, 7)]).triggerStates.concentration !== "triggered", "below 50pct");
+  add("PZ-27: concentration denominator = authoritative gross assets (liabilities excluded)", (() => { const a = A([usdc(1000), lst(1000, JITOSOL, 7), debt(5000)]); return a.grossAssetValueUsd === 2000 && a.recognizedLiabilitiesUsd === 5000 && a.triggerStates.concentration === "triggered"; })(), "denom excl liab");
+  add("PZ-28: native SOL counts in the denominator; LST counted once (no backing double-count)", (() => { const a = A([usdc(1000), W({ id: "ns", type: "native", symbol: "SOL", amount: "4000000000", uiAmount: 4, decimals: 9, priceUsd: 250, valueUsd: 1000 }), lst(2000, JITOSOL, 7)]); return a.grossAssetValueUsd === 4000; })(), "denom sol");
+
+  // ---- Shared underlying exposure ----
+  add("PZ-29: active stake + JitoSOL → native_sol shared exposure group", (() => { const a = A([usdc(2000), stake(300), lst(300, JITOSOL, 7)]); const g = a.sharedExposureGroups.find((x) => x.exposureId === "native_sol"); return g !== undefined && g.memberPositionIds.length === 2 && a.triggerStates.sharedExposure === "triggered"; })(), "native_sol group");
+  add("PZ-30: cross-protocol USDC supply groups by exact canonical USDC mint", (() => { const a = A([usdc(2000), kaminoUsdc(300, "kd", "klend:1"), steakUsdc(300, "st", "steak:1")]); const g = a.sharedExposureGroups.find((x) => x.exposureId === `stable:${USDC}`); return g !== undefined && g.memberPositionIds.length === 2; })(), "usdc group");
+  add("PZ-31: USDC and USDT are SEPARATE exposure groups (no broad STABLE bucket)", (() => { const a = A([usdc(2000), kaminoUsdc(300, "k1", "klend:1"), usdtSupply(300, "kt", "klend:t")]); return !a.sharedExposureGroups.some((x) => x.memberPositionIds.length >= 2 && x.exposureId.startsWith("stable:")); })(), "usdc≠usdt");
+  add("PZ-32: group EXACTLY $250 and 5% qualifies; each member EXACTLY $50 included", (() => { const a = A([usdc(4750), kaminoUsdc(125, "k1", "d1"), steakUsdc(125, "k2", "d2")]); const g = a.sharedExposureGroups.find((x) => x.exposureId === `stable:${USDC}`); return g?.combinedValueUsd === 250 && Math.abs((g?.portfolioShare ?? 0) - 0.05) < 1e-9; })(), "group boundary");
+  add("PZ-33: one member does not form a group", A([usdc(2000), kaminoUsdc(3000)]).sharedExposureGroups.length === 0, "one member");
+  add("PZ-34: LP without authoritative leg decomposition does NOT fabricate a group", (() => { const a = A([usdc(2000), lp(300, "lp1"), lp(300, "lp2")]); return !a.sharedExposureGroups.some((x) => x.exposureClass === "multi_asset") && (pos(a, "lp1")?.exposures.every((e) => e.exposureState === "unresolved") ?? false); })(), "lp no group");
+  add("PZ-35: a flagged position is counted ONCE in total flagged value despite group membership", (() => { const a = A([usdc(1000), lst(2000, JITOSOL, 0.5, "j"), lst(300, MSOL, 7, "m")]); const j = a.flaggedPositions.filter((p) => p.positionId === "j"); return j.length === 1; })(), "counted once");
+
+  // ---- Trigger independence ----
+  add("PZ-36: source-not-integrated APY does NOT block a proven concentration trigger", (() => { const a = A([usdc(1000), kaminoUsdc(1500)]); return a.triggerStates.concentration === "triggered" && a.overallReadiness.status === "allowed"; })(), "apy indep");
+  add("PZ-37: LP exposure unresolved does NOT block a proven low-yield trigger", (() => { const a = Afresh([usdc(2000), lp(500, "lp1"), lst(300, JITOSOL, 0.5, "j", FRESH_OBS)]); return a.triggerStates.lowYield === "triggered" && a.overallReadiness.status === "allowed"; })(), "exposure indep");
+  add("PZ-38: one proven trigger + one unresolved family → readiness allowed with warning", (() => { const a = A([usdc(1000), kaminoUsdc(1500), lp(60, "lp1")]); return a.overallReadiness.status === "allowed" && a.warnings.length > 0; })(), "allowed+warn");
+  add("PZ-39: duplicate-invalid economic position blocks all", (() => { const a = A([usdc(2000), kaminoUsdc(1500, "k1", "dupdk"), steakUsdc(1500, "k2", "dupdk")]); return a.overallReadiness.status !== "allowed" && a.warnings.includes("duplicate_economic_position"); })(), "dup blocks");
+  add("PZ-40: mSOL backing unresolved does NOT block market-value concentration/shared review", (() => { const a = A([usdc(1000), W({ id: "ms", type: "lst", source: "wallet", symbol: "mSOL", name: "Marinade Staked SOL", mint: MSOL, amount: "1", uiAmount: 1, detection: "recognized_lst_mint", valueUsd: 1500, apy: 7, lstNormalizationState: "unsupported" })]); return a.triggerStates.concentration === "triggered" && a.overallReadiness.status === "allowed"; })(), "backing no block");
+
+  // ---- Accounting reuse + floor + gates ----
+  add("PZ-41: reuses the SHARED derivePortfolioAssetAccounting (no second methodology)", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/positionOptimizationAssessment.ts`, "utf8"); } catch { return ""; } })(); return /derivePortfolioAssetAccounting/.test(src) && !/deriveValueBreakdown|deriveRebalanceAssessment/.test(src); })(), "shared accounting");
+  add("PZ-42: incomplete Safety Buffer → accounting blocked → no readiness", (() => { const a = A([usdc(100), lst(300, JITOSOL, 0.5)], 2000); return a.accountingGate.status === "blocked" && a.overallReadiness.status === "blocked"; })(), "buffer blocks");
+  add("PZ-43: no trigger fires → readiness blocked (authoritative accounting)", A([usdc(2000), lst(300, JITOSOL, 7)]).overallReadiness.status === "blocked", "no trigger");
+  add("PZ-44: total flagged value floor is $100; below → blocked", (() => { const a = A([usdc(2000), lst(80, JITOSOL, 0.5)]); return a.totalFlaggedValueUsd < 100 && a.overallReadiness.status !== "allowed"; })(), "floor");
+  add("PZ-45: assessment returns gates only — never an EngineSuggestion (no id/category/amount)", (() => { const a = A([usdc(2000), lst(300, JITOSOL, 0.5)]) as unknown as Record<string, unknown>; return !("id" in a) && !("category" in a) && !("amount" in a) && typeof a.overallReadiness === "object"; })(), "no suggestion");
+
+  // ---- Regression / read-only ----
+  add("PZ-46 (20C): card id unchanged + engine consumes canonical override, not the legacy derive", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/positionOptimizationSuggestion.ts`, "utf8"); } catch { return ""; } })(); const eng = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/engine.ts`, "utf8"); } catch { return ""; } })(); return /POSITION_OPTIMIZATION_SUGGESTION_ID = "position_optimization_review"/.test(src) && /buildPositionOptimizationCardFromAssessment/.test(src) && /positionOptimizationOverride/.test(eng) && !/derivePositionOptimizationSuggestion/.test(eng); })(), "canonical mount");
+  add("PZ-47: thresholds unchanged (100 / 1 / 1000 / 0.5 / 50 / 250 / 0.05)", MIN_POSITION_REVIEW_USD === 100 && MIN_REVIEW_APY === 1 && MIN_CONCENTRATION_REVIEW_USD === 1000 && POSITION_CONCENTRATION_THRESHOLD === 0.5 && MIN_DUPLICATE_EXPOSURE_POSITION_USD === 50 && MIN_DUPLICATE_EXPOSURE_GROUP_USD === 250 && DUPLICATE_EXPOSURE_PORTFOLIO_SHARE_THRESHOLD === 0.05, "thresholds");
+  add("PZ-48: no route/quote/transaction/signature/execution in the assessment path", (() => { const blob = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/positionOptimizationAssessment.ts`, "utf8"); } catch { return ""; } })(); return !/swapRoute|routePlan|signTransaction|sendTransaction|getQuote|aggregator|withdraw\(|unstake\(/.test(blob); })(), "read-only");
+
+  // ---- 20B.1: APY freshness semantics (retrieval ≠ source freshness; low-yield fails closed) ----
+  add("PZF-1: numeric APY without a source timestamp is NOT sourced_fresh (retrieval ≠ freshness)", (() => { const p = pos(A([usdc(2000), lst(300, JITOSOL, 6.5)]), "lst"); return p?.apy.apyState === "sourced_freshness_unverified" && p.apy.apyRetrieval === "retrieved_current_refresh" && p.apy.apyFreshness === "unresolved" && p.apy.apyObservedAt === null; })(), "not fresh");
+  add("PZF-2: freshness-unverified APY does NOT trigger low_yield (even below 1%)", A([usdc(2000), lst(300, JITOSOL, 0.5)]).triggerStates.lowYield !== "triggered", "no low yield");
+  add("PZF-3: freshness-unverified APY does NOT trigger missing_apy_data by itself", (() => { const a = A([usdc(2000), lst(300, JITOSOL, 0.5)]); return a.triggerStates.missingApy !== "triggered" && a.overallReadiness.status !== "allowed"; })(), "no missing");
+  add("PZF-4: freshness-unverified value is retained as informational metadata", (() => { const p = pos(A([usdc(2000), lst(300, JITOSOL, 0.5)]), "lst"); return p?.apy.apyValuePct === 0.5 && p.apy.warnings.includes("apy_freshness_unverified"); })(), "display metadata");
+  add("PZF-5: freshness-unverified + concentration → concentration review, freshness warning, no low-yield reason", (() => { const a = A([usdc(1000), lst(1500, JITOSOL, 0.5)]); return a.triggerStates.concentration === "triggered" && a.overallReadiness.status === "allowed" && a.warnings.includes("apy_freshness_unverified") && !a.reasonCodes.includes("low_yield_position"); })(), "conc coexist");
+  add("PZF-6: freshness-unverified + shared exposure → shared review, freshness warning, no low-yield reason", (() => { const a = A([usdc(2000), lst(300, JITOSOL, 0.5, "j"), lst(300, MSOL, 0.5, "m")]); return a.triggerStates.sharedExposure === "triggered" && a.warnings.includes("apy_freshness_unverified") && !a.reasonCodes.includes("low_yield_position"); })(), "shared coexist");
+  add("PZF-7: approved policy + timestamp within window → sourced_fresh + fresh", (() => { const p = pos(Afresh([usdc(2000), lst(300, JITOSOL, 0.5, "lst", FRESH_OBS)]), "lst"); return p?.apy.apyState === "sourced_fresh" && p.apy.apyFreshness === "fresh" && p.apy.apyObservedAt === FRESH_OBS; })(), "fresh path A");
+  add("PZF-8: approved policy + timestamp OUTSIDE window → sourced_stale, cached, never low-yield", (() => { const a = Afresh([usdc(2000), lst(300, JITOSOL, 0.5, "lst", STALE_OBS)]); const p = pos(a, "lst"); return p?.apy.apyState === "sourced_stale" && p.apy.apyRetrieval === "cached" && p.apy.apyFreshness === "stale" && a.triggerStates.lowYield !== "triggered"; })(), "stale not low");
+  add("PZF-9: conclusively stale EXPECTED APY may trigger missing/data-quality review (never low-yield)", (() => { const a = Afresh([usdc(2000), lst(300, JITOSOL, 0.5, "lst", STALE_OBS)]); return a.triggerStates.missingApy === "triggered" && a.triggerStates.lowYield !== "triggered"; })(), "stale → data review");
+  add("PZF-10: source failure for an expected APY triggers missing-data at EXACTLY $100", A([usdc(2000), lst(100, JITOSOL, null)]).triggerStates.missingApy === "triggered", "missing $100");
+  add("PZF-11: source-not-integrated (native stake) remains non-triggering for missing/low", (() => { const a = A([usdc(2000), stake(3000)]); return a.triggerStates.missingApy !== "triggered" && a.triggerStates.lowYield !== "triggered"; })(), "un-integrated");
+  add("PZF-12: retrieval-state and source-freshness are distinct fields (both modeled)", (() => { const p = pos(A([usdc(2000), lst(300, JITOSOL, 0.5)]), "lst"); return typeof p?.apy.apyRetrieval === "string" && typeof p?.apy.apyFreshness === "string" && p!.apy.apyRetrieval !== p!.apy.apyFreshness; })(), "distinct");
+  add("PZF-13: APY summary counts freshness-unverified separately from fresh", (() => { const a = A([usdc(2000), lst(300, JITOSOL, 0.5)]); return a.apyStateSummary.sourced_fresh === 0 && a.apyStateSummary.sourced_freshness_unverified === 1; })(), "summary");
+  add("PZF-14: no source timestamp is invented (apyObservedAt null when source omits it)", pos(A([usdc(2000), lst(300, JITOSOL, 7)]), "lst")?.apy.apyObservedAt === null, "no invention");
+  add("PZF-15: comparability does not hide freshness — both must pass for low-yield", (() => { const p = pos(A([usdc(2000), lst(300, JITOSOL, 0.5)]), "lst"); return p?.apy.apyComparability === "comparable" && p.apy.apyFreshness === "unresolved" && p.lowYieldEligible === false; })(), "both required");
+  add("PZF-16: source contract is a bare Map<mint,number> with no timestamp/freshness (audited)", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/wallet/lstApy.ts`, "utf8"); } catch { return ""; } })(); return /Promise<Map<string, number>>/.test(src) && !/observedAt|fetchedAt/.test(src); })(), "no source freshness");
+
+  // ---- 20B.2: source-specific freshness-policy governance (no global window) ----
+  add("PZG-1: NO global freshness-window constant / age fallback exists in the module", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/positionOptimizationAssessment.ts`, "utf8"); } catch { return ""; } })(); return !/PO_APY_FRESHNESS_WINDOW_MS/.test(src) && !/24 \* 60 \* 60/.test(src) && !/86_?400_?000/.test(src); })(), "no global window");
+  add("PZG-2: production LST APY policy is missing/unresolved (not approved)", (() => { const p = lookupApyFreshnessPolicy("lst_apy_feed", "lst_net_apy"); return p !== null && p.policyState !== "approved" && p.maxObservationAgeMs === null && p.freshnessSignal === "unavailable"; })(), "lst missing");
+  add("PZG-3: production Ondo APY policy is missing/unresolved (not approved)", (() => { const p = lookupApyFreshnessPolicy("ondo_usdy_feed", "treasury_yield"); return p !== null && p.policyState !== "approved" && p.maxObservationAgeMs === null; })(), "ondo missing");
+  add("PZG-4: production registry has NO approved policy (max age null everywhere)", PO_APY_FRESHNESS_POLICIES.every((p) => p.policyState !== "approved" && p.maxObservationAgeMs === null), "registry unapproved");
+  add("PZG-5: observedAt WITHOUT an approved policy stays freshness-unverified (no hidden age window)", (() => { const p = pos(A([usdc(2000), lst(300, JITOSOL, 0.5, "lst", FRESH_OBS)]), "lst"); return p?.apy.apyState === "sourced_freshness_unverified" && p.apy.apyFreshness === "unresolved" && p.apy.apyObservedAt === FRESH_OBS; })(), "obs inert");
+  add("PZG-6: current-refresh retrieval WITHOUT approved policy stays freshness-unverified", (() => { const p = pos(A([usdc(2000), lst(300, JITOSOL, 7)]), "lst"); return p?.apy.apyRetrieval === "retrieved_current_refresh" && p.apy.apyFreshness === "unresolved"; })(), "retrieval inert");
+  add("PZG-7: LST/Ondo production values never trigger low-yield even below 1%", A([usdc(2000), lst(300, JITOSOL, 0.5)]).triggerStates.lowYield !== "triggered", "prod no low yield");
+  add("PZG-8: mismatched SOURCE cannot classify fresh (policy source must match exactly)", (() => { const wrong: PoApyFreshnessPolicy = { ...TEST_LST_POLICY, sourceId: "other_feed" }; const p = pos(Afresh([usdc(2000), lst(300, JITOSOL, 0.5, "lst", FRESH_OBS)], 500, [wrong]), "lst"); return p?.apy.apyState === "sourced_freshness_unverified"; })(), "source mismatch");
+  add("PZG-9: mismatched METHODOLOGY cannot classify fresh", (() => { const wrong: PoApyFreshnessPolicy = { ...TEST_LST_POLICY, methodology: "treasury_yield" }; const p = pos(Afresh([usdc(2000), lst(300, JITOSOL, 0.5, "lst", FRESH_OBS)], 500, [wrong]), "lst"); return p?.apy.apyState === "sourced_freshness_unverified"; })(), "methodology mismatch");
+  add("PZG-10: approved policy but MISSING timestamp → freshness-unverified (signal required)", (() => { const p = pos(Afresh([usdc(2000), lst(300, JITOSOL, 0.5, "lst")]), "lst"); return p?.apy.apyState === "sourced_freshness_unverified"; })(), "no signal");
+  add("PZG-11: fixture-only approved policy is never exported to production UI (assessment input only)", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/positionOptimizationAssessment.ts`, "utf8"); } catch { return ""; } })(); return /apyFreshnessPolicies\?: readonly PoApyFreshnessPolicy\[\]/.test(src); })(), "input override only");
+  add("PZG-12: input accepts an explicit source-specific policy set OR the canonical registry", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/positionOptimizationAssessment.ts`, "utf8"); } catch { return ""; } })(); return /input\.apyFreshnessPolicies \?\? PO_APY_FRESHNESS_POLICIES/.test(src); })(), "registry or override");
 
   return checks;
 }
