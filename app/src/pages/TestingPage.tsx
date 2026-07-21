@@ -36,6 +36,8 @@ import { getLiquidPositions, getStakedPositions, getProtocolPositions } from "..
 import { getRebalanceTestingFixtures, getNativeSolSourceTestingFixtures, getStakingConflictTestingFixtures } from "./rebalanceTestingFixtures";
 import { getTrimTestingFixtures } from "./trimTestingFixtures";
 import { getPositionOptimizationTestingFixtures } from "./positionOptimizationTestingFixtures";
+import { getSafetyBufferTestingFixtures } from "./safetyBufferTestingFixtures";
+import { getOnTrackTestingFixtures } from "./onTrackTestingFixtures";
 import "./testingPage.css";
 
 type Filter = "All" | TestingGroup;
@@ -60,6 +62,12 @@ export default function TestingPage() {
   const positionOptimizationFixtures = useMemo(() => getPositionOptimizationTestingFixtures(), []);
   const [selectedPositionOptimizationId, setSelectedPositionOptimizationId] = useState<string | null>(null);
   const selectedPositionOptimization = selectedPositionOptimizationId ? positionOptimizationFixtures.find((f) => f.id === selectedPositionOptimizationId && f.card) : undefined;
+  // Step 21C — production-derived Safety Buffer gallery + click-through into the SAME production review modal.
+  const safetyBufferFixtures = useMemo(() => getSafetyBufferTestingFixtures(), []);
+  const [selectedSafetyBufferId, setSelectedSafetyBufferId] = useState<string | null>(null);
+  const selectedSafetyBuffer = selectedSafetyBufferId ? safetyBufferFixtures.find((f) => f.id === selectedSafetyBufferId && f.card && f.card.action_kind === "review_only") : undefined;
+  // Step 21E — production-derived On Track gallery (informational, no modal — the scoped claim is on the card).
+  const onTrackFixtures = useMemo(() => getOnTrackTestingFixtures(), []);
 
   const visible = filter === "All" ? fixtures : fixtures.filter((f) => f.group === filter);
 
@@ -415,6 +423,79 @@ export default function TestingPage() {
           onClose={() => setSelectedPositionOptimizationId(null)}
         />
       )}
+
+      {/* Step 21C — production-derived Safety Buffer gallery. Each fixture runs the canonical coverage +
+          SafetyBufferAssessment + production card mapper; definite-shortfall cards open the SAME production review
+          modal; informational states (below-minimum / unresolved / target-or-coverage-unavailable) render the
+          production card with no Review control; complete coverage shows the deterministic no-card reason. A
+          definite amount is the CONFIRMED minimum shortfall — never the worst case, never a plan amount. */}
+      <section className="testing-page__contrib" aria-label="Safety Buffer states">
+        <h2 className="testing-page__section-title">Safety Buffer (Top Up / Verify)</h2>
+        <p className="testing-page__subtext">
+          Verified immediately-withdrawable stablecoin coverage vs the risk-based target. A definite card amount is the
+          CONFIRMED minimum shortfall (recognized-but-unresolved stable value could reduce it); unresolved coverage
+          shows no definite amount; a below-$50 gap is informational; missing target or unclassifiable coverage is an
+          honest informational state. Review-only; no deposit, transfer, or transaction. Complete coverage shows no card.
+        </p>
+        <div className="testing-page__grid">
+          {safetyBufferFixtures.map((f) => {
+            const isDefinite = f.card?.action_kind === "review_only";
+            return (
+              <div key={f.id} className="testing-page__cell">
+                <p className="testing-page__cell-label">
+                  {f.label} — <span className="testing-page__badge">{f.card ? (isDefinite ? "review" : "informational") : "no card"}</span>
+                </p>
+                {f.card ? (
+                  <SuggestionCard card={toSuggestionCard(f.card)} onReview={isDefinite ? () => setSelectedSafetyBufferId(f.id) : undefined} />
+                ) : (
+                  <p className="testing-page__contrib-noplan">
+                    No card — presentation: <strong>{f.assessment.presentationState}</strong>, verified: <strong>${f.assessment.verifiedLiquidStableValueUsd ?? "—"}</strong>, target: <strong>${f.assessment.targetUsd ?? "—"}</strong>, confirmed gap: <strong>${f.assessment.provenMinimumShortfallUsd ?? "—"}</strong>.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {selectedSafetyBuffer?.card?.reviewDetails && (
+        <SuggestionReviewModal
+          details={selectedSafetyBuffer.card.reviewDetails}
+          isTopPick={selectedSafetyBuffer.card.is_top_pick === true}
+          onClose={() => setSelectedSafetyBufferId(null)}
+        />
+      )}
+
+      {/* Step 21E — production-derived On Track gallery. Each fixture runs the canonical Safety Buffer + Rebalance
+          projections into the production OnTrackAssessment + card mapper. On Track is INFORMATIONAL: eligible states
+          render the scoped no-CTA card (no modal); every blocked/unresolved state shows the deterministic reason.
+          The card claims only that the Safety Buffer is verified complete and the allocation is within the ±10pp
+          review range — never overall plan health, goal progress, or "no changes needed". */}
+      <section className="testing-page__contrib" aria-label="On Track states">
+        <h2 className="testing-page__section-title">On Track (Scoped Informational Fallback)</h2>
+        <p className="testing-page__subtext">
+          The final informational fallback, shown only when the Safety Buffer is verified complete AND canonical crypto
+          allocation is inside the ±10pp Rebalance review range, over authoritative accounting, with no proven material
+          Rebalance need and no visible actionable candidate. Candidate emptiness controls visibility, never plan health;
+          goal / contribution / yield / protocol-risk / diversification remain explicitly unevaluated. No CTA, no modal.
+        </p>
+        <div className="testing-page__grid">
+          {onTrackFixtures.map((f) => (
+            <div key={f.id} className="testing-page__cell">
+              <p className="testing-page__cell-label">
+                {f.label} — <span className="testing-page__badge">{f.card ? "scoped card" : "no card"}</span>
+              </p>
+              {f.card ? (
+                <SuggestionCard card={toSuggestionCard(f.card)} />
+              ) : (
+                <p className="testing-page__contrib-noplan">
+                  No card — presentation: <strong>{f.assessment.presentationState}</strong>, buffer: <strong>{f.assessment.safetyBufferState}</strong>, allocation: <strong>{f.assessment.allocationState}</strong>, material: <strong>{String(f.assessment.materialRebalanceNeed)}</strong>, fallback: <strong>{f.assessment.fallbackState}</strong>.
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* Step 18E — crypto-overweight staking-conflict policy. A PROVEN material crypto_to_stables NEED
           suppresses an otherwise-eligible new staking suggestion (narrow only, card-independent, directional).

@@ -16,13 +16,15 @@ import type {
   SuggestionReasonCode,
   EngineSuggestion,
 } from "./engineTypes";
-import { deriveBufferSuggestion } from "./bufferSuggestion";
 import { deriveCapitalEfficiencySuggestion } from "./capitalEfficiencySuggestion";
 import { deriveStakingSuggestion } from "./stakingSuggestion";
 import { deriveStableYieldSuggestion } from "./stableYieldSuggestion";
 import { deriveDcaSuggestion } from "./dcaSuggestion";
-import { deriveOnTrackSuggestion } from "./onTrackSuggestion";
-import { completenessAllows, type CompletenessGateMap, type CompletenessDecision } from "../wallet/portfolioCompleteness";
+import { buildOnTrackCardFromAssessment } from "./onTrackSuggestion";
+import { deriveOnTrackAssessment, type OnTrackMaterialSignal } from "./onTrackAssessment";
+import type { SafetyBufferAssessment } from "./safetyBufferAssessment";
+import type { RebalanceAssessment } from "./rebalanceAssessment";
+import { completenessAllows, type CompletenessGateMap, type CompletenessDecision, type PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
 import { selectTopPick } from "./topPick";
 import { ensureExecutionGuardrails } from "./guardrails";
 import { reconcileProtocolGuardrail } from "./protocolSelection";
@@ -93,23 +95,52 @@ export function runSuggestionEngine(
    * (fail closed). `reviewNeed` mirrors overall readiness (audit signal); it never suppresses another
    * suggestion. The mounted rail always supplies it. Keeps its lowest (category-8) order; coexists with all.
    */
-  positionOptimizationOverride?: { candidate: EngineSuggestion | null; reviewNeed?: boolean }
+  positionOptimizationOverride?: { candidate: EngineSuggestion | null; reviewNeed?: boolean },
+  /**
+   * Step 21C — the production Safety Buffer result. `candidate` (or null) is the ONE authoritative buffer card
+   * (built from the canonical SafetyBufferAssessment behind the `top_up_buffer` contract). `bufferSatisfied` is
+   * true ONLY when coverage is proven COMPLETE; `blocksDownstream` is true for every non-complete state (definite
+   * shortfall / below-minimum / unresolved / target-or-coverage-unavailable) so downstream deployment and On Track
+   * stay suppressed until the buffer is proven complete. There is NO legacy fallback: when this is ABSENT the
+   * engine produces NO buffer candidate and blocks downstream (fail closed). The mounted rail always supplies it.
+   */
+  bufferOverride?: { candidate: EngineSuggestion | null; bufferSatisfied: boolean; blocksDownstream: boolean },
+  /**
+   * Step 21E — the canonical On Track inputs for Stage B. The engine derives ONE `OnTrackAssessment` (from the
+   * shared SafetyBufferAssessment + RebalanceAssessment + completeness + the ACTUAL post-Stage-A candidate context)
+   * and appends the scoped informational card only when eligible. There is NO legacy `deriveOnTrackSuggestion`
+   * fallback: when this is ABSENT the engine emits NO On Track card (fail closed). The mounted rail always supplies it.
+   */
+  onTrackOverride?: {
+    safetyBufferAssessment: SafetyBufferAssessment | null;
+    rebalanceAssessment: RebalanceAssessment | null;
+    portfolioCompleteness: PortfolioCompletenessResult | null;
+    materialSignals?: OnTrackMaterialSignal[];
+  }
 ): SuggestionEngineResult {
   const warnings: SuggestionReasonCode[] = [];
   if (inputs.value.anyUnpriced) warnings.push("partial_pricing");
   const allows = (d: CompletenessDecision) => completenessAllows(completenessGates, d);
 
   const suggestions: EngineSuggestion[] = [];
-  const planBuffer = contributionSuggestion?.category === "buffer" ? contributionSuggestion : null;
+  // Step 21C — the plan-backed BUFFER candidate is no longer injected via `contributionSuggestion`; its source
+  // plan is normalized into the canonical SafetyBufferAssessment upstream and rendered by the ONE buffer mapper.
+  // Only the DCA/Stable-Yield plan candidates still merge here.
   const planDca = contributionSuggestion?.category === "dca" ? contributionSuggestion : null;
   const planStableYield = stableYieldPlanSuggestion?.category === "stable_yield" ? stableYieldPlanSuggestion : null;
 
-  // 1) Safety Buffer first (plan-backed version enriches/replaces the generic one — one buffer card).
-  const buffer = planBuffer ?? deriveBufferSuggestion(inputs, generatedAt);
-  if (buffer) suggestions.push(buffer);
+  // 1) Safety Buffer — the ONE authoritative buffer card comes exclusively from the canonical SafetyBufferAssessment
+  // via `bufferOverride` (built by `buildSafetyBufferCardFromAssessment` behind the `top_up_buffer` contract). There
+  // is NO legacy `deriveBufferSuggestion` fallback and NO plan-backed replacement branch: honest complete / definite /
+  // below-minimum / unresolved / target-or-coverage-unavailable states are all decided by the assessment. When the
+  // override is ABSENT the engine emits no buffer card and blocks downstream (fail closed). Mounted rail always supplies it.
+  const bufferCard = bufferOverride?.candidate ?? null;
+  if (bufferCard) suggestions.push(bufferCard);
 
-  // 2) Buffer Override: an underfunded buffer suppresses every other rule.
-  const bufferSatisfied = inputs.safetyBuffer?.fullyFunded === true;
+  // 2) Buffer Override: downstream deployment + On Track are evaluated ONLY when coverage is proven COMPLETE. Every
+  // non-complete state (including the informational unresolved / unavailable cards) blocks downstream. Keyed on the
+  // canonical `blocksDownstream`/`bufferSatisfied` signal — never on card presence, amount, or actionability.
+  const bufferSatisfied = bufferOverride?.blocksDownstream === false && bufferOverride?.bufferSatisfied === true;
   if (bufferSatisfied) {
     // 3) Actionable candidates in engine (category-priority) order.
     const candidates: EngineSuggestion[] = [];
@@ -159,11 +190,33 @@ export function runSuggestionEngine(
     if (positionOpt) candidates.push(positionOpt);
 
     if (candidates.length > 0) {
+      // Stage A produced a visible actionable candidate → On Track (the final informational fallback) never shows.
       suggestions.push(...candidates);
-    } else {
-      // 4) Nothing actionable → informational On Track (gated: unresolved completeness hides it).
-      const onTrack = deriveOnTrackSuggestion(inputs, generatedAt);
-      if (onTrack && allows("onTrack")) suggestions.push(onTrack);
+    } else if (onTrackOverride) {
+      // 4) Stage B — the canonical On Track fallback (Step 21E). Build the ACTUAL candidate context from Stage A
+      // (empty here), derive ONE OnTrackAssessment, and append the SCOPED informational card only when eligible.
+      // Candidate emptiness controls VISIBILITY only; the assessment (Safety Buffer verified complete + canonical
+      // allocation inside the ±10pp review range + authoritative accounting + no proven material Rebalance need)
+      // establishes the claim. `deriveOnTrackSuggestion`, `canShowOnTrack`, and the legacy bucket delta are gone.
+      const onTrackAssessment = deriveOnTrackAssessment({
+        safetyBufferAssessment: onTrackOverride.safetyBufferAssessment,
+        rebalanceAssessment: onTrackOverride.rebalanceAssessment,
+        portfolioCompleteness: onTrackOverride.portfolioCompleteness,
+        candidateContext: {
+          visibleCandidateCount: candidates.length,
+          visibleActionableCandidateCount: candidates.length,
+          visibleInformationalCandidateCount: 0,
+          hasHigherPriorityVisibleCandidate: candidates.length > 0,
+          materialSignals: onTrackOverride.materialSignals ?? [],
+          suppressedMaterialSignals: [],
+          filteredMaterialSignals: [],
+          unresolvedPotentialSignals: [],
+          candidateSetState: "empty",
+        },
+        generatedAt,
+      });
+      const onTrackCard = buildOnTrackCardFromAssessment(onTrackAssessment, generatedAt);
+      if (onTrackCard) suggestions.push(onTrackCard);
     }
   }
 

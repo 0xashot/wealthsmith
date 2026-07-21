@@ -53,9 +53,17 @@ export type SuggestionCategory =
 export type SuggestionReasonCode =
   // Implemented (MVP)
   | "buffer_low"
+  // Step 21C — canonical Safety Buffer assessment states (honest, never "unresolved value = zero").
+  | "buffer_shortfall_confirmed"
+  | "buffer_nearly_funded"
+  | "buffer_coverage_unresolved"
+  | "buffer_target_unavailable"
+  | "buffer_coverage_unavailable"
   | "crypto_overweight"
   | "crypto_underweight"
   | "portfolio_aligned"
+  // Step 21E — scoped On Track claim (Safety Buffer verified complete + allocation within the review range).
+  | "buffer_and_allocation_within_range"
   | "missing_data"
   | "below_min_size"
   | "partial_pricing"
@@ -127,7 +135,10 @@ export type GuardrailStatus =
   | "not_evaluated"
   // The guardrail does not apply to this suggestion (e.g. an informational
   // On Track card proposes no action, so execution guardrails don't apply).
-  | "not_applicable";
+  | "not_applicable"
+  // Step 21C — the check could not be authoritatively resolved (e.g. Safety Buffer coverage confidence /
+  // liquidity verification when recognized-but-unresolved stable value could still change the result).
+  | "unresolved";
 
 /**
  * MVP guardrails (top-pick-rules.md — Guardrails). Evaluable today:
@@ -140,6 +151,9 @@ export type GuardrailCode =
   | "buffer_protection"
   | "pricing_available"
   | "allocation_delta"
+  // Step 21C — Safety Buffer coverage confidence + verified-liquidity checks (canonical assessment).
+  | "coverage_confidence"
+  | "liquidity_verification"
   // capital_efficiency: idle assets clear the value/share thresholds.
   | "idle_asset_threshold"
   // trim: which non-core token scope / concentration checks were evaluated.

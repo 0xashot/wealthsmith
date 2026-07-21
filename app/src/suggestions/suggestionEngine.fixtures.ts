@@ -26,7 +26,13 @@ import { DIRECT_LENDING_PROFILE_TESTING_ROWS as AM_PROFILE_ROWS } from "./direct
 import { buildKlendDirectUsdcExistingPosition as epBuild, toWalletPosition as epToWallet, dedupeKlendDirectPosition as epDedupe, mergeKlendDirectPosition as epMerge, KLEND_DIRECT_POSITION_DEDUPE_KEY as EP_KEY, KLEND_DIRECT_POSITION_ID as EP_ID, type KlendDirectExistingPositionInput as EPInput } from "./klendDirectUsdcExistingPosition";
 import { POSITION_IDENTITY as EP_POS_ID, EXPECTED_TOKEN_PROGRAM_ID as EP_TOKPROG } from "./klendDirectLendingPosition";
 import { ONE_SF as EP_ONE_SF } from "./klendReserveCapacity";
-import { computeSafetyBufferCoverage as sbCoverage, classifyPositionCoverage as sbClassify } from "../wallet/safetyBufferCoverage";
+import { computeSafetyBufferCoverage as sbCoverage, classifyPositionCoverage as sbClassify, type SafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
+import { deriveSafetyBufferAssessment as sbAssess, SAFETY_BUFFER_ASSESSMENT_VERSION, type SafetyBufferContributionPlanInput } from "./safetyBufferAssessment";
+import { buildSafetyBufferCardFromAssessment } from "./bufferSuggestion";
+import { deriveOnTrackAssessment as otAssess, ON_TRACK_ASSESSMENT_VERSION, type OnTrackCandidateContext } from "./onTrackAssessment";
+import { buildOnTrackCardFromAssessment as otBuildCard } from "./onTrackSuggestion";
+import type { RebalanceAssessment } from "./rebalanceAssessment";
+import type { PortfolioCompletenessResult as PCResult } from "../wallet/portfolioCompleteness";
 import { deriveSafetyBuffer as sbDerive } from "../wallet/walletSummary";
 import type { WalletPosition as SBPos } from "../wallet/walletPosition";
 import { buildSteakhouseExistingPosition as stBuild, toSteakhouseWalletPosition as stToWallet, mergeSteakhousePosition as stMerge, deriveReserveGate as stDeriveGate, STEAKHOUSE_IDENTITY as ST_ID, STEAKHOUSE_POSITION_DEDUPE_KEY as ST_KEY, STEAKHOUSE_POSITION_ID as ST_POS_ID, type SteakhousePositionInput as STInput, type ReserveGateInput as STGateInput } from "../wallet/steakhouseExistingPosition";
@@ -83,7 +89,7 @@ import {
 import {
   assessPositionCompleteness as pcAssess, computePortfolioCompleteness as pcCompute,
   detectDuplicateViolations as pcDupes, classifyPositionClass as pcClass,
-  canDetermineNetWorth as pcNetWorth, canShowOnTrack as pcOnTrack, canGenerateRebalance as pcRebalance,
+  canDetermineNetWorth as pcNetWorth, canGenerateRebalance as pcRebalance,
   canGenerateStakingSuggestion as pcStaking, canGenerateDcaSuggestion as pcDca,
   canGenerateDirectLendingSuggestion as pcDirect,
   deriveCompletenessGates as pcGates, completenessAllows as pcAllows,
@@ -157,7 +163,86 @@ import type { SafetyBuffer } from "../wallet/walletSummary";
 import type { SavedGoal } from "../types/goal";
 import type { EngineSuggestion, ProtocolStrategyType } from "./engineTypes";
 import { buildSuggestionEngineInputs } from "./engineInputAdapter";
-import { runSuggestionEngine } from "./engine";
+import { runSuggestionEngine as runSuggestionEngineRaw } from "./engine";
+
+/**
+ * Step 21C — the mounted engine is now buffer-override-driven (no internal buffer rule). To keep the ~289 legacy
+ * engine fixtures expressing intent via `bufferFixture(...)`, this fixture-only wrapper auto-derives the canonical
+ * `bufferOverride` from `inputs.safetyBuffer` (reusing the PRODUCTION assessment + mapper over a synthesized
+ * coverage) when the caller did not pass one. A `null` safetyBuffer yields NO override (engine fail-closes exactly
+ * as before → missing_data). Callers may still pass an explicit `bufferOverride` (or `null` to force fail-closed).
+ */
+function sbAssessmentFromInputs(inputs: Parameters<typeof runSuggestionEngineRaw>[0], generatedAt: number): ReturnType<typeof sbAssess> | null {
+  const sb = inputs.safetyBuffer;
+  if (!sb) return null;
+  const coverageState = sb.coverageState ?? (sb.fullyFunded ? "complete" : "incomplete");
+  const coverage: SafetyBufferCoverage = {
+    requiredBufferUsd: sb.targetUsd,
+    recognizedStableValueUsd: (sb.recognizedStableUsd ?? sb.stableUsd) + (sb.unresolvedStableUsd ?? 0),
+    verifiedLiquidStableValueUsd: sb.stableUsd,
+    delayedStableValueUsd: sb.delayedStableUsd ?? 0,
+    unavailableStableValueUsd: sb.unavailableStableUsd ?? 0,
+    unresolvedStableValueUsd: sb.unresolvedStableUsd ?? 0,
+    hasUnknownUnresolvedMagnitude: false,
+    shortfallUsd: Math.max(sb.targetUsd - sb.stableUsd, 0),
+    coverageRatio: sb.targetUsd > 0 ? sb.stableUsd / sb.targetUsd : 1,
+    fullyFunded: coverageState === "complete",
+    coverageState,
+    unresolvedReasons: sb.unresolvedReasons ?? [],
+    sources: [],
+  };
+  const expenses = sb.targetMonths > 0 ? sb.targetUsd / sb.targetMonths : null;
+  return sbAssess({ coverage, monthlyExpensesUsd: expenses, targetMonths: sb.targetMonths, generatedAt });
+}
+function bufferOverrideFromInputs(inputs: Parameters<typeof runSuggestionEngineRaw>[0], generatedAt: number): Parameters<typeof runSuggestionEngineRaw>[8] | undefined {
+  const a = sbAssessmentFromInputs(inputs, generatedAt);
+  if (!a) return undefined; // fail-closed exactly like the pre-mount engine when no buffer summary exists
+  return { candidate: buildSafetyBufferCardFromAssessment(a, generatedAt), bufferSatisfied: a.presentationState === "complete", blocksDownstream: a.presentationState !== "complete" };
+}
+/**
+ * Step 21E — a fixture-only synthetic RebalanceAssessment from the fixture's bucket allocation + a passed material
+ * flag. In production the rail uses the REAL `deriveRebalanceAssessment`; this only lets the ~289 legacy engine
+ * fixtures express On Track intent via `allocationFixture(...)` / `rebalanceOverride.material` without rebuilding it.
+ */
+function synthRebalanceAssessment(allocation: Parameters<typeof runSuggestionEngineRaw>[0]["allocation"], material: boolean): RebalanceAssessment {
+  const delta = allocation?.cryptoDeltaPct ?? null;
+  const direction = material ? "crypto_to_stables" : delta == null ? "unresolved" : delta >= 10 ? "crypto_to_stables" : delta <= -10 ? "stables_to_crypto" : "within_threshold";
+  const calc = material ? "allowed" : allocation != null && delta != null ? "allowed" : "unresolved";
+  return {
+    currentCryptoPct: allocation?.currentCryptoPct ?? null,
+    targetCryptoPct: allocation?.recommendedCryptoPct ?? null,
+    cryptoDeltaPct: material ? 12 : delta,
+    direction,
+    calculationGate: { status: calc, reasons: [] },
+    methodologyVersion: "rebalance_assessment_1.0.0",
+  } as unknown as RebalanceAssessment;
+}
+function onTrackOverrideFromInputs(inputs: Parameters<typeof runSuggestionEngineRaw>[0], generatedAt: number, rebalanceOverride: Parameters<typeof runSuggestionEngineRaw>[5]): Parameters<typeof runSuggestionEngineRaw>[9] {
+  return {
+    safetyBufferAssessment: sbAssessmentFromInputs(inputs, generatedAt),
+    rebalanceAssessment: synthRebalanceAssessment(inputs.allocation, rebalanceOverride?.material === true),
+    portfolioCompleteness: null,
+    materialSignals: [],
+  };
+}
+
+/** Fixture-only wrapper: auto-supplies the canonical buffer + On Track overrides (unless the caller passes them). */
+function runSuggestionEngine(
+  inputs: Parameters<typeof runSuggestionEngineRaw>[0],
+  generatedAt: number = FIXTURE_GENERATED_AT,
+  contribution: Parameters<typeof runSuggestionEngineRaw>[2] = null,
+  stableYield: Parameters<typeof runSuggestionEngineRaw>[3] = null,
+  gates: Parameters<typeof runSuggestionEngineRaw>[4] = undefined,
+  rebalanceOverride: Parameters<typeof runSuggestionEngineRaw>[5] = undefined,
+  trimOverride: Parameters<typeof runSuggestionEngineRaw>[6] = undefined,
+  positionOptimizationOverride: Parameters<typeof runSuggestionEngineRaw>[7] = undefined,
+  bufferOverride?: Parameters<typeof runSuggestionEngineRaw>[8] | null,
+  onTrackOverride?: Parameters<typeof runSuggestionEngineRaw>[9] | null,
+): ReturnType<typeof runSuggestionEngineRaw> {
+  const bo = bufferOverride === undefined ? bufferOverrideFromInputs(inputs, generatedAt) : (bufferOverride ?? undefined);
+  const oto = onTrackOverride === undefined ? onTrackOverrideFromInputs(inputs, generatedAt, rebalanceOverride) : (onTrackOverride ?? undefined);
+  return runSuggestionEngineRaw(inputs, generatedAt, contribution, stableYield, gates, rebalanceOverride, trimOverride, positionOptimizationOverride, bo, oto);
+}
 import { deriveLegacyBucketRebalanceSuggestion as rbLegacyBucket } from "./rebalanceSuggestionLegacy";
 import { buildPositionOptimizationCardFromAssessment as poBuildCard } from "./positionOptimizationSuggestion";
 import { buildTrimCardFromAssessment as trimBuildCard } from "./trimSuggestion";
@@ -1341,6 +1426,7 @@ import {
 } from "./investmentTargetRegistry";
 import { listQualitativeRiskDisclosures, disclosureLeaksNumericSignal, RISK_SCORE_FORBIDDEN_SURFACES, RISK_SCORE_FORBIDDEN_FIELDS, RISK_SUITABILITY_SCORE_LABEL } from "./riskScoreExposurePolicy";
 import { MIN_PROTOCOL_RISK_SCORE } from "./engineThresholds";
+import { REBALANCE_DELTA_THRESHOLD_PCT } from "./engineThresholds";
 import {
   PROTOCOL_RISK_RUBRIC_V1_PROPOSAL_EXISTS,
   PROTOCOL_RISK_RUBRIC_APPROVAL_ARTIFACT_EXISTS,
@@ -1865,21 +1951,21 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
     );
   }
 
-  // C. Below minimum shortfall ($25 < $50) → disabled suggestion, min_trade failed.
+  // C. Below minimum confirmed gap ($25 < $50) → informational "nearly funded" (21C: no disabled action button).
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: bufferFixture(2975, 1000, 3) }), // shortfall 25
+      inputsFor({ safetyBuffer: bufferFixture(2975, 1000, 3) }), // confirmed gap 25
       FIXTURE_GENERATED_AT
     );
     const s = r.suggestions[0];
     const minTrade = s?.guardrails.find((g) => g.code === "min_trade_size");
     add(
-      "C: shortfall below $50 → disabled suggestion",
+      "C: confirmed gap below $50 → informational 'nearly funded' (no disabled action)",
       r.suggestions.length === 1 &&
-        s?.action_kind === "disabled" &&
+        s?.action_kind === "informational" &&
         s?.is_actionable === false &&
-        s?.reason_codes.includes("below_min_size") &&
-        minTrade?.status === "failed",
+        s?.reason_codes.includes("buffer_nearly_funded") &&
+        minTrade?.status === "not_applicable",
       `action=${s?.action_kind} reasons=${s?.reason_codes.join(",")} min_trade=${minTrade?.status}`
     );
   }
@@ -2213,15 +2299,15 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
     );
   }
 
-  // U. Underfunded buffer below minimum (disabled) → no Top Pick.
+  // U. Below-minimum informational "nearly funded" buffer → no Top Pick.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: bufferFixture(2975, 1000, 3) }), // shortfall 25
+      inputsFor({ safetyBuffer: bufferFixture(2975, 1000, 3) }), // confirmed gap 25
       FIXTURE_GENERATED_AT
     );
     add(
-      "U: disabled buffer → no Top Pick",
-      r.suggestions[0]?.action_kind === "disabled" &&
+      "U: informational nearly-funded buffer → no Top Pick",
+      r.suggestions[0]?.action_kind === "informational" &&
         topPickCount(r.suggestions) === 0,
       `action=${r.suggestions[0]?.action_kind} count=${topPickCount(r.suggestions)}`
     );
@@ -2385,7 +2471,7 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
     add(
       "Ma: buffer actionable → mapped card (title, amount, review-only, top pick)",
       card?.title === "Top Up Your Safety Buffer" &&
-        card?.description === "Increase your stablecoin reserve. Your Safety Buffer is below target." &&
+        card?.description === "Your verified stablecoin reserve is below your Safety Buffer target. Review adding to your reserve to close the confirmed gap." &&
         card?.impact_text.includes("$2,200") === true &&
         card?.actionability === "actionable" &&
         card?.cta.label === "Review" &&
@@ -2395,16 +2481,16 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
     );
   }
 
-  // Mb. Buffer below minimum → disabled card, no Top Pick, reason text.
+  // Mb. Confirmed gap below minimum → informational "nearly funded" card, no Top Pick (21C).
   {
-    const { card } = engineCard({ safetyBuffer: bufferFixture(2975, 1000, 3) }); // shortfall 25
+    const { card } = engineCard({ safetyBuffer: bufferFixture(2975, 1000, 3) }); // confirmed gap 25
     add(
-      "Mb: buffer below min → disabled card, no Top Pick, reason text",
-      card?.actionability === "disabled" &&
-        card?.status === "disabled" &&
+      "Mb: buffer below min → informational nearly-funded card, no Top Pick, no disabled reason",
+      card?.actionability === "informational" &&
+        card?.status === "ready" &&
         card?.is_top_pick === false &&
-        card?.disabled_reason_text === "Below minimum suggestion size.",
-      `actionability=${card?.actionability} status=${card?.status} reason="${card?.disabled_reason_text}"`
+        card?.title === "Your Safety Buffer Is Nearly Funded",
+      `actionability=${card?.actionability} status=${card?.status} title="${card?.title}"`
     );
   }
 
@@ -2454,8 +2540,8 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
       positions: [cryptoPosition()],
     });
     add(
-      "Me: On Track → informational card, no CTA, no Top Pick",
-      card?.title === "Your Plan Is On Track" &&
+      "Me: On Track → scoped informational card, no CTA, no Top Pick (21E narrowed copy)",
+      card?.title === "Your Safety Buffer and Allocation Are Within Range" &&
         card?.actionability === "informational" &&
         card?.cta.label === "" &&
         card?.is_top_pick === false,
@@ -4067,11 +4153,11 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
   const metricLabels = (c: string) => (rd(c)?.metrics ?? []).map((m) => m.label);
   const allReviewDetails = Object.keys(runs).map((c) => rd(c)).filter((x): x is NonNullable<typeof x> => x != null);
 
-  // 10A-A. Every emitted category carries reviewDetails.
+  // 10A-A. Every emitted ACTIONABLE category carries reviewDetails (On Track is informational: no modal/details, 21E).
   {
-    const cats = ["buffer", "rebalance", "capital_efficiency", "trim", "staking", "stable_yield", "dca", "position_optimization", "on_track"];
+    const cats = ["buffer", "rebalance", "capital_efficiency", "trim", "staking", "stable_yield", "dca", "position_optimization"];
     const missing = cats.filter((c) => rd(c) == null);
-    add("10A-A: every emitted category has reviewDetails", missing.length === 0, `missing=${missing.join(",") || "none"}`);
+    add("10A-A: every emitted actionable category has reviewDetails", missing.length === 0, `missing=${missing.join(",") || "none"}`);
   }
   // 10A-B. Rebalance details: allocation, target, amount, from/to, buffer protection.
   {
@@ -4086,11 +4172,11 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
       (d?.guardrailSummary.checked ?? []).includes("Safety Buffer protection");
     add("10A-B: rebalance details include allocation/target/amount/from-to/buffer protection", ok, `roles=${roles.join(",")}`);
   }
-  // 10A-C. Buffer details: target, stable value, shortfall, months covered, target months.
+  // 10A-C. Buffer details (21C canonical): verified reserve, target, confirmed minimum shortfall, months, target months.
   {
     const labels = metricLabels("buffer");
-    const ok = ["Stablecoin reserve", "Safety Buffer target", "Amount to review", "Months covered", "Target months"].every((l) => labels.includes(l));
-    add("10A-C: buffer details include target/stable/shortfall/months/target months", ok, `labels=${labels.join(" | ")}`);
+    const ok = ["Verified liquid reserve", "Safety Buffer target", "Confirmed minimum shortfall", "Verified months covered", "Target months"].every((l) => labels.includes(l));
+    add("10A-C: buffer details include verified reserve/target/confirmed shortfall/months/target months", ok, `labels=${labels.join(" | ")}`);
   }
   // 10A-D. Staking details: reserve, eligible SOL, eligible value, and protocol
   // selection now CHECKED (approved JitoSOL read-only recommendation, Step 13G).
@@ -4145,16 +4231,10 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
       (d?.guardrailSummary.notApplicable ?? []).includes("Protocol selection");
     add("10A-H: position_optimization details include flagged value/reasons + no replacement protocol", ok, `notApplicable=${d?.guardrailSummary.notApplicable.join(",")}`);
   }
-  // 10A-I. On Track is informational: no transaction/safety-action language, no limitations.
+  // 10A-I. On Track (21E) is informational with NO reviewDetails — no CTA, no modal, no dead calculations.
   {
-    const d = rd("on_track");
-    const kinds = (d?.safetyNotes ?? []).map((n) => n.kind);
-    const text = JSON.stringify(d?.safetyNotes ?? []).toLowerCase();
-    const ok =
-      (d?.limitations.length ?? 1) === 0 &&
-      kinds.every((k) => k === "informational" || k === "no_action") &&
-      !/transaction|signature|stake|swap/.test(text);
-    add("10A-I: on_track details are informational with no action language", ok, `kinds=${kinds.join(",")} lims=${d?.limitations.length}`);
+    const onTrackSug = find("on_track");
+    add("10A-I: on_track is informational with no reviewDetails (no modal/dead details, 21E)", onTrackSug != null && onTrackSug.reviewDetails == null && onTrackSug.action_kind === "informational", `hasDetails=${rd("on_track") != null} action=${onTrackSug?.action_kind}`);
   }
   // 10A-J. No reviewDetails contains forbidden language.
   {
@@ -8460,7 +8540,7 @@ export function runTestingPageFixtureChecks(): FixtureCheck[] {
   add("13H-G: TESTING_PAGE_MUTATES_LIVE_SUGGESTIONS is false", TESTING_PAGE_MUTATES_LIVE_SUGGESTIONS === false, `v=${TESTING_PAGE_MUTATES_LIVE_SUGGESTIONS}`);
 
   // 13H-H…P. Every suggestion category is present.
-  add("13H-H: testing fixtures include Safety Buffer", byCategory("Safety Buffer") != null, `has=${byCategory("Safety Buffer") != null}`);
+  add("13H-H: Safety Buffer moved to the production-derived /testing gallery (hand-built testing_safety_buffer removed, 21C)", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/pages/testingPageFixtures.ts`, "utf8"); } catch { return ""; } })(); const gallery = (() => { try { return readFileSync(`${process.cwd()}/src/pages/safetyBufferTestingFixtures.ts`, "utf8"); } catch { return ""; } })(); return !src.includes('id: "testing_safety_buffer"') && /buildSafetyBufferCardFromAssessment/.test(gallery) && /deriveSafetyBufferAssessment/.test(gallery) && /computeSafetyBufferCoverage/.test(gallery); })(), "production SB gallery");
   add("13H-I: testing fixtures include Rebalance", byCategory("Allocation") != null, `has=${byCategory("Allocation") != null}`);
   add("13H-J: testing fixtures include Capital Efficiency", byCategory("Capital Efficiency") != null, `has=${byCategory("Capital Efficiency") != null}`);
   add("13H-K: Trim moved to the production-derived /testing gallery (hand-built testing_trim removed, 19C)", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/pages/testingPageFixtures.ts`, "utf8"); } catch { return ""; } })(); const trimGallery = (() => { try { return readFileSync(`${process.cwd()}/src/pages/trimTestingFixtures.ts`, "utf8"); } catch { return ""; } })(); return !src.includes('id: "testing_trim"') && /buildTrimCardFromAssessment/.test(trimGallery) && /deriveTrimAssessment/.test(trimGallery); })(), "production trim gallery");
@@ -8468,7 +8548,7 @@ export function runTestingPageFixtureChecks(): FixtureCheck[] {
   add("13H-M: testing fixtures include Stable Yield", byCategory("Stablecoin Yield") != null, `has=${byCategory("Stablecoin Yield") != null}`);
   add("13H-N: testing fixtures include DCA", byCategory("Contribution Plan") != null, `has=${byCategory("Contribution Plan") != null}`);
   add("13H-O: Position Optimization moved to the production-derived /testing gallery (hand-built testing_position_optimization removed, 20C)", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/pages/testingPageFixtures.ts`, "utf8"); } catch { return ""; } })(); const poGallery = (() => { try { return readFileSync(`${process.cwd()}/src/pages/positionOptimizationTestingFixtures.ts`, "utf8"); } catch { return ""; } })(); return !src.includes('id: "testing_position_optimization"') && /buildPositionOptimizationCardFromAssessment/.test(poGallery) && /derivePositionOptimizationAssessment/.test(poGallery); })(), "production PO gallery");
-  add("13H-P: testing fixtures include On Track", byCategory("On Track") != null, `has=${byCategory("On Track") != null}`);
+  add("13H-P: On Track moved to the production-derived /testing gallery (hand-built testing_on_track removed, 21E)", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/pages/testingPageFixtures.ts`, "utf8"); } catch { return ""; } })(); const gallery = (() => { try { return readFileSync(`${process.cwd()}/src/pages/onTrackTestingFixtures.ts`, "utf8"); } catch { return ""; } })(); return !src.includes('id: "testing_on_track"') && /buildOnTrackCardFromAssessment/.test(gallery) && /deriveOnTrackAssessment/.test(gallery); })(), "production OT gallery");
 
   // 13H-Q. Every fixture carries the TESTING_PREVIEW_NOT_LIVE label.
   {
@@ -8496,10 +8576,10 @@ export function runTestingPageFixtureChecks(): FixtureCheck[] {
     add("13H-X: staking testing fixture includes APY 5.36", md?.apyPct === 5.36, `apy=${md?.apyPct}`);
   }
 
-  // 13H-Y. On Track fixture is not actionable (informational, no CTA, not Top Pick).
+  // 13H-Y (21E). On Track is no longer a hand-built grid fixture — the production-derived gallery renders it now
+  // (its informational / no-CTA / never-Top-Pick contract is proven by OTM-1/OTM-2/OTM-14).
   {
-    const ot = byCategory("On Track");
-    add("13H-Y: On Track testing fixture is not actionable", ot?.card.actionability === "informational" && ot?.card.cta.label === "" && ot?.card.is_top_pick === false, `actionability=${ot?.card.actionability} cta=${ot?.card.cta.label}`);
+    add("13H-Y (21E): On Track removed from the hand-built grid (production gallery instead)", byCategory("On Track") == null, `present=${byCategory("On Track") != null}`);
   }
 
   // 13H-Z/AA. The page uses the SHARED card/modal (declared flags; grep-verified in the report).
@@ -17672,6 +17752,12 @@ export function printFixtureResults(): void {
     ...runPositionOptimizationProductionFixtureChecks(),
     ...runSteakhouseExistingPositionFixtureChecks(),
     ...runSafetyBufferCoverageFixtureChecks(),
+    ...runSafetyBufferPhase0GuardFixtureChecks(),
+    ...runSafetyBufferAssessmentFixtureChecks(),
+    ...runSafetyBufferProductionFixtureChecks(),
+    ...runOnTrackAssessmentFixtureChecks(),
+    ...runOnTrackProductionFixtureChecks(),
+    ...runSafetyBufferOnTrackCloseoutFixtureChecks(),
     ...runKlendDirectPositionFailClosedFixtureChecks(),
     ...runKlendDirectExistingPositionFixtureChecks(),
     ...runDirectLendingProfileCompatibilityFixtureChecks(),
@@ -20229,6 +20315,409 @@ export function runKlendDirectPositionFailClosedFixtureChecks(): FixtureCheck[] 
 }
 
 /* ------------------------------------------------------------------ *
+ * Step 21B Phase 0 — mounted fail-closed honesty guards. (1) On Track cannot claim "on track" when the canonical
+ * Rebalance assessment proves a MATERIAL need (card-independent). (2) UNRESOLVED Safety Buffer coverage cannot
+ * emit a definite amount-bearing buffer card (generic OR plan-backed). Definite `incomplete` coverage is
+ * unchanged. Complete coverage keeps its no-override behavior.
+ * ------------------------------------------------------------------ */
+export function runSafetyBufferPhase0GuardFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const has = (r: ReturnType<typeof runSuggestionEngine>, c: string) => r.suggestions.some((s) => s.category === c);
+  const hasBufferCard = (r: ReturnType<typeof runSuggestionEngine>) => r.suggestions.some((s) => s.category === "buffer");
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2); // |delta| = 2 < 10 → On Track predicate passes
+  const unresolvedBuf = () => ({ ...bufferFixture(2000, 1000, 3), coverageState: "unresolved" as const }); // fullyFunded false
+  const incompleteBuf = () => ({ ...bufferFixture(2000, 1000, 3), coverageState: "incomplete" as const });
+  // A minimal fixture-only plan-backed buffer candidate (category buffer) to exercise the plan-backed path.
+  const planBufferCard = (): import("./engineTypes").EngineSuggestion => ({
+    id: "top_up_buffer", category: "buffer", reason_codes: ["buffer_low"],
+    title_key: "suggestion.buffer.title", description_key: "suggestion.buffer.description",
+    action_kind: "review_only", is_actionable: true, is_top_pick: false,
+    amount: { valueUsd: 500, label: "Planned contribution" }, to: { bucket: "stables" },
+    protocolSelection: notApplicableProtocolSelection("selection_not_required"),
+    scores: { impact: 0.2, urgency: 0.2, efficiency: null }, guardrails: [],
+    engine_version: SUGGESTION_ENGINE_VERSION, timestamp: FIXTURE_GENERATED_AT,
+  });
+
+  // ---- Guard 1: On Track vs canonical material Rebalance need ----
+  const otInp = () => inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] });
+  add("SBG-1: material Rebalance need (card null) + aligned bucket delta → NO On Track (and no Rebalance card)", (() => { const r = runSuggestionEngine(otInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true }); return !has(r, "on_track") && !has(r, "rebalance"); })(), "material blocks");
+  add("SBG-2: material need true even when the Rebalance card was category-filtered (still card null) → NO On Track", (() => { const r = runSuggestionEngine(otInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true, materialCryptoToStables: false }); return !has(r, "on_track"); })(), "filtered still blocks");
+  add("SBG-3: NO material need + aligned + no actionable candidates → On Track PRESERVED", (() => { const r = runSuggestionEngine(otInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: false }); return has(r, "on_track"); })(), "regression preserved");
+  add("SBG-4 (21E): the On Track material guard now lives in the canonical OnTrackAssessment (engine derives it, not a bucket-delta guard)", (() => { const eng = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/engine.ts`, "utf8"); } catch { return ""; } })(); return /deriveOnTrackAssessment\(/.test(eng) && /buildOnTrackCardFromAssessment\(/.test(eng) && !/deriveOnTrackSuggestion\(/.test(eng); })(), "assessment-driven");
+  add("SBG-5: with NO override at all, On Track still available (guard defaults open)", (() => { const r = runSuggestionEngine(otInp(), FIXTURE_GENERATED_AT); return has(r, "on_track"); })(), "default open");
+
+  // ---- Guard 2: unresolved buffer coverage cannot present a definite amount ----
+  add("SBG-6 (21C): unresolved coverage → informational verification card with NO definite amount", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: unresolvedBuf(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b != null && b.action_kind === "informational" && b.amount == null && b.reason_codes.includes("buffer_coverage_unresolved"); })(), "informational no amount");
+  add("SBG-7 (21C): unresolved coverage never presents a definite/plan funding amount (plan-backed source normalized upstream)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: unresolvedBuf(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, planBufferCard()); const b = r.suggestions.find((s) => s.category === "buffer"); return b != null && b.action_kind === "informational" && b.amount == null; })(), "no definite amount");
+  add("SBG-8: unresolved coverage → downstream deployment suggestions remain suppressed", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: unresolvedBuf(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); return !has(r, "staking") && !has(r, "rebalance") && !has(r, "capital_efficiency") && !has(r, "stable_yield") && !has(r, "dca") && !has(r, "position_optimization"); })(), "downstream suppressed");
+  add("SBG-9: unresolved coverage → On Track remains suppressed (buffer not proven complete)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: unresolvedBuf(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); return !has(r, "on_track"); })(), "on track suppressed");
+  add("SBG-10: definite INCOMPLETE coverage (generic) → buffer card behavior UNCHANGED (amount-bearing card remains)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: incompleteBuf(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b != null && b.id === "top_up_buffer" && (b.amount?.valueUsd ?? 0) > 0; })(), "incomplete preserved");
+  add("SBG-11: definite INCOMPLETE coverage (plan-backed) → plan buffer card remains", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: incompleteBuf(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, planBufferCard()); return hasBufferCard(r); })(), "incomplete plan preserved");
+  add("SBG-12: COMPLETE coverage → no buffer override (no buffer card; other candidates flow)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); return !hasBufferCard(r); })(), "complete no override");
+  add("SBG-13 (21C): the temporary Phase-0 unresolved guard is gone; the engine consumes the canonical bufferOverride", (() => { const eng = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/engine.ts`, "utf8"); } catch { return ""; } })(); return /bufferOverride\?\.candidate/.test(eng) && !/coverageUnresolved/.test(eng); })(), "override-driven");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 21B Phase 1 — the canonical, NON-MOUNTED SafetyBufferAssessment. Projects the existing canonical coverage
+ * into explicit target-availability, verified vs maximum-possible coverage, proven vs worst-case shortfall,
+ * complete/incomplete/unresolved/below-minimum/unavailable states, normalized contribution context, gates, and
+ * readiness. It emits NO suggestion and is not mounted. Coverage identity/liquidity/interval methodology unchanged.
+ * ------------------------------------------------------------------ */
+export function runSafetyBufferAssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const GEN = 1_700_000_000_000;
+  // Build a canonical SafetyBufferCoverage literal for a precise interval state (no reclassification of positions).
+  const cov = (o: { target: number; verified: number; unresolved?: number; unknownMag?: boolean; state: SafetyBufferCoverage["coverageState"] }): SafetyBufferCoverage => {
+    const unresolved = o.unresolved ?? 0;
+    return {
+      requiredBufferUsd: o.target,
+      recognizedStableValueUsd: o.verified + unresolved,
+      verifiedLiquidStableValueUsd: o.verified,
+      delayedStableValueUsd: 0,
+      unavailableStableValueUsd: 0,
+      unresolvedStableValueUsd: unresolved,
+      hasUnknownUnresolvedMagnitude: o.unknownMag ?? false,
+      shortfallUsd: Math.max(o.target - o.verified, 0),
+      coverageRatio: o.target > 0 ? o.verified / o.target : 1,
+      fullyFunded: o.state === "complete",
+      coverageState: o.state,
+      unresolvedReasons: [],
+      sources: [],
+    };
+  };
+  const A = (coverage: SafetyBufferCoverage | null, expenses: number | null, months: number | null, plan?: SafetyBufferContributionPlanInput | null) =>
+    sbAssess({ coverage, monthlyExpensesUsd: expenses, targetMonths: months, contributionPlan: plan ?? null, generatedAt: GEN });
+
+  // ---- Target availability ----
+  add("SBA-1: medium risk months=3 + expenses 1000 → targetUsd 3000, available", (() => { const a = A(cov({ target: 3000, verified: 3000, state: "complete" }), 1000, 3); return a.targetState === "available" && a.targetUsd === 3000; })(), "target medium");
+  add("SBA-2: low risk months=6 → targetUsd 6000", A(cov({ target: 6000, verified: 6000, state: "complete" }), 1000, 6).targetUsd === 6000, "target low");
+  add("SBA-3: high risk months=1 → targetUsd 1000", A(cov({ target: 1000, verified: 1000, state: "complete" }), 1000, 1).targetUsd === 1000, "target high");
+  add("SBA-4: missing target months (null) → unavailable, targetUsd null, readiness blocked, informational_target_unavailable", (() => { const a = A(null, 1000, null); return a.targetState === "unavailable_invalid_target_months" && a.targetUsd === null && a.overallReadiness === "blocked" && a.displayMode === "informational_target_unavailable" && a.presentationState === "target_unavailable"; })(), "missing risk");
+  add("SBA-5: missing expenses → unavailable_missing_expenses", (() => { const a = A(cov({ target: 3000, verified: 100, state: "incomplete" }), null, 3); return a.targetState === "unavailable_missing_expenses" && a.targetUsd === null; })(), "missing expenses");
+  add("SBA-6: zero expenses → unavailable_invalid_expenses", A(null, 0, 3).targetState === "unavailable_invalid_expenses", "zero expenses");
+  add("SBA-7: negative expenses → unavailable_invalid_expenses", A(null, -100, 3).targetState === "unavailable_invalid_expenses", "negative expenses");
+  add("SBA-8: malformed target months (0) → unavailable_invalid_target_months", A(null, 1000, 0).targetState === "unavailable_invalid_target_months", "malformed months");
+  add("SBA-9: no rounding before multiplication (333.33 × 3 = 999.99)", A(cov({ target: 999.99, verified: 999.99, state: "complete" }), 333.33, 3).targetUsd === 333.33 * 3, "no pre-round");
+
+  // ---- Complete ----
+  add("SBA-10: verified above target → complete, zero shortfall range", (() => { const a = A(cov({ target: 3000, verified: 4000, state: "complete" }), 1000, 3); return a.presentationState === "complete" && a.verifiedOnlyShortfallUsd === 0 && a.provenMinimumShortfallUsd === 0 && a.displayMode === "none" && a.overallReadiness === "allowed"; })(), "above target");
+  add("SBA-11: verified exactly at target → complete (equality funds)", (() => { const a = A(cov({ target: 3000, verified: 3000, state: "complete" }), 1000, 3); return a.presentationState === "complete" && a.fullyFunded === true && a.verifiedOnlyShortfallUsd === 0; })(), "exact target");
+  add("SBA-12: complete coverageConfidence = verified_complete", A(cov({ target: 3000, verified: 3200, state: "complete" }), 1000, 3).coverageConfidence === "verified_complete", "confidence");
+
+  // ---- Incomplete (proven shortfall) ----
+  add("SBA-13: no unresolved value, verified 2000/3000 → incomplete, provenMin 1000 = verifiedOnly 1000, generic mode", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3); return a.presentationState === "definite_shortfall" && a.provenMinimumShortfallUsd === 1000 && a.verifiedOnlyShortfallUsd === 1000 && a.displayMode === "generic_definite_shortfall" && a.overallReadiness === "allowed"; })(), "no unresolved");
+  add("SBA-14: known unresolved insufficient (verified 2000 + unresolved 500 < 3000) → incomplete, provenMin 500, verifiedOnly 1000", (() => { const a = A(cov({ target: 3000, verified: 2000, unresolved: 500, state: "incomplete" }), 1000, 3); return a.presentationState === "definite_shortfall" && a.provenMinimumShortfallUsd === 500 && a.verifiedOnlyShortfallUsd === 1000 && a.maximumPossibleCoverageUsd === 2500; })(), "unresolved insufficient");
+  add("SBA-15: exact $50 proven shortfall → definite_shortfall (not below minimum)", (() => { const a = A(cov({ target: 3000, verified: 2950, state: "incomplete" }), 1000, 3); return a.provenMinimumShortfallUsd === 50 && a.belowMinimum === false && a.presentationState === "definite_shortfall"; })(), "exact 50");
+  add("SBA-16: $49.99 proven shortfall → definite_shortfall_below_minimum + informational_below_minimum", (() => { const a = A(cov({ target: 3000, verified: 2950.01, state: "incomplete" }), 1000, 3); return a.provenMinimumShortfallUsd === 49.99 && a.belowMinimum === true && a.presentationState === "definite_shortfall_below_minimum" && a.displayMode === "informational_below_minimum" && a.overallReadiness === "allowed"; })(), "below 50");
+  add("SBA-17: cents preserved (verified 2900.50, target 3000.25 → verifiedOnly 99.75)", A(cov({ target: 3000.25, verified: 2900.50, state: "incomplete" }), 1000.0833333, 3).verifiedOnlyShortfallUsd === 99.75, "cents");
+
+  // ---- Unresolved ----
+  add("SBA-18: known unresolved exactly closes target → coverage_unresolved, provenMin 0, verifiedOnly 1000", (() => { const a = A(cov({ target: 3000, verified: 2000, unresolved: 1000, state: "unresolved" }), 1000, 3); return a.presentationState === "coverage_unresolved" && a.provenMinimumShortfallUsd === 0 && a.verifiedOnlyShortfallUsd === 1000 && a.displayMode === "informational_unresolved_coverage" && a.overallReadiness === "unresolved"; })(), "unresolved closes");
+  add("SBA-19: known unresolved exceeds target → still coverage_unresolved, provenMin 0", (() => { const a = A(cov({ target: 3000, verified: 2000, unresolved: 1500, state: "unresolved" }), 1000, 3); return a.presentationState === "coverage_unresolved" && a.provenMinimumShortfallUsd === 0; })(), "unresolved exceeds");
+  add("SBA-20: unknown unresolved magnitude → maximumCoverageIsOpen, maximumPossibleCoverageUsd null, confidence unresolved_unknown_magnitude", (() => { const a = A(cov({ target: 3000, verified: 2000, unresolved: 0, unknownMag: true, state: "unresolved" }), 1000, 3); return a.maximumCoverageIsOpen === true && a.maximumPossibleCoverageUsd === null && a.coverageConfidence === "unresolved_unknown_magnitude" && a.provenMinimumShortfallUsd === 0; })(), "unknown magnitude");
+  add("SBA-21: unresolved retains verifiedOnly as the range MAXIMUM, provenMin as the MINIMUM", (() => { const a = A(cov({ target: 3000, verified: 2000, unresolved: 1000, state: "unresolved" }), 1000, 3); return a.shortfallRangeUsd?.minimum === 0 && a.shortfallRangeUsd?.maximum === 1000; })(), "range");
+  add("SBA-22: unresolved has NO definite review amount (provenMin 0)", A(cov({ target: 3000, verified: 500, unresolved: 3000, state: "unresolved" }), 1000, 3).provenMinimumShortfallUsd === 0, "no definite amount");
+  add("SBA-23: unresolved confidence unresolved_may_be_complete when magnitude known", A(cov({ target: 3000, verified: 2000, unresolved: 1200, state: "unresolved" }), 1000, 3).coverageConfidence === "unresolved_may_be_complete", "may be complete");
+
+  // ---- Contribution normalization ----
+  add("SBA-24: generic definite-shortfall (no plan) → contribution none", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3); return a.contribution.contributionPlanState === "none" && a.displayMode === "generic_definite_shortfall"; })(), "generic none");
+  add("SBA-25: plan-backed FULL contribution covers proven shortfall → ready, remaining 0, plan_backed mode", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 1000 }); return a.contribution.planCouldFullyCoverProvenShortfall === true && a.contribution.remainingProvenShortfallAfterPlanUsd === 0 && a.contribution.contributionPlanState === "ready" && a.displayMode === "plan_backed_definite_shortfall"; })(), "plan full");
+  add("SBA-26: plan-backed PARTIAL (planned 400 < proven 1000) → partial, remaining 600", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 400 }); return a.contribution.planIsPartial === true && a.contribution.remainingProvenShortfallAfterPlanUsd === 600 && a.contribution.contributionPlanState === "partial"; })(), "plan partial");
+  add("SBA-27: contribution RANGE → planned uses the max point", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: true, plannedContributionMinUsd: 200, plannedContributionMaxUsd: 600 }); return a.contribution.planIsRange === true && a.contribution.plannedContributionUsd === 600 && a.contribution.plannedContributionMaxUsd === 600; })(), "range max");
+  add("SBA-28: zero contribution → warning planned_below_minimum, could-not-cover", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 0 }); return a.contribution.contributionWarnings.includes("planned_below_minimum") && a.contribution.planCouldFullyCoverProvenShortfall === false; })(), "zero contribution");
+  add("SBA-29: contribution below $50 (40) → warning planned_below_minimum", A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 40 }).contribution.contributionWarnings.includes("planned_below_minimum"), "below 50 plan");
+  add("SBA-30: planned GREATER than proven shortfall → warning planned_exceeds_proven_shortfall, remaining 0", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 1500 }); return a.contribution.contributionWarnings.includes("planned_exceeds_proven_shortfall") && a.contribution.remainingProvenShortfallAfterPlanUsd === 0; })(), "exceeds");
+  add("SBA-31: unresolved coverage + plan → NON-definite (no proven cover, remainingProven null, warning)", (() => { const a = A(cov({ target: 3000, verified: 2000, unresolved: 1000, state: "unresolved" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 1000 }); return a.contribution.planCouldFullyCoverProvenShortfall === false && a.contribution.remainingProvenShortfallAfterPlanUsd === null && a.contribution.contributionWarnings.includes("unresolved_coverage_plan_non_definite") && a.contribution.presentationMode === "informational_unresolved_coverage"; })(), "unresolved plan");
+  add("SBA-32: next planned contribution and remaining need are SEPARATE fields", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 400 }); return a.contribution.plannedContributionUsd === 400 && a.provenMinimumShortfallUsd === 1000; })(), "separate fields");
+  add("SBA-33: complete coverage → no contribution review required (state none/ready, mode none)", (() => { const a = A(cov({ target: 3000, verified: 3100, state: "complete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 100 }); return a.contribution.presentationMode === "none"; })(), "complete no contribution");
+
+  // ---- Gates ----
+  add("SBA-34: complete gates → target/coverage/confidence/contribution allowed, readiness allowed", (() => { const a = A(cov({ target: 3000, verified: 3000, state: "complete" }), 1000, 3); return a.targetGate === "allowed" && a.coverageGate === "allowed" && a.coverageConfidenceGate === "allowed" && a.contributionGate === "allowed" && a.reviewConfidenceGate === "allowed" && a.overallReadiness === "allowed"; })(), "gates complete");
+  add("SBA-35: definite incomplete → coverageConfidenceGate allowed, readiness allowed", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3); return a.coverageConfidenceGate === "allowed" && a.overallReadiness === "allowed"; })(), "gates incomplete");
+  add("SBA-36: unresolved → confidence + contribution + review gates unresolved, readiness unresolved", (() => { const a = A(cov({ target: 3000, verified: 2000, unresolved: 1000, state: "unresolved" }), 1000, 3); return a.coverageConfidenceGate === "unresolved" && a.contributionGate === "unresolved" && a.reviewConfidenceGate === "unresolved" && a.overallReadiness === "unresolved"; })(), "gates unresolved");
+  add("SBA-37: target unavailable → targetGate blocked, readiness blocked, blockingReasons present", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), null, 3); return a.targetGate === "blocked" && a.overallReadiness === "blocked" && a.blockingReasons.length > 0; })(), "gates target unavail");
+  add("SBA-38: coverage unavailable (coverage null, target OK) → coverageGate unresolved, coverage_unavailable, readiness unresolved", (() => { const a = A(null, 1000, 3); return a.presentationState === "coverage_unavailable" && a.coverageGate === "unresolved" && a.overallReadiness === "unresolved" && a.blockingReasons.includes("coverage_unavailable"); })(), "coverage unavail");
+
+  // ---- Methodology-preservation regression ----
+  add("SBA-39: assessment consumes the REAL computeSafetyBufferCoverage over positions (values flow, no reclassification)", (() => { const c = sbCoverage([{ id: "u", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", amount: "1", detection: "direct_wallet_balance", valueUsd: 2000 } as WalletPosition], 3000); const a = A(c, 1000, 3); return a.verifiedLiquidStableValueUsd === 2000 && a.coverageState === c.coverageState && a.provenMinimumShortfallUsd === 1000; })(), "real coverage flows");
+  add("SBA-40: assessment emits NO suggestion (no id/category/amount/action_kind)", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3) as unknown as Record<string, unknown>; return !("id" in a) && !("category" in a) && !("amount" in a) && !("action_kind" in a) && typeof a.overallReadiness === "string"; })(), "no suggestion");
+  add("SBA-41 (21C): the engine consumes the bufferOverride (no direct assessment import); the RAIL mounts one assessment + one mapper", (() => { const rd = (f: string) => { try { return readFileSync(`${process.cwd()}/${f}`, "utf8"); } catch { return ""; } }; const rail = rd("src/suggestions/useRailSuggestions.ts"); return !/deriveSafetyBufferAssessment/.test(rd("src/suggestions/engine.ts")) && (rail.match(/deriveSafetyBufferAssessment\(/g) ?? []).length === 1 && (rail.match(/buildSafetyBufferCardFromAssessment\(/g) ?? []).length === 1; })(), "mounted once");
+  add("SBA-42: methodologyVersion is safety_buffer_assessment_1.0.0", A(cov({ target: 3000, verified: 3000, state: "complete" }), 1000, 3).methodologyVersion === SAFETY_BUFFER_ASSESSMENT_VERSION && SAFETY_BUFFER_ASSESSMENT_VERSION === "safety_buffer_assessment_1.0.0", "version");
+  add("SBA-43: assessment module re-runs NO identity/liquidity/coverage classification", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/safetyBufferAssessment.ts`, "utf8"); } catch { return ""; } })(); return !/computeSafetyBufferCoverage\(|classifyPositionCoverage\(|isStablecoin\(/.test(src); })(), "no reclassification");
+  add("SBA-44: unknown-magnitude never invents a finite maximum coverage", A(cov({ target: 3000, verified: 1000, unresolved: 0, unknownMag: true, state: "unresolved" }), 1000, 3).maximumPossibleCoverageUsd === null, "no invented max");
+  add("SBA-45: verifiedOnly is never labeled the definitive shortfall in unresolved (proven=0, verifiedOnly>0)", (() => { const a = A(cov({ target: 3000, verified: 2000, unresolved: 1000, state: "unresolved" }), 1000, 3); return a.provenMinimumShortfallUsd === 0 && (a.verifiedOnlyShortfallUsd ?? 0) > 0 && a.presentationState === "coverage_unresolved"; })(), "unresolved honesty");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 21C — PRODUCTION MOUNT of the Safety Buffer. Proves the ONE canonical `buildSafetyBufferCardFromAssessment`
+ * mapper renders the `top_up_buffer` contract for every state, that the confirmed-minimum shortfall (never the
+ * worst-case, never a plan amount) drives the definite card, that below-$50 is informational (no disabled action),
+ * unresolved shows no definite amount, and that the fail-closed `bufferOverride` suppresses ALL downstream + On Track
+ * for every non-complete state and permits downstream only when complete. Legacy direct rule has zero mounted callers.
+ * ------------------------------------------------------------------ */
+export function runSafetyBufferProductionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const GEN = 1_700_000_000_000;
+  const cov = (o: { target: number; verified: number; unresolved?: number; unknownMag?: boolean; state: SafetyBufferCoverage["coverageState"] }): SafetyBufferCoverage => {
+    const unresolved = o.unresolved ?? 0;
+    return { requiredBufferUsd: o.target, recognizedStableValueUsd: o.verified + unresolved, verifiedLiquidStableValueUsd: o.verified, delayedStableValueUsd: 0, unavailableStableValueUsd: 0, unresolvedStableValueUsd: unresolved, hasUnknownUnresolvedMagnitude: o.unknownMag ?? false, shortfallUsd: Math.max(o.target - o.verified, 0), coverageRatio: o.target > 0 ? o.verified / o.target : 1, fullyFunded: o.state === "complete", coverageState: o.state, unresolvedReasons: [], sources: [] };
+  };
+  const card = (coverage: SafetyBufferCoverage | null, expenses: number | null, months: number | null, plan?: SafetyBufferContributionPlanInput | null) =>
+    buildSafetyBufferCardFromAssessment(sbAssess({ coverage, monthlyExpensesUsd: expenses, targetMonths: months, contributionPlan: plan ?? null, generatedAt: GEN }), GEN);
+  const overrideFor = (coverage: SafetyBufferCoverage | null, expenses: number | null, months: number | null) => { const a = sbAssess({ coverage, monthlyExpensesUsd: expenses, targetMonths: months, generatedAt: GEN }); return { candidate: buildSafetyBufferCardFromAssessment(a, GEN), bufferSatisfied: a.presentationState === "complete", blocksDownstream: a.presentationState !== "complete" }; };
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const stakingInp = () => inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] });
+
+  // ---- Card contract per state ----
+  add("SBM-1: COMPLETE → mapper returns null (no buffer card)", card(cov({ target: 3000, verified: 3000, state: "complete" }), 1000, 3) === null, "complete null");
+  add("SBM-2: definite shortfall → top_up_buffer / buffer / review_only / actionable / top-pick-false / amount = proven", (() => { const c = card(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3)!; return c.id === "top_up_buffer" && c.category === "buffer" && c.action_kind === "review_only" && c.is_actionable === true && c.is_top_pick === false && c.amount?.valueUsd === 1000 && c.amount?.label === "Buffer shortfall"; })(), "definite contract");
+  add("SBM-3: definite RANGE (proven < worst) → amount = CONFIRMED minimum (not worst), label 'Minimum confirmed shortfall'", (() => { const c = card(cov({ target: 3000, verified: 2000, unresolved: 500, state: "incomplete" }), 1000, 3)!; return c.amount?.valueUsd === 500 && c.amount?.label === "Minimum confirmed shortfall"; })(), "range amount");
+  add("SBM-4: below $50 → informational 'nearly funded', is_actionable false, amount = proven, no CTA-implying state", (() => { const c = card(cov({ target: 3000, verified: 2960, state: "incomplete" }), 1000, 3)!; return c.action_kind === "informational" && c.is_actionable === false && c.amount?.valueUsd === 40 && c.title_key === "suggestion.buffer.nearly_funded.title"; })(), "below min");
+  add("SBM-5: unresolved → informational, NO amount, no plan-as-required", (() => { const c = card(cov({ target: 3000, verified: 2000, unresolved: 1000, state: "unresolved" }), 1000, 3)!; return c.action_kind === "informational" && c.amount == null && c.reason_codes.includes("buffer_coverage_unresolved"); })(), "unresolved no amount");
+  add("SBM-6: target unavailable → informational, NO amount, target_unavailable copy", (() => { const c = card(cov({ target: 3000, verified: 2000, state: "incomplete" }), null, 3)!; return c.action_kind === "informational" && c.amount == null && c.title_key === "suggestion.buffer.target_unavailable.title" && c.reason_codes.includes("buffer_target_unavailable"); })(), "target unavail");
+  add("SBM-7: coverage unavailable (target OK, coverage null) → informational, NO amount", (() => { const c = card(null, 1000, 3)!; return c.action_kind === "informational" && c.amount == null && c.reason_codes.includes("buffer_coverage_unavailable"); })(), "coverage unavail");
+
+  // ---- Amount + scoring semantics ----
+  add("SBM-8: plan-backed definite → PRIMARY amount stays the confirmed shortfall; planned shown separately in metrics", (() => { const c = card(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 400 })!; const m = c.reviewDetails?.metrics ?? []; return c.amount?.valueUsd === 1000 && m.some((x) => x.label === "Next planned contribution" && x.value === 400) && m.some((x) => x.label === "Confirmed remaining gap after plan" && x.value === 600); })(), "plan primary=proven");
+  add("SBM-9: scoring impact/urgency use the CONFIRMED minimum shortfall / target (not the worst case)", (() => { const c = card(cov({ target: 3000, verified: 2000, unresolved: 500, state: "incomplete" }), 1000, 3)!; return c.scores?.impact === Math.min(500 / 3000, 1) && c.scores?.urgency === c.scores?.impact; })(), "score proven");
+  add("SBM-10: definite card maps non-transactional (Review, no execution/signature); informational has no CTA", (() => { const d = toSuggestionCard(card(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3)!); const inf = toSuggestionCard(card(cov({ target: 3000, verified: 2000, unresolved: 1000, state: "unresolved" }), 1000, 3)!); return d.cta.label === "Review" && d.cta.executes_transaction === false && d.cta.requires_wallet_signature === false && inf.cta.label === ""; })(), "cta");
+  add("SBM-11: exact $50 confirmed gap → review-only actionable; $49.99 → informational below-minimum", (() => { const a = card(cov({ target: 3000, verified: 2950, state: "incomplete" }), 1000, 3)!; const b = card(cov({ target: 3000, verified: 2950.01, state: "incomplete" }), 1000, 3)!; return a.action_kind === "review_only" && a.is_actionable === true && b.action_kind === "informational"; })(), "boundary");
+
+  // ---- Override: downstream + On Track suppression ----
+  add("SBM-12: definite override blocksDownstream → suppresses staking + On Track (keyed on override, not inputs.safetyBuffer)", (() => { const r = runSuggestionEngineRaw(stakingInp(), GEN, null, null, undefined, undefined, undefined, undefined, overrideFor(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3)); return !r.suggestions.some((s) => s.category === "staking") && !r.suggestions.some((s) => s.category === "on_track") && r.suggestions.some((s) => s.category === "buffer"); })(), "definite blocks");
+  add("SBM-13: unresolved override blocksDownstream → staking + On Track suppressed, informational buffer shown", (() => { const r = runSuggestionEngineRaw(stakingInp(), GEN, null, null, undefined, undefined, undefined, undefined, overrideFor(cov({ target: 3000, verified: 2000, unresolved: 1000, state: "unresolved" }), 1000, 3)); const b = r.suggestions.find((s) => s.category === "buffer"); return !r.suggestions.some((s) => s.category === "staking") && !r.suggestions.some((s) => s.category === "on_track") && b?.action_kind === "informational"; })(), "unresolved blocks");
+  add("SBM-14: below-minimum override blocksDownstream → staking + On Track suppressed", (() => { const r = runSuggestionEngineRaw(stakingInp(), GEN, null, null, undefined, undefined, undefined, undefined, overrideFor(cov({ target: 3000, verified: 2960, state: "incomplete" }), 1000, 3)); return !r.suggestions.some((s) => s.category === "staking") && !r.suggestions.some((s) => s.category === "on_track"); })(), "below-min blocks");
+  add("SBM-15: COMPLETE override → no buffer card, downstream (staking) evaluated normally", (() => { const r = runSuggestionEngineRaw(stakingInp(), GEN, null, null, undefined, undefined, undefined, undefined, overrideFor(cov({ target: 3000, verified: 3200, state: "complete" }), 1000, 3)); return !r.suggestions.some((s) => s.category === "buffer") && r.suggestions.some((s) => s.category === "staking"); })(), "complete permits");
+  add("SBM-16: ABSENT override → fail closed (no buffer, no downstream, no On Track)", (() => { const r = runSuggestionEngineRaw(stakingInp(), GEN); return !r.suggestions.some((s) => s.category === "buffer") && !r.suggestions.some((s) => s.category === "staking") && !r.suggestions.some((s) => s.category === "on_track"); })(), "fail closed");
+  add("SBM-17: exactly one buffer category slot", (() => { const r = runSuggestionEngineRaw(stakingInp(), GEN, null, null, undefined, undefined, undefined, undefined, overrideFor(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3)); return r.suggestions.filter((s) => s.category === "buffer").length === 1; })(), "one slot");
+
+  // ---- Legacy disposition + architecture ----
+  add("SBM-18: engine has NO direct buffer rule and consumes the bufferOverride (no legacy fallback)", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); return !/deriveBufferSuggestion\(/.test(eng) && !/from "\.\/bufferSuggestion"/.test(eng) && /bufferOverride\?\.candidate/.test(eng) && !/const planBuffer/.test(eng); })(), "no direct rule");
+  add("SBM-19 (21F): legacy buffer module DELETED with zero callers anywhere", (() => { const legacy = readIfSrc("src/suggestions/bufferSuggestionLegacy.ts"); const anyRef = ["src/suggestions/engine.ts", "src/suggestions/useRailSuggestions.ts", "src/pages/TestingPage.tsx", "src/suggestions/suggestionEngine.fixtures.ts"].some((f) => /from "\.\/bufferSuggestionLegacy"|deriveLegacyBufferSuggestion\(/.test(readIfSrc(f))); return legacy === "" && !anyRef; })(), "legacy deleted");
+  add("SBM-20: rail computes ONE coverage, ONE assessment, ONE mapper; no plan-backed buffer candidate injected", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return (rail.match(/computeSafetyBufferCoverage\(/g) ?? []).length === 1 && (rail.match(/deriveSafetyBufferAssessment\(/g) ?? []).length === 1 && (rail.match(/buildSafetyBufferCardFromAssessment\(/g) ?? []).length === 1 && /category === "buffer" \? null/.test(rail); })(), "one-of-each");
+  add("SBM-21: no route/quote/transaction/signature/execution in the mounted buffer path", (() => { const blob = readIfSrc("src/suggestions/safetyBufferAssessment.ts") + readIfSrc("src/suggestions/bufferSuggestion.ts"); return !/swapRoute|routePlan|getQuote|aggregator|signTransaction|sendTransaction|simulateTransaction|depositTransaction/.test(blob); })(), "read-only");
+  add("SBM-22: reason codes per state are honest + distinct", (() => { const def = card(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3)!; const nf = card(cov({ target: 3000, verified: 2990, state: "incomplete" }), 1000, 3)!; const un = card(cov({ target: 3000, verified: 2000, unresolved: 1000, state: "unresolved" }), 1000, 3)!; return def.reason_codes.includes("buffer_shortfall_confirmed") && nf.reason_codes.includes("buffer_nearly_funded") && un.reason_codes.includes("buffer_coverage_unresolved"); })(), "reason codes");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 21D — the canonical, NON-MOUNTED OnTrackAssessment. Proves the narrow scope WealthSmith can honestly claim
+ * (Safety Buffer verified complete + canonical crypto allocation inside the ±10pp review range + authoritative
+ * accounting + no proven material Rebalance need + no visible higher-priority candidate), that candidate-set
+ * emptiness controls fallback VISIBILITY but never establishes plan health, that unevaluated dimensions are recorded
+ * (never "healthy"), and that a proven cardless/filtered material Rebalance signal blocks the fallback.
+ * ------------------------------------------------------------------ */
+export function runOnTrackAssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const GEN = 1_700_000_000_000;
+  const cov = (target: number, verified: number, state: SafetyBufferCoverage["coverageState"], opts: { unresolved?: number; unknownMag?: boolean } = {}): SafetyBufferCoverage => ({ requiredBufferUsd: target, recognizedStableValueUsd: verified + (opts.unresolved ?? 0), verifiedLiquidStableValueUsd: verified, delayedStableValueUsd: 0, unavailableStableValueUsd: 0, unresolvedStableValueUsd: opts.unresolved ?? 0, hasUnknownUnresolvedMagnitude: opts.unknownMag ?? false, shortfallUsd: Math.max(target - verified, 0), coverageRatio: target > 0 ? verified / target : 1, fullyFunded: state === "complete", coverageState: state, unresolvedReasons: [], sources: [] });
+  const sb = (coverage: SafetyBufferCoverage | null, expenses: number | null = 1000, months: number | null = 3) => sbAssess({ coverage, monthlyExpensesUsd: expenses, targetMonths: months, generatedAt: GEN });
+  const sbComplete = () => sb(cov(3000, 3000, "complete"));
+  const sbIncomplete = () => sb(cov(3000, 2000, "incomplete"));
+  const sbBelowMin = () => sb(cov(3000, 2960, "incomplete"));
+  const sbUnresolved = () => sb(cov(3000, 2000, "unresolved", { unresolved: 1000 }));
+  const sbTargetUnavail = () => sb(cov(3000, 2000, "incomplete"), null, 3);
+  const sbCoverageUnavail = () => sb(null, 1000, 3);
+  const ra = (o: { delta: number | null; calc: "allowed" | "blocked" | "unresolved"; target?: number | null; direction?: RebalanceAssessment["direction"] }): RebalanceAssessment => ({
+    currentCryptoPct: o.delta != null && o.target !== null ? (o.target ?? 60) + o.delta : 62,
+    targetCryptoPct: o.target === undefined ? 60 : o.target,
+    cryptoDeltaPct: o.delta,
+    direction: o.direction ?? (o.delta == null ? "unresolved" : o.delta >= 10 ? "crypto_to_stables" : o.delta <= -10 ? "stables_to_crypto" : "within_threshold"),
+    calculationGate: { status: o.calc, reasons: [] },
+    methodologyVersion: "rebalance_assessment_1.0.0",
+  } as unknown as RebalanceAssessment);
+  const raWithin = (delta = 2) => ra({ delta, calc: "allowed" });
+  const raMaterial = (delta = 12) => ra({ delta, calc: "allowed" });
+  const raUnresolved = () => ra({ delta: null, calc: "unresolved" });
+  const raTargetUnavail = () => ra({ delta: null, calc: "allowed", target: null });
+  const sig = (over: Partial<OnTrackCandidateContext["materialSignals"][number]> = {}) => ({ category: "rebalance", state: "material", material: true, candidateAvailable: false, candidateVisible: false, suppressionReason: null, sourceAssessment: "rebalance", confidence: "proven" as const, ...over });
+  const cctx = (o: { actionable?: number; info?: number; state?: OnTrackCandidateContext["candidateSetState"]; suppressed?: boolean; filtered?: boolean } = {}): OnTrackCandidateContext => ({
+    visibleCandidateCount: (o.actionable ?? 0) + (o.info ?? 0),
+    visibleActionableCandidateCount: o.actionable ?? 0,
+    visibleInformationalCandidateCount: o.info ?? 0,
+    hasHigherPriorityVisibleCandidate: (o.actionable ?? 0) > 0,
+    materialSignals: [],
+    suppressedMaterialSignals: o.suppressed ? [sig({ suppressionReason: "rebalance_material" })] : [],
+    filteredMaterialSignals: o.filtered ? [sig({ suppressionReason: "category_filtered" })] : [],
+    unresolvedPotentialSignals: [],
+    candidateSetState: o.state ?? ((o.actionable ?? 0) > 0 ? "nonempty" : "empty"),
+  });
+  const comp = (o: { liab?: string; dedup?: string; unknown?: boolean } = {}) => ({ liabilitiesState: o.liab ?? "complete", deduplicationState: o.dedup ?? "complete", hasUnknownMagnitudeValue: o.unknown ?? false, netWorthState: "complete" } as unknown as PCResult);
+  const A = (sbA: ReturnType<typeof sbAssess> | null, raA: RebalanceAssessment | null, cc: OnTrackCandidateContext, compA: PCResult | null = comp()) => otAssess({ safetyBufferAssessment: sbA, rebalanceAssessment: raA, portfolioCompleteness: compA, candidateContext: cc, generatedAt: GEN });
+
+  // ---- Eligible narrow scope ----
+  add("OT-1: buffer complete + allocation within range + authoritative + empty candidates + no material → eligible scoped status", (() => { const a = A(sbComplete(), raWithin(2), cctx()); return a.fallbackEligibilityGate === "allowed" && a.overallReadiness === "allowed" && a.presentationState === "eligible_scoped_status" && a.displayMode === "scoped_informational" && a.claimConfidence === "verified_narrow_scope" && a.claimScope === "safety_buffer_and_allocation"; })(), "eligible");
+  add("OT-2: eligible only claims Safety Buffer + allocation (never a broad plan-health flag)", (() => { const a = A(sbComplete(), raWithin(0), cctx()); return a.broadPlanHealthyClaimSafe === false && a.noChangesNeedReviewClaimSafe === false && a.evaluatedDimensions.length === 5 && !a.evaluatedDimensions.includes("liabilities" as never) === false; })(), "narrow claim");
+
+  // ---- Safety Buffer dimension ----
+  add("OT-3: buffer incomplete → blocked_buffer, NOT eligible", (() => { const a = A(sbIncomplete(), raWithin(2), cctx()); return a.safetyBufferState === "incomplete" && a.bufferGate === "blocked" && a.fallbackState === "blocked_buffer" && a.presentationState === "buffer_not_complete"; })(), "incomplete blocks");
+  add("OT-4: buffer below-minimum incomplete → blocked_buffer (still not verified complete)", (() => { const a = A(sbBelowMin(), raWithin(2), cctx()); return a.safetyBufferState === "incomplete" && a.fallbackState === "blocked_buffer"; })(), "below min blocks");
+  add("OT-5: buffer unresolved → unresolved fallback (never a false on-track)", (() => { const a = A(sbUnresolved(), raWithin(2), cctx()); return a.safetyBufferState === "unresolved" && a.bufferGate === "unresolved" && a.fallbackEligibilityGate === "unresolved" && a.fallbackState === "unresolved"; })(), "unresolved");
+  add("OT-6: buffer target unavailable → target_unavailable, not eligible", (() => { const a = A(sbTargetUnavail(), raWithin(2), cctx()); return a.safetyBufferState === "unavailable" && a.presentationState === "target_unavailable" && a.fallbackState === "unavailable"; })(), "target unavail");
+  add("OT-7: buffer coverage unavailable → not verified complete, blocked", (() => { const a = A(sbCoverageUnavail(), raWithin(2), cctx()); return a.safetyBufferState === "unresolved" && a.bufferGate === "unresolved"; })(), "coverage unavail");
+  add("OT-8: ONLY verified_complete satisfies the buffer dimension", (() => { const ok = A(sbComplete(), raWithin(2), cctx()).dimensions.find((d) => d.dimension === "safety_buffer")?.state === "satisfied"; const bad = A(sbIncomplete(), raWithin(2), cctx()).dimensions.find((d) => d.dimension === "safety_buffer")?.state === "satisfied"; return ok && !bad; })(), "only complete");
+
+  // ---- Allocation (canonical) + threshold boundaries ----
+  add("OT-9: allocation reads canonical current/target/delta (no recomputation)", (() => { const a = A(sbComplete(), ra({ delta: 3, calc: "allowed" }), cctx()); return a.currentCryptoPct === 63 && a.targetCryptoPct === 60 && a.cryptoDeltaPct === 3 && a.absoluteCryptoDeltaPct === 3 && a.allocationMethodologyVersion === "rebalance_assessment_1.0.0"; })(), "canonical alloc");
+  add("OT-10: delta 0 → within range → eligible", A(sbComplete(), raWithin(0), cctx()).allocationState === "within_review_range", "delta 0");
+  add("OT-11: +9.999 → within range", A(sbComplete(), raWithin(9.999), cctx()).allocationState === "within_review_range", "just inside +");
+  add("OT-12: −9.999 → within range", A(sbComplete(), raWithin(-9.999), cctx()).allocationState === "within_review_range", "just inside -");
+  add("OT-13: exact +10 → material drift → blocked (equality is material; material precedence blocks the fallback)", (() => { const a = A(sbComplete(), raMaterial(10), cctx()); return a.allocationState === "material_drift" && a.materialRebalanceNeed === true && a.fallbackEligibilityGate === "blocked" && a.fallbackState === "blocked_material_rebalance"; })(), "exact +10");
+  add("OT-14: exact −10 → material drift → blocked", (() => { const a = A(sbComplete(), raMaterial(-10), cctx()); return a.allocationState === "material_drift" && a.materialRebalanceNeed === true && a.fallbackEligibilityGate === "blocked"; })(), "exact -10");
+  add("OT-15: above ±10 → material drift", A(sbComplete(), raMaterial(15), cctx()).allocationState === "material_drift", "above");
+  add("OT-16: no pre-comparison rounding at the boundary (9.999 stays within; 10 is material)", (() => { const inRange = A(sbComplete(), raWithin(9.999), cctx()).allocationState; const material = A(sbComplete(), raMaterial(10), cctx()).allocationState; return inRange === "within_review_range" && material === "material_drift"; })(), "no rounding");
+  add("OT-17: threshold reused from REBALANCE_DELTA_THRESHOLD_PCT (=10), not duplicated", A(sbComplete(), raWithin(2), cctx()).reviewThresholdPct === REBALANCE_DELTA_THRESHOLD_PCT && REBALANCE_DELTA_THRESHOLD_PCT === 10, "threshold");
+  add("OT-18: unresolved allocation (calc gate not allowed) → unresolved, not eligible", (() => { const a = A(sbComplete(), raUnresolved(), cctx()); return a.allocationState === "unresolved" && a.allocationGate === "unresolved" && a.fallbackEligibilityGate === "unresolved"; })(), "alloc unresolved");
+  add("OT-19: unavailable target allocation → target_unavailable, not eligible", (() => { const a = A(sbComplete(), raTargetUnavail(), cctx()); return a.allocationState === "unavailable" && a.fallbackState === "unavailable"; })(), "alloc unavail");
+
+  // ---- Material Rebalance need ----
+  add("OT-20: material true + candidate exists (visible) → blocked (candidate takes precedence, still no fallback)", (() => { const a = A(sbComplete(), raMaterial(12), cctx({ actionable: 1 })); return a.fallbackEligibilityGate === "blocked" && a.fallbackState === "blocked_visible_candidate"; })(), "material+card");
+  add("OT-21: material true + NO card (empty candidates) → blocked_material_rebalance (cardless)", (() => { const a = A(sbComplete(), raMaterial(12), cctx()); return a.materialRebalanceNeed === true && a.materialNeedGate === "blocked" && a.fallbackState === "blocked_material_rebalance"; })(), "cardless material");
+  add("OT-22: material true via CATEGORY-FILTERED signal (rebalance within-range but a filtered proven signal) → blocked", (() => { const a = A(sbComplete(), raWithin(2), cctx({ filtered: true })); return a.hasProvenHiddenMaterialSignal === true && a.materialNeedGate === "blocked" && a.fallbackState === "blocked_material_rebalance"; })(), "filtered material");
+  add("OT-23: SUPPRESSED proven material signal (staking suppressed by Rebalance) → blocks fallback", (() => { const a = A(sbComplete(), raWithin(2), cctx({ suppressed: true })); return a.materialNeedGate === "blocked"; })(), "suppressed material");
+  add("OT-24: material false + no card + within range → eligible", A(sbComplete(), raWithin(2), cctx()).fallbackEligibilityGate === "allowed", "no material eligible");
+  add("OT-25: material need derived from the canonical signal (isRebalanceMaterial), not a bucket delta", (() => { const a = A(sbComplete(), ra({ delta: 12, calc: "unresolved" }), cctx()); return a.materialRebalanceNeed === false && a.allocationState === "unresolved"; })(), "canonical material only");
+
+  // ---- Accounting / liabilities ----
+  add("OT-26: authoritative accounting requires calc allowed + liabilities complete + no unknown magnitude + no dedup-invalid", (() => { const a = A(sbComplete(), raWithin(2), cctx(), comp()); return a.accountingState === "authoritative" && a.accountingGate === "allowed"; })(), "authoritative");
+  add("OT-27: liabilities unresolved → accounting unresolved, not eligible", (() => { const a = A(sbComplete(), raWithin(2), cctx(), comp({ liab: "unresolved" })); return a.accountingState === "unresolved" && a.fallbackEligibilityGate === "unresolved"; })(), "liab unresolved");
+  add("OT-28: unknown-magnitude asset → accounting unresolved", A(sbComplete(), raWithin(2), cctx(), comp({ unknown: true })).accountingState === "unresolved", "unknown magnitude");
+  add("OT-29: duplicate-invalid position → accounting blocked", (() => { const a = A(sbComplete(), raWithin(2), cctx(), comp({ dedup: "invalid" })); return a.accountingState === "blocked" && a.accountingGate === "blocked"; })(), "dedup invalid");
+  add("OT-30: stale/unresolved denominator via calc gate unresolved → accounting unresolved", A(sbComplete(), ra({ delta: 2, calc: "unresolved" }), cctx()).accountingState === "unresolved", "stale/unresolved");
+
+  // ---- Candidate context (visibility ≠ claim truth) ----
+  add("OT-31: one visible ACTIONABLE candidate → blocked even when buffer+allocation healthy", (() => { const a = A(sbComplete(), raWithin(1), cctx({ actionable: 1 })); return a.candidateVisibilityGate === "blocked" && a.fallbackState === "blocked_visible_candidate"; })(), "visible candidate");
+  add("OT-32: informational-only candidate does NOT block (no actionable visible)", (() => { const a = A(sbComplete(), raWithin(1), cctx({ info: 1 })); return a.visibleActionableCandidateCount === 0 && a.candidateVisibilityGate === "allowed" && a.fallbackEligibilityGate === "allowed"; })(), "info ok");
+  add("OT-33: candidate set unresolved (could hide a material need) → unresolved, not eligible", (() => { const a = A(sbComplete(), raWithin(2), cctx({ state: "unresolved" })); return a.candidateVisibilityGate === "unresolved" && a.materialNeedGate === "unresolved" && a.fallbackEligibilityGate === "unresolved"; })(), "candidate unresolved");
+  add("OT-34: empty candidate set alone NEVER makes the fallback eligible without buffer+allocation+accounting proof", (() => { const a = A(sbIncomplete(), raWithin(2), cctx()); return a.candidateSetState === "empty" && a.fallbackEligibilityGate !== "allowed"; })(), "emptiness != health");
+
+  // ---- Claim scope + unevaluated dimensions ----
+  add("OT-35: unevaluated dimensions recorded (goal/savings/contribution/yield/protocol_risk/diversification) — never 'healthy'", (() => { const a = A(sbComplete(), raWithin(2), cctx()); return ["goal_progress", "savings_progress", "contribution_progress", "yield_performance", "protocol_risk", "diversification"].every((d) => a.unevaluatedDimensions.includes(d)) && !a.evaluatedDimensions.includes("goal_progress" as never); })(), "unevaluated recorded");
+  add("OT-36: evaluated dimensions contain ONLY supported proof (buffer/allocation/accounting/liabilities/candidate)", (() => { const a = A(sbComplete(), raWithin(2), cctx()); return JSON.stringify(a.evaluatedDimensions) === JSON.stringify(["safety_buffer", "portfolio_allocation", "portfolio_accounting", "liabilities", "candidate_visibility"]); })(), "evaluated only");
+  add("OT-37: claimConfidence verified_narrow_scope ONLY when buffer + accounting + allocation all pass", (() => { const ok = A(sbComplete(), raWithin(2), cctx()).claimConfidence === "verified_narrow_scope"; const bad = A(sbComplete(), raMaterial(12), cctx()).claimConfidence === "verified_narrow_scope"; return ok && !bad; })(), "confidence scope");
+  add("OT-38: 'no changes need review' is never asserted safe (broad claim unprovable)", A(sbComplete(), raWithin(2), cctx()).noChangesNeedReviewClaimSafe === false, "no-changes unsafe");
+
+  // ---- Privacy + recommendation metadata ----
+  add("OT-39: assessment exposes no wallet/account/dedupe/raw-balance identity", (() => { const s = JSON.stringify(A(sbComplete(), raWithin(2), cctx())); return !s.includes("dedupeKey") && !s.includes("stakeAccounts") && !s.includes("economicPositionKey") && !/[1-9A-HJ-NP-Za-km-z]{40,}/.test(s); })(), "privacy");
+  add("OT-40: future copy recommendation is scoped, not 'Your Plan Is On Track'", (() => { const a = A(sbComplete(), raWithin(2), cctx()); return /Safety Buffer and Allocation Are Within Range/.test(a.recommendedTitle) && !/Plan Is On Track|Everything Looks Good|Portfolio Is Healthy/.test(a.recommendedTitle + a.recommendedDescription); })(), "scoped copy");
+
+  // ---- Non-mounted + regression ----
+  add("OT-41: methodologyVersion = on_track_assessment_1.0.0", A(sbComplete(), raWithin(2), cctx()).methodologyVersion === ON_TRACK_ASSESSMENT_VERSION && ON_TRACK_ASSESSMENT_VERSION === "on_track_assessment_1.0.0", "version");
+  add("OT-42: assessment emits NO suggestion (no id/category/amount/action_kind)", (() => { const a = A(sbComplete(), raWithin(2), cctx()) as unknown as Record<string, unknown>; return !("id" in a) && !("category" in a) && !("amount" in a) && !("action_kind" in a) && typeof a.overallReadiness === "string"; })(), "no suggestion");
+  add("OT-43 (21E): OnTrackAssessment is MOUNTED — the engine derives one assessment + one mapper in Stage B (fed by the rail)", (() => { const rd = (f: string) => { try { return readFileSync(`${process.cwd()}/${f}`, "utf8"); } catch { return ""; } }; const eng = rd("src/suggestions/engine.ts"); const rail = rd("src/suggestions/useRailSuggestions.ts"); return (eng.match(/deriveOnTrackAssessment\(/g) ?? []).length === 1 && (eng.match(/buildOnTrackCardFromAssessment\(/g) ?? []).length === 1 && /onTrackOverride/.test(eng) && /safetyBufferAssessment, rebalanceAssessment, portfolioCompleteness/.test(rail); })(), "mounted once");
+  add("OT-44 (21E): mounted legacy On Track rule removed (no deriveOnTrackSuggestion, no bucket-delta guard) + copy narrowed", (() => { const rd = (f: string) => { try { return readFileSync(`${process.cwd()}/${f}`, "utf8"); } catch { return ""; } }; const eng = rd("src/suggestions/engine.ts"); const copy = rd("src/state/approvedCopy.ts"); return !/deriveOnTrackSuggestion\(/.test(eng) && !/Your Plan Is On Track/.test(copy) && /Your Safety Buffer and Allocation Are Within Range/.test(copy); })(), "legacy removed + narrowed");
+  add("OT-45: assessment re-runs NO allocation/coverage calculation (no deriveStableValue/deriveValueBreakdown/computeSafetyBufferCoverage)", (() => { const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/onTrackAssessment.ts`, "utf8"); } catch { return ""; } })(); return !/deriveStableValue|deriveValueBreakdown|computeSafetyBufferCoverage|deriveAllocationDeltas/.test(src); })(), "no recompute");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 21E — PRODUCTION MOUNT of On Track. Proves the ONE canonical `buildOnTrackCardFromAssessment` mapper renders
+ * the `on_track` informational card ONLY under the verified narrow scope, that the engine two-stage flow appends it
+ * after the actual candidate set (never for a visible actionable candidate, never for a proven material need), that
+ * an absent override fails closed, that the card is informational / no-CTA / no-modal / priority-99 / never Top Pick,
+ * and that the mounted claim is the narrowed scoped copy (not "Your Plan Is On Track").
+ * ------------------------------------------------------------------ */
+export function runOnTrackProductionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const GEN = 1_700_000_000_000;
+  const cov = (target: number, verified: number, state: SafetyBufferCoverage["coverageState"]): SafetyBufferCoverage => ({ requiredBufferUsd: target, recognizedStableValueUsd: verified, verifiedLiquidStableValueUsd: verified, delayedStableValueUsd: 0, unavailableStableValueUsd: 0, unresolvedStableValueUsd: 0, hasUnknownUnresolvedMagnitude: false, shortfallUsd: Math.max(target - verified, 0), coverageRatio: target > 0 ? verified / target : 1, fullyFunded: state === "complete", coverageState: state, unresolvedReasons: [], sources: [] });
+  const sbC = () => sbAssess({ coverage: cov(3000, 3000, "complete"), monthlyExpensesUsd: 1000, targetMonths: 3, generatedAt: GEN });
+  const sbI = () => sbAssess({ coverage: cov(3000, 2000, "incomplete"), monthlyExpensesUsd: 1000, targetMonths: 3, generatedAt: GEN });
+  const ra = (delta: number | null, calc: "allowed" | "unresolved", material = false): RebalanceAssessment => ({ currentCryptoPct: 60 + (delta ?? 0), targetCryptoPct: 60, cryptoDeltaPct: material ? 12 : delta, direction: material ? "crypto_to_stables" : delta == null ? "unresolved" : delta >= 10 ? "crypto_to_stables" : delta <= -10 ? "stables_to_crypto" : "within_threshold", calculationGate: { status: calc, reasons: [] }, methodologyVersion: "rebalance_assessment_1.0.0" } as unknown as RebalanceAssessment);
+  const ctx = (actionable = 0): OnTrackCandidateContext => ({ visibleCandidateCount: actionable, visibleActionableCandidateCount: actionable, visibleInformationalCandidateCount: 0, hasHigherPriorityVisibleCandidate: actionable > 0, materialSignals: [], suppressedMaterialSignals: [], filteredMaterialSignals: [], unresolvedPotentialSignals: [], candidateSetState: actionable > 0 ? "nonempty" : "empty" });
+  const eligible = () => otAssess({ safetyBufferAssessment: sbC(), rebalanceAssessment: ra(2, "allowed"), portfolioCompleteness: null, candidateContext: ctx(0), generatedAt: GEN });
+  const card = (a = eligible()) => otBuildCard(a, GEN);
+
+  // ---- Mapper contract ----
+  add("OTM-1: eligible assessment → card id on_track / category on_track / informational / not actionable / not top pick / no amount / no reviewDetails", (() => { const c = card()!; return c.id === "on_track" && c.category === "on_track" && c.action_kind === "informational" && c.is_actionable === false && c.is_top_pick === false && c.amount == null && c.reviewDetails == null; })(), "contract");
+  add("OTM-2: mapped card → type on_track / analytics portfolio_health / empty CTA / no Top Pick badge", (() => { const d = toSuggestionCard(card()!); return d.type === "on_track" && d.category === "portfolio_health" && d.cta.label === "" && d.cta.action === null && d.is_top_pick === false; })(), "mapped");
+  add("OTM-3: title + description are the NARROWED scoped copy (not 'Your Plan Is On Track')", (() => { const d = toSuggestionCard(card()!); return d.title === "Your Safety Buffer and Allocation Are Within Range" && d.description === "Your Safety Buffer is fully funded, and your crypto allocation is within the current review range." && !/Plan Is On Track/.test(d.title + d.description); })(), "scoped copy");
+  add("OTM-4: scoped reason code present (buffer_and_allocation_within_range), no broad-health code", (() => { const c = card()!; return c.reason_codes.includes("buffer_and_allocation_within_range") && !c.reason_codes.some((r) => /plan_healthy|portfolio_healthy|no_changes/.test(r)); })(), "reason code");
+  add("OTM-5: scores are zero/null (impact 0, urgency 0, efficiency null)", (() => { const c = card()!; return c.scores?.impact === 0 && c.scores?.urgency === 0 && c.scores?.efficiency === null; })(), "scores");
+  add("OTM-6: material Rebalance assessment → mapper returns null", card(otAssess({ safetyBufferAssessment: sbC(), rebalanceAssessment: ra(null, "allowed", true), portfolioCompleteness: null, candidateContext: ctx(0), generatedAt: GEN })) === null, "material null");
+  add("OTM-7: incomplete buffer → mapper returns null", card(otAssess({ safetyBufferAssessment: sbI(), rebalanceAssessment: ra(2, "allowed"), portfolioCompleteness: null, candidateContext: ctx(0), generatedAt: GEN })) === null, "buffer null");
+  add("OTM-8: visible actionable candidate → mapper returns null", card(otAssess({ safetyBufferAssessment: sbC(), rebalanceAssessment: ra(2, "allowed"), portfolioCompleteness: null, candidateContext: ctx(1), generatedAt: GEN })) === null, "candidate null");
+  add("OTM-9: unresolved allocation → mapper returns null", card(otAssess({ safetyBufferAssessment: sbC(), rebalanceAssessment: ra(2, "unresolved"), portfolioCompleteness: null, candidateContext: ctx(0), generatedAt: GEN })) === null, "unresolved null");
+
+  // ---- Engine two-stage mount ----
+  const oto = (a: ReturnType<typeof sbAssess> | null, r: RebalanceAssessment | null) => ({ safetyBufferAssessment: a, rebalanceAssessment: r, portfolioCompleteness: null, materialSignals: [] });
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const bufferComplete = () => ({ candidate: null, bufferSatisfied: true, blocksDownstream: false });
+  add("OTM-10: engine Stage B appends On Track when complete buffer + within range + no candidate", (() => { const r = runSuggestionEngineRaw(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); return r.suggestions.some((s) => s.category === "on_track") && r.suggestions[r.suggestions.length - 1].category === "on_track"; })(), "stage B appends");
+  add("OTM-11: engine — a visible actionable candidate (staking) suppresses On Track", (() => { const r = runSuggestionEngineRaw(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); return r.suggestions.some((s) => s.category === "staking") && !r.suggestions.some((s) => s.category === "on_track"); })(), "candidate suppresses");
+  add("OTM-12: engine — proven material Rebalance need (no card) suppresses On Track", (() => { const r = runSuggestionEngineRaw(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(null, "allowed", true))); return !r.suggestions.some((s) => s.category === "on_track"); })(), "material suppresses");
+  add("OTM-13: engine — ABSENT onTrackOverride fails closed (no On Track)", (() => { const r = runSuggestionEngineRaw(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete()); return !r.suggestions.some((s) => s.category === "on_track"); })(), "fail closed");
+  add("OTM-14: On Track never Top Pick + priority 99 + one slot", (() => { const r = runSuggestionEngineRaw(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); const ot = r.suggestions.filter((s) => s.category === "on_track"); return ot.length === 1 && ot[0].is_top_pick === false && CATEGORY_PRIORITY.on_track === 99; })(), "ordering/top pick");
+
+  // ---- Legacy disposition + privacy + read-only ----
+  add("OTM-15: engine has NO mounted legacy On Track rule; consumes deriveOnTrackAssessment + mapper", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); return !/deriveOnTrackSuggestion\(/.test(eng) && !/allows\("onTrack"\)/.test(eng) && /deriveOnTrackAssessment\(/.test(eng) && /buildOnTrackCardFromAssessment\(/.test(eng); })(), "no legacy rule");
+  add("OTM-16 (21F): legacy On Track module DELETED with zero callers anywhere", (() => { const legacy = readIfSrc("src/suggestions/onTrackSuggestionLegacy.ts"); const anyRef = ["src/suggestions/engine.ts", "src/suggestions/useRailSuggestions.ts", "src/pages/TestingPage.tsx", "src/suggestions/suggestionEngine.fixtures.ts"].some((f) => /from "\.\/onTrackSuggestionLegacy"|deriveLegacyOnTrackSuggestion\(/.test(readIfSrc(f))); return legacy === "" && !anyRef; })(), "legacy deleted");
+  add("OTM-17: no route/quote/transaction/signature/execution in the On Track path", (() => { const blob = readIfSrc("src/suggestions/onTrackAssessment.ts") + readIfSrc("src/suggestions/onTrackSuggestion.ts"); return !/swapRoute|routePlan|getQuote|aggregator|signTransaction|sendTransaction|simulateTransaction/.test(blob); })(), "read-only");
+  add("OTM-18: On Track card carries no wallet/account/dedupe/mint identity", (() => { const s = JSON.stringify(card()); return !s.includes("dedupeKey") && !s.includes("stakeAccounts") && !s.includes("economicPositionKey") && !/[1-9A-HJ-NP-Za-km-z]{40,}/.test(s); })(), "privacy");
+  add("OTM-19: mounted On Track uses the SHARED assessments (no second Safety Buffer / Rebalance / allocation calc in the engine)", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); return !/computeSafetyBufferCoverage|deriveSafetyBufferAssessment|deriveRebalanceAssessment|deriveStableValue|deriveAllocationDeltas/.test(eng); })(), "shared only");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 21F — COMBINED CLOSEOUT. Proves the end-to-end mounted Buffer → actionable → scoped-fallback state machine
+ * through the production wrapper, that both legacy modules + the obsolete On Track gate are DELETED, that the rail
+ * runs one calculation of each and one engine pass, and that no prohibited execution/broad-health claim remains.
+ * ------------------------------------------------------------------ */
+export function runSafetyBufferOnTrackCloseoutFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const funded = () => bufferFixture(5000, 1000, 3);
+  const underfunded = () => bufferFixture(800, 1000, 3);
+  const belowMin = () => bufferFixture(2975, 1000, 3);
+  const unresolvedBuf = () => ({ ...bufferFixture(2000, 1000, 3), coverageState: "unresolved" as const });
+  const aligned = () => allocationFixture(15000, 62, 2);
+  const cats = (r: ReturnType<typeof runSuggestionEngineRaw>) => r.suggestions.map((s) => s.category).join(",") || "none";
+  const has = (r: ReturnType<typeof runSuggestionEngineRaw>, c: string) => r.suggestions.some((s) => s.category === c);
+
+  // ---- End-to-end mounted state machine (through the production auto-override wrapper) ----
+  add("SBOT-1: complete buffer + aligned + no candidate → scoped On Track (no buffer card)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); const ot = r.suggestions.find((s) => s.category === "on_track"); return ot != null && ot.action_kind === "informational" && !has(r, "buffer"); })(), "on track");
+  add("SBOT-2: definite shortfall → review-only buffer Top Pick, downstream + On Track suppressed", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: underfunded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b?.action_kind === "review_only" && b?.is_top_pick === true && !has(r, "staking") && !has(r, "on_track"); })(), "definite");
+  add("SBOT-3: below-$50 → informational buffer, no Top Pick, downstream + On Track suppressed", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: belowMin(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b?.action_kind === "informational" && b?.is_top_pick === false && !has(r, "staking") && !has(r, "on_track"); })(), "below min");
+  add("SBOT-4: unresolved buffer → informational buffer (no amount), downstream + On Track suppressed", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: unresolvedBuf(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b?.action_kind === "informational" && b?.amount == null && !has(r, "staking") && !has(r, "on_track"); })(), "unresolved");
+  add("SBOT-5: complete buffer + visible actionable (staking) → no On Track", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); return has(r, "staking") && !has(r, "on_track"); })(), "candidate suppresses");
+  add("SBOT-6: complete buffer + material Rebalance (card null) → no On Track, no staking (suppressed)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true, materialCryptoToStables: true }); return !has(r, "on_track") && !has(r, "staking"); })(), "material blocks");
+  add("SBOT-7: ordering — On Track is priority 99 and always last", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); return CATEGORY_PRIORITY.on_track === 99 && CATEGORY_PRIORITY.buffer === 1 && (cats(r) === "on_track" || r.suggestions[r.suggestions.length - 1].category === "on_track"); })(), "ordering");
+
+  // ---- Legacy + gate deletion ----
+  add("SBOT-8: BOTH legacy modules DELETED (bufferSuggestionLegacy + onTrackSuggestionLegacy)", readIfSrc("src/suggestions/bufferSuggestionLegacy.ts") === "" && readIfSrc("src/suggestions/onTrackSuggestionLegacy.ts") === "", "legacy gone");
+  add("SBOT-9: obsolete On Track completeness gate removed (no canShowOnTrack, no onTrack gate entry)", (() => { const pc = readIfSrc("src/wallet/portfolioCompleteness.ts"); return !/export function canShowOnTrack/.test(pc) && !/onTrack: canGenerate|onTrack: canShow/.test(pc) && !/CompletenessDecision = "onTrack"/.test(pc); })(), "gate gone");
+  add("SBOT-10: onTrackState survives ONLY as the dashboard completeness field (not a mounted card gate)", (() => { const pc = readIfSrc("src/wallet/portfolioCompleteness.ts"); const ui = readIfSrc("src/components/portfolioCompletenessUi.ts"); const eng = readIfSrc("src/suggestions/engine.ts"); return /onTrackState: CompletenessState/.test(pc) && /onTrackState/.test(ui) && !/onTrackState/.test(eng); })(), "field retained");
+
+  // ---- One-of-each architecture (rail source) ----
+  add("SBOT-11: rail runs ONE coverage / ONE buffer assessment / ONE buffer mapper / ONE engine pass", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return (rail.match(/computeSafetyBufferCoverage\(/g) ?? []).length === 1 && (rail.match(/deriveSafetyBufferAssessment\(/g) ?? []).length === 1 && (rail.match(/buildSafetyBufferCardFromAssessment\(/g) ?? []).length === 1 && (rail.match(/runSuggestionEngine\(/g) ?? []).length === 1; })(), "one of each");
+  add("SBOT-12: engine derives ONE On Track assessment + ONE mapper (Stage B); no legacy On Track / buffer rule imported", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); return (eng.match(/deriveOnTrackAssessment\(/g) ?? []).length === 1 && (eng.match(/buildOnTrackCardFromAssessment\(/g) ?? []).length === 1 && !/deriveBufferSuggestion\(|deriveOnTrackSuggestion\(/.test(eng); })(), "engine one-of");
+
+  // ---- Copy + prohibited-language sweep (full mounted path) ----
+  add("SBOT-13: no old On Track title mounted anywhere in the buffer/on-track copy + mapper path", (() => { const blob = readIfSrc("src/state/approvedCopy.ts") + readIfSrc("src/suggestions/onTrackSuggestion.ts") + readIfSrc("src/suggestions/bufferSuggestion.ts"); return !/"Your Plan Is On Track"|"You're On Track"|Everything Looks Good|Portfolio Is Healthy|No Changes Are Needed|Fully Optimized|Strategy Is Performing/.test(blob) && /Your Safety Buffer and Allocation Are Within Range/.test(blob); })(), "copy");
+  add("SBOT-14: no deposit/transfer/swap/route/quote/transaction/signature/execution or broad-health claim in the full path", (() => { const blob = readIfSrc("src/suggestions/safetyBufferAssessment.ts") + readIfSrc("src/suggestions/bufferSuggestion.ts") + readIfSrc("src/suggestions/onTrackAssessment.ts") + readIfSrc("src/suggestions/onTrackSuggestion.ts"); return !/depositTransaction|transferFunds|swapRoute|routePlan|getQuote|aggregator|signTransaction|sendTransaction|simulateTransaction|plan_healthy|portfolio_healthy|no_changes_needed/.test(blob); })(), "read-only + honest");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
  * Step 17B — Safety Buffer verified-liquid coverage. Completion uses only
  * fresh, verified, immediately-withdrawable stable capital. Recognized but
  * delayed/unavailable/unresolved protocol value stays visible but cannot
@@ -20976,8 +21465,8 @@ export function runPortfolioCompletenessFixtureChecks(): FixtureCheck[] {
   add("PC-19: jlUSDC → canDetermineNetWorth unresolved with reasons", (() => { const g = pcNetWorth(pcCompute([nativeSol(), jlusdc()], { requiredBufferUsd: 0 })); return g.status === "unresolved" && g.reasons.length > 0; })(), "nw blocked");
   add("PC-20: mSOL → net worth allowed, exact SOL exposure state unresolved (drives the PO assessment, not a completeness gate)", (() => { const R = pcCompute([nativeSol(), msol()], { requiredBufferUsd: 0 }); return pcNetWorth(R).status === "allowed" && R.solExposureState !== "complete"; })(), "msol exposure");
   add("PC-21: unresolved Kamino liquidity → Rebalance unresolved, net worth allowed", (() => { const R = pcCompute([usdc(1000), kaminoDirect("unresolved", null)], { requiredBufferUsd: 0 }); return pcNetWorth(R).status === "allowed" && pcRebalance(R).status === "unresolved" && pcRebalance(R).reasons.length > 0; })(), "rebalance");
-  add("PC-22: unvalued liability → On Track unresolved + direct lending blocked/unresolved", (() => { const R = pcCompute([usdc(1000), hubbleDebt(null)], { requiredBufferUsd: 0 }); return pcOnTrack(R).status === "unresolved" && pcDirect(R).status !== "allowed"; })(), "liability gates");
-  add("PC-23: unknown token → On Track unresolved", pcOnTrack(pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 })).status === "unresolved", "ontrack unknown");
+  add("PC-22: unvalued liability → onTrackState unresolved (dashboard completeness precondition) + direct lending blocked/unresolved", (() => { const R = pcCompute([usdc(1000), hubbleDebt(null)], { requiredBufferUsd: 0 }); return R.onTrackState === "unresolved" && pcDirect(R).status !== "allowed"; })(), "liability gates");
+  add("PC-23: unknown token → onTrackState unresolved (dashboard completeness precondition)", pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 }).onTrackState === "unresolved", "ontrack unknown");
   add("PC-24: complete Safety Buffer stays complete despite unrelated unresolved excess", (() => { const R = pcCompute([usdc(1000), jlusdc()], { requiredBufferUsd: 500 }); return R.stableBufferState === "complete"; })(), "buffer complete");
   add("PC-25: incomplete/absent buffer → DCA + direct lending gates not allowed", (() => { const R = pcCompute([nativeSol()], { requiredBufferUsd: 1000 }); return pcDca(R).status !== "allowed" && pcDirect(R).status !== "allowed"; })(), "buffer suppress");
   add("PC-26: Rebalance/Staking gates return blocked/unresolved WITH reasons (never bare bool)", (() => { const R = pcCompute([nativeSol(), unknownTok()], { requiredBufferUsd: 0 }); const gs = [pcRebalance(R), pcStaking(R)]; return gs.every((g) => typeof g.status === "string" && Array.isArray(g.reasons)) && gs.some((g) => g.status !== "allowed" && g.reasons.length > 0); })(), "gate shape");
@@ -21035,16 +21524,16 @@ export function runCompletenessIntegrationFixtureChecks(): FixtureCheck[] {
 
   // ---- Completeness gates NARROW only (never enable) ----
   add("PI-14: completenessAllows — absent map ⇒ true; blocked/unresolved ⇒ false", pcAllows(undefined, "staking") === true && pcAllows({ staking: "blocked" }, "staking") === false && pcAllows({ dca: "unresolved" }, "dca") === false && pcAllows({ staking: "allowed" }, "staking") === true, "narrow");
-  add("PI-15: deriveCompletenessGates returns the 5 decision statuses (Trim gate retired 19D; Position Optimization gate retired 20D)", (() => { const { gates } = pcGates([walletUsdc()], { requiredBufferUsd: 0 }); return ["onTrack", "staking", "dca", "directLending", "rebalance"].every((k) => typeof (gates as any)[k] === "string") && !("trim" in gates) && !("positionOptimization" in gates); })(), "gate map");
-  add("PI-16: healthy portfolio (buffer target 0) → gates permit (no spurious suppression)", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "sol", type: "native", symbol: "SOL", valueUsd: 500 })], { requiredBufferUsd: 0 }); return gates.onTrack === "allowed" && gates.dca === "allowed" && gates.directLending === "allowed"; })(), "healthy ok");
-  add("PI-17: unvalued liability → On Track + DCA + direct-lending gates NOT allowed", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "hb", type: "protocol", symbol: "USDH", side: "borrowed", valueUsd: null, uiAmount: 300, amount: "300" })], { requiredBufferUsd: 0 }); return gates.onTrack !== "allowed" && gates.dca !== "allowed" && gates.directLending !== "allowed"; })(), "liability narrows");
-  add("PI-18: unrelated unpriced token does NOT block staking (only its own dimensions)", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "unk", type: "token", name: "Unknown token", symbol: "9x", uiAmount: 5, valueUsd: null })], { requiredBufferUsd: 0 }); return gates.staking === "allowed" && gates.onTrack !== "allowed"; })(), "unrelated");
+  add("PI-15: deriveCompletenessGates returns the 4 decision statuses (Trim 19D; Position Optimization 20D; On Track gate retired 21F)", (() => { const { gates } = pcGates([walletUsdc()], { requiredBufferUsd: 0 }); return ["staking", "dca", "directLending", "rebalance"].every((k) => typeof (gates as any)[k] === "string") && !("trim" in gates) && !("positionOptimization" in gates) && !("onTrack" in gates); })(), "gate map");
+  add("PI-16: healthy portfolio (buffer target 0) → gates permit (no spurious suppression)", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "sol", type: "native", symbol: "SOL", valueUsd: 500 })], { requiredBufferUsd: 0 }); return gates.dca === "allowed" && gates.directLending === "allowed"; })(), "healthy ok");
+  add("PI-17: unvalued liability → DCA + direct-lending gates NOT allowed", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "hb", type: "protocol", symbol: "USDH", side: "borrowed", valueUsd: null, uiAmount: 300, amount: "300" })], { requiredBufferUsd: 0 }); return gates.dca !== "allowed" && gates.directLending !== "allowed"; })(), "liability narrows");
+  add("PI-18: unrelated unpriced token does NOT block staking (only its own dimensions — net worth → Rebalance)", (() => { const { gates } = pcGates([walletUsdc(), w({ id: "unk", type: "token", name: "Unknown token", symbol: "9x", uiAmount: 5, valueUsd: null })], { requiredBufferUsd: 0 }); return gates.staking === "allowed" && gates.rebalance !== "allowed"; })(), "unrelated");
 
   // ---- Engine narrowing property: gates only reduce the candidate set ----
   add("PI-19: engine with all-blocked gates ⊆ engine without gates (never enables)", (() => {
     const inp = inputsFor({ safetyBuffer: bufferFixture(1000, 1000, 3) });
     const without = runSuggestionEngine(inp, FIXTURE_GENERATED_AT);
-    const blocked = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, { onTrack: "blocked", staking: "blocked", dca: "blocked", directLending: "blocked", rebalance: "blocked" });
+    const blocked = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, { staking: "blocked", dca: "blocked", directLending: "blocked", rebalance: "blocked" });
     const ids = new Set(without.suggestions.map((s) => s.id));
     return blocked.suggestions.length <= without.suggestions.length && blocked.suggestions.every((s) => ids.has(s.id));
   })(), "subset");
@@ -21406,7 +21895,7 @@ export function runRebalanceStep18EFixtureChecks(): FixtureCheck[] {
   add("RE-29: stables_to_crypto material (materialCryptoToStables=false) does NOT suppress staking", (() => { const r = runOv(stakingInp(), { card: null, material: true, materialCryptoToStables: false }); return r.suggestions.some((s) => s.category === "staking"); })(), "directional");
   add("RE-30: within_threshold (not material) does NOT suppress staking", (() => { const r = runOv(stakingInp(), { card: null, material: false, materialCryptoToStables: false }); return r.suggestions.some((s) => s.category === "staking"); })(), "within keeps");
   add("RE-31: suppression NARROWS only — never enables staking when SOL is not idle-eligible", (() => { const on = runOv(noStakeInp(), { card: null, material: true, materialCryptoToStables: true }); const off = runOv(noStakeInp(), undefined); return !on.suggestions.some((s) => s.category === "staking") && !off.suggestions.some((s) => s.category === "staking"); })(), "narrow only");
-  add("RE-32: suppressing the only candidate falls back to informational On Track (no crash/empty rail)", (() => { const r = runOv(stakingInp(), { card: null, material: true, materialCryptoToStables: true }); return r.suggestions.some((s) => s.category === "on_track") && !r.suggestions.some((s) => s.category === "staking"); })(), "on track fallback");
+  add("RE-32 (21B guard): a canonical MATERIAL Rebalance need blocks the On Track fallback even with a null Rebalance card (no crash/empty rail)", (() => { const r = runOv(stakingInp(), { card: null, material: true, materialCryptoToStables: true }); return !r.suggestions.some((s) => s.category === "on_track") && !r.suggestions.some((s) => s.category === "staking"); })(), "material blocks on track");
   add("RE-33: rail derives materialCryptoToStables via isMaterialCryptoToStables and passes it to the engine", (() => { const rail = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/useRailSuggestions.ts`, "utf8"); } catch { return ""; } })(); return rail.includes("isMaterialCryptoToStables") && rail.includes("materialCryptoToStables"); })(), "rail wired");
   add("RE-34: engine gate keys on materialCryptoToStables ONLY (staking), leaving other categories' logic intact", (() => { const eng = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/engine.ts`, "utf8"); } catch { return ""; } })(); const stakeLine = eng.split("\n").find((l) => l.includes("candidates.push(staking)")) ?? ""; return stakeLine.includes("materialCryptoToStables !== true") && rbIsCryptoToStables !== undefined; })(), "staking-only gate");
 
@@ -21711,7 +22200,7 @@ export function runPositionOptimizationProductionFixtureChecks(): FixtureCheck[]
   add("PO-38: legacy PO module FILE no longer exists", readIfSrc("src/suggestions/positionOptimizationSuggestionLegacy.ts") === "", "deleted");
   add("PO-39: engine has NO legacy PO derive, NO allows(\"positionOptimization\") gate, only the fail-closed override", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); return !/derivePositionOptimizationSuggestion|deriveLegacyPositionOptimizationSuggestion/.test(eng) && !/allows\("positionOptimization"\)/.test(eng) && /positionOptimizationOverride\?\.candidate \?\? null/.test(eng); })(), "no fallback/gate");
   add("PO-40: obsolete completeness gate removed (canGeneratePositionOptimization + positionOptimizationState gone; not in the gate map)", (() => { const pc = readIfSrc("src/wallet/portfolioCompleteness.ts"); return !/canGeneratePositionOptimization/.test(pc) && !/positionOptimizationState/.test(pc) && !/positionOptimization:/.test(pc) && !/"positionOptimization"/.test(pc); })(), "gate removed");
-  add("PO-41: CompletenessDecision union no longer includes positionOptimization; deriveCompletenessGates omits it", (() => { const pc = readIfSrc("src/wallet/portfolioCompleteness.ts"); return /CompletenessDecision = "onTrack" \| "staking" \| "dca" \| "directLending" \| "rebalance";/.test(pc); })(), "decision removed");
+  add("PO-41: CompletenessDecision union excludes positionOptimization (20D) and onTrack (21F)", (() => { const pc = readIfSrc("src/wallet/portfolioCompleteness.ts"); return /CompletenessDecision = "staking" \| "dca" \| "directLending" \| "rebalance";/.test(pc); })(), "decision removed");
   add("PO-42: legacy duplicate-exposure helpers deleted; getUnderlyingExposureGroup (contribution/staking) retained", (() => { const dup = readIfSrc("src/suggestions/duplicateExposure.ts"); return !/export function findDuplicateExposureGroups|export interface DuplicateExposureGroup|export function exposureGroupLabel/.test(dup) && /export function getUnderlyingExposureGroup/.test(dup); })(), "helpers pruned");
   add("PO-43: rail derives ONE assessment + ONE card; no UI/second accounting recompute for PO", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return (rail.match(/derivePositionOptimizationAssessment\(/g) ?? []).length === 1 && (rail.match(/buildPositionOptimizationCardFromAssessment\(/g) ?? []).length === 1 && (rail.match(/derivePortfolioAssetAccounting\(/g) ?? []).length <= 1; })(), "one calc");
   add("PO-44: fixture-only synthetic candidate + approved freshness policy never imported by mounted production modules", (() => { const mounted = ["src/suggestions/engine.ts", "src/suggestions/useRailSuggestions.ts", "src/suggestions/positionOptimizationSuggestion.ts", "src/suggestions/positionOptimizationAssessment.ts"].map(readIfSrc).join("\n"); return !/buildSyntheticPositionOptimizationCandidateForFixture|TEST_LST_POLICY/.test(mounted); })(), "fixture isolation");

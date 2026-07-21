@@ -201,7 +201,25 @@ export const REAL_WALLET_VALUE_DESC =
  * emits KEYS only; this map is for the card copy mapper (later step). */
 export const SUGGESTION_BUFFER_TITLE = "Top Up Your Safety Buffer";
 export const SUGGESTION_BUFFER_DESCRIPTION =
-  "Increase your stablecoin reserve. Your Safety Buffer is below target.";
+  "Your verified stablecoin reserve is below your Safety Buffer target. Review adding to your reserve to close the confirmed gap.";
+/* Step 21C — canonical Safety Buffer state copy. Honest, review-only, and never treats unresolved value as zero,
+ * never presents a plan amount as the total gap, and never implies immediate transfer capability. */
+export const SUGGESTION_BUFFER_RANGE_DESCRIPTION =
+  "Your verified stablecoin reserve is below target. Some additional stablecoin value is still being verified and could reduce the remaining gap.";
+export const SUGGESTION_BUFFER_PLAN_DESCRIPTION =
+  "Your contribution plan allocates part of your next contribution toward your Safety Buffer. Your confirmed remaining gap is shown separately.";
+export const SUGGESTION_BUFFER_NEARLY_FUNDED_TITLE = "Your Safety Buffer Is Nearly Funded";
+export const SUGGESTION_BUFFER_NEARLY_FUNDED_DESCRIPTION =
+  "The confirmed remaining gap is below the current review threshold.";
+export const SUGGESTION_BUFFER_UNRESOLVED_TITLE = "Safety Buffer Coverage Needs Verification";
+export const SUGGESTION_BUFFER_UNRESOLVED_DESCRIPTION =
+  "Some stablecoin value could not be verified as immediately available, so your exact Safety Buffer gap is not yet known.";
+export const SUGGESTION_BUFFER_TARGET_UNAVAILABLE_TITLE = "Complete Your Safety Buffer Setup";
+export const SUGGESTION_BUFFER_TARGET_UNAVAILABLE_DESCRIPTION =
+  "Your Safety Buffer target cannot be calculated until the required financial details are available.";
+export const SUGGESTION_BUFFER_COVERAGE_UNAVAILABLE_TITLE = "Safety Buffer Coverage Is Unavailable";
+export const SUGGESTION_BUFFER_COVERAGE_UNAVAILABLE_DESCRIPTION =
+  "We could not verify enough portfolio data to calculate your current Safety Buffer coverage.";
 export const SUGGESTION_REBALANCE_TITLE = "Rebalance Your Allocation";
 export const SUGGESTION_REBALANCE_OVERWEIGHT_DESCRIPTION =
   "Your crypto allocation is above your target. Review whether you want to move part of it toward stablecoins.";
@@ -220,9 +238,12 @@ export const SUGGESTION_REBALANCE_CRYPTO_FULL_DESCRIPTION =
   "Your crypto allocation is above your target. Consider redirecting direct-wallet SOL value toward USDC while keeping 0.1 SOL available for wallet operations.";
 export const SUGGESTION_REBALANCE_CRYPTO_PARTIAL_DESCRIPTION =
   "Your crypto allocation is above your target. Available direct-wallet SOL could reduce part of the gap toward USDC while keeping 0.1 SOL available for wallet operations.";
-export const SUGGESTION_ON_TRACK_TITLE = "Your Plan Is On Track";
+/* Step 21E — the On Track claim is NARROWED to match the exact evaluated scope (Safety Buffer verified complete +
+ * canonical crypto allocation inside the ±10pp review range). It must never imply overall plan/portfolio health,
+ * goal/contribution progress, "no changes needed", or that unevaluated dimensions are healthy. */
+export const SUGGESTION_ON_TRACK_TITLE = "Your Safety Buffer and Allocation Are Within Range";
 export const SUGGESTION_ON_TRACK_DESCRIPTION =
-  "Your Safety Buffer is funded and your allocation is close to your target.";
+  "Your Safety Buffer is fully funded, and your crypto allocation is within the current review range.";
 /* Copy for the full suggestion category set. Non-advisory, non-promissory,
  * non-transactional. */
 export const SUGGESTION_CAPITAL_EFFICIENCY_TITLE = "Review Idle Assets";
@@ -287,6 +308,16 @@ export const SUGGESTIONS_LOADING = "Preparing your suggestions…";
 export const SUGGESTION_COPY: Record<string, string> = {
   "suggestion.buffer.title": SUGGESTION_BUFFER_TITLE,
   "suggestion.buffer.description": SUGGESTION_BUFFER_DESCRIPTION,
+  "suggestion.buffer.range.description": SUGGESTION_BUFFER_RANGE_DESCRIPTION,
+  "suggestion.buffer.plan.description": SUGGESTION_BUFFER_PLAN_DESCRIPTION,
+  "suggestion.buffer.nearly_funded.title": SUGGESTION_BUFFER_NEARLY_FUNDED_TITLE,
+  "suggestion.buffer.nearly_funded.description": SUGGESTION_BUFFER_NEARLY_FUNDED_DESCRIPTION,
+  "suggestion.buffer.unresolved.title": SUGGESTION_BUFFER_UNRESOLVED_TITLE,
+  "suggestion.buffer.unresolved.description": SUGGESTION_BUFFER_UNRESOLVED_DESCRIPTION,
+  "suggestion.buffer.target_unavailable.title": SUGGESTION_BUFFER_TARGET_UNAVAILABLE_TITLE,
+  "suggestion.buffer.target_unavailable.description": SUGGESTION_BUFFER_TARGET_UNAVAILABLE_DESCRIPTION,
+  "suggestion.buffer.coverage_unavailable.title": SUGGESTION_BUFFER_COVERAGE_UNAVAILABLE_TITLE,
+  "suggestion.buffer.coverage_unavailable.description": SUGGESTION_BUFFER_COVERAGE_UNAVAILABLE_DESCRIPTION,
   "suggestion.rebalance.title": SUGGESTION_REBALANCE_TITLE,
   "suggestion.rebalance.crypto_overweight.description":
     SUGGESTION_REBALANCE_OVERWEIGHT_DESCRIPTION,

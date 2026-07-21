@@ -344,14 +344,9 @@ export function canDetermineAllocation(r: PortfolioCompletenessResult): Decision
   if (r.deduplicationState !== "complete") reasons.push("possible duplicate economic position");
   return gate(reasons.length === 0, true, reasons);
 }
-export function canShowOnTrack(r: PortfolioCompletenessResult): DecisionGate {
-  const reasons: string[] = [];
-  if (r.netWorthState !== "complete") reasons.push("net worth unresolved");
-  if (r.liabilitiesState !== "complete") reasons.push("liabilities unresolved");
-  if (r.stableBufferState === "unresolved") reasons.push("Safety Buffer unresolved");
-  if (r.hasUnknownMagnitudeValue) reasons.push("an unknown-value position could change the result");
-  return gate(reasons.length === 0, true, reasons);
-}
+// Step 21F — `canShowOnTrack` was DELETED. The mounted On Track card is governed exclusively by the canonical
+// `OnTrackAssessment` (Stage B), never by a completeness gate. The underlying completeness condition survives only
+// as the dashboard-visibility field `onTrackState` (a completeness precondition, NOT the mounted card eligibility).
 export function canGenerateRebalance(r: PortfolioCompletenessResult): DecisionGate {
   const reasons: string[] = [];
   if (r.netWorthState !== "complete") reasons.push("net worth unresolved");
@@ -384,7 +379,9 @@ export function canGenerateDirectLendingSuggestion(r: PortfolioCompletenessResul
  * §2/§14 — the canonical mounted gate map for production consumers. Each entry is a GateStatus; a consumer
  * NARROWS (AND) its existing eligibility with `gates.x === "allowed"` — it never enables on this alone.
  * ------------------------------------------------------------------ */
-export type CompletenessDecision = "onTrack" | "staking" | "dca" | "directLending" | "rebalance";
+// Step 21F — the `onTrack` gate was removed: the mounted On Track fallback is governed by the canonical
+// OnTrackAssessment (Stage B), not a completeness gate. Only the categories the engine still AND-narrows remain.
+export type CompletenessDecision = "staking" | "dca" | "directLending" | "rebalance";
 export type CompletenessGateMap = Partial<Record<CompletenessDecision, GateStatus>>;
 
 export function deriveCompletenessGates(
@@ -393,7 +390,6 @@ export function deriveCompletenessGates(
 ): { result: PortfolioCompletenessResult; gates: CompletenessGateMap } {
   const result = computePortfolioCompleteness(positions, opts);
   const gates: CompletenessGateMap = {
-    onTrack: canShowOnTrack(result).status,
     staking: canGenerateStakingSuggestion(result).status,
     dca: canGenerateDcaSuggestion(result).status,
     directLending: canGenerateDirectLendingSuggestion(result).status,

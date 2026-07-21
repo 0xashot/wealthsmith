@@ -49,6 +49,8 @@ const GUARDRAIL_LABELS: Record<GuardrailCode, string> = {
   buffer_protection: "Safety Buffer protection",
   pricing_available: "Pricing availability",
   allocation_delta: "Allocation vs target",
+  coverage_confidence: "Coverage confidence",
+  liquidity_verification: "Liquidity verification",
   idle_asset_threshold: "Idle asset threshold",
   token_scope: "Token scope reviewed",
   contribution_available: "Planned contribution",
@@ -182,8 +184,8 @@ export function summarizeGuardrails(
   for (const g of all) {
     const label = GUARDRAIL_LABELS[g.code];
     const bucket =
-      g.status === "not_evaluated"
-        ? notEvaluated
+      g.status === "not_evaluated" || g.status === "unresolved"
+        ? notEvaluated // Step 21C — "unresolved" was NOT conclusively evaluated; never imply it passed.
         : g.status === "not_applicable"
           ? notApplicable
           : checked; // passed / failed / warning were all evaluated

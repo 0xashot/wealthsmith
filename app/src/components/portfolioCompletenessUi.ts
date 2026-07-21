@@ -76,9 +76,9 @@ export function assessmentById(r: PortfolioCompletenessResult | null | undefined
 }
 
 /**
- * §5 — On Track availability from the MOUNTED result's onTrackState (no recomputation). `available` ⇒
- * render the existing deterministic On Track / off-track result; otherwise show the safe unavailable
- * message. `onTrackState` mirrors the canShowOnTrack gate, so consumers need not touch the gate map.
+ * §5 — DASHBOARD completeness-visibility helper (NOT the mounted On Track card gate). Step 21F: the mounted
+ * On Track card is governed by the canonical `OnTrackAssessment` (Stage B); this reads only the underlying
+ * `onTrackState` completeness precondition (net worth + liabilities + buffer resolved) for the dashboard banner.
  */
 export function onTrackAvailability(r: PortfolioCompletenessResult | null | undefined): { available: boolean; unavailableReason?: string } {
   return r && r.onTrackState === "complete" ? { available: true } : { available: false, unavailableReason: COMPLETENESS_COPY.onTrackUnavailable };

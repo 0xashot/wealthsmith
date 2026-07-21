@@ -255,7 +255,7 @@ export function deriveStableValue(positions: WalletPosition[]): number {
   return positions.reduce((s, p) => s + stableValueOf(p), 0);
 }
 
-import { computeSafetyBufferCoverage, type SafetyBufferCoverageState } from "./safetyBufferCoverage";
+import { computeSafetyBufferCoverage, type SafetyBufferCoverageState, type SafetyBufferCoverage } from "./safetyBufferCoverage";
 
 export interface SafetyBuffer {
   /**
@@ -296,13 +296,19 @@ export interface SafetyBuffer {
 export function deriveSafetyBuffer(
   positions: WalletPosition[],
   monthlyExpenses: number | undefined,
-  targetMonths: number | null
+  targetMonths: number | null,
+  /**
+   * Step 21C — the ALREADY-computed canonical coverage for this refresh. When supplied, it is reused verbatim
+   * (single source of truth; no second `computeSafetyBufferCoverage` call, no second position reclassification).
+   * It MUST have been computed against the same `targetUsd`. Omit only in isolated callers/tests.
+   */
+  sharedCoverage?: SafetyBufferCoverage
 ): SafetyBuffer | null {
   if (!(typeof monthlyExpenses === "number" && monthlyExpenses > 0)) return null;
   if (!(typeof targetMonths === "number" && targetMonths > 0)) return null;
   const targetUsd = monthlyExpenses * targetMonths;
   // Step 17B — completion is driven by VERIFIED IMMEDIATELY-WITHDRAWABLE value, not recognized value.
-  const coverage = computeSafetyBufferCoverage(positions, targetUsd);
+  const coverage = sharedCoverage ?? computeSafetyBufferCoverage(positions, targetUsd);
   const stableUsd = coverage.verifiedLiquidStableValueUsd; // authoritative reserve value
   const coveragePct = targetUsd > 0 ? Math.min(100, (stableUsd / targetUsd) * 100) : 0;
   const monthsCovered = stableUsd / monthlyExpenses;

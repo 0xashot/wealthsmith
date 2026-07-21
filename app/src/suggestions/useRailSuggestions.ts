@@ -36,6 +36,8 @@ import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
 import { deriveCompletenessGates, type PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
 import { computeSafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
+import { deriveSafetyBufferAssessment, type SafetyBufferContributionPlanInput } from "./safetyBufferAssessment";
+import { buildSafetyBufferCardFromAssessment } from "./bufferSuggestion";
 import { deriveRebalanceAssessment, selectRebalanceUsdcSource, isRebalanceMaterial, isMaterialCryptoToStables, deriveNativeSolRebalanceSource, REBALANCE_NATIVE_SOL_RESERVE_POLICY } from "./rebalanceAssessment";
 import { buildRebalanceCardFromAssessment } from "./rebalanceSuggestion";
 import { deriveTrimAssessment } from "./trimAssessment";
@@ -94,6 +96,26 @@ export interface RailSuggestions extends RailSuggestionsData {
 }
 
 /**
+ * Step 21C — normalize a plan-backed BUFFER contribution suggestion into the assessment's contribution input.
+ * Reads only the plan's SOURCE amount/cadence (never recomputes the buffer). Non-buffer suggestions → null.
+ */
+function normalizeBufferContributionPlan(
+  sug: { category?: string; amount?: { valueUsd?: number } | null; contributionPlan?: { amountKind?: string; exactAmountUsd?: number; minimumAmountUsd?: number; maximumAmountUsd?: number; contributionFrequencyId?: string } } | null | undefined
+): SafetyBufferContributionPlanInput | null {
+  if (!sug || sug.category !== "buffer") return null;
+  const p = sug.contributionPlan;
+  const planned = typeof sug.amount?.valueUsd === "number" ? sug.amount.valueUsd : p?.exactAmountUsd ?? p?.maximumAmountUsd ?? null;
+  return {
+    planIsReady: true,
+    planIsRange: p?.amountKind === "range",
+    plannedContributionUsd: typeof planned === "number" ? planned : null,
+    plannedContributionMinUsd: p?.minimumAmountUsd ?? null,
+    plannedContributionMaxUsd: p?.maximumAmountUsd ?? null,
+    cadence: p?.contributionFrequencyId ?? null,
+  };
+}
+
+/**
  * Pure: live wallet data + saved goal → engine cards. All inputs are derived
  * here via the approved helpers; the engine recalculates nothing.
  */
@@ -122,11 +144,20 @@ export function deriveRailSuggestions(args: {
 
   const value = deriveValueBreakdown(positions);
 
-  // Risk-based Safety Buffer (only once priced, so a 0 reserve is real).
+  // Step 21C — ONE canonical SafetyBufferCoverage per refresh, shared by the Safety Buffer summary, the
+  // SafetyBufferAssessment, completeness, Rebalance, Trim, and Position Optimization. The risk-based target is
+  // computed once; coverage is computed once against it (no second deriveSafetyBuffer reclassification).
   const bufferTargetMonths = getSafetyBufferTargetMonths(goal?.risk_tolerance);
+  const monthlyExpensesUsd = goal?.expenses_monthly ?? null;
+  const bufferTargetUsd =
+    pricedAsOf != null && typeof monthlyExpensesUsd === "number" && monthlyExpensesUsd > 0 && typeof bufferTargetMonths === "number" && bufferTargetMonths > 0
+      ? monthlyExpensesUsd * bufferTargetMonths
+      : 0;
+  const bufferCoverage = computeSafetyBufferCoverage(positions, bufferTargetUsd);
+  // Risk-based Safety Buffer summary (only once priced, so a 0 reserve is real). Reuses the shared coverage.
   const buffer =
     pricedAsOf != null
-      ? deriveSafetyBuffer(positions, goal?.expenses_monthly, bufferTargetMonths)
+      ? deriveSafetyBuffer(positions, goal?.expenses_monthly, bufferTargetMonths, bufferCoverage)
       : null;
 
   // Current + recommended allocation (bucket-level), from sourced value only.
@@ -177,10 +208,9 @@ export function deriveRailSuggestions(args: {
   // positions + the production Safety Buffer target. Passed to the engine to NARROW (never enable) the
   // On Track / staking / DCA / direct-lending candidates; the completeness result + blockingIssues/warnings
   // are returned for the dashboard + Smith AI to consume without recomputing.
-  // Step 18D — ONE canonical SafetyBufferCoverage per refresh, shared by completeness AND the Rebalance
-  // assessment (same positions + same requiredBufferUsd; no methodology change, no recomputation).
-  const requiredBufferUsd = buffer?.targetUsd ?? 0;
-  const bufferCoverage = computeSafetyBufferCoverage(positions, requiredBufferUsd);
+  // Step 18D/21C — the shared canonical coverage (computed ONCE above) feeds completeness AND the Rebalance /
+  // Trim / Position Optimization assessments (same positions + same requiredBufferUsd; no recomputation).
+  const requiredBufferUsd = buffer?.targetUsd ?? bufferTargetUsd;
   const completeness = deriveCompletenessGates(positions, { requiredBufferUsd, bufferCoverage });
 
   // Step 18C — one authoritative Rebalance result from the canonical assessment (phase-one:
@@ -233,6 +263,28 @@ export function deriveRailSuggestions(args: {
     reviewNeed: positionOptimizationAssessment.overallReadiness.status === "allowed",
   };
 
+  // Step 21C — ONE canonical SafetyBufferAssessment per refresh over the SHARED coverage. The plan-backed buffer's
+  // SOURCE plan is normalized into the assessment (never injected as a prebuilt engine candidate). The ONE buffer
+  // card comes from `buildSafetyBufferCardFromAssessment` behind the `top_up_buffer` contract. `blocksDownstream`
+  // is true for every non-complete state (definite / below-minimum / unresolved / unavailable), so downstream
+  // deployment and On Track stay suppressed until coverage is proven complete. Coverage is unavailable before pricing.
+  const bufferContributionPlan = normalizeBufferContributionPlan(contribution.suggestion);
+  const safetyBufferAssessment = deriveSafetyBufferAssessment({
+    coverage: pricedAsOf != null ? bufferCoverage : null,
+    monthlyExpensesUsd,
+    targetMonths: bufferTargetMonths,
+    contributionPlan: bufferContributionPlan,
+    generatedAt: pricedAsOf ?? Date.now(),
+  });
+  const bufferOverride = {
+    candidate: buildSafetyBufferCardFromAssessment(safetyBufferAssessment, pricedAsOf ?? 0),
+    bufferSatisfied: safetyBufferAssessment.presentationState === "complete",
+    blocksDownstream: safetyBufferAssessment.presentationState !== "complete",
+  };
+  // The plan-backed BUFFER candidate is now normalized into the assessment above — do not also pass it to the
+  // engine as a contributionSuggestion (that path only carries the DCA plan candidate now).
+  const contributionCandidate = contribution.suggestion?.category === "buffer" ? null : contribution.suggestion;
+
   const engineResult = runSuggestionEngine(
     buildSuggestionEngineInputs({
       positions,
@@ -243,12 +295,17 @@ export function deriveRailSuggestions(args: {
       allocation: allocationInput,
     }),
     pricedAsOf ?? 0,
-    contribution.suggestion,
+    contributionCandidate,
     stableYield.suggestion,
     completeness.gates,
     rebalanceOverride,
     trimOverride,
-    positionOptimizationOverride
+    positionOptimizationOverride,
+    bufferOverride,
+    // Step 21E — the canonical On Track inputs. The engine derives ONE OnTrackAssessment in Stage B (after the
+    // actual candidate set is assembled) from the SHARED Safety Buffer + Rebalance assessments + completeness;
+    // the legacy bucket-allocation On Track rule is no longer mounted. No second calculation is introduced.
+    { safetyBufferAssessment, rebalanceAssessment, portfolioCompleteness: completeness.result }
   );
   const cards = toSuggestionCards(engineResult.suggestions);
 

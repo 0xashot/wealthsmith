@@ -116,10 +116,8 @@ const REVIEW_ONLY_NOTES: ReviewSafetyNote[] = [
   { kind: "review_only", text: "Fixture-only — not real wallet data." },
 ];
 
-const INFORMATIONAL_NOTES: ReviewSafetyNote[] = [
-  { kind: "informational", text: "Informational only" },
-  { kind: "no_action", text: "No action required" },
-];
+// Step 21E — INFORMATIONAL_NOTES removed with the hand-built On Track fixture (the production On Track gallery
+// renders the canonical informational card directly; no hand-built safety notes).
 
 const REVIEW_ONLY_LIMITATION = { kind: "review_only" as const, text: "This is a review suggestion only, not a transaction." };
 
@@ -177,36 +175,8 @@ function buildCard(a: CardArgs): SuggestionCardState {
 /* ------------------------------------------------------------------ *
  * The fixtures — one clean, clickable example per category.
  * ------------------------------------------------------------------ */
-const safetyBuffer: TestingFixture = {
-  id: "testing_safety_buffer",
-  categoryLabel: "Safety Buffer",
-  group: "Safety",
-  label: TESTING_PREVIEW_NOT_LIVE,
-  card: buildCard({
-    id: "testing_safety_buffer",
-    title: "Build Your Safety Buffer",
-    type: "fund_safety_buffer",
-    category: "safety_buffer",
-    description: "Your Safety Buffer is below its risk-based target.",
-    impact_text: "Buffer shortfall: $2,200",
-    severity: "high",
-  }),
-  details: {
-    summary: { title: "Build Your Safety Buffer", reason: "Your Safety Buffer is below its risk-based target.", categoryLabel: "Safety Buffer" },
-    metrics: [
-      { label: "Safety Buffer target", value: 3000, kind: "amount_usd", unit: "USD" },
-      { label: "Current stable buffer", value: 800, kind: "amount_usd", unit: "USD" },
-      { label: "Shortfall", value: 2200, kind: "amount_usd", unit: "USD" },
-    ],
-    involvedAssets: [{ symbol: "USDC", valueUsd: 800, role: "buffer_asset" }],
-    involvedPositions: [],
-    calculations: [{ label: "Shortfall", formula: "target − current", currentValue: 800, targetValue: 3000, difference: 2200, unit: "USD" }],
-    guardrailSummary: { checked: ["Safety Buffer protection", "Pricing availability", "Minimum suggestion size"], notEvaluated: [], notApplicable: ["Protocol selection"] },
-    limitations: [REVIEW_ONLY_LIMITATION],
-    safetyNotes: REVIEW_ONLY_NOTES,
-    demoLabel: TESTING_PREVIEW_NOT_LIVE,
-  },
-};
+// Step 21C — the hand-built Safety Buffer fixture was removed. The /testing gallery now renders the PRODUCTION
+// canonical coverage + assessment + card mapper (see safetyBufferTestingFixtures.ts / TestingPage.tsx).
 
 const rebalance: TestingFixture = {
   id: "testing_rebalance",
@@ -410,33 +380,8 @@ const dca: TestingFixture = {
 // Step 20C — the hand-built Position Optimization fixture was removed. The /testing gallery now renders the
 // PRODUCTION canonical assessment + card mapper (see positionOptimizationTestingFixtures.ts / TestingPage.tsx).
 
-const onTrack: TestingFixture = {
-  id: "testing_on_track",
-  categoryLabel: "On Track",
-  group: "Review",
-  label: TESTING_PREVIEW_NOT_LIVE,
-  card: buildCard({
-    id: "testing_on_track",
-    title: "You're On Track",
-    type: "on_track",
-    category: "portfolio_health",
-    description: "Your Safety Buffer is funded and your allocation is close to your target.",
-    impact_text: "",
-    severity: "info",
-    informational: true,
-  }),
-  details: {
-    summary: { title: "You're On Track", reason: "Your Safety Buffer is funded and your allocation is close to your target. No action is needed right now.", categoryLabel: "On Track" },
-    metrics: [],
-    involvedAssets: [],
-    involvedPositions: [],
-    calculations: [],
-    guardrailSummary: { checked: [], notEvaluated: [], notApplicable: [] },
-    limitations: [],
-    safetyNotes: INFORMATIONAL_NOTES,
-    demoLabel: TESTING_PREVIEW_NOT_LIVE,
-  },
-};
+// Step 21E — the hand-built On Track fixture was removed. The /testing gallery now renders the PRODUCTION
+// canonical OnTrackAssessment + card mapper (see onTrackTestingFixtures.ts / TestingPage.tsx).
 
 // Step 14L — mSOL as a read-only ALTERNATIVE protocol to review (a separate card;
 // the "Staking" fixture above stays JitoSOL-only). Uses a fresh checkedAt so the
@@ -536,13 +481,11 @@ const infBlockedCandidate: TestingFixture = {
 
 
 const ALL_FIXTURES: TestingFixture[] = [
-  safetyBuffer,
   rebalance,
   capitalEfficiency,
   staking,
   stableYield,
   dca,
-  onTrack,
   msolReviewCandidate,
   infBlockedCandidate,
 ];
