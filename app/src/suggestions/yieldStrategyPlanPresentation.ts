@@ -34,35 +34,56 @@ export const STABLE_YIELD_YIELD_CHANGE_DISCLOSURE = "Yield rates can change over
 export const STABLE_YIELD_PROTOCOL_RISK_DISCLOSURE = "This strategy may involve protocol and smart-contract risk.";
 export const STABLE_YIELD_APY_UNAVAILABLE_DISPLAY = "APY unavailable";
 
-const CTA: StableYieldCtaPresentation = { label: "Review Strategy", intent: "open_stable_yield_review", executesTransaction: false, requiresWalletSignature: false, opensExternalUrl: false, completionOnClick: false };
+const CTA: StableYieldCtaPresentation = { label: "Review", intent: "open_stable_yield_review", executesTransaction: false, requiresWalletSignature: false, opensExternalUrl: false, completionOnClick: false };
 
-/** Deterministic title by lane + action mode (no hype, no promises, no product not in the output). */
-export function stableYieldTitle(lane: "buffer" | "excess", actionMode: "start_new_position" | "add_to_existing_strategy"): string {
-  if (lane === "excess") return actionMode === "start_new_position" ? "Put Excess USDC to Work" : "Add to Your Stable Yield Strategy";
-  return actionMode === "start_new_position" ? "Earn Yield on Eligible Buffer Funds" : "Add Buffer Funds to Stable Yield";
+/** Deterministic title by lane + action mode, naming the selected protocol (no hype, no promises). */
+export function stableYieldTitle(lane: "buffer" | "excess", actionMode: "start_new_position" | "add_to_existing_strategy", protocol: string): string {
+  if (lane === "excess") return actionMode === "start_new_position" ? `Put Excess USDC on ${protocol}` : `Add to Your ${protocol} Strategy`;
+  return actionMode === "start_new_position" ? `Put Buffer Funds on ${protocol}` : `Add to Your ${protocol} Position`;
 }
 
-/** Deterministic single-reason card description. */
-function cardDescription(lane: "buffer" | "excess", actionMode: "start_new_position" | "add_to_existing_strategy", amt: string, product: string): string {
+/** Longest product name the card description shows inline; longer names fall back to a generic phrase so the
+ *  card never overflows (the full name still appears in the review modal). */
+const STABLE_YIELD_CARD_PRODUCT_MAX = 40;
+function cardProductName(product: string): string {
+  return product.length <= STABLE_YIELD_CARD_PRODUCT_MAX ? product : "selected stable yield";
+}
+
+/** Deterministic single-reason card description (amount is shown separately as the card's impact metric). */
+function cardDescription(lane: "buffer" | "excess", actionMode: "start_new_position" | "add_to_existing_strategy", product: string): string {
+  const p = cardProductName(product);
   if (lane === "excess") {
     return actionMode === "start_new_position"
-      ? `${amt} of your direct wallet USDC is above your required Safety Buffer and is eligible to review for the ${product} strategy.`
-      : `You already hold ${product}. ${amt} of eligible direct wallet USDC could be added — review before you decide.`;
+      ? `Your direct-wallet USDC above the required Safety Buffer is eligible for the ${p} strategy.`
+      : `You already hold ${p}. Eligible direct-wallet USDC could be added to your existing position.`;
   }
   return actionMode === "start_new_position"
-    ? `${amt} of buffer-eligible USDC could earn yield in ${product} while your required Safety Buffer stays covered.`
-    : `${amt} of buffer-eligible USDC could be added to your ${product} position while your required Safety Buffer stays covered.`;
+    ? `Eligible buffer funds could earn yield through the ${p} while keeping your required Safety Buffer covered.`
+    : `Eligible buffer funds could be added to your existing ${p} position while keeping your required Safety Buffer covered.`;
+}
+
+/** Longest protocol name shown inline in the review summary; longer names fall back to a generic phrase. */
+const STABLE_YIELD_REVIEW_PROTOCOL_MAX = 30;
+/** Approved official app URLs by protocol (from the yield-strategy registry); read-only handoff only. */
+const STABLE_YIELD_PROTOCOL_APP_URLS: Record<string, string> = { kamino: "https://app.kamino.finance" };
+/** USD with thousands separators; whole amounts drop the ".00", otherwise cents are kept (e.g. "$1,234.56"). */
+function formatUsdTrim(usd: number): string {
+  return Number.isInteger(usd)
+    ? `$${usd.toLocaleString("en-US")}`
+    : `$${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 /** Deterministic plain-language review summary. */
 function reviewSummary(lane: "buffer" | "excess", actionMode: "start_new_position" | "add_to_existing_strategy", amt: string, product: string, protocol: string): string {
   const base = lane === "excess"
-    ? `${amt} of your direct wallet USDC is above your required Safety Buffer.`
-    : `${amt} of buffer-eligible direct wallet USDC could earn yield while your required Safety Buffer stays covered.`;
+    ? `${amt} of your direct-wallet USDC is above your required Safety Buffer.`
+    : `${amt} of your direct-wallet USDC is eligible for yield while keeping your required Safety Buffer covered.`;
+  const productPhrase = product.length <= STABLE_YIELD_CARD_PRODUCT_MAX ? `${product} position` : "position in the selected stable yield strategy";
+  const protocolPhrase = protocol.length <= STABLE_YIELD_REVIEW_PROTOCOL_MAX ? protocol : "the selected protocol";
   const dest = actionMode === "add_to_existing_strategy"
-    ? `You already hold the ${product} strategy on ${protocol}; this would add to it.`
-    : `The ${product} strategy on ${protocol} is eligible to review as a new position.`;
-  return `${base} ${dest} You would manage the deposit yourself — WealthSmith can't move your funds.`;
+    ? `You can review adding it to your existing ${productPhrase} on ${protocolPhrase}.`
+    : `You can review opening a new ${productPhrase} on ${protocolPhrase}.`;
+  return `${base} ${dest}`;
 }
 
 function positionStatusLabel(status: string): string {
@@ -121,10 +142,18 @@ export function buildStableYieldPlanPresentation(suggestion: EngineSuggestion | 
   if (!capacity) return fail("capacity_contract", `unsupported_capacity_mode:${meta.capacityMode}`, { suggestionId: suggestion.id, sourcePlanId: meta.sourcePlanId, capacityMode: meta.capacityMode });
 
   const amt = formatUsd(meta.amountUsd);
-  const title = stableYieldTitle(meta.lane, meta.actionMode);
-  const cardDesc = cardDescription(meta.lane, meta.actionMode, amt, meta.displayName);
+  const title = stableYieldTitle(meta.lane, meta.actionMode, meta.protocolDisplayName);
+  const cardDesc = cardDescription(meta.lane, meta.actionMode, meta.displayName);
   const apy = stableYieldApyPresentation(meta.apy);
   const tag = meta.lane === "buffer" ? "Safety Buffer Yield" : "Excess USDC Yield";
+  // Estimated annual income chip: eligible amount × sourced APY. Only when a real APY is available (never
+  // invented). Rounded to whole dollars; the APY display keeps its canonical precision.
+  const apyVal = meta.apy ? (meta.apy.netApyPct ?? meta.apy.grossApyPct) : undefined;
+  const annualIncomeUsd = apy.state !== "unavailable" && typeof apyVal === "number" && Number.isFinite(apyVal) && meta.amountUsd > 0
+    ? Math.round((meta.amountUsd * apyVal) / 100)
+    : undefined;
+  const apyIncomeChip = annualIncomeUsd !== undefined ? `+$${annualIncomeUsd.toLocaleString("en-US")}/year (${apy.display} APY)` : undefined;
+  const estimatedEarningsDisplay = annualIncomeUsd !== undefined ? `+$${annualIncomeUsd.toLocaleString("en-US")}/year` : undefined;
 
   const card: StableYieldCardPresentation = {
     schemaVersion: YIELD_STRATEGY_PRESENTATION_SCHEMA_VERSION,
@@ -146,11 +175,12 @@ export function buildStableYieldPlanPresentation(suggestion: EngineSuggestion | 
     protocolName: meta.protocolDisplayName,
     productDisplayName: meta.displayName,
     apy,
+    ...(apyIncomeChip ? { apyIncomeChip } : {}),
     isTopPick: suggestion.is_top_pick === true,
     actionable: true,
     actionKind: "review_only",
     cta: CTA,
-    accessibilityLabel: `${title}. ${cardDesc} Read-only recommendation. Review Strategy.`,
+    accessibilityLabel: `${title}. ${cardDesc} Read-only recommendation. Review.`,
     readOnly: true,
     externalManagementRequired: true,
   };
@@ -178,7 +208,7 @@ export function buildStableYieldPlanPresentation(suggestion: EngineSuggestion | 
     suggestionId: suggestion.id,
     sourcePlanId: meta.sourcePlanId,
     title,
-    summary: reviewSummary(meta.lane, meta.actionMode, amt, meta.displayName, meta.protocolDisplayName),
+    summary: reviewSummary(meta.lane, meta.actionMode, formatUsdTrim(meta.amountUsd), meta.displayName, meta.protocolDisplayName),
     lane: meta.lane,
     actionMode: meta.actionMode,
     amountDisplay: amt,
@@ -217,6 +247,10 @@ export function buildStableYieldPlanPresentation(suggestion: EngineSuggestion | 
     readOnly: true,
     externalManagementRequired: true,
     cta: CTA,
+    ...(STABLE_YIELD_PROTOCOL_APP_URLS[meta.protocolId]
+      ? { externalLink: { label: `Open ${meta.protocolDisplayName}`, url: STABLE_YIELD_PROTOCOL_APP_URLS[meta.protocolId], opensInNewTab: true, ctaLabel: "Deposit USDC" } }
+      : {}),
+    ...(estimatedEarningsDisplay ? { estimatedEarningsDisplay } : {}),
     rows,
   };
 

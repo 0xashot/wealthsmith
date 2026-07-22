@@ -96,6 +96,9 @@ export function deriveStableYieldSuggestion(
     valueUsd: p.valueUsd as number,
     amount: p.uiAmount as number,
     role: "stablecoin",
+    // Portfolio-style identity: approved icon + read-only Solscan link.
+    ...(p.icon ? { icon: p.icon } : {}),
+    ...(p.mint ? { mint: p.mint } : {}),
   }));
   // Static stable-yield candidates supporting the eligible stable assets (Step
   // 12C) — metadata only, NOT a recommendation; status stays not_evaluated.

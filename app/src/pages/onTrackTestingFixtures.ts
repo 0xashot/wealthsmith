@@ -13,10 +13,14 @@ import { deriveSafetyBufferAssessment } from "../suggestions/safetyBufferAssessm
 import { deriveOnTrackAssessment, type OnTrackAssessment, type OnTrackCandidateContext } from "../suggestions/onTrackAssessment";
 import type { RebalanceAssessment } from "../suggestions/rebalanceAssessment";
 import type { PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
-import { buildOnTrackCardFromAssessment } from "../suggestions/onTrackSuggestion";
+import { buildOnTrackCardsFromAssessment, type OnTrackGoalContext } from "../suggestions/onTrackSuggestion";
 import type { EngineSuggestion } from "../suggestions/engineTypes";
 
 const GEN = 1_700_000_000_000;
+
+// Deterministic demo saved-plan context so the gallery renders the real Goal Check + Expense Benchmark cards.
+// Expenses ($1,000/mo) × the 3-month target = the $3,000 buffer these fixtures fund, so the cards are consistent.
+const DEMO_GOAL_CTX: OnTrackGoalContext = { financialGoal: "retire_early", timeline: "5_years", monthlyExpensesUsd: 1000 };
 
 const cov = (target: number, verified: number, state: SafetyBufferCoverage["coverageState"], opts: { unresolved?: number; unknownMag?: boolean } = {}): SafetyBufferCoverage => ({ requiredBufferUsd: target, recognizedStableValueUsd: verified + (opts.unresolved ?? 0), verifiedLiquidStableValueUsd: verified, delayedStableValueUsd: 0, unavailableStableValueUsd: 0, unresolvedStableValueUsd: opts.unresolved ?? 0, hasUnknownUnresolvedMagnitude: opts.unknownMag ?? false, shortfallUsd: Math.max(target - verified, 0), coverageRatio: target > 0 ? verified / target : 1, fullyFunded: state === "complete", coverageState: state, unresolvedReasons: [], sources: [] });
 const sb = (coverage: SafetyBufferCoverage | null, expenses: number | null = 1000, months: number | null = 3) => deriveSafetyBufferAssessment({ coverage, monthlyExpensesUsd: expenses, targetMonths: months, generatedAt: GEN });
@@ -30,12 +34,13 @@ export interface OnTrackTestingFixture {
   id: string;
   label: string;
   assessment: OnTrackAssessment;
-  card: EngineSuggestion | null;
+  /** The production On Track cards (up to three) — empty for every blocked/unresolved state. */
+  cards: EngineSuggestion[];
 }
 
 function fx(id: string, label: string, sbA: OnTrackAssessment extends never ? never : Parameters<typeof deriveOnTrackAssessment>[0]["safetyBufferAssessment"], raA: RebalanceAssessment | null, cc: OnTrackCandidateContext, compA: PortfolioCompletenessResult | null = comp()): OnTrackTestingFixture {
   const assessment = deriveOnTrackAssessment({ safetyBufferAssessment: sbA, rebalanceAssessment: raA, portfolioCompleteness: compA, candidateContext: cc, generatedAt: GEN });
-  return { id, label, assessment, card: buildOnTrackCardFromAssessment(assessment, GEN) };
+  return { id, label, assessment, cards: buildOnTrackCardsFromAssessment(assessment, DEMO_GOAL_CTX, GEN) };
 }
 
 export function getOnTrackTestingFixtures(): OnTrackTestingFixture[] {

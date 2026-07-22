@@ -82,6 +82,8 @@ export interface ContributionPlanSuggestionData {
   exactAmountUsd?: number;
   minimumAmountUsd?: number;
   maximumAmountUsd?: number;
+  /** Single representative per-contribution amount when a range is only a one-cent reconciliation split. */
+  representativeAmountUsd?: number;
 
   contributionFrequencyId?: "weekly" | "biweekly" | "monthly" | "quarterly" | "occasional";
   contributionsPerYear?: number;

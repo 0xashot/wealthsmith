@@ -64,16 +64,16 @@ export function buildSafetyBufferCardFromAssessment(a: SafetyBufferAssessment, g
       usdMetric("Verified liquid reserve", verified ?? 0),
       ...(isRange && a.maximumPossibleCoverageUsd != null ? [usdMetric("Maximum possible coverage", a.maximumPossibleCoverageUsd)] : []),
       ...(target != null ? [usdMetric("Safety Buffer target", target)] : []),
-      usdMetric("Confirmed minimum shortfall", proven),
-      ...(isRange ? [usdMetric("Worst-case shortfall", worst)] : []),
-      ...(a.monthsCoveredVerified != null ? [metric("Verified months covered", round1(a.monthsCoveredVerified), "months", "months")] : []),
+      usdMetric("Amount needed", proven),
+      ...(isRange ? [usdMetric("Maximum amount needed", worst)] : []),
+      ...(a.monthsCoveredVerified != null ? [metric("Expenses covered", round1(a.monthsCoveredVerified), "months", "months")] : []),
       ...(a.targetMonths != null ? [metric("Target months", a.targetMonths, "months", "months")] : []),
       ...(planReady && a.contribution.plannedContributionUsd != null ? [usdMetric(a.contribution.planIsRange ? "Next planned contribution (max)" : "Next planned contribution", a.contribution.plannedContributionUsd)] : []),
-      ...(planReady && a.contribution.remainingProvenShortfallAfterPlanUsd != null ? [usdMetric("Confirmed remaining gap after plan", a.contribution.remainingProvenShortfallAfterPlanUsd)] : []),
-      ...(planReady && isRange && a.contribution.remainingVerifiedOnlyShortfallAfterPlanUsd != null ? [usdMetric("Worst-case remaining gap after plan", a.contribution.remainingVerifiedOnlyShortfallAfterPlanUsd)] : []),
+      ...(planReady && a.contribution.remainingProvenShortfallAfterPlanUsd != null ? [usdMetric("Confirmed gap after contribution", a.contribution.remainingProvenShortfallAfterPlanUsd)] : []),
+      ...(planReady && isRange && a.contribution.remainingVerifiedOnlyShortfallAfterPlanUsd != null ? [usdMetric("Maximum remaining gap after plan", a.contribution.remainingVerifiedOnlyShortfallAfterPlanUsd)] : []),
     ];
     const calculations = [
-      { label: "Worst-case shortfall", formula: "target − verified liquid reserve", currentValue: verified ?? 0, targetValue: target ?? 0, difference: worst, unit: "USD" },
+      { label: "Maximum amount needed", formula: "target − verified liquid reserve", currentValue: verified ?? 0, targetValue: target ?? 0, difference: worst, unit: "USD" },
       ...(isRange && a.maximumPossibleCoverageUsd != null
         ? [{ label: "Confirmed minimum shortfall", formula: "target − maximum possible coverage", currentValue: a.maximumPossibleCoverageUsd, targetValue: target ?? 0, difference: proven, unit: "USD" as const }]
         : [{ label: "Confirmed shortfall (no unresolved value)", formula: "target − verified liquid reserve", currentValue: verified ?? 0, targetValue: target ?? 0, difference: proven, unit: "USD" as const }]),
@@ -86,7 +86,7 @@ export function buildSafetyBufferCardFromAssessment(a: SafetyBufferAssessment, g
       description_key: planReady ? "suggestion.buffer.plan.description" : isRange ? "suggestion.buffer.range.description" : "suggestion.buffer.description",
       action_kind: "review_only",
       is_actionable: true,
-      amount: { valueUsd: proven, label: isRange ? "Minimum confirmed shortfall" : "Buffer shortfall" },
+      amount: { valueUsd: proven, label: isRange ? "Minimum amount needed" : "Amount needed" },
       to: { bucket: "stables" },
       post_buffer_months: a.targetMonths ?? undefined,
       scores: { impact: score, urgency: score, efficiency: null },

@@ -26,12 +26,12 @@ formatted values.
 
 ## Title mapping (deterministic, by lane × action mode)
 
-| Lane | Action mode | Title |
+| Lane | Action mode | Title (names the selected protocol) |
 |---|---|---|
-| excess | start_new_position | **Put Excess USDC to Work** |
-| excess | add_to_existing_strategy | **Add to Your Stable Yield Strategy** |
-| buffer | start_new_position | **Earn Yield on Eligible Buffer Funds** |
-| buffer | add_to_existing_strategy | **Add Buffer Funds to Stable Yield** |
+| excess | start_new_position | **Put Excess USDC on {protocol}** |
+| excess | add_to_existing_strategy | **Add to Your Stable Yield Strategy on {protocol}** |
+| buffer | start_new_position | **Put Buffer Funds on {protocol}** |
+| buffer | add_to_existing_strategy | **Add to Your {protocol} Position** |
 
 No hype, no promises, no "best/guaranteed/safe yield/risk-free", no product not present in the output.
 

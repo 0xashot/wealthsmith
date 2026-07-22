@@ -95,11 +95,11 @@ const TITLE_BY_CATEGORY: Record<SuggestionCategory, string> = {
 
 /** Default one-line reason per category (rules may override with specifics). */
 const DEFAULT_REASON: Record<SuggestionCategory, string> = {
-  buffer: "Your Safety Buffer is below its risk-based target.",
+  buffer: "Your liquid reserve is below the target for your risk profile.",
   rebalance: "Your allocation has drifted from your target.",
-  capital_efficiency: "Some assets may not be contributing to your plan.",
+  capital_efficiency: "Some assets are not currently contributing to your plan and may be worth reviewing.",
   trim: "Some non-core assets may deserve review.",
-  staking: "You have liquid SOL that may be eligible for review.",
+  staking: "You have liquid SOL that could earn staking rewards",
   stable_yield:
     "You have liquid stablecoins that may be eligible for conservative yield review.",
   dca: "Your crypto allocation is below target; future contributions may build exposure gradually.",
@@ -238,6 +238,8 @@ export function buildReviewDetails(args: {
   actionKind: SuggestionActionKind;
   guardrails: SuggestionGuardrail[];
   protocolSelection?: ProtocolSelection;
+  /** Optional modal-title override (e.g. Staking names the selected protocol: "Stake SOL on Jito"). */
+  title?: string;
   reason?: string;
   metrics: ReviewMetric[];
   involvedAssets?: ReviewAsset[];
@@ -265,7 +267,7 @@ export function buildReviewDetails(args: {
   const extraLimitations = args.additionalLimitations ?? [];
   return {
     summary: {
-      title: TITLE_BY_CATEGORY[args.category],
+      title: args.title ?? TITLE_BY_CATEGORY[args.category],
       reason: args.reason ?? DEFAULT_REASON[args.category],
       categoryLabel: CATEGORY_LABELS[args.category],
     },

@@ -21,6 +21,14 @@ import SolStakingComparisonSummary from "./SolStakingComparisonSummary";
 import type { SuggestionCardState } from "../types/dashboard";
 import type { SolStakingSelectorPresentation } from "../suggestions/solStakingSelectorPresentationTypes";
 import shieldCheckUrl from "../../../assets/icons/ui/shield-check.svg";
+import shieldUrl from "../../../assets/icons/ui/shield.svg";
+import goalUrl from "../../../assets/icons/ui/goal.svg";
+import chartPieUrl from "../../../assets/icons/ui/chart-pie.svg";
+import coinsUrl from "../../../assets/icons/ui/coins.svg";
+import listFilterUrl from "../../../assets/icons/ui/list-filter.svg";
+import trendingUpUrl from "../../../assets/icons/ui/trending-up.svg";
+import calendarSyncUrl from "../../../assets/icons/ui/calendar-sync.svg";
+import slidersHorizontalUrl from "../../../assets/icons/ui/sliders-horizontal.svg";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
 import hubbleUrl from "../../../assets/icons/protocol/hubble.svg";
 import jitoUrl from "../../../assets/icons/protocol/jito.svg";
@@ -60,6 +68,22 @@ const PROTOCOL_ICONS: Record<string, string> = {
  */
 const GENERIC_ICONS_BY_CATEGORY: Record<string, string> = {
   safety_buffer: shieldCheckUrl,
+  allocation: chartPieUrl,
+  capital_efficiency: coinsUrl,
+  portfolio_health: listFilterUrl,
+  contribution_plan: calendarSyncUrl,
+};
+
+/**
+ * Per-card-TYPE icons, checked before the category map. Needed when two categories share a card category
+ * (Position Optimization and Trim are both "portfolio_health") but should show different icons.
+ */
+const GENERIC_ICONS_BY_TYPE: Record<string, string> = {
+  review_yield_strategy: slidersHorizontalUrl, // Position Optimization
+  // On Track multi-card set: goal check / expense benchmark / safety buffer status.
+  on_track_goal_check: goalUrl,
+  on_track_expense_benchmark: coinsUrl,
+  on_track_safety_buffer: shieldUrl,
 };
 
 function resolveCardIcon(card: SuggestionCardState): string | undefined {
@@ -77,7 +101,13 @@ function resolveCardIcon(card: SuggestionCardState): string | undefined {
     }
     return icon;
   }
-  return GENERIC_ICONS_BY_CATEGORY[card.category];
+  // Selected-protocol suggestions (e.g. Staking → Jito) show the chosen protocol's logo, resolved from the
+  // approved protocol icon set by the selected protocol name. Falls through to the category icon when unmatched.
+  if (card.protocolName) {
+    const protocolIcon = PROTOCOL_ICONS[card.protocolName.toLowerCase()];
+    if (protocolIcon) return protocolIcon;
+  }
+  return GENERIC_ICONS_BY_TYPE[card.type] ?? GENERIC_ICONS_BY_CATEGORY[card.category];
 }
 
 const BADGE_TONES: Record<string, "info" | "warning" | "danger" | "success" | "neutral"> = {
@@ -144,8 +174,8 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview, stak
         {!isTopPick && card.badge && (
           <Badge label={card.badge} tone={BADGE_TONES[card.badge] ?? "neutral"} />
         )}
-        {/* Step 15H — plan-backed contribution tag ("Safety First" / "Allocation" / "DCA"). */}
-        {card.tag && <Badge label={card.tag} tone="neutral" />}
+        {/* The category tag chip (Stable Yield "Excess/Safety Buffer Yield", DCA "Allocation/DCA") was
+            removed by request; the card icon + title already convey the category. */}
         {card.demoLabel && <Badge label={card.demoLabel} tone="warning" />}
       </div>
 
@@ -157,18 +187,8 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview, stak
       <p className="suggestion-card__description">{card.description}</p>
       <p className="suggestion-card__impact">{card.impact_text}</p>
 
-      {/* Optional protocol display (Demo Mode now; real wallet later once gates pass). */}
-      {card.protocolName && (
-        <p className="suggestion-card__protocol">
-          <span className="suggestion-card__protocol-label">
-            {card.suggestedProtocolLabel ?? "Suggested protocol to review"}:{" "}
-          </span>
-          <span className="suggestion-card__protocol-name">
-            {card.protocolName}
-            {card.lstSymbol ? ` · ${card.lstSymbol}` : ""}
-          </span>
-        </p>
-      )}
+      {/* The selected protocol is shown via the card icon (resolveCardIcon) and inside the review modal;
+          the inline "Suggested protocol to review" text row was removed by request. */}
 
       {/* Step 14Z — compact "Top protocol to review right now" summary (SOL staking card only,
           available state only). Read-only; never changes the title/action or the CTA. */}
@@ -178,10 +198,21 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview, stak
         <p className="suggestion-card__locked-reason">{card.disabled_reason_text}</p>
       )}
 
-      {card.apy && (
-        <p className="suggestion-card__apy">
-          <span className="suggestion-card__apy-label">APY </span>
-          {card.apy.display}
+      {card.apyIncomeChip && (
+        <p className="suggestion-card__apy-row">
+          <span className="badge badge--success suggestion-card__apy-chip">
+            <ButtonIcon src={trendingUpUrl} size={16} />
+            {card.apyIncomeChip}
+          </span>
+        </p>
+      )}
+
+      {card.statusChip && (
+        <p className="suggestion-card__apy-row">
+          <span className="badge badge--success suggestion-card__apy-chip">
+            <ButtonIcon src={shieldCheckUrl} size={16} />
+            {card.statusChip}
+          </span>
         </p>
       )}
 

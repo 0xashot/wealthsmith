@@ -67,7 +67,6 @@ function buildStablesToCryptoCard(
   const suggestedAmountUsd = Math.min(requiredCorrectionUsd, source.verifiedExcessValueUsd);
   if (suggestedAmountUsd < MIN_SUGGESTION_AMOUNT_USD) return null;
   const partial = suggestedAmountUsd < requiredCorrectionUsd;
-  const dest = assessment.proposedDestination; // native SOL (registry-bound)
   const solOk = solPriceFresh && typeof solPriceUsd === "number" && solPriceUsd > 0;
   const estimatedDestinationSol = solOk ? suggestedAmountUsd / (solPriceUsd as number) : null;
   const delta = assessment.cryptoDeltaPct ?? 0;
@@ -88,22 +87,20 @@ function buildStablesToCryptoCard(
     actionKind: "review_only",
     guardrails,
     protocolSelection,
-    reason: "Your stablecoin allocation is above your target; excess direct-wallet USDC could move toward SOL while the Safety Buffer stays covered.",
+    reason: "Your stablecoin allocation is above target. Verified excess USDC could help close the gap in your SOL allocation while keeping your Safety Buffer covered.",
     metrics: [
       pctMetric("Current crypto allocation", assessment.currentCryptoPct ?? 0),
       pctMetric("Target crypto allocation", assessment.targetCryptoPct ?? 0),
       pctMetric("Current stablecoin allocation", assessment.currentStablePct ?? 0),
       pctMetric("Target stablecoin allocation", assessment.targetStablePct ?? 0),
-      pctMetric("Allocation delta", delta),
-      usdMetric("Required correction", requiredCorrectionUsd),
-      usdMetric("Verified excess USDC (above buffer)", source.verifiedExcessValueUsd),
-      usdMetric("Suggested review amount", suggestedAmountUsd),
-      ...(estimatedDestinationSol !== null ? [metric("Approx. SOL (informational)", estimatedDestinationSol, "token_amount", "SOL")] : []),
+      pctMetric("Allocation difference", delta),
+      usdMetric("Amount needed to rebalance", requiredCorrectionUsd),
+      usdMetric("Verified USDC above buffer", source.verifiedExcessValueUsd),
+      usdMetric("Suggested rebalance amount", suggestedAmountUsd),
+      ...(estimatedDestinationSol !== null ? [metric("Estimated SOL amount", estimatedDestinationSol, "token_amount", "SOL")] : []),
     ],
-    involvedAssets: [
-      { symbol: "USDC", role: "source_asset", valueUsd: source.verifiedExcessValueUsd },
-      { symbol: dest?.native ? "SOL" : "Crypto", role: "target_bucket" },
-    ],
+    // Involved assets section removed for Rebalance (allocation review is a bucket-level source→target move,
+    // not a per-holding list); the metrics + calculations carry the source/target context.
     calculations: [
       { label: "Allocation drift", formula: "current − target", currentValue: assessment.currentCryptoPct ?? 0, targetValue: assessment.targetCryptoPct ?? 0, difference: delta, threshold: REBALANCE_DELTA_THRESHOLD_PCT, unit: "%" },
       { label: "Safety Buffer protected", formula: "only direct-wallet USDC above the buffer is used", currentValue: source.verifiedTransferableValueUsd, targetValue: source.reservedForSafetyBufferUsd, difference: source.verifiedExcessValueUsd, unit: "USD" },
@@ -123,7 +120,7 @@ function buildStablesToCryptoCard(
     action_kind: "review_only",
     is_actionable: true,
     is_top_pick: false,
-    amount: { valueUsd: suggestedAmountUsd, label: partial ? "Suggested partial rebalance amount" : "Suggested rebalance amount" },
+    amount: { valueUsd: suggestedAmountUsd, label: partial ? "Suggested partial rebalance" : "Suggested rebalance" },
     from: { bucket: "stables" },
     to: { bucket: "crypto" },
     delta_percent: delta,
@@ -174,7 +171,6 @@ function buildCryptoToStablesCard(
 
   const delta = assessment.cryptoDeltaPct ?? 0;
   const ratio = Math.min(Math.abs(delta) / 100, 1);
-  const dest = assessment.proposedDestination; // canonical wallet USDC (registry-bound)
 
   const guardrails: SuggestionGuardrail[] = [
     { code: "pricing_available", status: "passed" },
@@ -192,7 +188,7 @@ function buildCryptoToStablesCard(
     actionKind: "review_only",
     guardrails,
     protocolSelection,
-    reason: "Your crypto allocation is above your target; available direct-wallet SOL could move toward USDC while 0.1 SOL is kept for wallet operations.",
+    reason: "Your crypto allocation is above target. Available direct-wallet SOL could help close the gap in your stablecoin allocation while keeping 0.1 SOL available for wallet operations.",
     metrics: [
       pctMetric("Current crypto allocation", assessment.currentCryptoPct ?? 0),
       pctMetric("Target crypto allocation", assessment.targetCryptoPct ?? 0),
@@ -200,17 +196,14 @@ function buildCryptoToStablesCard(
       pctMetric("Target stablecoin allocation", assessment.targetStablePct ?? 0),
       pctMetric("Allocation delta", delta),
       usdMetric("Required correction", requiredCorrectionUsd),
-      metric("Recognized wallet SOL", nativeSol.recognizedSol ?? 0, "token_amount", "SOL"),
-      metric("Operating reserve (kept)", nativeSol.requiredNativeReserveSol ?? 0, "token_amount", "SOL"),
+      metric("Verified wallet SOL", nativeSol.recognizedSol ?? 0, "token_amount", "SOL"),
+      metric("SOL operating reserve", nativeSol.requiredNativeReserveSol ?? 0, "token_amount", "SOL"),
       metric("Available SOL after reserve", nativeSol.technicallyAvailableSol ?? 0, "token_amount", "SOL"),
-      usdMetric("Available SOL value (source)", availableValueUsd),
-      usdMetric("Suggested review amount", suggestedAmountUsd),
-      metric("Approx. SOL to move (informational)", approximateSourceSol, "token_amount", "SOL"),
+      usdMetric("Available SOL value", availableValueUsd),
+      usdMetric("Suggested rebalance amount", suggestedAmountUsd),
+      metric("Estimated SOL to move", approximateSourceSol, "token_amount", "SOL"),
     ],
-    involvedAssets: [
-      { symbol: "SOL", role: "source_asset", ...(nativeSol.technicallyAvailableValueUsd !== null ? { valueUsd: nativeSol.technicallyAvailableValueUsd } : {}) },
-      { symbol: dest?.assetId === "usdc" ? "USDC" : "Stablecoins", role: "target_bucket" },
-    ],
+    // Involved assets section removed for Rebalance (see the USDC→SOL branch above) — bucket-level move.
     calculations: [
       { label: "Allocation drift", formula: "current − target", currentValue: assessment.currentCryptoPct ?? 0, targetValue: assessment.targetCryptoPct ?? 0, difference: delta, threshold: REBALANCE_DELTA_THRESHOLD_PCT, unit: "%" },
       { label: "Wallet operating reserve protected", formula: "0.1 SOL is withheld from source capacity", currentValue: nativeSol.recognizedSol ?? 0, targetValue: nativeSol.requiredNativeReserveSol ?? 0, difference: nativeSol.technicallyAvailableSol ?? 0, unit: "SOL" },
@@ -229,7 +222,7 @@ function buildCryptoToStablesCard(
     action_kind: "review_only",
     is_actionable: true,
     is_top_pick: false,
-    amount: { valueUsd: suggestedAmountUsd, label: partial ? "Suggested partial rebalance amount" : "Suggested rebalance amount" },
+    amount: { valueUsd: suggestedAmountUsd, label: partial ? "Suggested partial rebalance" : "Suggested rebalance" },
     from: { bucket: "crypto" },
     to: { bucket: "stables" },
     delta_percent: delta,

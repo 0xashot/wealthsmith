@@ -35,7 +35,7 @@ export interface StableYieldCapacityPresentation {
 
 /** Read-only, non-execution CTA. `intent` identifies a FUTURE internal review surface — never a URL. */
 export interface StableYieldCtaPresentation {
-  label: "Review Strategy";
+  label: "Review";
   intent: "open_stable_yield_review";
   executesTransaction: false;
   requiresWalletSignature: false;
@@ -69,6 +69,8 @@ export interface StableYieldCardPresentation {
   productDisplayName: string;
 
   apy: StableYieldApyPresentation;
+  /** Estimated annual income chip label (e.g. "+$170/year (5.20% APY)"); absent when APY is unavailable. */
+  apyIncomeChip?: string;
 
   isTopPick: boolean;
   actionable: true;
@@ -148,6 +150,11 @@ export interface StableYieldReviewPresentation {
   externalManagementRequired: true;
 
   cta: StableYieldCtaPresentation;
+
+  /** Read-only handoff to the protocol's own app (approved official URL); absent for an unknown protocol. */
+  externalLink?: { label: string; url: string; opensInNewTab: boolean; ctaLabel: string };
+  /** Estimated annual income (amount × sourced APY), e.g. "+$34/year"; absent when APY is unavailable. */
+  estimatedEarningsDisplay?: string;
 
   rows: StableYieldReviewRow[];
 }

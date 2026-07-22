@@ -156,6 +156,10 @@ export interface SuggestionCardState {
   };
   protocol_decision?: ProtocolDecision;
   apy?: { status: string; display: string };
+  /** Stable Yield: estimated annual income chip (e.g. "+$170/year (5.20% APY)"). */
+  apyIncomeChip?: string;
+  /** On Track Safety Buffer card: success status chip (e.g. "Protected"), rendered with a shield-check icon. */
+  statusChip?: string;
   /**
    * Optional protocol-display fields shared by Demo Mode (now) and real wallet
    * mode (later). Real wallet mode must NOT populate them until production

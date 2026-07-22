@@ -337,6 +337,14 @@ export interface ReviewAsset {
   portfolioSharePct?: number;
   actionability?: "transferable" | "unavailable" | "unresolved";
   reasonCategory?: "concentrated" | "small_position" | "part_of_aggregate_exposure";
+  /**
+   * OPTIONAL portfolio-style presentation metadata (Capital Efficiency idle-asset review): `icon` is the
+   * approved token-icon path (resolved via the shared icon registry; a neutral fallback renders when the
+   * token has no approved icon) and `mint` links the symbol to its read-only Solscan token page. Read-only
+   * identity only — never implies the asset can be moved, sold, or swapped. Absent for other categories.
+   */
+  icon?: string;
+  mint?: string;
 }
 
 export type ReviewPositionRole =
@@ -368,6 +376,10 @@ export interface ReviewPosition {
   apyDisplayState?: string;
   lifecycleLabel?: string;
   sharedExposureLabel?: string;
+  /** Approved protocol-logo fixture path (e.g. "assets/icons/protocol/jito.svg"); resolved to a URL by the UI, null-safe. */
+  iconPath?: string;
+  /** Read-only per-position review link to the protocol's own page (new tab). Never a transaction/signature. Absent when no approved manage URL exists. */
+  reviewLink?: ReviewExternalLink;
 }
 
 export interface ReviewCalculation {
@@ -531,6 +543,8 @@ export interface ReviewExternalLink {
   label: string;
   url: string;
   opensInNewTab: boolean;
+  /** Optional action-oriented label for the modal footer's primary button (e.g. "Stake SOL"). */
+  ctaLabel?: string;
 }
 
 /**
@@ -655,6 +669,19 @@ export interface EngineSuggestion {
    * downstream layer re-selects or recomputes anything.
    */
   stableYieldPlan?: StableYieldPlanSuggestionMeta;
+
+  /**
+   * Deterministic, engine-resolved presentation overrides (Step 21H — On Track multi-card). Present ONLY
+   * when a suggestion carries its own fully-resolved copy from real inputs (e.g. the On Track Goal/Expense/
+   * Buffer cards interpolate goal name, horizon, expenses, buffer months). When set they REPLACE the
+   * title_key/description_key/type mapping in the card mapper; never freeform LLM text, never invented.
+   */
+  titleOverride?: string;
+  descriptionOverride?: string;
+  /** Card `type` override so sibling cards in one category can resolve distinct icons (e.g. goal/coins/shield). */
+  cardTypeOverride?: string;
+  /** Optional success status chip rendered on the card (e.g. "Protected" with a shield-check icon). */
+  statusChip?: string;
 
   engine_version: string;
   /** Input-snapshot time (ms epoch) — supports stale detection on refresh. */

@@ -20,7 +20,7 @@ import { deriveCapitalEfficiencySuggestion } from "./capitalEfficiencySuggestion
 import { deriveStakingSuggestion } from "./stakingSuggestion";
 import { deriveStableYieldSuggestion } from "./stableYieldSuggestion";
 import { deriveDcaSuggestion } from "./dcaSuggestion";
-import { buildOnTrackCardFromAssessment } from "./onTrackSuggestion";
+import { buildOnTrackCardsFromAssessment } from "./onTrackSuggestion";
 import { deriveOnTrackAssessment, type OnTrackMaterialSignal } from "./onTrackAssessment";
 import type { SafetyBufferAssessment } from "./safetyBufferAssessment";
 import type { RebalanceAssessment } from "./rebalanceAssessment";
@@ -215,8 +215,12 @@ export function runSuggestionEngine(
         },
         generatedAt,
       });
-      const onTrackCard = buildOnTrackCardFromAssessment(onTrackAssessment, generatedAt);
-      if (onTrackCard) suggestions.push(onTrackCard);
+      const onTrackCards = buildOnTrackCardsFromAssessment(
+        onTrackAssessment,
+        { financialGoal: inputs.goal.financialGoal, timeline: inputs.goal.timeline, monthlyExpensesUsd: inputs.goal.monthlyExpenses },
+        generatedAt,
+      );
+      suggestions.push(...onTrackCards);
     }
   }
 

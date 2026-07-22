@@ -17,7 +17,7 @@
  */
 import type { SuggestionCardState } from "../types/dashboard";
 import type { EngineSuggestion, SuggestionCategory } from "./engineTypes";
-import { SUGGESTION_COPY, SUGGESTIONS_PARTIAL_PRICING } from "../state/approvedCopy";
+import { SUGGESTION_COPY, SUGGESTIONS_PARTIAL_PRICING, SUGGESTION_STAKING_SELECTED_TITLE, SUGGESTION_STAKING_SELECTED_DESCRIPTION } from "../state/approvedCopy";
 import type { SuggestionReasonCode } from "./engineTypes";
 import type { ContributionPlanSuggestion } from "./contributionIntegrationTypes";
 import { buildContributionPlanCardPresentation } from "./contributionPlanPresentation";
@@ -128,9 +128,12 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
         description: c.description,
         impact_text: `Amount to review: ${c.amountDisplay}`,
         tag: c.tag,
+        // Selected protocol drives the card icon (resolveCardIcon → protocol logo, e.g. Kamino).
+        protocolName: c.protocolName,
         accessibleCtaLabel: c.accessibilityLabel,
         cta: { label: c.cta.label, action: null, executes_transaction: false, requires_wallet_signature: false, completion_on_click: false },
         apy: { status: c.apy.state, display: c.apy.display },
+        ...(c.apyIncomeChip ? { apyIncomeChip: c.apyIncomeChip } : {}),
       };
     }
   }
@@ -194,10 +197,18 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
         }
       : {};
 
+  // Staking names the selected protocol in its title/description (e.g. "Stake SOL on Jito"); the generic
+  // copy remains the fallback when no protocol is selected. Nothing else is invented.
+  const stakingProtocol = s.category === "staking" && sel?.status === "selected" ? sel.selectedProtocolName : undefined;
+  // Engine-resolved overrides (On Track multi-card) win over the copy-key mapping when present. They carry
+  // fully-resolved, deterministic copy from real inputs — never freeform text.
+  const title = s.titleOverride ?? (stakingProtocol ? SUGGESTION_STAKING_SELECTED_TITLE.replace("{protocol}", stakingProtocol) : copy(s.title_key));
+  const description = s.descriptionOverride ?? (stakingProtocol ? SUGGESTION_STAKING_SELECTED_DESCRIPTION.replace("{protocol}", stakingProtocol) : copy(s.description_key));
+
   return {
     id: s.id,
-    title: copy(s.title_key),
-    type: CARD_TYPE[s.category],
+    title,
+    type: s.cardTypeOverride ?? CARD_TYPE[s.category],
     category: CARD_CATEGORY[s.category],
     // Only the Top Pick badge for MVP; other badges are not invented.
     badge: s.is_top_pick ? "Top Pick" : "",
@@ -205,10 +216,11 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
     status,
     actionability,
     severity,
-    description: copy(s.description_key),
+    description,
     impact_text,
     disabled_reason_text: disabled ? BELOW_MIN_REASON : undefined,
     cta,
+    ...(s.statusChip ? { statusChip: s.statusChip } : {}),
     ...selectedProtocolFields,
   };
 }

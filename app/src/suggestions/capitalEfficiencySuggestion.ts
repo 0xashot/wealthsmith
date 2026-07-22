@@ -99,6 +99,9 @@ export function deriveCapitalEfficiencySuggestion(
     valueUsd: p.valueUsd as number,
     amount: p.uiAmount as number,
     role: "idle_asset",
+    // Portfolio-style identity: approved token icon (falls back when unlisted) + read-only Solscan link.
+    ...(p.icon ? { icon: p.icon } : {}),
+    ...(p.mint ? { mint: p.mint } : {}),
   }));
   const protocolSelection = notApplicableProtocolSelection("selection_not_required");
   const reviewDetails = buildReviewDetails({
@@ -108,7 +111,7 @@ export function deriveCapitalEfficiencySuggestion(
     protocolSelection,
     metrics: [
       usdMetric("Idle assets to review", eligibleIdleValueUsd),
-      metric("Idle asset count", eligible.length, "count"),
+      metric("Number of idle assets", eligible.length, "count"),
       pctMetric("Portfolio share", Math.round(idleShare * 1000) / 10),
     ],
     involvedAssets,

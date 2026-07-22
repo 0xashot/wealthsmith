@@ -16,6 +16,7 @@
 import type { EngineSuggestion, SuggestionGuardrail, SuggestionReasonCode, ReviewPosition, ReviewCalculation, ReviewLimitation } from "./engineTypes";
 import { SUGGESTION_ENGINE_VERSION, MIN_POSITION_REVIEW_USD, POSITION_CONCENTRATION_THRESHOLD, DUPLICATE_EXPOSURE_PORTFOLIO_SHARE_THRESHOLD, GUARDRAIL_STATUS_NOT_EVALUATED } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
+import { getProtocolCandidateById } from "./protocolRegistry";
 import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
 import type { PositionOptimizationAssessment, PositionOptimizationPosition, PoApyState, PoLifecycle } from "./positionOptimizationAssessment";
 import {
@@ -89,8 +90,16 @@ export function buildPositionOptimizationCardFromAssessment(assessment: Position
   const involvedPositions: ReviewPosition[] = assessment.flaggedPositions.map((p) => {
     const { reasons, sharedLabel } = positionReasons(p);
     const share = gross > 0 && p.recognizedValueUsd !== null ? round1Pct(p.recognizedValueUsd / gross) : undefined;
+    // Read-only protocol identity + review link. Fail closed: only when the protocol is a known registry
+    // entry with an approved manage URL — never an invented link, and never a transaction/signature path.
+    const registryEntry = p.protocolId ? getProtocolCandidateById(p.protocolId) : undefined;
+    const reviewLink = registryEntry?.manageUrl
+      ? { label: registryEntry.name, url: registryEntry.manageUrl, opensInNewTab: true }
+      : undefined;
     return {
       protocol: p.protocolId ?? undefined,
+      ...(p.protocolId ? { iconPath: `assets/icons/protocol/${p.protocolId}.svg` } : {}),
+      ...(reviewLink ? { reviewLink } : {}),
       symbol: p.apy.yieldMethodology === "native_staking_apy" ? "SOL" : undefined,
       ...(p.recognizedValueUsd !== null ? { valueUsd: p.recognizedValueUsd } : {}),
       // Only expose a numeric APY when it is genuinely sourced; unverified/unsupported states carry a label, not a number.

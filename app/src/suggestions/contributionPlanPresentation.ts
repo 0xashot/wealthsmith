@@ -14,12 +14,11 @@ export interface ContributionPlanCardPresentation {
   description: string;
   tag: string;
   impactText?: string;
-  ctaLabel: "Review Plan";
+  ctaLabel: "Review";
   accessibilityLabel: string;
   readOnly: true;
 }
 
-const pct1 = (n: number): string => `${(Math.round(n * 10) / 10).toFixed(1)}%`;
 const pp1 = (n: number): string => (Math.round(Math.abs(n) * 10) / 10).toFixed(1);
 
 const FREQ_LABEL: Record<string, string> = { weekly: "weekly", biweekly: "bi-weekly", monthly: "monthly", quarterly: "quarterly", occasional: "occasional" };
@@ -35,6 +34,13 @@ export function buildContributionPlanCardPresentation(d: ContributionPlanSuggest
   const freq = FREQ_LABEL[d.contributionFrequencyId ?? ""] ?? "next";
   const gap = d.gapPercentagePoints != null ? pp1(d.gapPercentagePoints) : "0.0";
   const amt = amountText(d);
+  // Whole amounts drop the ".00" (e.g. "$500"); ranges/cents are kept ("$461.53–$461.54").
+  const fmtTrim = (usd: number): string => Number.isInteger(usd) ? `$${usd.toLocaleString("en-US")}` : `$${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const amtCompact = d.amountKind === "exact" ? fmtTrim(d.exactAmountUsd as number) : `${fmtTrim(d.minimumAmountUsd as number)}–${fmtTrim(d.maximumAmountUsd as number)}`;
+  // A fixed-frequency contribution can split into a one-cent-wide range only to reconcile the annual
+  // total (e.g. $461.53–$461.54). On the compact card that reads as fake precision, so collapse it to
+  // the single representative per-contribution amount ($461.54). Genuine ranges have no representative.
+  const amtSingle = d.amountKind === "range" && d.representativeAmountUsd != null ? fmtTrim(d.representativeAmountUsd) : amtCompact;
 
   if (d.planKind === "safety_buffer") {
     const shortfall = formatUsd(d.currentBufferShortfallUsd ?? 0);
@@ -42,40 +48,30 @@ export function buildContributionPlanCardPresentation(d: ContributionPlanSuggest
     const description = d.amountKind === "exact"
       ? `Direct ${amt} from your next contribution to ${token}. Your Safety Buffer is ${shortfall} below target.`
       : `Direct ${amt} from your next contribution to ${token}. Your Safety Buffer is ${shortfall} below target.`;
-    return { title, description, tag: "Safety First", impactText: `Buffer shortfall after plan: ${formatUsd(d.projectedBufferShortfallUsd ?? 0)}`, ctaLabel: "Review Plan", accessibilityLabel: `${title}. ${description} Read-only plan. Review Plan.`, readOnly: true };
+    return { title, description, tag: "Safety First", impactText: `Buffer shortfall after plan: ${formatUsd(d.projectedBufferShortfallUsd ?? 0)}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
   }
 
   if (d.planKind === "stable_contribution") {
-    const title = `Direct Your Next Contribution to ${token}`;
+    const title = `Direct Next Contribution to ${token}`;
     const description = d.amountKind === "exact"
-      ? `Your stable allocation is ${gap} percentage points below target. Direct your next ${freq} contribution to ${token} to move it closer.`
-      : `Your stable allocation is ${gap} percentage points below target. Your next ${freq} contribution is ${amt}.`;
-    return { title, description, tag: "Allocation", impactText: impactAllocation(d), ctaLabel: "Review Plan", accessibilityLabel: `${title}. ${description} Read-only plan. Review Plan.`, readOnly: true };
+      ? `Your stablecoin allocation is ${gap} percentage points below target. Direct your next ${freq} contribution to ${token} to move closer to target.`
+      : `Your stablecoin allocation is ${gap} percentage points below target. Direct your next ${freq} contribution of ${amtSingle} to ${token}.`;
+    return { title, description, tag: "Allocation", impactText: `Direct ${amtSingle} to ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
   }
 
   if (d.planKind === "recurring_dca") {
-    const title = `Gradually Build Your ${token} Allocation`;
+    const title = `Build ${token} Gradually`;
     const description = d.contributionFrequencyId === "occasional"
-      ? `${token} is ${gap} percentage points below its target. This plan uses the ${amt} contribution you entered.`
+      ? `${token} is ${gap} percentage points below target. Use the ${amtCompact} contribution you entered to build your ${token} allocation.`
       : d.amountKind === "exact"
-        ? `${token} is ${gap} percentage points below its target. Use your next ${freq} contribution to build the position gradually.`
-        : `${token} is ${gap} percentage points below its target. Your next ${freq} contribution is ${amt}.`;
-    return { title, description, tag: "DCA", impactText: impactAllocation(d), ctaLabel: "Review Plan", accessibilityLabel: `${title}. ${description} Read-only plan. Review Plan.`, readOnly: true };
+        ? `${token} is ${gap} percentage points below target. Direct your next ${freq} contribution to ${token} to build the position gradually.`
+        : `${token} is ${gap} percentage points below target. Direct your next ${freq} contribution of ${amtSingle} to ${token}.`;
+    return { title, description, tag: "DCA", impactText: `Direct ${amtSingle} to ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
   }
 
   // staged_excess_usdc_dca
   const src = d.sourceAssetSymbol ?? "USDC";
-  const title = `Stage ${src} Into ${token}`;
-  const description = `${token} is ${gap} percentage points below its target. This plan stages ${amt} of liquid USDC above your Safety Buffer across four steps.`;
-  return { title, description, tag: "DCA", impactText: impactAllocation(d), ctaLabel: "Review Plan", accessibilityLabel: `${title}. ${description} Read-only plan. Review Plan.`, readOnly: true };
-}
-
-function impactAllocation(d: ContributionPlanSuggestionData): string | undefined {
-  if (d.currentTargetPct == null) return undefined;
-  const cur = pct1(d.currentTargetPct);
-  if (d.amountKind === "range" && d.minimumProjectedTargetPct != null && d.maximumProjectedTargetPct != null) {
-    return `${cur} → ${pct1(d.minimumProjectedTargetPct)}–${pct1(d.maximumProjectedTargetPct)} of portfolio`;
-  }
-  if (d.projectedTargetPct != null) return `${cur} → ${pct1(d.projectedTargetPct)} of portfolio`;
-  return undefined;
+  const title = `Move ${src} Into ${token}`;
+  const description = `${token} is ${gap} percentage points below target. Gradually move ${amtCompact} of liquid USDC above your Safety Buffer into ${token} across four steps.`;
+  return { title, description, tag: "DCA", impactText: `Move ${amtCompact} into ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
 }

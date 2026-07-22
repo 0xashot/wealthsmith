@@ -17,10 +17,10 @@ import Badge from "./Badge";
 import SolStakingLeaderExplanation from "./SolStakingLeaderExplanation";
 import closeUrl from "../../../assets/icons/ui/close.svg";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
+import { resolveTokenIcon, resolveProtocolIcon } from "../state/iconRegistry";
+import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
 import type {
-  ReviewAssetRole,
   ReviewMetric,
-  ReviewPositionRole,
   SuggestionReviewDetails,
 } from "../suggestions/engineTypes";
 import type { ContributionPlanReviewDetails } from "../suggestions/contributionPlanReviewDetails";
@@ -37,26 +37,6 @@ interface Props {
   onClose: () => void;
 }
 
-const ASSET_ROLE_LABELS: Record<ReviewAssetRole, string> = {
-  source_asset: "Source",
-  target_bucket: "Target",
-  idle_asset: "Idle asset",
-  long_tail_asset: "Long-tail asset",
-  stablecoin: "Stablecoin",
-  liquid_sol: "Liquid SOL",
-  buffer_asset: "Buffer asset",
-  dca_source: "Contribution source",
-};
-
-const POSITION_ROLE_LABELS: Record<ReviewPositionRole, string> = {
-  yield_position: "Yield position",
-  staked_position: "Staked position",
-  concentrated_position: "Concentrated position",
-  missing_apy_position: "Missing APY data",
-  low_yield_position: "Low reported APY",
-  duplicate_exposure_position: "Similar exposure",
-};
-
 /** Whole-dollar USD, e.g. "$8,176". No fake precision. */
 const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
 /** At most one decimal, trailing ".0" trimmed. */
@@ -64,6 +44,8 @@ const num1 = (n: number) => {
   const r = Math.round(n * 10) / 10;
   return Number.isInteger(r) ? String(r) : r.toFixed(1);
 };
+/** Token amount with thousands separators (portfolio-style), up to 6 decimals. */
+const tokenAmount = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 6 });
 
 /** Format a metric value using its kind/unit — never invents precision. */
 function formatMetric(m: ReviewMetric): string {
@@ -138,51 +120,31 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
   // layer never computes an amount/APY/projection — it only places already-formatted strings into rows.
   if (stableYieldReview) {
     const r = stableYieldReview;
-    const rowList = (rows: { label: string; value: string }[], label: string) => (
-      <dl className="review-modal__rows" aria-label={label}>
-        {rows.map((row, i) => (
-          <div key={`${row.label}-${i}`} className="review-modal__row">
-            <dt>{row.label}</dt>
-            <dd>{row.value}</dd>
-          </div>
-        ))}
-      </dl>
-    );
-    const apyValue = r.apy.display + (r.apy.sourceLabel ? ` · ${r.apy.sourceLabel}` : "") + (r.apy.checkedAtNote ? ` · ${r.apy.checkedAtNote}` : "");
+    // Whole amounts drop the ".00" (e.g. "$500"); cents are kept ("$1,234.56").
+    const amtCompact = Number.isInteger(r.amountUsd)
+      ? `$${r.amountUsd.toLocaleString("en-US")}`
+      : `$${r.amountUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const whyBody = r.lane === "excess"
-      ? `${r.amountDisplay} of your direct wallet USDC is above your required Safety Buffer, so it is eligible to review for this strategy.`
-      : `After this amount is placed, the projection keeps your required Safety Buffer of ${r.requiredBufferDisplay} covered.`;
-    const strategyRows = [
-      { label: "Amount to review", value: r.amountDisplay },
-      { label: "Asset", value: "USDC" },
-      { label: "Protocol", value: r.protocolName },
-      { label: "Strategy", value: r.productDisplayName },
-      { label: "Action", value: r.actionMode === "add_to_existing_strategy" ? "Add to existing strategy" : "Start a new position" },
-      { label: "Current position", value: r.currentPositionContext.positionStatusLabel },
-      { label: "Product identifier", value: r.productAddress },
+      ? `${amtCompact} of your direct-wallet USDC is above your required Safety Buffer, so you can review allocating it to this strategy.`
+      : `${amtCompact} of your buffer-eligible USDC could earn yield while keeping your required Safety Buffer covered. You can review allocating it to this strategy.`;
+    // "Suggested protocol to review" — only data-backed cards. Kamino lending has no TVL / 30-day APY / unstake
+    // timing / fees (staking-only), and those are never invented; add them here only if real data appears.
+    const protocolCards: [string, string][] = [
+      ["Protocol", r.protocolName],
+      ["Current APY", r.apy.display],
     ];
-    const beforeAfterRows = [
-      { label: "Wallet USDC before", value: r.walletUsdcBeforeDisplay },
-      { label: "Wallet USDC after", value: r.walletUsdcAfterDisplay },
-      { label: "Required Safety Buffer", value: r.requiredBufferDisplay },
-      { label: "Eligible buffer before", value: r.bufferBeforeDisplay },
-      { label: "Eligible buffer after", value: r.bufferAfterDisplay },
-      { label: "Safety Buffer stays covered", value: r.bufferCoveragePreserved ? "Yes" : "No" },
-      { label: "Wallet floor preserved", value: r.walletFloorPreserved ? "Yes" : "No" },
+    const keyMetricCards: [string, string][] = [
+      ["USDC", `${r.amountUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC`],
+      ["USDC Value", r.amountDisplay],
+      ...(r.estimatedEarningsDisplay ? [["Estimated earnings", r.estimatedEarningsDisplay] as [string, string]] : []),
     ];
-    const yieldRows = [
-      { label: "APY", value: apyValue },
-      { label: "Deposit capacity", value: `${r.capacity.boundDisplay} — ${r.capacity.note}` },
-      { label: "Minimum", value: r.effectiveMinimumDisplay },
-      { label: "Maximum", value: r.effectiveMaximumDisplay },
-    ];
+    const ext = r.externalLink;
     return (
       <div className="modal-scrim" onClick={onClose}>
         <div ref={dialogRef} className="modal review-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={reasonId} onKeyDown={onKeyDown} onClick={(e) => e.stopPropagation()}>
           <div className="modal__header">
             <div className="review-modal__heading">
               <div className="review-modal__eyebrow">
-                <p className="review-modal__category">Stable Yield · read-only</p>
                 {isTopPick && <Badge label="Top Pick" tone="info" />}
               </div>
               <h2 id={titleId} className="modal__title">{r.title}</h2>
@@ -192,32 +154,73 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </button>
           </div>
           <div className="review-modal__body">
-            <section className="review-modal__section" aria-label="Recommendation">
-              <p id={reasonId} className="modal__intro">{r.summary}</p>
-            </section>
-            <section className="review-modal__section" aria-label="Strategy">
-              <h3 className="review-modal__section-title">Strategy</h3>
-              {rowList(strategyRows, "Strategy")}
-            </section>
             <section className="review-modal__section" aria-label="Why this fits your plan">
               <h3 className="review-modal__section-title">Why this fits your plan</h3>
-              <p className="modal__intro">{whyBody}</p>
+              <p id={reasonId} className="modal__intro">{whyBody}</p>
             </section>
-            <section className="review-modal__section" aria-label="Before and after">
-              <h3 className="review-modal__section-title">Before and after</h3>
-              {rowList(beforeAfterRows, "Before and after")}
+            <section className="review-modal__section" aria-label="Suggested protocol to review">
+              <h3 className="review-modal__section-title">Suggested protocol to review</h3>
+              <dl className="review-modal__metrics">
+                {protocolCards.map(([label, value]) => (
+                  <div key={label} className="review-modal__metric">
+                    <dt className="review-modal__metric-label">{label}</dt>
+                    <dd className="review-modal__metric-value">{value}</dd>
+                  </div>
+                ))}
+              </dl>
             </section>
-            <section className="review-modal__section" aria-label="Yield and capacity">
-              <h3 className="review-modal__section-title">Yield and capacity</h3>
-              {rowList(yieldRows, "Yield and capacity")}
+            <section className="review-modal__section" aria-label="Key metrics">
+              <h3 className="review-modal__section-title">Key metrics</h3>
+              <dl className="review-modal__metrics">
+                {keyMetricCards.map(([label, value]) => (
+                  <div key={label} className="review-modal__metric">
+                    <dt className="review-modal__metric-label">{label}</dt>
+                    <dd className="review-modal__metric-value">{value}</dd>
+                  </div>
+                ))}
+              </dl>
             </section>
-            <section className="review-modal__section" aria-label="Important information">
-              <h3 className="review-modal__section-title">Important information</h3>
-              <ul className="review-modal__disclosures">
-                {r.disclosures.map((d, i) => (<li key={i}>{d}</li>))}
-              </ul>
+            <section className="review-modal__section" aria-label="Involved assets">
+              <h3 className="review-modal__section-title">Involved assets</h3>
+              <div className="portfolio-table__scroll">
+                <table className="portfolio-table">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header">Asset</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">Amount</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">USD Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="portfolio-table__cell">
+                        <span className="asset-identity">
+                          <img className="asset-identity__icon" src={resolveTokenIcon("assets/icons/token/usdc.svg").url} alt="" width={24} height={24} aria-hidden="true" />
+                          <a className="deploy-table__asset-link" href="https://solscan.io/token/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" target="_blank" rel="noopener noreferrer">USDC</a>
+                        </span>
+                      </td>
+                      <td className="portfolio-table__cell portfolio-table__cell--right"><span className="portfolio-table__value">{tokenAmount(r.amountUsd)}</span></td>
+                      <td className="portfolio-table__cell portfolio-table__cell--right"><span className="portfolio-table__value">{usd(r.amountUsd)}</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </section>
           </div>
+          {ext && (
+            <div className="review-modal__footer review-modal__footer--actions">
+              <button type="button" className="review-modal__tertiary-action" onClick={onClose}>Cancel</button>
+              <a
+                className="review-modal__primary-action"
+                href={ext.url}
+                {...(ext.opensInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                aria-label={`${ext.ctaLabel}. Opens the protocol page in a new tab. No transaction is created.`}
+              >
+                <span>{ext.ctaLabel}</span>
+                <ButtonIcon src={externalLinkUrl} />
+              </a>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -227,23 +230,12 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
   // SAME shared modal shell (no new modal component, no recalculation). Read-only; Close only.
   if (contributionReview) {
     const cr = contributionReview;
-    const rowList = (rows: { label: string; value: string }[], label: string) => (
-      <dl className="review-modal__rows" aria-label={label}>
-        {rows.map((r, i) => (
-          <div key={`${r.label}-${i}`} className="review-modal__row">
-            <dt>{r.label}</dt>
-            <dd>{r.value}</dd>
-          </div>
-        ))}
-      </dl>
-    );
     return (
       <div className="modal-scrim" onClick={onClose}>
         <div ref={dialogRef} className="modal review-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={reasonId} onKeyDown={onKeyDown} onClick={(e) => e.stopPropagation()}>
           <div className="modal__header">
             <div className="review-modal__heading">
               <div className="review-modal__eyebrow">
-                <p className="review-modal__category">Contribution plan</p>
                 {isTopPick && <Badge label="Top Pick" tone="info" />}
               </div>
               <h2 id={titleId} className="modal__title">{cr.title}</h2>
@@ -253,64 +245,23 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </button>
           </div>
           <div className="review-modal__body">
-            {cr.summaryRows.length > 0 && (
-              <section className="review-modal__section" aria-label="Summary">{rowList(cr.summaryRows, "Summary")}</section>
-            )}
-            <section className="review-modal__section" aria-label={cr.whySection.title}>
-              <h3 className="review-modal__section-title">{cr.whySection.title}</h3>
+            <section className="review-modal__section" aria-label="Why this fits your plan">
+              <h3 className="review-modal__section-title">Why this fits your plan</h3>
               <p id={reasonId} className="modal__intro">{cr.whySection.body}</p>
             </section>
-            {cr.cadenceSection && (
-              <section className="review-modal__section" aria-label={cr.cadenceSection.title}>
-                <h3 className="review-modal__section-title">{cr.cadenceSection.title}</h3>
-                {rowList(cr.cadenceSection.rows, cr.cadenceSection.title)}
-              </section>
-            )}
-            {cr.scheduleSection && (
-              <section className="review-modal__section" aria-label={cr.scheduleSection.title}>
-                <h3 className="review-modal__section-title">{cr.scheduleSection.title}</h3>
-                <ol className="review-modal__schedule">
-                  {cr.scheduleSection.steps.map((s, i) => (
-                    <li key={`${s.label}-${i}`} className="review-modal__schedule-step">
-                      <span className="review-modal__schedule-when">{s.label}</span>
-                      <span className="review-modal__schedule-amount">{s.amount}</span>
-                    </li>
+            {cr.keyMetrics.length > 0 && (
+              <section className="review-modal__section" aria-label="Key metrics">
+                <h3 className="review-modal__section-title">Key metrics</h3>
+                <dl className="review-modal__metrics">
+                  {cr.keyMetrics.map((m, i) => (
+                    <div key={`${m.label}-${i}`} className="review-modal__metric">
+                      <dt className="review-modal__metric-label">{m.label}</dt>
+                      <dd className="review-modal__metric-value">{m.value}</dd>
+                    </div>
                   ))}
-                </ol>
+                </dl>
               </section>
             )}
-            {cr.allocationSection && (
-              <section className="review-modal__section" aria-label={cr.allocationSection.title}>
-                <h3 className="review-modal__section-title">{cr.allocationSection.title}</h3>
-                {rowList(cr.allocationSection.rows, cr.allocationSection.title)}
-              </section>
-            )}
-            <section className="review-modal__section" aria-label={cr.safetyBufferSection.title}>
-              <h3 className="review-modal__section-title">{cr.safetyBufferSection.title}</h3>
-              {rowList(cr.safetyBufferSection.rows, cr.safetyBufferSection.title)}
-            </section>
-            <section className="review-modal__section" aria-label={cr.fundingSection.title}>
-              <h3 className="review-modal__section-title">{cr.fundingSection.title}</h3>
-              {rowList(cr.fundingSection.rows, cr.fundingSection.title)}
-            </section>
-            {cr.alternativeSourceSection && (
-              <section className="review-modal__section" aria-label={cr.alternativeSourceSection.title}>
-                <h3 className="review-modal__section-title">{cr.alternativeSourceSection.title}</h3>
-                {rowList(cr.alternativeSourceSection.rows, cr.alternativeSourceSection.title)}
-              </section>
-            )}
-            {cr.unallocatedSection && (
-              <section className="review-modal__section" aria-label={cr.unallocatedSection.title}>
-                <h3 className="review-modal__section-title">{cr.unallocatedSection.title}</h3>
-                {rowList(cr.unallocatedSection.rows, cr.unallocatedSection.title)}
-              </section>
-            )}
-            <section className="review-modal__section review-modal__safety" aria-label="Read-only notice">
-              <p className="review-modal__readonly-notice">{cr.readOnlyNotice}</p>
-            </section>
-          </div>
-          <div className="review-modal__footer">
-            <button type="button" className="review-modal__close-action" onClick={onClose}>{cr.closeLabel}</button>
           </div>
         </div>
       </div>
@@ -318,7 +269,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
   }
 
   if (!details) return null;
-  const { summary, metrics, involvedAssets, involvedPositions, calculations, guardrailSummary, limitations, safetyNotes } = details;
+  const { summary, metrics, involvedAssets, involvedPositions, calculations, guardrailSummary } = details;
 
   const guardrailGroups: {
     title: string;
@@ -351,7 +302,6 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         <div className="modal__header">
           <div className="review-modal__heading">
             <div className="review-modal__eyebrow">
-              <p className="review-modal__category">{summary.categoryLabel}</p>
               {isTopPick && <Badge label="Top Pick" tone="info" />}
             </div>
             <h2 id={titleId} className="modal__title">
@@ -380,36 +330,34 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
           </p>
 
           {details.protocolSelectionDisplay && (
+            /* Presented like the Key metrics grid: one card per protocol data point (Protocol + market data). */
             <section className="review-modal__section" aria-label="Suggested protocol">
-              <p className="review-modal__section-title">{details.protocolSelectionDisplay.label}</p>
-              <p className="review-modal__protocol">
-                {details.protocolSelectionDisplay.protocolName}
-                {details.protocolSelectionDisplay.assetSymbol ? ` · ${details.protocolSelectionDisplay.assetSymbol}` : ""}
-              </p>
-              {details.protocolSelectionDisplay.sourceStatusLabel && (
-                <p className="review-modal__source-status">{details.protocolSelectionDisplay.sourceStatusLabel}</p>
-              )}
-              {details.protocolSelectionDisplay.marketData && (
-                <dl className="review-modal__market">
-                  {(() => {
-                    const md = details.protocolSelectionDisplay.marketData;
-                    const rows: [string, string][] = [
+              <h3 className="review-modal__section-title">{details.protocolSelectionDisplay.label}</h3>
+              <dl className="review-modal__metrics">
+                {(() => {
+                  const disp = details.protocolSelectionDisplay;
+                  const md = disp.marketData;
+                  const cards: [string, string][] = [
+                    ["Protocol", `${disp.protocolName}${disp.assetSymbol ? ` · ${disp.assetSymbol}` : ""}`],
+                  ];
+                  if (md) {
+                    cards.push(
                       ["TVL", `$${(md.tvlUsd / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 2 })}M`],
                       ["Current APY", `${md.apyPct}%`],
                       ["30-day APY", `${md.apy30dPct}%`],
                       ["Direct unstake", `~${md.directUnstakeTimeHours} hours`],
                       ["Direct unstake fee", `${md.directUnstakeFeePct}%`],
                       ["Annual management fee", `${md.annualManagementFeePct}% on ${md.annualManagementFeeAppliesTo}`],
-                    ];
-                    return rows.map(([label, value]) => (
-                      <div key={label} className="review-modal__market-row">
-                        <dt>{label}</dt>
-                        <dd>{value}</dd>
-                      </div>
-                    ));
-                  })()}
-                </dl>
-              )}
+                    );
+                  }
+                  return cards.map(([label, value]) => (
+                    <div key={label} className="review-modal__metric">
+                      <dt className="review-modal__metric-label">{label}</dt>
+                      <dd className="review-modal__metric-value">{value}</dd>
+                    </div>
+                  ));
+                })()}
+              </dl>
             </section>
           )}
 
@@ -428,58 +376,110 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
           )}
 
           {involvedAssets.length > 0 && (
+            /* Every review modal presents involved assets like the Portfolio "Liquid Assets" table: a header
+               row (Asset / Amount / USD Value) then a token icon + a symbol linking to the read-only Solscan
+               token page (when a mint is known). Read-only identity only — never implies the asset can move. */
             <section className="review-modal__section" aria-label="Involved assets">
               <h3 className="review-modal__section-title">Involved assets</h3>
-              <ul className="review-modal__list">
-                {involvedAssets.map((a, i) => (
-                  <li key={`${a.symbol}-${i}`} className="review-modal__row">
-                    <span className="review-modal__row-main">
-                      <span className="review-modal__row-symbol">{a.symbol}</span>
-                      {a.name && a.name !== a.symbol && (
-                        <span className="review-modal__row-sub">{a.name}</span>
-                      )}
-                    </span>
-                    <span className="review-modal__row-meta">
-                      {typeof a.amount === "number" && (
-                        <span>{num1(a.amount)}</span>
-                      )}
-                      {typeof a.valueUsd === "number" && <span>{usd(a.valueUsd)}</span>}
-                      <span className="review-modal__tag">{ASSET_ROLE_LABELS[a.role]}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <div className="portfolio-table__scroll">
+                <table className="portfolio-table">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header">Asset</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">Amount</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">USD Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {involvedAssets.map((a, i) => {
+                      const iconUrl = a.icon ? resolveTokenIcon(a.icon).url : fallbackTokenUrl;
+                      const url = a.mint ? `https://solscan.io/token/${a.mint}` : undefined;
+                      return (
+                        <tr key={`${a.symbol}-${i}`}>
+                          <td className="portfolio-table__cell">
+                            <span className="asset-identity">
+                              <img className="asset-identity__icon" src={iconUrl} alt="" width={24} height={24} aria-hidden="true" />
+                              {url ? (
+                                <a className="deploy-table__asset-link" href={url} target="_blank" rel="noopener noreferrer">{a.symbol}</a>
+                              ) : (
+                                <span className="asset-identity__name">{a.symbol}</span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="portfolio-table__cell portfolio-table__cell--right">
+                            <span className="portfolio-table__value">{typeof a.amount === "number" ? tokenAmount(a.amount) : "—"}</span>
+                          </td>
+                          <td className="portfolio-table__cell portfolio-table__cell--right">
+                            <span className="portfolio-table__value">{typeof a.valueUsd === "number" ? usd(a.valueUsd) : "—"}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </section>
           )}
 
           {involvedPositions.length > 0 && (
+            /* Rendered like the Portfolio "Involved assets"/"Staked Assets" table: Protocol (logo + name
+               linking to the protocol page) / APY / USD Value / a review-only "Manage" handoff (new tab). */
             <section className="review-modal__section" aria-label="Involved positions">
               <h3 className="review-modal__section-title">Involved positions</h3>
-              <ul className="review-modal__list">
-                {involvedPositions.map((p, i) => {
-                  const main = p.protocol ?? p.name ?? p.symbol ?? "Position";
-                  const asset =
-                    p.name && p.name !== main
-                      ? p.name
-                      : p.symbol && p.symbol !== main
-                        ? p.symbol
-                        : undefined;
-                  return (
-                    <li key={`${p.symbol ?? "pos"}-${i}`} className="review-modal__row">
-                      <span className="review-modal__row-main">
-                        <span className="review-modal__row-symbol">{main}</span>
-                        {asset && <span className="review-modal__row-sub">{asset}</span>}
-                        {p.reason && <span className="review-modal__row-sub">{p.reason}</span>}
-                      </span>
-                      <span className="review-modal__row-meta">
-                        {typeof p.apy === "number" && <span>{num1(p.apy)}% APY</span>}
-                        {typeof p.valueUsd === "number" && <span>{usd(p.valueUsd)}</span>}
-                        <span className="review-modal__tag">{POSITION_ROLE_LABELS[p.role]}</span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className="portfolio-table__scroll">
+                <table className="portfolio-table">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header">Protocol</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">APY</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">USD Value</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right"><span className="sr-only">Manage</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {involvedPositions.map((p, i) => {
+                      // Approved protocol logo only — resolveProtocolIcon returns null (render nothing) when missing.
+                      const protocolIcon = p.iconPath ? resolveProtocolIcon(p.iconPath) : null;
+                      const name = p.reviewLink?.label ?? p.protocol ?? p.name ?? p.symbol ?? "Position";
+                      const url = p.reviewLink?.url;
+                      return (
+                        <tr key={`${p.protocol ?? "pos"}-${i}`}>
+                          <td className="portfolio-table__cell">
+                            <span className="asset-identity">
+                              {protocolIcon && <img className="asset-identity__icon" src={protocolIcon} alt="" width={24} height={24} aria-hidden="true" />}
+                              {url ? (
+                                <a className="deploy-table__asset-link" href={url} target="_blank" rel="noopener noreferrer">{name}</a>
+                              ) : (
+                                <span className="asset-identity__name">{name}</span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="portfolio-table__cell portfolio-table__cell--right">
+                            <span className="portfolio-table__value">{typeof p.apy === "number" ? `${num1(p.apy)}%` : "—"}</span>
+                          </td>
+                          <td className="portfolio-table__cell portfolio-table__cell--right">
+                            <span className="portfolio-table__value">{typeof p.valueUsd === "number" ? usd(p.valueUsd) : "—"}</span>
+                          </td>
+                          <td className="portfolio-table__cell portfolio-table__cell--right">
+                            {url && (
+                              <a
+                                className="portfolio-table__manage"
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={`Manage on ${name} in a new tab. No transaction is created.`}
+                              >
+                                <span>Manage</span>
+                                <ButtonIcon src={externalLinkUrl} />
+                              </a>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </section>
           )}
 
@@ -562,43 +562,10 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </section>
           )}
 
-          {limitations.length > 0 && (
-            <section className="review-modal__section" aria-label="What is not evaluated yet">
-              <h3 className="review-modal__section-title">Not evaluated yet</h3>
-              <ul className="review-modal__bullets">
-                {limitations.map((l, i) => (
-                  <li key={`${l.kind}-${i}`}>{l.text}</li>
-                ))}
-              </ul>
-            </section>
-          )}
+          {/* The generic "Not evaluated yet" limitations block and the "Safety" review-only notes block were
+              removed from every review modal by request — the page/card already frame these as read-only. */}
 
-          {safetyNotes.length > 0 && (
-            <section className="review-modal__section review-modal__safety" aria-label="Safety">
-              <h3 className="review-modal__section-title">Safety</h3>
-              <ul className="review-modal__safety-notes">
-                {safetyNotes.map((n, i) => (
-                  <li key={`${n.kind}-${i}`}>{n.text}</li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {/* READ-ONLY external handoff (Step 13J). A plain anchor the user may
-              click to open the protocol's own page in a new tab. WealthSmith never
-              auto-opens it, executes a transaction, requests a signature, or marks
-              the suggestion complete — clicking only navigates. */}
-          {details.externalLink && (
-            <a
-              className="review-modal__external"
-              href={details.externalLink.url}
-              {...(details.externalLink.opensInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-              aria-label={`${details.externalLink.label}. Opens the protocol page in a new tab. No transaction is created.`}
-            >
-              <span>{details.externalLink.label}</span>
-              <ButtonIcon src={externalLinkUrl} />
-            </a>
-          )}
+          {/* READ-ONLY external handoff (Step 13J) moved to the sticky modal footer below. */}
 
           {/* READ-ONLY dynamic "Current comparison" (Step 14Y/14Z) — the current Step 14W leader
               plus the deterministic "Why this protocol currently leads" analysis. Not activation,
@@ -694,6 +661,24 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </section>
           )}
         </div>
+        {/* Sticky footer — shown only when a read-only protocol link is available. Cancel closes the modal;
+            the primary button opens the protocol's own page in a new tab (no in-app transaction/signature). */}
+        {details.externalLink && (
+          <div className="review-modal__footer review-modal__footer--actions">
+            <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
+              Cancel
+            </button>
+            <a
+              className="review-modal__primary-action"
+              href={details.externalLink.url}
+              {...(details.externalLink.opensInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+              aria-label={`${details.externalLink.ctaLabel ?? details.externalLink.label}. Opens the protocol page in a new tab. No transaction is created.`}
+            >
+              <span>{details.externalLink.ctaLabel ?? details.externalLink.label}</span>
+              <ButtonIcon src={externalLinkUrl} />
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );

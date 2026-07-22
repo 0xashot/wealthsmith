@@ -128,11 +128,19 @@ export function buildContributionPlanCadence(
   if (explicitUsed) {
     return { mode: "explicit_current_contribution", ...(fnId ? { contributionFrequencyId: fnId } : {}), actualCalendarDatesGenerated: false };
   }
+  // The representative per-contribution amount for compact UI: the rounded average
+  // (annual goal ÷ contributions per year). When the exact split varies by one cent to reconcile
+  // the annual total, rounding lands on the amount the majority of contributions actually are.
+  const dec = frequencyNormalization?.centDecomposition;
+  const representativeCents = dec != null && dec.contributionsPerYear > 0
+    ? Math.round(dec.annualSavingGoalCents / dec.contributionsPerYear)
+    : undefined;
   return {
     mode: "recurring_contribution_template",
     ...(fnId ? { contributionFrequencyId: fnId } : {}),
     ...(frequencyNormalization?.contributionsPerYear != null ? { contributionsPerYear: frequencyNormalization.contributionsPerYear } : {}),
-    amountVariesByOneCent: (frequencyNormalization?.centDecomposition?.remainderCents ?? 0) > 0,
+    amountVariesByOneCent: (dec?.remainderCents ?? 0) > 0,
+    ...(representativeCents != null ? { representativeContributionAmountUsd: representativeCents / 100 } : {}),
     actualCalendarDatesGenerated: false,
   };
 }

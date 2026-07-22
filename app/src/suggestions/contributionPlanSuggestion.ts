@@ -84,6 +84,7 @@ function buildPayload(plan: ContributionPlan, planKind: ContributionPlanSuggesti
     ...(plan.sourceAssetId ? { sourceAssetId: plan.sourceAssetId, sourceAssetSymbol: source?.symbol ?? "USDC" } : {}),
     amountKind: plan.amount.kind,
     ...(plan.amount.kind === "exact" ? { exactAmountUsd: plan.amount.exactAmountUsd } : { minimumAmountUsd: plan.amount.minimumAmountUsd, maximumAmountUsd: plan.amount.maximumAmountUsd }),
+    ...(plan.amount.kind === "range" && plan.cadence.representativeContributionAmountUsd != null ? { representativeAmountUsd: plan.cadence.representativeContributionAmountUsd } : {}),
     ...(plan.cadence.contributionFrequencyId ? { contributionFrequencyId: plan.cadence.contributionFrequencyId } : {}),
     ...(plan.cadence.contributionsPerYear != null ? { contributionsPerYear: plan.cadence.contributionsPerYear } : {}),
     ...(plan.cadence.amountVariesByOneCent != null ? { amountVariesByOneCent: plan.cadence.amountVariesByOneCent } : {}),

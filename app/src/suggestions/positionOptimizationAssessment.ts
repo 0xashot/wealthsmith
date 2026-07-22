@@ -1,6 +1,6 @@
 /**
  * positionOptimizationAssessment — Step 20B. The canonical, NON-MOUNTED foundation for the Position
- * Optimization ("Review Existing Yield Positions") suggestion. It answers, separately and deterministically:
+ * Optimization ("Review Yield Positions") suggestion. It answers, separately and deterministically:
  * which EXISTING deployed economic positions are in review scope, whether each is counted once, whether each
  * value is authoritative and fresh, whether the portfolio denominator is authoritative (reused from the shared
  * accounting helper), whether APY is EXPECTED / sourced / fresh / comparable for the exact position family,

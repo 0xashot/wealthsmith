@@ -16,7 +16,10 @@
     "probe:stable-yield": "node scripts/probe-stable-yield-sources.mjs",
     "refresh:stable-yield-market-data": "node scripts/refresh-stable-yield-market-data.mjs",
     "publish:stable-yield-market-cache": "node scripts/publish-stable-yield-market-cache.mjs",
-    "validate:stable-yield-market-cache": "node scripts/publish-stable-yield-market-cache.mjs --validate-only"
+    "validate:stable-yield-market-cache": "node scripts/publish-stable-yield-market-cache.mjs --validate-only",
+    "market:refresh-conditions": "node scripts/refresh-market-conditions.mjs",
+    "market:validate-conditions": "node scripts/validate-market-conditions-cache.mjs",
+    "build:deploy": "npm run market:refresh-conditions && npm run build"
   },
   "dependencies": {
     "@hubbleprotocol/hubble-sdk": "^8.0.4",

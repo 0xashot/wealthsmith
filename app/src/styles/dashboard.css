@@ -971,6 +971,16 @@
   font: var(--typography-label-sm-font);
 }
 
+/* Estimated-income chip (Stable Yield) — a success-toned badge with a leading trending-up icon. */
+.suggestion-card__apy-row {
+  margin: 0;
+}
+.suggestion-card__apy-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+}
+
 .suggestion-card__cta {
   justify-self: start;
   display: inline-flex;
@@ -3775,4 +3785,50 @@
 }
 .review-modal__close-action:hover {
   background: var(--color-surface-main);
+}
+/* Sticky action footer (protocol-link modals): Cancel + a primary handoff button. Sits below the scrolling
+   body inside the bounded flex-column modal, so it stays pinned to the bottom. */
+.review-modal__footer--actions {
+  justify-content: flex-end;
+  gap: var(--spacing-inline-gap-sm);
+}
+/* Design-system tertiary (low-emphasis, text-like) button — used for Cancel beside the primary action. */
+.review-modal__tertiary-action {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-lg);
+  border-radius: var(--radius-control-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-action-tertiary-text-default);
+  font: var(--typography-button-md-font);
+  cursor: pointer;
+}
+.review-modal__tertiary-action:hover {
+  background: var(--color-action-tertiary-background-hover);
+}
+.review-modal__tertiary-action:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+.review-modal__primary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-lg);
+  border-radius: var(--radius-control-sm);
+  border: 1px solid var(--color-action-primary-background-default);
+  background: var(--color-action-primary-background-default);
+  color: var(--color-action-primary-text-default);
+  font: var(--typography-button-md-font);
+  cursor: pointer;
+  text-decoration: none;
+}
+.review-modal__primary-action:hover {
+  background: var(--color-action-primary-background-hover);
+  border-color: var(--color-action-primary-background-hover);
+}
+.review-modal__primary-action:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
 }

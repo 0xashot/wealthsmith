@@ -92,6 +92,13 @@
   color: var(--color-text-secondary);
 }
 
+/* Step 21G — the category tab panel is focusable (keyboard tab flow lands on the panel). */
+.testing-page__tabpanel:focus-visible {
+  outline: none;
+  border-radius: var(--radius-control-sm);
+  box-shadow: var(--shadow-control-focus);
+}
+
 @media (max-width: 768px) {
   .testing-page {
     padding: var(--spacing-page-padding-mobile);

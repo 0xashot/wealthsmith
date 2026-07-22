@@ -201,22 +201,22 @@ export const REAL_WALLET_VALUE_DESC =
  * emits KEYS only; this map is for the card copy mapper (later step). */
 export const SUGGESTION_BUFFER_TITLE = "Top Up Your Safety Buffer";
 export const SUGGESTION_BUFFER_DESCRIPTION =
-  "Your verified stablecoin reserve is below your Safety Buffer target. Review adding to your reserve to close the confirmed gap.";
+  "Your stablecoin reserve is below target. Add funds to fully cover your Safety Buffer before investing further.";
 /* Step 21C — canonical Safety Buffer state copy. Honest, review-only, and never treats unresolved value as zero,
  * never presents a plan amount as the total gap, and never implies immediate transfer capability. */
 export const SUGGESTION_BUFFER_RANGE_DESCRIPTION =
-  "Your verified stablecoin reserve is below target. Some additional stablecoin value is still being verified and could reduce the remaining gap.";
+  "Your stablecoin reserve is below target. Additional stablecoin value is still being verified and may reduce the remaining gap.";
 export const SUGGESTION_BUFFER_PLAN_DESCRIPTION =
-  "Your contribution plan allocates part of your next contribution toward your Safety Buffer. Your confirmed remaining gap is shown separately.";
-export const SUGGESTION_BUFFER_NEARLY_FUNDED_TITLE = "Your Safety Buffer Is Nearly Funded";
+  "Part of your next contribution is allocated to your Safety Buffer. The confirmed gap after this contribution is shown separately.";
+export const SUGGESTION_BUFFER_NEARLY_FUNDED_TITLE = "Safety Buffer Is Nearly Funded";
 export const SUGGESTION_BUFFER_NEARLY_FUNDED_DESCRIPTION =
-  "The confirmed remaining gap is below the current review threshold.";
-export const SUGGESTION_BUFFER_UNRESOLVED_TITLE = "Safety Buffer Coverage Needs Verification";
+  "The remaining gap is below the current action threshold.";
+export const SUGGESTION_BUFFER_UNRESOLVED_TITLE = "Verify Your Safety Buffer";
 export const SUGGESTION_BUFFER_UNRESOLVED_DESCRIPTION =
-  "Some stablecoin value could not be verified as immediately available, so your exact Safety Buffer gap is not yet known.";
-export const SUGGESTION_BUFFER_TARGET_UNAVAILABLE_TITLE = "Complete Your Safety Buffer Setup";
+  "Some stablecoin value has not yet been verified as available, so your exact Safety Buffer gap is still unknown.";
+export const SUGGESTION_BUFFER_TARGET_UNAVAILABLE_TITLE = "Complete Safety Buffer Setup";
 export const SUGGESTION_BUFFER_TARGET_UNAVAILABLE_DESCRIPTION =
-  "Your Safety Buffer target cannot be calculated until the required financial details are available.";
+  "Add the missing financial details so we can calculate your Safety Buffer target.";
 export const SUGGESTION_BUFFER_COVERAGE_UNAVAILABLE_TITLE = "Safety Buffer Coverage Is Unavailable";
 export const SUGGESTION_BUFFER_COVERAGE_UNAVAILABLE_DESCRIPTION =
   "We could not verify enough portfolio data to calculate your current Safety Buffer coverage.";
@@ -228,43 +228,62 @@ export const SUGGESTION_REBALANCE_UNDERWEIGHT_DESCRIPTION =
 /* Step 18D — phase-one stables→crypto copy: names the verified USDC source, the SOL destination, and the
  * protected Safety Buffer; distinguishes full vs partial correction. Review-only; no execution/guarantee. */
 export const SUGGESTION_REBALANCE_STABLES_FULL_DESCRIPTION =
-  "Your stablecoin allocation is above your target. Consider directing verified excess USDC toward SOL while keeping your Safety Buffer covered.";
+  "Your stablecoin allocation is above target. Consider moving part of your verified excess USDC into SOL while keeping your Safety Buffer fully covered.";
 export const SUGGESTION_REBALANCE_STABLES_PARTIAL_DESCRIPTION =
-  "Your stablecoin allocation is above your target. Verified excess USDC could reduce part of the gap toward SOL while keeping your Safety Buffer covered.";
+  "Your stablecoin allocation is above target. Use verified excess USDC to partially close the gap in your SOL allocation while keeping your Safety Buffer covered.";
 /* Step 18F — phase-one crypto→stables copy: names the direct-wallet SOL source, the USDC destination, and
  * the protected 0.1 SOL operating reserve; distinguishes full vs partial correction. Review-only; no
  * execution/guarantee, no received-USDC amount, no route/slippage. Dynamic amounts live in supporting data. */
 export const SUGGESTION_REBALANCE_CRYPTO_FULL_DESCRIPTION =
-  "Your crypto allocation is above your target. Consider redirecting direct-wallet SOL value toward USDC while keeping 0.1 SOL available for wallet operations.";
+  "Your crypto allocation is above target. Consider moving part of your direct-wallet SOL into USDC while keeping 0.1 SOL available for wallet activity.";
 export const SUGGESTION_REBALANCE_CRYPTO_PARTIAL_DESCRIPTION =
-  "Your crypto allocation is above your target. Available direct-wallet SOL could reduce part of the gap toward USDC while keeping 0.1 SOL available for wallet operations.";
+  "Your crypto allocation is above target. Available direct-wallet SOL could partially close the gap in your stablecoin allocation while keeping 0.1 SOL available for wallet operations.";
 /* Step 21E — the On Track claim is NARROWED to match the exact evaluated scope (Safety Buffer verified complete +
  * canonical crypto allocation inside the ±10pp review range). It must never imply overall plan/portfolio health,
  * goal/contribution progress, "no changes needed", or that unevaluated dimensions are healthy. */
 export const SUGGESTION_ON_TRACK_TITLE = "Your Safety Buffer and Allocation Are Within Range";
 export const SUGGESTION_ON_TRACK_DESCRIPTION =
   "Your Safety Buffer is fully funded, and your crypto allocation is within the current review range.";
+/* Step 21H — On Track multi-card informational set (shown together only when the narrow On Track scope is
+ * verified). Cards 1 & 2 are review PROMPTS (they invite the user to re-check inputs WealthSmith cannot verify),
+ * card 3 states only the verified Safety Buffer completeness. {placeholders} are interpolated from real inputs;
+ * a card is omitted (fail closed) when its value is unknown — never a placeholder or invented figure. */
+export const SUGGESTION_ON_TRACK_GOAL_TITLE = "Goal Check: {goal}?";
+export const SUGGESTION_ON_TRACK_GOAL_DESCRIPTION =
+  "Your plan is set for a {horizon} horizon. If that has changed, we can recalibrate your risk level.";
+export const SUGGESTION_ON_TRACK_EXPENSE_TITLE = "Expense Benchmark";
+export const SUGGESTION_ON_TRACK_EXPENSE_DESCRIPTION =
+  "Your plan assumes {expenses}/mo in expenses. Is this still accurate, or has your cost of living shifted?";
+export const SUGGESTION_ON_TRACK_BUFFER_TITLE = "Safety Buffer: 100% Funded";
+export const SUGGESTION_ON_TRACK_BUFFER_DESCRIPTION =
+  "You have {months} months of expenses secured in USDC. This protects your growth assets from market volatility.";
+export const SUGGESTION_ON_TRACK_BUFFER_CHIP = "Protected";
 /* Copy for the full suggestion category set. Non-advisory, non-promissory,
  * non-transactional. */
 export const SUGGESTION_CAPITAL_EFFICIENCY_TITLE = "Review Idle Assets";
 export const SUGGESTION_CAPITAL_EFFICIENCY_DESCRIPTION =
-  "Some assets may not be contributing to your current plan.";
+  "Some assets are not currently contributing to your plan and may be worth reviewing.";
 export const SUGGESTION_STAKING_TITLE = "Put Idle SOL to Work";
 export const SUGGESTION_STAKING_DESCRIPTION =
   "You have liquid SOL that may be eligible for staking or liquid staking.";
+/* When a protocol is selected (e.g. the JitoSOL read-only beta), the card names it. `{protocol}` is replaced
+ * with the selected protocol name in the card mapper; the generic copy above is the no-protocol fallback. */
+export const SUGGESTION_STAKING_SELECTED_TITLE = "Stake SOL on {protocol}";
+export const SUGGESTION_STAKING_SELECTED_DESCRIPTION =
+  "You have liquid SOL that could earn staking rewards through {protocol}.";
 export const SUGGESTION_STABLE_YIELD_TITLE = "Put Stablecoins to Work";
 export const SUGGESTION_STABLE_YIELD_DESCRIPTION =
   "You have liquid stablecoins that may be eligible for conservative yield options while still supporting your Safety Buffer.";
-export const SUGGESTION_POSITION_OPTIMIZATION_TITLE = "Review Existing Yield Positions";
+export const SUGGESTION_POSITION_OPTIMIZATION_TITLE = "Review Yield Positions";
 /* Step 20C — neutral description covering ALL trigger families (incl. shared underlying exposure). Never
  * implies a position is defective, and never an instruction to exit/switch/withdraw. */
 export const SUGGESTION_POSITION_OPTIMIZATION_DESCRIPTION =
-  "Some existing positions may deserve review based on yield data, concentration, or shared underlying exposure.";
+  "Some positions may be worth reviewing because of lower yields, concentration, or overlapping exposure to the same assets.";
 /* Step 20C — review-oriented trigger wording + per-position reasons + APY display labels + limitations. */
-export const SUGGESTION_PO_REASON_MISSING_APY = "Current APY data could not be verified for one or more supported positions.";
-export const SUGGESTION_PO_REASON_LOW_YIELD = "One or more positions have a fresh, comparable sourced APY below the review threshold.";
-export const SUGGESTION_PO_REASON_CONCENTRATION = "A single deployed position represents a substantial share of your gross portfolio assets.";
-export const SUGGESTION_PO_REASON_SHARED = "Multiple positions are tied to the same underlying asset.";
+export const SUGGESTION_PO_REASON_MISSING_APY = "Current APY data could not be verified for one or more supported positions. Review the flagged positions and confirm the latest yield information.";
+export const SUGGESTION_PO_REASON_LOW_YIELD = "One or more positions have a verified, comparable APY below the review threshold. Review them to compare their current yield with other eligible options.";
+export const SUGGESTION_PO_REASON_CONCENTRATION = "A single deployed position makes up a large share of your portfolio. Review it to assess its yield and concentration.";
+export const SUGGESTION_PO_REASON_SHARED = "Multiple positions have exposure to the same underlying asset. Review them to understand your combined exposure and concentration.";
 export const SUGGESTION_PO_POS_MISSING_APY = "Current APY data unavailable";
 export const SUGGESTION_PO_POS_LOW_YIELD = "Fresh comparable APY below review threshold";
 export const SUGGESTION_PO_POS_CONCENTRATION = "High single-position share";
@@ -283,10 +302,10 @@ export const SUGGESTION_DCA_DESCRIPTION =
   "Your crypto allocation is below target. You may be able to use future contributions to build exposure gradually.";
 export const SUGGESTION_TRIM_TITLE = "Review Long-Tail Assets";
 export const SUGGESTION_TRIM_DESCRIPTION =
-  "Some non-core wallet assets may deserve review because they make up a meaningful part of your portfolio.";
+  "Some non-core assets make up a meaningful share of your portfolio and may be worth reviewing.";
 /* Step 19C — review-oriented Trim wording (never an instruction to sell/remove/consolidate). Trigger
  * explanations + transferability limitations for the canonical Trim review details. */
-export const SUGGESTION_TRIM_REASON_AGGREGATE = "Non-core tokens collectively represent a meaningful share of your portfolio.";
+export const SUGGESTION_TRIM_REASON_AGGREGATE = "Non-core assets make up a meaningful share of your portfolio and may be worth reviewing.";
 export const SUGGESTION_TRIM_REASON_CONCENTRATION = "A non-core token represents a meaningful share of your portfolio.";
 export const SUGGESTION_TRIM_REASON_SMALL = "Several small non-core positions add complexity worth reviewing.";
 export const SUGGESTION_TRIM_EXPLAIN_AGGREGATE = "Non-core holdings collectively exceed the review threshold.";

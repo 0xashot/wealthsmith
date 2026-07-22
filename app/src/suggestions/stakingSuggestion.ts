@@ -143,7 +143,7 @@ export function deriveStakingSuggestion(
       });
       // Read-only external handoff (Step 13J): a user-click link to Jito's staking
       // page in a new tab. Never auto-opened, never a transaction/signature.
-      externalLink = getJitoSolExternalStakingLink();
+      externalLink = { ...getJitoSolExternalStakingLink(), ctaLabel: "Stake SOL" };
       // Read-only "alternatives to review" (Steps 14L/14M/14N): approved mSOL, JupSOL, and
       // bSOL are shown for review only alongside the selected JitoSOL. None is
       // selected/winner and none has an execution path. Freshness is relative to
@@ -172,6 +172,8 @@ export function deriveStakingSuggestion(
     actionKind: "review_only",
     guardrails,
     protocolSelection,
+    // Name the selected protocol in the modal title, matching the card ("Stake SOL on Jito").
+    ...(protocolSelection.status === "selected" && protocolSelection.selectedProtocolName ? { title: `Stake SOL on ${protocolSelection.selectedProtocolName}` } : {}),
     ...(protocolSelectionDisplay ? { protocolSelectionDisplay } : {}),
     ...(safetyNotesOverride ? { safetyNotesOverride } : {}),
     ...(routeEvaluationDisplay ? { routeEvaluationDisplay } : {}),
@@ -179,12 +181,12 @@ export function deriveStakingSuggestion(
     ...(otherProtocolsToReview ? { otherProtocolsToReview } : {}),
     metrics: [
       metric("Liquid SOL", Math.round(totalLiquidSol * 10000) / 10000, "token_amount", "SOL"),
-      metric("SOL reserve kept", SOL_FEE_RESERVE, "token_amount", "SOL"),
-      metric("Eligible SOL to review", Math.round(eligibleSol * 10000) / 10000, "token_amount", "SOL"),
-      usdMetric("Eligible value to review", eligibleValueUsd),
+      metric("SOL operating reserve", SOL_FEE_RESERVE, "token_amount", "SOL"),
+      metric("SOL eligible for staking", Math.round(eligibleSol * 10000) / 10000, "token_amount", "SOL"),
+      usdMetric("Eligible SOL value", eligibleValueUsd),
     ],
     involvedAssets: [
-      { symbol: "SOL", valueUsd: eligibleValueUsd, amount: eligibleSol, role: "liquid_sol" },
+      { symbol: "SOL", valueUsd: eligibleValueUsd, amount: eligibleSol, role: "liquid_sol", mint: "So11111111111111111111111111111111111111112", icon: "assets/icons/token/sol.svg" },
     ],
     calculations: [
       {
@@ -212,7 +214,7 @@ export function deriveStakingSuggestion(
 
     amount: {
       valueUsd: eligibleValueUsd,
-      label: "Eligible SOL to review",
+      label: "Eligible SOL value",
     },
     // Token side of the review (no protocol chosen — that's a later step).
     from: { symbol: "SOL", bucket: "crypto" },

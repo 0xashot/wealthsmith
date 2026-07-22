@@ -105,6 +105,14 @@ export interface ContributionPlanCadence {
 
   amountVariesByOneCent?: boolean;
 
+  /**
+   * When a fixed-frequency contribution splits into a one-cent-wide range (e.g. $461.53–$461.54)
+   * only to reconcile the annual total, this is the single representative per-contribution amount
+   * to surface on compact UI — the rounded average, which equals the amount the majority of
+   * contributions actually are. The exact min–max range is still available for detailed views.
+   */
+  representativeContributionAmountUsd?: number;
+
   trancheCount?: number;
   durationDays?: number;
   relativeDayOffsets?: number[];

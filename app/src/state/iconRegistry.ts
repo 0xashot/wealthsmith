@@ -10,8 +10,9 @@
  */
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
 
+// SVG is the default token-icon format; PNG is allowed for logos that only exist as raster art (e.g. WIF).
 const tokenIcons = import.meta.glob(
-  "../../../assets/icons/token/*.svg",
+  "../../../assets/icons/token/*.{svg,png}",
   { eager: true, query: "?url", import: "default" }
 ) as Record<string, string>;
 

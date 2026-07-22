@@ -17,6 +17,7 @@ import { SUGGESTION_ENGINE_VERSION, MIN_TRIM_SUGGESTION_USD, TRIM_PORTFOLIO_SHAR
 import { notApplicableProtocolSelection } from "./protocolSelection";
 import { buildReviewDetails, usdMetric, pctMetric, metric } from "./suggestionReviewDetails";
 import type { TrimAssessment } from "./trimAssessment";
+import { TOKEN_REGISTRY } from "../wallet/walletPosition";
 import {
   SUGGESTION_TRIM_REASON_AGGREGATE, SUGGESTION_TRIM_REASON_CONCENTRATION, SUGGESTION_TRIM_REASON_SMALL,
   SUGGESTION_TRIM_EXPLAIN_AGGREGATE, SUGGESTION_TRIM_EXPLAIN_CONCENTRATION, SUGGESTION_TRIM_EXPLAIN_SMALL,
@@ -85,6 +86,9 @@ export function buildTrimCardFromAssessment(assessment: TrimAssessment, generate
       ...(h.recognizedValueUsd !== null ? { valueUsd: h.recognizedValueUsd } : {}),
       ...(h.uiAmount !== null ? { amount: h.uiAmount } : {}),
       role: "long_tail_asset" as const,
+      // Portfolio-style identity: read-only Solscan link by mint + approved token icon when one exists.
+      ...(h.mint ? { mint: h.mint } : {}),
+      ...(h.mint && TOKEN_REGISTRY[h.mint]?.icon ? { icon: TOKEN_REGISTRY[h.mint]!.icon as string } : {}),
       ...(holdingShare !== undefined ? { portfolioSharePct: holdingShare } : {}),
       actionability: h.actionabilityState === "unavailable" ? "unavailable" : h.actionabilityState === "unresolved" ? "unresolved" : "transferable",
       reasonCategory: isConc ? "concentrated" : isSmall ? "small_position" : "part_of_aggregate_exposure",
@@ -101,10 +105,10 @@ export function buildTrimCardFromAssessment(assessment: TrimAssessment, generate
 
   const metrics = [
     usdMetric("Non-core value to review", total),
-    metric("Distinct holdings", assessment.candidateHoldings.length, "count"),
+    metric("Number of non-core assets", assessment.candidateHoldings.length, "count"),
     pctMetric("Portfolio share", round1Pct(share)),
-    metric("Concentrated holdings", concentratedCount, "count"),
-    metric("Small holdings", smallCount, "count"),
+    metric("Concentrated positions", concentratedCount, "count"),
+    metric("Small positions", smallCount, "count"),
     usdMetric("Transferable value", ts.transferableCandidateValueUsd),
     ...(anyUnavailable ? [usdMetric("Not currently transferable", ts.unavailableTransferabilityCandidateValueUsd)] : []),
     ...(anyUnresolved ? [usdMetric("Transferability unverified", ts.unresolvedTransferabilityCandidateValueUsd)] : []),
@@ -139,7 +143,7 @@ export function buildTrimCardFromAssessment(assessment: TrimAssessment, generate
     action_kind: "review_only",
     is_actionable: true,
     is_top_pick: false, // set only by selectTopPick
-    amount: { valueUsd: total, label: "Non-core value to review" },
+    amount: { valueUsd: total, label: "Assets to review" },
     protocolSelection,
     reviewDetails,
     // Scoring methodology unchanged; the denominator is now the AUTHORITATIVE gross-asset value (not the legacy

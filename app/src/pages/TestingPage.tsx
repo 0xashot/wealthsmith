@@ -1,343 +1,342 @@
 /**
- * TestingPage — Step 13H. A HIDDEN, fixture-only QA surface at `/testing` that
- * shows every suggestion category in the SAME shared `SuggestionCard` +
- * `SuggestionReviewModal` real wallet mode uses. It answers: "how do all
- * WealthSmith suggestion categories look in the real card and Review Details
- * modal?"
+ * TestingPage — a HIDDEN, fixture-only QA surface at `/testing`. Step 21G rebuilt it as a clean
+ * suggestion-card GALLERY: one accessible tab per suggestion category (in product order), each showing
+ * ONLY the states that actually render a card, through the SAME shared `SuggestionCard` +
+ * `SuggestionReviewModal` real wallet mode uses.
  *
- * SAFETY: fixture-only, read-only. It never connects a wallet, reads real wallet
- * data, mutates live/Demo suggestions, or enables a transaction. The card/modal
- * are the SHARED components — this file only adds a page/layout wrapper and a
- * category filter. It is not linked in navigation and not imported by any live
- * page; reachable only by opening the URL directly (and only when the route is
- * enabled — see `isTestingPageEnabled()`).
+ * Every visible card is PRODUCTION-DERIVED — each category runs its canonical production assessment/rule +
+ * card mapper (or, for Stable Yield / DCA, the production presentation pipeline) and renders the resulting
+ * card. There are no hand-built card objects, no tables, no gate/readiness/raw-state inspectors, and no
+ * "no-card" cells: this page shows finished cards and their Review modal, nothing else. Visually-identical
+ * scenarios are de-duplicated so each tab shows only meaningfully-different cards.
+ *
+ * SAFETY: fixture-only, read-only. It never connects a wallet, reads real wallet data, mutates live/Demo
+ * suggestions, or enables a transaction. It is not linked in navigation and not imported by any live page;
+ * reachable only by opening the URL directly (and only when the route is enabled — see isTestingPageEnabled()).
+ *
+ * The hand-built card fixtures in `testingPageFixtures.ts` are intentionally NOT rendered here anymore; they
+ * are retained ONLY as automated-suite fixtures (the Node fixtures runner still imports them). Nothing about
+ * the automated fixture/regression coverage depends on what this page renders.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import SuggestionCard from "../components/SuggestionCard";
 import SuggestionReviewModal from "../components/SuggestionReviewModal";
-import {
-  getTestingPageFixtures,
-  TESTING_GROUPS,
-  TESTING_PREVIEW_NOT_LIVE,
-  type TestingFixture,
-  type TestingGroup,
-} from "./testingPageFixtures";
+import type { SuggestionCardState } from "../types/dashboard";
+import { TESTING_PREVIEW_NOT_LIVE } from "./testingPageFixtures";
 import { runAllContributionTestingScenarios } from "../suggestions/contributionTestingScenarios";
 import { toSuggestionCard } from "../suggestions/toSuggestionCard";
-import { STABLE_YIELD_TESTING_CARD_FIXTURES, STABLE_YIELD_TESTING_REVIEW_FIXTURES, STABLE_YIELD_TESTING_NON_RENDER_FIXTURES, STABLE_YIELD_TESTING_FIXTURES } from "../suggestions/stableYieldTestingFixtures";
-import { DIRECT_LENDING_TESTING_ROWS, DIRECT_LENDING_PROFILE_TESTING_ROWS } from "../suggestions/directUsdcLendingTestingFixtures";
+import { STABLE_YIELD_TESTING_CARD_FIXTURES, STABLE_YIELD_TESTING_FIXTURES } from "../suggestions/stableYieldTestingFixtures";
 import { buildStableYieldPlanPresentation } from "../suggestions/yieldStrategyPlanPresentation";
-import PortfolioCompletenessBanner from "../components/PortfolioCompletenessBanner";
-import LiquidAssetsCard from "../components/LiquidAssetsCard";
-import EarningAssetsCard from "../components/EarningAssetsCard";
-import { portfolioTotalDisplay } from "../components/portfolioCompletenessUi";
-import { getPortfolioCompletenessTestingFixtures } from "./portfolioCompletenessTestingFixtures";
-import { getLiquidPositions, getStakedPositions, getProtocolPositions } from "../wallet/walletSummary";
-import { getRebalanceTestingFixtures, getNativeSolSourceTestingFixtures, getStakingConflictTestingFixtures } from "./rebalanceTestingFixtures";
+import { getRebalanceTestingFixtures } from "./rebalanceTestingFixtures";
 import { getTrimTestingFixtures } from "./trimTestingFixtures";
 import { getPositionOptimizationTestingFixtures } from "./positionOptimizationTestingFixtures";
 import { getSafetyBufferTestingFixtures } from "./safetyBufferTestingFixtures";
 import { getOnTrackTestingFixtures } from "./onTrackTestingFixtures";
+import { getCapitalEfficiencyTestingFixtures, getStakingTestingFixtures } from "./capitalEfficiencyStakingTestingFixtures";
 import "./testingPage.css";
 
-type Filter = "All" | TestingGroup;
-const FILTERS: Filter[] = ["All", ...TESTING_GROUPS];
+/** The nine suggestion categories, in the existing product order. */
+const TABS = [
+  { id: "safety_buffer", label: "Safety Buffer" },
+  { id: "rebalance", label: "Rebalance" },
+  { id: "capital_efficiency", label: "Capital Efficiency" },
+  { id: "trim", label: "Trim" },
+  { id: "staking", label: "Staking" },
+  { id: "stable_yield", label: "Stable Yield" },
+  { id: "dca", label: "DCA" },
+  { id: "position_optimization", label: "Position Optimization" },
+  { id: "on_track", label: "On Track" },
+] as const;
+type TabId = (typeof TABS)[number]["id"];
+
+/** One card to render in the gallery: a production card + a short Testing-only state label above it. */
+interface GalleryEntry {
+  key: string;
+  stateLabel: string;
+  card: SuggestionCardState;
+  /** Present only when the card supports Review (opens the shared production modal). */
+  onReview?: () => void;
+}
+
+/**
+ * A visual signature of a card's FACE (what the user sees in the gallery, outside the modal). Two entries
+ * with the same signature are visually identical and only the first is kept — so each tab shows only
+ * meaningfully-different cards (differing title / description / amount+label / status / severity / Top Pick /
+ * actionability / CTA).
+ */
+function cardFaceSignature(c: SuggestionCardState): string {
+  return [
+    c.title,
+    c.description,
+    c.impact_text,
+    c.status,
+    c.actionability,
+    c.severity,
+    String(c.is_top_pick),
+    c.cta?.label ?? "",
+    c.cta?.action ?? "",
+  ].join("§");
+}
+
+function dedupeByCardFace(entries: GalleryEntry[]): GalleryEntry[] {
+  const seenFace = new Set<string>();
+  return entries.filter((e) => {
+    const sig = cardFaceSignature(e.card);
+    if (seenFace.has(sig)) return false;
+    seenFace.add(sig);
+    return true;
+  });
+}
 
 export default function TestingPage() {
-  const fixtures = useMemo(() => getTestingPageFixtures(), []);
-  const completenessFixtures = useMemo(() => getPortfolioCompletenessTestingFixtures(), []);
-  const rebalanceFixtures = useMemo(() => getRebalanceTestingFixtures(), []);
-  const nativeSolFixtures = useMemo(() => getNativeSolSourceTestingFixtures(), []);
-  const stakingConflictFixtures = useMemo(() => getStakingConflictTestingFixtures(), []);
-  const [filter, setFilter] = useState<Filter>("All");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Step 18G — click-through for the dedicated Rebalance gallery into the SAME production review modal.
-  const [selectedRebalanceId, setSelectedRebalanceId] = useState<string | null>(null);
-  const selectedRebalance = selectedRebalanceId ? rebalanceFixtures.find((f) => f.id === selectedRebalanceId && f.card) : undefined;
-  // Step 19C — production-derived Trim gallery + click-through into the SAME production review modal.
-  const trimFixtures = useMemo(() => getTrimTestingFixtures(), []);
-  const [selectedTrimId, setSelectedTrimId] = useState<string | null>(null);
-  const selectedTrim = selectedTrimId ? trimFixtures.find((f) => f.id === selectedTrimId && f.card) : undefined;
-  // Step 20C — production-derived Position Optimization gallery + click-through into the SAME production review modal.
-  const positionOptimizationFixtures = useMemo(() => getPositionOptimizationTestingFixtures(), []);
-  const [selectedPositionOptimizationId, setSelectedPositionOptimizationId] = useState<string | null>(null);
-  const selectedPositionOptimization = selectedPositionOptimizationId ? positionOptimizationFixtures.find((f) => f.id === selectedPositionOptimizationId && f.card) : undefined;
-  // Step 21C — production-derived Safety Buffer gallery + click-through into the SAME production review modal.
+  // ---- Production-derived gallery sources (each runs the canonical assessment/rule + card mapper). ----
   const safetyBufferFixtures = useMemo(() => getSafetyBufferTestingFixtures(), []);
-  const [selectedSafetyBufferId, setSelectedSafetyBufferId] = useState<string | null>(null);
-  const selectedSafetyBuffer = selectedSafetyBufferId ? safetyBufferFixtures.find((f) => f.id === selectedSafetyBufferId && f.card && f.card.action_kind === "review_only") : undefined;
-  // Step 21E — production-derived On Track gallery (informational, no modal — the scoped claim is on the card).
+  const rebalanceFixtures = useMemo(() => getRebalanceTestingFixtures(), []);
+  const capitalEfficiencyFixtures = useMemo(() => getCapitalEfficiencyTestingFixtures(), []);
+  const trimFixtures = useMemo(() => getTrimTestingFixtures(), []);
+  const stakingFixtures = useMemo(() => getStakingTestingFixtures(), []);
+  const positionOptimizationFixtures = useMemo(() => getPositionOptimizationTestingFixtures(), []);
   const onTrackFixtures = useMemo(() => getOnTrackTestingFixtures(), []);
-
-  const visible = filter === "All" ? fixtures : fixtures.filter((f) => f.group === filter);
-
-  const selected: TestingFixture | undefined = selectedId
-    ? fixtures.find((f) => f.id === selectedId)
-    : undefined;
-
-  // Step 15H — the 30 contribution/DCA scenarios, each running the REAL pipeline (no hand-built cards).
+  // Step 15H — the DCA scenarios run the REAL contribution pipeline (no hand-built cards).
   const contributionScenarios = useMemo(() => runAllContributionTestingScenarios(), []);
-  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
-  const selectedScenario = selectedScenarioId ? contributionScenarios.find((s) => s.id === selectedScenarioId) : undefined;
 
+  const [active, setActive] = useState<TabId>("safety_buffer");
+
+  // Per-category Review selection. Switching tabs closes any open modal (see selectTab).
+  const [selectedSafetyBufferId, setSelectedSafetyBufferId] = useState<string | null>(null);
+  const [selectedRebalanceId, setSelectedRebalanceId] = useState<string | null>(null);
+  const [selectedCapitalEfficiencyId, setSelectedCapitalEfficiencyId] = useState<string | null>(null);
+  const [selectedTrimId, setSelectedTrimId] = useState<string | null>(null);
+  const [selectedStakingId, setSelectedStakingId] = useState<string | null>(null);
   const [selectedStableYieldId, setSelectedStableYieldId] = useState<string | null>(null);
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
+  const [selectedPositionOptimizationId, setSelectedPositionOptimizationId] = useState<string | null>(null);
+
+  const selectedSafetyBuffer = selectedSafetyBufferId ? safetyBufferFixtures.find((f) => f.id === selectedSafetyBufferId && f.card && f.card.action_kind === "review_only") : undefined;
+  const selectedRebalance = selectedRebalanceId ? rebalanceFixtures.find((f) => f.id === selectedRebalanceId && f.card) : undefined;
+  const selectedCapitalEfficiency = selectedCapitalEfficiencyId ? capitalEfficiencyFixtures.find((f) => f.id === selectedCapitalEfficiencyId && f.card) : undefined;
+  const selectedTrim = selectedTrimId ? trimFixtures.find((f) => f.id === selectedTrimId && f.card) : undefined;
+  const selectedStaking = selectedStakingId ? stakingFixtures.find((f) => f.id === selectedStakingId && f.card) : undefined;
+  const selectedPositionOptimization = selectedPositionOptimizationId ? positionOptimizationFixtures.find((f) => f.id === selectedPositionOptimizationId && f.card) : undefined;
+  const selectedScenario = selectedScenarioId ? contributionScenarios.find((s) => s.id === selectedScenarioId) : undefined;
   const selectedStableYield = selectedStableYieldId ? STABLE_YIELD_TESTING_FIXTURES.find((f) => f.id === selectedStableYieldId) : undefined;
   const selectedStableYieldReview = selectedStableYield?.suggestion ? buildStableYieldPlanPresentation(selectedStableYield.suggestion).review : null;
+
+  // ---- Build one gallery-entry list per tab (card-producing states only, de-duplicated). ----
+  const safetyBufferEntries = useMemo<GalleryEntry[]>(() => {
+    const base = safetyBufferFixtures
+      .filter((f) => f.card)
+      .map((f) => {
+        const isDefinite = f.card!.action_kind === "review_only";
+        return {
+          key: f.id,
+          stateLabel: f.label,
+          card: toSuggestionCard(f.card!),
+          onReview: isDefinite ? () => setSelectedSafetyBufferId(f.id) : undefined,
+        };
+      });
+    const deduped = dedupeByCardFace(base);
+    // ONE explicit Top Pick variant — the SAME production definite card with the engine's is_top_pick flag
+    // set (exactly what selectTopPick does), so the gallery shows the Top Pick visual treatment once.
+    const definite = safetyBufferFixtures.find((f) => f.card && f.card.action_kind === "review_only");
+    const topPick: GalleryEntry[] = definite
+      ? [{
+          key: `${definite.id}__top_pick`,
+          stateLabel: "Selected suggestion (Top Pick treatment)",
+          card: toSuggestionCard({ ...definite.card!, is_top_pick: true }),
+          onReview: () => setSelectedSafetyBufferId(definite.id),
+        }]
+      : [];
+    return [...topPick, ...deduped];
+  }, [safetyBufferFixtures]);
+
+  const rebalanceEntries = useMemo<GalleryEntry[]>(
+    () => dedupeByCardFace(rebalanceFixtures.filter((f) => f.card).map((f) => ({
+      key: f.id,
+      stateLabel: f.label,
+      card: toSuggestionCard(f.card!),
+      onReview: () => setSelectedRebalanceId(f.id),
+    }))),
+    [rebalanceFixtures]
+  );
+
+  const capitalEfficiencyEntries = useMemo<GalleryEntry[]>(
+    () => dedupeByCardFace(capitalEfficiencyFixtures.filter((f) => f.card).map((f) => ({
+      key: f.id,
+      stateLabel: f.label,
+      card: toSuggestionCard(f.card!),
+      onReview: () => setSelectedCapitalEfficiencyId(f.id),
+    }))),
+    [capitalEfficiencyFixtures]
+  );
+
+  const trimEntries = useMemo<GalleryEntry[]>(
+    () => dedupeByCardFace(trimFixtures.filter((f) => f.card).map((f) => ({
+      key: f.id,
+      stateLabel: f.label,
+      card: toSuggestionCard(f.card!),
+      onReview: () => setSelectedTrimId(f.id),
+    }))),
+    [trimFixtures]
+  );
+
+  const stakingEntries = useMemo<GalleryEntry[]>(
+    () => dedupeByCardFace(stakingFixtures.filter((f) => f.card).map((f) => ({
+      key: f.id,
+      stateLabel: f.label,
+      card: toSuggestionCard(f.card!),
+      onReview: () => setSelectedStakingId(f.id),
+    }))),
+    [stakingFixtures]
+  );
+
+  const stableYieldEntries = useMemo<GalleryEntry[]>(
+    () => dedupeByCardFace(STABLE_YIELD_TESTING_CARD_FIXTURES.filter((f) => f.card).map((f) => ({
+      key: f.id,
+      stateLabel: f.label,
+      card: f.card!,
+      onReview: () => setSelectedStableYieldId(f.id),
+    }))),
+    []
+  );
+
+  const dcaEntries = useMemo<GalleryEntry[]>(
+    () => dedupeByCardFace(contributionScenarios.flatMap((s) => {
+      const p = s.pipeline;
+      if (p.status !== "ready" || !p.suggestion || p.suggestion.category !== "dca") return [];
+      return [{
+        key: s.id,
+        stateLabel: s.name,
+        card: toSuggestionCard(p.suggestion),
+        onReview: () => setSelectedScenarioId(s.id),
+      }];
+    })),
+    [contributionScenarios]
+  );
+
+  const positionOptimizationEntries = useMemo<GalleryEntry[]>(
+    () => dedupeByCardFace(positionOptimizationFixtures.filter((f) => f.card).map((f) => ({
+      key: f.id,
+      stateLabel: f.label,
+      card: toSuggestionCard(f.card!),
+      onReview: () => setSelectedPositionOptimizationId(f.id),
+    }))),
+    [positionOptimizationFixtures]
+  );
+
+  // On Track is INFORMATIONAL: no Review control, no modal — the scoped claim is on the card itself. Each eligible
+  // state now emits up to three cards (Goal Check / Expense Benchmark / Safety Buffer); flatten them into entries.
+  const onTrackEntries = useMemo<GalleryEntry[]>(
+    () => dedupeByCardFace(onTrackFixtures.flatMap((f) => f.cards.map((c) => ({
+      key: `${f.id}__${c.id}`,
+      stateLabel: f.label,
+      card: toSuggestionCard(c),
+    })))),
+    [onTrackFixtures]
+  );
+
+  const entriesByTab: Record<TabId, GalleryEntry[]> = {
+    safety_buffer: safetyBufferEntries,
+    rebalance: rebalanceEntries,
+    capital_efficiency: capitalEfficiencyEntries,
+    trim: trimEntries,
+    staking: stakingEntries,
+    stable_yield: stableYieldEntries,
+    dca: dcaEntries,
+    position_optimization: positionOptimizationEntries,
+    on_track: onTrackEntries,
+  };
+
+  // ---- Tab selection (also closes any open Review modal — the modal belongs to the previous tab). ----
+  function selectTab(id: TabId) {
+    setActive(id);
+    setSelectedSafetyBufferId(null);
+    setSelectedRebalanceId(null);
+    setSelectedCapitalEfficiencyId(null);
+    setSelectedTrimId(null);
+    setSelectedStakingId(null);
+    setSelectedStableYieldId(null);
+    setSelectedScenarioId(null);
+    setSelectedPositionOptimizationId(null);
+  }
+
+  // Roving-tabindex keyboard navigation across the tab list (arrow keys + Home/End).
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  function onTabKeyDown(e: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    let next = index;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (index + 1) % TABS.length;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (index - 1 + TABS.length) % TABS.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = TABS.length - 1;
+    else return;
+    e.preventDefault();
+    selectTab(TABS[next].id);
+    tabRefs.current[next]?.focus();
+  }
+
+  const entries = entriesByTab[active];
 
   return (
     <main className="testing-page">
       <header className="testing-page__header">
         <p className="testing-page__eyebrow">{TESTING_PREVIEW_NOT_LIVE}</p>
-        <h1 className="testing-page__title">Testing</h1>
+        <h1 className="testing-page__title">Suggestion Card Gallery</h1>
         <p className="testing-page__subtext">
-          Fixture-only suggestion states for UI review. Not real wallet data. No
-          transaction is created, and no wallet is connected.
+          Production-derived suggestion cards for UI review, one tab per category. Fixture-only — not real
+          wallet data. No wallet is connected and no transaction is created.
         </p>
       </header>
 
-      <div className="testing-page__filters" role="tablist" aria-label="Suggestion groups">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            role="tab"
-            aria-selected={filter === f}
-            className={`testing-page__filter${filter === f ? " testing-page__filter--active" : ""}`}
-            onClick={() => setFilter(f)}
-          >
-            {f}
-          </button>
-        ))}
+      <div className="testing-page__filters" role="tablist" aria-label="Suggestion categories" aria-orientation="horizontal">
+        {TABS.map((t, i) => {
+          const isActive = t.id === active;
+          return (
+            <button
+              key={t.id}
+              ref={(el) => { tabRefs.current[i] = el; }}
+              type="button"
+              role="tab"
+              id={`testing-tab-${t.id}`}
+              aria-selected={isActive}
+              aria-controls={`testing-panel-${t.id}`}
+              tabIndex={isActive ? 0 : -1}
+              className={`testing-page__filter${isActive ? " testing-page__filter--active" : ""}`}
+              onClick={() => selectTab(t.id)}
+              onKeyDown={(e) => onTabKeyDown(e, i)}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
 
-      <section className="testing-page__grid" aria-label="Suggestion fixtures">
-        {visible.map((f) => (
-          <div key={f.id} className="testing-page__cell">
-            <p className="testing-page__cell-label">{f.categoryLabel}</p>
-            <SuggestionCard card={f.card} onReview={() => setSelectedId(f.id)} />
+      <section
+        role="tabpanel"
+        id={`testing-panel-${active}`}
+        aria-labelledby={`testing-tab-${active}`}
+        tabIndex={0}
+        className="testing-page__grid testing-page__tabpanel"
+      >
+        {entries.map((e) => (
+          <div key={e.key} className="testing-page__cell">
+            <p className="testing-page__cell-label">{e.stateLabel}</p>
+            {/* SuggestionCard derives its DOM element id from `card.id`; several states of one category share a
+                stable suggestion id, so we override it with the unique gallery key to keep every DOM id unique. */}
+            <SuggestionCard card={{ ...e.card, id: e.key }} onReview={e.onReview} />
           </div>
         ))}
       </section>
 
-      {selected && (
+      {/* Shared PRODUCTION review modals — one per category, fed by production reviewDetails / presentation.
+          Only the active tab's cards can open one, and switching tabs closes it (selectTab resets selection). */}
+      {selectedSafetyBuffer?.card?.reviewDetails && (
         <SuggestionReviewModal
-          details={selected.details}
-          isTopPick={selected.card.is_top_pick === true}
-          onClose={() => setSelectedId(null)}
+          details={selectedSafetyBuffer.card.reviewDetails}
+          isTopPick={selectedSafetyBuffer.card.is_top_pick === true}
+          onClose={() => setSelectedSafetyBufferId(null)}
         />
       )}
 
-      {/* Step 15H — contribution & DCA plan scenarios (T1–T30), real pipeline. */}
-      <section className="testing-page__contrib" aria-label="Contribution plan scenarios">
-        <h2 className="testing-page__section-title">Contribution &amp; DCA plans</h2>
-        <p className="testing-page__subtext">
-          Each scenario runs the real 15A–15H pipeline. Ready scenarios render the shared card and open
-          the shared review modal; blocked scenarios show deterministic diagnostics only — never a
-          recommendation card.
-        </p>
-        <div className="testing-page__contrib-grid">
-          {contributionScenarios.map((s) => {
-            const p = s.pipeline;
-            const ready = p.status === "ready" && p.suggestion != null;
-            const cp = p.suggestion?.contributionPlan;
-            const amount = cp
-              ? cp.amountKind === "exact"
-                ? `$${(cp.exactAmountUsd ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                : `$${(cp.minimumAmountUsd ?? 0).toFixed(2)}–$${(cp.maximumAmountUsd ?? 0).toFixed(2)}`
-              : "—";
-            return (
-              <div key={s.id} className="testing-page__contrib-cell">
-                <div className="testing-page__contrib-head">
-                  <span className="testing-page__badge">TEST FIXTURE</span>
-                  <span className="testing-page__contrib-id">{s.id}</span>
-                </div>
-                <p className="testing-page__contrib-name">{s.name}</p>
-                <dl className="testing-page__contrib-diag">
-                  <div><dt>Data mode</dt><dd>{p.dataMode}</dd></div>
-                  <div><dt>Pipeline</dt><dd>{p.status}</dd></div>
-                  <div><dt>Plan</dt><dd>{p.plan?.kind ?? p.planResult?.status ?? "—"}</dd></div>
-                  <div><dt>Suggestion</dt><dd>{p.suggestion ? p.suggestion.category : "none"}</dd></div>
-                  <div><dt>Purpose</dt><dd>{p.plan?.priorityPurpose ?? "—"}</dd></div>
-                  <div><dt>Source</dt><dd>{p.plan?.fundingSourceId ?? "—"}</dd></div>
-                  <div><dt>Alt sources</dt><dd>{p.plan?.alternativeFundingSourceIds.join(", ") || "—"}</dd></div>
-                  <div><dt>Target</dt><dd>{cp?.targetSymbol ?? "—"}</dd></div>
-                  <div><dt>Amount</dt><dd>{amount}</dd></div>
-                  <div><dt>Plan ID</dt><dd className="testing-page__contrib-planid">{p.plan?.planId ?? "—"}</dd></div>
-                  {p.blockers.length > 0 && <div><dt>Blockers</dt><dd>{p.blockers.join(", ")}</dd></div>}
-                </dl>
-                {ready && p.suggestion ? (
-                  <SuggestionCard card={toSuggestionCard(p.suggestion)} onReview={() => setSelectedScenarioId(s.id)} />
-                ) : (
-                  <p className="testing-page__contrib-noplan">
-                    {p.status === "no_action_required"
-                      ? "On Track — no contribution-allocation action is required. No recommendation card."
-                      : "Blocked — no recommendation card (see diagnostics above)."}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {selectedScenario?.review && (
-        <SuggestionReviewModal
-          contributionReview={selectedScenario.review}
-          isTopPick={selectedScenario.pipeline.suggestion?.is_top_pick === true}
-          onClose={() => setSelectedScenarioId(null)}
-        />
-      )}
-
-      {/* Step 16H-C — Stable Yield card + review states (injected 16H-B presentation fixtures). */}
-      <section className="testing-page__contrib" aria-label="Stable Yield suggestions">
-        <h2 className="testing-page__section-title">Stable Yield</h2>
-        <p className="testing-page__subtext">
-          Injected deterministic Stable Yield presentation fixtures (16G plan → 16H-A suggestion → 16H-B
-          card/review). Read-only: the "Review Strategy" CTA opens the shared review drawer only — never a
-          transaction, signature, deposit, or external protocol page. No production product is approved,
-          so real wallet mode shows no Stable Yield card.
-        </p>
-        <h3 className="testing-page__section-subtitle">Cards</h3>
-        <div className="testing-page__grid">
-          {STABLE_YIELD_TESTING_CARD_FIXTURES.map((f) => (
-            <div key={f.id} className="testing-page__cell">
-              <p className="testing-page__cell-label">{f.label}</p>
-              {f.card ? (
-                <SuggestionCard card={f.card} onReview={() => setSelectedStableYieldId(f.id)} />
-              ) : (
-                <p className="testing-page__contrib-noplan">Fails closed — no card rendered.</p>
-              )}
-            </div>
-          ))}
-        </div>
-        <h3 className="testing-page__section-subtitle">Review drawers</h3>
-        <div className="testing-page__grid">
-          {STABLE_YIELD_TESTING_REVIEW_FIXTURES.map((f) => (
-            <div key={f.id} className="testing-page__cell">
-              <p className="testing-page__cell-label">{f.label}</p>
-              {f.card ? (
-                <SuggestionCard card={f.card} onReview={() => setSelectedStableYieldId(f.id)} />
-              ) : (
-                <p className="testing-page__contrib-noplan">Fails closed — no card rendered.</p>
-              )}
-            </div>
-          ))}
-        </div>
-        <h3 className="testing-page__section-subtitle">Fail-closed (no card)</h3>
-        <div className="testing-page__contrib-grid">
-          {STABLE_YIELD_TESTING_NON_RENDER_FIXTURES.map((f) => (
-            <div key={f.id} className="testing-page__contrib-cell">
-              <div className="testing-page__contrib-head">
-                <span className="testing-page__badge">TEST FIXTURE</span>
-                <span className="testing-page__contrib-id">{f.id}</span>
-              </div>
-              <p className="testing-page__contrib-name">{f.label}</p>
-              <p className="testing-page__contrib-noplan">
-                {f.description} No card is rendered ({f.card === null ? "presentation suppressed" : "unexpected"}).
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {selectedStableYieldReview && (
-        <SuggestionReviewModal
-          stableYieldReview={selectedStableYieldReview}
-          isTopPick={selectedStableYield?.card?.is_top_pick === true}
-          onClose={() => setSelectedStableYieldId(null)}
-        />
-      )}
-
-      {/* Step 16H-S.2 — Direct USDC lending: all 24 governance/runtime states through the production card. */}
-      <section className="testing-page__contrib" aria-label="Direct USDC lending suggestions">
-        <h2 className="testing-page__section-title">Direct USDC lending (Kamino)</h2>
-        <p className="testing-page__subtext">
-          All 24 direct-lending states rendered through the SAME production SuggestionCard. Read-only:
-          the CTA opens details only — never a transaction, signature, deposit, or external page. Cards
-          never show a risk score or threshold; the state name, selector result, and risk disclosure are
-          shown only in these internal testing diagnostics. APY is estimated and dynamic (fixture sample).
-        </p>
-        <h3 className="testing-page__section-subtitle">States that render a card</h3>
-        <div className="testing-page__grid">
-          {DIRECT_LENDING_TESTING_ROWS.filter((r) => r.card).map((r) => (
-            <div key={r.id} className="testing-page__cell">
-              <p className="testing-page__cell-label">{r.stateId}. {r.name} — <span className="testing-page__badge">{r.selectorState}</span></p>
-              <SuggestionCard card={r.card!} onReview={() => undefined} />
-              <p className="testing-page__contrib-noplan">Risk disclosure: {r.riskDisclosure}</p>
-            </div>
-          ))}
-        </div>
-        <h3 className="testing-page__section-subtitle">Suppressed / fail-closed states (no card)</h3>
-        <div className="testing-page__contrib-grid">
-          {DIRECT_LENDING_TESTING_ROWS.filter((r) => !r.card).map((r) => (
-            <div key={r.id} className="testing-page__contrib-cell">
-              <div className="testing-page__contrib-head">
-                <span className="testing-page__badge">{r.selectorState}</span>
-                <span className="testing-page__contrib-id">#{r.stateId}</span>
-              </div>
-              <p className="testing-page__contrib-name">{r.name}</p>
-              <p className="testing-page__contrib-noplan">{r.suppressionReason}. {r.notes}</p>
-            </div>
-          ))}
-        </div>
-        {/* Step 16H-S.6 — risk-profile compatibility (Medium/High compatible; governance-derived). */}
-        <h3 className="testing-page__section-subtitle">Risk-profile compatibility (Medium/High only)</h3>
-        <div className="testing-page__grid">
-          {DIRECT_LENDING_PROFILE_TESTING_ROWS.filter((r) => r.card).map((r) => (
-            <div key={r.id} className="testing-page__cell">
-              <p className="testing-page__cell-label">{r.name} — <span className="testing-page__badge">{r.profile}</span></p>
-              <SuggestionCard card={r.card!} onReview={() => undefined} />
-            </div>
-          ))}
-        </div>
-        <div className="testing-page__contrib-grid">
-          {DIRECT_LENDING_PROFILE_TESTING_ROWS.filter((r) => !r.card).map((r) => (
-            <div key={r.id} className="testing-page__contrib-cell">
-              <div className="testing-page__contrib-head">
-                <span className="testing-page__badge">{r.profile}</span>
-                <span className="testing-page__contrib-id">{r.suppressionReason}</span>
-              </div>
-              <p className="testing-page__contrib-name">{r.name}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Step 18D — phase-one Rebalance gallery. Each fixture uses the PRODUCTION assessment + source
-          selector + card mapper + one canonical SafetyBufferCoverage. Full/partial cards render through
-          the production SuggestionCard; no-card states show the deterministic reason. Fixture-only. */}
-      <section className="testing-page__contrib" aria-label="Rebalance phase-one states">
-        <h2 className="testing-page__section-title">Rebalance (both directions: USDC ↔ SOL)</h2>
-        <p className="testing-page__subtext">
-          Two verified directions via the SAME rebalance_to_plan mapper: verified excess direct-wallet USDC → native
-          SOL (Safety Buffer protected), and available direct-wallet native SOL (minus the approved 0.1 SOL operating
-          reserve) → canonical USDC. Amount capped by both correction and verified source. Review-only; no route,
-          quote, slippage, or received-amount. within-threshold / unresolved never render a card (no legacy fallback).
-        </p>
-        <div className="testing-page__grid">
-          {rebalanceFixtures.map((f) => (
-            <div key={f.id} className="testing-page__cell">
-              <p className="testing-page__cell-label">
-                {f.label} — <span className="testing-page__badge">{f.card ? (f.card.amount?.label?.includes("partial") ? "PARTIAL" : "FULL") : `no card · ${f.assessment.direction}`}</span>
-              </p>
-              {f.card ? (
-                <SuggestionCard card={toSuggestionCard(f.card)} onReview={() => setSelectedRebalanceId(f.id)} />
-              ) : f.assessment.direction === "crypto_to_stables" ? (
-                <p className="testing-page__contrib-noplan">
-                  No Rebalance card — direction: <strong>crypto_to_stables</strong>, native-SOL source: <strong>{f.nativeSolSource.sourceEligibilityState}</strong>, recognized: <strong>{f.nativeSolSource.recognizedSol ?? "—"} SOL</strong>, reserve: <strong>0.1 SOL</strong>, available: <strong>{f.nativeSolSource.technicallyAvailableValueUsd === null ? "—" : `$${f.nativeSolSource.technicallyAvailableValueUsd}`}</strong>, material need: <strong>{String(f.material)}</strong>.{f.nativeSolSource.exclusionReasons.length > 0 ? <> Excluded: <strong>{f.nativeSolSource.exclusionReasons.join("; ")}</strong>.</> : null}
-                </p>
-              ) : (
-                <p className="testing-page__contrib-noplan">
-                  No Rebalance card — direction: <strong>{f.assessment.direction}</strong>, source: <strong>{f.source.selectionState}</strong>, material need: <strong>{String(f.material)}</strong>. Canonical coverage (shared): required ${f.coverageIdentity.requiredBufferUsd}, verified-liquid ${f.coverageIdentity.verifiedLiquidStableValueUsd}.
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Step 18G — the dedicated Rebalance gallery opens the SAME production review modal the live card uses
-          (production reviewDetails; no testing-only modal or details calculation). */}
       {selectedRebalance?.card?.reviewDetails && (
         <SuggestionReviewModal
           details={selectedRebalance.card.reviewDetails}
@@ -346,34 +345,13 @@ export default function TestingPage() {
         />
       )}
 
-      {/* Step 19C — production-derived Trim gallery. Each fixture runs the canonical TrimAssessment + production
-          card mapper; cards render through the production SuggestionCard and open the SAME production review
-          modal; no-card states show the deterministic reason. No testing-only Trim card or calculation. */}
-      <section className="testing-page__contrib" aria-label="Trim review states">
-        <h2 className="testing-page__section-title">Trim (Review Long-Tail Assets)</h2>
-        <p className="testing-page__subtext">
-          Non-core direct-wallet token review by exact mint + token program (canonical SOL/wrapped-SOL/stablecoins
-          excluded), authoritative gross-asset denominator with liabilities separate, and Token-2022 transferability
-          reported as a review limitation. Review-only; no token is selected and nothing is sold, swapped, or moved.
-          Stale / unknown / unresolved-liability / incomplete-buffer / below-threshold states never render a card.
-        </p>
-        <div className="testing-page__grid">
-          {trimFixtures.map((f) => (
-            <div key={f.id} className="testing-page__cell">
-              <p className="testing-page__cell-label">
-                {f.label} — <span className="testing-page__badge">{f.card ? `${f.card.reason_codes.filter((r) => r === "token_concentration_review" || r === "long_tail_exposure" || r === "small_position_cleanup").length} trigger(s)` : "no card"}</span>
-              </p>
-              {f.card ? (
-                <SuggestionCard card={toSuggestionCard(f.card)} onReview={() => setSelectedTrimId(f.id)} />
-              ) : (
-                <p className="testing-page__contrib-noplan">
-                  No Trim card — readiness: <strong>{f.assessment.overallReadiness.status}</strong>, candidates: <strong>{f.assessment.candidateHoldings.length}</strong>, denominator: <strong>${f.assessment.denominatorValueUsd}</strong>, total non-core: <strong>${f.assessment.totalCandidateValueUsd}</strong>{f.assessment.blockingReasons.length > 0 ? <> · reasons: <strong>{f.assessment.blockingReasons.join(", ")}</strong></> : null}.
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
+      {selectedCapitalEfficiency?.card?.reviewDetails && (
+        <SuggestionReviewModal
+          details={selectedCapitalEfficiency.card.reviewDetails}
+          isTopPick={selectedCapitalEfficiency.card.is_top_pick === true}
+          onClose={() => setSelectedCapitalEfficiencyId(null)}
+        />
+      )}
 
       {selectedTrim?.card?.reviewDetails && (
         <SuggestionReviewModal
@@ -383,38 +361,29 @@ export default function TestingPage() {
         />
       )}
 
-      {/* Step 20C — production-derived Position Optimization gallery. Each fixture runs the canonical
-          PositionOptimizationAssessment + production card mapper; cards render through the production
-          SuggestionCard and open the SAME production review modal; no-card states show the deterministic
-          readiness/trigger reason. No testing-only card or calculation. Review-only: no position is selected
-          and nothing is exited, switched, withdrawn, unstaked, or closed. */}
-      <section className="testing-page__contrib" aria-label="Position Optimization review states">
-        <h2 className="testing-page__section-title">Position Optimization (Review Existing Positions)</h2>
-        <p className="testing-page__subtext">
-          Existing yield positions counted once by exact economic identity (stake account, mint + token program, or
-          product + dedupe key), an authoritative gross-asset denominator with liabilities separate, honest APY state
-          (unavailable / no-comparison / freshness-unverified — production has no approved freshness policy, so
-          low-yield is unreachable), and exact shared-underlying grouping (not treated as an economic duplicate).
-          Review-only; no position is selected and nothing is exited, switched, withdrawn, unstaked, or closed.
-          Incomplete-buffer / unresolved-liability / duplicate-identity / below-$100 states never render a card.
-        </p>
-        <div className="testing-page__grid">
-          {positionOptimizationFixtures.map((f) => (
-            <div key={f.id} className="testing-page__cell">
-              <p className="testing-page__cell-label">
-                {f.label} — <span className="testing-page__badge">{f.card ? `${f.card.reason_codes.length} trigger(s)` : "no card"}</span>
-              </p>
-              {f.card ? (
-                <SuggestionCard card={toSuggestionCard(f.card)} onReview={() => setSelectedPositionOptimizationId(f.id)} />
-              ) : (
-                <p className="testing-page__contrib-noplan">
-                  No card — readiness: <strong>{f.assessment.overallReadiness.status}</strong>, positions: <strong>{f.assessment.canonicalPositions.length}</strong>, gross assets: <strong>${f.assessment.grossAssetValueUsd}</strong>, flagged: <strong>${f.assessment.totalFlaggedValueUsd}</strong>{f.assessment.blockingReasons.length > 0 ? <> · reasons: <strong>{f.assessment.blockingReasons.join(", ")}</strong></> : null}.
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
+      {selectedStaking?.card?.reviewDetails && (
+        <SuggestionReviewModal
+          details={selectedStaking.card.reviewDetails}
+          isTopPick={selectedStaking.card.is_top_pick === true}
+          onClose={() => setSelectedStakingId(null)}
+        />
+      )}
+
+      {selectedStableYieldReview && (
+        <SuggestionReviewModal
+          stableYieldReview={selectedStableYieldReview}
+          isTopPick={selectedStableYield?.card?.is_top_pick === true}
+          onClose={() => setSelectedStableYieldId(null)}
+        />
+      )}
+
+      {selectedScenario?.review && (
+        <SuggestionReviewModal
+          contributionReview={selectedScenario.review}
+          isTopPick={selectedScenario.pipeline.suggestion?.is_top_pick === true}
+          onClose={() => setSelectedScenarioId(null)}
+        />
+      )}
 
       {selectedPositionOptimization?.card?.reviewDetails && (
         <SuggestionReviewModal
@@ -423,180 +392,6 @@ export default function TestingPage() {
           onClose={() => setSelectedPositionOptimizationId(null)}
         />
       )}
-
-      {/* Step 21C — production-derived Safety Buffer gallery. Each fixture runs the canonical coverage +
-          SafetyBufferAssessment + production card mapper; definite-shortfall cards open the SAME production review
-          modal; informational states (below-minimum / unresolved / target-or-coverage-unavailable) render the
-          production card with no Review control; complete coverage shows the deterministic no-card reason. A
-          definite amount is the CONFIRMED minimum shortfall — never the worst case, never a plan amount. */}
-      <section className="testing-page__contrib" aria-label="Safety Buffer states">
-        <h2 className="testing-page__section-title">Safety Buffer (Top Up / Verify)</h2>
-        <p className="testing-page__subtext">
-          Verified immediately-withdrawable stablecoin coverage vs the risk-based target. A definite card amount is the
-          CONFIRMED minimum shortfall (recognized-but-unresolved stable value could reduce it); unresolved coverage
-          shows no definite amount; a below-$50 gap is informational; missing target or unclassifiable coverage is an
-          honest informational state. Review-only; no deposit, transfer, or transaction. Complete coverage shows no card.
-        </p>
-        <div className="testing-page__grid">
-          {safetyBufferFixtures.map((f) => {
-            const isDefinite = f.card?.action_kind === "review_only";
-            return (
-              <div key={f.id} className="testing-page__cell">
-                <p className="testing-page__cell-label">
-                  {f.label} — <span className="testing-page__badge">{f.card ? (isDefinite ? "review" : "informational") : "no card"}</span>
-                </p>
-                {f.card ? (
-                  <SuggestionCard card={toSuggestionCard(f.card)} onReview={isDefinite ? () => setSelectedSafetyBufferId(f.id) : undefined} />
-                ) : (
-                  <p className="testing-page__contrib-noplan">
-                    No card — presentation: <strong>{f.assessment.presentationState}</strong>, verified: <strong>${f.assessment.verifiedLiquidStableValueUsd ?? "—"}</strong>, target: <strong>${f.assessment.targetUsd ?? "—"}</strong>, confirmed gap: <strong>${f.assessment.provenMinimumShortfallUsd ?? "—"}</strong>.
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {selectedSafetyBuffer?.card?.reviewDetails && (
-        <SuggestionReviewModal
-          details={selectedSafetyBuffer.card.reviewDetails}
-          isTopPick={selectedSafetyBuffer.card.is_top_pick === true}
-          onClose={() => setSelectedSafetyBufferId(null)}
-        />
-      )}
-
-      {/* Step 21E — production-derived On Track gallery. Each fixture runs the canonical Safety Buffer + Rebalance
-          projections into the production OnTrackAssessment + card mapper. On Track is INFORMATIONAL: eligible states
-          render the scoped no-CTA card (no modal); every blocked/unresolved state shows the deterministic reason.
-          The card claims only that the Safety Buffer is verified complete and the allocation is within the ±10pp
-          review range — never overall plan health, goal progress, or "no changes needed". */}
-      <section className="testing-page__contrib" aria-label="On Track states">
-        <h2 className="testing-page__section-title">On Track (Scoped Informational Fallback)</h2>
-        <p className="testing-page__subtext">
-          The final informational fallback, shown only when the Safety Buffer is verified complete AND canonical crypto
-          allocation is inside the ±10pp Rebalance review range, over authoritative accounting, with no proven material
-          Rebalance need and no visible actionable candidate. Candidate emptiness controls visibility, never plan health;
-          goal / contribution / yield / protocol-risk / diversification remain explicitly unevaluated. No CTA, no modal.
-        </p>
-        <div className="testing-page__grid">
-          {onTrackFixtures.map((f) => (
-            <div key={f.id} className="testing-page__cell">
-              <p className="testing-page__cell-label">
-                {f.label} — <span className="testing-page__badge">{f.card ? "scoped card" : "no card"}</span>
-              </p>
-              {f.card ? (
-                <SuggestionCard card={toSuggestionCard(f.card)} />
-              ) : (
-                <p className="testing-page__contrib-noplan">
-                  No card — presentation: <strong>{f.assessment.presentationState}</strong>, buffer: <strong>{f.assessment.safetyBufferState}</strong>, allocation: <strong>{f.assessment.allocationState}</strong>, material: <strong>{String(f.assessment.materialRebalanceNeed)}</strong>, fallback: <strong>{f.assessment.fallbackState}</strong>.
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Step 18E — crypto-overweight staking-conflict policy. A PROVEN material crypto_to_stables NEED
-          suppresses an otherwise-eligible new staking suggestion (narrow only, card-independent, directional).
-          Decision is derived from the PRODUCTION assessment direction. Fixture-only; no cards created. */}
-      <section className="testing-page__contrib" aria-label="Crypto-overweight staking conflict">
-        <h2 className="testing-page__section-title">Staking conflict (crypto-overweight)</h2>
-        <p className="testing-page__subtext">
-          newStakingAllowed = existingStakingEligibility AND NOT provenMaterialCryptoToStablesNeed. Only a
-          material crypto_to_stables need suppresses a new staking suggestion; stables_to_crypto and
-          within-threshold never do, and suppression never enables staking that wasn’t already eligible.
-        </p>
-        <div className="testing-page__contrib-grid">
-          {stakingConflictFixtures.map((f) => (
-            <div key={f.id} className="testing-page__contrib-cell" style={{ display: "grid", gap: "8px" }}>
-              <div className="testing-page__contrib-head">
-                <span className="testing-page__badge">{f.newStakingAllowed ? "STAKING KEPT" : "STAKING SUPPRESSED"}</span>
-                <span className="testing-page__contrib-id">{f.id}</span>
-              </div>
-              <p className="testing-page__contrib-name">{f.label}</p>
-              <p className="testing-page__contrib-noplan">
-                direction: <strong>{f.direction}</strong> · material crypto→stables: <strong>{String(f.materialCryptoToStables)}</strong> ·
-                existing staking eligible: <strong>{String(f.existingStakingEligible)}</strong> · new staking allowed: <strong>{String(f.newStakingAllowed)}</strong>
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Step 18E — NON-MOUNTED direct-wallet native-SOL source foundation for a FUTURE crypto_to_stables
-          source. No approved native-SOL fee-reserve policy exists, so availability stays “—” (fail-closed);
-          stake / LST / wrapped SOL are excluded. Never renders a Rebalance card. Fixture-only. */}
-      <section className="testing-page__contrib" aria-label="Native-SOL source foundation">
-        <h2 className="testing-page__section-title">Native-SOL source (future crypto → stables foundation)</h2>
-        <p className="testing-page__subtext">
-          Direct-wallet native SOL only. Recognized ≠ available: with no approved fee-reserve policy the
-          technically-available amount stays “—” (never zero-reserve). Native stake, LSTs/backing, and
-          wrapped SOL are excluded. The future source gate never emits a card in this build.
-        </p>
-        <div className="testing-page__contrib-grid">
-          {nativeSolFixtures.map((f) => {
-            const a = f.assessment;
-            const fmt = (n: number | null) => (n === null ? "—" : `$${Math.round(n * 100) / 100}`);
-            return (
-              <div key={f.id} className="testing-page__contrib-cell" style={{ display: "grid", gap: "8px" }}>
-                <div className="testing-page__contrib-head">
-                  <span className="testing-page__badge">{a.sourceEligibilityState}</span>
-                  <span className="testing-page__contrib-id">{f.id}</span>
-                </div>
-                <p className="testing-page__contrib-name">{f.label}</p>
-                <p className="testing-page__contrib-noplan">
-                  recognized: <strong>{fmt(a.recognizedValueUsd)}</strong> · reserve: <strong>{fmt(a.requiredNativeReserveUsd)}</strong> ·
-                  available: <strong aria-label={a.technicallyAvailableValueUsd === null ? "not available — reserve policy or freshness unresolved" : undefined}>{fmt(a.technicallyAvailableValueUsd)}</strong> ·
-                  unresolved potential: <strong>{fmt(a.unresolvedPotentialValueUsd)}</strong>
-                </p>
-                <p className="testing-page__contrib-noplan">
-                  reserve policy: <strong>{a.reservePolicyState}</strong> · future source gate: <strong>{f.futureGate.status}</strong>
-                  {a.exclusionReasons.length > 0 ? <> · excluded: <strong>{a.exclusionReasons.join("; ")}</strong></> : null}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Step 17H.3 — Portfolio Completeness gallery. Each fixture uses the PRODUCTION completeness
-          derivation + PRODUCTION components (banner, donuts total, position-row cards). Fixture-only,
-          RPC-independent; no suggestion cards created (the gate inspector is testing information only). */}
-      <section className="testing-page__contrib" aria-label="Portfolio completeness states">
-        <h2 className="testing-page__section-title">Portfolio completeness</h2>
-        <p className="testing-page__subtext">
-          Dedicated visual states for the mounted completeness result: authoritative total vs “—”,
-          per-row unresolved reasons, and the future decision-gate inspector. Production components and
-          production derivation only.
-        </p>
-        <div className="testing-page__contrib-grid">
-          {completenessFixtures.map((f) => {
-            const total = portfolioTotalDisplay(f.completeness, "$—");
-            return (
-              <div key={f.id} className="testing-page__contrib-cell" style={{ display: "grid", gap: "12px" }}>
-                <div className="testing-page__contrib-head">
-                  <span className="testing-page__badge">TEST FIXTURE</span>
-                  <span className="testing-page__contrib-id">{f.id}</span>
-                </div>
-                <p className="testing-page__contrib-name">{f.label}</p>
-                <p className="testing-page__contrib-noplan">
-                  Total: <strong aria-label={total.authoritative ? undefined : total.ariaLabel}>{total.authoritative ? "authoritative" : total.text}</strong>
-                  {" · "}On Track: <strong>{f.completeness.onTrackState === "complete" ? "available" : "unavailable"}</strong>
-                </p>
-                <PortfolioCompletenessBanner completeness={f.completeness} />
-                <LiquidAssetsCard positions={getLiquidPositions(f.positions)} completeness={f.completeness} />
-                <EarningAssetsCard title="Yield Strategies" caption="Detected protocol/staked positions" valueHeader="Value" positions={[...getStakedPositions(f.positions), ...getProtocolPositions(f.positions)]} completeness={f.completeness} />
-                {f.id === "gate_inspector" && (
-                  <p className="testing-page__contrib-noplan">
-                    Gates — Rebalance: <strong>{f.gates.rebalance}</strong> (no cards created; Trim and Position Optimization each use their own canonical assessment gates)
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
     </main>
   );
 }
