@@ -2144,9 +2144,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   //    amount = total × 15%.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 75, 15),
         safetyBuffer: bufferFixture(5000, 1000, 3), // funded
-        allocation: allocationFixture(15000, 75, 15),
+        
       }),
       FIXTURE_GENERATED_AT
     );
@@ -2169,9 +2169,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   {
     // stableUsd 5000, targetUsd 3000 → excess 2000; deviation 15% × 15000 = 2250
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 45, -15),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 45, -15),
+        
       }),
       FIXTURE_GENERATED_AT
     );
@@ -2191,9 +2191,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // I2. Underweight but NO excess stables above the buffer → no rebalance.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 45, -15),
         safetyBuffer: bufferFixture(3000, 1000, 3), // exactly funded, zero excess
-        allocation: allocationFixture(15000, 45, -15),
+        
       }),
       FIXTURE_GENERATED_AT
     );
@@ -2207,9 +2207,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // J. Buffer funded + crypto delta below 10% → no rebalance.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 65, 5),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 65, 5),
+        
       }),
       FIXTURE_GENERATED_AT
     );
@@ -2224,7 +2224,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   //    (the Safety Buffer input is present, so nothing is "missing").
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: null }),
+      inputsFor({ allocation: null, safetyBuffer: bufferFixture(5000, 1000, 3) }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -2239,10 +2239,10 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   {
     // total 400 × 10% = $40 < $50
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(400, 70, 10),
         safetyBuffer: bufferFixture(5000, 1000, 3),
         totalUsd: 400,
-        allocation: allocationFixture(400, 70, 10),
+        
       }),
       FIXTURE_GENERATED_AT
     );
@@ -2261,9 +2261,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // M. Partial pricing + funded + overweight → warning present, rebalance appears.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 75, 15),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 75, 15),
+        
         anyUnpriced: true,
       }),
       FIXTURE_GENERATED_AT
@@ -2280,9 +2280,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   //    assets → On Track. (Empty positions so no staking/stable_yield fires.)
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 62, 5),
         safetyBuffer: bufferFixture(5000, 1000, 3), // funded
-        allocation: allocationFixture(15000, 62, 5),
+        
         positions: [cryptoPosition()],
       }),
       FIXTURE_GENERATED_AT
@@ -2300,9 +2300,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // O. Buffer NOT funded + allocation within threshold → buffer only, no On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 62, 5),
         safetyBuffer: bufferFixture(800, 1000, 3), // underfunded
-        allocation: allocationFixture(15000, 62, 5),
+        
       }),
       FIXTURE_GENERATED_AT
     );
@@ -2318,9 +2318,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // P. Buffer funded + rebalance threshold met (delta 15%) → Rebalance only.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 75, 15),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 75, 15),
+        
       }),
       FIXTURE_GENERATED_AT
     );
@@ -2337,7 +2337,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   //    (the Safety Buffer input is present, so nothing required is missing).
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: null }),
+      inputsFor({ allocation: null, safetyBuffer: bufferFixture(5000, 1000, 3) }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -2352,9 +2352,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   //    On Track. (Empty positions so no staking/stable_yield fires.)
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 62, 5),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 62, 5),
+        
         anyUnpriced: true,
         positions: [cryptoPosition()],
       }),
@@ -2371,7 +2371,7 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // S. Missing Safety Buffer → no On Track + unavailable_reason missing_data.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: null, allocation: allocationFixture(15000, 62, 5) }),
+      inputsFor({ allocation: allocationFixture(15000, 62, 5), safetyBuffer: null }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -2413,9 +2413,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // V. Funded + rebalance actionable → Rebalance is Top Pick.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 75, 15),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 75, 15),
+        
       }),
       FIXTURE_GENERATED_AT
     );
@@ -2430,9 +2430,9 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
   // W. Funded + On Track only (no deployable assets) → no Top Pick.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 62, 5),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 62, 5),
+        
         positions: [cryptoPosition()],
       }),
       FIXTURE_GENERATED_AT
@@ -2593,9 +2593,9 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
 
   // Mc. Rebalance overweight → bucket-level card, no token names invented.
   {
-    const { card } = engineCard({
+    const { card } = engineCard({ allocation: allocationFixture(15000, 75, 15),
       safetyBuffer: bufferFixture(5000, 1000, 3),
-      allocation: allocationFixture(15000, 75, 15),
+      
     });
     const noTokens = !/\b(SOL|USDC|BONK|sell|buy)\b/i.test(
       `${card?.title} ${card?.description}`
@@ -2612,9 +2612,9 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
 
   // Md. Rebalance underweight → bucket-level card, no token names invented.
   {
-    const { card } = engineCard({
+    const { card } = engineCard({ allocation: allocationFixture(15000, 45, -15),
       safetyBuffer: bufferFixture(5000, 1000, 3),
-      allocation: allocationFixture(15000, 45, -15),
+      
     });
     const noTokens = !/\b(SOL|USDC|BONK|sell|buy)\b/i.test(
       `${card?.title} ${card?.description}`
@@ -2631,9 +2631,9 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
 
   // Me. On Track → informational card, no CTA, no Top Pick.
   {
-    const { card } = engineCard({
+    const { card } = engineCard({ allocation: allocationFixture(15000, 62, 5),
       safetyBuffer: bufferFixture(5000, 1000, 3),
-      allocation: allocationFixture(15000, 62, 5),
+      
       positions: [cryptoPosition()],
     });
     add(
@@ -2905,7 +2905,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   // 9B-B. Funded + aligned (no rebalance) + eligible SOL → Staking Top Pick, no On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(10)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: fundedBuffer(), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
     const staking = r.suggestions.find((s) => s.category === "staking");
@@ -2922,7 +2922,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   // 9B-C. Funded + rebalance + eligible SOL → Rebalance first (Top Pick), Staking second.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: fundedBuffer(), allocation: offTarget(), positions: [solPosition(10)] }),
+      inputsFor({ allocation: offTarget(), safetyBuffer: fundedBuffer(), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
     const reb = r.suggestions.find((s) => s.category === "rebalance");
@@ -2939,7 +2939,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   // 9B-D. Funded + only the reserve (0.1 SOL) → no staking; aligned → On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(0.1)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: fundedBuffer(), positions: [solPosition(0.1)] }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -2953,7 +2953,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   {
     // 0.5 SOL @ $75 → eligible 0.4 SOL = $30 < $50
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(0.5)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: fundedBuffer(), positions: [solPosition(0.5)] }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -2966,9 +2966,9 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   // 9B-F. Only LSTs (JupSOL/mSOL), no liquid SOL → no staking.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: fundedBuffer(),
-        allocation: aligned(),
+        
         positions: [lstPosition("JupSOL", 100), lstPosition("mSOL", 50)],
       }),
       FIXTURE_GENERATED_AT
@@ -2979,9 +2979,9 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   // 9B-G. SOL present but unpriced → no staking, no invented amount.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: fundedBuffer(),
-        allocation: aligned(),
+        
         positions: [solPosition(10, { priced: false })],
       }),
       FIXTURE_GENERATED_AT
@@ -2992,9 +2992,9 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   // 9B-H. Liquid priced WSOL (token) → counts as liquid SOL → staking emitted.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: fundedBuffer(),
-        allocation: aligned(),
+        
         positions: [solPosition(10, { symbol: "WSOL", type: "token" })],
       }),
       FIXTURE_GENERATED_AT
@@ -3005,9 +3005,9 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   // 9B-I. Partial pricing + priced SOL → staking still emits + partial_pricing warning.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: fundedBuffer(),
-        allocation: aligned(),
+        
         positions: [solPosition(10)],
         anyUnpriced: true,
       }),
@@ -3023,7 +3023,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
   // 9B-J. Mapper renders the staking card safely.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: fundedBuffer(), allocation: aligned(), positions: [solPosition(10)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: fundedBuffer(), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
     const s = r.suggestions.find((x) => x.category === "staking");
@@ -3066,9 +3066,9 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   // 9C-A. Underfunded buffer + liquid USDC → Buffer only.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: bufferFixture(800, 1000, 3),
-        allocation: aligned(),
+        
         positions: [stablePosition("USDC", 10000)],
       }),
       FIXTURE_GENERATED_AT
@@ -3084,9 +3084,9 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   //       amount = FULL liquid wallet stable value (no buffer subtraction).
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: funded(),
-        allocation: aligned(),
+        
         positions: [stablePosition("USDC", 10000)],
       }),
       FIXTURE_GENERATED_AT
@@ -3105,9 +3105,9 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   // 9C-C. Funded + Rebalance applies + liquid USDC → Rebalance only, no stable_yield.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: offTarget(),
         safetyBuffer: funded(),
-        allocation: offTarget(),
+        
         positions: [stablePosition("USDC", 10000)],
       }),
       FIXTURE_GENERATED_AT
@@ -3122,9 +3122,9 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   // 9C-D. Funded + Staking + Stable Yield + no Rebalance → Staking first (Top Pick), stable_yield second.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: funded(),
-        allocation: aligned(),
+        
         positions: [solPosition(10), stablePosition("USDC", 10000)],
       }),
       FIXTURE_GENERATED_AT
@@ -3143,9 +3143,9 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   // 9C-E. Funded + liquid stable value < $100 → no stable_yield → On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: funded(),
-        allocation: aligned(),
+        
         positions: [stablePosition("USDC", 50)],
       }),
       FIXTURE_GENERATED_AT
@@ -3160,9 +3160,9 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   // 9C-F. Stables held in a PROTOCOL position (not liquid wallet) → no new stable_yield.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: funded(),
-        allocation: aligned(),
+        
         positions: [stablePosition("USDC", 10000, { type: "protocol", source: "kamino" })],
       }),
       FIXTURE_GENERATED_AT
@@ -3177,9 +3177,9 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   // 9C-G. Unknown stable-like wallet token (not in approved set) → no stable_yield.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: funded(),
-        allocation: aligned(),
+        
         positions: [stablePosition("USDX", 10000)], // USDX not in STABLE_SYMBOLS
       }),
       FIXTURE_GENERATED_AT
@@ -3194,9 +3194,9 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   // 9C-H. Stable price/value missing → no stable_yield, no invented amount.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: funded(),
-        allocation: aligned(),
+        
         positions: [stablePosition("USDC", 10000, { priced: false })],
       }),
       FIXTURE_GENERATED_AT
@@ -3211,9 +3211,9 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   // 9C-I. Partial pricing + priced wallet USDC → stable_yield still emits + warning.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: funded(),
-        allocation: aligned(),
+        
         positions: [stablePosition("USDC", 10000)],
         anyUnpriced: true,
       }),
@@ -3229,9 +3229,9 @@ export function runStableYieldFixtureChecks(): FixtureCheck[] {
   // 9C-J. Mapper renders the stable_yield card safely.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: funded(),
-        allocation: aligned(),
+        
         positions: [stablePosition("USDC", 10000)],
       }),
       FIXTURE_GENERATED_AT
@@ -3277,9 +3277,9 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-A. Underfunded buffer + eligible idle token → Buffer only.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: bufferFixture(800, 1000, 3),
-        allocation: aligned(),
+        
         positions: [cryptoPosition(5000)],
       }),
       FIXTURE_GENERATED_AT
@@ -3295,7 +3295,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   {
     const r = runEngineWithLegacyRebalance(
       // $400 = 2.67% share → Capital Efficiency only (below Trim's 5% threshold).
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(400)] }),
       FIXTURE_GENERATED_AT
     );
     const s = r.suggestions.find((x) => x.category === "capital_efficiency");
@@ -3311,7 +3311,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-C. Funded + Rebalance applies + idle token → Rebalance first (Top Pick), capital_efficiency second.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [cryptoPosition(400)] }),
+      inputsFor({ allocation: offTarget(), safetyBuffer: funded(), positions: [cryptoPosition(400)] }),
       FIXTURE_GENERATED_AT
     );
     const reb = r.suggestions.find((s) => s.category === "rebalance");
@@ -3325,9 +3325,9 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-D. Funded + Capital Efficiency + Staking + Stable Yield, no Rebalance → engine order, capEff Top Pick.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: funded(),
-        allocation: aligned(),
+        
         positions: [cryptoPosition(400), solPosition(10), stablePosition("USDC", 10000)],
       }),
       FIXTURE_GENERATED_AT
@@ -3343,7 +3343,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-E. Idle token value < $100 → no capital_efficiency → On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(50)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(50)] }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -3356,7 +3356,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-F. Idle token ≥ $100 but < 2% of portfolio ($200 / 15,000 = 1.3%) → no capital_efficiency.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(200)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(200)] }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -3369,7 +3369,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-G. Only liquid SOL → no capital_efficiency (staking may apply).
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -3382,7 +3382,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-H. Only liquid wallet stablecoins → no capital_efficiency (stable_yield may apply).
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -3395,7 +3395,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-I. Only deployed positions → no capital_efficiency (position_optimization may apply).
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [yieldPosition(5000, null)] }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -3421,7 +3421,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
       valueUsd: null,
     };
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [unpriced] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [unpriced] }),
       FIXTURE_GENERATED_AT
     );
     add(
@@ -3434,9 +3434,9 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-K. Partial pricing + priced idle token → capital_efficiency + warning.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: aligned(),
         safetyBuffer: funded(),
-        allocation: aligned(),
+        
         positions: [cryptoPosition(5000)],
         anyUnpriced: true,
       }),
@@ -3452,7 +3452,7 @@ export function runCapitalEfficiencyFixtureChecks(): FixtureCheck[] {
   // 9E-L. Mapper renders the capital_efficiency card safely.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(5000)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(5000)] }),
       FIXTURE_GENERATED_AT
     );
     const s = r.suggestions.find((x) => x.category === "capital_efficiency");
@@ -3501,9 +3501,9 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
   //       (4 cards), capEff Top Pick, engine order preserved.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 62, 2),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 62, 2), // no rebalance
+        // no rebalance
         positions: everything,
       }),
       FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate(), buildSyntheticPositionOptimizationCandidateForFixture()
@@ -3522,9 +3522,9 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
   //       (stable_yield suppressed), 4 cards, rebalance Top Pick.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 75, 15),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 75, 15), // rebalance applies
+        // rebalance applies
         positions: everything,
       }),
       FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate(), buildSyntheticPositionOptimizationCandidateForFixture()
@@ -3542,9 +3542,9 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
   // QA-3. Underfunded buffer overrides EVERYTHING (all else eligible) → buffer only.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 75, 15),
         safetyBuffer: bufferFixture(800, 1000, 3), // underfunded
-        allocation: allocationFixture(15000, 75, 15),
+        
         positions: everything,
       }),
       FIXTURE_GENERATED_AT
@@ -3559,17 +3559,17 @@ export function runFullQaFixtureChecks(): FixtureCheck[] {
   // QA-4. Realistic maximum card count never exceeds 4 actionable cards.
   {
     const noReb = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 62, 2),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 62, 2),
+        
         positions: everything,
       }),
       FIXTURE_GENERATED_AT
     );
     const withReb = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(15000, 75, 15),
         safetyBuffer: bufferFixture(5000, 1000, 3),
-        allocation: allocationFixture(15000, 75, 15),
+        
         positions: everything,
       }),
       FIXTURE_GENERATED_AT
@@ -3611,9 +3611,9 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
   // 9G-A. Underfunded buffer + DCA conditions otherwise true → Buffer only.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: dcaUnder(3),
         safetyBuffer: bufferFixture(800, 1000, 3),
-        allocation: dcaUnder(3),
+        
         positions: [cryptoPosition(100)],
       }),
       FIXTURE_GENERATED_AT
@@ -3624,7 +3624,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
   // 9G-B. Funded + Rebalance applies + contribution → Rebalance, no DCA.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [cryptoPosition(100)] }),
+      inputsFor({ allocation: offTarget(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }),
       FIXTURE_GENERATED_AT
     );
     add("9G-B: rebalance applies → rebalance, no dca", has(r, "rebalance") && !has(r, "dca"), `categories=${cats(r)}`);
@@ -3632,7 +3632,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-C. Funded + crypto 3pts under target + contribution ≥ $50 + no higher → DCA Top Pick.
   {
-    const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] });
+    const inp = inputsFor({ allocation: dcaUnder(3), safetyBuffer: funded(), positions: [cryptoPosition(100)] });
     const r = runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate());
     const s = dca(r);
     add(
@@ -3645,7 +3645,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
   // 9G-D. Crypto at/above target → no DCA → On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 60, 0), positions: [cryptoPosition(100)] }),
+      inputsFor({ allocation: allocationFixture(15000, 60, 0), safetyBuffer: funded(), positions: [cryptoPosition(100)] }),
       FIXTURE_GENERATED_AT
     );
     add("9G-D: crypto at target → no dca, On Track", !has(r, "dca") && cats(r).split(",").every((c) => c === "on_track") && cats(r) !== "none", `categories=${cats(r)}`);
@@ -3654,7 +3654,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
   // 9G-E. Underweight below 2 points → no DCA → On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(1), positions: [cryptoPosition(100)] }),
+      inputsFor({ allocation: dcaUnder(1), safetyBuffer: funded(), positions: [cryptoPosition(100)] }),
       FIXTURE_GENERATED_AT
     );
     add("9G-E: underweight < 2pt → no dca, On Track", !has(r, "dca") && cats(r).split(",").every((c) => c === "on_track") && cats(r) !== "none", `categories=${cats(r)}`);
@@ -3663,7 +3663,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
   // 9G-F. Monthly contribution missing → no DCA → On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)], goal: noContribGoal }),
+      inputsFor({ allocation: dcaUnder(3), safetyBuffer: funded(), positions: [cryptoPosition(100)], goal: noContribGoal }),
       FIXTURE_GENERATED_AT
     );
     add("9G-F: no contribution → no dca, On Track", !has(r, "dca") && cats(r).split(",").every((c) => c === "on_track") && cats(r) !== "none", `categories=${cats(r)}`);
@@ -3672,7 +3672,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
   // 9G-G. Monthly contribution below $50 → no DCA → On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)], goal: smallContribGoal }),
+      inputsFor({ allocation: dcaUnder(3), safetyBuffer: funded(), positions: [cryptoPosition(100)], goal: smallContribGoal }),
       FIXTURE_GENERATED_AT
     );
     add("9G-G: contribution < $50 → no dca, On Track", !has(r, "dca") && cats(r).split(",").every((c) => c === "on_track") && cats(r) !== "none", `categories=${cats(r)}`);
@@ -3681,10 +3681,10 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
   // 9G-H. Target crypto gap below $50 (small portfolio, 2pt gap = $40) → no DCA → On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
+      inputsFor({ allocation: allocationFixture(2000, 58, -2),
         safetyBuffer: bufferFixture(2000, 300, 3),
         totalUsd: 2000,
-        allocation: allocationFixture(2000, 58, -2), // gap = 2000*0.60 − 2000*0.58 = 40
+        // gap = 2000*0.60 − 2000*0.58 = 40
         positions: [cryptoPosition(50)],
       }),
       FIXTURE_GENERATED_AT
@@ -3694,9 +3694,9 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-I. capEff + staking + stable_yield + DCA, no rebalance → engine order, capEff Top Pick.
   {
-    const inp = inputsFor({
+    const inp = inputsFor({ allocation: dcaUnder(3),
       safetyBuffer: funded(),
-      allocation: dcaUnder(3),
+      
       positions: [cryptoPosition(400), solPosition(10), stablePosition("USDC", 10000)],
     });
     const r = runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate());
@@ -3710,9 +3710,9 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-J. DCA + Position Optimization, no higher candidates → DCA first (Top Pick), posOpt second.
   {
-    const inp = inputsFor({
+    const inp = inputsFor({ allocation: dcaUnder(3),
       safetyBuffer: funded(),
-      allocation: dcaUnder(3),
+      
       positions: [cryptoPosition(100)],
     });
     const r = runEngineWithLegacyRebalance(
@@ -3728,7 +3728,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-K. Mapper renders the DCA card safely.
   {
-    const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] });
+    const inp = inputsFor({ allocation: dcaUnder(3), safetyBuffer: funded(), positions: [cryptoPosition(100)] });
     const r = runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate());
     const s = dca(r);
     const card = s ? toSuggestionCard(s) : undefined;
@@ -3747,7 +3747,7 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-L. DCA output names no specific token (only the generic crypto bucket).
   {
-    const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] });
+    const inp = inputsFor({ allocation: dcaUnder(3), safetyBuffer: funded(), positions: [cryptoPosition(100)] });
     const r = runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate());
     const s = dca(r);
     const noToken = s ? !/\b(SOL|WSOL|BTC|ETH|BONK|JUP|WIF)\b/.test(JSON.stringify(s)) : false;
@@ -3793,7 +3793,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   // 9H-A. Underfunded buffer + trim conditions otherwise true → Buffer only.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: bufferFixture(800, 1000, 3), positions: [nonCoreToken("BONK", 5000)] }),
       FIXTURE_GENERATED_AT
     );
     add("9H-A: underfunded buffer → buffer only, no trim", cats(r) === "buffer" && !has(r, "trim"), `categories=${cats(r)}`);
@@ -3803,7 +3803,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   // ordering test supplies a synthetic Trim candidate; the engine has no production Trim rule.)
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: smallTokens }),
       FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate(160)
     );
     const s = trim(r);
@@ -3817,7 +3817,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   // 9H-C. Funded + Rebalance applies + an explicit Trim candidate → Rebalance first/Top Pick, Trim later.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: offTarget(), positions: [nonCoreToken("BONK", 5000)] }),
+      inputsFor({ allocation: offTarget(), safetyBuffer: funded(), positions: [nonCoreToken("BONK", 5000)] }),
       FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
     );
     const reb = r.suggestions.find((s) => s.category === "rebalance");
@@ -3831,7 +3831,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   // 9H-D. Funded + Capital Efficiency (idle token) + an explicit Trim candidate → capEff first/Top Pick, trim second.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [nonCoreToken("BONK", 5000)] }),
       FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
     );
     const ce = r.suggestions.find((s) => s.category === "capital_efficiency");
@@ -3848,7 +3848,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   // 9H-G. Non-core token < $100 and < 5%, no concentration/cleanup → no Trim → On Track.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 80)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [nonCoreToken("BONK", 80)] }),
       FIXTURE_GENERATED_AT
     );
     add("9H-G: small non-core exposure → no trim, On Track", !has(r, "trim") && cats(r).split(",").every((c) => c === "on_track") && cats(r) !== "none", `categories=${cats(r)}`);
@@ -3857,7 +3857,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   // 9H-H. Only SOL/WSOL → no Trim (SOL/WSOL are core).
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }),
       FIXTURE_GENERATED_AT
     );
     add("9H-H: only SOL → no trim", !has(r, "trim"), `categories=${cats(r)}`);
@@ -3866,7 +3866,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   // 9H-I. Only stablecoins → no Trim (stables are core).
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }),
       FIXTURE_GENERATED_AT
     );
     add("9H-I: only stablecoins → no trim", !has(r, "trim"), `categories=${cats(r)}`);
@@ -3875,7 +3875,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   // 9H-J. Only deployed positions → no Trim (not liquid wallet tokens).
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [yieldPosition(5000, null)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [yieldPosition(5000, null)] }),
       FIXTURE_GENERATED_AT
     );
     add("9H-J: only deployed positions → no trim", !has(r, "trim"), `categories=${cats(r)}`);
@@ -3897,7 +3897,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
       valueUsd: null,
     };
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [unpriced] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [unpriced] }),
       FIXTURE_GENERATED_AT
     );
     add("9H-K: unpriced non-core token → no trim", !has(r, "trim"), `categories=${cats(r)}`);
@@ -3906,7 +3906,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   // 9H-L. Partial pricing + an explicit Trim candidate → Trim coexists with the partial_pricing warning.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)], anyUnpriced: true }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [nonCoreToken("BONK", 5000)], anyUnpriced: true }),
       FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()
     );
     add(
@@ -3935,7 +3935,7 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
   // 9H-N. Trim output/copy contains no sell/buy/swap/bad/unsafe/illiquid-as-fact.
   {
     const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [nonCoreToken("BONK", 5000)] }),
+      inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [nonCoreToken("BONK", 5000)] }),
       FIXTURE_GENERATED_AT
     );
     const s = trim(r);
@@ -3966,13 +3966,13 @@ export function runGuardrailFixtureChecks(): FixtureCheck[] {
   // One run that isolates each actionable category.
   const runs: Record<string, ReturnType<typeof runSuggestionEngine>> = {
     buffer: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    rebalance: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
-    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
-    staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
-    stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
-    dca: (() => { const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }); return runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate()); })(),
-    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
+    rebalance: runEngineWithLegacyRebalance(inputsFor({ allocation: allocationFixture(15000, 75, 15), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
+    trim: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
+    staking: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
+    stable_yield: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
+    dca: (() => { const inp = inputsFor({ allocation: dcaUnder(3), safetyBuffer: funded(), positions: [cryptoPosition(100)] }); return runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate()); })(),
+    position_optimization: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
   };
   const find = (r: ReturnType<typeof runSuggestionEngine>, c: string) => r.suggestions.find((s) => s.category === c);
   const execStatuses = (s: { guardrails: { code: string; status: string }[] } | undefined) =>
@@ -3993,7 +3993,7 @@ export function runGuardrailFixtureChecks(): FixtureCheck[] {
 
   // 9I-B. On Track's execution guardrails are not_applicable (not fake pass/fail).
   {
-    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
     const st = execStatuses(find(r, "on_track"));
     add(
       "9I-B: On Track execution guardrails are not_applicable",
@@ -4006,7 +4006,7 @@ export function runGuardrailFixtureChecks(): FixtureCheck[] {
   {
     const allSuggestions = [
       ...Object.values(runs).flatMap((r) => r.suggestions),
-      ...runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT).suggestions,
+      ...runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT).suggestions,
     ];
     const anyPassed = allSuggestions.some((s) =>
       s.guardrails.some((g) => (EXEC_CODES as readonly string[]).includes(g.code) && g.status === "passed")
@@ -4086,14 +4086,14 @@ export function runProtocolSelectionFixtureChecks(): FixtureCheck[] {
 
   const runs: Record<string, ReturnType<typeof runSuggestionEngine>> = {
     buffer: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    rebalance: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
-    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
-    staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
-    stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
-    dca: (() => { const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }); return runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate()); })(),
-    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
-    on_track: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    rebalance: runEngineWithLegacyRebalance(inputsFor({ allocation: allocationFixture(15000, 75, 15), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
+    trim: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
+    staking: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
+    stable_yield: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
+    dca: (() => { const inp = inputsFor({ allocation: dcaUnder(3), safetyBuffer: funded(), positions: [cryptoPosition(100)] }); return runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate()); })(),
+    position_optimization: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
+    on_track: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
   };
   const find = (r: ReturnType<typeof runSuggestionEngine>, c: string) => r.suggestions.find((s) => s.category === c);
   const gStatus = (s: EngineSuggestion | undefined, code: string) => s?.guardrails.find((g) => g.code === code)?.status;
@@ -4229,14 +4229,14 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
 
   const runs: Record<string, ReturnType<typeof runSuggestionEngine>> = {
     buffer: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    rebalance: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
-    capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
-    trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
-    staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
-    stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
-    dca: (() => { const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }); return runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate()); })(),
-    position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
-    on_track: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    rebalance: runEngineWithLegacyRebalance(inputsFor({ allocation: allocationFixture(15000, 75, 15), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    capital_efficiency: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT),
+    trim: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
+    staking: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
+    stable_yield: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
+    dca: (() => { const inp = inputsFor({ allocation: dcaUnder(3), safetyBuffer: funded(), positions: [cryptoPosition(100)] }); return runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate()); })(),
+    position_optimization: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
+    on_track: runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
   };
   const find = (c: string) => runs[c].suggestions.find((s) => s.category === c);
   const rd = (c: string) => find(c)?.reviewDetails;
@@ -4377,9 +4377,9 @@ export function runReviewModalFixtureChecks(): FixtureCheck[] {
     checks.push({ name, pass, detail });
 
   const run = runEngineWithLegacyRebalance(
-    inputsFor({
+    inputsFor({ allocation: allocationFixture(15000, 75, 15),
       safetyBuffer: bufferFixture(5000, 1000, 3),
-      allocation: allocationFixture(15000, 75, 15),
+      
       positions: [cryptoPosition(100)],
     }),
     FIXTURE_GENERATED_AT
@@ -4453,19 +4453,19 @@ export function runReviewRefinementFixtureChecks(): FixtureCheck[] {
     r.suggestions.find((s) => s.category === c)?.reviewDetails;
 
   const rebalanceOver = runEngineWithLegacyRebalance(
-    inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }),
+    inputsFor({ allocation: allocationFixture(15000, 75, 15), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [cryptoPosition(100)] }),
     FIXTURE_GENERATED_AT
   );
   const rebalanceUnder = runEngineWithLegacyRebalance(
-    inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 20, -40), positions: [cryptoPosition(100)] }),
+    inputsFor({ allocation: allocationFixture(15000, 20, -40), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [cryptoPosition(100)] }),
     FIXTURE_GENERATED_AT
   );
   const posOptConc = runEngineWithLegacyRebalance(
-    inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), totalUsd: 100, allocation: allocationFixture(15000, 62, 2), positions: [cryptoPosition(100)] }),
+    inputsFor({ allocation: allocationFixture(15000, 62, 2), safetyBuffer: bufferFixture(5000, 1000, 3), totalUsd: 100, positions: [cryptoPosition(100)] }),
     FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()
   );
   const stableYield = runEngineWithLegacyRebalance(
-    inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [stablePosition("USDC", 10000)] }),
+    inputsFor({ allocation: allocationFixture(15000, 62, 2), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [stablePosition("USDC", 10000)] }),
     FIXTURE_GENERATED_AT
   );
 
@@ -4538,7 +4538,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // B. Rebalance + Position Optimization → rebalance first & Top Pick.
   {
-    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: allocationFixture(15000, 75, 15), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture());
+    const r = runEngineWithLegacyRebalance(inputsFor({ allocation: allocationFixture(15000, 75, 15), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture());
     const reb = r.suggestions.find((s) => s.category === "rebalance");
     const po = r.suggestions.find((s) => s.category === "position_optimization");
     add(
@@ -4552,9 +4552,9 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // C. Six categories fire → engine order preserved, capEff Top Pick, no UI sorting.
   {
-    const inp = inputsFor({
+    const inp = inputsFor({ allocation: dcaUnder(3),
       safetyBuffer: funded(),
-      allocation: dcaUnder(3),
+      
       positions: [cryptoPosition(400), nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), solPosition(10), stablePosition("USDC", 10000), yieldPosition(3000, null)],
     });
     const r = runEngineWithLegacyRebalance(
@@ -4572,7 +4572,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // D. On Track only → no Top Pick, no CTA (no modal).
   {
-    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
     const card = toSuggestionCard(r.suggestions[0]);
     add(
       "SMOKE-D: On Track only, no Top Pick, no CTA (no modal)",
@@ -4582,7 +4582,7 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // E. Partial pricing → warning appears and calculable suggestions still render.
   {
-    const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), anyUnpriced: true, positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT);
+    const r = runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), anyUnpriced: true, positions: [cryptoPosition(400)] }), FIXTURE_GENERATED_AT);
     add(
       "SMOKE-E: partial pricing → partial_pricing warning + suggestions still render",
       r.warnings.includes("partial_pricing") && r.suggestions.length > 0,
@@ -4613,8 +4613,8 @@ export function runProtocolRegistryFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -4725,8 +4725,8 @@ export function runProtocolAdapterFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const candidateIds = ["jupiter", "marinade", "jito", "blazestake", "sanctum"];
@@ -4839,8 +4839,8 @@ export function runProtocolEligibilityFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -4979,8 +4979,8 @@ export function runRouteGuardrailFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -5108,8 +5108,8 @@ export function runProtocolScoringFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -5270,8 +5270,8 @@ export function runProtocolSelectionQaFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -5355,7 +5355,7 @@ export function runProtocolSelectionQaFixtureChecks(): FixtureCheck[] {
   // 12H-M. QA never mutates the live ProtocolSelection object.
   {
     run(buildSolLiquidStakingQaInput()); // running QA must not affect live suggestions
-    const freshStaking = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT).suggestions.find((s) => s.category === "staking");
+    const freshStaking = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT).suggestions.find((s) => s.category === "staking");
     // Live staking selection comes from the approved JitoSOL beta (id "jito"),
     // never from the QA fixture candidate — running QA must not change it.
     add("12H-M: QA does not mutate live ProtocolSelection (stays approved JitoSOL beta)", freshStaking?.protocolSelection?.status === "selected" && freshStaking?.protocolSelection?.selectedProtocolId === "jito", `status=${freshStaking?.protocolSelection?.status} id=${freshStaking?.protocolSelection?.selectedProtocolId}`);
@@ -5403,8 +5403,8 @@ export function runProtocolReadinessFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const checklist = getProtocolSelectionReadinessChecklist();
@@ -5495,8 +5495,8 @@ export function runSolLiquidStakingMappingFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -5567,7 +5567,7 @@ export function runSolLiquidStakingMappingFixtureChecks(): FixtureCheck[] {
   // 12J-M. Dry-run does not mutate live ProtocolSelection.
   {
     runSolLiquidStakingInternalDryRun({ checkedAt: "t" });
-    const fresh = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT).suggestions.find((s) => s.category === "staking");
+    const fresh = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT).suggestions.find((s) => s.category === "staking");
     // Live staking selection is the approved JitoSOL beta (id "jito"); the dry-run
     // must not change it into some other candidate.
     add("12J-M: dry-run does not mutate live ProtocolSelection (stays approved JitoSOL beta)", fresh?.protocolSelection?.status === "selected" && fresh?.protocolSelection?.selectedProtocolId === "jito", `status=${fresh?.protocolSelection?.status} id=${fresh?.protocolSelection?.selectedProtocolId}`);
@@ -5621,8 +5621,8 @@ export function runSolLiquidStakingDryRunFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -5729,8 +5729,8 @@ export function runSolLiquidStakingSourceFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -5837,8 +5837,8 @@ export function runSolLiquidStakingStage2FixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -6046,8 +6046,8 @@ export function runProtocolSelectionGoNoGoFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -6178,8 +6178,8 @@ export function runSolLiquidStakingSourceCandidateFixtureChecks(): FixtureCheck[
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -6291,8 +6291,8 @@ export function runProtocolRiskRubricFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -6402,8 +6402,8 @@ export function runSolLiquidStakingEvidenceFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -6509,8 +6509,8 @@ export function runProtocolRiskApprovalDecisionFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -6621,8 +6621,8 @@ export function runSolLiquidStakingEvidenceCompletionFixtureChecks(): FixtureChe
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -6721,8 +6721,8 @@ export function runSolLiquidStakingSourceVerificationFixtureChecks(): FixtureChe
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -6866,8 +6866,8 @@ export function runSolLiquidStakingSourceValueConfirmationFixtureChecks(): Fixtu
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -7029,8 +7029,8 @@ export function runSolLiquidStakingRealValueFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -7177,8 +7177,8 @@ export function runSolLiquidStakingGatherDecisionFixtureChecks(): FixtureCheck[]
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -7341,8 +7341,8 @@ export function runJitoSolEvidenceReadinessFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -7494,8 +7494,8 @@ export function runProtocolRiskScoreAssignmentFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -7664,8 +7664,8 @@ export function runSolLstProductionMetadataFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -7823,8 +7823,8 @@ export function runSolLstSelectorShellFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const ids = [...SOL_LIQUID_STAKING_CANDIDATE_IDS];
@@ -7960,8 +7960,8 @@ export function runSolLstSelectorPreviewFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -8073,8 +8073,8 @@ export function runSolLstSelectorPreviewRouteFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -8183,8 +8183,8 @@ export function runInternalSolStakingRecommendationFixtureChecks(): FixtureCheck
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
 
@@ -8259,7 +8259,7 @@ export function runInternalSolStakingRecommendationFixtureChecks(): FixtureCheck
   }
   // 13D-AD. Demo Mode suggestions unchanged (fixture data are not the demo suggestion set).
   {
-    const demoRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+    const demoRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
     const json = JSON.stringify(demoRun);
     add("13D-AD: Demo/engine suggestion output free of fixture copy", !json.includes("Fake internal wallet has 12.4 SOL") && !json.includes("INTERNAL_PREVIEW_NOT_LIVE"), "no fixture copy");
   }
@@ -8299,8 +8299,8 @@ export function runDemoExactSolStakingScenarioFixtureChecks(): FixtureCheck[] {
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
 
   const sc = getDemoExactSolStakingScenario();
@@ -8402,8 +8402,8 @@ export function runDemoExactSolStakingMarketDataFixtureChecks(): FixtureCheck[] 
 
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
 
   const details = getDemoExactSolStakingReviewDetails();
@@ -8492,8 +8492,8 @@ export function runJitoSolBetaActivationFixtureChecks(): FixtureCheck[] {
   const aligned = () => allocationFixture(15000, 62, 2);
   const FRESH = "2026-07-12T06:00:00Z";
 
-  const stakingRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
-  const stableRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
+  const stakingRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
+  const stableRun = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT);
   const staking = stakingRun.suggestions.find((s) => s.category === "staking");
   const stable = stableRun.suggestions.find((s) => s.category === "stable_yield");
   const card = staking ? toSuggestionCard(staking) : undefined;
@@ -14059,7 +14059,7 @@ export function runContributionUiTurnFixtureChecks(): FixtureCheck[] {
   const testingPageSrc = readIf("src/pages/TestingPage.tsx");
 
   // Aligned (buffer complete, no rebalance) inputs so the plan DCA takes the DCA slot.
-  const alignedRun = (contrib: import("./engineTypes").EngineSuggestion | null) => runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 60, 0), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT, contrib);
+  const alignedRun = (contrib: import("./engineTypes").EngineSuggestion | null) => runSuggestionEngine(inputsFor({ allocation: allocationFixture(15000, 60, 0), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT, contrib);
   const bufferRun = (contrib: import("./engineTypes").EngineSuggestion | null) => runSuggestionEngine(inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT, contrib);
 
   // 15H-UI-A…H.
@@ -15631,7 +15631,7 @@ export function runYieldStrategyPlanSuggestionFixtureChecks(): FixtureCheck[] {
   }
   {
     // Underfunded buffer → the buffer correction suppresses every candidate incl. stable yield.
-    const under = inputsFor({ safetyBuffer: bufferFixture(800, 1000, 3), allocation: alignedAlloc(), positions: [stablePosition("USDC", 10000)] });
+    const under = inputsFor({ allocation: alignedAlloc(), safetyBuffer: bufferFixture(800, 1000, 3), positions: [stablePosition("USDC", 10000)] });
     const r = runSuggestionEngine(under, FIXTURE_GENERATED_AT, null, engSugg);
     add("16H-A-AJ: an existing higher-priority buffer correction outranks (suppresses) excess Stable Yield", r.suggestions.every((s) => s.category !== "stable_yield") && r.suggestions.some((s) => s.category === "buffer"), "buffer wins");
   }
@@ -18375,7 +18375,7 @@ export function runDcaContributionCanonicalMountFixtureChecks(): FixtureCheck[] 
   const readSrc = readIfSrc;
   add("D41-1: engine DCA has ONE source — `const dca: ... = planDca;` — NO deriveDcaSuggestion, NO legacyDcaEligible, NO `??`/`||` fallback", (() => { const e = readSrc("src/suggestions/engine.ts"); return /const dca: EngineSuggestion \| null = planDca;/.test(e) && !/deriveDcaSuggestion/.test(e) && !/legacyDcaEligible/.test(e) && !/planDca \?\?/.test(e) && !/planDca \|\|/.test(e); })(), "single source");
   add("D41-2: the engine no longer declares a `legacyDcaEligible` param, and the rail no longer passes one", (() => { const e = readSrc("src/suggestions/engine.ts"); const r = readSrc("src/suggestions/useRailSuggestions.ts"); return !/legacyDcaEligible/.test(e) && !/legacyDcaEligible/.test(r); })(), "param gone");
-  const d41Inputs = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 57, -3), positions: [cryptoPosition(100)] });
+  const d41Inputs = () => inputsFor({ allocation: allocationFixture(15000, 57, -3), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [cryptoPosition(100)] });
   add("D41-3: REAL-WALLET with a null canonical planDca → NO DCA, even with a risk-only allocation present (no legacy evaluator)", (() => { const inputs = d41Inputs(); const bo = bufferOverrideFromInputs(inputs, FIXTURE_GENERATED_AT); const oto = onTrackOverrideFromInputs(inputs, FIXTURE_GENERATED_AT, undefined); const rw = runSuggestionEngineRaw(inputs, FIXTURE_GENERATED_AT, null, null, undefined, undefined, undefined, undefined, bo, oto); return !rw.suggestions.some((s) => s.category === "dca"); })(), "real-wallet no legacy");
   add("D41-4: EVERY mode with a null planDca → NO DCA — the legacy evaluator is UNREACHABLE through the engine (no opt-in exists)", (() => { const inputs = d41Inputs(); const bo = bufferOverrideFromInputs(inputs, FIXTURE_GENERATED_AT); const oto = onTrackOverrideFromInputs(inputs, FIXTURE_GENERATED_AT, undefined); const t = runSuggestionEngineRaw(inputs, FIXTURE_GENERATED_AT, null, null, undefined, undefined, undefined, undefined, bo, oto); return !t.suggestions.some((s) => s.category === "dca"); })(), "no legacy path");
   add("D41-5: real-wallet INCOMPLETE Safety Buffer + NO target → buffer contribution preserved, NO target failure, NO DCA (short-circuit before target)", (() => { const res = deriveContributionSuggestion({ dataMode: "real_wallet", positions: DEMO_POSITIONS, pricedAsOf: Date.parse("2026-07-01T00:00:00.000Z"), goal: DEMO_GOAL, buffer: { stableUsd: 800, targetUsd: 3000, targetMonths: 3, coveragePct: 26.67, monthsCovered: 0.8, fullyFunded: false } }); return res.suggestion?.category === "buffer" && !(res.pipeline?.blockers ?? []).some((b) => b.startsWith("target_")); })(), "buffer short-circuit");
@@ -21363,7 +21363,7 @@ export function runSafetyBufferPhase0GuardFixtureChecks(): FixtureCheck[] {
   });
 
   // ---- Guard 1: On Track vs canonical material Rebalance need ----
-  const otInp = () => inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] });
+  const otInp = () => inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] });
   add("SBG-1: material Rebalance need (card null) + aligned bucket delta → NO On Track (and no Rebalance card)", (() => { const r = runSuggestionEngine(otInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true }); return !has(r, "on_track") && !has(r, "rebalance"); })(), "material blocks");
   add("SBG-2: material need true even when the Rebalance card was category-filtered (still card null) → NO On Track", (() => { const r = runSuggestionEngine(otInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true, materialCryptoToStables: false }); return !has(r, "on_track"); })(), "filtered still blocks");
   add("SBG-3: NO material need + aligned + no actionable candidates → On Track PRESERVED", (() => { const r = runSuggestionEngine(otInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: false }); return has(r, "on_track"); })(), "regression preserved");
@@ -21373,11 +21373,11 @@ export function runSafetyBufferPhase0GuardFixtureChecks(): FixtureCheck[] {
   // ---- Guard 2: unresolved buffer coverage cannot present a definite amount ----
   add("SBG-6 (21C): unresolved coverage → informational verification card with NO definite amount", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: unresolvedBuf(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b != null && b.action_kind === "informational" && b.amount == null && b.reason_codes.includes("buffer_coverage_unresolved"); })(), "informational no amount");
   add("SBG-7 (21C): unresolved coverage never presents a definite/plan funding amount (plan-backed source normalized upstream)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: unresolvedBuf(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, planBufferCard()); const b = r.suggestions.find((s) => s.category === "buffer"); return b != null && b.action_kind === "informational" && b.amount == null; })(), "no definite amount");
-  add("SBG-8: unresolved coverage → downstream deployment suggestions remain suppressed", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: unresolvedBuf(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); return !has(r, "staking") && !has(r, "rebalance") && !has(r, "capital_efficiency") && !has(r, "stable_yield") && !has(r, "dca") && !has(r, "position_optimization"); })(), "downstream suppressed");
-  add("SBG-9: unresolved coverage → On Track remains suppressed (buffer not proven complete)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: unresolvedBuf(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); return !has(r, "on_track"); })(), "on track suppressed");
+  add("SBG-8: unresolved coverage → downstream deployment suggestions remain suppressed", (() => { const r = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: unresolvedBuf(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); return !has(r, "staking") && !has(r, "rebalance") && !has(r, "capital_efficiency") && !has(r, "stable_yield") && !has(r, "dca") && !has(r, "position_optimization"); })(), "downstream suppressed");
+  add("SBG-9: unresolved coverage → On Track remains suppressed (buffer not proven complete)", (() => { const r = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: unresolvedBuf(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); return !has(r, "on_track"); })(), "on track suppressed");
   add("SBG-10: definite INCOMPLETE coverage (generic) → buffer card behavior UNCHANGED (amount-bearing card remains)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: incompleteBuf(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b != null && b.id === "top_up_buffer" && (b.amount?.valueUsd ?? 0) > 0; })(), "incomplete preserved");
   add("SBG-11: definite INCOMPLETE coverage (plan-backed) → plan buffer card remains", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: incompleteBuf(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, planBufferCard()); return hasBufferCard(r); })(), "incomplete plan preserved");
-  add("SBG-12: COMPLETE coverage → no buffer override (no buffer card; other candidates flow)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); return !hasBufferCard(r); })(), "complete no override");
+  add("SBG-12: COMPLETE coverage → no buffer override (no buffer card; other candidates flow)", (() => { const r = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); return !hasBufferCard(r); })(), "complete no override");
   add("SBG-13 (21C): the temporary Phase-0 unresolved guard is gone; the engine consumes the canonical bufferOverride", (() => { const eng = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/engine.ts`, "utf8"); } catch { return ""; } })(); return /bufferOverride\?\.candidate/.test(eng) && !/coverageUnresolved/.test(eng); })(), "override-driven");
 
   return checks;
@@ -21498,7 +21498,7 @@ export function runSafetyBufferProductionFixtureChecks(): FixtureCheck[] {
   const overrideFor = (coverage: SafetyBufferCoverage | null, expenses: number | null, months: number | null) => { const a = sbAssess({ coverage, monthlyExpensesUsd: expenses, targetMonths: months, generatedAt: GEN }); return { candidate: buildSafetyBufferCardFromAssessment(a, GEN), bufferSatisfied: a.presentationState === "complete", blocksDownstream: a.presentationState !== "complete" }; };
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
-  const stakingInp = () => inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] });
+  const stakingInp = () => inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] });
 
   // ---- Card contract per state ----
   add("SBM-1: COMPLETE → mapper returns null (no buffer card)", card(cov({ target: 3000, verified: 3000, state: "complete" }), 1000, 3) === null, "complete null");
@@ -21697,11 +21697,11 @@ export function runOnTrackProductionFixtureChecks(): FixtureCheck[] {
   const funded = () => bufferFixture(5000, 1000, 3);
   const aligned = () => allocationFixture(15000, 62, 2);
   const bufferComplete = () => ({ candidate: null, bufferSatisfied: true, blocksDownstream: false });
-  add("OTM-10: engine Stage B appends On Track when complete buffer + within range + no candidate", (() => { const r = runSuggestionEngineRaw(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); return r.suggestions.some((s) => s.category === "on_track") && r.suggestions[r.suggestions.length - 1].category === "on_track"; })(), "stage B appends");
-  add("OTM-11: engine — a visible actionable candidate (staking) suppresses On Track", (() => { const r = runSuggestionEngineRaw(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); return r.suggestions.some((s) => s.category === "staking") && !r.suggestions.some((s) => s.category === "on_track"); })(), "candidate suppresses");
-  add("OTM-12: engine — proven material Rebalance need (no card) suppresses On Track", (() => { const r = runSuggestionEngineRaw(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(null, "allowed", true))); return !r.suggestions.some((s) => s.category === "on_track"); })(), "material suppresses");
-  add("OTM-13: engine — ABSENT onTrackOverride fails closed (no On Track)", (() => { const r = runSuggestionEngineRaw(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete()); return !r.suggestions.some((s) => s.category === "on_track"); })(), "fail closed");
-  add("OTM-14: On Track never Top Pick + priority 99 + three informational cards", (() => { const r = runSuggestionEngineRaw(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); const ot = r.suggestions.filter((s) => s.category === "on_track"); return ot.length === 3 && ot.every((o) => o.is_top_pick === false) && CATEGORY_PRIORITY.on_track === 99; })(), "ordering/top pick");
+  add("OTM-10: engine Stage B appends On Track when complete buffer + within range + no candidate", (() => { const r = runSuggestionEngineRaw(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); return r.suggestions.some((s) => s.category === "on_track") && r.suggestions[r.suggestions.length - 1].category === "on_track"; })(), "stage B appends");
+  add("OTM-11: engine — a visible actionable candidate (staking) suppresses On Track", (() => { const r = runSuggestionEngineRaw(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); return r.suggestions.some((s) => s.category === "staking") && !r.suggestions.some((s) => s.category === "on_track"); })(), "candidate suppresses");
+  add("OTM-12: engine — proven material Rebalance need (no card) suppresses On Track", (() => { const r = runSuggestionEngineRaw(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(null, "allowed", true))); return !r.suggestions.some((s) => s.category === "on_track"); })(), "material suppresses");
+  add("OTM-13: engine — ABSENT onTrackOverride fails closed (no On Track)", (() => { const r = runSuggestionEngineRaw(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete()); return !r.suggestions.some((s) => s.category === "on_track"); })(), "fail closed");
+  add("OTM-14: On Track never Top Pick + priority 99 + three informational cards", (() => { const r = runSuggestionEngineRaw(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); const ot = r.suggestions.filter((s) => s.category === "on_track"); return ot.length === 3 && ot.every((o) => o.is_top_pick === false) && CATEGORY_PRIORITY.on_track === 99; })(), "ordering/top pick");
 
   // ---- Legacy disposition + privacy + read-only ----
   add("OTM-15: engine has NO mounted legacy On Track rule; consumes deriveOnTrackAssessment + mapper", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); return !/deriveOnTrackSuggestion\(/.test(eng) && !/allows\("onTrack"\)/.test(eng) && /deriveOnTrackAssessment\(/.test(eng) && /buildOnTrackCardsFromAssessment\(/.test(eng); })(), "no legacy rule");
@@ -21731,13 +21731,13 @@ export function runSafetyBufferOnTrackCloseoutFixtureChecks(): FixtureCheck[] {
   const has = (r: ReturnType<typeof runSuggestionEngineRaw>, c: string) => r.suggestions.some((s) => s.category === c);
 
   // ---- End-to-end mounted state machine (through the production auto-override wrapper) ----
-  add("SBOT-1: complete buffer + aligned + no candidate → scoped On Track (no buffer card)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); const ot = r.suggestions.find((s) => s.category === "on_track"); return ot != null && ot.action_kind === "informational" && !has(r, "buffer"); })(), "on track");
-  add("SBOT-2: definite shortfall → review-only buffer Top Pick, downstream + On Track suppressed", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: underfunded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b?.action_kind === "review_only" && b?.is_top_pick === true && !has(r, "staking") && !has(r, "on_track"); })(), "definite");
-  add("SBOT-3: below-$50 → informational buffer, no Top Pick, downstream + On Track suppressed", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: belowMin(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b?.action_kind === "informational" && b?.is_top_pick === false && !has(r, "staking") && !has(r, "on_track"); })(), "below min");
-  add("SBOT-4: unresolved buffer → informational buffer (no amount), downstream + On Track suppressed", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: unresolvedBuf(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b?.action_kind === "informational" && b?.amount == null && !has(r, "staking") && !has(r, "on_track"); })(), "unresolved");
-  add("SBOT-5: complete buffer + visible actionable (staking) → no On Track", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); return has(r, "staking") && !has(r, "on_track"); })(), "candidate suppresses");
-  add("SBOT-6: complete buffer + material Rebalance (card null) → no On Track, no staking (suppressed)", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true, materialCryptoToStables: true }); return !has(r, "on_track") && !has(r, "staking"); })(), "material blocks");
-  add("SBOT-7: ordering — On Track is priority 99 and always last", (() => { const r = runSuggestionEngine(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); return CATEGORY_PRIORITY.on_track === 99 && CATEGORY_PRIORITY.buffer === 1 && (cats(r).split(",").every((c) => c === "on_track") && cats(r) !== "none" || r.suggestions[r.suggestions.length - 1].category === "on_track"); })(), "ordering");
+  add("SBOT-1: complete buffer + aligned + no candidate → scoped On Track (no buffer card)", (() => { const r = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); const ot = r.suggestions.find((s) => s.category === "on_track"); return ot != null && ot.action_kind === "informational" && !has(r, "buffer"); })(), "on track");
+  add("SBOT-2: definite shortfall → review-only buffer Top Pick, downstream + On Track suppressed", (() => { const r = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: underfunded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b?.action_kind === "review_only" && b?.is_top_pick === true && !has(r, "staking") && !has(r, "on_track"); })(), "definite");
+  add("SBOT-3: below-$50 → informational buffer, no Top Pick, downstream + On Track suppressed", (() => { const r = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: belowMin(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b?.action_kind === "informational" && b?.is_top_pick === false && !has(r, "staking") && !has(r, "on_track"); })(), "below min");
+  add("SBOT-4: unresolved buffer → informational buffer (no amount), downstream + On Track suppressed", (() => { const r = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: unresolvedBuf(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); const b = r.suggestions.find((s) => s.category === "buffer"); return b?.action_kind === "informational" && b?.amount == null && !has(r, "staking") && !has(r, "on_track"); })(), "unresolved");
+  add("SBOT-5: complete buffer + visible actionable (staking) → no On Track", (() => { const r = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT); return has(r, "staking") && !has(r, "on_track"); })(), "candidate suppresses");
+  add("SBOT-6: complete buffer + material Rebalance (card null) → no On Track, no staking (suppressed)", (() => { const r = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true, materialCryptoToStables: true }); return !has(r, "on_track") && !has(r, "staking"); })(), "material blocks");
+  add("SBOT-7: ordering — On Track is priority 99 and always last", (() => { const r = runSuggestionEngine(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT); return CATEGORY_PRIORITY.on_track === 99 && CATEGORY_PRIORITY.buffer === 1 && (cats(r).split(",").every((c) => c === "on_track") && cats(r) !== "none" || r.suggestions[r.suggestions.length - 1].category === "on_track"); })(), "ordering");
 
   // ---- Legacy + gate deletion ----
   add("SBOT-8: BOTH legacy modules DELETED (bufferSuggestionLegacy + onTrackSuggestionLegacy)", readIfSrc("src/suggestions/bufferSuggestionLegacy.ts") === "" && readIfSrc("src/suggestions/onTrackSuggestionLegacy.ts") === "", "legacy gone");
@@ -22925,8 +22925,8 @@ export function runRebalanceStep18EFixtureChecks(): FixtureCheck[] {
   add("RE-26: options note the staking 0.1-SOL reserve is NOT an approved Rebalance reserve", RB_RESERVE_OPTIONS.some((o) => /product-approved/i.test(o.summary)), "not reused");
 
   // ---- Staking-conflict suppression (engine; narrow-only, card-independent, directional) ----
-  const stakingInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 5), positions: [solPosition(10)] });
-  const noStakeInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 5), positions: [cryptoPosition(100)] });
+  const stakingInp = () => inputsFor({ allocation: allocationFixture(15000, 62, 5), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [solPosition(10)] });
+  const noStakeInp = () => inputsFor({ allocation: allocationFixture(15000, 62, 5), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [cryptoPosition(100)] });
   const runOv = (inp: ReturnType<typeof stakingInp>, ov: { card: null; material: boolean; materialCryptoToStables: boolean } | undefined) => runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, ov);
   add("RE-27: material crypto_to_stables NEED suppresses otherwise-eligible staking (no card needed)", (() => { const r = runOv(stakingInp(), { card: null, material: true, materialCryptoToStables: true }); return !r.suggestions.some((s) => s.category === "staking"); })(), "suppressed");
   add("RE-28: baseline (no override) → the same input DOES emit staking (proves it was eligible)", (() => { const r = runOv(stakingInp(), undefined); return r.suggestions.some((s) => s.category === "staking"); })(), "eligible baseline");
@@ -23033,7 +23033,7 @@ export function runRebalanceStep18FFixtureChecks(): FixtureCheck[] {
   // ---- Conflict ----
   const dcaSug = mkSug15H("dca-plan", "dca");
   const sySug = mkSug15H("sy-plan", "stable_yield");
-  const stakingInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 5), positions: [solPosition(10)] });
+  const stakingInp = () => inputsFor({ allocation: allocationFixture(15000, 62, 5), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [solPosition(10)] });
   const cryptoCard = build([nsol(4), usdc(100)], "low", 0).c;
   add("RF-43: crypto_to_stables card present → staking suppressed", (() => { const r = runSuggestionEngine(stakingInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: cryptoCard, material: true, materialCryptoToStables: true }); return r.suggestions.some((s) => s.id === "rebalance_to_plan") && !r.suggestions.some((s) => s.category === "staking"); })(), "card + suppress staking");
   add("RF-44: material crypto overweight WITHOUT a card still suppresses staking", (() => { const r = runSuggestionEngine(stakingInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true, materialCryptoToStables: true }); return !r.suggestions.some((s) => s.category === "staking"); })(), "no card suppress");
@@ -23111,12 +23111,12 @@ export function runTrimProductionFixtureChecks(): FixtureCheck[] {
   add("TC-25: stale candidate value → no card", trimCardFor([usdc(1000), W({ id: "st", symbol: "TKst", name: "Stale", mint: "StaleMint", amount: "300", uiAmount: 300, priceUsd: 1, valueUsd: 300, withdrawalState: "stale" })]) === null, "stale blocks");
 
   // ---- Engine mount + coexistence ----
-  const railInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 5), positions: [solPosition(10)] });
+  const railInp = () => inputsFor({ allocation: allocationFixture(15000, 62, 5), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [solPosition(10)] });
   add("TC-26: engine with NO trimOverride → NO Trim candidate (fail closed)", (() => { const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT); return !r.suggestions.some((s) => s.category === "trim"); })(), "fail closed");
   add("TC-27: engine emits the canonical Trim candidate from the override", (() => { const c = trimCardFor([usdc(1000), tok(300, "a")])!; const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: c }); return r.suggestions.some((s) => s.id === "trim_long_tail_assets"); })(), "override emits");
   add("TC-28: Rebalance + Trim COEXIST; Rebalance ordered above Trim", (() => { const t = trimCardFor([usdc(1000), tok(300, "a")])!; const reb = mkSug15H("reb", "rebalance"); const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: reb, material: true }, { candidate: t }); const cats = r.suggestions.map((s) => s.category); return cats.includes("rebalance") && cats.includes("trim") && cats.indexOf("rebalance") < cats.indexOf("trim"); })(), "reb+trim");
   add("TC-29: material Rebalance need WITHOUT a card does not suppress Trim", (() => { const t = trimCardFor([usdc(1000), tok(300, "a")])!; const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: null, material: true }, { candidate: t }); return r.suggestions.some((s) => s.category === "trim"); })(), "no card no suppress");
-  add("TC-30: Capital Efficiency + Trim COEXIST; Capital Efficiency ordered above Trim", (() => { const t = trimCardFor([usdc(1000), tok(300, "a")])!; const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [nonCoreToken("BONK", 5000)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: t }); const cats = r.suggestions.map((s) => s.category); return cats.includes("capital_efficiency") && cats.includes("trim") && cats.indexOf("capital_efficiency") < cats.indexOf("trim"); })(), "ce+trim");
+  add("TC-30: Capital Efficiency + Trim COEXIST; Capital Efficiency ordered above Trim", (() => { const t = trimCardFor([usdc(1000), tok(300, "a")])!; const inp = inputsFor({ allocation: allocationFixture(15000, 62, 2), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [nonCoreToken("BONK", 5000)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: t }); const cats = r.suggestions.map((s) => s.category); return cats.includes("capital_efficiency") && cats.includes("trim") && cats.indexOf("capital_efficiency") < cats.indexOf("trim"); })(), "ce+trim");
   add("TC-31: a valid Trim candidate suppresses the informational On Track fallback", (() => { const t = trimCardFor([usdc(1000), tok(300, "a")])!; const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: t }); return r.suggestions.some((s) => s.category === "trim") && !r.suggestions.some((s) => s.category === "on_track"); })(), "on track suppressed");
 
   // ---- Disposition + regression ----
@@ -23134,10 +23134,10 @@ export function runTrimProductionFixtureChecks(): FixtureCheck[] {
   add("TD-4: 'trim' removed from CompletenessDecision + gate map", (() => { const s = readIfSrc("src/wallet/portfolioCompleteness.ts"); return !/CompletenessDecision = [^;]*"trim"/.test(s) && !/trim: canGenerateTrim/.test(s); })(), "decision removed");
   add("TD-5: Trim-only → Trim is Top Pick (no higher candidate)", (() => { const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: tCard }); const tp = r.suggestions.find((s) => s.is_top_pick); return tp?.category === "trim"; })(), "trim top pick");
   add("TD-6: Trim NOT Top Pick when Rebalance present (Rebalance outranks)", (() => { const r = runSuggestionEngine(railInp(), FIXTURE_GENERATED_AT, null, null, undefined, { card: mkSug15H("reb", "rebalance"), material: true }, { candidate: tCard }); return r.suggestions.find((s) => s.is_top_pick)?.category === "rebalance"; })(), "reb top");
-  add("TD-7: Trim NOT Top Pick when Capital Efficiency ranks above", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [nonCoreToken("BONK", 5000)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: tCard }); return r.suggestions.find((s) => s.is_top_pick)?.category === "capital_efficiency"; })(), "ce top");
-  add("TD-8: DCA + Trim coexist (Rebalance not applying)", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 40, -8), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, mkSug15H("dca", "dca"), null, undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "dca") && r.suggestions.some((s) => s.category === "trim"); })(), "dca+trim");
-  add("TD-9: staking + Trim coexist", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [solPosition(10)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "staking") && r.suggestions.some((s) => s.category === "trim"); })(), "staking+trim");
-  add("TD-10: direct lending (stable_yield) + Trim coexist", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [stablePosition("USDC", 10000)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, mkSug15H("sy", "stable_yield"), undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "stable_yield") && r.suggestions.some((s) => s.category === "trim"); })(), "sy+trim");
+  add("TD-7: Trim NOT Top Pick when Capital Efficiency ranks above", (() => { const inp = inputsFor({ allocation: allocationFixture(15000, 62, 2), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [nonCoreToken("BONK", 5000)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: tCard }); return r.suggestions.find((s) => s.is_top_pick)?.category === "capital_efficiency"; })(), "ce top");
+  add("TD-8: DCA + Trim coexist (Rebalance not applying)", (() => { const inp = inputsFor({ allocation: allocationFixture(15000, 40, -8), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, mkSug15H("dca", "dca"), null, undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "dca") && r.suggestions.some((s) => s.category === "trim"); })(), "dca+trim");
+  add("TD-9: staking + Trim coexist", (() => { const inp = inputsFor({ allocation: allocationFixture(15000, 62, 2), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [solPosition(10)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "staking") && r.suggestions.some((s) => s.category === "trim"); })(), "staking+trim");
+  add("TD-10: direct lending (stable_yield) + Trim coexist", (() => { const inp = inputsFor({ allocation: allocationFixture(15000, 62, 2), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [stablePosition("USDC", 10000)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, mkSug15H("sy", "stable_yield"), undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "stable_yield") && r.suggestions.some((s) => s.category === "trim"); })(), "sy+trim");
   add("TD-11: category ordering unchanged (buffer1..posOpt8, trim=4)", CATEGORY_PRIORITY.buffer === 1 && CATEGORY_PRIORITY.rebalance === 2 && CATEGORY_PRIORITY.capital_efficiency === 3 && CATEGORY_PRIORITY.trim === 4 && CATEGORY_PRIORITY.staking === 5 && CATEGORY_PRIORITY.position_optimization === 8, "ordering");
   add("TD-12: user-facing Trim copy has no cleanup/sell/dispose/swap instruction", (() => { const copy = readIfSrc("src/state/approvedCopy.ts"); const trimLines = copy.split("\n").filter((l) => /SUGGESTION_TRIM/.test(l) && /=/.test(l)).join(" "); return !/clean ?up|\bsell\b|dispose|\bswap\b|consolidate now|\bremove\b/i.test(trimLines); })(), "review copy");
   add("TD-13: internal small_position_cleanup remains a machine code only (not visible instruction copy)", (() => { const trim = readIfSrc("src/suggestions/trimSuggestion.ts"); return /small_position_cleanup/.test(trim) && !/"[^"]*clean ?up[^"]*"/i.test(readIfSrc("src/state/approvedCopy.ts")); })(), "internal code");
@@ -23206,22 +23206,22 @@ export function runPositionOptimizationProductionFixtureChecks(): FixtureCheck[]
   // ---- Engine mount + coexistence ----
   const funded = () => bufferFixture(5000, 1000, 3); // funded (target $3,000)
   const aligned = () => allocationFixture(15000, 62, 2); // delta 2% → no rebalance
-  const railInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 5), positions: [solPosition(10)] });
+  const railInp = () => inputsFor({ allocation: allocationFixture(15000, 62, 5), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [solPosition(10)] });
   const po = () => poCardFor(conc())!;
   add("PO-17: engine with NO positionOptimizationOverride → NO position_optimization candidate (fail closed)", (() => { const r = runSuggestionEngine(railInp(), GEN); return !r.suggestions.some((s) => s.category === "position_optimization"); })(), "fail closed");
   add("PO-18: engine emits the canonical card from the override", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.id === "position_optimization_review"); })(), "override emits");
   add("PO-19: Rebalance + Position Optimization COEXIST; Rebalance ordered above", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, { card: mkSug15H("reb", "rebalance"), material: true }, undefined, { candidate: po() }); const cats = r.suggestions.map((s) => s.category); return cats.includes("rebalance") && cats.includes("position_optimization") && cats.indexOf("rebalance") < cats.indexOf("position_optimization"); })(), "reb above");
   add("PO-20: Trim + Position Optimization COEXIST; Trim ordered above", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, undefined, { candidate: mkSug15H("t", "trim") }, { candidate: po() }); const cats = r.suggestions.map((s) => s.category); return cats.includes("trim") && cats.includes("position_optimization") && cats.indexOf("trim") < cats.indexOf("position_optimization"); })(), "trim above");
-  add("PO-21: Capital Efficiency + Position Optimization COEXIST; Capital Efficiency ordered above", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [nonCoreToken("BONK", 5000)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); const cats = r.suggestions.map((s) => s.category); return cats.includes("capital_efficiency") && cats.includes("position_optimization") && cats.indexOf("capital_efficiency") < cats.indexOf("position_optimization"); })(), "ce above");
+  add("PO-21: Capital Efficiency + Position Optimization COEXIST; Capital Efficiency ordered above", (() => { const inp = inputsFor({ allocation: allocationFixture(15000, 62, 2), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [nonCoreToken("BONK", 5000)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); const cats = r.suggestions.map((s) => s.category); return cats.includes("capital_efficiency") && cats.includes("position_optimization") && cats.indexOf("capital_efficiency") < cats.indexOf("position_optimization"); })(), "ce above");
   add("PO-22: staking + Position Optimization coexist", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "staking") && r.suggestions.some((s) => s.category === "position_optimization"); })(), "staking coexist");
-  add("PO-23: direct lending (stable_yield) + Position Optimization coexist", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 62, 2), positions: [stablePosition("USDC", 10000)] }); const r = runSuggestionEngine(inp, GEN, null, mkSug15H("sy", "stable_yield"), undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "stable_yield") && r.suggestions.some((s) => s.category === "position_optimization"); })(), "sy coexist");
-  add("PO-24: DCA + Position Optimization coexist", (() => { const inp = inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 40, -8), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, mkSug15H("dca", "dca"), null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "dca") && r.suggestions.some((s) => s.category === "position_optimization"); })(), "dca coexist");
-  add("PO-25: a valid Position Optimization card suppresses the informational On Track fallback", (() => { const inp = inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "position_optimization") && !r.suggestions.some((s) => s.category === "on_track"); })(), "on track suppressed");
+  add("PO-23: direct lending (stable_yield) + Position Optimization coexist", (() => { const inp = inputsFor({ allocation: allocationFixture(15000, 62, 2), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [stablePosition("USDC", 10000)] }); const r = runSuggestionEngine(inp, GEN, null, mkSug15H("sy", "stable_yield"), undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "stable_yield") && r.suggestions.some((s) => s.category === "position_optimization"); })(), "sy coexist");
+  add("PO-24: DCA + Position Optimization coexist", (() => { const inp = inputsFor({ allocation: allocationFixture(15000, 40, -8), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, mkSug15H("dca", "dca"), null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "dca") && r.suggestions.some((s) => s.category === "position_optimization"); })(), "dca coexist");
+  add("PO-25: a valid Position Optimization card suppresses the informational On Track fallback", (() => { const inp = inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "position_optimization") && !r.suggestions.some((s) => s.category === "on_track"); })(), "on track suppressed");
   add("PO-26: material Rebalance need WITHOUT a card does not suppress Position Optimization", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, { card: null, material: true }, undefined, { candidate: po() }); return r.suggestions.some((s) => s.category === "position_optimization"); })(), "no card no suppress");
 
   // ---- Ordering + Top Pick ----
   add("PO-27: category ordering unchanged; position_optimization is the lowest (8)", CATEGORY_PRIORITY.buffer === 1 && CATEGORY_PRIORITY.rebalance === 2 && CATEGORY_PRIORITY.capital_efficiency === 3 && CATEGORY_PRIORITY.trim === 4 && CATEGORY_PRIORITY.staking === 5 && CATEGORY_PRIORITY.stable_yield === 6 && CATEGORY_PRIORITY.dca === 7 && CATEGORY_PRIORITY.position_optimization === 8, "ordering");
-  add("PO-28: Position-Optimization-only → it becomes Top Pick (no higher candidate)", (() => { const inp = inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.find((s) => s.is_top_pick)?.category === "position_optimization"; })(), "po top pick");
+  add("PO-28: Position-Optimization-only → it becomes Top Pick (no higher candidate)", (() => { const inp = inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.find((s) => s.is_top_pick)?.category === "position_optimization"; })(), "po top pick");
   add("PO-29: Position Optimization NOT Top Pick when Rebalance present (Rebalance outranks)", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, { card: mkSug15H("reb", "rebalance"), material: true }, undefined, { candidate: po() }); return r.suggestions.find((s) => s.is_top_pick)?.category === "rebalance"; })(), "reb top");
 
   // ---- Disposition + regression ----
@@ -23402,7 +23402,7 @@ export function runRebalanceStep18GFixtureChecks(): FixtureCheck[] {
   const testingPageSrc = read("src/pages/TestingPage.tsx");
   const fx = rbTestFixtures();
   const byId = (id: string) => fx.find((f) => f.id === id);
-  const offTargetFundedInp = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 90, 25), positions: [solPosition(10)] });
+  const offTargetFundedInp = () => inputsFor({ allocation: allocationFixture(15000, 90, 25), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [solPosition(10)] });
 
   // ---- Legacy disposition / no silent fallback ----
   add("RG-1: engine.ts imports NO legacy bucket rebalance function", !/deriveRebalanceSuggestion|rebalanceSuggestionLegacy|deriveLegacyBucketRebalanceSuggestion/.test(engineSrc), "no legacy import");
