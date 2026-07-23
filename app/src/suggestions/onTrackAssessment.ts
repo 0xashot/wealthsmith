@@ -128,6 +128,12 @@ export interface OnTrackAssessment {
   reviewThresholdPct: number;
   materialRebalanceNeed: boolean;
   allocationMethodologyVersion: string | null;
+  /**
+   * Step 22F (slice 5) — the canonical target confidence, READ from the RebalanceAssessment (never recomputed, never
+   * from the market score/cache). On Track may appear ONLY under full canonical confidence; any degraded/absent
+   * confidence blocks it. Transitional Demo/testing targets carry "full" (unchanged until Slice 7).
+   */
+  targetConfidence: string | null;
   // ---- Accounting ----
   accountingState: OtAccountingState;
   // ---- Candidate visibility (separate from claim truth) ----
@@ -145,6 +151,8 @@ export interface OnTrackAssessment {
   bufferGate: OtGateState;
   accountingGate: OtGateState;
   allocationGate: OtGateState;
+  /** Step 22F (slice 5) — full canonical target confidence is an ADDITIONAL mandatory gate for On Track. */
+  targetConfidenceGate: OtGateState;
   materialNeedGate: OtGateState;
   candidateVisibilityGate: OtGateState;
   claimConfidenceGate: OtGateState;
@@ -205,6 +213,13 @@ export function deriveOnTrackAssessment(input: OnTrackAssessmentInput): OnTrackA
   else allocationState = "within_review_range"; // calc allowed + |delta| < threshold (direction within_threshold)
   const allocationGate: OtGateState = allocationState === "within_review_range" ? "allowed" : allocationState === "unresolved" ? "unresolved" : "blocked";
 
+  // ---- Target confidence (Step 22F slice 5) — READ from the canonical Rebalance assessment; never recomputed. On
+  // Track requires FULL confidence. A degraded (market-excluded) target explicitly blocks; an absent confidence (no
+  // usable canonical target — unavailable/blocked/unresolved/loading/missing) is unresolved and defers to the other
+  // gates (which already fail closed on those states). ----
+  const targetConfidence = ra?.targetConfidence ?? null;
+  const targetConfidenceGate: OtGateState = targetConfidence === "full" ? "allowed" : targetConfidence === "degraded_market_excluded" ? "blocked" : "unresolved";
+
   // ---- Accounting dimension (reuse the canonical Rebalance calculation gate; corroborate with completeness). ----
   const comp = input.portfolioCompleteness ?? null;
   const liabilitiesComplete = comp == null ? null : comp.liabilitiesState === "complete";
@@ -241,12 +256,14 @@ export function deriveOnTrackAssessment(input: OnTrackAssessmentInput): OnTrackA
   // ---- Fallback eligibility. ----
   const allAllowed =
     bufferGate === "allowed" && accountingGate === "allowed" && allocationGate === "allowed" &&
+    targetConfidenceGate === "allowed" &&
     materialNeedGate === "allowed" && candidateVisibilityGate === "allowed" && claimConfidenceGate === "allowed";
   const anyUnresolved =
     bufferGate === "unresolved" || accountingGate === "unresolved" || allocationGate === "unresolved" ||
+    targetConfidenceGate === "unresolved" ||
     materialNeedGate === "unresolved" || candidateVisibilityGate === "unresolved" || claimConfidenceGate === "unresolved";
   const fallbackEligibilityGate: OtGateState =
-    allAllowed && visibleActionableCandidateCount === 0 && !materialRebalanceNeed && allocationState === "within_review_range"
+    allAllowed && visibleActionableCandidateCount === 0 && !materialRebalanceNeed && allocationState === "within_review_range" && targetConfidenceGate === "allowed"
       ? "allowed"
       : anyUnresolved ? "unresolved" : "blocked";
   const overallReadiness = fallbackEligibilityGate;
@@ -275,6 +292,12 @@ export function deriveOnTrackAssessment(input: OnTrackAssessmentInput): OnTrackA
     presentationState = "accounting_unresolved"; fallbackState = "unresolved"; blockingReasons.push("accounting_unresolved");
   } else if (allocationGate === "unresolved") {
     presentationState = "allocation_unresolved"; fallbackState = "unresolved"; blockingReasons.push("allocation_unresolved");
+  } else if (targetConfidenceGate !== "allowed") {
+    // Buffer/allocation/accounting all pass, but the canonical target is not FULL confidence (degraded/absent) →
+    // no On Track (Step 22F slice 5). Degraded blocks; an absent confidence is unresolved.
+    presentationState = "target_unavailable";
+    fallbackState = targetConfidenceGate === "unresolved" ? "unresolved" : "unavailable";
+    blockingReasons.push("target_confidence_not_full");
   } else {
     presentationState = "fallback_unavailable"; fallbackState = "unavailable"; blockingReasons.push("fallback_unavailable");
   }
@@ -320,6 +343,7 @@ export function deriveOnTrackAssessment(input: OnTrackAssessmentInput): OnTrackA
     reviewThresholdPct,
     materialRebalanceNeed,
     allocationMethodologyVersion,
+    targetConfidence,
     accountingState,
     candidateSetState: cc.candidateSetState,
     visibleActionableCandidateCount,
@@ -333,6 +357,7 @@ export function deriveOnTrackAssessment(input: OnTrackAssessmentInput): OnTrackA
     bufferGate,
     accountingGate,
     allocationGate,
+    targetConfidenceGate,
     materialNeedGate,
     candidateVisibilityGate,
     claimConfidenceGate,

@@ -16,7 +16,22 @@ import {
   type NativeSolRebalanceSourceAssessment, type NativeSolReservePolicy,
 } from "../suggestions/rebalanceAssessment";
 import { buildRebalanceCardFromAssessment } from "../suggestions/rebalanceSuggestion";
+import { buildCanonicalTargetTestingScenario, testingGoal, type TestingMarketState } from "../suggestions/testing/canonicalTargetTestingScenario";
+import type { CanonicalTargetAllocation } from "../suggestions/canonicalTargetAllocation";
+import type { RebalanceTargetState } from "../suggestions/rebalanceAssessment";
 import type { EngineSuggestion } from "../suggestions/engineTypes";
+
+// Step 22F (slice 7B) — the visible /testing Rebalance gallery derives its target through the PRODUCTION five-factor
+// chain (deterministic governed market → MarketConditionAssessment → TargetAllocationAssessment → canonical adapter).
+// The default deterministic market is fresh Fear (score 39); a scenario may override it (Greed, stale/missing degraded).
+const DEFAULT_TESTING_MARKET: TestingMarketState = { kind: "fresh", score: 39 };
+const rbTestingTarget = (positions: WalletPosition[], riskTolerance: string | undefined, market: TestingMarketState = DEFAULT_TESTING_MARKET): CanonicalTargetAllocation | null => {
+  const total = positions.reduce((s, p) => s + (typeof p.valueUsd === "number" && p.valueUsd > 0 ? p.valueUsd : 0), 0);
+  const scenario = buildCanonicalTargetTestingScenario({ goal: testingGoal({ risk_tolerance: riskTolerance ?? "medium" }), totalPricedUsd: total > 0 ? total : null, market });
+  return scenario.context.canonicalTargetAllocation;
+};
+const rbTargetState = (t: CanonicalTargetAllocation | null): RebalanceTargetState =>
+  t == null ? "unavailable" : t.targetConfidence === "degraded_market_excluded" ? "degraded_market_excluded" : "full";
 
 const w = (o: Partial<WalletPosition>): WalletPosition => ({ id: "x", source: "wallet", type: "token", symbol: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o });
 const usdc = (v: number, id = "usdc") => w({ id, symbol: "USDC", name: "USD Coin", mint: CANONICAL_USDC_MINT, valueUsd: v, uiAmount: v, priceUsd: 1, icon: "assets/icons/token/usdc.svg" });
@@ -48,10 +63,11 @@ export interface RebalanceTestingFixture {
   coverageIdentity: { requiredBufferUsd: number; verifiedLiquidStableValueUsd: number; sharedByCompletenessAndRebalance: boolean };
 }
 
-function fx(id: string, label: string, positions: WalletPosition[], riskTolerance: string | undefined, requiredBufferUsd: number, solFresh = true, walletFresh = true): RebalanceTestingFixture {
+function fx(id: string, label: string, positions: WalletPosition[], riskTolerance: string | undefined, requiredBufferUsd: number, solFresh = true, walletFresh = true, market: TestingMarketState = DEFAULT_TESTING_MARKET): RebalanceTestingFixture {
   const coverage = computeSafetyBufferCoverage(positions, requiredBufferUsd);
   const completeness = deriveCompletenessGates(positions, { requiredBufferUsd, bufferCoverage: coverage, evaluatedAt: "2026-07-18T00:00:00.000Z" });
-  const assessment = deriveRebalanceAssessment({ positions, portfolioCompleteness: completeness.result, safetyBufferCoverage: coverage, riskTolerance, requiredBufferUsd, generatedAt: 1_700_000_000_000 });
+  const rbTarget = rbTestingTarget(positions, riskTolerance, market);
+  const assessment = deriveRebalanceAssessment({ positions, portfolioCompleteness: completeness.result, safetyBufferCoverage: coverage, targetAllocation: rbTarget, targetState: rbTargetState(rbTarget), requiredBufferUsd, generatedAt: 1_700_000_000_000 });
   const source = selectRebalanceUsdcSource(positions, requiredBufferUsd, 1_700_000_000_000);
   const solPrice = positions.find((p) => p.type === "native")?.priceUsd ?? 250;
   const nativeSolSource = deriveNativeSolRebalanceSource(positions, solPrice, solFresh, REBALANCE_NATIVE_SOL_RESERVE_POLICY, walletFresh, 1_700_000_000_000);
@@ -94,6 +110,9 @@ export function getRebalanceTestingFixtures(): RebalanceTestingFixture[] {
     fx("native_plus_lst", "25. Native SOL + LST — LST and backing excluded", [nativeSolPos(4), lstPos(3), usdc(100)], "low", 0),
     fx("native_plus_wsol", "26. Native SOL + wrapped SOL — wrapped SOL excluded", [nativeSolPos(4), wsolPos(3), usdc(100)], "low", 0),
     fx("native_plus_collateral", "27. Native SOL + protocol SOL collateral — collateral excluded", [nativeSolPos(4), solCollateral(3000), usdc(100)], "low", 0),
+    // ---- Step 22F (slice 7B): production-derived MARKET-AWARE cases (full Greed → toward stables; degraded market-excluded) ----
+    fx("greed_to_stables", "Greed target · Toward stables", [nativeSolPos(4), usdc(100)], "high", 0, true, true, { kind: "fresh", score: 80 }),
+    fx("degraded_excluded", "Market data excluded · Toward crypto", [sol(100), usdc(900)], "medium", 100, true, true, { kind: "stale", score: 39 }),
   ];
 }
 
@@ -159,7 +178,8 @@ export function getStakingConflictTestingFixtures(): StakingConflictTestingFixtu
   const scenario = (id: string, label: string, positions: WalletPosition[], risk: string | undefined, buffer: number, existingStakingEligible: boolean): StakingConflictTestingFixture => {
     const coverage = computeSafetyBufferCoverage(positions, buffer);
     const completeness = deriveCompletenessGates(positions, { requiredBufferUsd: buffer, bufferCoverage: coverage, evaluatedAt: "2026-07-18T00:00:00.000Z" });
-    const a = deriveRebalanceAssessment({ positions, portfolioCompleteness: completeness.result, safetyBufferCoverage: coverage, riskTolerance: risk, requiredBufferUsd: buffer, generatedAt: 1_700_000_000_000 });
+    const rbTgt = rbTestingTarget(positions, risk);
+    const a = deriveRebalanceAssessment({ positions, portfolioCompleteness: completeness.result, safetyBufferCoverage: coverage, targetAllocation: rbTgt, targetState: rbTargetState(rbTgt), requiredBufferUsd: buffer, generatedAt: 1_700_000_000_000 });
     const materialCryptoToStables = isMaterialCryptoToStables(a);
     return { id, label, direction: a.direction, materialCryptoToStables, existingStakingEligible, newStakingAllowed: existingStakingEligible && !materialCryptoToStables };
   };

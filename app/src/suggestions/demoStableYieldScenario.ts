@@ -9,6 +9,7 @@
 import type { WalletPosition } from "../wallet/walletPosition";
 import type { SavedGoal } from "../types/goal";
 import { deriveRailSuggestions, type RailSuggestions } from "./useRailSuggestions";
+import { buildDemoMarketCacheInput, DEMO_MARKET_CACHE_STATE } from "./demoMarketConditions";
 import { buildYieldStrategyPlanDecision } from "./yieldStrategyPlan";
 import type { YieldStrategyPlanDecision } from "./yieldStrategyPlanTypes";
 import type { YieldStrategyRegistryEntry } from "./yieldStrategyRegistryTypes";
@@ -112,6 +113,6 @@ export const DEMO_STABLE_YIELD_GOAL: SavedGoal = { financial_goal: "build_long_t
  * `RealWalletSuggestionsRail` → shared card + shared review modal. No production registry mutation.
  */
 export function buildDemoStableYieldRail(): RailSuggestions {
-  const data = deriveRailSuggestions({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL, dataMode: "demo_fixture" });
+  const data = deriveRailSuggestions({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL, dataMode: "demo_fixture", marketConditionsCacheInput: buildDemoMarketCacheInput(DEMO_STABLE_YIELD_PRICED_AS_OF), marketConditionsCacheState: DEMO_MARKET_CACHE_STATE, targetGeneratedAt: DEMO_STABLE_YIELD_PRICED_AS_OF });
   return { ...data, loading: false };
 }

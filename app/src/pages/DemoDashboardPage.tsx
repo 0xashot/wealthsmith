@@ -24,6 +24,7 @@ import FinancialSnapshot from "../components/FinancialSnapshot";
 import SafetyBufferCard from "../components/SafetyBufferCard";
 import ProjectedGrowthChart from "../components/ProjectedGrowthChart";
 import AllocationChart from "../components/AllocationChart";
+import MarketConditionsSurface from "../components/MarketConditionsSurface";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 import { buildDemoExactSolStakingRail } from "../suggestions/demoExactSolStakingScenario";
@@ -58,6 +59,21 @@ export default function DemoDashboardPage({
   // Step 15H — the canonical Demo run through the SAME shared engine (demo_fixture). Buffer-incomplete
   // → exactly one plan-backed Safety Buffer card (Top Pick), no SOL DCA. Rendered via the shared rail.
   const demoContributionRail = useMemo(() => buildDemoContributionRail(), []);
+  // Step 22F (slice 7B) — the Demo AllocationChart's RECOMMENDED target reads the SHARED canonical target from the rail
+  // (63.5% crypto / 36.5% stable), agreeing with the Market Conditions surface. CURRENT allocation is unchanged
+  // (curated Demo portfolio). No target is recalculated here; a non-full target shows no hand-authored fallback target.
+  const demoTarget = demoContributionRail.targetSummary;
+  const demoTargetFull = demoTarget != null && demoTarget.state === "full" && demoTarget.targetCryptoPct != null && demoTarget.targetStablePct != null;
+  const demoAllocation = {
+    ...d.allocation,
+    recommended_allocation: demoTargetFull
+      ? d.allocation.recommended_allocation.map((r) =>
+          r.label === "Crypto" ? { ...r, value_percent: demoTarget!.targetCryptoPct as number }
+            : r.label === "Stables" ? { ...r, value_percent: demoTarget!.targetStablePct as number }
+              : r,
+        )
+      : [], // no hand-authored fallback target when the canonical target is not full
+  };
   // Step 16H-D — a funded-buffer Demo profile that visibly surfaces ONE read-only Stable Yield card
   // through the SAME shared engine (demo_fixture) → shared rail/card/review modal. Demo-only inputs.
   const demoStableYieldRail = useMemo(() => buildDemoStableYieldRail(), []);
@@ -94,7 +110,10 @@ export default function DemoDashboardPage({
           />
           <SafetyBufferCard buffer={d.safety_buffer} />
           <ProjectedGrowthChart growth={d.projected_growth} />
-          <AllocationChart allocation={d.allocation} />
+          <AllocationChart allocation={demoAllocation} />
+          {/* Step 22F (slice 7) — the SAME production Market Conditions surface, from the deterministic Demo market
+              fixture (no real cache, no provider). Fear 39/100, CoinMarketCap attribution, 10% explanation. */}
+          <MarketConditionsSurface summary={demoContributionRail.marketSummary} />
         </main>
 
         {railMode === "ask_smith_ai" ? (

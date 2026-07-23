@@ -262,6 +262,25 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                 </dl>
               </section>
             )}
+            {/* Step 22F (slice 4.1) — honest market-context disclosure. Rendered ONLY when the canonical target drove
+                the plan (full → 10% + CoinMarketCap; degraded → exclusion + renormalization); absent for transitional
+                Demo/testing and buffer plans, so no empty section appears. */}
+            {cr.marketContextSection && (
+              <section className="review-modal__section" aria-label="Market context">
+                <h3 className="review-modal__section-title">{cr.marketContextSection.title}</h3>
+                <p className="modal__intro">{cr.marketContextSection.body}</p>
+                {cr.marketContextSection.rows.length > 0 && (
+                  <dl className="review-modal__metrics">
+                    {cr.marketContextSection.rows.map((r, i) => (
+                      <div key={`${r.label}-${i}`} className="review-modal__metric">
+                        <dt className="review-modal__metric-label">{r.label}</dt>
+                        <dd className="review-modal__metric-value">{r.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </section>
+            )}
           </div>
         </div>
       </div>

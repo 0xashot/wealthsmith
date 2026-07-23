@@ -16,7 +16,8 @@
  * PortfolioCompletenessResult + SafetyBufferCoverage (never recomputes them when supplied).
  */
 import type { WalletPosition } from "../wallet/walletPosition";
-import { deriveRecommendedAllocation } from "../wallet/recommendedAllocation";
+import type { CanonicalTargetAllocation } from "./canonicalTargetAllocation";
+import { TARGET_ALLOCATION_ASSESSMENT_VERSION } from "./targetAllocationAssessment";
 import { REBALANCE_DELTA_THRESHOLD_PCT, MIN_SUGGESTION_AMOUNT_USD } from "./engineThresholds";
 import { isStablecoin } from "../wallet/walletSummary";
 import {
@@ -88,11 +89,21 @@ export const REBALANCE_DESTINATIONS: Record<"crypto_to_stables" | "stables_to_cr
   },
 };
 
+/** Step 22F — the canonical target lifecycle state the rail passes alongside the (possibly null) target. */
+export type RebalanceTargetState = "full" | "degraded_market_excluded" | "unavailable" | "blocked" | "unresolved" | "loading";
+
 export interface RebalanceInput {
   positions: WalletPosition[];
   portfolioCompleteness?: PortfolioCompletenessResult;
   safetyBufferCoverage?: SafetyBufferCoverage;
-  riskTolerance: string | undefined;
+  /**
+   * Step 22F — the CANONICAL five-factor target (from `RailTargetContext.canonicalTargetAllocation`), or a
+   * transitional Demo/`/testing` target. `null` when the target is unusable (loading/unavailable/blocked/unresolved).
+   * Rebalance CONSUMES this target — it never derives a risk-only target and never falls back to one.
+   */
+  targetAllocation: CanonicalTargetAllocation | null;
+  /** Drives the calc gate when `targetAllocation` is null (loading/unresolved → unresolved; unavailable/blocked → blocked). */
+  targetState?: RebalanceTargetState;
   requiredBufferUsd?: number;
   generatedAt?: number;
 }
@@ -109,6 +120,25 @@ export interface RebalanceAssessment {
   currentStablePct: number | null;
   targetCryptoPct: number | null;
   targetStablePct: number | null;
+  /** Step 22F — canonical target metadata for review copy (never raw income/expenses/score/governance). */
+  targetConfidence: string | null;
+  targetMethodologyVersion: string | null;
+  marketIncluded: boolean;
+  marketExclusionReason: string | null;
+  marketAdjustmentVsProfileOnlyPct: number | null;
+  profileOnlyTargetStablePct: number | null;
+  /**
+   * Step 22F (slice 3.1) — RAW, full-precision drift: currentCryptoPct − targetCryptoPct, NEVER rounded.
+   * This is the CANONICAL eligibility value. Materiality, direction, trigger eligibility, amount, On Track
+   * compatibility, and conflict suppression MUST all compare `rawCryptoDeltaPct` against the ±threshold —
+   * a raw ±9.999 stays inside the review range and must not round up to ±10 before the comparison.
+   */
+  rawCryptoDeltaPct: number | null;
+  /**
+   * DISPLAY-only rounding of `rawCryptoDeltaPct` (2dp). Used solely for presentation; display rounding can
+   * never create or remove a Rebalance signal. Do not gate on this field. (Field name preserved for
+   * downstream display/diagnostic compatibility — On Track & the card mapper read this for rendering.)
+   */
   cryptoDeltaPct: number | null;
   direction: RebalanceDirection;
   requiredCorrectionUsd: number;
@@ -231,27 +261,44 @@ export function deriveRebalanceAssessment(input: RebalanceInput): RebalanceAsses
   const netWorthUsd = accounting.netWorthUsd;
   const allocatableAssetValueUsd = accounting.grossAssetValueUsd;
   const otherClassifiedAssetValueUsd = 0; // MVP two-bucket: every fresh-valued asset is crypto or stable.
-  const currentCryptoPct = allocatableAssetValueUsd > 0 ? round2((crypto / allocatableAssetValueUsd) * 100) : null;
+  // Slice 3.1 — keep a RAW (full-precision) current % for eligibility; the public currentCryptoPct stays display-rounded.
+  const rawCurrentCryptoPct = allocatableAssetValueUsd > 0 ? (crypto / allocatableAssetValueUsd) * 100 : null;
+  const currentCryptoPct = rawCurrentCryptoPct !== null ? round2(rawCurrentCryptoPct) : null;
   const currentStablePct = allocatableAssetValueUsd > 0 ? round2((stable / allocatableAssetValueUsd) * 100) : null;
 
-  // --- Target (unchanged risk-based allocation). ---
-  const recommended = deriveRecommendedAllocation({ riskTolerance: input.riskTolerance, totalPricedUsd: allocatableAssetValueUsd });
-  const targetCryptoPct = recommended?.cryptoPct ?? null;
-  const targetStablePct = recommended?.stablePct ?? null;
+  // --- Target (Step 22F — the CANONICAL five-factor target is CONSUMED here; the assessment derives no target). ---
+  const targetCryptoPct = input.targetAllocation?.targetCryptoPct ?? null;
+  const targetStablePct = input.targetAllocation?.targetStablePct ?? null;
+  const targetConfidence = input.targetAllocation?.targetConfidence ?? null;
+  const targetMethodologyVersion = input.targetAllocation?.methodologyVersion ?? null;
+  // Market copy shows only for a REAL five-factor full target (transitional Demo/testing targets carry the sentinel).
+  const marketIncluded = input.targetAllocation != null && targetConfidence === "full" && targetMethodologyVersion === TARGET_ALLOCATION_ASSESSMENT_VERSION;
+  const marketExclusionReason = input.targetAllocation?.marketExclusionReason ?? null;
+  const marketAdjustmentVsProfileOnlyPct = input.targetAllocation?.marketAdjustmentVsProfileOnlyPct ?? null;
+  const profileOnlyTargetStablePct = marketIncluded && targetStablePct != null && marketAdjustmentVsProfileOnlyPct != null
+    ? round2(targetStablePct - marketAdjustmentVsProfileOnlyPct) : null;
 
-  // --- Drift (unchanged ±10pt / $50). ---
-  const cryptoDeltaPct = currentCryptoPct !== null && targetCryptoPct !== null ? round2(currentCryptoPct - targetCryptoPct) : null;
+  // --- Drift (unchanged ±10pt / $50). Slice 3.1: eligibility compares the RAW, full-precision delta. ---
+  // rawCryptoDeltaPct is the CANONICAL value; display rounding (cryptoDeltaPct) can never create/remove a signal.
+  const rawCryptoDeltaPct = rawCurrentCryptoPct !== null && targetCryptoPct !== null ? rawCurrentCryptoPct - targetCryptoPct : null;
+  const cryptoDeltaPct = rawCryptoDeltaPct !== null ? round2(rawCryptoDeltaPct) : null;
   let direction: RebalanceDirection = "unresolved";
-  if (cryptoDeltaPct !== null) direction = cryptoDeltaPct >= REBALANCE_DELTA_THRESHOLD_PCT ? "crypto_to_stables" : cryptoDeltaPct <= -REBALANCE_DELTA_THRESHOLD_PCT ? "stables_to_crypto" : "within_threshold";
-  // A correction is only required when the drift actually breaches the ±threshold direction.
-  const requiredCorrectionUsd = (direction === "crypto_to_stables" || direction === "stables_to_crypto") && cryptoDeltaPct !== null
-    ? round2((allocatableAssetValueUsd * Math.abs(cryptoDeltaPct)) / 100) : 0;
+  if (rawCryptoDeltaPct !== null) direction = rawCryptoDeltaPct >= REBALANCE_DELTA_THRESHOLD_PCT ? "crypto_to_stables" : rawCryptoDeltaPct <= -REBALANCE_DELTA_THRESHOLD_PCT ? "stables_to_crypto" : "within_threshold";
+  // A correction is only required when the drift actually breaches the ±threshold direction — raw magnitude, no pre-rounding.
+  const requiredCorrectionUsd = (direction === "crypto_to_stables" || direction === "stables_to_crypto") && rawCryptoDeltaPct !== null
+    ? round2((allocatableAssetValueUsd * Math.abs(rawCryptoDeltaPct)) / 100) : 0;
 
   // --- Calculation gate (§9) — market-value allocation only; NO portfolio-wide liquidity / SOL exposure. ---
   const calcReasons: string[] = [];
   let calcStatus: GateStatus = "allowed";
-  if (input.riskTolerance === undefined) { calcReasons.push("missing_risk_tolerance"); calcStatus = "unresolved"; }
-  else if (recommended === null) { calcReasons.push("unsupported_risk_tolerance"); calcStatus = "blocked"; }
+  // Step 22F — the target gate replaces the risk-only gate. A usable canonical target (full/degraded) → allowed;
+  // otherwise fail closed to the canonical target state (no risk-only fallback).
+  if (input.targetAllocation == null) {
+    const ts = input.targetState ?? "unresolved";
+    if (ts === "blocked") { calcReasons.push("target_blocked"); calcStatus = "blocked"; }
+    else if (ts === "unavailable") { calcReasons.push("target_unavailable"); calcStatus = "blocked"; }
+    else { calcReasons.push("target_unresolved"); calcStatus = "unresolved"; } // loading / unresolved
+  }
   if (allocatableAssetValueUsd <= 0) { calcReasons.push("no_allocatable_assets"); calcStatus = "blocked"; }
   if (malformedNegativeAsset) { calcReasons.push("malformed_asset_value"); calcStatus = "blocked"; }
   if (buffer.coverageState === "incomplete") { calcReasons.push("safety_buffer_incomplete"); calcStatus = "blocked"; }
@@ -320,12 +367,13 @@ export function deriveRebalanceAssessment(input: RebalanceInput): RebalanceAsses
   return {
     grossAssetValueUsd, recognizedLiabilitiesUsd, netWorthUsd, cryptoAssetValueUsd: round2(crypto), stableAssetValueUsd: round2(stable),
     otherClassifiedAssetValueUsd, allocatableAssetValueUsd, currentCryptoPct, currentStablePct, targetCryptoPct, targetStablePct,
-    cryptoDeltaPct, direction, requiredCorrectionUsd, sourceCandidates, eligibleSourceCapacityUsd, unresolvedSourceCapacityUsd,
+    targetConfidence, targetMethodologyVersion, marketIncluded, marketExclusionReason, marketAdjustmentVsProfileOnlyPct, profileOnlyTargetStablePct,
+    rawCryptoDeltaPct, cryptoDeltaPct, direction, requiredCorrectionUsd, sourceCandidates, eligibleSourceCapacityUsd, unresolvedSourceCapacityUsd,
     excludedSourceValueUsd, verifiedSourceCapacityUsd, maximumCurrentlySupportableUsd, amountClassification,
     proposedDestination: dest, calculationGate, sourceActionabilityGate, destinationEligibilityGate, overallReadiness,
     blockingReasons, warnings, observedAt: new Date(input.generatedAt ?? Date.now()).toISOString(),
     methodologyVersion: `rebalance_assessment_${REBALANCE_ASSESSMENT_VERSION}`,
-    targetSource: "RISK_TARGET_ALLOCATION (recommendedAllocation.ts) — unchanged",
+    targetSource: `canonical five-factor TargetAllocationAssessment (targetAllocationAssessment.ts) — confidence ${targetConfidence ?? "none"}`,
     thresholdSource: `REBALANCE_DELTA_THRESHOLD_PCT=${REBALANCE_DELTA_THRESHOLD_PCT}, MIN_SUGGESTION_AMOUNT_USD=${MIN_SUGGESTION_AMOUNT_USD} (engineThresholds.ts) — unchanged`,
   };
 }

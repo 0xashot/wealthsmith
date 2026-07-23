@@ -19,7 +19,6 @@ import type {
 import { deriveCapitalEfficiencySuggestion } from "./capitalEfficiencySuggestion";
 import { deriveStakingSuggestion } from "./stakingSuggestion";
 import { deriveStableYieldSuggestion } from "./stableYieldSuggestion";
-import { deriveDcaSuggestion } from "./dcaSuggestion";
 import { buildOnTrackCardsFromAssessment } from "./onTrackSuggestion";
 import { deriveOnTrackAssessment, type OnTrackMaterialSignal } from "./onTrackAssessment";
 import type { SafetyBufferAssessment } from "./safetyBufferAssessment";
@@ -116,7 +115,7 @@ export function runSuggestionEngine(
     rebalanceAssessment: RebalanceAssessment | null;
     portfolioCompleteness: PortfolioCompletenessResult | null;
     materialSignals?: OnTrackMaterialSignal[];
-  }
+  },
 ): SuggestionEngineResult {
   const warnings: SuggestionReasonCode[] = [];
   if (inputs.value.anyUnpriced) warnings.push("partial_pricing");
@@ -176,8 +175,10 @@ export function runSuggestionEngine(
       // 17H.1 — the direct-USDC-lending completeness gate narrows this (never enables it).
       const stableYield = planStableYield ?? deriveStableYieldSuggestion(inputs, generatedAt);
       if (stableYield && allows("directLending")) candidates.push(stableYield);
-      // Step 15H — prefer the plan-backed DCA; it suppresses the legacy DCA (one DCA per plan).
-      const dca = planDca ?? deriveDcaSuggestion(inputs, generatedAt);
+      // Step 22F (slice 7D) — DCA has ONE source in EVERY mode: the canonical contribution plan (`planDca`). A null
+      // `planDca` yields NO DCA (fail closed). The legacy transitional evaluator and its per-mode opt-in were DELETED
+      // here — there is no risk-only target and no `??`/`||` fallback; DCA is never inferred from a null plan.
+      const dca: EngineSuggestion | null = planDca;
       if (dca && allows("dca")) candidates.push(dca);
     }
     // Step 20C — the ONE authoritative Position Optimization result comes exclusively from the canonical

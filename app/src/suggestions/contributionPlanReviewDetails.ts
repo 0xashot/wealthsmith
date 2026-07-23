@@ -25,6 +25,13 @@ export interface ContributionPlanReviewDetails {
   /** Key-metric cards for the modal (amount, value, cadence, current/target/projected allocation). */
   keyMetrics: ReviewRow[];
   whySection: { title: "Why this plan"; body: string };
+  /**
+   * Step 22F (slice 4) — honest market-context disclosure for a DCA plan. Present only when the canonical target
+   * drove the plan: full confidence discloses the 10% market input + CoinMarketCap attribution + not-a-buy/sell
+   * clarification; degraded discloses exclusion + renormalization. Never a score/band for degraded, never raw
+   * income/expenses/cache. Absent for buffer plans and transitional Demo/testing targets.
+   */
+  marketContextSection?: { title: "Market context"; rows: ReviewRow[]; body: string };
   cadenceSection?: { title: string; rows: ReviewRow[] };
   scheduleSection?: { title: "Plan schedule"; steps: ReviewStep[] };
   allocationSection?: { title: "Allocation impact"; rows: ReviewRow[] };
@@ -136,4 +143,46 @@ export function buildContributionPlanReviewDetails(d: ContributionPlanSuggestion
     details.unallocatedSection = { title: "Not allocated by this plan", rows: [{ label: "Not allocated", value: formatUsd(unused) }] };
   }
   return details;
+}
+
+/**
+ * Step 22F (slice 4) — attach an honest market-context section to a DCA plan's Review (mutates in place). Full REAL
+ * five-factor target → the approved 10% + CoinMarketCap + not-a-buy/sell copy; degraded → exclusion + renormalization
+ * (no score, no band, no "Neutral", no current-data attribution). Transitional Demo/testing targets add NOTHING (never
+ * claim market inclusion). Never exposes income/expenses/net cash flow/savings rate/score/cache internals.
+ */
+export function appendDcaMarketContextReview(
+  reviewById: Record<string, ContributionPlanReviewDetails>,
+  id: string,
+  meta: {
+    marketIncluded?: boolean;
+    marketExclusionReason?: string | null;
+    marketAdjustmentVsProfileOnlyPct?: number | null;
+    finalTargetStablePct?: number;
+    finalTargetCryptoPct?: number;
+    targetConfidence?: string | null;
+  },
+): void {
+  const details = reviewById[id];
+  if (!details) return;
+  const targetRow: ReviewRow = { label: "Target (crypto / stable)", value: `${pct1(meta.finalTargetCryptoPct ?? 0)} / ${pct1(meta.finalTargetStablePct ?? 0)}` };
+  if (meta.marketIncluded === true) {
+    const rows: ReviewRow[] = [targetRow];
+    if (meta.marketAdjustmentVsProfileOnlyPct != null) rows.push({ label: "Market adjustment vs profile-only", value: `${meta.marketAdjustmentVsProfileOnlyPct >= 0 ? "+" : "−"}${pp1(meta.marketAdjustmentVsProfileOnlyPct)} pp` });
+    rows.push({ label: "Data source", value: "CoinMarketCap" });
+    details.marketContextSection = {
+      title: "Market context",
+      rows,
+      body: "Current market conditions are included as 10% of your target-allocation calculation. Data source: CoinMarketCap — broad crypto-market sentiment; this index does not directly create buy or sell recommendations.",
+    };
+    return;
+  }
+  if (meta.targetConfidence === "degraded_market_excluded") {
+    details.marketContextSection = {
+      title: "Market context",
+      rows: [targetRow],
+      body: "Market data was unavailable or outside its approved freshness window. The market component was excluded, and the remaining profile factors were renormalized.",
+    };
+  }
+  // Transitional / anything else → no market section (never claims inclusion).
 }

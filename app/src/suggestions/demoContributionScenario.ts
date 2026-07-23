@@ -14,6 +14,7 @@
 import type { WalletPosition } from "../wallet/walletPosition";
 import type { SavedGoal } from "../types/goal";
 import { deriveRailSuggestions, type RailSuggestions } from "./useRailSuggestions";
+import { buildDemoMarketCacheInput, DEMO_MARKET_CACHE_STATE } from "./demoMarketConditions";
 
 /** Fixed deterministic snapshot time so the Demo plan id is stable across rerenders. */
 export const DEMO_PRICED_AS_OF = Date.UTC(2026, 6, 15, 0, 0, 0);
@@ -34,6 +35,9 @@ export const DEMO_GOAL: SavedGoal = { financial_goal: "build_long_term_wealth", 
  * → shared card + shared review modal.
  */
 export function buildDemoContributionRail(): RailSuggestions {
-  const data = deriveRailSuggestions({ positions: DEMO_POSITIONS, pricedAsOf: DEMO_PRICED_AS_OF, goal: DEMO_GOAL, dataMode: "demo_fixture" });
+  // Step 22F (slice 7) — Demo consumes the SAME production five-factor target path via a DETERMINISTIC governed market
+  // fixture (no real cache, no provider, no wall-clock). The canonical target + Market Conditions surface are derived,
+  // not transitional.
+  const data = deriveRailSuggestions({ positions: DEMO_POSITIONS, pricedAsOf: DEMO_PRICED_AS_OF, goal: DEMO_GOAL, dataMode: "demo_fixture", marketConditionsCacheInput: buildDemoMarketCacheInput(DEMO_PRICED_AS_OF), marketConditionsCacheState: DEMO_MARKET_CACHE_STATE, targetGeneratedAt: DEMO_PRICED_AS_OF });
   return { ...data, loading: false };
 }

@@ -282,3 +282,13 @@ export function blockedMarketConditionAssessment(generatedAt: number, blockingRe
     blockingReasons,
   });
 }
+
+/** An unresolved assessment for a transient state (cache still loading, or a fetch failure that proves nothing). */
+export function unresolvedMarketConditionAssessment(generatedAt: number, warnings: string[], methodologyVersion?: string): MarketConditionAssessment {
+  return shell({ observation: null, sourcePolicies: [], freshnessPolicies: [], generatedAt, methodologyVersion }, {
+    overallReadiness: "unresolved",
+    componentAvailability: "unresolved",
+    sourceGate: "unresolved", scoreGate: "unresolved", bandGate: "unresolved", freshnessGate: "unresolved", calculationGate: "unresolved",
+    warnings,
+  });
+}

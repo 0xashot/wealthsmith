@@ -6,13 +6,16 @@
  * never enter Demo or Real Wallet.
  */
 import { buildContributionPlanPipeline, type BuildContributionPlanPipelineInput } from "./contributionPlanPipeline";
+import { buildCanonicalTargetTestingScenario, testingGoal as cttGoal } from "./testing/canonicalTargetTestingScenario";
+import { TARGET_ALLOCATION_ASSESSMENT_VERSION } from "./targetAllocationAssessment";
+import type { CanonicalTargetAllocation } from "./canonicalTargetAllocation";
 import { buildContributionSafetyBufferSnapshot } from "./contributionSafetyBufferGate";
 import { buildContributionPortfolioSnapshot } from "./contributionPortfolioAdapter";
 import { buildContributionPriceQuote } from "./contributionPriceAdapter";
 import { buildContributionLiquiditySnapshot, buildContributionUsdcPosition } from "./contributionLiquidityAdapter";
 import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID } from "./contributionPricePolicy";
 import { buildContributionPlanCardPresentation, type ContributionPlanCardPresentation } from "./contributionPlanPresentation";
-import { buildContributionPlanReviewDetails, type ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
+import { buildContributionPlanReviewDetails, appendDcaMarketContextReview, type ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
 import type { ContributionPipelineResult } from "./contributionIntegrationTypes";
 import type { ContributionFundingLiquidityStatus, ContributionFundingUsdcPosition } from "./contributionFundingTypes";
 import type { ContributionPortfolioAllocationSnapshot } from "./contributionAllocationGapTypes";
@@ -34,8 +37,30 @@ const pos = (id: string, status: ContributionFundingLiquidityStatus, value: numb
 const liq = (status: "current" | "stale" | "invalid", positions: ContributionFundingUsdcPosition[]) => buildContributionLiquiditySnapshot({ dataMode: "testing_fixture", snapshotId: "liq-1", sourcePortfolioVersion: "v1", calculatedAt: T, checkedAt: T, status, usdcPositions: positions }).snapshot!;
 const profile = (freq: string, goal = 1000, risk = "medium") => ({ monthlySavingGoalUsd: goal, contributionFrequency: freq, goal: "build_long_term_wealth", riskLevel: risk, timeHorizon: "5_years" });
 
+/**
+ * Step 22F (slice 7D) — the EXPLICIT MINIMAL canonical target the buffer-complete UNIT scenarios (T1–T30) run against.
+ * The transitional risk-only pipeline fallback has been DELETED, so every buffer-complete scenario must VISIBLY supply
+ * a target. These mechanics scenarios (frequency, minimums, liquidity, fail-closed guards) are target-policy-agnostic,
+ * so they use a fixed 60/40 split — the §7 "explicit minimal canonical target when policy is irrelevant" path (canonical
+ * methodology, never the deleted `transitional_risk_only` sentinel). The market-aware gallery cases override it with a
+ * production five-factor target from `buildCanonicalTargetTestingScenario`.
+ */
+const unitTarget = (): CanonicalTargetAllocation => ({
+  targetStablePct: 40, targetCryptoPct: 60, targetStableUsd: null, targetCryptoUsd: null,
+  targetConfidence: "full", marketExcluded: false, marketExclusionReason: null, marketAdjustmentVsProfileOnlyPct: null,
+  methodologyVersion: TARGET_ALLOCATION_ASSESSMENT_VERSION, policyVersion: "target_allocation_policy_v1",
+  rebalanceTargetEligible: true, dcaTargetEligible: true, onTrackTargetEligible: true,
+});
+
 function run(over: Partial<BuildContributionPlanPipelineInput>): ContributionPipelineResult {
-  return buildContributionPlanPipeline({ dataMode: "testing_fixture", profile: profile("monthly"), portfolioSnapshot: portfolio(10000, 4300, 3700), safetyBufferSnapshot: buffer(3000, 3000), priceQuoteByTargetId: { sol: freshPrice() }, generatedAt: T, checkedAt: T, ...over });
+  const { targetAllocation, targetState, ...rest } = over;
+  return buildContributionPlanPipeline({
+    dataMode: "testing_fixture", profile: profile("monthly"), portfolioSnapshot: portfolio(10000, 4300, 3700),
+    safetyBufferSnapshot: buffer(3000, 3000), priceQuoteByTargetId: { sol: freshPrice() }, generatedAt: T, checkedAt: T,
+    targetAllocation: targetAllocation !== undefined ? targetAllocation : unitTarget(),
+    targetState: targetState ?? "full",
+    ...rest,
+  });
 }
 
 export interface ContributionTestingScenarioResult {
@@ -79,7 +104,21 @@ const SCENARIOS: Array<{ id: string; name: string; expected: "ready" | "no_actio
   { id: "15H-T28", name: "Rebalance outranks DCA", expected: "ready", make: () => run({}) },
   { id: "15H-T29", name: "Capital Efficiency outranks DCA", expected: "ready", make: () => run({}) },
   { id: "15H-T30", name: "Deterministic rerender identity", expected: "ready", make: () => run({ generatedAt: "2026-08-01T00:00:00Z" }) },
+  // ---- Step 22F (slice 7C): PRODUCTION market-aware DCA cases (five-factor canonical target via the deterministic
+  // scenario builder — fresh Fear → toward SOL; fresh Greed → toward USDC; stale market → degraded/excluded). ----
+  { id: "dca_fear_crypto", name: "Fear target · Toward crypto", expected: "ready", make: () => { const t = cttTarget({ kind: "fresh", score: 39 }, 10000, "medium"); return run({ targetAllocation: t, targetState: cttState(t) }); } },
+  { id: "dca_greed_stables", name: "Extreme Greed target · Toward stables", expected: "ready", make: () => { const t = cttTarget({ kind: "fresh", score: 80 }, 10000, "high"); return run({ profile: profile("monthly", 1000, "high"), portfolioSnapshot: portfolio(10000, 8000, 2000), safetyBufferSnapshot: buffer(2000, 2000), targetAllocation: t, targetState: cttState(t) }); } },
+  { id: "dca_degraded", name: "Market data excluded", expected: "ready", make: () => { const t = cttTarget({ kind: "stale", score: 39 }, 10000, "medium"); return run({ targetAllocation: t, targetState: cttState(t) }); } },
+  { id: "dca_fear_biweekly", name: "Fear target · Bi-weekly", expected: "ready", make: () => { const t = cttTarget({ kind: "fresh", score: 39 }, 10000, "medium"); return run({ profile: profile("biweekly", 1000, "medium"), targetAllocation: t, targetState: cttState(t) }); } },
 ];
+
+/** Slice 7C — a deterministic production canonical target (five-factor) for the market-aware DCA gallery cases. */
+function cttTarget(market: import("./testing/canonicalTargetTestingScenario").TestingMarketState, total: number, risk: string) {
+  return buildCanonicalTargetTestingScenario({ goal: cttGoal({ risk_tolerance: risk }), totalPricedUsd: total, market }).context.canonicalTargetAllocation;
+}
+function cttState(t: ReturnType<typeof cttTarget>): "full" | "degraded_market_excluded" | "unavailable" {
+  return t == null ? "unavailable" : t.targetConfidence === "degraded_market_excluded" ? "degraded_market_excluded" : "full";
+}
 
 /** T22: multiple priority targets — the generator fail-closed path (real MVP cannot produce this). */
 function multipleTargetsScenario(): ContributionPipelineResult {
@@ -111,6 +150,9 @@ export function runContributionTestingScenario(id: string): ContributionTestingS
   if (pipeline.status === "ready" && pipeline.suggestion) {
     out.card = buildContributionPlanCardPresentation(pipeline.suggestion.contributionPlan);
     out.review = buildContributionPlanReviewDetails(pipeline.suggestion.contributionPlan);
+    // Step 22F (slice 7C) — a DCA plan gets the honest production market-context Review section (full → 10% +
+    // CoinMarketCap; degraded → exclusion + renormalization) from the pipeline's safe target metadata.
+    if (pipeline.suggestion.category === "dca") appendDcaMarketContextReview({ [pipeline.suggestion.id]: out.review }, pipeline.suggestion.id, pipeline);
   }
   return out;
 }

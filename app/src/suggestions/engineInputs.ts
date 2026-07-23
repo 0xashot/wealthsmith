@@ -41,11 +41,11 @@ export interface SafetyBufferInputs extends Readonly<SafetyBuffer> {
 }
 
 /**
- * Bucket-level allocation snapshot (MVP is bucket-level by approved product
- * decision). Current values come from the same derivations the Dashboard and
- * Portfolio already render; recommended/target values come from
- * deriveRecommendedAllocation (approved risk matrix); deltas mirror
- * AllocationDeltas (current − target; positive = overweight).
+ * Bucket-level allocation snapshot (MVP is bucket-level by approved product decision). Step 22G — this is a NEUTRAL,
+ * VESTIGIAL engine input: the mounted rail always passes `allocation: null` (no risk-only target is derived anywhere),
+ * and no mounted product code reads it. The canonical five-factor target flows through the category assessments +
+ * contribution plan, not this field. It is retained only as an already-decided current/recommended snapshot shape for
+ * isolated engine fixtures; nothing here derives a target from risk. (Full removal is optional no-behavior cleanup.)
  */
 export interface AllocationInputs {
   currentCryptoPct: number | null;

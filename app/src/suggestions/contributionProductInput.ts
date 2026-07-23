@@ -20,6 +20,9 @@ import type { ContributionPlanSuggestion, ContributionProductDataMode, Contribut
 import type { ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
 import type { ContributionFundingUsdcPosition } from "./contributionFundingTypes";
 import type { ContributionPriceQuote as PriceQuote } from "./contributionPricePolicy";
+import type { CanonicalTargetAllocation } from "./canonicalTargetAllocation";
+import type { RebalanceTargetState } from "./rebalanceAssessment";
+import { appendDcaMarketContextReview } from "./contributionPlanReviewDetails";
 
 export const CONTRIBUTION_PRODUCT_INPUT_EXISTS = true;
 
@@ -59,6 +62,13 @@ export function deriveContributionSuggestion(args: {
    * `price_provenance_missing`; the Safety Buffer plan is unaffected. Never defaulted here.
    */
   priceProvenance?: { sourceId: string; browserFetched?: boolean };
+  /**
+   * Step 22F (slice 4/7D) — the shared five-factor CANONICAL target (the SAME object Rebalance receives). It is the
+   * SOLE target source in EVERY mode and the pipeline recalculates none; a null/non-usable target (or an omitted one)
+   * fails closed via `targetState`. The transitional risk-only fallback has been DELETED — no mode has one.
+   */
+  targetAllocation?: CanonicalTargetAllocation | null;
+  targetState?: RebalanceTargetState;
 }): ContributionProductResult {
   const { dataMode, positions, pricedAsOf, goal, buffer } = args;
   if (!goal || pricedAsOf == null || !buffer) return EMPTY;
@@ -95,10 +105,18 @@ export function deriveContributionSuggestion(args: {
     safetyBufferSnapshot: sbSnapshot,
     priceQuoteByTargetId,
     ...(liquiditySnapshot ? { liquiditySnapshot } : {}),
+    // Slice 4 — forward the shared canonical target (undefined for Demo/testing → transitional).
+    ...(args.targetAllocation !== undefined ? { targetAllocation: args.targetAllocation } : {}),
+    ...(args.targetState !== undefined ? { targetState: args.targetState } : {}),
     generatedAt: iso,
     checkedAt: iso,
   });
 
   const suggestion = pipeline.status === "ready" && pipeline.suggestion ? pipeline.suggestion : null;
-  return { suggestion, reviewById: suggestion ? buildContributionReviewDetailsById([suggestion]) : {}, pipeline };
+  if (!suggestion) return { suggestion: null, reviewById: {}, pipeline };
+  const reviewById = buildContributionReviewDetailsById([suggestion]);
+  // Slice 4 — a DCA plan carries an honest market-context Review section (full → 10% + CoinMarketCap; degraded →
+  // exclusion + renormalization). Buffer plans + transitional Demo/testing targets add nothing.
+  if (suggestion.category === "dca") appendDcaMarketContextReview(reviewById, suggestion.id, pipeline);
+  return { suggestion, reviewById, pipeline };
 }

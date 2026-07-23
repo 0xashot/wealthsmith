@@ -55,7 +55,11 @@ export type ContributionPipelineBlocker =
   | "contribution_plan_invalid"
   | "multiple_targets_blocked"
   | "existing_suggestion_conflict"
-  | "real_wallet_fixture_fallback_forbidden";
+  | "real_wallet_fixture_fallback_forbidden"
+  // Step 22F (slice 4) — the mounted five-factor CANONICAL target is non-usable (fail closed; no risk-only fallback).
+  | "target_unavailable"
+  | "target_blocked"
+  | "target_unresolved";
 
 export type ContributionPlanSuggestionPlanKind = "safety_buffer" | "stable_contribution" | "recurring_dca" | "staged_excess_usdc_dca";
 
@@ -158,4 +162,19 @@ export interface ContributionPipelineResult {
   blockers: ContributionPipelineBlocker[];
   warnings: string[];
   notes: string[];
+
+  /**
+   * Step 22F (slice 4) — the minimum SAFE target metadata for the DCA Review (never the full
+   * TargetAllocationAssessment, never raw profile financials, never a market score/cache). Present only when a
+   * target was consumed; `marketIncluded` is true only for a REAL full five-factor target (transitional Demo/testing
+   * targets carry the sentinel methodology and read false).
+   */
+  targetConfidence?: string | null;
+  targetMethodologyVersion?: string | null;
+  marketIncluded?: boolean;
+  marketExclusionReason?: string | null;
+  marketAdjustmentVsProfileOnlyPct?: number | null;
+  profileOnlyTargetStablePct?: number | null;
+  finalTargetStablePct?: number;
+  finalTargetCryptoPct?: number;
 }

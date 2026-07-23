@@ -24,13 +24,8 @@ import type { SuggestionCardState } from "../types/dashboard";
 import type { SuggestionReviewDetails } from "./engineTypes";
 import {
   deriveValueBreakdown,
-  deriveStableValue,
   deriveSafetyBuffer,
 } from "../wallet/walletSummary";
-import {
-  deriveRecommendedAllocation,
-  deriveAllocationDeltas,
-} from "../wallet/recommendedAllocation";
 import { getSafetyBufferTargetMonths } from "../wallet/safetyBufferTarget";
 import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
@@ -38,7 +33,8 @@ import { deriveCompletenessGates, type PortfolioCompletenessResult } from "../wa
 import { computeSafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
 import { deriveSafetyBufferAssessment, type SafetyBufferContributionPlanInput } from "./safetyBufferAssessment";
 import { buildSafetyBufferCardFromAssessment } from "./bufferSuggestion";
-import { deriveRebalanceAssessment, selectRebalanceUsdcSource, isRebalanceMaterial, isMaterialCryptoToStables, deriveNativeSolRebalanceSource, REBALANCE_NATIVE_SOL_RESERVE_POLICY } from "./rebalanceAssessment";
+import { deriveRebalanceAssessment, selectRebalanceUsdcSource, isRebalanceMaterial, isMaterialCryptoToStables, deriveNativeSolRebalanceSource, REBALANCE_NATIVE_SOL_RESERVE_POLICY, type RebalanceTargetState } from "./rebalanceAssessment";
+import type { CanonicalTargetAllocation } from "./canonicalTargetAllocation";
 import { buildRebalanceCardFromAssessment } from "./rebalanceSuggestion";
 import { deriveTrimAssessment } from "./trimAssessment";
 import { buildTrimCardFromAssessment } from "./trimSuggestion";
@@ -54,6 +50,8 @@ import { deriveDirectLendingExcessUsd, deriveDirectLendingSuitability } from "./
 import type { StableYieldReviewPresentation } from "./yieldStrategyPlanPresentationTypes";
 import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID } from "./contributionPricePolicy";
 import type { ContributionPlanReviewDetails } from "./contributionPlanReviewDetails";
+import { buildRailTargetContext, type RailTargetContext, type MarketConditionsCacheState } from "./railTargetContext";
+import { useMarketConditionsCache } from "./useMarketConditionsCache";
 
 /** Engine cards + partial-pricing notice for the right rail (engine order). */
 export interface RailSuggestionsData {
@@ -88,6 +86,94 @@ export interface RailSuggestionsData {
    * recomputed by the UI. Optional so non-real-wallet callers omit it.
    */
   portfolioCompleteness?: PortfolioCompletenessResult;
+  /**
+   * Step 22F (slice 2) — the ONE shared canonical-target context per refresh (real-wallet only): the single
+   * MarketConditionAssessment + five-factor TargetAllocationAssessment + canonical target-adapter result. NOT yet
+   * consumed by any suggestion category, the dashboard, or the review modals — it is the seam that Slices 3–5 read.
+   * Absent for Demo (which never loads the real cache) and for callers that pass no cache state.
+   */
+  targetContext?: RailTargetContext;
+  /**
+   * Step 22F (slice 5) — the MINIMUM safe canonical-target summary for the dashboard allocation display. It carries
+   * the SAME shared target Rebalance + DCA consume, so the dashboard shows identical percentages. Never the raw
+   * TargetAllocationAssessment, market cache, income/expenses, factor weights, or provider payload. Absent (undefined)
+   * for callers with no target context (e.g. Demo/testing) so the dashboard keeps its existing display there.
+   */
+  targetSummary?: RailTargetSummary;
+  /**
+   * Step 22F (slice 6) — the minimum safe market-display summary for the dashboard Market Conditions surface.
+   * Absent (undefined) for Demo/testing and callers with no target context.
+   */
+  marketSummary?: RailMarketSummary;
+}
+
+/** The minimum safe target fields the dashboard consumes (Step 22F slice 5). */
+export interface RailTargetSummary {
+  /** `full`/`degraded_market_excluded` carry percentages; `unavailable`/`blocked`/`unresolved`/`loading` do not. */
+  state: RebalanceTargetState;
+  targetCryptoPct: number | null;
+  targetStablePct: number | null;
+  /** True only for a degraded (market-excluded) target — drives the minimal renormalization disclosure. */
+  marketExcluded: boolean;
+}
+
+export type RailMarketSummaryState = "loading" | "full" | "degraded" | "stale" | "unavailable" | "blocked";
+/**
+ * Step 22F (slice 6) — the MINIMUM safe market-display summary for the dashboard Market Conditions surface. Derived
+ * ONCE from the already-shared MarketConditionAssessment + canonical target (no recompute of score/band/freshness/
+ * target). Score/band/observedAt/attribution appear ONLY in the `full` state; every excluded/blocked/loading state
+ * carries nulls so the UI never shows a stale score/band or a fake Neutral. Never the raw assessment/cache,
+ * retrievedAt, validUntil, provider endpoint/payload, income/expenses, or an API key.
+ */
+export interface RailMarketSummary {
+  state: RailMarketSummaryState;
+  score: number | null;
+  band: string | null;
+  bandLabel: string | null;
+  /** ISO — the approved observedAt, only in the `full` state (never retrievedAt/validUntil). */
+  observedAt: string | null;
+  sourceName: "CoinMarketCap" | null;
+  scopeLabel: string | null;
+  targetWeightPct: 10;
+  marketIncluded: boolean;
+  marketExcluded: boolean;
+  marketAdjustmentVsProfileOnlyPct: number | null;
+  targetConfidence: string | null;
+}
+
+/** Derive the safe market-display summary from the ONE shared target context (never recomputes anything). */
+function deriveRailMarketSummary(ctx: RailTargetContext): RailMarketSummary {
+  const mca = ctx.marketConditionAssessment;
+  const ct = ctx.canonicalTargetAllocation;
+  const confidence = ctx.targetAllocationAssessment.targetConfidence;
+  let state: RailMarketSummaryState;
+  if (ctx.targetLoadingState === "loading") state = "loading";
+  else
+    switch (mca.overallReadiness) {
+      case "full": state = "full"; break;
+      case "excluded_market_stale": state = "stale"; break;
+      case "excluded_market_unavailable":
+      case "excluded_market_failed": state = "degraded"; break;
+      case "excluded_market_unapproved":
+      case "blocked_invalid_score":
+      case "blocked_methodology_mismatch": state = "blocked"; break;
+      default: state = "unavailable"; // unresolved
+    }
+  const full = state === "full";
+  return {
+    state,
+    score: full ? mca.score : null,
+    band: full ? mca.band : null,
+    bandLabel: full ? mca.displayBand : null,
+    observedAt: full ? mca.observedAt : null,
+    sourceName: full ? "CoinMarketCap" : null,
+    scopeLabel: full ? "Broad crypto-market sentiment" : null,
+    targetWeightPct: 10,
+    marketIncluded: full,
+    marketExcluded: state === "degraded" || state === "stale",
+    marketAdjustmentVsProfileOnlyPct: full ? (ct?.marketAdjustmentVsProfileOnlyPct ?? null) : null,
+    targetConfidence: confidence,
+  };
 }
 
 /** The lifted rail payload (adds the live-read loading flag). */
@@ -138,9 +224,24 @@ export function deriveRailSuggestions(args: {
   klendMarketSnapshot?: KlendDirectUsdcMarketSnapshot;
   directLendingExcessUsd?: number | null;
   directLendingSuitability?: { profileComplete: boolean; suitableForCategory: boolean; prohibitsDefiLending: boolean };
+  /**
+   * Step 22F (slice 2) — the published market-conditions cache read by the component-layer hook
+   * (`useMarketConditionsCache`), passed in like `klendMarketSnapshot`. The pure rail NEVER fetches. When
+   * `marketConditionsCacheState` is provided (real-wallet), the rail derives the ONE shared target context; when
+   * absent (Demo / callers without the cache), no context is derived and behavior is byte-identical to before.
+   */
+  marketConditionsCacheInput?: unknown | null;
+  marketConditionsCacheState?: MarketConditionsCacheState;
+  targetGeneratedAt?: number;
 }): RailSuggestionsData {
   const { positions, pricedAsOf, goal, klendMarketSnapshot, directLendingExcessUsd, directLendingSuitability } = args;
   const dataMode = args.dataMode ?? "real_wallet";
+  // Step 22F (slice 7D) — the canonical target path is UNCONDITIONAL now (the transitional branch is deleted). This
+  // flag governs only whether the rail EXPOSES the dashboard target/market SUMMARIES: real-wallet ALWAYS exposes them
+  // (fail-closed unresolved when it has no cache), and Demo/testing expose them only when they supply a DETERMINISTIC
+  // governed cache. Demo/testing WITHOUT a cache expose no summary (the dashboard keeps its existing display) yet still
+  // fail closed on the target itself — there is no risk-only fallback in any mode.
+  const canonicalSummaryEligible = dataMode === "real_wallet" || args.marketConditionsCacheState !== undefined;
 
   const value = deriveValueBreakdown(positions);
 
@@ -160,43 +261,61 @@ export function deriveRailSuggestions(args: {
       ? deriveSafetyBuffer(positions, goal?.expenses_monthly, bufferTargetMonths, bufferCoverage)
       : null;
 
-  // Current + recommended allocation (bucket-level), from sourced value only.
+  // Current allocation total (bucket-level), from sourced value only — sizes the canonical target context below.
   const total = value.totalUsd ?? 0;
-  const stableUsd = deriveStableValue(positions);
-  const cryptoUsd = Math.max(0, total - stableUsd);
-  const cryptoPct = total > 0 ? (cryptoUsd / total) * 100 : 0;
-  const stablePct = total > 0 ? (stableUsd / total) * 100 : 0;
   const showAllocation = value.totalUsd != null && total > 0;
-  const recommended = deriveRecommendedAllocation({
-    riskTolerance: goal?.risk_tolerance,
-    totalPricedUsd: showAllocation ? total : null,
-  });
-  const deltas =
-    showAllocation && recommended
-      ? deriveAllocationDeltas({
-          current: { cryptoUsd, stableUsd, cryptoPct, stablePct },
-          recommended,
-        })
-      : null;
-  const allocationInput =
-    showAllocation && recommended && deltas
-      ? {
-          currentCryptoPct: cryptoPct,
-          currentStablesPct: stablePct,
-          currentCryptoUsd: cryptoUsd,
-          currentStablesUsd: stableUsd,
-          recommendedCryptoPct: recommended.cryptoPct,
-          recommendedStablesPct: recommended.stablePct,
-          cryptoDeltaPct: deltas.cryptoDeltaPct,
-          stablesDeltaPct: deltas.stableDeltaPct,
-        }
-      : null;
+  // Step 22F (slice 7D) — the legacy risk-only allocation input is REMOVED: the engine no longer has a legacy DCA
+  // fallback, so there is no `allocation` to feed it. DCA comes ONLY from the canonical contribution pipeline
+  // (`planDca`). The engine `allocation` input is always null now.
+  const allocationInput = null;
 
-  // Step 15H — the deterministic plan-backed contribution suggestion from REAL wallet state (never
-  // fixtures). Merged into the engine BEFORE its sort/Top-Pick pass so ordering is engine-owned.
-  // Real-wallet positions are priced exclusively through the canonical token-price service
-  // (`wallet/tokenPrices.ts`), so `token_price_service` is a DEMONSTRABLE provenance (not fabricated).
-  const contribution = deriveContributionSuggestion({ dataMode, positions, pricedAsOf, goal, buffer, priceProvenance: { sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID } });
+  // Step 22F (slice 2) — the ONE shared canonical-target context per refresh. Derived here (real-wallet only, and
+  // only when the component-layer hook has provided a cache state) so Slices 3–5 can read a single
+  // MarketConditionAssessment + TargetAllocationAssessment + canonical target. NOT consumed by any suggestion,
+  // the dashboard, or the modals yet — the legacy risk-only path above is untouched, and there is NO risk-only
+  // fallback in this canonical path. Demo passes no cache state → no context → behavior is byte-identical.
+  const targetContext: RailTargetContext | undefined =
+    args.marketConditionsCacheState !== undefined
+      ? buildRailTargetContext({
+          goal,
+          cacheInput: args.marketConditionsCacheInput ?? null,
+          cacheState: args.marketConditionsCacheState,
+          generatedAt: args.targetGeneratedAt ?? pricedAsOf ?? Date.now(),
+          totalPricedUsd: showAllocation ? total : null,
+        })
+      : undefined;
+
+  // Step 22F (slice 3.1/4/7D) — the ONE shared five-factor canonical target per refresh, resolved ONCE and consumed by
+  // BOTH Rebalance and DCA/contribution (§5 "one shared target"). EVERY mode (real-wallet, Demo, testing) uses the
+  // canonical path UNCONDITIONALLY: missing cache state, missing targetContext, or a null canonical target FAIL CLOSED
+  // (unresolved/loading/unavailable/blocked → no Rebalance and no target-based DCA), with NO risk-only fallback and no
+  // risk-only flicker. The transitional risk-only target has been DELETED — there is no non-canonical branch.
+  let rebalanceTarget: CanonicalTargetAllocation | null;
+  let rebalanceTargetState: RebalanceTargetState;
+  if (!targetContext) {
+    // No cache state / no context (real-wallet with an omitted cache, or Demo/testing without a deterministic market
+    // input) → fail closed, NEVER transitional.
+    rebalanceTarget = null;
+    rebalanceTargetState = "unresolved";
+  } else if (targetContext.targetLoadingState === "loading") {
+    // Loading → no card, and no transient risk-only render.
+    rebalanceTarget = null;
+    rebalanceTargetState = "loading";
+  } else {
+    rebalanceTarget = targetContext.canonicalTargetAllocation ?? null;
+    rebalanceTargetState = targetContext.targetAllocationAssessment.targetConfidence as RebalanceTargetState;
+  }
+
+  // Step 15H / 22F(slice 4/7D) — the deterministic plan-backed contribution suggestion from REAL wallet state (never
+  // fixtures). ALL modes consume the SAME shared canonical target (fail closed on any non-usable state); the target is
+  // ALWAYS passed (a null canonical target → the pipeline fails closed, never a risk-only fallback). Merged into the
+  // engine BEFORE its sort/Top-Pick pass so ordering is engine-owned. Real-wallet positions are priced exclusively
+  // through the canonical token-price service, so `token_price_service` is a DEMONSTRABLE provenance (not fabricated).
+  const contribution = deriveContributionSuggestion({
+    dataMode, positions, pricedAsOf, goal, buffer,
+    priceProvenance: { sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID },
+    targetAllocation: rebalanceTarget, targetState: rebalanceTargetState,
+  });
 
   // Step 16H-D — the shared Stable Yield orchestration prepares the optional 16G plan decision → 16H-A
   // suggestion. Real Wallet uses the production pipeline (no approved product → no_plan → null); Demo
@@ -213,12 +332,12 @@ export function deriveRailSuggestions(args: {
   const requiredBufferUsd = buffer?.targetUsd ?? bufferTargetUsd;
   const completeness = deriveCompletenessGates(positions, { requiredBufferUsd, bufferCoverage });
 
-  // Step 18C — one authoritative Rebalance result from the canonical assessment (phase-one:
-  // stables_to_crypto only), computed ONCE over the same merged positions + mounted completeness +
-  // the SAME canonical coverage object. `material` preserves conflict suppression even without a card.
+  // Step 18C/22F — one authoritative Rebalance result from the canonical assessment, computed ONCE over the same
+  // merged positions + mounted completeness + the SAME canonical coverage object, consuming the canonical target
+  // above. `material` preserves conflict suppression even without a card.
   const rebalanceAssessment = deriveRebalanceAssessment({
     positions, portfolioCompleteness: completeness.result, safetyBufferCoverage: bufferCoverage,
-    riskTolerance: goal?.risk_tolerance, requiredBufferUsd, generatedAt: pricedAsOf ?? Date.now(),
+    targetAllocation: rebalanceTarget, targetState: rebalanceTargetState, requiredBufferUsd, generatedAt: pricedAsOf ?? Date.now(),
   });
   const usdcSource = selectRebalanceUsdcSource(positions, requiredBufferUsd, pricedAsOf ?? Date.now());
   const solPrice = positions.find((p) => p.type === "native")?.priceUsd ?? null;
@@ -366,6 +485,22 @@ export function deriveRailSuggestions(args: {
   for (const s of engineResult.suggestions) {
     if (s.reviewDetails) reviewDetailsById[s.id] = s.reviewDetails;
   }
+  // Step 22F (slice 5) — the dashboard allocation summary consumes the SAME shared canonical target as Rebalance/DCA
+  // (real-wallet only). Percentages appear only for a usable target (full/degraded); every non-usable state
+  // (unavailable/blocked/unresolved/loading) carries null percentages so the dashboard shows a safe state, never a
+  // risk-only fallback. Demo/testing get no summary (undefined) → the dashboard keeps its existing display.
+  const targetSummary: RailTargetSummary | undefined =
+    canonicalSummaryEligible
+      ? {
+          state: rebalanceTarget != null ? (rebalanceTarget.targetConfidence as RebalanceTargetState) : rebalanceTargetState,
+          targetCryptoPct: rebalanceTarget?.targetCryptoPct ?? null,
+          targetStablePct: rebalanceTarget?.targetStablePct ?? null,
+          marketExcluded: rebalanceTarget?.marketExcluded ?? false,
+        }
+      : undefined;
+  // Step 22F (slice 6/7) — the safe market-display summary (canonical path; derived ONCE from the shared context).
+  const marketSummary: RailMarketSummary | undefined =
+    canonicalSummaryEligible && targetContext ? deriveRailMarketSummary(targetContext) : undefined;
   return {
     cards,
     reviewDetailsById,
@@ -376,6 +511,12 @@ export function deriveRailSuggestions(args: {
     directLendingSuppression,
     // 17H.1 — canonical completeness for the dashboard + Smith AI (computed once; never recomputed).
     portfolioCompleteness: completeness.result,
+    // 22F slice 2 — the shared canonical-target context (real-wallet only; undefined otherwise).
+    ...(targetContext ? { targetContext } : {}),
+    // 22F slice 5 — the minimum safe target summary for the dashboard allocation display.
+    ...(targetSummary ? { targetSummary } : {}),
+    // 22F slice 6 — the minimum safe market-display summary for the dashboard Market Conditions surface.
+    ...(marketSummary ? { marketSummary } : {}),
   };
 }
 
@@ -392,13 +533,22 @@ export function useRailSuggestions(args: {
   onSuggestions?: (data: RailSuggestions) => void;
   /** Step 16H-S.5 — the live Kamino Direct market snapshot from useKlendDirectUsdcMarketSnapshot (fresh or null). */
   klendMarketSnapshot?: KlendDirectUsdcMarketSnapshot | null;
-}): { portfolioCompleteness?: PortfolioCompletenessResult } {
+}): { portfolioCompleteness?: PortfolioCompletenessResult; targetSummary?: RailTargetSummary; marketSummary?: RailMarketSummary } {
   const { positions, pricedAsOf, goal, loading, onSuggestions, klendMarketSnapshot } = args;
-  const { cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available, portfolioCompleteness } = deriveRailSuggestions({
+  // Step 22F (slice 2) — load the published, same-origin market-conditions cache (real-wallet path only; the hook
+  // never calls CoinMarketCap and holds no key). The parsed artifact + state feed the pure rail, which derives the
+  // ONE shared target context. Nothing consumes it yet, so no user-facing behavior changes.
+  const marketCache = useMarketConditionsCache();
+  // `targetContext` is derived inside deriveRailSuggestions (available to Slices 3–5 + fixtures); the hook does not
+  // read it yet — nothing consumes the canonical target in Slice 2, so it is intentionally not lifted to the page.
+  const { cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available, portfolioCompleteness, targetSummary, marketSummary } = deriveRailSuggestions({
     positions,
     pricedAsOf,
     goal,
     klendMarketSnapshot: klendMarketSnapshot ?? undefined,
+    marketConditionsCacheInput: marketCache.cacheInput,
+    marketConditionsCacheState: marketCache.cacheState,
+    targetGeneratedAt: pricedAsOf ?? undefined,
   });
 
   const signature = JSON.stringify({
@@ -418,18 +568,23 @@ export function useRailSuggestions(args: {
     reviewDetailsById,
     notice: notice ?? "",
     loading,
+    // Slice 5 — a target-state/percentage change lifts a fresh payload so the dashboard summary updates once.
+    targetSummary: targetSummary ?? null,
+    // Slice 6 — a market-state/score/band change lifts a fresh payload so the Market Conditions surface updates once.
+    marketSummary: marketSummary ?? null,
   });
   const lastSignature = useRef<string | null>(null);
   useEffect(() => {
     if (!onSuggestions) return;
     if (signature === lastSignature.current) return;
     lastSignature.current = signature;
-    onSuggestions({ cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available, loading, portfolioCompleteness });
+    onSuggestions({ cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available, loading, portfolioCompleteness, ...(targetSummary ? { targetSummary } : {}), ...(marketSummary ? { marketSummary } : {}) });
     // Signature gates the update; card objects are intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, onSuggestions]);
 
   // Step 17H.2 — expose the SAME already-computed completeness result to the portfolio body (banner +
   // position reasons + On Track UI). No second computation: it is destructured from deriveRailSuggestions.
-  return { portfolioCompleteness };
+  // Slice 5/6 — also return the shared canonical target + market summaries for the dashboard (real-wallet only).
+  return { portfolioCompleteness, ...(targetSummary ? { targetSummary } : {}), ...(marketSummary ? { marketSummary } : {}) };
 }

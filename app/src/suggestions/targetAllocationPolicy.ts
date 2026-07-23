@@ -33,7 +33,8 @@ export const TARGET_ALLOCATION_FACTOR_WEIGHTS = {
   market: 0.10,
 } as const;
 
-/** Mounted Risk matrix, documented in STABLE-target terms (mirrors RISK_TARGET_ALLOCATION.stablePct — unchanged). */
+/** The RISK factor (35% weight) of the canonical five-factor target, in STABLE-target percentage terms. This is the
+ * risk COMPONENT of the mounted canonical policy — not a standalone risk-only target (that module is deleted). */
 export const RISK_STABLE_TARGET_PCT: Record<string, number> = {
   very_low: 80,
   low: 60,

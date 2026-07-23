@@ -24,6 +24,26 @@ import { cryptoToStablesSourceGate } from "./rebalanceAssessment";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
+/**
+ * Step 22F (slice 3) — honest, non-timing market-context suffix for the Rebalance review reason. Shown ONLY for a
+ * real five-factor target: `full` discloses the 10% market input + CoinMarketCap attribution + the "not a buy/sell
+ * signal" clarification; `degraded_market_excluded` discloses the exclusion + renormalization. Transitional Demo/testing
+ * targets (`marketIncluded` false and not degraded) get NO suffix — behavior unchanged. Never shows a raw score/band,
+ * never a stale value as current, never Neutral, never market-timing language.
+ */
+function marketReviewSuffix(a: RebalanceAssessment): string {
+  if (a.marketIncluded) {
+    const adj = typeof a.marketAdjustmentVsProfileOnlyPct === "number"
+      ? ` The market component adjusted your stable target by ${a.marketAdjustmentVsProfileOnlyPct >= 0 ? "+" : ""}${(Math.round(a.marketAdjustmentVsProfileOnlyPct * 10) / 10).toFixed(1)} percentage points versus your profile-only target.`
+      : "";
+    return ` Current market conditions are included as 10% of your target-allocation calculation.${adj} Data source: CoinMarketCap — broad crypto-market sentiment; this index does not directly create buy or sell recommendations.`;
+  }
+  if (a.targetConfidence === "degraded_market_excluded") {
+    return " Market data was unavailable or outside its approved freshness window. The market component was excluded, and the remaining profile factors were renormalized.";
+  }
+  return "";
+}
+
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
 export const REBALANCE_SUGGESTION_ID = "rebalance_to_plan";
 
@@ -69,7 +89,7 @@ function buildStablesToCryptoCard(
   const partial = suggestedAmountUsd < requiredCorrectionUsd;
   const solOk = solPriceFresh && typeof solPriceUsd === "number" && solPriceUsd > 0;
   const estimatedDestinationSol = solOk ? suggestedAmountUsd / (solPriceUsd as number) : null;
-  const delta = assessment.cryptoDeltaPct ?? 0;
+  const delta = assessment.rawCryptoDeltaPct ?? 0; // Slice 3.1 — raw magnitude drives scoring; display rounding never scores.
   const ratio = Math.min(Math.abs(delta) / 100, 1);
 
   const guardrails: SuggestionGuardrail[] = [
@@ -87,7 +107,7 @@ function buildStablesToCryptoCard(
     actionKind: "review_only",
     guardrails,
     protocolSelection,
-    reason: "Your stablecoin allocation is above target. Verified excess USDC could help close the gap in your SOL allocation while keeping your Safety Buffer covered.",
+    reason: "Your stablecoin allocation is above target. Verified excess USDC could help close the gap in your SOL allocation while keeping your Safety Buffer covered." + marketReviewSuffix(assessment),
     metrics: [
       pctMetric("Current crypto allocation", assessment.currentCryptoPct ?? 0),
       pctMetric("Target crypto allocation", assessment.targetCryptoPct ?? 0),
@@ -169,7 +189,7 @@ function buildCryptoToStablesCard(
   const cappedApproxLamports = rawApproxLamports < BigInt(availableLamports) ? rawApproxLamports : BigInt(availableLamports);
   const approximateSourceSol = Number(cappedApproxLamports) / LAMPORTS_PER_SOL;
 
-  const delta = assessment.cryptoDeltaPct ?? 0;
+  const delta = assessment.rawCryptoDeltaPct ?? 0; // Slice 3.1 — raw magnitude drives scoring; display rounding never scores.
   const ratio = Math.min(Math.abs(delta) / 100, 1);
 
   const guardrails: SuggestionGuardrail[] = [
@@ -188,7 +208,7 @@ function buildCryptoToStablesCard(
     actionKind: "review_only",
     guardrails,
     protocolSelection,
-    reason: "Your crypto allocation is above target. Available direct-wallet SOL could help close the gap in your stablecoin allocation while keeping 0.1 SOL available for wallet operations.",
+    reason: "Your crypto allocation is above target. Available direct-wallet SOL could help close the gap in your stablecoin allocation while keeping 0.1 SOL available for wallet operations." + marketReviewSuffix(assessment),
     metrics: [
       pctMetric("Current crypto allocation", assessment.currentCryptoPct ?? 0),
       pctMetric("Target crypto allocation", assessment.targetCryptoPct ?? 0),

@@ -22,7 +22,6 @@ import {
   formatUsd,
 } from "../wallet/walletSummary";
 import { deriveProjection } from "../wallet/projectedGrowth";
-import { deriveRecommendedAllocation } from "../wallet/recommendedAllocation";
 import { getSafetyBufferTargetMonths } from "../wallet/safetyBufferTarget";
 import { useRailSuggestions, type RailSuggestions } from "../suggestions/useRailSuggestions";
 import { useKlendDirectUsdcMarketSnapshot, freshSnapshotOrNull } from "../suggestions/useKlendDirectUsdcMarketSnapshot";
@@ -34,6 +33,7 @@ import LegendMarker from "./LegendMarker";
 import ProjectedGrowthChart from "./ProjectedGrowthChart";
 import ProjectedGrowthInfo from "./ProjectedGrowthInfo";
 import InfoPopover from "./InfoPopover";
+import MarketConditionsSurface from "./MarketConditionsSurface";
 import {
   REAL_WALLET_VALUE_DESC,
   FS_TOTAL_VALUE_LABEL,
@@ -55,13 +55,16 @@ import {
   PG_INFO_UNAVAILABLE_CONNECT,
   PG_INFO_FOOTER,
   ALLOCATION_NEEDS_PRICING,
-  ALLOCATION_NO_RISK,
   ALLOCATION_INFO_ARIA,
-  ALLOCATION_INFO_TEXT,
+  deriveAllocationMethodologyCopy,
   ALLOCATION_GROUP_CURRENT,
   ALLOCATION_GROUP_RECOMMENDED,
   ALLOCATION_LABEL_CRYPTO,
   ALLOCATION_LABEL_STABLES,
+  ALLOCATION_TARGET_CURRENT,
+  ALLOCATION_MARKET_EXCLUDED,
+  ALLOCATION_TARGET_LOADING,
+  ALLOCATION_TARGET_UNAVAILABLE,
 } from "../state/approvedCopy";
 
 /** Whole-dollar USD (no cents) — used for the Current vs Recommended rows. */
@@ -141,21 +144,6 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
   const stablePct = total > 0 ? (stableUsd / total) * 100 : 0;
   const showAllocation = priced && total > 0;
 
-  // Recommended (target) allocation — deterministic risk-based product logic
-  // applied to the current priced total. Null when no saved risk level.
-  const recommended = deriveRecommendedAllocation({
-    riskTolerance: goal?.risk_tolerance,
-    totalPricedUsd: showAllocation ? total : null,
-  });
-  const allocationSummary =
-    `${s.allocation.title}. Current mix by value: ` +
-    `${ALLOCATION_LABEL_CRYPTO} ${usd0(cryptoUsd)} (${cryptoPct.toFixed(0)}%), ` +
-    `${ALLOCATION_LABEL_STABLES} ${usd0(stableUsd)} (${stablePct.toFixed(0)}%). ` +
-    (recommended != null
-      ? `Recommended target: ${ALLOCATION_LABEL_CRYPTO} ${usd0(recommended.cryptoUsd)} (${recommended.cryptoPct}%), ` +
-        `${ALLOCATION_LABEL_STABLES} ${usd0(recommended.stableUsd)} (${recommended.stablePct}%).`
-      : `Recommended allocation unavailable.`);
-
   // Deterministic Suggestion Engine (real wallet) — the SAME shared hook the
   // Portfolio uses, so both pages show identical suggestions. It re-derives its
   // inputs from the live positions + saved goal (recalculating no pricing,
@@ -164,7 +152,31 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
   // connected and governance is active; idle/no-fetch otherwise). Fed into the rail as a fresh-or-null
   // snapshot so the direct-lending adapter stays fail-closed on any unresolved/stale/error state.
   const klendMarket = useKlendDirectUsdcMarketSnapshot();
-  useRailSuggestions({ positions, pricedAsOf, goal, loading: loading === true, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket) });
+  // Step 22F (slice 5/6) — the shared canonical target summary + the safe market-display summary (Rebalance/DCA share the target).
+  const { targetSummary, marketSummary } = useRailSuggestions({ positions, pricedAsOf, goal, loading: loading === true, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket) });
+
+  // Recommended (target) allocation — Step 22F(slice 5): the mounted CANONICAL target, NOT a risk-only derivation.
+  // Percentages appear only for a usable (full/degraded) target; every non-usable state shows a safe treatment
+  // (loading/unresolved → loading; unavailable/blocked → unavailable) with NO legacy percentages and no risk-only flash.
+  const targetState = targetSummary?.state ?? "unresolved";
+  const targetCryptoPct = targetSummary?.targetCryptoPct ?? null;
+  const targetStablePct = targetSummary?.targetStablePct ?? null;
+  const targetUsable = (targetState === "full" || targetState === "degraded_market_excluded") && targetCryptoPct != null && targetStablePct != null;
+  const targetCryptoUsd = targetUsable && showAllocation ? total * ((targetCryptoPct as number) / 100) : null;
+  const targetStableUsd = targetUsable && showAllocation ? total * ((targetStablePct as number) / 100) : null;
+  const targetMarketExcluded = targetState === "degraded_market_excluded";
+  const targetLoadingTreatment = targetState === "loading" || targetState === "unresolved";
+  const allocationSummary =
+    `${s.allocation.title}. Current mix by value: ` +
+    `${ALLOCATION_LABEL_CRYPTO} ${usd0(cryptoUsd)} (${cryptoPct.toFixed(0)}%), ` +
+    `${ALLOCATION_LABEL_STABLES} ${usd0(stableUsd)} (${stablePct.toFixed(0)}%). ` +
+    (targetUsable
+      ? `Recommended target: ${ALLOCATION_LABEL_CRYPTO} ${usd0(targetCryptoUsd as number)} (${(targetCryptoPct as number).toFixed(0)}%), ` +
+        `${ALLOCATION_LABEL_STABLES} ${usd0(targetStableUsd as number)} (${(targetStablePct as number).toFixed(0)}%).` +
+        (targetMarketExcluded ? ` ${ALLOCATION_MARKET_EXCLUDED}` : ` ${ALLOCATION_TARGET_CURRENT}`)
+      : targetLoadingTreatment
+        ? `Recommended allocation is loading.`
+        : `Recommended allocation unavailable.`);
 
   // Deterministic Projected Growth — priced starting value + saved plan inputs.
   const projection = deriveProjection({
@@ -373,7 +385,9 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
         action={
           loading ? undefined : (
             <InfoPopover label={ALLOCATION_INFO_ARIA}>
-              <p className="info-popover__text">{ALLOCATION_INFO_TEXT}</p>
+              {/* Step 22F (slice 6.1) — STATE-AWARE methodology copy: full cites current market conditions; degraded
+                  says market data was excluded; unavailable/blocked make no five-factor claim; loading stays neutral. */}
+              <p className="info-popover__text">{deriveAllocationMethodologyCopy(targetState)}</p>
             </InfoPopover>
           )
         }
@@ -411,8 +425,8 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
                 </div>
               </div>
 
-              {/* Recommended — risk-based target applied to the current priced total. */}
-              {recommended && (
+              {/* Recommended — the shared CANONICAL target (Step 22F slice 5), shown only for a usable target. */}
+              {targetUsable && (
                 <div className="allocation__group">
                   <span className="allocation__group-label">
                     {ALLOCATION_GROUP_RECOMMENDED}
@@ -422,25 +436,30 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
                     <div className="allocation__track">
                       <div
                         className="allocation__bar allocation__bar--current"
-                        style={{ width: `${recommended.cryptoPct}%` }}
+                        style={{ width: `${targetCryptoPct}%` }}
                       />
                     </div>
-                    <span className="allocation__value">{usd0(recommended.cryptoUsd)}</span>
+                    <span className="allocation__value">{usd0(targetCryptoUsd as number)}</span>
                   </div>
                   <div className="allocation__row">
                     <span className="allocation__row-label">{ALLOCATION_LABEL_STABLES}</span>
                     <div className="allocation__track">
                       <div
                         className="allocation__bar allocation__bar--recommended"
-                        style={{ width: `${recommended.stablePct}%` }}
+                        style={{ width: `${targetStablePct}%` }}
                       />
                     </div>
-                    <span className="allocation__value">{usd0(recommended.stableUsd)}</span>
+                    <span className="allocation__value">{usd0(targetStableUsd as number)}</span>
                   </div>
                 </div>
               )}
             </div>
-            {!recommended && <p className="card__caption">{ALLOCATION_NO_RISK}</p>}
+            {/* Step 22F (slice 5) — safe target-state treatment: degraded disclosure / current confirmation /
+                loading / unavailable. No risk-only percentages, no market score/band (Slice-6 surface). */}
+            {targetUsable && targetMarketExcluded && <p className="card__caption">{ALLOCATION_MARKET_EXCLUDED}</p>}
+            {targetUsable && !targetMarketExcluded && <p className="card__caption">{ALLOCATION_TARGET_CURRENT}</p>}
+            {!targetUsable && targetLoadingTreatment && <p className="card__caption">{ALLOCATION_TARGET_LOADING}</p>}
+            {!targetUsable && !targetLoadingTreatment && <p className="card__caption">{ALLOCATION_TARGET_UNAVAILABLE}</p>}
             <div className="chart-legend">
               <span className="chart-legend__item">
                 <LegendMarker variant="dot" colorToken="--color-chart-series-1" />
@@ -455,6 +474,9 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
         ) : (
           <UnavailableCard text={ALLOCATION_NEEDS_PRICING} />
         )}
+        {/* Step 22F (slice 6) — ONE informational Market Conditions surface, grouped with the allocation summary.
+            Renders only in real-wallet mode (marketSummary present); informational only, no suggestion/trigger. */}
+        <MarketConditionsSurface summary={marketSummary} />
       </DashSection>
     </>
   );

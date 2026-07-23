@@ -481,14 +481,59 @@ export const ALLOCATION_LABEL_STABLES = "Stables";
 export const ALLOCATION_GROUP_CURRENT = "Current";
 export const ALLOCATION_GROUP_RECOMMENDED = "Recommended";
 export const ALLOCATION_COMPARE_CAPTION =
-  "Your live mix vs a risk-based target. Target values apply your saved risk level to your current priced holdings — a modeled target, not advice.";
+  "Your live mix vs your target allocation. Your target is based on your risk tolerance, timeline, financial goal, cash flow, and current market conditions — a modeled target, not advice.";
 export const ALLOCATION_NO_RISK =
   "Set your risk level to see a recommended target mix.";
+/* Step 22F (slice 5) — canonical target-state captions for the allocation summary. No market score/band/attribution. */
+export const ALLOCATION_TARGET_CURRENT = "All target-allocation inputs are current.";
+export const ALLOCATION_MARKET_EXCLUDED = "Market data was excluded from this calculation.";
+export const ALLOCATION_TARGET_LOADING = "Your recommended target allocation is loading.";
+export const ALLOCATION_TARGET_UNAVAILABLE = "Your recommended target allocation is currently unavailable.";
+/* Step 22F (slice 6) — informational Market Conditions surface. Informational only; no buy/sell/emotional/timing language. */
+export const MARKET_CONDITIONS_HEADING = "Market conditions";
+export const MARKET_CONDITIONS_SCOPE = "Broad crypto-market sentiment";
+export const MARKET_CONDITIONS_SOURCE = "Data source: CoinMarketCap";
+export const MARKET_CONDITIONS_AS_OF_PREFIX = "As of";
+export const MARKET_CONDITIONS_EXPLANATION =
+  "This input represents 10% of your target-allocation calculation and does not directly create buy or sell recommendations.";
+export const MARKET_CONDITIONS_LOADING = "Loading market conditions…";
+export const MARKET_CONDITIONS_UNAVAILABLE_PRIMARY = "Data unavailable";
+export const MARKET_CONDITIONS_UNAVAILABLE_SIMPLE = "Market data is currently unavailable.";
+export const MARKET_CONDITIONS_EXCLUDED =
+  "The market component was excluded, and the remaining profile factors were renormalized.";
+export const MARKET_CONDITIONS_STALE = "Market data is outside its approved freshness window.";
+/* Step 22F (slice 6.1) — STATE-AWARE target-allocation methodology copy. The methodology sentence must match the
+ * canonical target state: a full target may cite current market conditions; a degraded target must say market data
+ * was excluded (never both); unavailable/blocked make no five-factor completion claim; loading/unresolved make no
+ * inclusion/exclusion claim. */
+export const ALLOCATION_METHODOLOGY_FULL =
+  "Your target allocation is based on your risk tolerance, timeline, financial goal, cash flow, and current market conditions. For planning only, not financial advice.";
+export const ALLOCATION_METHODOLOGY_DEGRADED =
+  "Your target allocation uses your risk tolerance, timeline, financial goal, and cash flow. Market data was excluded because it was unavailable or outside its approved freshness window. For planning only, not financial advice.";
+export const ALLOCATION_METHODOLOGY_LOADING = "Your target allocation is being calculated.";
+/**
+ * Derive the allocation methodology popover copy from the CANONICAL target state (never from score presence or a
+ * recomputed confidence). `state` is `RailTargetSummary.state`: full | degraded_market_excluded | unavailable |
+ * blocked | unresolved | loading.
+ */
+export function deriveAllocationMethodologyCopy(state: string): string {
+  switch (state) {
+    case "full":
+      return ALLOCATION_METHODOLOGY_FULL;
+    case "degraded_market_excluded":
+      return ALLOCATION_METHODOLOGY_DEGRADED;
+    case "loading":
+    case "unresolved":
+      return ALLOCATION_METHODOLOGY_LOADING;
+    default: // unavailable | blocked → no five-factor completion claim
+      return ALLOCATION_TARGET_UNAVAILABLE;
+  }
+}
 /* Current vs Recommended Allocation "how it works" info popover. */
 export const ALLOCATION_INFO_ARIA =
   "How Current vs Recommended Allocation is calculated";
 export const ALLOCATION_INFO_TEXT =
-  "Your current allocation compared with a target based on your risk level. This target uses your priced wallet assets and is for planning only, not financial advice.";
+  "Your current allocation compared with your target allocation. Your target is based on your risk tolerance, timeline, financial goal, cash flow, and current market conditions — for planning only, not financial advice.";
 /** Overweight / underweight labels vs the risk-based target (per bucket). */
 export const ALLOCATION_DELTA_ON = "On target";
 export const ALLOCATION_DELTA_OVER = "Overweight";

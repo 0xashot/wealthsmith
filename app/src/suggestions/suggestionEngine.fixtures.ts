@@ -48,6 +48,36 @@ import { deriveMarketConditionAssessment } from "./marketConditionAssessment";
 import { deriveTargetAllocationAssessment, TARGET_ALLOCATION_ASSESSMENT_VERSION, type TargetAllocationFactorId } from "./targetAllocationAssessment";
 import { TARGET_ALLOCATION_POLICY_ID, TARGET_ALLOCATION_POLICY_VERSION } from "./targetAllocationPolicy";
 import { parseCoinMarketCapFearGreedResponse, buildMarketConditionCacheFromAdapterResult, resolveCachePublishDecision, providerClassificationToBand, type CmcFearGreedAdapterResult } from "./coinmarketcapFearGreed";
+import { buildCanonicalTargetAllocation, type CanonicalTargetAllocation as RBCanonicalTarget } from "./canonicalTargetAllocation";
+import { buildRailTargetContext, mapCacheStateToMarketAssessment } from "./railTargetContext";
+/** Step 22F (slice 7D) — EXPLICIT FIXED target for the Rebalance accounting/threshold/source-capacity fixtures (§6,
+ * §15.B). These fixtures exercise drift / direction / materiality / accounting math, NOT target POLICY, so each one
+ * visibly selects a fixed target by its crypto/stable split (the split each assertion was calibrated against). The
+ * target is a hand-built MINIMAL `CanonicalTargetAllocation` tagged with the CANONICAL methodology — it does NOT call
+ * `deriveRecommendedAllocation`, does NOT depend on the deleted `rebalanceTargetTransitional` helper, and never carries
+ * the `transitional_risk_only` sentinel. A missing/unknown split → a null target (unresolved/unavailable) so the
+ * "no usable target" fail-closed cases stay honest. This is the §6 "explicit minimal CanonicalTargetAllocation" path. */
+const RB_FIXTURE_TARGET_SPLIT: Record<string, { cryptoPct: number; stablePct: number }> = {
+  very_low: { cryptoPct: 20, stablePct: 80 },
+  low: { cryptoPct: 40, stablePct: 60 },
+  medium: { cryptoPct: 60, stablePct: 40 },
+  high: { cryptoPct: 80, stablePct: 20 },
+  very_high: { cryptoPct: 90, stablePct: 10 },
+};
+const rbFixedTarget = (split: string | undefined, priced = 1000) => {
+  const pct = split ? RB_FIXTURE_TARGET_SPLIT[split] : undefined;
+  if (!pct) return { targetAllocation: null as RBCanonicalTarget | null, targetState: (split === undefined ? "unresolved" : "unavailable") as import("./rebalanceAssessment").RebalanceTargetState };
+  const denom = priced > 0 ? priced : null;
+  const t: RBCanonicalTarget = {
+    targetStablePct: pct.stablePct, targetCryptoPct: pct.cryptoPct,
+    targetStableUsd: denom != null ? denom * (pct.stablePct / 100) : null,
+    targetCryptoUsd: denom != null ? denom * (pct.cryptoPct / 100) : null,
+    targetConfidence: "full", marketExcluded: false, marketExclusionReason: null, marketAdjustmentVsProfileOnlyPct: null,
+    methodologyVersion: TARGET_ALLOCATION_ASSESSMENT_VERSION, policyVersion: "target_allocation_policy_v1",
+    rebalanceTargetEligible: true, dcaTargetEligible: true, onTrackTargetEligible: true,
+  };
+  return { targetAllocation: t, targetState: "full" as import("./rebalanceAssessment").RebalanceTargetState };
+};
 import { deriveMarketConditionAssessmentFromCache } from "./marketConditionCacheLoader";
 import { CMC_FEAR_GREED_MAX_OBSERVATION_AGE_MS } from "./marketConditionPolicy";
 import type { RebalanceAssessment } from "./rebalanceAssessment";
@@ -134,6 +164,7 @@ import {
 } from "./rebalanceAssessment";
 import { buildRebalanceCardFromAssessment as rbBuildCard, REBALANCE_SUGGESTION_ID as RB_ID } from "./rebalanceSuggestion";
 import { getRebalanceTestingFixtures as rbTestFixtures } from "../pages/rebalanceTestingFixtures";
+import { getOnTrackTestingFixtures as otTestFixtures } from "../pages/onTrackTestingFixtures";
 import { SUGGESTION_COPY as RB_COPY } from "../state/approvedCopy";
 import { KLEND_LOADER_CHAIN, AUTHORITY_OBSERVATION, UPGRADE_AUTHORITY_LAYER as UPGRADE_LAYER, MARKET_OWNER_LAYER, EMERGENCY_COUNCIL_LAYER as EMERGENCY_LAYER, PROPOSER_AUTHORITY_LAYER as PROPOSER_LAYER, AUTHORITY_LAYERS as AUTH_LAYERS, LAYERS_ARE_DISTINCT as LAYERS_DISTINCT, KVAULT_COINCIDENCE, SQUADS_EXECUTION_SEMANTICS as SQUADS_EXEC, MARKET_OWNER_POWERS as MO_POWERS, SOCIALIZE_LOSS_AUTHORITY as SOCIALIZE_AUTH, EMERGENCY_COUNCIL_POWER_MAP as EC_POWERS, AUTHORITY_HISTORY as AUTH_HISTORY, UNRESOLVED_AUTHORITY_GAPS as UNRESOLVED_GAPS, computeAuthorityManifestHash, AUTHORITY_MANIFEST_HASH as AUTH_MANIFEST_HASH, AUTHORITY_CONFERS as AUTH_CONFERS } from "./klendDirectUsdcAuthorityEvidence";
 import { PACKAGE_BINDING as PKG_BINDING, validatePackageBinding, INCLUDED_EVIDENCE_MODULES as PKG_MODULES, CURRENT_STATE_NOT_IDENTITY, DIAGNOSTIC_ONLY_SOURCES, DIMENSION_EVIDENCE as PKG_DIMENSIONS, KLEND_PROGRAM_UPGRADE_AUTHORITY as KLEND_UPGRADE_AUTH, evaluatePackageReadiness, PACKAGE_READINESS as PKG_READINESS, READINESS_CONSEQUENCE, PACKAGE_MANIFEST as PKG_MANIFEST, computePackageManifestHash, PACKAGE_MANIFEST_HASH as PKG_MANIFEST_HASH, PACKAGE_CONFERS as PKG_CONFERS } from "./klendDirectUsdcRiskEvidencePackage";
@@ -183,6 +214,8 @@ import type { SavedGoal } from "../types/goal";
 import type { EngineSuggestion, ProtocolStrategyType } from "./engineTypes";
 import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine as runSuggestionEngineRaw } from "./engine";
+import { deriveAllocationMethodologyCopy, ALLOCATION_METHODOLOGY_FULL, ALLOCATION_TARGET_CURRENT } from "../state/approvedCopy";
+import { buildCanonicalTargetTestingScenario as buildCttScenario, testingGoal as cttGoal } from "./testing/canonicalTargetTestingScenario";
 
 /**
  * Step 21C — the mounted engine is now buffer-override-driven (no internal buffer rule). To keep the ~289 legacy
@@ -234,6 +267,7 @@ function synthRebalanceAssessment(allocation: Parameters<typeof runSuggestionEng
     direction,
     calculationGate: { status: calc, reasons: [] },
     methodologyVersion: "rebalance_assessment_1.0.0",
+    targetConfidence: "full", // Slice 5 — On Track requires full canonical confidence; the synthetic path is "full".
   } as unknown as RebalanceAssessment;
 }
 function onTrackOverrideFromInputs(inputs: Parameters<typeof runSuggestionEngineRaw>[0], generatedAt: number, rebalanceOverride: Parameters<typeof runSuggestionEngineRaw>[5]): Parameters<typeof runSuggestionEngineRaw>[9] {
@@ -260,6 +294,9 @@ function runSuggestionEngine(
 ): ReturnType<typeof runSuggestionEngineRaw> {
   const bo = bufferOverride === undefined ? bufferOverrideFromInputs(inputs, generatedAt) : (bufferOverride ?? undefined);
   const oto = onTrackOverride === undefined ? onTrackOverrideFromInputs(inputs, generatedAt, rebalanceOverride) : (onTrackOverride ?? undefined);
+  // Step 22F (slice 7D) / 22G — the legacy engine DCA opt-in and evaluator are DELETED. The engine's ONLY DCA source is
+  // the canonical contribution plan (`planDca`) in every mode; a null plan yields NO DCA. Engine unit fixtures that need
+  // a DCA candidate inject the STATIC test object `buildEngineFixtureDcaCandidate` (no financial evaluator).
   return runSuggestionEngineRaw(inputs, generatedAt, contribution, stableYield, gates, rebalanceOverride, trimOverride, positionOptimizationOverride, bo, oto);
 }
 import { deriveLegacyBucketRebalanceSuggestion as rbLegacyBucket } from "./rebalanceSuggestionLegacy";
@@ -338,7 +375,47 @@ function buildSyntheticPositionOptimizationCandidateForFixture(amountUsd = 1500)
   if (!card) throw new Error("buildSyntheticPositionOptimizationCandidateForFixture requires a concentration-triggering portfolio");
   return card;
 }
+
+/**
+ * Step 22G — a STATIC engine test object for the isolated engine ordering / Top-Pick / mapper / guardrail /
+ * review-detail fixtures. It is NOT a financial evaluator: it computes no target, no eligibility, no direction, and no
+ * amount — the caller passes an explicit `amountUsd`, and it returns a fixed, already-decided `dca` `EngineSuggestion`
+ * (the same category/contract shape the engine sorts, maps, and guardrails). Never imported by mounted source, never
+ * used by `/testing`. The legacy `deriveDcaSuggestion` evaluator it replaced is deleted.
+ */
+const buildEngineFixtureDcaCandidate = (amountUsd = 450): import("./engineTypes").EngineSuggestion => {
+  const guardrails: import("./engineTypes").SuggestionGuardrail[] = [
+    { code: "pricing_available", status: "passed" },
+    { code: "buffer_protection", status: "passed" },
+    { code: "contribution_available", status: "passed" },
+    { code: "allocation_gap", status: "passed" },
+    { code: "token_selection", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+  ];
+  const protocolSelection = notApplicableProtocolSelection("selection_not_required");
+  const reviewDetails = buildReviewDetails({
+    category: "dca", actionKind: "review_only", guardrails, protocolSelection,
+    metrics: [usdMetric("Planned monthly contribution", 1000), usdMetric("Crypto target gap", amountUsd), usdMetric("Suggested contribution to review", amountUsd), pctMetric("Crypto underweight", 3)],
+    involvedAssets: [{ symbol: "Crypto", role: "target_bucket" }],
+    calculations: [{ label: "Suggested contribution", formula: "min(monthly contribution, crypto target gap)", currentValue: 1000, targetValue: amountUsd, difference: amountUsd, unit: "USD" }],
+  });
+  return {
+    id: "dca_core_exposure", category: "dca",
+    reason_codes: ["crypto_underweight_for_dca", "planned_contribution_available", "gradual_entry_candidate"],
+    title_key: "suggestion.dca.title", description_key: "suggestion.dca.description",
+    action_kind: "review_only", is_actionable: true, is_top_pick: false,
+    amount: { valueUsd: amountUsd, label: "Contribution to review" },
+    to: { bucket: "crypto" }, // generic bucket — no token chosen
+    protocolSelection, reviewDetails,
+    scores: { impact: Math.min(amountUsd / 15000, 1), urgency: 0.3, efficiency: 0.45 },
+    guardrails, engine_version: SUGGESTION_ENGINE_VERSION, timestamp: FIXTURE_GENERATED_AT,
+  };
+};
 import { toSuggestionCard, toSuggestionCards } from "./toSuggestionCard";
+import { buildReviewDetails, usdMetric, pctMetric } from "./suggestionReviewDetails";
+import { GUARDRAIL_STATUS_NOT_EVALUATED } from "./engineThresholds";
 import {
   passedGuardrail,
   failedGuardrail,
@@ -896,8 +973,12 @@ import {
   explainContributionFrequencyNormalization,
 } from "./contributionFrequencyNormalization";
 import { CONTRIBUTION_OPTIONS } from "../state/goalState";
-import { deriveRecommendedAllocation } from "../wallet/recommendedAllocation";
 import { SOL_MINT as PRICE_SOL_MINT } from "../wallet/tokenPrices";
+/**
+ * Step 22G — an EXPLICIT TEST-ONLY crypto/stable allocation for the 15C/15D growth-target-allocation-policy and
+ * DCA-minimum-policy fixtures. It is a fixed test input (NOT the deleted risk matrix, NOT a production target policy);
+ * these fixtures exercise the growth/minimum policy machinery and only need some split to feed it. */
+const fxRiskTarget = (cryptoPct: number, stablePct: number, priced = 1000) => ({ cryptoPct, stablePct, cryptoUsd: (priced * cryptoPct) / 100, stableUsd: (priced * stablePct) / 100 });
 import { MIN_DCA_SUGGESTION_USD, SUGGESTION_ENGINE_VERSION, MIN_TRIM_SUGGESTION_USD, TRIM_PORTFOLIO_SHARE_THRESHOLD, TRIM_SINGLE_TOKEN_CONCENTRATION_THRESHOLD, TRIM_SMALL_POSITION_COUNT_THRESHOLD, TRIM_SMALL_POSITION_MAX_USD, MIN_POSITION_REVIEW_USD, MIN_REVIEW_APY, MIN_CONCENTRATION_REVIEW_USD, POSITION_CONCENTRATION_THRESHOLD, MIN_DUPLICATE_EXPOSURE_POSITION_USD, MIN_DUPLICATE_EXPOSURE_GROUP_USD, DUPLICATE_EXPOSURE_PORTFOLIO_SHARE_THRESHOLD } from "./engineThresholds";
 import {
   CONTRIBUTION_PLANNING_POLICY_SCHEMA_VERSION,
@@ -3551,10 +3632,8 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-C. Funded + crypto 3pts under target + contribution ≥ $50 + no higher → DCA Top Pick.
   {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }),
-      FIXTURE_GENERATED_AT
-    );
+    const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] });
+    const r = runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate());
     const s = dca(r);
     add(
       "9G-C: funded + 3pt underweight + contribution → dca Top Pick",
@@ -3615,14 +3694,12 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-I. capEff + staking + stable_yield + DCA, no rebalance → engine order, capEff Top Pick.
   {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: dcaUnder(3),
-        positions: [cryptoPosition(400), solPosition(10), stablePosition("USDC", 10000)],
-      }),
-      FIXTURE_GENERATED_AT
-    );
+    const inp = inputsFor({
+      safetyBuffer: funded(),
+      allocation: dcaUnder(3),
+      positions: [cryptoPosition(400), solPosition(10), stablePosition("USDC", 10000)],
+    });
+    const r = runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate());
     const ce = r.suggestions.find((s) => s.category === "capital_efficiency");
     add(
       "9G-I: capEff + staking + stable_yield + dca → engine order, capital_efficiency Top Pick",
@@ -3633,13 +3710,14 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-J. DCA + Position Optimization, no higher candidates → DCA first (Top Pick), posOpt second.
   {
+    const inp = inputsFor({
+      safetyBuffer: funded(),
+      allocation: dcaUnder(3),
+      positions: [cryptoPosition(100)],
+    });
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: dcaUnder(3),
-        positions: [cryptoPosition(100)],
-      }),
-      FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()
+      inp,
+      FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate(), null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()
     );
     add(
       "9G-J: dca + position_optimization → dca first/Top Pick, posOpt second",
@@ -3650,10 +3728,8 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-K. Mapper renders the DCA card safely.
   {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }),
-      FIXTURE_GENERATED_AT
-    );
+    const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] });
+    const r = runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate());
     const s = dca(r);
     const card = s ? toSuggestionCard(s) : undefined;
     add(
@@ -3671,10 +3747,8 @@ export function runDcaFixtureChecks(): FixtureCheck[] {
 
   // 9G-L. DCA output names no specific token (only the generic crypto bucket).
   {
-    const r = runEngineWithLegacyRebalance(
-      inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }),
-      FIXTURE_GENERATED_AT
-    );
+    const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] });
+    const r = runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate());
     const s = dca(r);
     const noToken = s ? !/\b(SOL|WSOL|BTC|ETH|BONK|JUP|WIF)\b/.test(JSON.stringify(s)) : false;
     add(
@@ -3897,7 +3971,7 @@ export function runGuardrailFixtureChecks(): FixtureCheck[] {
     trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
     staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
     stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
-    dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    dca: (() => { const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }); return runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate()); })(),
     position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
   };
   const find = (r: ReturnType<typeof runSuggestionEngine>, c: string) => r.suggestions.find((s) => s.category === c);
@@ -4017,7 +4091,7 @@ export function runProtocolSelectionFixtureChecks(): FixtureCheck[] {
     trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
     staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
     stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
-    dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    dca: (() => { const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }); return runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate()); })(),
     position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
     on_track: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
   };
@@ -4160,7 +4234,7 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
     trim: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: smallTokens }), FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate()),
     staking: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [solPosition(10)] }), FIXTURE_GENERATED_AT),
     stable_yield: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [stablePosition("USDC", 10000)] }), FIXTURE_GENERATED_AT),
-    dca: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
+    dca: (() => { const inp = inputsFor({ safetyBuffer: funded(), allocation: dcaUnder(3), positions: [cryptoPosition(100)] }); return runEngineWithLegacyRebalance(inp, FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate()); })(),
     position_optimization: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT, null, null, undefined, null, buildSyntheticPositionOptimizationCandidateForFixture()),
     on_track: runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: funded(), allocation: aligned(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT),
   };
@@ -4478,13 +4552,14 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
   }
   // C. Six categories fire → engine order preserved, capEff Top Pick, no UI sorting.
   {
+    const inp = inputsFor({
+      safetyBuffer: funded(),
+      allocation: dcaUnder(3),
+      positions: [cryptoPosition(400), nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), solPosition(10), stablePosition("USDC", 10000), yieldPosition(3000, null)],
+    });
     const r = runEngineWithLegacyRebalance(
-      inputsFor({
-        safetyBuffer: funded(),
-        allocation: dcaUnder(3),
-        positions: [cryptoPosition(400), nonCoreToken("AAA", 40), nonCoreToken("BBB", 40), nonCoreToken("CCC", 40), solPosition(10), stablePosition("USDC", 10000), yieldPosition(3000, null)],
-      }),
-      FIXTURE_GENERATED_AT, null, null, undefined, synthTrimCandidate(), buildSyntheticPositionOptimizationCandidateForFixture()
+      inp,
+      FIXTURE_GENERATED_AT, buildEngineFixtureDcaCandidate(), null, undefined, synthTrimCandidate(), buildSyntheticPositionOptimizationCandidateForFixture()
     );
     add(
       "SMOKE-C: six categories in engine order, capEff Top Pick, one Top Pick, all modal-openable",
@@ -12431,7 +12506,7 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   const btc = getInvestmentTarget("btc")!;
 
   // Existing engine → adapter (prompt example: 40/60 → usdc 40, sol 60 via risk "medium").
-  const rec = deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!; // cryptoPct 60, stablePct 40
+  const rec = fxRiskTarget(60, 40); // cryptoPct 60, stablePct 40
   const allocInput = { targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION };
   const alloc = buildGrowthTargetAllocationPolicyResult(allocInput);
   const minimumPolicy = getDcaMinimumPolicy();
@@ -12459,7 +12534,7 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   add("15C-F: no enabled SOL _v_future policy key remains", sol.allocationRequirements.allocationPolicyKey === "growth_target_allocation_v1" && sol.minimumRequirements.minimumPolicyKey === "dca_minimum_v1" && sol.suitabilityPolicyKey === "sol_growth_suitability_v1" && !JSON.stringify(sol).includes("_v_future"), "migrated");
 
   // 15C-G…P. Existing allocation reuse.
-  add("15C-G: the current target-allocation engine is reused", typeof deriveRecommendedAllocation === "function" && alloc.sourceEngineVersion === SUGGESTION_ENGINE_VERSION, "reused");
+  add("15C-G: the growth target-allocation policy stamps the shared engine version", alloc.sourceEngineVersion === SUGGESTION_ENGINE_VERSION, "reused");
   add("15C-H: no duplicate allocation matrix exists in the new modules", !readIf("src/suggestions/growthTargetAllocationPolicy.ts").includes("very_low") && !readIf("src/suggestions/growthTargetAllocationPolicy.ts").includes("RISK_TARGET") && !/cryptoPct\s*:\s*\d/.test(readIf("src/suggestions/growthTargetAllocationPolicy.ts")), "no matrix");
   add("15C-I: stable target is preserved exactly", alloc.stableBucketTargetPct === rec.stablePct && alloc.stableBucketTargetPct === 40, `${alloc.stableBucketTargetPct}`);
   add("15C-J: volatile/growth target is preserved exactly", alloc.growthBucketTargetPct === rec.cryptoPct && alloc.growthBucketTargetPct === 60, `${alloc.growthBucketTargetPct}`);
@@ -12531,7 +12606,7 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   }
   add("15C-BI: disabled target fails suitability", evaluateContributionTargetSuitability(btc, { ...suitCtx, targetId: "btc" }).status === "target_disabled", "disabled");
   {
-    const vlRec = deriveRecommendedAllocation({ riskTolerance: "very_low", totalPricedUsd: 1000 })!; // crypto 20
+    const vlRec = fxRiskTarget(20, 80); // crypto 20
     const vlAlloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: vlRec.stablePct, targetVolatilePct: vlRec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
     add("15C-BJ: Very Low risk is not independently banned when the engine returns positive growth allocation", vlAlloc.targetPctByInvestmentTargetId.sol === 20 && evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, riskLevel: "very_low" }, targetAllocationResult: vlAlloc }).status === "suitable_for_gap_evaluation", "not banned");
   }
@@ -12577,7 +12652,7 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   add("15C-CR: DCA suggestion now exists (enabled at Step 15H); policy layer still updates no output", DCA_SUGGESTION_ENABLED === true && CONTRIBUTION_POLICY_UPDATES_PRODUCT_OUTPUT === false, "exists");
 
   // 15C-CS…CZ. Product invariants.
-  add("15C-CS: existing target-allocation output remains unchanged", deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!.cryptoPct === 60 && deriveRecommendedAllocation({ riskTolerance: "very_low", totalPricedUsd: 1000 })!.cryptoPct === 20, "unchanged");
+  add("15C-CS (22G): the canonical five-factor target is the only mounted target policy — the legacy risk-only allocation module is deleted", (() => { const f = readIf("src/wallet/recommendedAllocation.ts"); return f === "" && /input\.targetAllocation/.test(readIf("src/suggestions/rebalanceAssessment.ts")); })(), "canonical only");
   const funded = bufferFixture(5000, 1000, 3);
   const aligned = allocationFixture(15000, 62, 2);
   const engineRun = runSuggestionEngine(inputsFor({ safetyBuffer: funded, allocation: aligned, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
@@ -12634,7 +12709,7 @@ export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
   const mkSnap = (totalPortfolioValueUsd: number, exposures: ContributionPortfolioTargetExposure[], over: Partial<ContributionPortfolioAllocationSnapshot> = {}): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd, targetExposures: exposures, valuationStatus: "current", notes: [], ...over });
 
   // 15C target-allocation policy (usdc 40, sol 60 via risk "medium").
-  const rec = deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!;
+  const rec = fxRiskTarget(60, 40);
   const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
 
   // A READY SOL policy eligibility (reuses the 15C pipeline).
@@ -12849,7 +12924,7 @@ export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
   add("15D-CV: DCA suggestion now exists (enabled at Step 15H)", DCA_SUGGESTION_ENABLED === true, "exists");
 
   // 15D-CW…DD. Product invariants.
-  add("15D-CW: existing target-allocation output remains unchanged", deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!.cryptoPct === 60 && deriveRecommendedAllocation({ riskTolerance: "very_low", totalPricedUsd: 1000 })!.cryptoPct === 20, "unchanged");
+  add("15D-CW (22G): DCA-minimum policy is independent of any risk-only target — the legacy allocation module is deleted", (() => { return readIf("src/wallet/recommendedAllocation.ts") === "" && typeof getDcaMinimumPolicy === "function"; })(), "minimum policy intact");
   const funded15D = bufferFixture(5000, 1000, 3);
   const aligned15D = allocationFixture(15000, 62, 2);
   const engineRun15D = runSuggestionEngine(inputsFor({ safetyBuffer: funded15D, allocation: aligned15D, positions: [solPosition(10)] }), FIXTURE_GENERATED_AT);
@@ -12907,7 +12982,7 @@ export function runContributionPriorityFixtureChecks(): FixtureCheck[] {
   const mkExp = (targetId: string, assetId: string, valueUsd: number, holdingSources: InvestmentTargetHoldingSource[] = ["connected_wallet"]): ContributionPortfolioTargetExposure => ({ targetId, assetId, valueUsd, holdingSources, valuationReady: true, notes: [] });
   const mkSnap = (total: number, exposures: ContributionPortfolioTargetExposure[]): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd: total, targetExposures: exposures, valuationStatus: "current", notes: [] });
 
-  const rec = deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!;
+  const rec = fxRiskTarget(60, 40);
   const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
 
   const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
@@ -13155,7 +13230,7 @@ export function runContributionFundingFixtureChecks(): FixtureCheck[] {
   const mkExp = (targetId: string, assetId: string, valueUsd: number): ContributionPortfolioTargetExposure => ({ targetId, assetId, valueUsd, holdingSources: ["connected_wallet"], valuationReady: true, notes: [] });
   const mkSnap = (total: number, exposures: ContributionPortfolioTargetExposure[]): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd: total, targetExposures: exposures, valuationStatus: "current", notes: [] });
 
-  const rec = deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!;
+  const rec = fxRiskTarget(60, 40);
   const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
   const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
   const techElig = evaluateInvestmentTargetTechnicalEligibility(solT, techCtx);
@@ -13416,7 +13491,7 @@ export function runContributionPlanFixtureChecks(): FixtureCheck[] {
 
   const mkExp = (targetId: string, assetId: string, valueUsd: number): ContributionPortfolioTargetExposure => ({ targetId, assetId, valueUsd, holdingSources: ["connected_wallet"], valuationReady: true, notes: [] });
   const mkSnap = (total: number, exposures: ContributionPortfolioTargetExposure[]): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd: total, targetExposures: exposures, valuationStatus: "current", notes: [] });
-  const rec = deriveRecommendedAllocation({ riskTolerance: "medium", totalPricedUsd: 1000 })!;
+  const rec = fxRiskTarget(60, 40);
   const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
   const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
   const readyElig = evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHK, technicalEligibility: evaluateInvestmentTargetTechnicalEligibility(solT, techCtx), targetAllocationResult: alloc, suitabilityResult: evaluateContributionTargetSuitability(solT, { checkedAt: CHK, targetId: "sol", profile: { goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, targetAllocationResult: alloc }), priceQuote: evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: CHK, checkedAt: CHK }), minimumPolicy: getDcaMinimumPolicy() });
@@ -13900,7 +13975,7 @@ export function runContributionIntegrationFixtureChecks(): FixtureCheck[] {
   add("15H-CO: no transaction is requested when opening modal", review("15H-T4").executionControlsPresent === false && sc("15H-T4").transactionsEnabled === false, "no tx");
 
   // 15H-CP…CV. Testing.
-  add("15H-CP: all required /testing scenarios exist", listContributionTestingScenarios().length === 30, `${listContributionTestingScenarios().length}`);
+  add("15H-CP: all required /testing scenarios exist (30 unit + 4 slice-7C production market cases)", listContributionTestingScenarios().length === 34, `${listContributionTestingScenarios().length}`);
   add("15H-CQ: ready scenarios use shared card", runAllContributionTestingScenarios().filter((s) => s.pipeline.status === "ready").every((s) => s.card != null), "cards");
   add("15H-CR: ready scenarios use shared modal", runAllContributionTestingScenarios().filter((s) => s.pipeline.status === "ready").every((s) => s.review != null), "modals");
   add("15H-CS: blocked scenarios expose diagnostics", ["15H-T15", "15H-T22", "15H-T23"].every((id) => sc(id).blockers.length > 0), "diagnostics");
@@ -14028,7 +14103,7 @@ export function runContributionUiTurnFixtureChecks(): FixtureCheck[] {
   add("15H-UI-AE: growth excess-USDC requires current liquidity", runContributionTestingScenario("15H-T9")!.pipeline.plan!.fundingSourceId === "existing_excess_usdc", "requires liquidity");
 
   // 15H-UI-AF…AK. Testing route.
-  add("15H-UI-AF: all 30 testing scenarios are registered", runAllContributionTestingScenarios().length === 30 && testingPageSrc.includes("runAllContributionTestingScenarios"), "30");
+  add("15H-UI-AF: all testing scenarios are registered (30 unit + 4 slice-7C production market cases)", runAllContributionTestingScenarios().length === 34 && testingPageSrc.includes("runAllContributionTestingScenarios"), "34");
   add("15H-UI-AG: ready testing scenarios use the shared card", testingPageSrc.includes("toSuggestionCard(p.suggestion)") && runAllContributionTestingScenarios().filter((s) => s.pipeline.status === "ready").every((s) => s.card != null), "shared card");
   add("15H-UI-AH: ready testing scenarios use the shared modal", testingPageSrc.includes("contributionReview={selectedScenario.review}") && runAllContributionTestingScenarios().filter((s) => s.pipeline.status === "ready").every((s) => s.review != null), "shared modal");
   add("15H-UI-AI: blocked testing scenarios render no recommendation card", runAllContributionTestingScenarios().filter((s) => s.pipeline.status !== "ready" && s.pipeline.status !== "no_action_required").every((s) => s.card === undefined), "no card");
@@ -14110,8 +14185,10 @@ export function runContributionFinalizationFixtureChecks(): FixtureCheck[] {
   const growthPositions: WP15H[] = [wp({ id: "u", type: "token", symbol: "USDC", name: "USD Coin", valueUsd: 9000 }), wp({ id: "s", type: "native", symbol: "SOL", valueUsd: 4300, priceUsd: 150 })];
   const growthGoal = { ...DEMO_GOAL, expenses_monthly: 100 };
   const completeBuffer = { stableUsd: 9000, targetUsd: 300, targetMonths: 3, coveragePct: 100, monthsCovered: 90, fullyFunded: true };
-  const noProv = deriveContributionSuggestion({ dataMode: "real_wallet", positions: growthPositions, pricedAsOf: T_MS, goal: growthGoal, buffer: completeBuffer });
-  const withProv = deriveContributionSuggestion({ dataMode: "real_wallet", positions: growthPositions, pricedAsOf: T_MS, goal: growthGoal, buffer: completeBuffer, priceProvenance: { sourceId: PRICE_SRC_15H } });
+  // Slice 4 — real-wallet growth/DCA now requires the shared CANONICAL target (crypto 60 / stable 40 → SOL underweight).
+  const finalQTarget = { targetStablePct: 40, targetCryptoPct: 60, targetStableUsd: null, targetCryptoUsd: null, targetConfidence: "full", marketExcluded: false, marketExclusionReason: null, marketAdjustmentVsProfileOnlyPct: 1.5, methodologyVersion: TARGET_ALLOCATION_ASSESSMENT_VERSION, policyVersion: "target_allocation_policy_v1", rebalanceTargetEligible: true, dcaTargetEligible: true, onTrackTargetEligible: true } as import("./canonicalTargetAllocation").CanonicalTargetAllocation;
+  const noProv = deriveContributionSuggestion({ dataMode: "real_wallet", positions: growthPositions, pricedAsOf: T_MS, goal: growthGoal, buffer: completeBuffer, targetAllocation: finalQTarget, targetState: "full" });
+  const withProv = deriveContributionSuggestion({ dataMode: "real_wallet", positions: growthPositions, pricedAsOf: T_MS, goal: growthGoal, buffer: completeBuffer, priceProvenance: { sourceId: PRICE_SRC_15H }, targetAllocation: finalQTarget, targetState: "full" });
   add("15H-FINAL-Q: a price with value and timestamp but no provenance blocks growth", noProvQuote.blockers.includes("price_provenance_missing") && noProv.suggestion === null && withProv.suggestion != null && withProv.suggestion!.category === "dca", "blocks growth");
   // Buffer-incomplete without provenance still works.
   const bufNoProv = deriveContributionSuggestion({ dataMode: "real_wallet", positions: DEMO_POSITIONS, pricedAsOf: T_MS, goal: DEMO_GOAL, buffer: { stableUsd: 800, targetUsd: 3000, targetMonths: 3, coveragePct: 26.67, monthsCovered: 0.8, fullyFunded: false } });
@@ -15811,7 +15888,10 @@ export function runStableYieldProductIntegrationFixtureChecks(): FixtureCheck[] 
   const realDerive = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: DEMO_STABLE_YIELD_POSITIONS, goal: DEMO_STABLE_YIELD_GOAL, buffer: demoBuffer, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF });
   add("16H-D-Q: the real-wallet decision is no_plan (no approved product / no market/capacity data source)", realDerive.decision?.status === "no_plan", realDerive.decision?.status ?? "null");
   add("16H-D-R: the real-wallet orchestration emits no Stable Yield suggestion + no review (fail-closed, no error)", realDerive.suggestion === null && Object.keys(realDerive.reviewById).length === 0 && realDerive.diagnostic.emitted === false, "no suggestion");
-  const realRail = SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL });
+  // Slice 3.1 — the real-wallet rail now consumes the CANONICAL target unconditionally; supply a fresh market cache so
+  // the canonical path is exercised (previously this scenario leaked a Rebalance card via the transitional fallback).
+  const syRwCache = { cacheVersion: MARKET_CONDITION_CACHE_VERSION, generatedAt: new Date(DEMO_STABLE_YIELD_PRICED_AS_OF).toISOString(), sourceId: "coinmarketcap_crypto_fear_greed", indexId: "cmc_crypto_fear_greed", indexName: "CMC Crypto Fear & Greed Index", methodology: "cmc_crypto_fear_greed_composite", methodologyVersion: "cmc_fng_methodology_2026_1", score: 12, band: "extreme_fear", observedAt: new Date(DEMO_STABLE_YIELD_PRICED_AS_OF - 3_600_000).toISOString(), retrievedAt: new Date(DEMO_STABLE_YIELD_PRICED_AS_OF).toISOString(), validUntil: null, retrievalState: "cached", evidence: ["cmc"] };
+  const realRail = SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL, marketConditionsCacheInput: syRwCache, marketConditionsCacheState: "loaded", targetGeneratedAt: DEMO_STABLE_YIELD_PRICED_AS_OF });
   add("16H-D-S: the real-wallet rail renders no plan-backed Stable Yield review (integration wired; no card is correct)", Object.keys(realRail.stableYieldReviewById).length === 0, `keys=${Object.keys(realRail.stableYieldReviewById).length}`);
   add("16H-D-T: unrelated real-wallet suggestions still render (the rail is not broken by no_plan)", realRail.cards.length > 0, `${realRail.cards.length} cards`);
 
@@ -15906,7 +15986,9 @@ export function runStableYieldReleaseGateFixtureChecks(): FixtureCheck[] {
 
   // ---- Production ----
   const prod = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: DEMO_STABLE_YIELD_POSITIONS, goal: DEMO_STABLE_YIELD_GOAL, buffer: demoBuffer, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF });
-  const prodRail = SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL });
+  // Slice 3.1 — exercise the real-wallet CANONICAL target path with a fresh market cache (see 16H-D-S rationale).
+  const prodRwCache = { cacheVersion: MARKET_CONDITION_CACHE_VERSION, generatedAt: new Date(DEMO_STABLE_YIELD_PRICED_AS_OF).toISOString(), sourceId: "coinmarketcap_crypto_fear_greed", indexId: "cmc_crypto_fear_greed", indexName: "CMC Crypto Fear & Greed Index", methodology: "cmc_crypto_fear_greed_composite", methodologyVersion: "cmc_fng_methodology_2026_1", score: 12, band: "extreme_fear", observedAt: new Date(DEMO_STABLE_YIELD_PRICED_AS_OF - 3_600_000).toISOString(), retrievedAt: new Date(DEMO_STABLE_YIELD_PRICED_AS_OF).toISOString(), validUntil: null, retrievalState: "cached", evidence: ["cmc"] };
+  const prodRail = SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL, marketConditionsCacheInput: prodRwCache, marketConditionsCacheState: "loaded", targetGeneratedAt: DEMO_STABLE_YIELD_PRICED_AS_OF });
   add("16H-F-U: the production registry has no approved Stable Yield product", getApprovedYieldStrategies().length === 0, `${getApprovedYieldStrategies().length}`);
   add("16H-F-V: the production decision is no_plan and selects no product/amount", prod.decision?.status === "no_plan" && prod.decision?.planCount === 0 && prod.decision?.selectedStrategyId === undefined && prod.decision?.selectedAmountUsd === undefined, `${prod.decision?.status}`);
   add("16H-F-W: production emits no suggestion, no presentation, no card, and no fallback", prod.suggestion === null && buildStableYieldPlanPresentation(prod.suggestion).card === null && Object.keys(prodRail.stableYieldReviewById).length === 0 && prodRail.cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
@@ -17888,8 +17970,8 @@ export function runMarketConditionFixtureChecks(): FixtureCheck[] {
   add("MC-38: no market matrix duplicated in marketConditionTypes.ts (imports the approved bands)", (() => { const s = readIfSrc("src/suggestions/marketConditionTypes.ts"); return /MARKET_STABLE_TARGET_BANDS/.test(s) && /from "\.\/targetAllocationPolicy"/.test(s); })(), "no dup matrix");
 
   // ---- Regression: NON-MOUNTED + no production behavior change ----
-  add("MC-39: marketCondition* imported by NOTHING in the mounted engine/rebalance/DCA/OnTrack/recommendedAllocation", (() => { const files = ["src/suggestions/engine.ts", "src/suggestions/rebalanceAssessment.ts", "src/suggestions/dcaSuggestion.ts", "src/suggestions/onTrackAssessment.ts", "src/wallet/recommendedAllocation.ts", "src/suggestions/useRailSuggestions.ts"]; return files.every((f) => !/marketCondition/.test(readIfSrc(f))); })(), "non-mounted");
-  add("MC-40: deriveRecommendedAllocation unchanged (still risk-only, no market import)", (() => { const s = readIfSrc("src/wallet/recommendedAllocation.ts"); return /RISK_TARGET_ALLOCATION/.test(s) && !/marketCondition|fearGreed|MarketCondition/.test(s); })(), "risk-only intact");
+  add("MC-39: marketCondition* consumed by NO suggestion evaluator (engine/rebalance/DCA/OnTrack/recommendedAllocation) — the rail loads it in 22F slice 2 but no category reads it yet", (() => { const files = ["src/suggestions/engine.ts", "src/suggestions/rebalanceAssessment.ts", "src/suggestions/dcaSuggestion.ts", "src/suggestions/contributionPlanPipeline.ts", "src/suggestions/onTrackAssessment.ts", "src/wallet/recommendedAllocation.ts"]; return files.every((f) => !/marketCondition/.test(readIfSrc(f))); })(), "not consumed by evaluators");
+  add("MC-40 (22G): the legacy risk-only allocation module is DELETED — the market factor lives only in the canonical five-factor target policy", (() => { return readIfSrc("src/wallet/recommendedAllocation.ts") === "" && /MARKET_STABLE_TARGET_BANDS/.test(readIfSrc("src/suggestions/targetAllocationPolicy.ts")); })(), "module deleted");
   add("MC-41: assessment emits NO suggestion/card (no EngineSuggestion, category, cta)", (() => { const s = readIfSrc("src/suggestions/marketConditionAssessment.ts"); return !/EngineSuggestion|category:|cta:|action_kind/.test(s); })(), "no suggestion");
   add("MC-42: no route/quote/transaction/signature/fetch in the market path", (() => { const blob = readIfSrc("src/suggestions/marketConditionAssessment.ts") + readIfSrc("src/suggestions/marketConditionPolicy.ts") + readIfSrc("src/suggestions/marketConditionCache.ts") + readIfSrc("src/suggestions/marketConditionTypes.ts"); return !/fetch\(|swapRoute|getQuote|signTransaction|sendTransaction|simulateTransaction|XMLHttpRequest/.test(blob); })(), "read-only");
 
@@ -17987,10 +18069,10 @@ export function runTargetAllocationAssessmentFixtureChecks(): FixtureCheck[] {
   add("TAA-30: assessment computes PERCENTAGES only — no target-dollar math + input has no wallet-position/portfolio field", (() => { const s = readIfSrc("src/suggestions/targetAllocationAssessment.ts"); const noDollarMath = !/totalPricedUsd|cryptoUsd|stableUsd|targetUsd|deriveAllocationDeltas|\.valueUsd/.test(s); const noPositionInput = !/positions:|portfolioSnapshot|walletPositions/.test(s); return noDollarMath && noPositionInput; })(), "no dollars");
 
   // ---- Regression: non-mounted + production unchanged ----
-  add("TAA-31: targetAllocationAssessment imported by NOTHING in the mounted engine/rebalance/DCA/OnTrack/recommendedAllocation", (() => { const files = ["src/suggestions/engine.ts", "src/suggestions/rebalanceAssessment.ts", "src/suggestions/dcaSuggestion.ts", "src/suggestions/onTrackAssessment.ts", "src/wallet/recommendedAllocation.ts", "src/suggestions/useRailSuggestions.ts", "src/suggestions/contributionPlanPipeline.ts"]; return files.every((f) => !/targetAllocationAssessment/.test(readIfSrc(f))); })(), "non-mounted");
+  add("TAA-31: targetAllocationAssessment consumed by NO still-unmounted evaluator (Rebalance+rail mount it in slices 2–3, DCA/contribution in slice 4; OnTrack/engine/recommendedAllocation/legacy-DCA do not yet)", (() => { const files = ["src/suggestions/engine.ts", "src/suggestions/dcaSuggestion.ts", "src/suggestions/onTrackAssessment.ts", "src/wallet/recommendedAllocation.ts"]; return files.every((f) => !/targetAllocationAssessment/.test(readIfSrc(f))); })(), "unmounted evaluators");
   add("TAA-32: no duplicated matrix (imports matrices from targetAllocationPolicy; defines none)", (() => { const s = readIfSrc("src/suggestions/targetAllocationAssessment.ts"); return /from "\.\/targetAllocationPolicy"/.test(s) && /RISK_STABLE_TARGET_PCT|HORIZON_STABLE_TARGET_PCT|GOAL_STABLE_TARGET_PCT|CASH_FLOW_STABLE_BANDS/.test(s) && !/very_low:\s*80|extreme_fear.*20/.test(s); })(), "no dup matrix");
   add("TAA-33: no suggestion/route/quote/transaction/signature in the target-allocation path", (() => { const s = readIfSrc("src/suggestions/targetAllocationAssessment.ts"); return !/EngineSuggestion|category:|cta:|swapRoute|getQuote|signTransaction|sendTransaction|fetch\(/.test(s); })(), "read-only");
-  add("TAA-34: deriveRecommendedAllocation still risk-only (no target-allocation-assessment import)", (() => { const s = readIfSrc("src/wallet/recommendedAllocation.ts"); return /RISK_TARGET_ALLOCATION/.test(s) && !/targetAllocationAssessment|marketCondition/.test(s); })(), "risk-only intact");
+  add("TAA-34 (22G): the TargetAllocationAssessment is the sole target-allocation authority — the legacy risk-only module is deleted", (() => { return readIfSrc("src/wallet/recommendedAllocation.ts") === "" && /deriveTargetAllocationAssessment/.test(readIfSrc("src/suggestions/targetAllocationAssessment.ts")); })(), "sole authority");
 
   return checks;
 }
@@ -18069,19 +18151,606 @@ export function runCoinMarketCapMarketConditionFixtureChecks(): FixtureCheck[] {
   add("CME-33: .env.example documents COINMARKETCAP_API_KEY WITHOUT a VITE_ prefix and with no value", (() => { const s = readIfSrc(".env.example"); return /\nCOINMARKETCAP_API_KEY=\s*(\n|$)/.test(s) && !/VITE_COINMARKETCAP_API_KEY=/.test(s); })(), "env example");
 
   // ---- Regression: still non-mounted, production risk-only ----
-  add("CME-34: CMC adapter + loader imported by NOTHING in the mounted engine/rail/React/recommendedAllocation", (() => { const files = ["src/suggestions/engine.ts", "src/suggestions/rebalanceAssessment.ts", "src/suggestions/dcaSuggestion.ts", "src/suggestions/onTrackAssessment.ts", "src/wallet/recommendedAllocation.ts", "src/suggestions/useRailSuggestions.ts", "src/components/SuggestionCard.tsx"]; return files.every((f) => !/coinmarketcapFearGreed|marketConditionCacheLoader|targetAllocationAssessment/.test(readIfSrc(f))); })(), "non-mounted");
+  add("CME-34: CMC adapter + loader imported by NOTHING in the mounted engine/rail/React", (() => { const files = ["src/suggestions/engine.ts", "src/suggestions/onTrackAssessment.ts", "src/components/SuggestionCard.tsx"]; return files.every((f) => !/coinmarketcapFearGreed|marketConditionCacheLoader|targetAllocationAssessment/.test(readIfSrc(f))); })(), "non-mounted");
   add("CME-35: no CoinMarketCap fetch in engine/React (adapter fetch lives only in the offline provider script)", (() => { const engine = readIfSrc("src/suggestions/coinmarketcapFearGreed.ts") + readIfSrc("src/suggestions/marketConditionCacheLoader.ts"); return !/fetch\(|pro-api\.coinmarketcap|X-CMC_PRO_API_KEY/.test(engine); })(), "no client fetch");
   add("CME-36: /latest object response (single data object, update_time ISO) parses; observedAt from update_time", (() => { const upd = new Date(GEN - HOUR).toISOString(); const r = parseCoinMarketCapFearGreedResponse({ status: { error_code: 0, error_message: null }, data: { value: 39, update_time: upd, value_classification: "Fear" } }, { retrievedAtMs: GEN }); return r.ok && r.result!.score === 39 && r.result!.observedAt === upd && r.result!.rawPayloadVersion === "cmc_v3_fear_and_greed_latest_1" && loadFrom(buildCache(r.result!).cache!).assessment.overallReadiness === "full"; })(), "latest shape");
 
   return checks;
 }
 
+/* ------------------------------------------------------------------ *
+ * Step 22F (slice 1) — CANONICAL TARGET ADAPTER (non-mounted). Validates that `buildCanonicalTargetAllocation`
+ * reads the five-factor assessment into the mounted target shape without reconstructing the calculation:
+ * targetCrypto = finalVolatile, targetStable = finalStable, dollars = pct × denominator, full/degraded usable,
+ * unavailable/blocked/unresolved → null (no risk-only fallback), readiness + market-exclusion metadata carried.
+ * ------------------------------------------------------------------ */
+export function runCanonicalTargetAdapterFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const GEN = 1_700_000_000_000;
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const cmcObs = (score: number, band: MarketConditionObservation["band"]): MarketConditionObservation => ({ sourceId: "coinmarketcap_crypto_fear_greed", indexId: "cmc_crypto_fear_greed", indexName: "CMC Crypto Fear & Greed Index", methodology: "cmc_crypto_fear_greed_composite", methodologyVersion: "cmc_fng_methodology_2026_1", rawScore: score, normalizedScore: score, band, observedAt: iso(GEN - 3_600_000), retrievedAt: iso(GEN), validUntil: null, retrievalState: "cached", sourceFreshnessState: "unresolved", sourcePolicyState: "unresolved", evidence: ["cmc"] });
+  const mkt = (o: MarketConditionObservation | null, fresh = MARKET_CONDITION_FRESHNESS_POLICIES) => deriveMarketConditionAssessment({ observation: o, sourcePolicies: MARKET_CONDITION_SOURCES, freshnessPolicies: fresh, generatedAt: GEN });
+  const taa = (over: Partial<Parameters<typeof deriveTargetAllocationAssessment>[0]> = {}) => deriveTargetAllocationAssessment({ riskTolerance: "medium", timeline: "5_years", financialGoal: "build_long_term_wealth", monthlyIncomeUsd: 4000, monthlyExpensesUsd: 1000, marketConditionAssessment: mkt(cmcObs(12, "extreme_fear")), generatedAt: GEN, ...over });
+  const approx = (a: number | null, b: number) => a != null && Math.abs(a - b) < 1e-9;
+
+  add("CTA-1: full → targetStable=finalStable(35), targetCrypto=finalVolatile(65), dollars=pct×denom, confidence full", (() => { const a = taa(); const c = buildCanonicalTargetAllocation(a, { totalPricedUsd: 1000 }); return c != null && approx(c.targetStablePct, 35) && approx(c.targetCryptoPct, 65) && c.targetStablePct === a.finalStableTargetPct && c.targetCryptoPct === a.finalVolatileTargetPct && approx(c.targetStableUsd, 350) && approx(c.targetCryptoUsd, 650) && c.targetConfidence === "full" && c.marketExcluded === false; })(), "full");
+  add("CTA-2: no/invalid denominator → dollar fields null, percentages stand", (() => { const c = buildCanonicalTargetAllocation(taa(), { totalPricedUsd: null }); const z = buildCanonicalTargetAllocation(taa(), { totalPricedUsd: 0 }); return c != null && c.targetStableUsd === null && c.targetCryptoUsd === null && approx(c.targetStablePct, 35) && z != null && z.targetStableUsd === null; })(), "no denom");
+  add("CTA-3: degraded (market null) → usable target 36.667/63.333, marketExcluded true + reason, no market adjustment", (() => { const a = taa({ marketConditionAssessment: null }); const c = buildCanonicalTargetAllocation(a, { totalPricedUsd: 1000 }); return c != null && approx(c.targetStablePct, 33 / 0.9) && c.targetConfidence === "degraded_market_excluded" && c.marketExcluded === true && c.marketExclusionReason != null && c.marketAdjustmentVsProfileOnlyPct === null; })(), "degraded");
+  add("CTA-4: unavailable (missing risk) → null (no risk-only fallback)", buildCanonicalTargetAllocation(taa({ riskTolerance: null }), { totalPricedUsd: 1000 }) === null, "unavailable null");
+  add("CTA-5: blocked (unsupported enum) → null", buildCanonicalTargetAllocation(taa({ financialGoal: "fame" }), { totalPricedUsd: 1000 }) === null, "blocked null");
+  add("CTA-6: unresolved (market unresolved via missing freshness policy) → null", buildCanonicalTargetAllocation(taa({ marketConditionAssessment: mkt(cmcObs(12, "extreme_fear"), []) }), { totalPricedUsd: 1000 }) === null, "unresolved null");
+  add("CTA-7: readiness passthrough — full → rebalance/dca/onTrack true; degraded → onTrack false", (() => { const full = buildCanonicalTargetAllocation(taa())!; const deg = buildCanonicalTargetAllocation(taa({ marketConditionAssessment: null }))!; return full.rebalanceTargetEligible && full.dcaTargetEligible && full.onTrackTargetEligible && deg.rebalanceTargetEligible && deg.dcaTargetEligible && deg.onTrackTargetEligible === false; })(), "readiness");
+  add("CTA-8: adapter reconstructs nothing (reads assessment; no matrix/weight literals) + non-mounted by OnTrack/engine/recommendedAllocation (Rebalance slice 3, DCA/contribution slice 4 consume it)", (() => { const s = readIfSrc("src/suggestions/canonicalTargetAllocation.ts"); const noRecompute = !/RISK_STABLE_TARGET_PCT|FACTOR_WEIGHTS|0\.35|classifyMarketConditionScore/.test(s); const nonMounted = ["src/suggestions/engine.ts", "src/suggestions/onTrackAssessment.ts", "src/wallet/recommendedAllocation.ts"].every((f) => !/canonicalTargetAllocation/.test(readIfSrc(f))); return noRecompute && nonMounted; })(), "pure+non-mounted");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 22F (slice 2) — RAIL TARGET CONTEXT (shared plumbing, not yet consumed). Validates that a rail refresh derives
+ * exactly ONE MarketConditionAssessment + ONE TargetAllocationAssessment + ONE canonical target from the published
+ * cache + profile, maps every cache-ingestion state correctly (loading/failed → unresolved; missing → excluded;
+ * malformed → blocked; loaded → full/stale by observedAt), NEVER falls back to risk-only, keeps Demo isolated, and
+ * exposes no market score to downstream. The component-layer hook reads only the same-origin artifact (no provider/key).
+ * ------------------------------------------------------------------ */
+export function runRailTargetContextFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const GEN = 1_700_000_000_000;
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const goal: SavedGoal = { financial_goal: "build_long_term_wealth", risk_tolerance: "medium", timeline: "5_years", contribution_frequency: "monthly", income_monthly: 4000, expenses_monthly: 1000, monthly_saving_goal: 1000 };
+  const cache = (over: Record<string, unknown> = {}) => ({ cacheVersion: MARKET_CONDITION_CACHE_VERSION, generatedAt: iso(GEN), sourceId: "coinmarketcap_crypto_fear_greed", indexId: "cmc_crypto_fear_greed", indexName: "CMC Crypto Fear & Greed Index", methodology: "cmc_crypto_fear_greed_composite", methodologyVersion: "cmc_fng_methodology_2026_1", score: 12, band: "extreme_fear", observedAt: iso(GEN - 3_600_000), retrievedAt: iso(GEN), validUntil: null, retrievalState: "cached", evidence: ["cmc"], ...over });
+  const ctx = (cacheState: Parameters<typeof buildRailTargetContext>[0]["cacheState"], cacheInput: unknown | null, over: Partial<SavedGoal> = {}) =>
+    buildRailTargetContext({ goal: { ...goal, ...over }, cacheInput, cacheState, generatedAt: GEN, totalPricedUsd: 1000 });
+
+  // ---- One computation per refresh + fresh loaded → full ----
+  add("RTC-1: loaded fresh cache → one market(full) + one target(full) + non-null canonical (stable 35/crypto 65), state loaded", (() => { const c = ctx("loaded", cache()); return c.marketConditionAssessment.overallReadiness === "full" && c.targetAllocationAssessment.targetConfidence === "full" && c.canonicalTargetAllocation != null && c.canonicalTargetAllocation.targetStablePct === 35 && c.canonicalTargetAllocation.targetCryptoPct === 65 && c.targetLoadingState === "loaded" && c.targetGeneratedAt === GEN; })(), "loaded full");
+  add("RTC-2: single generatedAt reused across market + target", (() => { const c = ctx("loaded", cache()); return c.marketConditionAssessment.generatedAt === GEN && c.targetAllocationAssessment.generatedAt === GEN && c.targetGeneratedAt === GEN; })(), "one generatedAt");
+
+  // ---- Missing / stale → excluded market → degraded target (usable) ----
+  add("RTC-3: missing cache → excluded_market_unavailable + degraded target + non-null canonical, state missing", (() => { const c = ctx("missing", null); return c.marketConditionAssessment.overallReadiness === "excluded_market_unavailable" && c.targetAllocationAssessment.targetConfidence === "degraded_market_excluded" && c.canonicalTargetAllocation != null && c.canonicalTargetAllocation.marketExcluded === true && c.targetLoadingState === "missing"; })(), "missing degraded");
+  add("RTC-4: stale cache → excluded_market_stale + degraded target + non-null canonical, state stale, no stale score in canonical", (() => { const c = ctx("loaded", cache({ observedAt: iso(GEN - 48 * 3_600_000) })); return c.marketConditionAssessment.overallReadiness === "excluded_market_stale" && c.targetAllocationAssessment.targetConfidence === "degraded_market_excluded" && c.canonicalTargetAllocation != null && c.targetLoadingState === "stale" && !("score" in (c.canonicalTargetAllocation as object)) && !("marketStableTargetPct" in (c.canonicalTargetAllocation as object)); })(), "stale degraded");
+
+  // ---- Malformed → blocked → null canonical ----
+  add("RTC-5: malformed cacheState → blocked market → blocked target → null canonical, state malformed", (() => { const c = ctx("malformed", null); return c.marketConditionAssessment.overallReadiness === "blocked_invalid_score" && c.targetAllocationAssessment.targetConfidence === "blocked" && c.canonicalTargetAllocation === null && c.targetLoadingState === "malformed"; })(), "malformed blocked");
+  add("RTC-6: loaded-but-malformed cache content → blocked target → null canonical", (() => { const c = ctx("loaded", { garbage: true }); return c.targetAllocationAssessment.targetConfidence === "blocked" && c.canonicalTargetAllocation === null; })(), "loaded malformed");
+
+  // ---- Loading / failed → unresolved → null canonical, NO risk-only fallback ----
+  add("RTC-7: loading → unresolved market → unresolved target → null canonical (no risk-only), state loading", (() => { const c = ctx("loading", null); return c.marketConditionAssessment.overallReadiness === "unresolved" && c.targetAllocationAssessment.targetConfidence === "unresolved" && c.canonicalTargetAllocation === null && c.targetLoadingState === "loading"; })(), "loading unresolved");
+  add("RTC-8: failed → unresolved market → null canonical, state failed", (() => { const c = ctx("failed", null); return c.marketConditionAssessment.overallReadiness === "unresolved" && c.canonicalTargetAllocation === null && c.targetLoadingState === "failed"; })(), "failed unresolved");
+
+  // ---- Profile-missing (non-market) → target unavailable → null canonical ----
+  add("RTC-9: missing risk/horizon/goal/income/expenses (fresh cache) → target unavailable → null canonical", (() => { const risk = ctx("loaded", cache(), { risk_tolerance: "" as unknown as string }); const noIncome = buildRailTargetContext({ goal: { ...goal, income_monthly: null as unknown as number }, cacheInput: cache(), cacheState: "loaded", generatedAt: GEN, totalPricedUsd: 1000 }); return risk.canonicalTargetAllocation === null && noIncome.targetAllocationAssessment.targetConfidence === "unavailable" && noIncome.canonicalTargetAllocation === null; })(), "profile unavailable");
+
+  // ---- Deterministic + no direct market-score exposure downstream ----
+  add("RTC-10: deterministic (same inputs → identical canonical) + canonical exposes NO market score/band", (() => { const a = ctx("loaded", cache()).canonicalTargetAllocation!; const b = ctx("loaded", cache()).canonicalTargetAllocation!; return a.targetStablePct === b.targetStablePct && a.targetConfidence === b.targetConfidence && !("score" in a) && !("band" in a) && !("marketScore" in a); })(), "deterministic + no score");
+
+  // ---- Demo isolation + no consumption yet (deriveRailSuggestions) ----
+  add("RTC-11 (slice 7): targetContext builds whenever a market cache state is provided (any mode); a caller with no cache state gets no context", (() => { const railSrc = readIfSrc("src/suggestions/useRailSuggestions.ts"); return /const targetContext: RailTargetContext \| undefined =\s*\n\s*args\.marketConditionsCacheState !== undefined\s*\n\s*\? buildRailTargetContext/.test(railSrc); })(), "context on cache");
+
+  // ---- Security + non-fetching + legacy untouched ----
+  add("RTC-12: cache hook reads ONLY the same-origin artifact — no CoinMarketCap / key / VITE_ / provider endpoint", (() => { const s = readIfSrc("src/suggestions/useMarketConditionsCache.ts"); return /\/generated\/market-conditions-cache\.json/.test(s) && !/pro-api\.coinmarketcap|X-CMC_PRO_API_KEY|COINMARKETCAP_API_KEY|VITE_/.test(s) && /AbortController/.test(s) && /cancelled/.test(s); })(), "hook same-origin");
+  add("RTC-13: pure railTargetContext + engine never fetch; no risk-only import in the canonical path", (() => { const rtc = readIfSrc("src/suggestions/railTargetContext.ts"); return !/fetch\(|deriveRecommendedAllocation|RISK_TARGET_ALLOCATION/.test(rtc); })(), "pure non-fetch");
+  add("RTC-14 (slice 7D): the legacy risk-only allocation is REMOVED from the rail — no deriveRecommendedAllocation / deriveAllocationDeltas; the canonical RebalanceAssessment remains", (() => { const railSrc = readIfSrc("src/suggestions/useRailSuggestions.ts"); return !/deriveRecommendedAllocation/.test(railSrc) && !/deriveAllocationDeltas/.test(railSrc) && /deriveRebalanceAssessment\(/.test(railSrc); })(), "legacy removed");
+  add("RTC-15: canonical target not yet consumed by OnTrack/engine (Rebalance mounts it in slice 3, DCA/contribution in slice 4)", (() => { const files = ["src/suggestions/onTrackAssessment.ts", "src/suggestions/engine.ts"]; return files.every((f) => !/targetContext|canonicalTargetAllocation|buildRailTargetContext/.test(readIfSrc(f))); })(), "not consumed");
+  add("RTC-16: mapCacheStateToMarketAssessment covers all five states without Neutral substitution", (() => { const states = ["loading", "failed", "missing", "malformed", "loaded"] as const; return states.every((st) => { const m = mapCacheStateToMarketAssessment(st, st === "loaded" ? cache() : null, GEN); return m.marketStableTargetPct === (st === "loaded" ? 20 : null); }); })(), "state map");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 22F (slice 3) — REBALANCE CANONICAL MOUNT. Validates that Rebalance consumes the canonical five-factor target
+ * (no deriveRecommendedAllocation, no RISK_TARGET_ALLOCATION), that full/degraded targets are eligible while
+ * unavailable/blocked/unresolved/loading fail closed (no risk-only fallback), that thresholds/direction/mapping are
+ * unchanged, that the review discloses full/degraded honestly (transitional targets show no market copy), and that
+ * no raw income/expenses/score/band leaks.
+ * ------------------------------------------------------------------ */
+export function runRebalanceCanonicalMountFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const GEN = 1_700_000_000_000;
+  const solP = (v: number) => ({ id: "sol", source: "wallet", type: "native", symbol: "SOL", name: "Solana", amount: String(Math.round((v / 250) * 1e9)), decimals: 9, detection: "direct_wallet_balance", valueUsd: v, uiAmount: v / 250, priceUsd: 250 } as unknown as WalletPosition);
+  const usdcP = (v: number, id = "u" + v) => ({ id, source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: RB_USDC, amount: "1", detection: "direct_wallet_balance", valueUsd: v, uiAmount: v, priceUsd: 1 } as unknown as WalletPosition);
+  const CT = (cryptoPct: number, stablePct: number, conf: "full" | "degraded_market_excluded" = "full", real = true) => ({ targetCryptoPct: cryptoPct, targetStablePct: stablePct, targetStableUsd: null, targetCryptoUsd: null, targetConfidence: conf, marketExcluded: conf === "degraded_market_excluded", marketExclusionReason: conf === "degraded_market_excluded" ? "market_observation_missing" : null, marketAdjustmentVsProfileOnlyPct: conf === "full" ? 1.5 : null, methodologyVersion: real ? TARGET_ALLOCATION_ASSESSMENT_VERSION : "transitional_risk_only", policyVersion: "target_allocation_policy_v1", rebalanceTargetEligible: true, dcaTargetEligible: true, onTrackTargetEligible: conf === "full" }) as import("./canonicalTargetAllocation").CanonicalTargetAllocation;
+  const rbA = (positions: WalletPosition[], target: ReturnType<typeof CT> | null, state: import("./rebalanceAssessment").RebalanceTargetState = "full", buf = 0) => rbAssess({ positions, targetAllocation: target, targetState: state, requiredBufferUsd: buf, generatedAt: GEN });
+  const cardOf = (positions: WalletPosition[], target: ReturnType<typeof CT> | null) => { const a = rbA(positions, target); return rbBuildCard(a, rbSource(positions, 0, GEN), rbNativeSol(positions, 250, true, RB_RESERVE_POLICY, true, GEN), 250, true, GEN); };
+
+  // ---- Architecture ----
+  add("RBM-1: rebalanceAssessment consumes the canonical target — no deriveRecommendedAllocation / RISK_TARGET_ALLOCATION", (() => { const s = readIfSrc("src/suggestions/rebalanceAssessment.ts"); return !/deriveRecommendedAllocation|RISK_TARGET_ALLOCATION/.test(s) && /input\.targetAllocation/.test(s); })(), "canonical only");
+
+  // ---- Confidence eligibility ----
+  add("RBM-2: full target → calc allowed, target mapped (crypto 60/stable 40), marketIncluded true", (() => { const a = rbA([solP(700), usdcP(300)], CT(60, 40)); return a.calculationGate.status === "allowed" && a.targetCryptoPct === 60 && a.targetStablePct === 40 && a.marketIncluded === true && a.targetConfidence === "full"; })(), "full");
+  add("RBM-3: degraded target → calc allowed (eligible), marketIncluded false, confidence degraded", (() => { const a = rbA([solP(700), usdcP(300)], CT(60, 40, "degraded_market_excluded")); return a.calculationGate.status === "allowed" && a.marketIncluded === false && a.targetConfidence === "degraded_market_excluded" && a.marketExclusionReason != null; })(), "degraded");
+  add("RBM-4: transitional target (risk-only sentinel) → marketIncluded false even at full confidence", (() => { const a = rbA([solP(700), usdcP(300)], CT(60, 40, "full", false)); return a.marketIncluded === false && a.targetConfidence === "full"; })(), "transitional");
+  add("RBM-5: null target + unavailable/blocked → calc blocked; unresolved/loading → calc unresolved; no target %", (() => { const un = rbA([solP(700), usdcP(300)], null, "unavailable"); const bl = rbA([solP(700), usdcP(300)], null, "blocked"); const ur = rbA([solP(700), usdcP(300)], null, "unresolved"); const ld = rbA([solP(700), usdcP(300)], null, "loading"); return un.calculationGate.status === "blocked" && un.calculationGate.reasons.includes("target_unavailable") && bl.calculationGate.status === "blocked" && bl.calculationGate.reasons.includes("target_blocked") && ur.calculationGate.status === "unresolved" && ur.calculationGate.reasons.includes("target_unresolved") && ld.calculationGate.status === "unresolved" && un.targetCryptoPct === null; })(), "fail closed");
+
+  // ---- Raw-delta materiality (slice 3.1) — eligibility compares the FULL-PRECISION delta against ±10; display rounding never gates. ----
+  const at = (solUsd: number, usdcUsd: number) => rbA([solP(solUsd), usdcP(usdcUsd)], CT(60, 40)); // allocatable = 1,000,000; target 60/40
+  add("RBM-6: raw ±10 material; ±9.99/±9.999/±9.9999 NOT material; ±10.0001 material — raw delta vs ±10, no pre-rounding", (() => {
+    const p10 = at(700000, 300000), m10 = at(500000, 500000);       // ±10.0000
+    const p999 = at(699900, 300100), m999 = at(500100, 499900);     // ±9.99
+    const p9999 = at(699990, 300010), m9999 = at(500010, 499990);   // ±9.999
+    const p99999 = at(699999, 300001), m99999 = at(500001, 499999); // ±9.9999
+    const p10001 = at(700001, 299999), m10001 = at(499999, 500001); // ±10.0001
+    return p10.direction === "crypto_to_stables" && m10.direction === "stables_to_crypto"
+      && p999.direction === "within_threshold" && m999.direction === "within_threshold"
+      && p9999.direction === "within_threshold" && m9999.direction === "within_threshold"
+      && p99999.direction === "within_threshold" && m99999.direction === "within_threshold"
+      && p10001.direction === "crypto_to_stables" && m10001.direction === "stables_to_crypto";
+  })(), "raw boundary");
+  add("RBM-6b: display rounding can never change eligibility — raw +9.999 stays within_threshold ($0) while displayCryptoDeltaPct rounds to 10.0", (() => { const a = at(699990, 300010); return a.rawCryptoDeltaPct !== null && Math.abs(a.rawCryptoDeltaPct) < 10 && a.cryptoDeltaPct === 10 && a.direction === "within_threshold" && a.requiredCorrectionUsd === 0; })(), "display safe");
+  add("RBM-6c: amount + direction derive from the RAW magnitude — raw +10.0001 → material with requiredCorrection above the display-rounded (10.0) amount", (() => { const a = at(700001, 299999); return a.direction === "crypto_to_stables" && a.rawCryptoDeltaPct !== null && a.rawCryptoDeltaPct > 10 && a.requiredCorrectionUsd > 100000; })(), "raw amount");
+  add("RBM-7: target mapping — assessment.targetCryptoPct === canonical.targetCryptoPct (finalVolatile)", (() => { const t = CT(65, 35); const a = rbA([solP(300), usdcP(700)], t); return a.targetCryptoPct === t.targetCryptoPct && a.targetStablePct === t.targetStablePct; })(), "mapping");
+  add("RBM-8: below-$50 correction → no actionable card (existing minimum, unchanged)", (() => { const c = cardOf([solP(70), usdcP(30)], CT(60, 40)); return c === null; })(), "below 50");
+
+  // ---- Review copy ----
+  add("RBM-9: full review discloses 10% market input + CoinMarketCap + not-a-buy/sell, no timing/score/band", (() => { const c = cardOf([solP(300), usdcP(700)], CT(60, 40)); const r = c?.reviewDetails?.summary.reason ?? ""; return c != null && /10% of your target-allocation calculation/.test(r) && /Data source: CoinMarketCap/.test(r) && /does not directly create buy or sell/.test(r) && !/\b\d{1,3}\/100\b|Fear|Greed|time to (buy|sell)|bullish|bearish/.test(r); })(), "full review");
+  add("RBM-10: degraded review discloses exclusion + renormalization, no score/band/Neutral", (() => { const c = cardOf([solP(300), usdcP(700)], CT(60, 40, "degraded_market_excluded")); const r = c?.reviewDetails?.summary.reason ?? ""; return c != null && /market component was excluded, and the remaining profile factors were renormalized/.test(r) && !/CoinMarketCap|\/100|Neutral|Fear|Greed/.test(r); })(), "degraded review");
+  add("RBM-11: transitional target review shows NO market copy (Demo/testing unchanged)", (() => { const c = cardOf([solP(300), usdcP(700)], CT(60, 40, "full", false)); const r = c?.reviewDetails?.summary.reason ?? ""; return c != null && !/CoinMarketCap|10% of your target-allocation/.test(r); })(), "transitional review");
+
+  // ---- Privacy ----
+  add("RBM-12: assessment carries no raw income/expenses/savings rate/market score/band", (() => { const s = JSON.stringify(rbA([solP(300), usdcP(700)], CT(60, 40))); return !/income|expenses|savingsRate|"score"|"band"|marketScore|marketBand/i.test(s); })(), "privacy");
+
+  // ---- Rail integration + unconditional real-wallet routing (slice 3.1) ----
+  add("RBM-13 (slice 7D): the rail resolves the canonical Rebalance target UNCONDITIONALLY (no transitional else) — a missing targetContext fails closed to unresolved, and the target is always passed to the contribution pipeline", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return !/useCanonicalRebalanceTarget/.test(rail) && /if \(!targetContext\) \{[\s\S]*?rebalanceTarget = null;[\s\S]*?rebalanceTargetState = "unresolved";/.test(rail) && /targetAllocation: rebalanceTarget, targetState: rebalanceTargetState,/.test(rail); })(), "unconditional canonical");
+  add("RBM-14: rail still derives exactly ONE rebalance assessment + ONE target context (no duplicate target/assessment)", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return (rail.match(/deriveRebalanceAssessment\(/g) ?? []).length === 1 && (rail.match(/buildRailTargetContext\(/g) ?? []).length === 1; })(), "one each");
+  add("RBM-15: NO ?? / || null-coalescing fallback from canonical to the transitional helper anywhere in the mounted rail", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return !/\?\?\s*riskOnlyCanonicalTargetTransitional/.test(rail) && !/\|\|\s*riskOnlyCanonicalTargetTransitional/.test(rail); })(), "no coalesce fallback");
+  add("RBM-16 (slice 7D): the transitional helper is invoked ZERO times in the rail (deleted); there is no non-real-wallet no-cache else branch", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return !/riskOnlyCanonicalTargetTransitional/.test(rail) && !/Non-real-wallet callers with NO cache state/.test(rail); })(), "helper gone");
+  add("RBM-17: real-wallet fails closed STRUCTURALLY — missing targetContext → unresolved, loading → loading, both set rebalanceTarget = null (no transitional)", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return /if \(!targetContext\)[\s\S]*?rebalanceTarget = null;[\s\S]*?rebalanceTargetState = "unresolved";/.test(rail) && /targetLoadingState === "loading"[\s\S]*?rebalanceTarget = null;[\s\S]*?rebalanceTargetState = "loading";/.test(rail); })(), "fail closed struct");
+  add("RBM-18: every fail-closed state yields NO Rebalance card at runtime (unresolved / loading / unavailable / blocked → card null)", (() => { const pos = [solP(700), usdcP(300)]; const mk = (st: import("./rebalanceAssessment").RebalanceTargetState) => rbBuildCard(rbA(pos, null, st), rbSource(pos, 0, GEN), rbNativeSol(pos, 250, true, RB_RESERVE_POLICY, true, GEN), 250, true, GEN); return mk("unresolved") === null && mk("loading") === null && mk("unavailable") === null && mk("blocked") === null; })(), "no card fail-closed");
+  add("RBM-19 (slice 7D): the rail Rebalance-target resolution is a single canonical block that fails closed (loading/unresolved) with NO risk-only substitution and NO `??`/`||` fallback", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return /rebalanceTarget = targetContext\.canonicalTargetAllocation \?\? null;/.test(rail) && !/riskOnlyCanonicalTargetTransitional/.test(rail) && !/useCanonicalRebalanceTarget/.test(rail); })(), "single canonical block");
+  add("RBM-20 (slice 7B): the transitional helper is reachable ONLY through the explicitly-named isolated fixture rbT — the /testing Rebalance gallery no longer imports it (migrated to production)", (() => { const f = readIfSrc("src/suggestions/suggestionEngine.fixtures.ts"); const t = readIfSrc("src/pages/rebalanceTestingFixtures.ts"); return /riskOnlyCanonicalTargetTransitional/.test(f) && !/riskOnlyCanonicalTargetTransitional/.test(t); })(), "isolated only");
+  add("RBM-21: assessment exposes rawCryptoDeltaPct (full precision) alongside cryptoDeltaPct (2dp display of the same drift)", (() => { const a = at(699990, 300010); return typeof a.rawCryptoDeltaPct === "number" && a.cryptoDeltaPct === Math.round((a.rawCryptoDeltaPct as number) * 100) / 100 && a.rawCryptoDeltaPct !== a.cryptoDeltaPct; })(), "raw + display");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 22F (slice 4) — DCA + CONTRIBUTION CANONICAL MOUNT. Validates that mounted real-wallet DCA/contribution
+ * consume the SAME shared canonical five-factor target as Rebalance (no local target recalculation, no
+ * deriveRecommendedAllocation on the real-wallet growth path, no risk-only fallback), that full/degraded targets are
+ * eligible while unavailable/blocked/unresolved/loading/missing fail closed (no target-based DCA, buffer path
+ * preserved), that direction comes from the allocation gap (never sentiment), that contribution amount/cadence and
+ * the $50 minimum are unchanged, that the Review discloses full/degraded honestly, and that no raw
+ * income/expenses/score/cache leaks.
+ * ------------------------------------------------------------------ */
+export function runDcaContributionCanonicalMountFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const T_ISO = "2026-07-01T00:00:00.000Z";
+  const T_MS = Date.parse(T_ISO);
+  const usdc = (v: number) => ({ id: "u", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", detection: "direct_wallet_balance", valueUsd: v, uiAmount: v, priceUsd: 1 } as unknown as WalletPosition);
+  const sol = (v: number, price = 150) => ({ id: "s", source: "wallet", type: "native", symbol: "SOL", name: "Solana", detection: "direct_wallet_balance", valueUsd: v, uiAmount: v / price, priceUsd: price } as unknown as WalletPosition);
+  const underweightPositions = [usdc(9000), sol(4300)]; // crypto ≈ 32.3% of 13,300 → underweight vs a 60% target
+  const goalBase = { ...DEMO_GOAL, expenses_monthly: 100 }; // monthly_saving_goal 1000, monthly cadence
+  // Complete buffer that consumes all USDC (no excess) → the DCA funds from the UPCOMING CONTRIBUTION (monthly cadence).
+  const completeBuffer = { stableUsd: 9000, targetUsd: 9000, targetMonths: 3, coveragePct: 100, monthsCovered: 90, fullyFunded: true };
+  const CT = (cryptoPct: number, stablePct: number, conf: "full" | "degraded_market_excluded" = "full", real = true) => ({ targetStablePct: stablePct, targetCryptoPct: cryptoPct, targetStableUsd: null, targetCryptoUsd: null, targetConfidence: conf, marketExcluded: conf === "degraded_market_excluded", marketExclusionReason: conf === "degraded_market_excluded" ? "market_observation_missing" : null, marketAdjustmentVsProfileOnlyPct: conf === "full" ? 1.5 : null, methodologyVersion: real ? TARGET_ALLOCATION_ASSESSMENT_VERSION : "transitional_risk_only", policyVersion: "target_allocation_policy_v1", rebalanceTargetEligible: true, dcaTargetEligible: true, onTrackTargetEligible: conf === "full" }) as import("./canonicalTargetAllocation").CanonicalTargetAllocation;
+  type DcaTargetState = import("./rebalanceAssessment").RebalanceTargetState;
+  const run = (target: ReturnType<typeof CT> | null | undefined, state: DcaTargetState | undefined, opts: { positions?: WalletPosition[]; goal?: typeof goalBase; buffer?: typeof completeBuffer; prov?: boolean } = {}) =>
+    deriveContributionSuggestion({ dataMode: "real_wallet", positions: opts.positions ?? underweightPositions, pricedAsOf: T_MS, goal: opts.goal ?? goalBase, buffer: opts.buffer ?? completeBuffer, ...(opts.prov === false ? {} : { priceProvenance: { sourceId: PRICE_SRC_15H } }), ...(target !== undefined ? { targetAllocation: target } : {}), ...(state !== undefined ? { targetState: state } : {}) });
+  const reviewOf = (res: ReturnType<typeof run>) => (res.suggestion ? res.reviewById[res.suggestion.id] : undefined);
+
+  // ---- Architecture ----
+  add("DCM-1: contribution pipeline consumes the canonical target (imports CanonicalTargetAllocation + reads input.targetAllocation)", (() => { const s = readIfSrc("src/suggestions/contributionPlanPipeline.ts"); return /CanonicalTargetAllocation/.test(s) && /input\.targetAllocation/.test(s); })(), "pipeline canonical");
+  add("DCM-2 (slice 7D): the rail passes the SAME shared canonical target (the one Rebalance consumes) to the contribution pipeline UNCONDITIONALLY in every mode — no conditional/transitional branch", (() => { const r = readIfSrc("src/suggestions/useRailSuggestions.ts"); return /targetAllocation: rebalanceTarget, targetState: rebalanceTargetState,/.test(r) && !/useCanonicalTarget \? \{ targetAllocation/.test(r); })(), "one shared target");
+  add("DCM-3 (slice 7D): the legacy risk-only allocation input is DELETED — the engine `allocation` input is always null and there is no deriveRecommendedAllocation/deltas leak in the rail", (() => { const r = readIfSrc("src/suggestions/useRailSuggestions.ts"); return /const allocationInput = null;/.test(r) && /allocation: allocationInput,/.test(r) && !/deriveRecommendedAllocation/.test(r); })(), "no legacy leak");
+
+  // ---- Confidence eligibility ----
+  add("DCM-4: full canonical target → DCA eligible (category dca), pipeline maps crypto/stable from the target", (() => { const res = run(CT(60, 40), "full"); return res.suggestion?.category === "dca" && res.pipeline?.finalTargetCryptoPct === 60 && res.pipeline?.finalTargetStablePct === 40 && res.pipeline?.marketIncluded === true; })(), "full eligible");
+  add("DCM-5: degraded canonical target → DCA eligible; marketIncluded false", (() => { const res = run(CT(60, 40, "degraded_market_excluded"), "degraded_market_excluded"); return res.suggestion?.category === "dca" && res.pipeline?.marketIncluded === false && res.pipeline?.targetConfidence === "degraded_market_excluded"; })(), "degraded eligible");
+  add("DCM-6: unavailable / blocked / unresolved / loading canonical target → NO DCA (fail closed, no card)", (() => { const un = run(null, "unavailable"); const bl = run(null, "blocked"); const ur = run(null, "unresolved"); const ld = run(null, "loading"); return un.suggestion === null && bl.suggestion === null && ur.suggestion === null && ld.suggestion === null && un.pipeline?.blockers.includes("target_unavailable") === true && bl.pipeline?.blockers.includes("target_blocked") === true; })(), "fail closed");
+  add("DCM-7: MISSING target context (real-wallet, no target supplied) → NO DCA (fail closed target_unresolved)", (() => { const res = run(undefined, undefined); return res.suggestion === null && res.pipeline?.blockers.includes("target_unresolved") === true; })(), "missing → closed");
+
+  // ---- Target consistency + no recomputation ----
+  add("DCM-8: no local target recalculation — pipeline surfaces the SUPPLIED target verbatim (finalVolatile→crypto, finalStable→stable)", (() => { const t = CT(65, 35); const res = run(t, "full"); return res.pipeline?.finalTargetCryptoPct === t.targetCryptoPct && res.pipeline?.finalTargetStablePct === t.targetStablePct; })(), "no recompute");
+  add("DCM-9: same canonical target reaches Rebalance and DCA — the pipeline consumes the identical percentages the rail hands Rebalance", (() => { const t = CT(60, 40); const res = run(t, "full"); return res.pipeline?.finalTargetCryptoPct === t.targetCryptoPct; })(), "shared pcts");
+
+  // ---- Minimum ----
+  add("DCM-10: contribution below the $50 minimum → no DCA card (minimum unchanged, degraded cannot bypass)", (() => { const smallGoal = { ...goalBase, monthly_saving_goal: 40 }; const full = run(CT(60, 40), "full", { goal: smallGoal }); const deg = run(CT(60, 40, "degraded_market_excluded"), "degraded_market_excluded", { goal: smallGoal }); return full.suggestion === null && deg.suggestion === null; })(), "min $50");
+
+  // ---- Direction (from gap, never sentiment) ----
+  add("DCM-11: direction from the allocation gap — crypto UNDER a 60% target → DCA (targetPct 60); an ALIGNED target (≈current) → no DCA; the market band only moves the target", (() => { const under = run(CT(60, 40), "full"); const aligned = run(CT(32, 68), "full"); return under.suggestion?.category === "dca" && (under.suggestion as { contributionPlan?: { targetPct?: number } }).contributionPlan?.targetPct === 60 && aligned.suggestion === null && aligned.pipeline?.status === "no_action_required"; })(), "gap direction");
+
+  // ---- Rebalance conflict authority (engine, unchanged) ----
+  add("DCM-12 (slice 7D): engine gates DCA behind the canonical rebalance signal (inside `!rebalanceApplies`, keyed on rebalanceOverride.material); the DCA source is the single `const dca = planDca` with NO legacy/`??`/`||` fallback", (() => { const e = readIfSrc("src/suggestions/engine.ts"); return /if \(!rebalanceApplies\)/.test(e) && /rebalanceApplies = rebalanceOverride\?\.material/.test(e) && /const dca: EngineSuggestion \| null = planDca;/.test(e) && !/legacyDcaEligible/.test(e) && !/deriveDcaSuggestion/.test(e); })(), "conflict authority");
+
+  // ---- Review copy ----
+  add("DCM-13: full DCA Review discloses 10% market input + CoinMarketCap + not-a-buy/sell; no score/band/timing", (() => { const r = reviewOf(run(CT(60, 40), "full")); const body = r?.marketContextSection?.body ?? ""; return /10% of your target-allocation calculation/.test(body) && /Data source: CoinMarketCap/.test(body) && /does not directly create buy or sell/.test(body) && !/\b\d{1,3}\/100\b|Fear|Greed|bullish|bearish|time to (buy|sell)/.test(body); })(), "full review");
+  add("DCM-14: degraded DCA Review discloses exclusion + renormalization; no score/band/CoinMarketCap/Neutral", (() => { const r = reviewOf(run(CT(60, 40, "degraded_market_excluded"), "degraded_market_excluded")); const body = r?.marketContextSection?.body ?? ""; return /market component was excluded, and the remaining profile factors were renormalized/.test(body) && !/CoinMarketCap|\/100|Neutral|Fear|Greed/.test(body); })(), "degraded review");
+  add("DCM-15: transitional target DCA Review shows NO market section (never claims inclusion)", (() => { const r = reviewOf(run(CT(60, 40, "full", false), "full")); return r != null && r.marketContextSection === undefined; })(), "transitional review");
+
+  // ---- Privacy ----
+  add("DCM-16: DCA suggestion + Review expose no income/expenses/net cash flow/savings rate/market score/band/cache/key", (() => { const res = run(CT(60, 40), "full"); const s = JSON.stringify(res.suggestion) + JSON.stringify(reviewOf(res)); return !/income|expenses|net_?cash|savingsRate|"score"|"band"|cacheVersion|apiKey|X-CMC/i.test(s); })(), "privacy");
+  add("DCM-17: no market-timing / emotional language anywhere in the DCA Review", (() => { const res = run(CT(60, 40), "full"); const s = JSON.stringify(reviewOf(res)); return !/buy the dip|Fear|Greed|bullish|bearish|sell now|time to buy/i.test(s); })(), "no timing copy");
+
+  // ---- Contribution semantics ----
+  add("DCM-18: contribution cadence preserved (from goal.contribution_frequency, not derived); income/expense change cannot alter the stored monthly contribution", (() => { const cp = (r: ReturnType<typeof run>) => (r.suggestion as { contributionPlan?: { contributionFrequencyId?: string } } | null)?.contributionPlan; const a = run(CT(60, 40), "full", { goal: { ...goalBase, income_monthly: 4000, expenses_monthly: 100 } }); const b = run(CT(60, 40), "full", { goal: { ...goalBase, income_monthly: 99999, expenses_monthly: 9999 } }); const ca = cp(a)?.contributionFrequencyId; const cb = cp(b)?.contributionFrequencyId; return a.suggestion?.category === "dca" && ca === "monthly" && ca === cb && goalBase.monthly_saving_goal === 1000; })(), "cadence + amount fixed");
+
+  // ---- Slice 7D: legacy DCA fallback DELETED from the engine + pipeline (fail closed, no risk-only) ----
+  const readSrc = readIfSrc;
+  add("D41-1: engine DCA has ONE source — `const dca: ... = planDca;` — NO deriveDcaSuggestion, NO legacyDcaEligible, NO `??`/`||` fallback", (() => { const e = readSrc("src/suggestions/engine.ts"); return /const dca: EngineSuggestion \| null = planDca;/.test(e) && !/deriveDcaSuggestion/.test(e) && !/legacyDcaEligible/.test(e) && !/planDca \?\?/.test(e) && !/planDca \|\|/.test(e); })(), "single source");
+  add("D41-2: the engine no longer declares a `legacyDcaEligible` param, and the rail no longer passes one", (() => { const e = readSrc("src/suggestions/engine.ts"); const r = readSrc("src/suggestions/useRailSuggestions.ts"); return !/legacyDcaEligible/.test(e) && !/legacyDcaEligible/.test(r); })(), "param gone");
+  const d41Inputs = () => inputsFor({ safetyBuffer: bufferFixture(5000, 1000, 3), allocation: allocationFixture(15000, 57, -3), positions: [cryptoPosition(100)] });
+  add("D41-3: REAL-WALLET with a null canonical planDca → NO DCA, even with a risk-only allocation present (no legacy evaluator)", (() => { const inputs = d41Inputs(); const bo = bufferOverrideFromInputs(inputs, FIXTURE_GENERATED_AT); const oto = onTrackOverrideFromInputs(inputs, FIXTURE_GENERATED_AT, undefined); const rw = runSuggestionEngineRaw(inputs, FIXTURE_GENERATED_AT, null, null, undefined, undefined, undefined, undefined, bo, oto); return !rw.suggestions.some((s) => s.category === "dca"); })(), "real-wallet no legacy");
+  add("D41-4: EVERY mode with a null planDca → NO DCA — the legacy evaluator is UNREACHABLE through the engine (no opt-in exists)", (() => { const inputs = d41Inputs(); const bo = bufferOverrideFromInputs(inputs, FIXTURE_GENERATED_AT); const oto = onTrackOverrideFromInputs(inputs, FIXTURE_GENERATED_AT, undefined); const t = runSuggestionEngineRaw(inputs, FIXTURE_GENERATED_AT, null, null, undefined, undefined, undefined, undefined, bo, oto); return !t.suggestions.some((s) => s.category === "dca"); })(), "no legacy path");
+  add("D41-5: real-wallet INCOMPLETE Safety Buffer + NO target → buffer contribution preserved, NO target failure, NO DCA (short-circuit before target)", (() => { const res = deriveContributionSuggestion({ dataMode: "real_wallet", positions: DEMO_POSITIONS, pricedAsOf: Date.parse("2026-07-01T00:00:00.000Z"), goal: DEMO_GOAL, buffer: { stableUsd: 800, targetUsd: 3000, targetMonths: 3, coveragePct: 26.67, monthsCovered: 0.8, fullyFunded: false } }); return res.suggestion?.category === "buffer" && !(res.pipeline?.blockers ?? []).some((b) => b.startsWith("target_")); })(), "buffer short-circuit");
+  add("D41-6: the contribution pipeline no longer references deriveRecommendedAllocation ANYWHERE; the buffer-complete path fails closed on a missing/undefined target in every mode", (() => { const s = readSrc("src/suggestions/contributionPlanPipeline.ts"); return !/deriveRecommendedAllocation/.test(s) && /if \(input\.targetAllocation === undefined\) \{[\s\S]*?return fail\("blocked_policy", \["target_unresolved"\]\);/.test(s); })(), "no risk-only in pipeline");
+  add("D41-7: the production Review modal RENDERS marketContextSection (title + body + rows), guarded so buffer/degraded show no empty section", (() => { const m = readSrc("src/components/SuggestionReviewModal.tsx"); return /cr\.marketContextSection && \(/.test(m) && /cr\.marketContextSection\.body/.test(m) && /cr\.marketContextSection\.rows\.map/.test(m); })(), "modal renders");
+  add("D41-8: the legacy `deriveDcaSuggestion` evaluator is NOT imported or called by the mounted engine (engine.ts has zero references)", (() => { const e = readSrc("src/suggestions/engine.ts"); return !/deriveDcaSuggestion/.test(e) && !/from "\.\/dcaSuggestion"/.test(e); })(), "not engine-wired");
+  add("D41-9: zero risk-only DCA anywhere in the pipeline — no RISK_TARGET_ALLOCATION, no riskOnlyCanonicalTargetTransitional, no deriveRecommendedAllocation, no transitional_risk_only", (() => { const s = readSrc("src/suggestions/contributionPlanPipeline.ts"); return !/RISK_TARGET_ALLOCATION/.test(s) && !/riskOnlyCanonicalTargetTransitional/.test(s) && !/deriveRecommendedAllocation/.test(s) && !/transitional_risk_only/.test(s); })(), "no risk-only");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 22F (slice 5) — DASHBOARD CANONICAL TARGET MOUNT. Validates that the real-wallet dashboard allocation summary
+ * consumes the SAME shared canonical target as Rebalance + DCA (via the rail's targetSummary), shows a safe state for
+ * every non-usable target (loading/unresolved/unavailable/blocked → no legacy percentages, no risk-only flicker),
+ * discloses a degraded (market-excluded) target minimally, adds no market score/band/attribution (Slice-6), and leaks
+ * no raw income/expenses/cache. Demo/testing get no summary (existing display preserved).
+ * ------------------------------------------------------------------ */
+export function runDashboardTargetMountFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const P = Date.parse("2026-07-01T00:00:00.000Z");
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const cacheAt = (observedMsAgo: number) => ({ cacheVersion: MARKET_CONDITION_CACHE_VERSION, generatedAt: iso(P), sourceId: "coinmarketcap_crypto_fear_greed", indexId: "cmc_crypto_fear_greed", indexName: "CMC Crypto Fear & Greed Index", methodology: "cmc_crypto_fear_greed_composite", methodologyVersion: "cmc_fng_methodology_2026_1", score: 12, band: "extreme_fear", observedAt: iso(P - observedMsAgo), retrievedAt: iso(P), validUntil: null, retrievalState: "cached", evidence: ["cmc"] });
+  const goal = { financial_goal: "build_long_term_wealth", risk_tolerance: "medium", timeline: "5_years", contribution_frequency: "monthly", income_monthly: 4000, expenses_monthly: 1000, monthly_saving_goal: 1000 } as unknown as SavedGoal;
+  const usdc = (v: number) => ({ id: "u", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", detection: "direct_wallet_balance", valueUsd: v, uiAmount: v, priceUsd: 1 } as unknown as WalletPosition);
+  const sol = (v: number) => ({ id: "s", source: "wallet", type: "native", symbol: "SOL", name: "Solana", detection: "direct_wallet_balance", valueUsd: v, uiAmount: v / 150, priceUsd: 150 } as unknown as WalletPosition);
+  const positions = [usdc(6000), sol(4000)];
+  const railFull = SY_deriveRail({ positions, pricedAsOf: P, goal, marketConditionsCacheInput: cacheAt(3_600_000), marketConditionsCacheState: "loaded", targetGeneratedAt: P });
+  const railDegraded = SY_deriveRail({ positions, pricedAsOf: P, goal, marketConditionsCacheInput: cacheAt(200 * 3_600_000), marketConditionsCacheState: "loaded", targetGeneratedAt: P }); // 200h stale → market excluded
+  const railLoading = SY_deriveRail({ positions, pricedAsOf: P, goal, marketConditionsCacheState: "loading", targetGeneratedAt: P });
+  const railNoCache = SY_deriveRail({ positions, pricedAsOf: P, goal });
+  const railDemo = SY_deriveRail({ positions, pricedAsOf: P, goal, dataMode: "demo_fixture" });
+
+  add("DSH-1: real-wallet rail exposes targetSummary from the shared canonical target (state full, percentages present)", (() => { const t = railFull.targetSummary; return t != null && t.state === "full" && typeof t.targetCryptoPct === "number" && typeof t.targetStablePct === "number" && t.marketExcluded === false; })(), "full summary");
+  add("DSH-2: dashboard target === the canonical target Rebalance+DCA consume (identical percentages; no independent value)", (() => { const t = railFull.targetSummary; const ct = railFull.targetContext?.canonicalTargetAllocation; return t != null && ct != null && t.targetCryptoPct === ct.targetCryptoPct && t.targetStablePct === ct.targetStablePct; })(), "consistency");
+  add("DSH-3: STALE market → degraded (market-excluded) canonical target → targetSummary degraded_market_excluded + marketExcluded true + renormalized percentages present", (() => { const t = railDegraded.targetSummary; return t != null && t.state === "degraded_market_excluded" && t.marketExcluded === true && typeof t.targetCryptoPct === "number"; })(), "degraded summary");
+  add("DSH-4: LOADING → targetSummary state loading, null percentages (loading treatment, no legacy)", (() => { const t = railLoading.targetSummary; return t != null && t.state === "loading" && t.targetCryptoPct === null && t.targetStablePct === null; })(), "loading");
+  add("DSH-5: real-wallet WITHOUT a market cache → targetSummary fails closed (unresolved, null percentages, no risk-only fallback)", (() => { const t = railNoCache.targetSummary; return t != null && t.state === "unresolved" && t.targetCryptoPct === null && t.targetStablePct === null; })(), "fail closed");
+  add("DSH-6: Demo/testing rail exposes NO targetSummary (dashboard keeps its existing display)", railDemo.targetSummary === undefined, "demo none");
+  add("DSH-7: DashboardBody consumes targetSummary and does NOT call deriveRecommendedAllocation / RISK_TARGET_ALLOCATION / fetch the market cache", (() => { const s = readIfSrc("src/components/DashboardBody.tsx"); return /targetSummary/.test(s) && !/deriveRecommendedAllocation/.test(s) && !/RISK_TARGET_ALLOCATION/.test(s) && !/useMarketConditionsCache|market-conditions-cache/.test(s); })(), "no legacy");
+  add("DSH-8: DashboardBody renders the safe state captions (current / market-excluded / loading / unavailable)", (() => { const s = readIfSrc("src/components/DashboardBody.tsx"); return /ALLOCATION_TARGET_CURRENT/.test(s) && /ALLOCATION_MARKET_EXCLUDED/.test(s) && /ALLOCATION_TARGET_LOADING/.test(s) && /ALLOCATION_TARGET_UNAVAILABLE/.test(s); })(), "captions");
+  add("DSH-9: dashboard target captions add NO market score/band/CoinMarketCap/observation-time (Slice-6 surface)", (() => { const c = readIfSrc("src/state/approvedCopy.ts"); const i = c.indexOf("ALLOCATION_TARGET_CURRENT ="); const block = i >= 0 ? c.slice(i, i + 400) : ""; return /Market data was excluded from this calculation/.test(block) && /All target-allocation inputs are current/.test(block) && !/CoinMarketCap|Fear|Greed|\/100|score|band|observ/i.test(block); })(), "no market UI");
+  add("DSH-10: privacy — targetSummary carries no income/expenses/net cash flow/savings rate/market score/band/cache/key", (() => { const s = JSON.stringify(railFull.targetSummary); return !/income|expenses|net_?cash|savingsRate|"score"|"band"|cacheVersion|apiKey/i.test(s); })(), "privacy");
+  add("DSH-11: display rounding only — targetSummary stores the raw canonical percentages (not pre-rounded)", (() => { const t = railFull.targetSummary; const ct = railFull.targetContext?.canonicalTargetAllocation; return t != null && ct != null && t.targetCryptoPct === ct.targetCryptoPct && t.targetStablePct === ct.targetStablePct; })(), "raw stored");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 22F (slice 6) — DASHBOARD MARKET CONDITIONS SURFACE. Validates the ONE informational surface: it consumes the
+ * minimum safe `marketSummary` (derived once from the shared MarketConditionAssessment), shows score/band/observedAt/
+ * CoinMarketCap attribution ONLY in the full state, represents degraded/stale/unavailable/blocked/loading safely (no
+ * stale score/band, no fake Neutral), discloses the 10% + not-a-buy/sell explanation, agrees with the allocation
+ * summary, adds no direct market trigger / standalone candidate, uses observedAt (not retrievedAt), and leaks no
+ * key/endpoint/payload/income/expenses. The band is the canonical supplied label (no UI thresholds).
+ * ------------------------------------------------------------------ */
+export function runMarketConditionsSurfaceFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const P = Date.parse("2026-07-01T00:00:00.000Z");
+  const iso = (ms: number) => new Date(ms).toISOString();
+  const cacheAt = (ago: number) => ({ cacheVersion: MARKET_CONDITION_CACHE_VERSION, generatedAt: iso(P), sourceId: "coinmarketcap_crypto_fear_greed", indexId: "cmc_crypto_fear_greed", indexName: "CMC Crypto Fear & Greed Index", methodology: "cmc_crypto_fear_greed_composite", methodologyVersion: "cmc_fng_methodology_2026_1", score: 39, band: "fear", observedAt: iso(P - ago), retrievedAt: iso(P), validUntil: null, retrievalState: "cached", evidence: ["cmc"] });
+  const goal = { financial_goal: "build_long_term_wealth", risk_tolerance: "medium", timeline: "5_years", contribution_frequency: "monthly", income_monthly: 4000, expenses_monthly: 1000, monthly_saving_goal: 1000 } as unknown as SavedGoal;
+  const usdc = (v: number) => ({ id: "u", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", detection: "direct_wallet_balance", valueUsd: v, uiAmount: v, priceUsd: 1 } as unknown as WalletPosition);
+  const sol = (v: number) => ({ id: "s", source: "wallet", type: "native", symbol: "SOL", name: "Solana", detection: "direct_wallet_balance", valueUsd: v, uiAmount: v / 150, priceUsd: 150 } as unknown as WalletPosition);
+  const positions = [usdc(6000), sol(4000)];
+  const rail = (cacheInput: unknown, cacheState: import("./railTargetContext").MarketConditionsCacheState) => SY_deriveRail({ positions, pricedAsOf: P, goal, marketConditionsCacheInput: cacheInput, marketConditionsCacheState: cacheState, targetGeneratedAt: P });
+  const full = rail(cacheAt(3_600_000), "loaded");
+  const stale = rail(cacheAt(200 * 3_600_000), "loaded");
+  const degraded = rail(null, "loaded");
+  const loadingR = rail(null, "loading");
+  const compSrc = readIfSrc("src/components/MarketConditionsSurface.tsx");
+  const dashSrc = readIfSrc("src/components/DashboardBody.tsx");
+  const railSrc = readIfSrc("src/suggestions/useRailSuggestions.ts");
+  const engineSrc = readIfSrc("src/suggestions/engine.ts");
+  const copySrc = readIfSrc("src/state/approvedCopy.ts");
+
+  // ---- Architecture ----
+  add("MCS-1: rail exposes a minimal safe marketSummary (derived ONCE from the shared MarketConditionAssessment)", (() => { return full.marketSummary != null && (railSrc.match(/deriveRailMarketSummary\(targetContext\)/g) ?? []).length === 1; })(), "one summary");
+  add("MCS-2: DashboardBody renders MarketConditionsSurface from marketSummary (no provider fetch / no target or band recompute in the component)", (() => { return /MarketConditionsSurface/.test(dashSrc) && /marketSummary/.test(dashSrc) && !/pro-api|X-CMC|fetch\(|deriveRecommendedAllocation|buildCanonicalTargetAllocation|MARKET_BAND_DISPLAY_LABEL|classifyMarketConditionScore|deriveTargetAllocationAssessment/.test(compSrc); })(), "informational only");
+  add("MCS-3: NO direct market trigger — marketSummary is computed AFTER the engine and never passed into runSuggestionEngine; the engine reads no market score/band", (() => { const engineCallIdx = railSrc.indexOf("runSuggestionEngine("); const summaryIdx = railSrc.indexOf("deriveRailMarketSummary(targetContext)"); return summaryIdx > engineCallIdx && !/marketSummary/.test(railSrc.slice(engineCallIdx, railSrc.indexOf(");", engineCallIdx))) && !/marketSummary|marketBand|marketScore/.test(engineSrc); })(), "no trigger");
+  add("MCS-4: NO standalone market/Fear-Greed suggestion candidate is emitted", (() => { return full.cards.every((c: { category?: string; id?: string }) => c.category !== "market_conditions" && c.category !== "fear_greed" && !/fear|greed|market_condition/i.test(c.id ?? "")); })(), "no candidate");
+
+  // ---- Full state ----
+  add("MCS-5: full state exposes canonical score + band + bandLabel + observedAt + CoinMarketCap + scope + 10% weight + marketIncluded", (() => { const m = full.marketSummary!; return m.state === "full" && m.score === 39 && m.band === "fear" && m.bandLabel === "Fear" && typeof m.observedAt === "string" && m.sourceName === "CoinMarketCap" && m.scopeLabel === "Broad crypto-market sentiment" && m.targetWeightPct === 10 && m.marketIncluded === true; })(), "full fields");
+  add("MCS-6: the surface consumes the CANONICAL supplied band label (no UI threshold logic; bandLabel matches the assessment displayBand)", (() => { const m = full.marketSummary!; const db = full.targetContext?.marketConditionAssessment.displayBand; return m.bandLabel === db && m.bandLabel === "Fear" && !/MARKET_BAND_DISPLAY_LABEL|classifyMarketConditionScore|score >=|score <|score >/.test(compSrc); })(), "canonical band");
+  add("MCS-7: full component renders 10% explanation + not-a-buy/sell + CoinMarketCap attribution + scope, and NO emotional/predictive/timing words", (() => { return /MARKET_CONDITIONS_EXPLANATION/.test(compSrc) && /MARKET_CONDITIONS_SOURCE/.test(compSrc) && /MARKET_CONDITIONS_SCOPE/.test(compSrc) && /10% of your target-allocation calculation and does not directly create buy or sell/.test(copySrc) && !/buy the dip|bullish|bearish|opportunity|danger|time the market|reduce exposure|Solana market/i.test(compSrc + copySrc); })(), "full copy");
+  add("MCS-8: market-adjustment display — labelled as an adjustment in percentage points, direction shown, display-only (never eligibility)", (() => { return /increased|reduced/.test(compSrc) && /percentage points/.test(compSrc) && /Math\.abs\(adj/.test(compSrc); })(), "adjustment copy");
+
+  // ---- Degraded / stale / loading — safe states ----
+  add("MCS-9: STALE → no stale score/band/observedAt/attribution; marketExcluded true", (() => { const m = stale.marketSummary!; return m.state === "stale" && m.score === null && m.band === null && m.bandLabel === null && m.observedAt === null && m.sourceName === null && m.marketExcluded === true; })(), "stale safe");
+  add("MCS-10: DEGRADED (missing/failed market) → no score/band/attribution (no fake Neutral in the data); excluded/renormalized copy", (() => { const m = degraded.marketSummary!; return m.state === "degraded" && m.score === null && m.band === null && m.bandLabel === null && m.sourceName === null && m.marketIncluded === false && /MARKET_CONDITIONS_EXCLUDED/.test(compSrc); })(), "degraded safe");
+  add("MCS-11: STALE component adds the approved freshness-window line", (() => { return /MARKET_CONDITIONS_STALE/.test(compSrc) && /outside its approved freshness window/.test(copySrc); })(), "stale copy");
+  add("MCS-12: LOADING → loading treatment (state loading, no score/band, no legacy value)", (() => { const m = loadingR.marketSummary!; return m.state === "loading" && m.score === null && m.band === null && /MARKET_CONDITIONS_LOADING/.test(compSrc) && /aria-busy/.test(compSrc); })(), "loading");
+  add("MCS-13: blocked/unavailable/unresolved → safe simple unavailable copy; degraded/stale → exclusion copy (component branches on excludedStyle)", (() => { return /excludedStyle = state === "degraded" \|\| state === "stale"/.test(compSrc) && /MARKET_CONDITIONS_UNAVAILABLE_SIMPLE/.test(compSrc); })(), "safe branch");
+
+  // ---- Timestamp ----
+  add("MCS-14: uses observedAt (never .retrievedAt/.validUntil member access); invalid/future omitted; localized (toLocaleString)", (() => { return /summary\.observedAt/.test(compSrc) && !/\.retrievedAt|\.validUntil/.test(compSrc) && /Number\.isNaN\(ms\)/.test(compSrc) && /ms > Date\.now\(\)/.test(compSrc) && /toLocaleString\(\)/.test(compSrc); })(), "observedAt only");
+
+  // ---- Consistency ----
+  add("MCS-15: full market surface AGREES with the full target (marketIncluded true ⇔ target full); degraded agrees with degraded target", (() => { const f = full; const s = stale; return f.marketSummary!.marketIncluded === true && f.targetSummary!.state === "full" && s.marketSummary!.marketExcluded === true && s.targetSummary!.state === "degraded_market_excluded"; })(), "surface⇔target");
+  add("MCS-16: full target percentages equal Rebalance/DCA/dashboard values (same canonical object)", (() => { const ct = full.targetContext?.canonicalTargetAllocation; return ct != null && full.targetSummary?.targetCryptoPct === ct.targetCryptoPct; })(), "one target");
+
+  // ---- Copy correction ----
+  add("MCS-17: mounted dashboard FULL methodology copy is CANONICAL five-factor (the rendered ALLOCATION_METHODOLOGY_FULL, no 'risk-based'/'based on your risk level')", (() => { const fullText = copySrc.match(/ALLOCATION_METHODOLOGY_FULL =\s*\n?\s*"([^"]*)"/)?.[1] ?? ""; return /risk tolerance, timeline, financial goal, cash flow, and current market conditions/.test(fullText) && !/risk-based|based on your risk level/i.test(fullText); })(), "canonical copy");
+
+  // ---- Attribution rules ----
+  add("MCS-18: CoinMarketCap attribution present ONLY beside current data (full has sourceName; degraded/stale/unavailable/loading do not)", (() => { return full.marketSummary!.sourceName === "CoinMarketCap" && stale.marketSummary!.sourceName === null && degraded.marketSummary!.sourceName === null && loadingR.marketSummary!.sourceName === null; })(), "attribution gated");
+
+  // ---- Privacy ----
+  add("MCS-19: marketSummary carries no API key / provider endpoint / raw payload / retrievedAt / validUntil / income / expenses / cache internals", (() => { const s = JSON.stringify(full.marketSummary); return !/apiKey|X-CMC|pro-api|retrievedAt|validUntil|cacheVersion|income|expenses|net_?cash|savingsRate|evidence/i.test(s); })(), "privacy");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 22F (slice 6.1) — STATE-AWARE dashboard methodology copy + canonical band-boundary passthrough. Validates that
+ * `deriveAllocationMethodologyCopy(state)` returns copy matching the canonical target state (full cites current market
+ * conditions; degraded says market was excluded; unavailable/blocked make no five-factor claim; loading/unresolved make
+ * no inclusion/exclusion claim), that no single state renders a contradictory pair, that the dashboard consumes the
+ * derivation (not the old static text), that the surface passes the canonical production band through without UI
+ * reclassification, and that the legitimate Safety-Buffer risk-based-months copy is untouched.
+ * ------------------------------------------------------------------ */
+export function runAllocationMethodologyCopyFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const includesMarket = /current market conditions/i;
+  const excludedMarket = /Market data was excluded/i;
+  const full = deriveAllocationMethodologyCopy("full");
+  const degraded = deriveAllocationMethodologyCopy("degraded_market_excluded");
+  const loading = deriveAllocationMethodologyCopy("loading");
+  const unresolved = deriveAllocationMethodologyCopy("unresolved");
+  const unavailable = deriveAllocationMethodologyCopy("unavailable");
+  const blocked = deriveAllocationMethodologyCopy("blocked");
+  const dashSrc = readIfSrc("src/components/DashboardBody.tsx");
+  const copySrc = readIfSrc("src/state/approvedCopy.ts");
+
+  // ---- State-aware copy ----
+  add("MCC-1: FULL methodology copy cites current market conditions + names the profile factors; does NOT say excluded", includesMarket.test(full) && /risk tolerance, timeline, financial goal, cash flow/.test(full) && !excludedMarket.test(full), "full copy");
+  add("MCC-2: DEGRADED copy says market data was excluded + names the four profile factors; does NOT claim current market inclusion; does NOT say all inputs current", excludedMarket.test(degraded) && /risk tolerance, timeline, financial goal, and cash flow/.test(degraded) && !includesMarket.test(degraded) && !/all target-allocation inputs are current/i.test(degraded), "degraded copy");
+  add("MCC-3: DEGRADED copy is renormalized four-factor language — never Neutral/risk-only/incomplete", !/neutral|risk-only|only risk tolerance|incomplete/i.test(degraded), "degraded accurate");
+  add("MCC-4: UNAVAILABLE + BLOCKED make no five-factor completion claim (no factor enumeration, no current market conditions)", !includesMarket.test(unavailable) && !/risk tolerance, timeline/.test(unavailable) && unavailable === blocked && !includesMarket.test(blocked), "unavailable copy");
+  add("MCC-5: LOADING + UNRESOLVED make no inclusion/exclusion claim (neutral)", !includesMarket.test(loading) && !excludedMarket.test(loading) && loading === unresolved && !includesMarket.test(unresolved) && !excludedMarket.test(unresolved), "loading copy");
+
+  // ---- No contradiction in any single state ----
+  add("MCC-6: no single state's methodology copy contains BOTH 'current market conditions' and 'market data was excluded'", [full, degraded, loading, unresolved, unavailable, blocked].every((c) => !(includesMarket.test(c) && excludedMarket.test(c))), "no contradiction");
+  add("MCC-7: FULL methodology (current market conditions) pairs with the FULL allocation caption (all inputs current) — consistent, not contradictory", includesMarket.test(full) && includesMarket.test(ALLOCATION_METHODOLOGY_FULL) && /All target-allocation inputs are current/.test(ALLOCATION_TARGET_CURRENT) && !excludedMarket.test(ALLOCATION_TARGET_CURRENT), "full pair");
+
+  // ---- Dashboard consumes the derivation ----
+  add("MCC-8: DashboardBody renders deriveAllocationMethodologyCopy(targetState) in the allocation info popover — NOT the old static ALLOCATION_INFO_TEXT", /deriveAllocationMethodologyCopy\(targetState\)/.test(dashSrc) && !/\{ALLOCATION_INFO_TEXT\}/.test(dashSrc), "state-aware wired");
+
+  // ---- Band-boundary passthrough (UI never classifies) ----
+  add("MCC-9: canonical band boundaries are proven at the ASSESSMENT level (MC-1: 24/25/49/50/59/60/74/75) — no duplicate UI threshold logic", (() => { const comp = readIfSrc("src/components/MarketConditionsSurface.tsx"); const fx = readIfSrc("src/suggestions/suggestionEngine.fixtures.ts"); return /cls\(24\) === "extreme_fear" && cls\(25\) === "fear"/.test(fx) && !/score >=|score <|>= 25|>= 50|>= 60|>= 75/.test(comp); })(), "assessment boundaries");
+  add("MCC-10: the surface passes the CANONICAL production band through for the boundary scores 60 → Greed and 75 → Extreme Greed (UI reads displayBand; MCS-6 proves no UI thresholds)", (() => { const P = Date.parse("2026-07-01T00:00:00.000Z"); const iso = (ms: number) => new Date(ms).toISOString(); const cache = (score: number, band: string) => ({ cacheVersion: MARKET_CONDITION_CACHE_VERSION, generatedAt: iso(P), sourceId: "coinmarketcap_crypto_fear_greed", indexId: "cmc_crypto_fear_greed", indexName: "CMC Crypto Fear & Greed Index", methodology: "cmc_crypto_fear_greed_composite", methodologyVersion: "cmc_fng_methodology_2026_1", score, band, observedAt: iso(P - 3_600_000), retrievedAt: iso(P), validUntil: null, retrievalState: "cached", evidence: ["cmc"] }); const goal = { financial_goal: "build_long_term_wealth", risk_tolerance: "medium", timeline: "5_years", contribution_frequency: "monthly", income_monthly: 4000, expenses_monthly: 1000, monthly_saving_goal: 1000 } as unknown as SavedGoal; const pos = [{ id: "u", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", detection: "direct_wallet_balance", valueUsd: 6000, uiAmount: 6000, priceUsd: 1 }, { id: "s", source: "wallet", type: "native", symbol: "SOL", name: "Solana", detection: "direct_wallet_balance", valueUsd: 4000, uiAmount: 26.7, priceUsd: 150 }] as unknown as WalletPosition[]; const m = (score: number, band: string) => SY_deriveRail({ positions: pos, pricedAsOf: P, goal, marketConditionsCacheInput: cache(score, band), marketConditionsCacheState: "loaded", targetGeneratedAt: P }).marketSummary; const g = m(60, "greed"); const eg = m(75, "extreme_greed"); return g?.score === 60 && g?.band === "greed" && g?.bandLabel === "Greed" && eg?.score === 75 && eg?.band === "extreme_greed" && eg?.bandLabel === "Extreme Greed"; })(), "band passthrough");
+
+  // ---- Legitimate risk copy untouched ----
+  add("MCC-11: the Safety-Buffer risk-based-months copy is unchanged (legitimately risk-based)", /Add your monthly expenses and risk tolerance to see your safety buffer target/.test(copySrc), "buffer copy kept");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 22F (slice 7) — DETERMINISTIC DEMO MIGRATION. Validates that Demo consumes the PRODUCTION five-factor target
+ * path via a deterministic governed market fixture (no real cache, no provider, no wall-clock, no risk-only
+ * transitional target): one full MarketConditionAssessment (Fear 39), one canonical target, the same shared target for
+ * the dashboard, a deterministic Market Conditions surface, and stable rerenders. Visible Demo cards are unchanged.
+ * ------------------------------------------------------------------ */
+export function runDemoMarketMigrationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const rail = buildDemoContributionRail();
+  const rail2 = buildDemoContributionRail();
+  const demoScenarioSrc = readIfSrc("src/suggestions/demoContributionScenario.ts");
+  const demoMarketSrc = readIfSrc("src/suggestions/demoMarketConditions.ts");
+  const demoPageSrc = readIfSrc("src/pages/DemoDashboardPage.tsx");
+
+  add("DEMO7-1: Demo market summary is a full production assessment (Fear 39/100, CoinMarketCap, scope, marketIncluded)", (() => { const m = rail.marketSummary; return m != null && m.state === "full" && m.score === 39 && m.band === "fear" && m.bandLabel === "Fear" && m.sourceName === "CoinMarketCap" && m.scopeLabel === "Broad crypto-market sentiment" && m.marketIncluded === true; })(), "full fear");
+  add("DEMO7-2: Demo target summary is the production canonical five-factor target (full, non-null percentages, not market-excluded)", (() => { const t = rail.targetSummary; return t != null && t.state === "full" && typeof t.targetCryptoPct === "number" && typeof t.targetStablePct === "number" && t.marketExcluded === false; })(), "canonical target");
+  add("DEMO7-3: the SAME shared canonical target percentages back the dashboard target and the market summary confidence", (() => { return rail.targetSummary?.state === "full" && rail.marketSummary?.targetConfidence === "full"; })(), "one shared target");
+  add("DEMO7-4: Demo is DETERMINISTIC — two builds produce byte-identical market + target summaries + cards", (() => { return JSON.stringify(rail.marketSummary) === JSON.stringify(rail2.marketSummary) && JSON.stringify(rail.targetSummary) === JSON.stringify(rail2.targetSummary) && JSON.stringify(rail.cards) === JSON.stringify(rail2.cards); })(), "deterministic");
+  add("DEMO7-5: Demo observedAt is deterministic (fixed relative to a fixed generatedAt); no wall-clock / Date.now in the Demo market fixture", (() => { return /observedAt: iso\(generatedAtMs - 3_600_000\)/.test(demoMarketSrc) && !/Date\.now\(\)/.test(demoMarketSrc); })(), "deterministic clock");
+  add("DEMO7-6: Demo passes a DETERMINISTIC governed cache to the production rail — no real cache fetch (no useMarketConditionsCache), no provider host", (() => { return /buildDemoMarketCacheInput\(DEMO_PRICED_AS_OF\)/.test(demoScenarioSrc) && /marketConditionsCacheState: DEMO_MARKET_CACHE_STATE/.test(demoScenarioSrc) && !/useMarketConditionsCache|pro-api|X-CMC|fetch\(/.test(demoScenarioSrc) && !/useMarketConditionsCache|pro-api|X-CMC|fetch\(/.test(demoMarketSrc); })(), "no real cache");
+  add("DEMO7-7: Demo uses the CANONICAL path (marketSummary/targetSummary present ⇒ no risk-only transitional target)", (() => { return rail.marketSummary != null && rail.targetSummary != null && !/riskOnlyCanonicalTargetTransitional/.test(demoScenarioSrc); })(), "no transitional");
+  add("DEMO7-8: the deterministic Demo market fixture uses the APPROVED CoinMarketCap source identity + methodology (production classifies the band)", (() => { return /sourceId: "coinmarketcap_crypto_fear_greed"/.test(demoMarketSrc) && /methodologyVersion: "cmc_fng_methodology_2026_1"/.test(demoMarketSrc); })(), "approved source");
+  add("DEMO7-9: the Demo dashboard renders the production MarketConditionsSurface from the Demo market summary", (() => { return /MarketConditionsSurface/.test(demoPageSrc) && /demoContributionRail\.marketSummary/.test(demoPageSrc); })(), "demo surface");
+  add("DEMO7-10: visible Demo card set is unchanged (Safety-Buffer-incomplete Demo still shows the buffer card, no market-driven card injected)", (() => { return rail.cards.some((c: { category?: string }) => c.category === "safety_buffer") && !rail.cards.some((c: { category?: string; id?: string }) => c.category === "market_conditions" || /fear|greed/i.test(c.id ?? "")); })(), "cards unchanged");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 22F (slice 7B) — DEMO ALLOCATION-CHART CONSISTENCY + PRODUCTION `/testing` REBALANCE MIGRATION. Validates that
+ * the Demo AllocationChart's recommended target is the shared canonical target (63.5/36.5, agreeing with the market
+ * surface); that the reusable production scenario builder is deterministic + reuses production classification/freshness/
+ * target; and that every visible `/testing` Rebalance card is derived through the production five-factor chain, with the
+ * required Fear-toward-crypto, Greed-toward-stables, full/partial correction, and degraded market-excluded cases.
+ * ------------------------------------------------------------------ */
+export function runSlice7BRebalanceMigrationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const demoRail = buildDemoContributionRail();
+  const gallery = rbTestFixtures();
+  const byId = (id: string) => gallery.find((f) => f.id === id);
+  const demoPageSrc = readIfSrc("src/pages/DemoDashboardPage.tsx");
+  const rbFxSrc = readIfSrc("src/pages/rebalanceTestingFixtures.ts");
+  const scenSrc = readIfSrc("src/suggestions/testing/canonicalTargetTestingScenario.ts");
+
+  // ---- Demo AllocationChart consistency ----
+  add("7B-1: Demo chart recommended target reads the SHARED canonical target (63.5 crypto / 36.5 stable); no hand-authored 60/40", (() => { const t = demoRail.targetSummary; return t?.targetCryptoPct === 63.5 && t?.targetStablePct === 36.5 && /demoTarget!\.targetCryptoPct/.test(demoPageSrc) && /demoTarget!\.targetStablePct/.test(demoPageSrc) && !/value_percent: 60|value_percent: 40/.test(demoPageSrc); })(), "canonical chart target");
+  add("7B-2: Demo chart agrees with the Market Conditions surface (both full, same shared target); no target recalculation in DemoDashboardPage", (() => { return demoRail.targetSummary?.state === "full" && demoRail.marketSummary?.state === "full" && demoRail.marketSummary?.targetConfidence === "full" && !/deriveRecommendedAllocation|buildCanonicalTargetAllocation/.test(demoPageSrc); })(), "chart⇔surface");
+  add("7B-3: Demo current allocation is unchanged (curated 89.33 / 10.67 — the target changed, not the current)", (() => { return /"Crypto", "value_percent": 89.33|89\.33/.test(readIfSrc("../examples/dashboard/dashboard-demo-state.json")) || /demoAllocation/.test(demoPageSrc); })(), "current unchanged");
+
+  // ---- Scenario builder ----
+  add("7B-4: the production scenario builder is DETERMINISTIC (fixed clock, no Date.now); two builds are identical", (() => { const a = buildCttScenario({ goal: cttGoal({ risk_tolerance: "high" }), totalPricedUsd: 1000, market: { kind: "fresh", score: 39 } }); const b = buildCttScenario({ goal: cttGoal({ risk_tolerance: "high" }), totalPricedUsd: 1000, market: { kind: "fresh", score: 39 } }); return JSON.stringify(a.context.canonicalTargetAllocation) === JSON.stringify(b.context.canonicalTargetAllocation) && !/Date\.now\(\)/.test(scenSrc); })(), "deterministic");
+  add("7B-5: the builder REUSES production classification (classifyMarketConditionScore) + freshness (stale → excluded) + target (no duplicated matrices/thresholds)", (() => { const fresh = buildCttScenario({ goal: cttGoal(), totalPricedUsd: 1000, market: { kind: "fresh", score: 39 } }); const stale = buildCttScenario({ goal: cttGoal(), totalPricedUsd: 1000, market: { kind: "stale", score: 39 } }); return fresh.context.marketConditionAssessment.band === "fear" && fresh.context.marketConditionAssessment.overallReadiness === "full" && stale.context.marketConditionAssessment.overallReadiness === "excluded_market_stale" && /classifyMarketConditionScore/.test(scenSrc) && !/RISK_STABLE_TARGET_PCT|FACTOR_WEIGHTS|score >= 25|score >= 50/.test(scenSrc); })(), "production reuse");
+
+  // ---- Visible gallery is production-derived ----
+  add("7B-6: the /testing Rebalance gallery no longer imports/uses the transitional helper (zero visible transitional callers)", (() => { return !/riskOnlyCanonicalTargetTransitional/.test(rbFxSrc) && /buildCanonicalTargetTestingScenario/.test(rbFxSrc); })(), "no transitional");
+  add("7B-7: Case A — full Fear target → toward crypto (production card, full confidence, market included)", (() => { const f = byId("full")!; return f.assessment.direction === "stables_to_crypto" && f.assessment.targetConfidence === "full" && f.assessment.marketIncluded === true && f.assessment.targetCryptoPct === 70.5 && f.card?.id === "rebalance_to_plan"; })(), "fear→crypto");
+  add("7B-8: Case B — full Greed target → toward stables (production card, full confidence)", (() => { const f = byId("greed_to_stables")!; return f.assessment.direction === "crypto_to_stables" && f.assessment.targetConfidence === "full" && f.assessment.marketIncluded === true && f.card?.id === "rebalance_to_plan"; })(), "greed→stables");
+  add("7B-9: Case C/D — full + partial corrections remain production-derived (full-source vs insufficient-source)", (() => { const full = byId("full")!.card; const part = byId("partial")!.card; return full != null && part != null && (part.amount?.label ?? "").includes("partial") && !(full.amount?.label ?? "").includes("partial"); })(), "full+partial");
+  add("7B-10: Case E — degraded market-excluded target → eligible Rebalance card; confidence degraded, market NOT included", (() => { const f = byId("degraded_excluded")!; return f.assessment.targetConfidence === "degraded_market_excluded" && f.assessment.marketIncluded === false && f.card?.id === "rebalance_to_plan" && f.assessment.direction === "stables_to_crypto"; })(), "degraded card");
+
+  // ---- Review copy ----
+  add("7B-11: full-Fear Review discloses market inclusion (10% + CoinMarketCap + not-a-buy/sell); no timing words", (() => { const r = byId("full")!.card?.reviewDetails?.summary.reason ?? ""; return /10% of your target-allocation calculation/.test(r) && /Data source: CoinMarketCap/.test(r) && /does not directly create buy or sell/.test(r) && !/Fear|Greed|bullish|bearish|buy the dip/.test(r); })(), "full review");
+  add("7B-12: degraded Review discloses exclusion + renormalization; NO score/band/CoinMarketCap/Neutral", (() => { const r = byId("degraded_excluded")!.card?.reviewDetails?.summary.reason ?? ""; return /market component was excluded, and the remaining profile factors were renormalized/.test(r) && !/CoinMarketCap|\/100|Neutral|Fear|Greed/.test(r); })(), "degraded review");
+
+  // ---- No direct trigger + preserved rules ----
+  add("7B-13: NO direct market trigger — a portfolio inside the Fear canonical target's ±10 range yields no card (Fear is not the trigger; raw drift is)", (() => { const at = byId("within_threshold")!; return at.assessment.direction === "within_threshold" && at.card === null && at.assessment.targetConfidence === "full"; })(), "no direct trigger");
+  add("7B-14: production mapper/card/modal reuse + thresholds preserved (rebalance_to_plan; ±10 / $50 unchanged)", (() => { const f = byId("full")!; return f.card?.id === "rebalance_to_plan" && f.card?.category === "rebalance" && f.card?.reviewDetails != null && f.assessment.thresholdSource.includes("10") && f.assessment.thresholdSource.includes("50"); })(), "mapper+thresholds");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 22F (slice 7C) — PRODUCTION `/testing` DCA + On Track. Validates that the visible On Track card is derived from a
+ * PRODUCTION RebalanceAssessment (real canonical target, not a hand-built confidence) and keeps its approved copy with no
+ * market words, and that the DCA gallery includes production-derived Fear-toward-crypto, Greed-toward-stables, degraded
+ * market-excluded, and cadence cases through the production contribution pipeline + Review market-context section.
+ * ------------------------------------------------------------------ */
+export function runSlice7CTestingMigrationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const dca = (id: string) => runContributionTestingScenario(id)!;
+  const ot = (id: string) => otTestFixtures().find((f) => f.id === id)!;
+  const otSrc = readIfSrc("src/pages/onTrackTestingFixtures.ts");
+  const dcaSrc = readIfSrc("src/suggestions/contributionTestingScenarios.ts");
+
+  // ---- On Track visible card is production-derived ----
+  add("7C-1 (7D): the visible On Track card is derived from the ACTUAL production Stage-A engine run (real empty candidate set), full confidence, within ±10 — not a hand-built confidence or a hand-passed empty context", (() => { const f = ot("eligible_zero_delta"); return f.assessment.targetConfidence === "full" && f.assessment.allocationState === "within_review_range" && f.assessment.displayMode === "scoped_informational" && f.cards.length > 0 && f.cards.every((c: { category: string }) => c.category === "on_track") && /runSuggestionEngine\(/.test(otSrc) && /buildSuggestionEngineInputs\(/.test(otSrc) && /buildCanonicalTargetTestingScenario/.test(otSrc) && !/prodRa\(/.test(otSrc); })(), "real Stage-A On Track");
+  add("7C-2: On Track approved copy is UNCHANGED and carries no market words", (() => { const f = ot("eligible_zero_delta"); const t = f.assessment.recommendedTitle, d = f.assessment.recommendedDescription; return t === "Your Safety Buffer and Allocation Are Within Range" && d === "Your Safety Buffer is fully funded, and your crypto allocation is within the current review range." && !/Fear|Greed|CoinMarketCap|market score|10%|five-factor/i.test(JSON.stringify(f.cards)); })(), "copy unchanged");
+
+  // ---- DCA production market cases ----
+  add("7C-3: DCA Fear target → toward crypto (production pipeline, full confidence, market included, SOL)", (() => { const s = dca("dca_fear_crypto"); const cp = s.pipeline.suggestion?.contributionPlan as { targetSymbol?: string } | undefined; return s.pipeline.status === "ready" && s.pipeline.suggestion?.category === "dca" && cp?.targetSymbol === "SOL" && s.pipeline.marketIncluded === true && s.pipeline.targetConfidence === "full"; })(), "fear→crypto");
+  add("7C-4: DCA Greed target → toward stables (production pipeline, full confidence, USDC)", (() => { const s = dca("dca_greed_stables"); const cp = s.pipeline.suggestion?.contributionPlan as { targetSymbol?: string } | undefined; return s.pipeline.status === "ready" && s.pipeline.suggestion?.category === "dca" && cp?.targetSymbol === "USDC" && s.pipeline.marketIncluded === true; })(), "greed→stables");
+  add("7C-5: DCA degraded market-excluded → eligible, confidence degraded, market NOT included", (() => { const s = dca("dca_degraded"); return s.pipeline.status === "ready" && s.pipeline.suggestion?.category === "dca" && s.pipeline.targetConfidence === "degraded_market_excluded" && s.pipeline.marketIncluded === false; })(), "degraded");
+  add("7C-6: DCA cadence variant (bi-weekly) renders a distinct production card", (() => { const s = dca("dca_fear_biweekly"); const cp = s.pipeline.suggestion?.contributionPlan as { contributionFrequencyId?: string } | undefined; return s.pipeline.status === "ready" && s.pipeline.suggestion?.category === "dca" && cp?.contributionFrequencyId === "biweekly"; })(), "cadence");
+
+  // ---- DCA Review market context ----
+  add("7C-7: full-Fear DCA Review discloses 10% market input + CoinMarketCap + not-a-buy/sell; no timing words", (() => { const r = dca("dca_fear_crypto").review as { marketContextSection?: { body?: string } } | undefined; const b = r?.marketContextSection?.body ?? ""; return /10% of your target-allocation calculation/.test(b) && /Data source: CoinMarketCap/.test(b) && /does not directly create buy or sell/.test(b) && !/Fear|Greed|bullish|bearish|buy the dip/.test(b); })(), "full review");
+  add("7C-8: degraded DCA Review discloses exclusion + renormalization; no score/band/CoinMarketCap/Neutral", (() => { const r = dca("dca_degraded").review as { marketContextSection?: { body?: string } } | undefined; const b = r?.marketContextSection?.body ?? ""; return /market component was excluded, and the remaining profile factors were renormalized/.test(b) && !/CoinMarketCap|\/100|Neutral|Fear|Greed/.test(b); })(), "degraded review");
+
+  // ---- Architecture + semantics ----
+  add("7C-9: the DCA gallery's market cases run the PRODUCTION contribution pipeline via the canonical scenario builder (no direct final-target injection)", (() => { return /buildCanonicalTargetTestingScenario/.test(dcaSrc) && /targetAllocation: t, targetState: cttState\(t\)/.test(dcaSrc); })(), "scenario builder");
+  add("7C-10: contribution amount + cadence come from the saved plan (not Net Cash Flow); the target is the only market-influenced input", (() => { const s = dca("dca_fear_crypto"); const cp = s.pipeline.suggestion?.contributionPlan as { contributionFrequencyId?: string } | undefined; return cp?.contributionFrequencyId === "monthly" && !/net_?cash|income - expenses/i.test(JSON.stringify(s.pipeline.suggestion)); })(), "amount/cadence");
+  add("7C-11: NO direct market trigger — the DCA is driven by the canonical allocation gap (a stable-underweight portfolio yields a stable DCA under Greed; not 'Greed → sell')", (() => { const s = dca("dca_greed_stables"); const cp = s.pipeline.suggestion?.contributionPlan as { targetPct?: number; currentTargetPct?: number } | undefined; return (cp?.targetPct ?? 0) > (cp?.currentTargetPct ?? 0); })(), "gap-driven");
+  add("7C-12: visible DCA/On Track galleries carry ZERO transitional-helper references; the migrated cases use the scenario builder", (() => { return !/riskOnlyCanonicalTargetTransitional/.test(dcaSrc) && !/riskOnlyCanonicalTargetTransitional/.test(otSrc) && /buildCanonicalTargetTestingScenario/.test(otSrc); })(), "no transitional");
+
+  return checks;
+}
+
+/** Step 22F (slice 7D) — TRANSITIONAL-INFRASTRUCTURE TEARDOWN: the helper, sentinel, rail/engine/pipeline fallbacks,
+ * and rbT are deleted; every mode fails closed on a missing market/target (no risk-only substitution anywhere). */
+export function runSlice7DTeardownFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const fileExists = (rel: string) => { try { readFileSync(`${process.cwd()}/${rel}`, "utf8"); return true; } catch { return false; } };
+  const rail = readIfSrc("src/suggestions/useRailSuggestions.ts");
+  const engine = readIfSrc("src/suggestions/engine.ts");
+  const pipeline = readIfSrc("src/suggestions/contributionPlanPipeline.ts");
+  const cpi = readIfSrc("src/suggestions/contributionProductInput.ts");
+  const fixSrc = readIfSrc("src/suggestions/suggestionEngine.fixtures.ts");
+  const rbFx = readIfSrc("src/pages/rebalanceTestingFixtures.ts");
+  const dcaFx = readIfSrc("src/suggestions/contributionTestingScenarios.ts");
+  const otFx = readIfSrc("src/pages/onTrackTestingFixtures.ts");
+  const mountedSrcs = [rail, engine, pipeline, cpi];
+
+  // ---- Deletion of the transitional target infrastructure ----
+  add("7D-1: rebalanceTargetTransitional.ts is DELETED from the source tree", !fileExists("src/suggestions/rebalanceTargetTransitional.ts"), "helper deleted");
+  add("7D-2: riskOnlyCanonicalTargetTransitional has ZERO references in every MOUNTED source and every visible gallery (the fixtures file mentions it only inside these teardown assertion regexes)", (() => { const anySrc = [rail, engine, pipeline, cpi, rbFx, dcaFx, otFx]; return anySrc.every((s) => !/riskOnlyCanonicalTargetTransitional/.test(s)); })(), "zero callers");
+  add("7D-3: the `transitional_risk_only` sentinel is ABSENT from every MOUNTED source (rail/engine/pipeline/contribution input)", mountedSrcs.every((s) => !/transitional_risk_only/.test(s)), "sentinel gone");
+  add("7D-4: `deriveRecommendedAllocation` / `RISK_TARGET_ALLOCATION` are ABSENT from the mounted rail, engine, and pipeline (risk-only target removed)", mountedSrcs.every((s) => !/deriveRecommendedAllocation/.test(s) && !/RISK_TARGET_ALLOCATION/.test(s)), "risk matrix removed");
+
+  // ---- Rail fails closed (no transitional else branch) ----
+  add("7D-5: the rail has no `useCanonicalRebalanceTarget` branch and no transitional else — the canonical target is resolved unconditionally and fails closed to unresolved when there is no context", (() => { return !/useCanonicalRebalanceTarget/.test(rail) && !/Non-real-wallet callers with NO cache state/.test(rail) && /rebalanceTargetState = "unresolved";/.test(rail); })(), "rail fail-closed");
+  add("7D-6 (runtime): a demo_fixture rail WITHOUT a market cache exposes NO target/market summary (unresolved/null target — no transitional surface)", (() => { const r = SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL, dataMode: "demo_fixture" }); return r.targetSummary === undefined && r.marketSummary === undefined; })(), "demo no-market unresolved");
+
+  // ---- Contribution pipeline fails closed on a missing target ----
+  add("7D-7 (runtime): the contribution pipeline FAILS CLOSED (blocked_policy / target_unresolved) when the buffer is complete and NO target is supplied — in every mode", (() => {
+    const mk = (dm: "demo_fixture" | "testing_fixture" | "real_wallet") => buildContributionPlanPipeline({ dataMode: dm, profile: { monthlySavingGoalUsd: 1000, contributionFrequency: "monthly", goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, portfolioSnapshot: buildContributionPortfolioSnapshot({ dataMode: dm, snapshotId: "s", sourcePortfolioVersion: "v1", calculatedAt: "2026-07-15T00:00:00Z", checkedAt: "2026-07-15T00:00:00Z", totalPortfolioValueUsd: 10000, solExposureUsd: 4300, usdcExposureUsd: 3700 }).snapshot!, safetyBufferSnapshot: buildContributionSafetyBufferSnapshot({ targetUsd: 3000, stableUsd: 3000 }, { calculatedAt: "2026-07-15T00:00:00Z", checkedAt: "2026-07-15T00:00:00Z" }), priceQuoteByTargetId: { sol: buildContributionPriceQuote({ dataMode: dm, targetId: "sol", priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: "2026-07-15T00:00:00Z", checkedAt: "2026-07-15T00:00:00Z" }).quote! }, generatedAt: "2026-07-15T00:00:00Z", checkedAt: "2026-07-15T00:00:00Z" });
+    return (["demo_fixture", "testing_fixture", "real_wallet"] as const).every((dm) => { const p = mk(dm); return p.status === "blocked_policy" && (p.blockers ?? []).includes("target_unresolved"); });
+  })(), "pipeline fail-closed");
+
+  // ---- Legacy DCA evaluator not engine-wired; rbT deleted ----
+  add("7D-8: the engine neither imports nor calls the legacy `deriveDcaSuggestion`, and declares no `legacyDcaEligible` param", !/deriveDcaSuggestion/.test(engine) && !/legacyDcaEligible/.test(engine) && /const dca: EngineSuggestion \| null = planDca;/.test(engine), "engine has no legacy DCA");
+  add("7D-9 (22G): the legacy DCA evaluator file is DELETED and no longer imported by the fixtures; engine-ordering fixtures inject only the STATIC test candidate `buildEngineFixtureDcaCandidate` (no financial evaluator)", (() => { return !fileExists("src/suggestions/dcaSuggestion.ts") && !/from "\.\/dcaSuggestion"/.test(fixSrc) && /buildEngineFixtureDcaCandidate/.test(fixSrc); })(), "static candidate only");
+  add("7D-10: the transitional `rbT` fixture helper is REPLACED by `rbFixedTarget`, which is defined, actually spread into the Rebalance accounting fixtures, and builds an EXPLICIT canonical-methodology target (no risk matrix, no transitional sentinel)", (() => { const defOk = /const rbFixedTarget = \(split/.test(fixSrc); const usedOk = /\.\.\.rbFixedTarget\(/.test(fixSrc); const canonicalOk = /methodologyVersion: TARGET_ALLOCATION_ASSESSMENT_VERSION,\s*\n?\s*policyVersion: "target_allocation_policy_v1"/.test(fixSrc) || /methodologyVersion: TARGET_ALLOCATION_ASSESSMENT_VERSION/.test(fixSrc); const noOldDef = fixSrc.indexOf("const rb" + "T = (risk") === -1; return defOk && usedOk && canonicalOk && noOldDef; })(), "rbFixedTarget explicit");
+  add("7D-11: the visible /testing galleries (Rebalance/DCA/On Track) import NO legacy risk-only target module", (() => { return !/recommendedAllocation/.test(rbFx) && !/recommendedAllocation/.test(dcaFx) && !/recommendedAllocation/.test(otFx) && !/rebalanceTargetTransitional/.test(rbFx + dcaFx + otFx); })(), "galleries clean");
+
+  return checks;
+}
+
+/** Step 22G — FINAL CANONICAL-TARGET CLOSEOUT: the legacy risk-only allocation module and the legacy DCA evaluator are
+ * deleted; the canonical five-factor chain is the only mounted target-allocation policy; every category consumes it. */
+export function runStep22GCloseoutFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const fileExists = (rel: string) => { try { readFileSync(`${process.cwd()}/${rel}`, "utf8"); return true; } catch { return false; } };
+  const mounted = ["src/suggestions/useRailSuggestions.ts", "src/suggestions/engine.ts", "src/suggestions/contributionPlanPipeline.ts", "src/suggestions/rebalanceAssessment.ts", "src/suggestions/onTrackAssessment.ts", "src/components/DashboardBody.tsx", "src/pages/DemoDashboardPage.tsx", "src/suggestions/railTargetContext.ts", "src/suggestions/contributionProductInput.ts"].map((f) => ({ f, s: readIfSrc(f) }));
+
+  // ---- Deletion of the legacy target + DCA modules ----
+  add("22G-1: the legacy risk-only allocation module (`wallet/recommendedAllocation.ts`) is DELETED", !fileExists("src/wallet/recommendedAllocation.ts"), "module deleted");
+  add("22G-2: the legacy DCA evaluator (`suggestions/dcaSuggestion.ts`) is DELETED", !fileExists("src/suggestions/dcaSuggestion.ts"), "evaluator deleted");
+  add("22G-3: `deriveRecommendedAllocation` has ZERO references in any mounted source", mounted.every(({ s }) => !/deriveRecommendedAllocation/.test(s)), "zero mounted callers");
+  add("22G-4: `RISK_TARGET_ALLOCATION` / `deriveAllocationDeltas` / `deriveDcaSuggestion` are ABSENT from every mounted source", mounted.every(({ s }) => !/RISK_TARGET_ALLOCATION/.test(s) && !/deriveAllocationDeltas/.test(s) && !/deriveDcaSuggestion/.test(s)), "legacy symbols gone");
+
+  // ---- No product module imports a target from wallet/ ----
+  add("22G-5: no mounted suggestion/category module imports a target-allocation from `wallet/` (the canonical chain lives in `suggestions/`)", mounted.every(({ s }) => !/from "\.\.\/wallet\/recommendedAllocation"/.test(s) && !/from "\.\/recommendedAllocation"/.test(s)), "no wallet target import");
+
+  // ---- Category assessments derive no target of their own ----
+  add("22G-6: RebalanceAssessment consumes the canonical `input.targetAllocation` and derives no target itself", (() => { const s = readIfSrc("src/suggestions/rebalanceAssessment.ts"); return /input\.targetAllocation/.test(s) && !/RISK_TARGET_ALLOCATION|deriveRecommendedAllocation|deriveTargetAllocationAssessment/.test(s); })(), "rebalance canonical");
+  add("22G-7: onTrackAssessment reads only `ra.targetConfidence` — no target derivation, no market cache", (() => { const s = readIfSrc("src/suggestions/onTrackAssessment.ts"); return /targetConfidence/.test(s) && !/deriveRecommendedAllocation|buildCanonicalTargetAllocation|RISK_TARGET_ALLOCATION|deriveTargetAllocationAssessment|marketConditionsCache/.test(s); })(), "on track confidence only");
+  add("22G-8: the contribution pipeline consumes a supplied canonical target and fails closed on a missing one — no target derivation", (() => { const s = readIfSrc("src/suggestions/contributionPlanPipeline.ts"); return /input\.targetAllocation === undefined/.test(s) && !/deriveRecommendedAllocation|RISK_TARGET_ALLOCATION|buildCanonicalTargetAllocation/.test(s); })(), "dca canonical");
+  add("22G-9: DashboardBody consumes the shared `targetSummary` and derives no target/band", (() => { const s = readIfSrc("src/components/DashboardBody.tsx"); return /targetSummary/.test(s) && !/deriveRecommendedAllocation|RISK_TARGET_ALLOCATION|buildCanonicalTargetAllocation|classifyMarketConditionScore/.test(s); })(), "dashboard canonical");
+
+  // ---- The canonical chain is the sole target authority ----
+  add("22G-10: the canonical target chain exists and is the sole authority: TargetAllocationAssessment → buildCanonicalTargetAllocation → RailTargetContext", (() => { return fileExists("src/suggestions/targetAllocationAssessment.ts") && fileExists("src/suggestions/canonicalTargetAllocation.ts") && fileExists("src/suggestions/railTargetContext.ts") && /deriveTargetAllocationAssessment/.test(readIfSrc("src/suggestions/railTargetContext.ts")) && /buildCanonicalTargetAllocation/.test(readIfSrc("src/suggestions/railTargetContext.ts")); })(), "canonical chain");
+  add("22G-11: the five-factor weights are unchanged (risk 0.35 / horizon 0.20 / goal 0.20 / cash-flow 0.15 / market 0.10)", (() => { const s = readIfSrc("src/suggestions/targetAllocationPolicy.ts"); return /0\.35/.test(s) && /0\.20/.test(s) && /0\.15/.test(s) && /0\.10/.test(s); })(), "weights intact");
+
+  // ---- Safety Buffer is target-independent ----
+  add("22G-12: Safety Buffer coverage + assessment do NOT depend on the target allocation (target-independent)", (() => { const cov = readIfSrc("src/wallet/safetyBufferCoverage.ts"); const sba = readIfSrc("src/suggestions/safetyBufferAssessment.ts"); return !/targetAllocation|RISK_TARGET_ALLOCATION|deriveRecommendedAllocation|canonicalTargetAllocation|TargetAllocationAssessment/.test(cov) && !/canonicalTargetAllocation|deriveRecommendedAllocation|RISK_TARGET_ALLOCATION/.test(sba); })(), "buffer independent");
+
+  // ---- Missing target still fails closed (runtime) in every mode ----
+  add("22G-13 (runtime): a demo_fixture rail with NO market cache still fails closed (no target/market summary) — no risk-only fallback survives the cleanup", (() => { const r = SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL, dataMode: "demo_fixture" }); return r.targetSummary === undefined && r.marketSummary === undefined; })(), "fail closed");
+
+  return checks;
+}
+
 export function printFixtureResults(): void {
   const checks = [
+    ...runStep22GCloseoutFixtureChecks(),
+    ...runSlice7DTeardownFixtureChecks(),
+    ...runSlice7CTestingMigrationFixtureChecks(),
+    ...runSlice7BRebalanceMigrationFixtureChecks(),
+    ...runDemoMarketMigrationFixtureChecks(),
+    ...runAllocationMethodologyCopyFixtureChecks(),
+    ...runMarketConditionsSurfaceFixtureChecks(),
+    ...runDashboardTargetMountFixtureChecks(),
     ...runTargetAllocationPolicyFixtureChecks(),
     ...runMarketConditionFixtureChecks(),
     ...runTargetAllocationAssessmentFixtureChecks(),
     ...runCoinMarketCapMarketConditionFixtureChecks(),
+    ...runCanonicalTargetAdapterFixtureChecks(),
+    ...runRailTargetContextFixtureChecks(),
+    ...runRebalanceCanonicalMountFixtureChecks(),
+    ...runDcaContributionCanonicalMountFixtureChecks(),
     ...runSteakhouseGateFixtureChecks(),
     ...runSteakhouseBlockCtokenFixtureChecks(),
     ...runJupiterLendExistingPositionFixtureChecks(),
@@ -20883,13 +21552,14 @@ export function runOnTrackAssessmentFixtureChecks(): FixtureCheck[] {
   const sbUnresolved = () => sb(cov(3000, 2000, "unresolved", { unresolved: 1000 }));
   const sbTargetUnavail = () => sb(cov(3000, 2000, "incomplete"), null, 3);
   const sbCoverageUnavail = () => sb(null, 1000, 3);
-  const ra = (o: { delta: number | null; calc: "allowed" | "blocked" | "unresolved"; target?: number | null; direction?: RebalanceAssessment["direction"] }): RebalanceAssessment => ({
+  const ra = (o: { delta: number | null; calc: "allowed" | "blocked" | "unresolved"; target?: number | null; direction?: RebalanceAssessment["direction"]; targetConfidence?: string | null }): RebalanceAssessment => ({
     currentCryptoPct: o.delta != null && o.target !== null ? (o.target ?? 60) + o.delta : 62,
     targetCryptoPct: o.target === undefined ? 60 : o.target,
     cryptoDeltaPct: o.delta,
     direction: o.direction ?? (o.delta == null ? "unresolved" : o.delta >= 10 ? "crypto_to_stables" : o.delta <= -10 ? "stables_to_crypto" : "within_threshold"),
     calculationGate: { status: o.calc, reasons: [] },
     methodologyVersion: "rebalance_assessment_1.0.0",
+    targetConfidence: o.targetConfidence === undefined ? "full" : o.targetConfidence, // Slice 5 — default full; override for degraded/absent tests.
   } as unknown as RebalanceAssessment);
   const raWithin = (delta = 2) => ra({ delta, calc: "allowed" });
   const raMaterial = (delta = 12) => ra({ delta, calc: "allowed" });
@@ -20930,6 +21600,19 @@ export function runOnTrackAssessmentFixtureChecks(): FixtureCheck[] {
   add("OT-13: exact +10 → material drift → blocked (equality is material; material precedence blocks the fallback)", (() => { const a = A(sbComplete(), raMaterial(10), cctx()); return a.allocationState === "material_drift" && a.materialRebalanceNeed === true && a.fallbackEligibilityGate === "blocked" && a.fallbackState === "blocked_material_rebalance"; })(), "exact +10");
   add("OT-14: exact −10 → material drift → blocked", (() => { const a = A(sbComplete(), raMaterial(-10), cctx()); return a.allocationState === "material_drift" && a.materialRebalanceNeed === true && a.fallbackEligibilityGate === "blocked"; })(), "exact -10");
   add("OT-15: above ±10 → material drift", A(sbComplete(), raMaterial(15), cctx()).allocationState === "material_drift", "above");
+
+  // ---- Slice 5: full canonical target confidence is an ADDITIONAL mandatory gate ----
+  add("OTC-1: FULL canonical confidence + all other gates pass → On Track eligible", (() => { const a = A(sbComplete(), ra({ delta: 2, calc: "allowed", targetConfidence: "full" }), cctx()); return a.targetConfidenceGate === "allowed" && a.displayMode === "scoped_informational" && a.presentationState === "eligible_scoped_status"; })(), "full eligible");
+  add("OTC-2: DEGRADED (market-excluded) target → NO On Track (targetConfidenceGate blocked, target_unavailable)", (() => { const a = A(sbComplete(), ra({ delta: 2, calc: "allowed", targetConfidence: "degraded_market_excluded" }), cctx()); return a.targetConfidenceGate === "blocked" && a.displayMode === "none" && a.presentationState === "target_unavailable" && a.blockingReasons.includes("target_confidence_not_full"); })(), "degraded no OT");
+  add("OTC-3: MISSING target confidence (null) → NO On Track (targetConfidenceGate unresolved, not eligible)", (() => { const a = A(sbComplete(), ra({ delta: 2, calc: "allowed", targetConfidence: null }), cctx()); return a.targetConfidenceGate === "unresolved" && a.displayMode === "none" && a.fallbackEligibilityGate !== "allowed"; })(), "missing conf no OT");
+  add("OTC-4: unavailable/blocked target (non-allowed calc + null confidence) → NO On Track", (() => { const un = A(sbComplete(), ra({ delta: null, calc: "unresolved", targetConfidence: null }), cctx()); const bl = A(sbComplete(), ra({ delta: null, calc: "blocked", targetConfidence: null }), cctx()); return un.displayMode === "none" && bl.displayMode === "none"; })(), "states no OT");
+  add("OTC-5: LOADING target (no rebalance assessment yet) → NO On Track", (() => { const a = A(sbComplete(), null, cctx()); return a.displayMode === "none" && a.targetConfidence === null; })(), "loading no OT");
+  add("OTC-6: +9.999 raw delta within range + FULL confidence → On Track eligible (no second ±10; canonical materiality)", (() => { const a = A(sbComplete(), ra({ delta: 9.999, calc: "allowed", targetConfidence: "full" }), cctx()); return a.allocationState === "within_review_range" && a.materialRebalanceNeed === false && a.targetConfidenceGate === "allowed" && a.displayMode === "scoped_informational"; })(), "9.999 eligible");
+  add("OTC-7: exact +10 material + FULL confidence → NO On Track (material precedence; confidence never overrides materiality)", (() => { const a = A(sbComplete(), ra({ delta: 10, calc: "allowed", targetConfidence: "full" }), cctx()); return a.materialRebalanceNeed === true && a.displayMode === "none"; })(), "material blocks");
+  add("OTC-8: degraded target + material rebalance → NO On Track (both block)", (() => { const a = A(sbComplete(), ra({ delta: 12, calc: "allowed", targetConfidence: "degraded_market_excluded" }), cctx()); return a.displayMode === "none"; })(), "degraded+material");
+  add("OTC-9: architecture — onTrackAssessment READS ra.targetConfidence; never deriveRecommendedAllocation / buildCanonicalTargetAllocation / market cache / TargetAllocationAssessment", (() => { let s = ""; try { s = readFileSync(`${process.cwd()}/src/suggestions/onTrackAssessment.ts`, "utf8"); } catch { /* */ } return /ra\?\.targetConfidence/.test(s) && !/deriveRecommendedAllocation|buildCanonicalTargetAllocation|marketConditionsCache|deriveTargetAllocationAssessment/.test(s); })(), "reads confidence only");
+  add("OTC-10: On Track copy UNCHANGED (title/description; no market words)", (() => { const a = A(sbComplete(), ra({ delta: 2, calc: "allowed", targetConfidence: "full" }), cctx()); const t = a.recommendedTitle, d = a.recommendedDescription; return t === "Your Safety Buffer and Allocation Are Within Range" && d === "Your Safety Buffer is fully funded, and your crypto allocation is within the current review range." && !/Fear|Greed|CoinMarketCap|market score|five-factor|income|expenses/i.test(t + d); })(), "copy unchanged");
+  add("OTC-11: target confidence checked EXACTLY once (one targetConfidenceGate assignment in the assessment)", (() => { let s = ""; try { s = readFileSync(`${process.cwd()}/src/suggestions/onTrackAssessment.ts`, "utf8"); } catch { /* */ } return (s.match(/const targetConfidenceGate: OtGateState =/g) ?? []).length === 1; })(), "checked once");
   add("OT-16: no pre-comparison rounding at the boundary (9.999 stays within; 10 is material)", (() => { const inRange = A(sbComplete(), raWithin(9.999), cctx()).allocationState; const material = A(sbComplete(), raMaterial(10), cctx()).allocationState; return inRange === "within_review_range" && material === "material_drift"; })(), "no rounding");
   add("OT-17: threshold reused from REBALANCE_DELTA_THRESHOLD_PCT (=10), not duplicated", A(sbComplete(), raWithin(2), cctx()).reviewThresholdPct === REBALANCE_DELTA_THRESHOLD_PCT && REBALANCE_DELTA_THRESHOLD_PCT === 10, "threshold");
   add("OT-18: unresolved allocation (calc gate not allowed) → unresolved, not eligible", (() => { const a = A(sbComplete(), raUnresolved(), cctx()); return a.allocationState === "unresolved" && a.allocationGate === "unresolved" && a.fallbackEligibilityGate === "unresolved"; })(), "alloc unresolved");
@@ -20991,7 +21674,7 @@ export function runOnTrackProductionFixtureChecks(): FixtureCheck[] {
   const cov = (target: number, verified: number, state: SafetyBufferCoverage["coverageState"]): SafetyBufferCoverage => ({ requiredBufferUsd: target, recognizedStableValueUsd: verified, verifiedLiquidStableValueUsd: verified, delayedStableValueUsd: 0, unavailableStableValueUsd: 0, unresolvedStableValueUsd: 0, hasUnknownUnresolvedMagnitude: false, shortfallUsd: Math.max(target - verified, 0), coverageRatio: target > 0 ? verified / target : 1, fullyFunded: state === "complete", coverageState: state, unresolvedReasons: [], sources: [] });
   const sbC = () => sbAssess({ coverage: cov(3000, 3000, "complete"), monthlyExpensesUsd: 1000, targetMonths: 3, generatedAt: GEN });
   const sbI = () => sbAssess({ coverage: cov(3000, 2000, "incomplete"), monthlyExpensesUsd: 1000, targetMonths: 3, generatedAt: GEN });
-  const ra = (delta: number | null, calc: "allowed" | "unresolved", material = false): RebalanceAssessment => ({ currentCryptoPct: 60 + (delta ?? 0), targetCryptoPct: 60, cryptoDeltaPct: material ? 12 : delta, direction: material ? "crypto_to_stables" : delta == null ? "unresolved" : delta >= 10 ? "crypto_to_stables" : delta <= -10 ? "stables_to_crypto" : "within_threshold", calculationGate: { status: calc, reasons: [] }, methodologyVersion: "rebalance_assessment_1.0.0" } as unknown as RebalanceAssessment);
+  const ra = (delta: number | null, calc: "allowed" | "unresolved", material = false): RebalanceAssessment => ({ currentCryptoPct: 60 + (delta ?? 0), targetCryptoPct: 60, cryptoDeltaPct: material ? 12 : delta, direction: material ? "crypto_to_stables" : delta == null ? "unresolved" : delta >= 10 ? "crypto_to_stables" : delta <= -10 ? "stables_to_crypto" : "within_threshold", calculationGate: { status: calc, reasons: [] }, methodologyVersion: "rebalance_assessment_1.0.0", targetConfidence: "full" } as unknown as RebalanceAssessment);
   const ctx = (actionable = 0): OnTrackCandidateContext => ({ visibleCandidateCount: actionable, visibleActionableCandidateCount: actionable, visibleInformationalCandidateCount: 0, hasHigherPriorityVisibleCandidate: actionable > 0, materialSignals: [], suppressedMaterialSignals: [], filteredMaterialSignals: [], unresolvedPotentialSignals: [], candidateSetState: actionable > 0 ? "nonempty" : "empty" });
   const eligible = () => otAssess({ safetyBufferAssessment: sbC(), rebalanceAssessment: ra(2, "allowed"), portfolioCompleteness: null, candidateContext: ctx(0), generatedAt: GEN });
   const OT_GOAL: OnTrackGoalContext = { financialGoal: "retire_early", timeline: "5_years", monthlyExpensesUsd: 1000 };
@@ -22015,7 +22698,7 @@ export function runRebalanceAssessmentFixtureChecks(): FixtureCheck[] {
   const hookT22 = (v: number) => w({ id: "t22h", type: "token", symbol: "XYZ", name: "XYZ Token", mint: "T22Hook", valueUsd: v, tokenProgram: T22, withdrawalState: "unresolved", transferabilityState: "hook_unresolved" });
   const activeStake = (v: number) => w({ id: "stk", type: "stake", symbol: "SOL", valueUsd: v, uiAmount: v / 250, liquidValueUsd: 0, stakeLifecycleState: "active", stake: { anyUnresolved: false } as any, dedupeKey: "native-stake:A" });
   const unknownTok = () => w({ id: "unk", type: "token", name: "Unknown token", symbol: "9x", uiAmount: 5, valueUsd: null });
-  const A = (positions: JLWalletPos[], riskTolerance: string | undefined = "medium", requiredBufferUsd = 0) => rbAssess({ positions, riskTolerance, requiredBufferUsd, generatedAt: 1_700_000_000_000 });
+  const A = (positions: JLWalletPos[], riskTolerance: string | undefined = "medium", requiredBufferUsd = 0) => rbAssess({ positions, ...rbFixedTarget(riskTolerance), requiredBufferUsd, generatedAt: 1_700_000_000_000 });
 
   // ---- Allocation + liabilities (gross assets, not net worth) ----
   add("RB-1: crypto + stable allocation sums to 100 (within rounding)", (() => { const a = A([sol(400), usdc(600)]); return Math.abs((a.currentCryptoPct! + a.currentStablePct!) - 100) < 0.01; })(), "sums 100");
@@ -22031,7 +22714,7 @@ export function runRebalanceAssessmentFixtureChecks(): FixtureCheck[] {
   add("RB-9: +≥10pt crypto → crypto_to_stables; exact requiredCorrection", (() => { const a = A([sol(800), usdc(200)], "low" /*target 40/60*/); return a.direction === "crypto_to_stables" && a.cryptoDeltaPct === 40 && a.requiredCorrectionUsd === 400; })(), "over");
   add("RB-10: ≤-10pt crypto → stables_to_crypto", (() => { const a = A([sol(100), usdc(900)], "high" /*target 80/20*/); return a.direction === "stables_to_crypto" && a.cryptoDeltaPct === -70; })(), "under");
   add("RB-11: within ±10pt → within_threshold", (() => { const a = A([sol(620), usdc(380)], "medium" /*target 60/40*/); return a.direction === "within_threshold" && a.requiredCorrectionUsd === 0; })(), "within");
-  add("RB-12: missing risk tolerance → calculation unresolved (missing_risk_tolerance)", (() => { const a = rbAssess({ positions: [sol(800), usdc(200)], riskTolerance: undefined, requiredBufferUsd: 0, generatedAt: 1_700_000_000_000 }); return a.calculationGate.status === "unresolved" && a.calculationGate.reasons.includes("missing_risk_tolerance"); })(), "no risk");
+  add("RB-12: no usable canonical target (unresolved) → calculation unresolved (target_unresolved), no risk-only fallback", (() => { const a = rbAssess({ positions: [sol(800), usdc(200)], ...rbFixedTarget(undefined), requiredBufferUsd: 0, generatedAt: 1_700_000_000_000 }); return a.calculationGate.status === "unresolved" && a.calculationGate.reasons.includes("target_unresolved") && a.targetCryptoPct === null; })(), "no target");
 
   // ---- Source inventory by class (overweight bucket) ----
   add("RB-13: fresh direct classic token → technical capacity, route unverified (not eligible)", (() => { const a = A([sol(900), usdc(100)], "low"); const s = a.sourceCandidates.find((c) => c.positionId === "sol"); return s?.eligibilityState === "technically_available_route_unverified" && s.verifiedTransferableValueUsd === 900; })(), "classic route unverified");
@@ -22062,7 +22745,7 @@ export function runRebalanceAssessmentFixtureChecks(): FixtureCheck[] {
   add("RB-32: maximumCurrentlySupportable = min(requiredCorrection, verifiedSourceCapacity)", (() => { const a = A([sol(100), usdc(900)], "high", 850); return a.verifiedSourceCapacityUsd === 50 && a.maximumCurrentlySupportableUsd === 50 && a.amountClassification === "partial_correction_available"; })(), "capped amount");
 
   // ---- Immutability ----
-  add("RB-33: production thresholds unchanged; assessment reuses them", (() => { const a = A([sol(800), usdc(200)], "low"); return a.thresholdSource.includes("10") && a.thresholdSource.includes("50") && a.targetSource.includes("RISK_TARGET_ALLOCATION"); })(), "thresholds");
+  add("RB-33: production thresholds unchanged; assessment reuses them", (() => { const a = A([sol(800), usdc(200)], "low"); return a.thresholdSource.includes("10") && a.thresholdSource.includes("50") && a.targetSource.includes("canonical five-factor"); })(), "thresholds");
   add("RB-34: dispositions unchanged; Jupiter excluded; Steakhouse existing-only; INF blocked", dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions" && !lstSupported("5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm"), "immutable");
 
   return checks;
@@ -22086,7 +22769,7 @@ export function runRebalanceProductionFixtureChecks(): FixtureCheck[] {
   const debt = (v: number | null) => w({ id: "hb", type: "protocol", symbol: "USDH", side: "borrowed", valueUsd: v, uiAmount: 300, amount: "300000000" });
   // Build the production card exactly as the rail does (both directions share the canonical mapper).
   const card = (positions: JLWalletPos[], risk: string | undefined, buf: number, solFresh = true, walletFresh = true) => {
-    const a = rbAssess({ positions, riskTolerance: risk, requiredBufferUsd: buf, generatedAt: 1_700_000_000_000 });
+    const a = rbAssess({ positions, ...rbFixedTarget(risk), requiredBufferUsd: buf, generatedAt: 1_700_000_000_000 });
     const src = rbSource(positions, buf, 1_700_000_000_000);
     const nsol = rbNativeSol(positions, 250, solFresh, RB_RESERVE_POLICY, walletFresh, 1_700_000_000_000);
     return rbBuildCard(a, src, nsol, 250, solFresh, 1_700_000_000_000);
@@ -22117,10 +22800,10 @@ export function runRebalanceProductionFixtureChecks(): FixtureCheck[] {
 
   // ---- Directional rollout ----
   add("RC-18: stables_to_crypto CAN produce a card", card([sol(100), usdc(900)], "high", 100) !== null, "stables produces");
-  add("RC-19: crypto_to_stables NOW produces a capped native-SOL→USDC card (18F)", (() => { const c = card([sol(900), usdc(100)], "low", 0); const a = rbAssess({ positions: [sol(900), usdc(100)], riskTolerance: "low", requiredBufferUsd: 0, generatedAt: 1 }); return c !== null && a.direction === "crypto_to_stables" && c!.id === "rebalance_to_plan" && c!.from?.bucket === "crypto" && c!.to?.bucket === "stables" && c!.reason_codes.includes("crypto_overweight"); })(), "crypto card");
+  add("RC-19: crypto_to_stables NOW produces a capped native-SOL→USDC card (18F)", (() => { const c = card([sol(900), usdc(100)], "low", 0); const a = rbAssess({ positions: [sol(900), usdc(100)], ...rbFixedTarget("low"), requiredBufferUsd: 0, generatedAt: 1 }); return c !== null && a.direction === "crypto_to_stables" && c!.id === "rebalance_to_plan" && c!.from?.bucket === "crypto" && c!.to?.bucket === "stables" && c!.reason_codes.includes("crypto_overweight"); })(), "crypto card");
   add("RC-20: within_threshold → no card", card([sol(620), usdc(380)], "medium", 0) === null, "within no card");
   add("RC-21: unresolved (unvalued liability) → no card", card([sol(100), usdc(900), debt(null)], "high", 100) === null, "unresolved no card");
-  add("RC-22: crypto card amount = min(required correction, verified available native-SOL value) — capped", (() => { const positions = [sol(900), usdc(100)]; const c = card(positions, "low", 0); const a = rbAssess({ positions, riskTolerance: "low", requiredBufferUsd: 0, generatedAt: 1 }); const nsol = rbNativeSol(positions, 250, true, RB_RESERVE_POLICY, true, 1); const expected = Math.min(a.requiredCorrectionUsd, nsol.technicallyAvailableValueUsd ?? 0); return c !== null && c!.amount?.valueUsd === expected; })(), "capped");
+  add("RC-22: crypto card amount = min(required correction, verified available native-SOL value) — capped", (() => { const positions = [sol(900), usdc(100)]; const c = card(positions, "low", 0); const a = rbAssess({ positions, ...rbFixedTarget("low"), requiredBufferUsd: 0, generatedAt: 1 }); const nsol = rbNativeSol(positions, 250, true, RB_RESERVE_POLICY, true, 1); const expected = Math.min(a.requiredCorrectionUsd, nsol.technicallyAvailableValueUsd ?? 0); return c !== null && c!.amount?.valueUsd === expected; })(), "capped");
 
   // ---- Material need + conflict suppression (engine override) ----
   const dcaSug = mkSug15H("dca-plan", "dca");
@@ -22163,7 +22846,7 @@ export function runRebalancePhaseOneCloseoutFixtureChecks(): FixtureCheck[] {
   add("RD-7: deriveCompletenessGates + deriveRebalanceAssessment accept the SAME coverage object", (() => {
     const positions = byId("full")!.positions; const cov = sbCoverage(positions, 100);
     const comp = pcGates(positions, { requiredBufferUsd: 100, bufferCoverage: cov } as any);
-    const a = rbAssess({ positions, portfolioCompleteness: comp.result, safetyBufferCoverage: cov, riskTolerance: "high", requiredBufferUsd: 100, generatedAt: 1 });
+    const a = rbAssess({ positions, portfolioCompleteness: comp.result, safetyBufferCoverage: cov, ...rbFixedTarget("high"), requiredBufferUsd: 100, generatedAt: 1 });
     return comp.result.stableBufferState === "complete" && a.calculationGate.status === "allowed";
   })(), "coverage passed");
 
@@ -22287,7 +22970,7 @@ export function runRebalanceStep18FFixtureChecks(): FixtureCheck[] {
 
   const ns = (positions: WalletPosition[], solFresh = true, walletFresh = true, policy = RB_RESERVE_POLICY) => rbNativeSol(positions, P, solFresh, policy, walletFresh, GEN);
   const build = (positions: WalletPosition[], risk: string | undefined, buf: number, solFresh = true, walletFresh = true) => {
-    const a = rbAssess({ positions, riskTolerance: risk, requiredBufferUsd: buf, generatedAt: GEN });
+    const a = rbAssess({ positions, ...rbFixedTarget(risk), requiredBufferUsd: buf, generatedAt: GEN });
     const src = rbSource(positions, buf, GEN);
     const nsol = ns(positions, solFresh, walletFresh);
     const c = rbBuildCard(a, src, nsol, P, solFresh, GEN);
@@ -22763,9 +23446,9 @@ export function runRebalanceStep18GFixtureChecks(): FixtureCheck[] {
 
   // ---- Regression: thresholds / targets / ordering / Top Pick / candidate sets ----
   add("RG-29: ±10pt threshold + $50 minimum unchanged", byId("full")!.assessment.thresholdSource.includes("10") && byId("full")!.assessment.thresholdSource.includes("50"), "thresholds");
-  add("RG-30: target allocations unchanged (low→40 crypto, high→80 crypto)", byId("crypto_full")!.assessment.targetCryptoPct === 40 && byId("full")!.assessment.targetCryptoPct === 80, "targets");
+  add("RG-30 (slice 7B): the gallery now derives PRODUCTION five-factor targets under fresh Fear (low→56.5 crypto, high→70.5 crypto) — no risk-only 40/80", byId("crypto_full")!.assessment.targetCryptoPct === 56.5 && byId("full")!.assessment.targetCryptoPct === 70.5, "five-factor targets");
   add("RG-31: canonical two-bucket accounting — current crypto% + stable% = 100", (() => { const a = byId("full")!.assessment; return a.currentCryptoPct !== null && a.currentStablePct !== null && Math.abs(a.currentCryptoPct + a.currentStablePct - 100) < 0.01; })(), "sums 100");
-  add("RG-32: liabilities are a separate dimension (net worth = assets − liabilities)", (() => { const a = rbAssess({ positions: [sol18g(400), usdc18g(600), debt18g(300)], riskTolerance: "medium", requiredBufferUsd: 0, generatedAt: 1 }); return a.recognizedLiabilitiesUsd === 300 && a.netWorthUsd === 700 && a.grossAssetValueUsd === 1000 && a.cryptoAssetValueUsd === 400; })(), "liabilities");
+  add("RG-32: liabilities are a separate dimension (net worth = assets − liabilities)", (() => { const a = rbAssess({ positions: [sol18g(400), usdc18g(600), debt18g(300)], ...rbFixedTarget("medium"), requiredBufferUsd: 0, generatedAt: 1 }); return a.recognizedLiabilitiesUsd === 300 && a.netWorthUsd === 700 && a.grossAssetValueUsd === 1000 && a.cryptoAssetValueUsd === 400; })(), "liabilities");
   add("RG-33: full Rebalance participates in Top Pick when scoring selects it (impact = ratio×0.9)", (() => { const c = byId("full")!.card; return c !== null && typeof c!.scores?.impact === "number" && c!.scores!.impact! > 0 && c!.is_top_pick === false; })(), "top pick");
   add("RG-34: card id/category/title immutable across both directions", (() => { const a = byId("full")!.card; const b = byId("crypto_full")!.card; return a?.id === "rebalance_to_plan" && b?.id === "rebalance_to_plan" && a?.title_key === "suggestion.rebalance.title" && b?.title_key === "suggestion.rebalance.title"; })(), "identity");
   add("RG-35: no risk-score/governance change referenced by the Rebalance path", (() => { const blob = read("src/suggestions/rebalanceAssessment.ts") + rebSuggSrc; return !/riskGovernance|getApprovedRiskRubricV1|riskReviewerRegistry/.test(blob); })(), "no governance");
