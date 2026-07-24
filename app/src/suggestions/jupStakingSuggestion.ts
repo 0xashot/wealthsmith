@@ -1,5 +1,5 @@
 /**
- * jupStakingSuggestion — Step 24A. The deterministic, PRODUCTION "Stake Your JUP" rule (Staking category,
+ * jupStakingSuggestion — Step 24A. The deterministic, PRODUCTION "Stake JUP on Jupiter" rule (Staking category,
  * a SEPARATE card from SOL staking — never aggregated with SOL). Pure over SuggestionEngineInputs: no
  * fetching, no pricing, no AI. It recognizes JUP by EXACT canonical mint + token program (via the
  * governed ownership registry), runs the deterministic selector over the governed Jupiter product, and
@@ -171,6 +171,16 @@ export function deriveJupStakingSuggestion(
         unit: "JUP",
       },
     ],
+    // READ-ONLY external handoff (like SOL→Jito): a user-click link to Jupiter's own staking page in a new
+    // tab. WealthSmith prepares/simulates/signs/submits NOTHING — the sticky modal footer's primary button
+    // ("Stake JUP") only opens the provider page; the aria label states no transaction is prepared.
+    externalLink: {
+      label: "Jupiter",
+      url: "https://jup.ag/stake",
+      ctaLabel: "Stake JUP",
+      secondaryLabel: "Cancel",
+      opensInNewTab: true,
+    },
   });
 
   return {

@@ -3043,7 +3043,7 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
       "9B-J: staking card maps safely (copy, amount, review-only, non-transactional)",
       card?.title === "Stake SOL on Jito" &&
         card?.description === "You have liquid SOL that could earn staking rewards through Jito." &&
-        card?.impact_text.includes("Eligible SOL value") === true &&
+        /^Stake [\d.,]+ SOL$/.test(card?.impact_text ?? "") && !/\$\d/.test(card?.impact_text ?? "") &&
         card?.cta.label === "Review" &&
         card?.cta.executes_transaction === false &&
         card?.cta.requires_wallet_signature === false &&
@@ -3571,12 +3571,12 @@ export function runJupStakingFixtureChecks(): FixtureCheck[] {
   {
     const sug = deriveJupStakingSuggestion(inp([jupPos(650, 0.8)]), NOW);
     const card = sug ? toSuggestionCard(sug) : undefined;
-    add("JUP-CARD-1: card title is exact 'Stake Your JUP'", card?.title === "Stake Your JUP", `title=${card?.title}`);
+    add("JUP-CARD-1: card title is exact 'Stake JUP on Jupiter'", card?.title === "Stake JUP on Jupiter", `title=${card?.title}`);
     add("JUP-CARD-2: card description is exact", card?.description === "Your JUP is currently unstaked and eligible for Jupiter staking rewards.", `desc=${card?.description}`);
     add("JUP-CARD-3: action line is exact 'Stake 650 JUP' (token amount, not USD-only)", card?.impact_text === "Stake 650 JUP" && !/\$\d/.test(card?.impact_text ?? ""), `impact=${card?.impact_text}`);
     add("JUP-CARD-4: CTA is Review, non-transactional", card?.cta.label === "Review" && card?.cta.executes_transaction === false && card?.cta.requires_wallet_signature === false && card?.cta.completion_on_click === false && card?.cta.action === null, `cta=${card?.cta.label}`);
     add("JUP-CARD-5: id + staking category (never capital_efficiency)", sug?.id === JUP_STAKING_SUGGESTION_ID && sug?.category === "staking", `${sug?.id}/${sug?.category}`);
-    add("JUP-CARD-6: no external execution CTA / handoff on the suggestion", sug?.reviewDetails?.externalLink == null, `externalLink=${sug?.reviewDetails?.externalLink != null}`);
+    add("JUP-CARD-6: read-only handoff footer (Cancel + 'Stake JUP' → Jupiter, new tab; no in-app execution)", (() => { const l = sug?.reviewDetails?.externalLink; return l != null && l.ctaLabel === "Stake JUP" && l.opensInNewTab === true && /jup\.ag/.test(l.url) && (l.secondaryLabel ?? "Cancel") === "Cancel" && card?.cta.label === "Review" && card?.cta.executes_transaction === false; })(), `cta=${sug?.reviewDetails?.externalLink?.ctaLabel}`);
   }
 
   /* ---- JUP Review modal content ---- */

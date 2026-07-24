@@ -273,7 +273,7 @@ export const SUGGESTION_STAKING_SELECTED_DESCRIPTION =
   "You have liquid SOL that could earn staking rewards through {protocol}.";
 /* Step 24A — dedicated JUP Staking suggestion (Staking category, separate card from SOL staking). Read-only
  * review; no fixed-return promise, no external execution CTA. `{amount}` is the formatted transferable JUP. */
-export const SUGGESTION_JUP_STAKING_TITLE = "Stake Your JUP";
+export const SUGGESTION_JUP_STAKING_TITLE = "Stake JUP on Jupiter";
 export const SUGGESTION_JUP_STAKING_DESCRIPTION =
   "Your JUP is currently unstaked and eligible for Jupiter staking rewards.";
 export const SUGGESTION_JUP_STAKING_ACTION = "Stake {amount} JUP";

@@ -216,6 +216,9 @@ export function deriveStakingSuggestion(
       valueUsd: eligibleValueUsd,
       label: "Eligible SOL value",
     },
+    // Card action line: the token amount to stake (e.g. "Stake 12.4 SOL"), matching the JUP staking card.
+    // The `amount`/USD value still drive the Review modal's Key metrics.
+    impactTextOverride: `Stake ${Number(eligibleSol.toFixed(4)).toLocaleString("en-US", { maximumFractionDigits: 4 })} SOL`,
     // Token side of the review (no protocol chosen — that's a later step).
     from: { symbol: "SOL", bucket: "crypto" },
 
