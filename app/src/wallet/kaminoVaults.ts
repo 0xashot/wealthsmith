@@ -209,6 +209,20 @@ export async function fetchKaminoVaultPositions(
       detection: "protocol_api",
       valueUsd: null,
       apy: apy ?? null,
+      // Resolved identity for Safety Buffer vetting — ANY Kamino curated vault (Allez, Sentora, Gauntlet, …). The
+      // product name is the on-chain vault name and the canonical id is the vault address; the buffer vetting resolves
+      // these dynamically. No curator is special-cased here; when a resolved vault name is absent it stays generic.
+      ...(vaultName
+        ? {
+            curatedLending: {
+              protocol: "Kamino",
+              productName: vaultName,
+              curator: null,
+              vaultAddress: vaultAddress.toString(),
+              detectionConfidence: "high" as const,
+            },
+          }
+        : {}),
     });
   }
   return positions;

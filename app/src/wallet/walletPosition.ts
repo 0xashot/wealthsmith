@@ -119,6 +119,21 @@ export interface WalletPosition {
   /** Approved product candidate id, when the position maps to one. */
   candidateId?: string;
   /**
+   * Resolved identity of a Kamino lending market / curated vault position, from Kamino protocol data or the internal
+   * registry — NOT a display name. Present for ANY curator (Steakhouse, Sentora, Allez Labs, Gauntlet, RockawayX, MEV
+   * Capital, future curators); the buffer-vetting decision + card/modal copy resolve `productName`/`curator`/addresses
+   * from here dynamically, never per-curator hardcoded. Canonical addresses are how a position is identified.
+   */
+  curatedLending?: {
+    protocol: string;                       // e.g. "Kamino"
+    productName: string;                    // resolved product/vault name, e.g. "Allez USDC"
+    curator?: string | null;                // resolved curator, e.g. "Allez Labs"
+    vaultAddress?: string | null;           // canonical curated-vault address
+    marketAddress?: string | null;          // canonical lending-market address
+    reserveAddress?: string | null;         // canonical reserve address
+    detectionConfidence?: "high" | "medium" | "low";
+  };
+  /**
    * Step 17E — Token-2022 (Token Extensions) transferability hardening. All optional and backward-
    * compatible; a classic SPL (TOKEN_PROGRAM_ID) position leaves them undefined and behaves exactly as
    * before. `transferableRaw`/`unresolvedRaw` are null-vs-"0" distinct: null = transferability unresolved,

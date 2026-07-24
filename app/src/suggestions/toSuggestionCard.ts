@@ -157,7 +157,7 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
 
   // Impact text = the sourced amount, labeled ("Buffer shortfall: $2,200").
   // No amount (On Track) → empty. Never invented.
-  const impact_text = s.amount ? `${s.amount.label ?? "Amount"}: ${usd0(s.amount.valueUsd)}` : "";
+  const impact_text = s.impactTextOverride ?? (s.amount ? `${s.amount.label ?? "Amount"}: ${usd0(s.amount.valueUsd)}` : "");
 
   // CTA label: review-only and disabled use "Review" (the disabled card renders
   // it as a disabled button); informational (On Track) has no CTA. Never

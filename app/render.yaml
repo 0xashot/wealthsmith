@@ -1,0 +1,20 @@
+# Step 23B.1 — explicit production deployment target for the read-only swap-quote service.
+# A minimal Node web service (portable to Railway / Fly.io / any Node host). The static Vite SPA
+# is deployed separately and unchanged; this service is server-only and never ships provider secrets
+# to the browser. It constructs / simulates / signs / submits NOTHING.
+services:
+  - type: web
+    name: wealthsmith-swap-quote
+    runtime: node
+    plan: starter
+    rootDir: app
+    buildCommand: npm ci && npm run swap:build-server
+    startCommand: node dist-server/swap-quote-server.mjs
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8787
+      - key: SOLANA_RPC_URL      # server-only; enables Orca. Set in the dashboard (never committed).
+        sync: false
+      - key: SWAP_ALLOWED_ORIGIN # approved SPA origin for CORS.
+        sync: false

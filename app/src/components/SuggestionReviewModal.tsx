@@ -25,6 +25,9 @@ import type {
 } from "../suggestions/engineTypes";
 import type { ContributionPlanReviewDetails } from "../suggestions/contributionPlanReviewDetails";
 import type { StableYieldReviewPresentation } from "../suggestions/yieldStrategyPlanPresentationTypes";
+import type { SwapActionReadiness, SwapQuoteComparisonAssessment } from "../suggestions/swapQuote/swapQuoteContracts";
+import type { SwapQuoteFetcher } from "../suggestions/swapQuote/swapQuoteClient";
+import SwapQuoteComparisonSection from "./swapQuote/SwapQuoteComparisonSection";
 
 interface Props {
   /** The engine review details (existing suggestion families). Optional when `contributionReview` is set. */
@@ -33,7 +36,28 @@ interface Props {
   contributionReview?: ContributionPlanReviewDetails;
   /** Step 16H-C — deterministic Stable Yield review presentation. When present, the modal renders it. */
   stableYieldReview?: StableYieldReviewPresentation;
-  isTopPick: boolean;
+  /**
+   * Show the internal Guardrails section (Checked / Not evaluated yet / Not applicable). This is a
+   * TESTING-ONLY diagnostic that proves the engine's guardrail logic; the /testing gallery passes it.
+   * Real Wallet and Demo omit it (default hidden) so users never see the internal checklist.
+   */
+  showGuardrails?: boolean;
+  /**
+   * Step 23C — the exact quote-ready action for a Rebalance / Trim / eligible-DCA suggestion. When present, the
+   * read-only "Suggested route" section renders inside this modal (after the recommendation). It NEVER changes the
+   * financial suggestion. Omitted for families with no swap (buffer / staking / stable yield).
+   */
+  swapAction?: SwapActionReadiness;
+  /** True for DCA (drives not-ready copy). */
+  swapQuoteIsDca?: boolean;
+  /** Injected fetcher (real client by default); the /testing gallery injects deterministic presets instead. */
+  swapQuoteFetcher?: SwapQuoteFetcher;
+  /** Deterministic gallery override: preset assessment per legId (no live fetch). */
+  swapQuotePresetAssessments?: Record<string, SwapQuoteComparisonAssessment>;
+  /** Deterministic gallery override: force the loading state. */
+  swapQuotePresetLoading?: boolean;
+  /** Fixed clock for deterministic gallery rendering. */
+  swapQuoteNowMs?: number;
   onClose: () => void;
 }
 
@@ -74,7 +98,7 @@ function formatCalcValue(v: number, unit?: string): string {
   return `${num1(v)}${unit ? ` ${unit}` : ""}`;
 }
 
-export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, isTopPick, onClose }: Props) {
+export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onClose }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -144,9 +168,6 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         <div ref={dialogRef} className="modal review-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={reasonId} onKeyDown={onKeyDown} onClick={(e) => e.stopPropagation()}>
           <div className="modal__header">
             <div className="review-modal__heading">
-              <div className="review-modal__eyebrow">
-                {isTopPick && <Badge label="Top Pick" tone="info" />}
-              </div>
               <h2 id={titleId} className="modal__title">{r.title}</h2>
             </div>
             <button ref={closeRef} type="button" className="modal__close" aria-label="Close review details" onClick={onClose}>
@@ -235,9 +256,6 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         <div ref={dialogRef} className="modal review-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={reasonId} onKeyDown={onKeyDown} onClick={(e) => e.stopPropagation()}>
           <div className="modal__header">
             <div className="review-modal__heading">
-              <div className="review-modal__eyebrow">
-                {isTopPick && <Badge label="Top Pick" tone="info" />}
-              </div>
               <h2 id={titleId} className="modal__title">{cr.title}</h2>
             </div>
             <button ref={closeRef} type="button" className="modal__close" aria-label="Close review details" onClick={onClose}>
@@ -281,6 +299,19 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                 )}
               </section>
             )}
+
+            {/* Step 23C — read-only "Suggested route" for an eligible funded DCA (contribution) review. */}
+            {swapAction && (
+              <SwapQuoteComparisonSection
+                readiness={swapAction}
+                enabled
+                isDca={swapQuoteIsDca}
+                fetcher={swapQuoteFetcher}
+                presetAssessments={swapQuotePresetAssessments}
+                presetLoading={swapQuotePresetLoading}
+                nowMs={swapQuoteNowMs}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -320,9 +351,6 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       >
         <div className="modal__header">
           <div className="review-modal__heading">
-            <div className="review-modal__eyebrow">
-              {isTopPick && <Badge label="Top Pick" tone="info" />}
-            </div>
             <h2 id={titleId} className="modal__title">
               {summary.title}
             </h2>
@@ -530,7 +558,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </section>
           )}
 
-          {guardrailGroups.length > 0 && (
+          {showGuardrails && guardrailGroups.length > 0 && (
             <section className="review-modal__section" aria-label="Guardrails">
               <h3 className="review-modal__section-title">Guardrails</h3>
               <div className="review-modal__guardrails">
@@ -679,13 +707,27 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
               ))}
             </section>
           )}
+
+          {/* Step 23C — read-only "Suggested route" comparison (Rebalance / Trim / eligible DCA). Supplemental
+              execution information only; it never changes the financial suggestion and prepares no transaction. */}
+          {swapAction && (
+            <SwapQuoteComparisonSection
+              readiness={swapAction}
+              enabled
+              isDca={swapQuoteIsDca}
+              fetcher={swapQuoteFetcher}
+              presetAssessments={swapQuotePresetAssessments}
+              presetLoading={swapQuotePresetLoading}
+              nowMs={swapQuoteNowMs}
+            />
+          )}
         </div>
         {/* Sticky footer — shown only when a read-only protocol link is available. Cancel closes the modal;
             the primary button opens the protocol's own page in a new tab (no in-app transaction/signature). */}
         {details.externalLink && (
           <div className="review-modal__footer review-modal__footer--actions">
             <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
-              Cancel
+              {details.externalLink.secondaryLabel ?? "Cancel"}
             </button>
             <a
               className="review-modal__primary-action"

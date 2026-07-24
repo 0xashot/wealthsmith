@@ -19,7 +19,10 @@
     "validate:stable-yield-market-cache": "node scripts/publish-stable-yield-market-cache.mjs --validate-only",
     "market:refresh-conditions": "node scripts/refresh-market-conditions.mjs",
     "market:validate-conditions": "node scripts/validate-market-conditions-cache.mjs",
-    "build:deploy": "npm run market:refresh-conditions && npm run build"
+    "build:deploy": "npm run market:refresh-conditions && npm run build",
+    "swap:build-server": "node scripts/build-swap-server.mjs",
+    "swap:serve": "npm run swap:build-server && node dist-server/swap-quote-server.mjs",
+    "swap:smoke": "node scripts/swap-quote-smoke.mjs"
   },
   "dependencies": {
     "@hubbleprotocol/hubble-sdk": "^8.0.4",

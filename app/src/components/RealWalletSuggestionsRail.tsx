@@ -62,19 +62,22 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
   const reviewModal = selectedStableYieldReview ? (
     <SuggestionReviewModal
       stableYieldReview={selectedStableYieldReview}
-      isTopPick={selectedCard?.is_top_pick === true}
       onClose={() => setSelectedId(null)}
     />
   ) : selectedContribReview ? (
     <SuggestionReviewModal
       contributionReview={selectedContribReview}
-      isTopPick={selectedCard?.is_top_pick === true}
+      swapAction={selectedId ? rail?.swapActionById?.[selectedId] : undefined}
+      swapQuoteIsDca={selectedCard?.category === "dca"}
+      swapQuoteFetcher={rail?.swapQuoteFetcher}
       onClose={() => setSelectedId(null)}
     />
   ) : detailsForModal ? (
     <SuggestionReviewModal
       details={detailsForModal}
-      isTopPick={selectedCard?.is_top_pick === true}
+      swapAction={selectedId ? rail?.swapActionById?.[selectedId] : undefined}
+      swapQuoteIsDca={selectedCard?.category === "dca"}
+      swapQuoteFetcher={rail?.swapQuoteFetcher}
       onClose={() => setSelectedId(null)}
     />
   ) : null;

@@ -59,6 +59,8 @@ export type SuggestionReasonCode =
   | "buffer_coverage_unresolved"
   | "buffer_target_unavailable"
   | "buffer_coverage_unavailable"
+  // A detected USDC lending position not yet vetted for Safety Buffer use (its USDC is excluded from coverage).
+  | "buffer_position_not_vetted"
   | "crypto_overweight"
   | "crypto_underweight"
   | "portfolio_aligned"
@@ -545,6 +547,8 @@ export interface ReviewExternalLink {
   opensInNewTab: boolean;
   /** Optional action-oriented label for the modal footer's primary button (e.g. "Stake SOL"). */
   ctaLabel?: string;
+  /** Optional label for the footer's secondary (dismiss) button; defaults to "Cancel". */
+  secondaryLabel?: string;
 }
 
 /**
@@ -678,6 +682,12 @@ export interface EngineSuggestion {
    */
   titleOverride?: string;
   descriptionOverride?: string;
+  /**
+   * Card-face impact text override. When set it REPLACES the generic `${amount.label}: $${amount}` line in the card
+   * mapper with a fully-resolved, deterministic sentence built from real inputs (e.g. "Add $2,000 to your Safety
+   * Buffer."). Never freeform LLM text, never invented — the `amount`/`amount.label` still drive the Review modal.
+   */
+  impactTextOverride?: string;
   /** Card `type` override so sibling cards in one category can resolve distinct icons (e.g. goal/coins/shield). */
   cardTypeOverride?: string;
   /** Optional success status chip rendered on the card (e.g. "Protected" with a shield-check icon). */

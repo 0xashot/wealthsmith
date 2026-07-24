@@ -32,5 +32,11 @@ export default defineConfig({
       // allow serving files from the repo root (read-only: assets/, tokens/)
       allow: [".."],
     },
+    // Step 23B.1 — DEV-ONLY proxy so the SPA can reach the server-only swap-quote service (run `npm run swap:serve`)
+    // without the browser ever calling providers directly. Not used in production (SPA talks to the deployed
+    // service via VITE_SWAP_QUOTE_API_BASE). The quote layer stays unmounted until Step 23C.
+    proxy: {
+      "/api/swap-quote": { target: process.env.SWAP_QUOTE_DEV_TARGET ?? "http://localhost:8787", changeOrigin: true },
+    },
   },
 });

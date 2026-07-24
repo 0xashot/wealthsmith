@@ -23,6 +23,14 @@ import type { SafetyBufferAssessment } from "./safetyBufferAssessment";
 export const BUFFER_SUGGESTION_ID = "top_up_buffer";
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
+/** Whole-dollar display, matching the card mapper's `usd0` so the card-face sentence reads identically. */
+const usd0 = (n: number): string => `$${Math.round(n).toLocaleString("en-US")}`;
+/**
+ * READ-ONLY external handoff for topping up the Safety Buffer: a fiat on-ramp to buy USDC. Rendered as the modal's
+ * sticky-footer primary button (opens MoonPay's own page in a new tab). WealthSmith never auto-opens it, buys, moves
+ * funds, or requests a signature — the user chooses to continue on MoonPay.
+ */
+const BUFFER_MOONPAY_LINK = { label: "Buy USDC on Moonpay", ctaLabel: "Buy USDC on Moonpay", url: "https://www.moonpay.com/buy/usdc", opensInNewTab: true } as const;
 
 /**
  * Build the canonical `top_up_buffer` card from a SafetyBufferAssessment, or `null` when coverage is COMPLETE
@@ -46,6 +54,71 @@ export function buildSafetyBufferCardFromAssessment(a: SafetyBufferAssessment, g
   const proven = a.provenMinimumShortfallUsd ?? 0;
   const worst = a.verifiedOnlyShortfallUsd ?? proven;
   const isRange = worst > proven; // some unresolved value exists but is insufficient to prove full funding
+
+  // ---- Detected unvetted USDC lending position → the SPECIFIC "Review Your Safety Buffer USDC" card + move modal. ----
+  // Present ONLY when the engine confidently identified the position + an approved destination (else null → the generic
+  // states below). The USDC is already EXCLUDED from coverage upstream; this card never counts, moves, or signs, and it
+  // never calls the position unsafe — it states only that the position has not yet passed WealthSmith's vetting.
+  if (a.bufferPositionReview) {
+    const r = a.bufferPositionReview;
+    const detected = r.amountDisplay != null ? r.amountDisplay : r.token; // "2,000 USDC" or "USDC"
+    const cardDescription =
+      `We found ${detected} in ${r.product} on ${r.protocol}. This lending position has not yet passed ` +
+      `WealthSmith's vetting for Safety Buffer use, so we do not currently count it toward your buffer.`;
+    const modalIntro =
+      `Your ${detected} is currently deposited in ${r.product} on ${r.protocol}. This position has not yet ` +
+      `passed WealthSmith's vetting for Safety Buffer use and is not currently included in your available buffer. ` +
+      `Move the funds to ${r.token} lending in ${r.approvedDestination}, which is currently approved for your Safety Buffer.`;
+    // Scenario 5 — an additional shortfall that remains even after (max) counting this position is surfaced separately.
+    const additionalNeeded = proven > 0 ? proven : null;
+    const guardrails: SuggestionGuardrail[] = [
+      { code: "pricing_available", status: "passed" },
+      { code: "buffer_protection", status: "passed" },
+      { code: "coverage_confidence", status: "unresolved" },
+      { code: "liquidity_verification", status: "unresolved" },
+      { code: "min_trade_size", status: "not_applicable" },
+      { code: "cost_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+      { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+      { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
+    ];
+    const metrics: ReviewMetric[] = [
+      { label: "Detected (not yet counted)", value: r.amountDisplay ?? `${r.token} (amount unresolved)`, kind: "token_amount" },
+      ...(r.curator ? [{ label: "Curator", value: r.curator, kind: "count" as const }] : []),
+      ...(target != null ? [usdMetric("Safety Buffer target", target)] : []),
+      usdMetric("Verified liquid reserve", verified ?? 0),
+      ...(additionalNeeded != null ? [usdMetric("Additional amount still needed", additionalNeeded)] : []),
+    ];
+    return {
+      ...base,
+      reason_codes: ["buffer_low", "buffer_position_not_vetted"],
+      title_key: "suggestion.buffer.title",
+      description_key: "suggestion.buffer.description",
+      titleOverride: "Review Your Safety Buffer USDC",
+      descriptionOverride: cardDescription,
+      action_kind: "review_only",
+      is_actionable: true,
+      to: { bucket: "stables" },
+      post_buffer_months: a.targetMonths ?? undefined,
+      scores: { impact: 0, urgency: 0, efficiency: null },
+      guardrails,
+      reviewDetails: buildReviewDetails({
+        category: "buffer",
+        actionKind: "review_only",
+        guardrails,
+        protocolSelection: base.protocolSelection,
+        title: "Move Your Safety Buffer USDC",
+        reason: modalIntro,
+        metrics,
+        externalLink: {
+          label: r.approvedDestination,
+          ctaLabel: `Move to ${r.approvedDestination}`,
+          url: r.destinationUrl,
+          opensInNewTab: true,
+          secondaryLabel: "Cancel",
+        },
+      }),
+    };
+  }
 
   // ---- Definite shortfall (coverageState incomplete, proven ≥ $50) → review-only, amount = confirmed minimum. ----
   if (a.presentationState === "definite_shortfall") {
@@ -87,11 +160,12 @@ export function buildSafetyBufferCardFromAssessment(a: SafetyBufferAssessment, g
       action_kind: "review_only",
       is_actionable: true,
       amount: { valueUsd: proven, label: isRange ? "Minimum amount needed" : "Amount needed" },
+      impactTextOverride: isRange ? `Add at least ${usd0(proven)} to your Safety Buffer.` : `Add ${usd0(proven)} to your Safety Buffer.`,
       to: { bucket: "stables" },
       post_buffer_months: a.targetMonths ?? undefined,
       scores: { impact: score, urgency: score, efficiency: null },
       guardrails,
-      reviewDetails: buildReviewDetails({ category: "buffer", actionKind: "review_only", guardrails, protocolSelection: base.protocolSelection, metrics, calculations }),
+      reviewDetails: buildReviewDetails({ category: "buffer", actionKind: "review_only", guardrails, protocolSelection: base.protocolSelection, metrics, calculations, externalLink: BUFFER_MOONPAY_LINK }),
     };
   }
 

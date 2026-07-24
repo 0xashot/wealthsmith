@@ -21,6 +21,7 @@
 import { useMemo, useRef, useState } from "react";
 import SuggestionCard from "../components/SuggestionCard";
 import SuggestionReviewModal from "../components/SuggestionReviewModal";
+import SwapQuoteGalleryStates, { GALLERY_MODAL_PRESETS, GALLERY_NOW } from "./swapQuoteTestingFixtures";
 import type { SuggestionCardState } from "../types/dashboard";
 import { TESTING_PREVIEW_NOT_LIVE } from "./testingPageFixtures";
 import { runAllContributionTestingScenarios } from "../suggestions/contributionTestingScenarios";
@@ -332,7 +333,7 @@ export default function TestingPage() {
       {selectedSafetyBuffer?.card?.reviewDetails && (
         <SuggestionReviewModal
           details={selectedSafetyBuffer.card.reviewDetails}
-          isTopPick={selectedSafetyBuffer.card.is_top_pick === true}
+          showGuardrails
           onClose={() => setSelectedSafetyBufferId(null)}
         />
       )}
@@ -340,7 +341,10 @@ export default function TestingPage() {
       {selectedRebalance?.card?.reviewDetails && (
         <SuggestionReviewModal
           details={selectedRebalance.card.reviewDetails}
-          isTopPick={selectedRebalance.card.is_top_pick === true}
+          showGuardrails
+          swapAction={GALLERY_MODAL_PRESETS.rebalance.readiness}
+          swapQuotePresetAssessments={GALLERY_MODAL_PRESETS.rebalance.presets}
+          swapQuoteNowMs={GALLERY_NOW}
           onClose={() => setSelectedRebalanceId(null)}
         />
       )}
@@ -348,7 +352,7 @@ export default function TestingPage() {
       {selectedCapitalEfficiency?.card?.reviewDetails && (
         <SuggestionReviewModal
           details={selectedCapitalEfficiency.card.reviewDetails}
-          isTopPick={selectedCapitalEfficiency.card.is_top_pick === true}
+          showGuardrails
           onClose={() => setSelectedCapitalEfficiencyId(null)}
         />
       )}
@@ -356,7 +360,10 @@ export default function TestingPage() {
       {selectedTrim?.card?.reviewDetails && (
         <SuggestionReviewModal
           details={selectedTrim.card.reviewDetails}
-          isTopPick={selectedTrim.card.is_top_pick === true}
+          showGuardrails
+          swapAction={GALLERY_MODAL_PRESETS.trim.readiness}
+          swapQuotePresetAssessments={GALLERY_MODAL_PRESETS.trim.presets}
+          swapQuoteNowMs={GALLERY_NOW}
           onClose={() => setSelectedTrimId(null)}
         />
       )}
@@ -364,7 +371,7 @@ export default function TestingPage() {
       {selectedStaking?.card?.reviewDetails && (
         <SuggestionReviewModal
           details={selectedStaking.card.reviewDetails}
-          isTopPick={selectedStaking.card.is_top_pick === true}
+          showGuardrails
           onClose={() => setSelectedStakingId(null)}
         />
       )}
@@ -372,7 +379,7 @@ export default function TestingPage() {
       {selectedStableYieldReview && (
         <SuggestionReviewModal
           stableYieldReview={selectedStableYieldReview}
-          isTopPick={selectedStableYield?.card?.is_top_pick === true}
+          showGuardrails
           onClose={() => setSelectedStableYieldId(null)}
         />
       )}
@@ -380,7 +387,7 @@ export default function TestingPage() {
       {selectedScenario?.review && (
         <SuggestionReviewModal
           contributionReview={selectedScenario.review}
-          isTopPick={selectedScenario.pipeline.suggestion?.is_top_pick === true}
+          showGuardrails
           onClose={() => setSelectedScenarioId(null)}
         />
       )}
@@ -388,10 +395,12 @@ export default function TestingPage() {
       {selectedPositionOptimization?.card?.reviewDetails && (
         <SuggestionReviewModal
           details={selectedPositionOptimization.card.reviewDetails}
-          isTopPick={selectedPositionOptimization.card.is_top_pick === true}
+          showGuardrails
           onClose={() => setSelectedPositionOptimizationId(null)}
         />
       )}
+
+      <SwapQuoteGalleryStates />
     </main>
   );
 }

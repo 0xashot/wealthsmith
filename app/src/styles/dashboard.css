@@ -3848,3 +3848,31 @@
   outline: none;
   box-shadow: var(--shadow-control-focus);
 }
+
+/* Step 23C — read-only "Suggested route" comparison section inside the Review modal. Supplemental styling only;
+   the section reuses the existing review-modal section/metric/hint classes. */
+.swap-quote__section,
+.swap-quote__plan {
+  border-top: 1px solid var(--color-border-subtle, var(--color-border-default));
+  padding-top: var(--spacing-stack-gap-sm);
+}
+.swap-quote__provider {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-primary);
+}
+.swap-quote__alternatives > summary {
+  cursor: pointer;
+  list-style: revert;
+}
+.swap-quote__alternatives > summary:focus-visible {
+  outline: 2px solid var(--color-border-focus, var(--color-action-primary-background-default));
+  outline-offset: 2px;
+}
+.swap-quote__plan-leg + .swap-quote__plan-leg {
+  margin-top: var(--spacing-stack-gap-sm);
+}
+.swap-quote__refresh {
+  align-self: flex-start;
+  margin-top: var(--spacing-stack-gap-sm);
+}

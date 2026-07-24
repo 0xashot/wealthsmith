@@ -1,3 +1,5 @@
+import { runSwapQuoteFixtureChecks, runSwapQuoteUiFixtureChecks, runRailSwapActionFixtureChecks } from "./swapQuote/swapQuoteFixtures";
+import { runSwapQuoteServerFixtureChecks, runSwapQuoteServerGuardChecks } from "../server/swapQuote/swapQuoteServerFixtures";
 import { SOURCE_CLASSIFICATION as TD_SRC, TEAM_ANSWERS as TD_ANSWERS, ISOLATION_RECONCILED as TD_ISO, COLLATERAL_UNIVERSE_ONCHAIN as TD_COLLAT, LOSS_WATERFALL_DESIGN_RESOLVED as TD_WATERFALL, MANDATORY_ARTIFACTS_V2 as TD_MANDATORY, evaluateReadinessV3, READINESS_V3 as TD_READINESS, READINESS_V3_RATIONALE as TD_RATIONALE, DIMENSION_STATE_V3, computeTeamDisclosureHash, TEAM_DISCLOSURE_HASH as TD_HASH, TEAM_DISCLOSURE_CONFERS as TD_CONFERS } from "./jupiterLendTeamDisclosureAmendment";
 import { INCIDENT_SCOPE_MODEL as IS_SCOPE, SOURCE_CLASSES as IS_SOURCES, NEGATIVE_RESULT_DISCIPLINE as IS_NEG, SELF_CHECK as IS_SELFCHECK, SOURCE_ENUMERATION_RULE_INHERITED as IS_ENUM, anchorDiscriminator, loadKlendDiscriminatorRegistry, KLEND_ADMIN_INSTRUCTIONS as IS_ADMIN_ALIAS, REGISTRY_VERIFICATION as IS_REGVERIFY, KAMINO_ADMIN_SCAN as IS_SCAN, JUPITER_APPLICABILITY as IS_JUP, computeIncidentSearchHash, INCIDENT_SEARCH_HASH as IS_HASH, INCIDENT_SEARCH_CONFERS as IS_CONFERS } from "./incidentSearchMethodology";
 const KLEND_ADMIN = IS_ADMIN_ALIAS;
@@ -29,6 +31,7 @@ import { ONE_SF as EP_ONE_SF } from "./klendReserveCapacity";
 import { computeSafetyBufferCoverage as sbCoverage, classifyPositionCoverage as sbClassify, type SafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
 import { deriveSafetyBufferAssessment as sbAssess, SAFETY_BUFFER_ASSESSMENT_VERSION, type SafetyBufferContributionPlanInput } from "./safetyBufferAssessment";
 import { buildSafetyBufferCardFromAssessment } from "./bufferSuggestion";
+import { deriveBufferPositionReview, KAMINO_MAIN_MARKET_USDC_URL } from "./bufferPositionVetting";
 import { deriveOnTrackAssessment as otAssess, ON_TRACK_ASSESSMENT_VERSION, type OnTrackCandidateContext } from "./onTrackAssessment";
 import { buildOnTrackCardsFromAssessment as otBuildCards, type OnTrackGoalContext } from "./onTrackSuggestion";
 import {
@@ -4329,9 +4332,12 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
   // 10A-J. No reviewDetails contains forbidden language.
   {
     const forbidden = ["guaranteed", "optimal", "best", "you should", "we will move", "we will stake", "we will buy", "automatic", "risk-free", "sell", "buy", "swap", "execute", "bad", "unsafe", "highest apy", "safest protocol"];
-    const json = JSON.stringify(allReviewDetails).toLowerCase();
+    // The forbidden-language guard targets WealthSmith's own ADVICE copy. The `externalLink` is an explicit user-choice
+    // read-only handoff button to a third party's own page (e.g. "Stake SOL on Jito", "Buy on MoonPay") — the modal
+    // already marks it "opens in a new tab, no transaction is created" — so its CTA label is excluded from this scan.
+    const json = JSON.stringify(allReviewDetails.map((d) => ({ ...d, externalLink: undefined }))).toLowerCase();
     const hits = forbidden.filter((w) => json.includes(w));
-    add("10A-J: reviewDetails contain no forbidden language", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+    add("10A-J: reviewDetails advice copy (excluding the external-handoff CTA) contains no forbidden language", hits.length === 0, `hits=${hits.join(",") || "none"}`);
   }
   // 10A-K. No raw internal guardrail codes leak into reviewDetails.
   {
@@ -18733,9 +18739,15 @@ export function runStep22GCloseoutFixtureChecks(): FixtureCheck[] {
   return checks;
 }
 
-export function printFixtureResults(): void {
+export async function printFixtureResults(): Promise<void> {
   const checks = [
+    ...runSwapQuoteFixtureChecks(),
+    ...runSwapQuoteUiFixtureChecks(),
+    ...runRailSwapActionFixtureChecks(),
+    ...runSwapQuoteServerGuardChecks(),
+    ...(await runSwapQuoteServerFixtureChecks()),
     ...runStep22GCloseoutFixtureChecks(),
+    ...runBufferPositionReviewFixtureChecks(),
     ...runSlice7DTeardownFixtureChecks(),
     ...runSlice7CTestingMigrationFixtureChecks(),
     ...runSlice7BRebalanceMigrationFixtureChecks(),
@@ -21529,6 +21541,87 @@ export function runSafetyBufferProductionFixtureChecks(): FixtureCheck[] {
   add("SBM-20: rail computes ONE coverage, ONE assessment, ONE mapper; no plan-backed buffer candidate injected", (() => { const rail = readIfSrc("src/suggestions/useRailSuggestions.ts"); return (rail.match(/computeSafetyBufferCoverage\(/g) ?? []).length === 1 && (rail.match(/deriveSafetyBufferAssessment\(/g) ?? []).length === 1 && (rail.match(/buildSafetyBufferCardFromAssessment\(/g) ?? []).length === 1 && /category === "buffer" \? null/.test(rail); })(), "one-of-each");
   add("SBM-21: no route/quote/transaction/signature/execution in the mounted buffer path", (() => { const blob = readIfSrc("src/suggestions/safetyBufferAssessment.ts") + readIfSrc("src/suggestions/bufferSuggestion.ts"); return !/swapRoute|routePlan|getQuote|aggregator|signTransaction|sendTransaction|simulateTransaction|depositTransaction/.test(blob); })(), "read-only");
   add("SBM-22: reason codes per state are honest + distinct", (() => { const def = card(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3)!; const nf = card(cov({ target: 3000, verified: 2990, state: "incomplete" }), 1000, 3)!; const un = card(cov({ target: 3000, verified: 2000, unresolved: 1000, state: "unresolved" }), 1000, 3)!; return def.reason_codes.includes("buffer_shortfall_confirmed") && nf.reason_codes.includes("buffer_nearly_funded") && un.reason_codes.includes("buffer_coverage_unresolved"); })(), "reason codes");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Unvetted Safety Buffer USDC lending position → "Review Your Safety Buffer USDC" card + "Move Your Safety Buffer
+ * USDC" modal. Backend/engine decides eligibility (source of truth); the UI renders deterministic templates only.
+ * ------------------------------------------------------------------ */
+export function runBufferPositionReviewFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  const GEN = 1_700_000_000_000;
+  const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+  const p = (o: Partial<WalletPosition>): WalletPosition => ({ id: "x", source: "wallet", type: "token", symbol: "X", name: "X", amount: "1", detection: "direct_wallet_balance", valueUsd: 100, ...o } as WalletPosition);
+  const usdc = (v: number, id = "u") => p({ id, symbol: "USDC", name: "USD Coin", mint: USDC, uiAmount: v, priceUsd: 1, valueUsd: v });
+  // A detected Kamino curated-vault USDC position (ANY curator), identified by a canonical vault address.
+  const curated = (o: { product: string; curator: string; vault: string; amount?: number | null }) => p({ id: "cv", type: "protocol", symbol: "USDC", name: `${o.product} USDC`, protocol: "Kamino", existingPositionOnly: true, withdrawalState: "unresolved", recognizedValueUsd: o.amount ?? null, uiAmount: o.amount ?? undefined, valueUsd: o.amount ?? null, mint: USDC, curatedLending: { protocol: "Kamino", productName: o.product, curator: o.curator, vaultAddress: o.vault, detectionConfidence: "high" } });
+  const allez = (v: number) => curated({ product: "Allez USDC", curator: "Allez Labs", vault: "A11ezVau1t1111111111111111111111111111111111", amount: v });
+  const steak = (v: number) => curated({ product: "Steakhouse USDC Vault", curator: "Steakhouse Financial", vault: "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E", amount: v });
+  const steakNoAmt = () => curated({ product: "Steakhouse USDC Vault", curator: "Steakhouse Financial", vault: "HDsayqAsDWy3QvANGqh2yNraqcD8Fnjgh73Mhb3WRS5E", amount: null });
+  const unmapped = (v: number) => p({ id: "uv", type: "protocol", symbol: "USDC", name: "Unknown vault USDC", protocol: "Kamino", existingPositionOnly: true, withdrawalState: "unresolved", recognizedValueUsd: v, uiAmount: v, valueUsd: v, mint: USDC });
+  const kaminoMain = (v: number) => p({ id: "kd", type: "protocol", symbol: "USDC", name: "USDC on Kamino", protocol: "Kamino", candidateId: "kamino_usdc_lending", existingPositionOnly: true, withdrawalState: "fully_withdrawable", recognizedValueUsd: v, liquidValueUsd: v, valueUsd: v, mint: USDC });
+  // Full production chain: positions → coverage → review → assessment → card → mapped SuggestionCard.
+  const run = (positions: WalletPosition[], expenses: number, months: number) => {
+    const coverage = sbCoverage(positions, expenses * months);
+    const review = deriveBufferPositionReview(coverage, positions);
+    const a = sbAssess({ coverage, monthlyExpensesUsd: expenses, targetMonths: months, bufferPositionReview: review, generatedAt: GEN });
+    const eng = buildSafetyBufferCardFromAssessment(a, GEN);
+    return { coverage, review, a, eng, card: eng ? toSuggestionCard(eng) : null };
+  };
+
+  const known = run([usdc(1000), allez(2000)], 1000, 3);      // the user's example curator
+  const steakRun = run([usdc(1000), steak(2000)], 1000, 3);   // a DIFFERENT curator, same path
+  const noAmt = run([usdc(1000), steakNoAmt()], 1000, 3);
+  const low = run([usdc(1000), unmapped(2000)], 1000, 3);
+  const approved = run([usdc(500), kaminoMain(2000)], 1000, 3);
+  const both = run([usdc(1000), allez(2000)], 2000, 3);
+  const noDest = run([usdc(1000), unmapped(2000)], 1000, 3);
+
+  // ---- Deterministic, DYNAMIC card copy (product/curator resolved per position; no curator special-cased) ----
+  add("BPR-1: unvetted Allez position → card body resolves the product + protocol dynamically ('… in Allez USDC on Kamino …')", known.card!.title === "Review Your Safety Buffer USDC" && known.card!.description === "We found 2,000 USDC in Allez USDC on Kamino. This lending position has not yet passed WealthSmith's vetting for Safety Buffer use, so we do not currently count it toward your buffer.", `desc=${known.card!.description.slice(0, 44)}`);
+  add("BPR-1b: a DIFFERENT curator (Steakhouse) flows through the SAME path with ITS resolved product — not a hardcoded phrase", steakRun.card!.description.startsWith("We found 2,000 USDC in Steakhouse USDC Vault on Kamino.") && steakRun.review!.curator === "Steakhouse Financial", `desc=${steakRun.card!.description.slice(0, 50)}`);
+  add("BPR-2: unknown amount → card body omits an invented amount ('We found USDC in …')", noAmt.card!.description === "We found USDC in Steakhouse USDC Vault on Kamino. This lending position has not yet passed WealthSmith's vetting for Safety Buffer use, so we do not currently count it toward your buffer.", noAmt.card!.description.slice(0, 40));
+  // ---- Deterministic modal copy ----
+  add("BPR-3: modal title is 'Move Your Safety Buffer USDC' and body states not-vetted + the approved destination", known.eng!.reviewDetails!.summary.title === "Move Your Safety Buffer USDC" && /has not yet passed WealthSmith's vetting/.test(known.eng!.reviewDetails!.summary.reason) && /Move the funds to USDC lending in Kamino Main Market/.test(known.eng!.reviewDetails!.summary.reason), known.eng!.reviewDetails!.summary.title);
+  // ---- CTAs + destination URL ----
+  add("BPR-4: card CTA always says 'Review' and is non-transactional (no execution, no signature, no in-app action)", known.card!.cta.label === "Review" && known.card!.cta.executes_transaction === false && known.card!.cta.requires_wallet_signature === false && known.card!.cta.action === null, `cta=${known.card!.cta.label}`);
+  add("BPR-5: modal primary CTA is 'Move to Kamino Main Market' → the approved Kamino Main Market URL, opens in a new tab, secondary 'Cancel'", (() => { const e = known.eng!.reviewDetails!.externalLink!; return e.ctaLabel === "Move to Kamino Main Market" && e.url === KAMINO_MAIN_MARKET_USDC_URL && e.opensInNewTab === true && e.secondaryLabel === "Cancel"; })(), "primary cta");
+  add("BPR-6: the destination URL is the canonical Kamino Main Market USDC reserve (never empty → never a broken external CTA)", KAMINO_MAIN_MARKET_USDC_URL.startsWith("https://app.kamino.finance/lending/reserve/") && known.eng!.reviewDetails!.externalLink!.url.length > 0, KAMINO_MAIN_MARKET_USDC_URL);
+  // ---- Safety Buffer calculation: unvetted USDC excluded ----
+  add("BPR-7: the unvetted USDC is EXCLUDED from Safety Buffer coverage (verified liquid = direct USDC only; excluded_unresolved source)", known.coverage.verifiedLiquidStableValueUsd === 1000 && known.coverage.sources.some((s) => s.inclusionState === "excluded_unresolved" && s.positionId === "cv"), `verified=${known.coverage.verifiedLiquidStableValueUsd}`);
+  add("BPR-8: approved Kamino Main Market USDC IS counted (verified liquid) → NO review, normal Safety Buffer rules (definite shortfall card)", approved.review === null && approved.coverage.verifiedLiquidStableValueUsd === 2500 && approved.card!.title === "Top Up Your Safety Buffer", `verified=${approved.coverage.verifiedLiquidStableValueUsd}`);
+  // ---- Scenario 5: distinguish detected-not-counted vs additional-needed ----
+  add("BPR-9: unvetted + additional shortfall → specific review card AND an 'Additional amount still needed' metric (distinct from detected)", both.card!.title === "Review Your Safety Buffer USDC" && both.eng!.reviewDetails!.metrics.some((m) => m.label === "Additional amount still needed") && both.eng!.reviewDetails!.metrics.some((m) => m.label === "Detected (not yet counted)"), both.eng!.reviewDetails!.metrics.map((m) => m.label).join(","));
+  // ---- Generic fallback ----
+  add("BPR-10: unmapped / low-confidence position → NO review; generic 'Verify Your Safety Buffer' fallback", low.review === null && low.card!.title === "Verify Your Safety Buffer", `title=${low.card!.title}`);
+  add("BPR-11: missing destination mapping → NO review; generic fallback, never an external CTA", noDest.review === null && (noDest.eng == null || noDest.eng.reviewDetails?.externalLink == null), `review=${noDest.review}`);
+  // ---- No unsafe/security claims + no frontend inference ----
+  add("BPR-12: copy never calls the position 'unsafe'/'insecure'/'failed' or makes a security claim", (() => { const blob = `${known.card!.title} ${known.card!.description} ${known.eng!.reviewDetails!.summary.reason}`.toLowerCase(); return !/unsafe|insecure|\bfailed\b|not secure|dangerous|risky|hack/.test(blob) && /has not yet passed wealthsmith's vetting/.test(blob); })(), "no security claims");
+  add("BPR-13: NO frontend inference — the modal component contains no protocol/product/destination literals (they come from bufferPositionReview)", (() => { const comp = readIfSrc("src/components/SuggestionReviewModal.tsx"); return !/Steakhouse|Allez|Sentora|Kamino Main Market|app\.kamino/.test(comp); })(), "no UI inference");
+  add("BPR-14: NO curator is hardcoded in the engine CODE — with comments stripped, the vetting module names NO curator (Steakhouse/Sentora/Allez/Gauntlet/…); it resolves them from the position", (() => { const mod = readIfSrc("src/suggestions/bufferPositionVetting.ts"); const code = mod.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, ""); return code.length > 0 && !/Steakhouse|Sentora|Allez|Gauntlet|RockawayX|MEV Capital/.test(code); })(), "curator-agnostic");
+  add("BPR-15: positions are identified by CANONICAL ADDRESS (vault/market/reserve), not display name — the review carries the canonical positionAddress", known.review != null && typeof known.review.positionAddress === "string" && known.review.positionAddress === "A11ezVau1t1111111111111111111111111111111111", `addr=${known.review?.positionAddress}`);
+  add("BPR-16: the review carries the resolved structured fields dynamically (product/curator/approval/destination)", known.review != null && known.review.type === "buffer_position_review" && known.review.reason === "buffer_position_not_vetted" && known.review.protocol === "Kamino" && known.review.product === "Allez USDC" && known.review.curator === "Allez Labs" && known.review.approvalStatus === "not_vetted" && known.review.approvedDestination === "Kamino Main Market" && known.review.detectionConfidence === "high", `product=${known.review?.product}`);
+  // ---- Real detection path: the production Steakhouse vault mapper now carries curatedLending → specific card ----
+  add("BPR-17: the REAL Steakhouse detection mapper populates curatedLending (canonical vault address + product) so a live wallet gets the specific card, not the generic fallback", (() => {
+    const record = stBuild({ totalShareRaw: "2000000000", recognizedUnderlyingRaw: "2000000000", vaultMaxInstantWithdrawableRaw: null, vaultGate: "permitted", reserveGate: "unresolved", vaultFresh: true, price: { usdcPriceUsd: 1, fresh: true }, apy: { valuePct: 3.63, fresh: true }, observedAt: "2026-07-15T00:00:00.000Z", sourceSlot: 1 });
+    const wp = stToWallet(record, { name: "Steakhouse USDC Vault" });
+    if (!wp) return false;
+    const priced = { ...wp, valueUsd: 2000, recognizedValueUsd: 2000 } as WalletPosition;
+    const r = run([usdc(1000), priced], 1000, 3);
+    return r.review != null && r.review.protocol === "Kamino" && typeof r.review.positionAddress === "string" && r.card!.title === "Review Your Safety Buffer USDC" && /on Kamino\./.test(r.card!.description);
+  })(), "real steakhouse mapper");
+  add("BPR-18: detection populates curatedLending in BOTH the Steakhouse builder AND the generic Kamino vault path (any curator)", (() => { const st = readIfSrc("src/wallet/steakhouseExistingPosition.ts"); const kv = readIfSrc("src/wallet/kaminoVaults.ts"); return /curatedLending:/.test(st) && /curatedLending:/.test(kv) && /vaultAddress: vaultAddress\.toString\(\)/.test(kv); })(), "detection wired");
+  // ---- Rail modal precedence: the plan-backed buffer contribution review shares the buffer id and must NOT shadow
+  //      the position-review modal. The rail drops it when a position review is present so the correct modal opens. ----
+  add("BPR-19: the buffer contribution plan reuses the buffer card id (top_up_buffer) — the collision the rail must resolve", (() => { const s = readIfSrc("src/suggestions/contributionPlanSuggestion.ts"); return /category: "buffer"[\s\S]*?id: BUFFER_SUGGESTION_ID/.test(s); })(), "id collision");
+  add("BPR-20: the rail suppresses the buffer contribution review when a position review is present, so the buffer card's own reviewDetails (Move Your Safety Buffer USDC) drives the modal — not the 'Directing $X from your next contribution' contribution modal", (() => { const s = readIfSrc("src/suggestions/useRailSuggestions.ts"); return /bufferPositionReview != null\)\s*delete contributionReviewById\[BUFFER_SUGGESTION_ID\]/.test(s) && /contributionReviewById,/.test(s); })(), "rail resolves precedence");
+  // ---- Review modal chrome: no Top Pick chip; Guardrails are a TESTING-ONLY diagnostic ----
+  add("BPR-21: the review modal renders NO 'Top Pick' badge (chip removed) and no isTopPick prop remains", (() => { const m = readIfSrc("src/components/SuggestionReviewModal.tsx"); return !/label="Top Pick"/.test(m) && !/isTopPick/.test(m) && !/review-modal__eyebrow/.test(m); })(), "no top pick chip");
+  add("BPR-22: Guardrails are gated behind showGuardrails; the /testing gallery passes it, Real Wallet + Demo (the rail) do NOT — so users never see the internal checklist", (() => { const m = readIfSrc("src/components/SuggestionReviewModal.tsx"); const rail = readIfSrc("src/components/RealWalletSuggestionsRail.tsx"); const testing = readIfSrc("src/pages/TestingPage.tsx"); return /showGuardrails && guardrailGroups\.length > 0/.test(m) && !/showGuardrails/.test(rail) && /showGuardrails/.test(testing); })(), "guardrails testing-only");
 
   return checks;
 }

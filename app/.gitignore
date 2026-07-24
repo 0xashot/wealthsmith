@@ -9,3 +9,4 @@ public/generated/sol-staking-market-cache.json
 # bundled into the deployed dist — but never committed. Only this file is ignored (not the whole generated dir).
 public/generated/market-conditions-cache.json
 public/generated/*.tmp
+dist-server/

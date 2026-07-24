@@ -15,6 +15,7 @@
  * Existing canonical coverage remains the single source of truth for identity + liquidity + interval state.
  */
 import type { SafetyBufferCoverage, SafetyBufferCoverageState } from "../wallet/safetyBufferCoverage";
+import type { BufferPositionReview } from "./bufferPositionVetting";
 import { MIN_SUGGESTION_AMOUNT_USD } from "./engineThresholds";
 
 export const SAFETY_BUFFER_ASSESSMENT_VERSION = "safety_buffer_assessment_1.0.0";
@@ -76,6 +77,11 @@ export interface SafetyBufferAssessmentInput {
   monthlyExpensesUsd: number | null;
   targetMonths: number | null;
   contributionPlan?: SafetyBufferContributionPlanInput | null;
+  /**
+   * The engine's confidently-identified unvetted USDC lending position (from `deriveBufferPositionReview`), computed
+   * upstream from the same positions the coverage was classified from. Echoed onto the assessment; null → generic state.
+   */
+  bufferPositionReview?: BufferPositionReview | null;
   generatedAt?: number;
   methodologyVersion?: string;
 }
@@ -134,6 +140,12 @@ export interface SafetyBufferAssessment {
   minimumReviewAmountUsd: number;
   // ---- Contribution context ----
   contribution: SafetyBufferContributionAssessment;
+  /**
+   * A detected USDC lending position that has NOT yet passed WealthSmith's Safety Buffer vetting (its USDC is already
+   * excluded from coverage above). Present ONLY when the engine can confidently identify the position + an approved
+   * destination; null otherwise (→ the generic "Verify Your Safety Buffer" state). The UI renders it deterministically.
+   */
+  bufferPositionReview: BufferPositionReview | null;
   // ---- Meta ----
   blockingReasons: string[];
   warnings: string[];
@@ -214,6 +226,8 @@ export function deriveSafetyBufferAssessment(input: SafetyBufferAssessmentInput)
     shortfallRangeUsd: null as SafetyBufferAssessment["shortfallRangeUsd"],
     targetGate,
     minimumReviewAmountUsd: minAmount,
+    // Passthrough of the engine's confidently-identified unvetted position (buffer-independent; already excluded above).
+    bufferPositionReview: input.bufferPositionReview ?? null,
     generatedAt,
     methodologyVersion,
   };

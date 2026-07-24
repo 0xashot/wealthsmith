@@ -32,7 +32,12 @@ import { runSuggestionEngine } from "./engine";
 import { deriveCompletenessGates, type PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
 import { computeSafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
 import { deriveSafetyBufferAssessment, type SafetyBufferContributionPlanInput } from "./safetyBufferAssessment";
-import { buildSafetyBufferCardFromAssessment } from "./bufferSuggestion";
+import { deriveBufferPositionReview } from "./bufferPositionVetting";
+import { buildSafetyBufferCardFromAssessment, BUFFER_SUGGESTION_ID } from "./bufferSuggestion";
+import { deriveRailSwapActions } from "./swapQuote/railSwapActions";
+import type { SwapActionReadiness } from "./swapQuote/swapQuoteContracts";
+import type { SwapQuoteFetcher } from "./swapQuote/swapQuoteClient";
+import type { ContributionPlanSuggestion } from "./contributionIntegrationTypes";
 import { deriveRebalanceAssessment, selectRebalanceUsdcSource, isRebalanceMaterial, isMaterialCryptoToStables, deriveNativeSolRebalanceSource, REBALANCE_NATIVE_SOL_RESERVE_POLICY, type RebalanceTargetState } from "./rebalanceAssessment";
 import type { CanonicalTargetAllocation } from "./canonicalTargetAllocation";
 import { buildRebalanceCardFromAssessment } from "./rebalanceSuggestion";
@@ -71,6 +76,18 @@ export interface RailSuggestionsData {
    * review modal renders these for a Stable Yield card; engine-owned, never recalculated in React.
    */
   stableYieldReviewById: Record<string, StableYieldReviewPresentation>;
+  /**
+   * Step 23C.1 — the exact, read-only `SwapActionReadiness` per card (Rebalance / Trim / eligible DCA), derived
+   * from the production assessments via the Step-23A boundary adapters. The Review modal passes it to the
+   * "Suggested route" section (fetched only when the modal opens). Cards with no swap have no entry. It NEVER
+   * changes the financial suggestion. Absent for callers that don't derive it.
+   */
+  swapActionById?: Record<string, SwapActionReadiness>;
+  /**
+   * Step 23C.1 — an optional injected quote fetcher. Demo supplies a DETERMINISTIC sanitized fetcher (no live
+   * providers); real wallet leaves it undefined so the modal uses the live `/api/swap-quote` client.
+   */
+  swapQuoteFetcher?: SwapQuoteFetcher;
   notice?: string;
   /** True when the engine produced at least one card. */
   available: boolean;
@@ -393,6 +410,8 @@ export function deriveRailSuggestions(args: {
     monthlyExpensesUsd,
     targetMonths: bufferTargetMonths,
     contributionPlan: bufferContributionPlan,
+    // Step 22 — a detected USDC lending position not yet vetted for Safety Buffer use (already excluded from coverage).
+    bufferPositionReview: pricedAsOf != null ? deriveBufferPositionReview(bufferCoverage, positions) : null,
     generatedAt: pricedAsOf ?? Date.now(),
   });
   const bufferOverride = {
@@ -501,11 +520,29 @@ export function deriveRailSuggestions(args: {
   // Step 22F (slice 6/7) — the safe market-display summary (canonical path; derived ONCE from the shared context).
   const marketSummary: RailMarketSummary | undefined =
     canonicalSummaryEligible && targetContext ? deriveRailMarketSummary(targetContext) : undefined;
+  // The plan-backed BUFFER contribution shares the buffer card's id (`top_up_buffer`) and is folded into the
+  // SafetyBufferAssessment, so it is never rendered as its own card. When the buffer surfaces the specific
+  // "unvetted USDC position" review, the authoritative modal is the buffer card's own reviewDetails ("Move Your
+  // Safety Buffer USDC"); the contribution review would otherwise SHADOW it (the rail resolves contribution reviews
+  // before reviewDetails), opening the wrong "Directing $X from your next contribution" modal. Drop it in that case.
+  const contributionReviewById = { ...contribution.reviewById };
+  if (safetyBufferAssessment.bufferPositionReview != null) delete contributionReviewById[BUFFER_SUGGESTION_ID];
+  // Step 23C.1 — exact quote-ready swap actions per card, derived ONLY through the Step-23A boundary adapters
+  // (no financial recalculation here). USDC funding uses the coverage's $1 basis; native SOL uses the fresh SOL
+  // price; the 0.1 SOL reserve is already enforced inside `nativeSolSource.technicallyAvailableLamports`.
+  const swapActionById = deriveRailSwapActions({
+    cards,
+    generatedAt: new Date(pricedAsOf ?? Date.now()).toISOString(),
+    rebalance: { assessment: rebalanceAssessment, usdcSource, nativeSolSource, usdcUnitPriceUsd: 1, solUnitPriceUsd: solPrice },
+    trimHoldings: trimAssessment.candidateHoldings,
+    contributionSuggestion: (contribution.suggestion as ContributionPlanSuggestion | null),
+  });
   return {
     cards,
     reviewDetailsById,
-    contributionReviewById: contribution.reviewById,
+    contributionReviewById,
     stableYieldReviewById: stableYield.reviewById,
+    swapActionById,
     notice: warningsToNotice(engineResult.warnings),
     available: cards.length > 0,
     directLendingSuppression,
@@ -541,7 +578,7 @@ export function useRailSuggestions(args: {
   const marketCache = useMarketConditionsCache();
   // `targetContext` is derived inside deriveRailSuggestions (available to Slices 3–5 + fixtures); the hook does not
   // read it yet — nothing consumes the canonical target in Slice 2, so it is intentionally not lifted to the page.
-  const { cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available, portfolioCompleteness, targetSummary, marketSummary } = deriveRailSuggestions({
+  const { cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, swapActionById, notice, available, portfolioCompleteness, targetSummary, marketSummary } = deriveRailSuggestions({
     positions,
     pricedAsOf,
     goal,
@@ -578,7 +615,7 @@ export function useRailSuggestions(args: {
     if (!onSuggestions) return;
     if (signature === lastSignature.current) return;
     lastSignature.current = signature;
-    onSuggestions({ cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, notice, available, loading, portfolioCompleteness, ...(targetSummary ? { targetSummary } : {}), ...(marketSummary ? { marketSummary } : {}) });
+    onSuggestions({ cards, reviewDetailsById, contributionReviewById, stableYieldReviewById, swapActionById, notice, available, loading, portfolioCompleteness, ...(targetSummary ? { targetSummary } : {}), ...(marketSummary ? { marketSummary } : {}) });
     // Signature gates the update; card objects are intentionally omitted from deps.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature, onSuggestions]);

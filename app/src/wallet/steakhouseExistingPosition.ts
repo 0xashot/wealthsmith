@@ -301,6 +301,15 @@ export function toSteakhouseWalletPosition(r: SteakhousePositionResult, opts: { 
     existingPositionOnly: true,
     dedupeKey: r.dedupeKey,
     candidateId: r.candidateId,
+    // Resolved identity for Safety Buffer vetting — canonical vault address + product/curator (this exact vault is the
+    // Steakhouse-curated Kamino market). The buffer vetting reads these dynamically; it never hardcodes a curator.
+    curatedLending: {
+      protocol: "Kamino",
+      productName: opts.name ?? "Steakhouse USDC Vault",
+      curator: "Steakhouse Financial",
+      vaultAddress: STEAKHOUSE_IDENTITY.vaultAddress,
+      detectionConfidence: "high",
+    },
   };
 }
 

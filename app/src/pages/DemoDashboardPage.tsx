@@ -26,6 +26,7 @@ import ProjectedGrowthChart from "../components/ProjectedGrowthChart";
 import AllocationChart from "../components/AllocationChart";
 import MarketConditionsSurface from "../components/MarketConditionsSurface";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
+import { demoSwapQuoteFetcher } from "../suggestions/swapQuote/demoSwapQuote";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 import { buildDemoExactSolStakingRail } from "../suggestions/demoExactSolStakingScenario";
 import { buildDemoContributionRail } from "../suggestions/demoContributionScenario";
@@ -148,19 +149,19 @@ export default function DemoDashboardPage({
             </div>
             {demoScenario === "sol_staking" ? (
               <RealWalletSuggestionsRail
-                rail={buildDemoExactSolStakingRail()}
+                rail={{ ...buildDemoExactSolStakingRail(), swapQuoteFetcher: demoSwapQuoteFetcher }}
                 railLabel={d.accessibility.right_rail_label}
               />
             ) : demoScenario === "stable_yield" ? (
               <RealWalletSuggestionsRail
-                rail={demoStableYieldRail}
+                rail={{ ...demoStableYieldRail, swapQuoteFetcher: demoSwapQuoteFetcher }}
                 railLabel={d.accessibility.right_rail_label}
               />
             ) : (
               // Step 15H — the default Demo now runs the shared contribution engine (buffer-first),
               // rendered through the shared rail/card/modal. Buffer override → one buffer card.
               <RealWalletSuggestionsRail
-                rail={demoContributionRail}
+                rail={{ ...demoContributionRail, swapQuoteFetcher: demoSwapQuoteFetcher }}
                 railLabel={d.accessibility.right_rail_label}
               />
             )}
