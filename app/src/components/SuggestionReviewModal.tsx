@@ -11,7 +11,7 @@
  * Reuses the shared `.modal` / `.modal-scrim` pattern (see ConnectWalletModal)
  * for consistent dialog semantics, focus handling, and theming.
  */
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import ButtonIcon from "./ButtonIcon";
 import Badge from "./Badge";
 import SolStakingLeaderExplanation from "./SolStakingLeaderExplanation";
@@ -27,6 +27,7 @@ import type { ContributionPlanReviewDetails } from "../suggestions/contributionP
 import type { StableYieldReviewPresentation } from "../suggestions/yieldStrategyPlanPresentationTypes";
 import type { SwapActionReadiness, SwapQuoteComparisonAssessment } from "../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapQuoteFetcher } from "../suggestions/swapQuote/swapQuoteClient";
+import type { SwapHandoff } from "../suggestions/swapQuote/providerSwapLinks";
 import SwapQuoteComparisonSection from "./swapQuote/SwapQuoteComparisonSection";
 
 interface Props {
@@ -103,6 +104,57 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const reasonId = useId();
+  // 23C.2 — the read-only handoff reported by the "Suggested route" section drives the sticky "Swap on <provider>"
+  // footer (a link out only; WealthSmith prepares/signs/submits nothing). Null when there is no selected route.
+  const [swapHandoff, setSwapHandoff] = useState<SwapHandoff | null>(null);
+
+  // The read-only "Suggested route" section (Rebalance / Trim / eligible DCA), reused across modal variants.
+  const swapSection = swapAction ? (
+    <SwapQuoteComparisonSection
+      readiness={swapAction}
+      enabled
+      isDca={swapQuoteIsDca}
+      fetcher={swapQuoteFetcher}
+      presetAssessments={swapQuotePresetAssessments}
+      presetLoading={swapQuotePresetLoading}
+      nowMs={swapQuoteNowMs}
+      onHandoff={setSwapHandoff}
+    />
+  ) : null;
+
+  // The sticky "Swap on <provider>" footer — READ-ONLY handoff to the provider's own swap page in a new tab.
+  const swapFooter = swapHandoff ? (
+    <div className="review-modal__footer review-modal__footer--actions">
+      <button type="button" className="review-modal__tertiary-action" onClick={onClose}>Cancel</button>
+      <a
+        className="review-modal__primary-action"
+        href={swapHandoff.swapUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Swap on ${swapHandoff.providerName}. Opens ${swapHandoff.providerName} in a new tab. No transaction is prepared.`}
+      >
+        <span>Swap on {swapHandoff.providerName}</span>
+        <ButtonIcon src={externalLinkUrl} />
+      </a>
+    </div>
+  ) : null;
+
+  // 23C.2 — a read-only external-link footer (Cancel + provider handoff, e.g. "Buy SOL on Moonpay" for a future
+  // DCA). Opens the provider's page in a new tab; WealthSmith prepares nothing.
+  const externalLinkFooter = (link: { label: string; url: string; ctaLabel?: string; secondaryLabel?: string; opensInNewTab?: boolean } | undefined | null) => link ? (
+    <div className="review-modal__footer review-modal__footer--actions">
+      <button type="button" className="review-modal__tertiary-action" onClick={onClose}>{link.secondaryLabel ?? "Cancel"}</button>
+      <a
+        className="review-modal__primary-action"
+        href={link.url}
+        {...(link.opensInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+        aria-label={`${link.ctaLabel ?? link.label}. Opens the provider page in a new tab. No transaction is prepared.`}
+      >
+        <span>{link.ctaLabel ?? link.label}</span>
+        <ButtonIcon src={externalLinkUrl} />
+      </a>
+    </div>
+  ) : null;
 
   // Focus the close button on open; restore focus + unlock scroll on close.
   useEffect(() => {
@@ -301,18 +353,11 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             )}
 
             {/* Step 23C — read-only "Suggested route" for an eligible funded DCA (contribution) review. */}
-            {swapAction && (
-              <SwapQuoteComparisonSection
-                readiness={swapAction}
-                enabled
-                isDca={swapQuoteIsDca}
-                fetcher={swapQuoteFetcher}
-                presetAssessments={swapQuotePresetAssessments}
-                presetLoading={swapQuotePresetLoading}
-                nowMs={swapQuoteNowMs}
-              />
-            )}
+            {swapSection}
           </div>
+          {/* Funded DCA → the live "Swap on <provider>" handoff; a future DCA with no on-chain source → its
+              read-only Moonpay handoff ("Buy SOL on Moonpay"). Mutually exclusive by construction. */}
+          {swapFooter ?? externalLinkFooter(contributionReview.externalLink)}
         </div>
       </div>
     );
@@ -710,17 +755,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
 
           {/* Step 23C — read-only "Suggested route" comparison (Rebalance / Trim / eligible DCA). Supplemental
               execution information only; it never changes the financial suggestion and prepares no transaction. */}
-          {swapAction && (
-            <SwapQuoteComparisonSection
-              readiness={swapAction}
-              enabled
-              isDca={swapQuoteIsDca}
-              fetcher={swapQuoteFetcher}
-              presetAssessments={swapQuotePresetAssessments}
-              presetLoading={swapQuotePresetLoading}
-              nowMs={swapQuoteNowMs}
-            />
-          )}
+          {swapSection}
         </div>
         {/* Sticky footer — shown only when a read-only protocol link is available. Cancel closes the modal;
             the primary button opens the protocol's own page in a new tab (no in-app transaction/signature). */}
@@ -740,6 +775,8 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </a>
           </div>
         )}
+        {/* 23C.2 — read-only "Swap on <provider>" handoff footer (Rebalance / Trim; DCA uses its own branch). */}
+        {swapFooter}
       </div>
     </div>
   );

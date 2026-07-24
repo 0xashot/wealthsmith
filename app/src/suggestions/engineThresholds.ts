@@ -64,11 +64,8 @@ export const TRIM_SMALL_POSITION_COUNT_THRESHOLD = 3;
 /** A non-core token at/below this value counts as a "small" position. */
 export const TRIM_SMALL_POSITION_MAX_USD = 50;
 
-/* Capital efficiency (idle liquid wallet crypto not covered by other rules). */
-/** Aggregate idle-asset value below this is too small to flag. */
-export const MIN_CAPITAL_EFFICIENCY_SUGGESTION_USD = 100;
-/** Idle assets below this share of the priced portfolio are not flagged. */
-export const CAPITAL_EFFICIENCY_PORTFOLIO_SHARE_THRESHOLD = 0.02;
+/* Step 24A — the Capital Efficiency (generic "Review Idle Assets") thresholds were REMOVED with the
+ * retired rule. JUP staking reuses the approved staking-category minimum (MIN_STAKING_SUGGESTION_USD). */
 
 /* Position optimization (review of existing staked/yield/protocol positions). */
 /** A deployed position below this value is too small to flag for review. */

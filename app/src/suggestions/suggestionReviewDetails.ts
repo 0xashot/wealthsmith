@@ -65,6 +65,15 @@ const GUARDRAIL_LABELS: Record<GuardrailCode, string> = {
   cost_available: "Route cost",
   liquidity_available: "Liquidity depth",
   slippage_available: "Slippage",
+  // Step 24A — JUP staking exact-identity + governed-product checks.
+  asset_identity: "Exact asset identity",
+  direct_wallet_availability: "Direct-wallet availability",
+  transferable_balance: "Transferable balance",
+  protocol_approval: "Protocol approval",
+  product_availability: "Product availability",
+  reward_terms: "Current reward terms",
+  unstaking_terms: "Unstaking terms available",
+  asset_conflict: "Asset-level conflicts cleared",
 };
 
 /** Engine category → short drawer category label. */

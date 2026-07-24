@@ -5,12 +5,18 @@
  * requests the sanitized comparison only when the modal is open, and renders the honest state. It never mounts a
  * platform on the card face, never prepares/executes a transaction, and never changes the financial suggestion.
  *
+ * 23C.2 — when a single-leg ELIGIBLE route is selected, it reports a READ-ONLY handoff (selected provider + swap
+ * page URL) up to the modal via `onHandoff`, which renders the sticky "Swap on <provider>" footer. Multi-leg
+ * routes report no handoff (no single platform for a multi-leg plan). The handoff is a link out only.
+ *
  * Data source is pluggable: real client by default; the /testing gallery passes `presetAssessments` (or a preset
  * status) so gallery cases are deterministic and never call live providers.
  */
+import { useEffect } from "react";
 import type { SwapActionReadiness, SwapActionContext, SwapQuoteComparisonAssessment } from "../../suggestions/swapQuote/swapQuoteContracts";
 import { presentSwapQuote, notReadyView, notRequiredView, unavailableView, isEligibleResultKind, type QuoteView } from "../../suggestions/swapQuote/quotePresentation";
 import type { SwapQuoteFetcher } from "../../suggestions/swapQuote/swapQuoteClient";
+import { buildSwapHandoff, type SwapHandoff } from "../../suggestions/swapQuote/providerSwapLinks";
 import { useSwapQuoteComparison } from "./useSwapQuoteComparison";
 import SwapQuoteLoadingState from "./SwapQuoteLoadingState";
 import SwapQuoteSelectedState from "./SwapQuoteSelectedState";
@@ -38,42 +44,56 @@ export interface SwapQuoteComparisonSectionProps {
   /** Deterministic gallery override: force loading. */
   presetLoading?: boolean;
   nowMs?: number;
+  /** 23C.2 — reports the read-only handoff for the modal's sticky "Swap on <provider>" footer (null = none). */
+  onHandoff?: (handoff: SwapHandoff | null) => void;
 }
 
 export default function SwapQuoteComparisonSection(props: SwapQuoteComparisonSectionProps) {
-  const { readiness, enabled, isDca } = props;
+  const { readiness, enabled, isDca, onHandoff } = props;
   const legs: SwapActionContext[] = readiness.status === "ready" ? readiness.legs : [];
   const multiLeg = legs.length > 1;
+  const usePreset = props.presetAssessments != null || props.presetLoading === true;
 
   // Always call the hook (stable order); it no-ops when disabled / no legs (e.g. presets or not-ready).
-  const usePreset = props.presetAssessments != null || props.presetLoading === true;
   const { phase, legResults, refresh } = useSwapQuoteComparison(legs, { enabled: enabled && readiness.status === "ready" && !usePreset, slippageBps: props.slippageBps, fetcher: props.fetcher });
 
-  // Not-ready / not-required are decided by the boundary adapter — no request is made.
+  // Resolve the single-leg assessment (preset or live) for the handoff + render.
+  const singleLeg = !multiLeg ? legs[0] : undefined;
+  const singleAssessment: SwapQuoteComparisonAssessment | null = singleLeg
+    ? (usePreset ? (props.presetAssessments?.[singleLeg.legId] ?? null) : (legResults[0]?.result.ok ? legResults[0].result.assessment : null))
+    : null;
+  const singleView = singleAssessment ? presentSwapQuote(singleAssessment, { nowMs: props.nowMs }) : null;
+
+  // READ-ONLY handoff — only for a single-leg ELIGIBLE selected route (multi-leg → no single platform button).
+  const handoff: SwapHandoff | null = singleLeg && singleView && isEligibleResultKind(singleView.kind) && singleView.selectedProviderId
+    ? buildSwapHandoff(singleView.selectedProviderId, singleLeg.inputAsset.mint, singleLeg.outputAsset.mint, singleLeg.inputAmountTokens)
+    : null;
+  const handoffKey = handoff ? `${handoff.providerId}|${handoff.swapUrl}` : null;
+  useEffect(() => {
+    onHandoff?.(handoff);
+    return () => onHandoff?.(null); // clear on close / action change / unmount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoffKey]);
+
+  // ---- render ----
   if (readiness.status === "not_ready_for_quote") return renderView(notReadyView(isDca));
   if (readiness.status === "not_required") return renderView(notRequiredView());
 
-  // Deterministic gallery preset.
   if (usePreset) {
     if (props.presetLoading) return <SwapQuoteLoadingState />;
-    const presets = props.presetAssessments ?? {};
-    if (multiLeg) return <SwapPlanQuoteSummary legs={legs} assessments={presets} nowMs={props.nowMs} />;
-    const a = presets[legs[0]?.legId];
-    return a ? renderView(presentSwapQuote(a, { nowMs: props.nowMs }), refresh) : renderView(unavailableView(), refresh);
+    if (multiLeg) return <SwapPlanQuoteSummary legs={legs} assessments={props.presetAssessments ?? {}} nowMs={props.nowMs} />;
+    return singleView ? renderView(singleView, refresh) : renderView(unavailableView(), refresh);
   }
 
   if (phase === "idle" || phase === "loading") return <SwapQuoteLoadingState />;
 
-  // Multi-leg: summarize per leg (earliest expiry, unresolved legs preserved).
   if (multiLeg) {
     const assessments: Record<string, SwapQuoteComparisonAssessment> = {};
     for (const lr of legResults) if (lr.result.ok) assessments[lr.legId] = lr.result.assessment;
     return <SwapPlanQuoteSummary legs={legs} assessments={assessments} onRefresh={refresh} nowMs={props.nowMs} />;
   }
 
-  // Single leg.
   const lr = legResults[0];
-  if (!lr) return renderView(unavailableView(), refresh);
-  if (!lr.result.ok) return renderView(unavailableView(), refresh);
-  return renderView(presentSwapQuote(lr.result.assessment, { nowMs: props.nowMs }), refresh);
+  if (!lr || !lr.result.ok) return renderView(unavailableView(), refresh);
+  return singleView ? renderView(singleView, refresh) : renderView(unavailableView(), refresh);
 }

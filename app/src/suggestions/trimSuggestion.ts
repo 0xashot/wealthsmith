@@ -121,10 +121,18 @@ export function buildTrimCardFromAssessment(assessment: TrimAssessment, generate
     ...(hasSmall ? [{ label: "Small positions", formula: SUGGESTION_TRIM_EXPLAIN_SMALL, currentValue: smallCount, targetValue: assessment.smallCandidateCombinedValueUsd, unit: "count" }] : []),
   ];
 
+  // 23C.2 — direct card line. Exact single-asset form when only one non-core asset is in scope; otherwise the
+  // generic "assets" form. Destination is USDC (the Trim destination). Read-only: the CTA stays "Review".
+  const trimAmountUsd = Math.round(total).toLocaleString("en-US");
+  const trimImpactText = assessment.candidateHoldings.length === 1
+    ? `Swap $${trimAmountUsd} of ${assessment.candidateHoldings[0].symbol} to USDC`
+    : `Swap $${trimAmountUsd} of assets to USDC`;
+
   const protocolSelection = notApplicableProtocolSelection("selection_not_required");
   const reviewDetails = buildReviewDetails({
     category: "trim",
     actionKind: "review_only",
+    title: "Reduce Long-Tail Assets", // 23C.2 — keep the modal title identical to the card
     guardrails,
     protocolSelection,
     reason,
@@ -139,11 +147,13 @@ export function buildTrimCardFromAssessment(assessment: TrimAssessment, generate
     category: "trim",
     reason_codes,
     title_key: "suggestion.trim.title",
+    titleOverride: "Reduce Long-Tail Assets",
     description_key: "suggestion.trim.description",
     action_kind: "review_only",
     is_actionable: true,
     is_top_pick: false, // set only by selectTopPick
     amount: { valueUsd: total, label: "Assets to review" },
+    impactTextOverride: trimImpactText,
     protocolSelection,
     reviewDetails,
     // Scoring methodology unchanged; the denominator is now the AUTHORITATIVE gross-asset value (not the legacy

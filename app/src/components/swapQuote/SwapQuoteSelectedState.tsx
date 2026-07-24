@@ -6,13 +6,24 @@
  */
 import type { QuoteView } from "../../suggestions/swapQuote/quotePresentation";
 import { VENUE_OVERLAP_NOTE } from "../../suggestions/swapQuote/quotePresentation";
+import { resolveProtocolIcon } from "../../state/iconRegistry";
 import SwapQuoteAlternatives from "./SwapQuoteAlternatives";
+
+/** The selected execution surface's approved logo (Jupiter / Raydium / Orca), or null → text-only fallback. */
+function providerLogo(providerId: QuoteView["selectedProviderId"]): string | null {
+  return providerId ? resolveProtocolIcon(`${providerId}.svg`) : null;
+}
 
 export default function SwapQuoteSelectedState({ view, headingOverride }: { view: QuoteView; headingOverride?: string }) {
   return (
     <section className="review-modal__section swap-quote__section" aria-label="Suggested route">
       <h3 className="review-modal__section-title">{headingOverride ?? view.heading}</h3>
-      {view.providerLabel && <p className="swap-quote__provider"><strong>{view.providerLabel}</strong></p>}
+      {view.providerLabel && (
+        <p className="swap-quote__provider">
+          {(() => { const logo = providerLogo(view.selectedProviderId); return logo ? <img className="swap-quote__provider-logo" src={logo} alt="" width={20} height={20} aria-hidden="true" /> : null; })()}
+          <strong>{view.providerLabel}</strong>
+        </p>
+      )}
       {view.body && <p className="modal__intro">{view.body}</p>}
 
       {view.metrics.length > 0 && (

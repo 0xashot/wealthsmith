@@ -211,35 +211,8 @@ const rebalance: TestingFixture = {
   },
 };
 
-const capitalEfficiency: TestingFixture = {
-  id: "testing_capital_efficiency",
-  categoryLabel: "Capital Efficiency",
-  group: "Review",
-  label: TESTING_PREVIEW_NOT_LIVE,
-  card: buildCard({
-    id: "testing_capital_efficiency",
-    title: "Review Idle Assets",
-    type: "review_idle_assets",
-    category: "capital_efficiency",
-    description: "Some assets may not be contributing to your plan.",
-    impact_text: "Idle assets: $420",
-    severity: "info",
-  }),
-  details: {
-    summary: { title: "Review Idle Assets", reason: "Some non-core assets are sitting idle and may deserve a review.", categoryLabel: "Capital Efficiency" },
-    metrics: [{ label: "Idle assets value", value: 420, kind: "amount_usd", unit: "USD" }],
-    involvedAssets: [
-      { symbol: "BONK", valueUsd: 240, role: "idle_asset" },
-      { symbol: "WIF", valueUsd: 180, role: "idle_asset" },
-    ],
-    involvedPositions: [],
-    calculations: [],
-    guardrailSummary: { checked: ["Idle asset threshold", "Pricing availability"], notEvaluated: [], notApplicable: ["Protocol selection"] },
-    limitations: [REVIEW_ONLY_LIMITATION],
-    safetyNotes: REVIEW_ONLY_NOTES,
-    demoLabel: TESTING_PREVIEW_NOT_LIVE,
-  },
-};
+// Step 24A — the hand-built generic Capital Efficiency idle-assets testing card was REMOVED (that
+// suggestion is retired). No idle-assets testing card remains.
 
 // Step 19C — the hand-built `testing_trim` card was REPLACED by the production-derived Trim gallery
 // (trimTestingFixtures.ts → deriveTrimAssessment + buildTrimCardFromAssessment, rendered on TestingPage via
@@ -482,7 +455,6 @@ const infBlockedCandidate: TestingFixture = {
 
 const ALL_FIXTURES: TestingFixture[] = [
   rebalance,
-  capitalEfficiency,
   staking,
   stableYield,
   dca,

@@ -3858,8 +3858,17 @@
 }
 .swap-quote__provider {
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
   font: var(--typography-body-md-font);
   color: var(--color-text-primary);
+}
+.swap-quote__provider-logo {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-control-sm);
 }
 .swap-quote__alternatives > summary {
   cursor: pointer;

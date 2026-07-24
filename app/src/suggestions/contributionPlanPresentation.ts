@@ -56,7 +56,7 @@ export function buildContributionPlanCardPresentation(d: ContributionPlanSuggest
     const description = d.amountKind === "exact"
       ? `Your stablecoin allocation is ${gap} percentage points below target. Direct your next ${freq} contribution to ${token} to move closer to target.`
       : `Your stablecoin allocation is ${gap} percentage points below target. Direct your next ${freq} contribution of ${amtSingle} to ${token}.`;
-    return { title, description, tag: "Allocation", impactText: `Direct ${amtSingle} to ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
+    return { title, description, tag: "Allocation", impactText: `Add ${amtSingle} of ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
   }
 
   if (d.planKind === "recurring_dca") {
@@ -66,12 +66,12 @@ export function buildContributionPlanCardPresentation(d: ContributionPlanSuggest
       : d.amountKind === "exact"
         ? `${token} is ${gap} percentage points below target. Direct your next ${freq} contribution to ${token} to build the position gradually.`
         : `${token} is ${gap} percentage points below target. Direct your next ${freq} contribution of ${amtSingle} to ${token}.`;
-    return { title, description, tag: "DCA", impactText: `Direct ${amtSingle} to ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
+    return { title, description, tag: "DCA", impactText: `Add ${amtSingle} of ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
   }
 
   // staged_excess_usdc_dca
   const src = d.sourceAssetSymbol ?? "USDC";
   const title = `Move ${src} Into ${token}`;
   const description = `${token} is ${gap} percentage points below target. Gradually move ${amtCompact} of liquid USDC above your Safety Buffer into ${token} across four steps.`;
-  return { title, description, tag: "DCA", impactText: `Move ${amtCompact} into ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
+  return { title, description, tag: "DCA", impactText: `Swap ${amtCompact} of ${src} to ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
 }

@@ -16,8 +16,8 @@ import type {
   SuggestionReasonCode,
   EngineSuggestion,
 } from "./engineTypes";
-import { deriveCapitalEfficiencySuggestion } from "./capitalEfficiencySuggestion";
 import { deriveStakingSuggestion } from "./stakingSuggestion";
+import { deriveJupStakingSuggestion } from "./jupStakingSuggestion";
 import { deriveStableYieldSuggestion } from "./stableYieldSuggestion";
 import { buildOnTrackCardsFromAssessment } from "./onTrackSuggestion";
 import { deriveOnTrackAssessment, type OnTrackMaterialSignal } from "./onTrackAssessment";
@@ -151,9 +151,11 @@ export function runSuggestionEngine(
     const rebalance = rebalanceOverride?.card ?? null;
     const rebalanceApplies = rebalanceOverride?.material ?? false;
     if (rebalance) candidates.push(rebalance);
-    // Capital Efficiency ranks above Staking/Stable Yield; may coexist with all.
-    const capitalEfficiency = deriveCapitalEfficiencySuggestion(inputs, generatedAt);
-    if (capitalEfficiency) candidates.push(capitalEfficiency);
+    // Step 24A — the generic "Review Idle Assets" Capital Efficiency candidate was RETIRED here. It
+    // aggregated unrelated wallet tokens (BONK/WIF/JUP) into one actionless card with swap-route
+    // guardrails, and is no longer approved. Meme/long-tail assets are owned by Trim; JUP by the new
+    // dedicated JUP Staking branch (below, in the Staking category); yield-bearing assets are already
+    // earning. No compatibility wrapper is left behind (productAssetOwnership.ts governs ownership).
     // Step 19C/19D — the ONE authoritative Trim result comes exclusively from the canonical TrimAssessment via
     // `trimOverride` (built by `buildTrimCardFromAssessment` behind the SAME `trim_long_tail_assets` contract).
     // Its OWN Trim-specific gates already applied; the obsolete Rebalance-copied Trim completeness gate was
@@ -166,6 +168,12 @@ export function runSuggestionEngine(
     // only — never enables staking. Keyed on the material NEED, independent of Rebalance-card presence.
     const staking = deriveStakingSuggestion(inputs, generatedAt);
     if (staking && allows("staking") && rebalanceOverride?.materialCryptoToStables !== true) candidates.push(staking);
+    // Step 24A — the dedicated JUP Staking card (Staking category, SEPARATE card from SOL — never
+    // aggregated). One card per eligible asset; it may select a different protocol/product (Jupiter). It
+    // shares the Staking category's global gates (completeness + crypto→stables suppression) but never
+    // enters the SOL candidate selector; JUP and JupSOL stay distinct identities.
+    const jupStaking = deriveJupStakingSuggestion(inputs, generatedAt);
+    if (jupStaking && allows("staking") && rebalanceOverride?.materialCryptoToStables !== true) candidates.push(jupStaking);
     // Stable Yield and DCA only when Rebalance does not apply. 18C: keyed on MATERIAL Rebalance NEED
     // (rebalanceApplies), not card presence — so crypto_to_stables (or insufficient-USDC) material drift
     // still suppresses conflicting deployment even when no Rebalance card can safely be shown.

@@ -17,6 +17,7 @@
 import type { WalletPosition } from "../wallet/walletPosition";
 import { TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "../wallet/walletPosition";
 import { classifyPositionClass, type PortfolioCompletenessResult, computePortfolioCompleteness } from "../wallet/portfolioCompleteness";
+import { resolveAssetOwner } from "./productAssetOwnership";
 import { computeSafetyBufferCoverage, type SafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
 import { derivePortfolioAssetAccounting } from "../wallet/portfolioAssetAccounting";
 import {
@@ -245,7 +246,12 @@ export function deriveTrimAssessment(input: TrimInput): TrimAssessment {
     const exclusionReasons: string[] = [];
     const unresolvedReasons: string[] = [];
     let reviewEligibilityState: TrimReviewEligibilityState;
+    // Step 24A — an asset with a dedicated non-Trim product owner (e.g. JUP → jup_staking) is out of Trim's
+    // non-core SCOPE by exact identity, so a newly-recognized JUP holding never leaks into Trim. Meme/long-tail
+    // assets (trim_only) and unknown/unsupported assets are unaffected — Trim's existing behavior is preserved.
+    const productOwner = resolveAssetOwner(mint ?? undefined, first.tokenProgram);
     if (core) { reviewEligibilityState = "excluded_core"; exclusionReasons.push(`canonical core asset (${core.assetId}) by exact mint + program`); }
+    else if (productOwner === "jup_staking") { reviewEligibilityState = "excluded_scope"; exclusionReasons.push(`owned by the ${productOwner} product (out of Trim scope) by exact mint + program`); }
     else if (dedupeInvalid) { reviewEligibilityState = "duplicate_invalid"; unresolvedReasons.push("duplicate economic identity"); }
     else if (identityUnresolved) { reviewEligibilityState = "unresolved_identity"; unresolvedReasons.push("token identity unresolved (unknown mint/registry)"); }
     else if (recognizedValueUsd === null) { reviewEligibilityState = "unresolved_value"; unresolvedReasons.push("no fresh recognized market value"); }
@@ -281,7 +287,7 @@ export function deriveTrimAssessment(input: TrimInput): TrimAssessment {
       methodologyVersion: holdingMethodology,
     };
 
-    if (reviewEligibilityState === "excluded_core") excludedHoldings.push(holding);
+    if (reviewEligibilityState === "excluded_core" || reviewEligibilityState === "excluded_scope") excludedHoldings.push(holding);
     else if (reviewEligibilityState === "eligible") candidateHoldings.push(holding);
     else unresolvedHoldings.push(holding);
   }

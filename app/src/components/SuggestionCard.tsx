@@ -29,6 +29,7 @@ import listFilterUrl from "../../../assets/icons/ui/list-filter.svg";
 import trendingUpUrl from "../../../assets/icons/ui/trending-up.svg";
 import calendarSyncUrl from "../../../assets/icons/ui/calendar-sync.svg";
 import slidersHorizontalUrl from "../../../assets/icons/ui/sliders-horizontal.svg";
+import trimUrl from "../../../assets/icons/ui/trim.svg";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
 import hubbleUrl from "../../../assets/icons/protocol/hubble.svg";
 import jitoUrl from "../../../assets/icons/protocol/jito.svg";
@@ -79,6 +80,7 @@ const GENERIC_ICONS_BY_CATEGORY: Record<string, string> = {
  * (Position Optimization and Trim are both "portfolio_health") but should show different icons.
  */
 const GENERIC_ICONS_BY_TYPE: Record<string, string> = {
+  trim_long_tail: trimUrl, // Trim (shares the "portfolio_health" category with Position Optimization)
   review_yield_strategy: slidersHorizontalUrl, // Position Optimization
   // On Track multi-card set: goal check / expense benchmark / safety buffer status.
   on_track_goal_check: goalUrl,

@@ -17,6 +17,8 @@ export interface QuoteAlternative { provider: SwapProviderId; providerName: stri
 export interface QuoteView {
   kind: QuoteViewKind;
   heading: string;
+  /** The selected execution surface (provider) id, for the logo + accessible name. Null when no route selected. */
+  selectedProviderId: SwapProviderId | null;
   providerLabel: string | null;
   body: string | null;
   disclosure: string | null;
@@ -110,7 +112,7 @@ export function presentSwapQuote(a: SwapQuoteComparisonAssessment, opts: Present
   const eligibleCount = a.candidates.filter((c) => c.eligible).length;
   const selName = a.selectedProviderId ? SWAP_PROVIDER_NAME[a.selectedProviderId] : null;
   const selectedVenues = (a.candidates.find((c) => c.providerId === a.selectedProviderId)?.underlyingVenues) ?? [];
-  const base = { comparedProviderNames, unavailableProviderNames, alternatives, liquidityProxyNote: LIQUIDITY_PROXY_NOTE, incompleteComparison: false, selectedVenues, venueOverlap: hasVenueOverlap(a) };
+  const base = { selectedProviderId: a.selectedProviderId, comparedProviderNames, unavailableProviderNames, alternatives, liquidityProxyNote: LIQUIDITY_PROXY_NOTE, incompleteComparison: false, selectedVenues, venueOverlap: hasVenueOverlap(a) };
 
   if (opts.expired || (a.expiresAt != null && Date.parse(a.expiresAt) <= nowMs && (a.status === "selected" || a.status === "partial_comparison" || a.status === "only_route_available"))) {
     return { kind: "expired", heading: "Route comparison is unavailable right now", providerLabel: null, body: "Your financial suggestion is unchanged. You can try the comparison again later.", disclosure: null, metrics: [], showRefresh: true, ...base };
@@ -151,7 +153,7 @@ export const LOADING_VIEW: Pick<QuoteView, "kind" | "heading" | "body" | "disclo
   disclosure: "No transaction is being prepared.",
 };
 
-const EMPTY_VIEW_BASE = { providerLabel: null, metrics: [] as QuoteMetric[], comparedProviderNames: [] as string[], unavailableProviderNames: [] as string[], alternatives: [] as QuoteAlternative[], liquidityProxyNote: null, incompleteComparison: false, selectedVenues: [] as string[], venueOverlap: false };
+const EMPTY_VIEW_BASE = { selectedProviderId: null, providerLabel: null, metrics: [] as QuoteMetric[], comparedProviderNames: [] as string[], unavailableProviderNames: [] as string[], alternatives: [] as QuoteAlternative[], liquidityProxyNote: null, incompleteComparison: false, selectedVenues: [] as string[], venueOverlap: false };
 
 /** The not-ready view (exact action identity unavailable). DCA gets the funded-contribution-specific copy. */
 export function notReadyView(isDca = false): QuoteView {

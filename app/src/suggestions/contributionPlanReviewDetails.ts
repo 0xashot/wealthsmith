@@ -6,6 +6,7 @@
  */
 import { formatUsd } from "../wallet/walletSummary";
 import type { ContributionPlanSuggestionData } from "./contributionIntegrationTypes";
+import type { ReviewExternalLink } from "./engineTypes";
 
 export const CONTRIBUTION_PLAN_REVIEW_DETAILS_EXISTS = true;
 export const CONTRIBUTION_PLAN_READ_ONLY_NOTICE = "Read-only plan. WealthSmith does not move funds or request a signature. You choose whether to continue in your wallet or another app.";
@@ -39,6 +40,11 @@ export interface ContributionPlanReviewDetails {
   fundingSection: { title: "Funding source"; rows: ReviewRow[] };
   alternativeSourceSection?: { title: "Another eligible source"; rows: ReviewRow[] };
   unallocatedSection?: { title: "Not allocated by this plan"; rows: ReviewRow[] };
+  /**
+   * 23C.2 — optional read-only external handoff footer (e.g. "Buy SOL on Moonpay" for a future recurring DCA that
+   * has no on-chain funding source yet). Opens the provider's own page in a new tab; WealthSmith prepares nothing.
+   */
+  externalLink?: ReviewExternalLink;
   readOnlyNotice: string;
   closeLabel: "Close";
   executionControlsPresent: false;
@@ -124,6 +130,9 @@ export function buildContributionPlanReviewDetails(d: ContributionPlanSuggestion
     details.allocationSection = { title: "Allocation impact", rows: allocationRows() };
     details.cadenceSection = { title: "Cadence", rows: [{ label: "Cadence", value: d.contributionFrequencyId === "occasional" ? "Occasional (entered amount)" : FREQ_LABEL[d.contributionFrequencyId ?? ""] ?? "—" }, { label: "Structure", value: "The contribution cadence is the gradual structure" }] };
     details.safetyBufferSection = { title: "Safety Buffer", rows: [{ label: "Status", value: "Covered — not reduced by this plan" }] };
+    // 23C.2 — this is a FUTURE contribution with no on-chain source yet (no swap route). Offer a read-only Moonpay
+    // handoff to acquire the target directly (opens Moonpay in a new tab; WealthSmith prepares no transaction).
+    details.externalLink = { label: "Moonpay", url: `https://www.moonpay.com/buy/${token.toLowerCase()}`, ctaLabel: `Buy ${token} on Moonpay`, secondaryLabel: "Cancel", opensInNewTab: true };
   } else {
     details.title = `Move ${d.sourceAssetSymbol ?? "USDC"} Into ${token}`;
     details.summaryRows = [{ label: "Source", value: d.sourceAssetSymbol ?? "USDC" }, { label: "Target", value: token }, { label: "Total staged amount", value: amt }, { label: "Timing", value: "Available now" }, { label: "Steps", value: `${d.steps.length}` }, { label: "Period", value: `${d.durationDays ?? 14}-day relative period` }];

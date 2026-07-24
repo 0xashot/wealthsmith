@@ -271,6 +271,16 @@ export const SUGGESTION_STAKING_DESCRIPTION =
 export const SUGGESTION_STAKING_SELECTED_TITLE = "Stake SOL on {protocol}";
 export const SUGGESTION_STAKING_SELECTED_DESCRIPTION =
   "You have liquid SOL that could earn staking rewards through {protocol}.";
+/* Step 24A — dedicated JUP Staking suggestion (Staking category, separate card from SOL staking). Read-only
+ * review; no fixed-return promise, no external execution CTA. `{amount}` is the formatted transferable JUP. */
+export const SUGGESTION_JUP_STAKING_TITLE = "Stake Your JUP";
+export const SUGGESTION_JUP_STAKING_DESCRIPTION =
+  "Your JUP is currently unstaked and eligible for Jupiter staking rewards.";
+export const SUGGESTION_JUP_STAKING_ACTION = "Stake {amount} JUP";
+export const SUGGESTION_JUP_STAKING_REWARDS_VARIABLE =
+  "Rewards are variable and depend on the current Jupiter staking program.";
+export const SUGGESTION_JUP_STAKING_WHY_JUPITER =
+  "Jupiter is the only approved JUP staking product currently supported by WealthSmith.";
 export const SUGGESTION_STABLE_YIELD_TITLE = "Put Stablecoins to Work";
 export const SUGGESTION_STABLE_YIELD_DESCRIPTION =
   "You have liquid stablecoins that may be eligible for conservative yield options while still supporting your Safety Buffer.";
@@ -357,6 +367,9 @@ export const SUGGESTION_COPY: Record<string, string> = {
   "suggestion.capital_efficiency.description": SUGGESTION_CAPITAL_EFFICIENCY_DESCRIPTION,
   "suggestion.staking.title": SUGGESTION_STAKING_TITLE,
   "suggestion.staking.description": SUGGESTION_STAKING_DESCRIPTION,
+  // Step 24A — dedicated JUP staking card (Staking category).
+  "suggestion.jup_staking.title": SUGGESTION_JUP_STAKING_TITLE,
+  "suggestion.jup_staking.description": SUGGESTION_JUP_STAKING_DESCRIPTION,
   "suggestion.stable_yield.title": SUGGESTION_STABLE_YIELD_TITLE,
   "suggestion.stable_yield.description": SUGGESTION_STABLE_YIELD_DESCRIPTION,
   "suggestion.position_optimization.title": SUGGESTION_POSITION_OPTIMIZATION_TITLE,

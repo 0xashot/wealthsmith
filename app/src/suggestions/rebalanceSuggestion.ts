@@ -141,6 +141,8 @@ function buildStablesToCryptoCard(
     is_actionable: true,
     is_top_pick: false,
     amount: { valueUsd: suggestedAmountUsd, label: partial ? "Suggested partial rebalance" : "Suggested rebalance" },
+    // 23C.1 — direct, direction-aware card line (source → destination). Read-only: the CTA stays "Review".
+    impactTextOverride: `Swap $${Math.round(suggestedAmountUsd).toLocaleString("en-US")} of USDC to SOL`,
     from: { bucket: "stables" },
     to: { bucket: "crypto" },
     delta_percent: delta,
@@ -243,6 +245,8 @@ function buildCryptoToStablesCard(
     is_actionable: true,
     is_top_pick: false,
     amount: { valueUsd: suggestedAmountUsd, label: partial ? "Suggested partial rebalance" : "Suggested rebalance" },
+    // 23C.1 — direct, direction-aware card line (source → destination). Read-only: the CTA stays "Review".
+    impactTextOverride: `Swap $${Math.round(suggestedAmountUsd).toLocaleString("en-US")} of SOL to USDC`,
     from: { bucket: "crypto" },
     to: { bucket: "stables" },
     delta_percent: delta,

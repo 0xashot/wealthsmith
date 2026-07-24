@@ -21,7 +21,7 @@
 import { useMemo, useRef, useState } from "react";
 import SuggestionCard from "../components/SuggestionCard";
 import SuggestionReviewModal from "../components/SuggestionReviewModal";
-import SwapQuoteGalleryStates, { GALLERY_MODAL_PRESETS, GALLERY_NOW } from "./swapQuoteTestingFixtures";
+import { GALLERY_MODAL_PRESETS, GALLERY_NOW } from "./swapQuoteTestingFixtures";
 import type { SuggestionCardState } from "../types/dashboard";
 import { TESTING_PREVIEW_NOT_LIVE } from "./testingPageFixtures";
 import { runAllContributionTestingScenarios } from "../suggestions/contributionTestingScenarios";
@@ -33,14 +33,14 @@ import { getTrimTestingFixtures } from "./trimTestingFixtures";
 import { getPositionOptimizationTestingFixtures } from "./positionOptimizationTestingFixtures";
 import { getSafetyBufferTestingFixtures } from "./safetyBufferTestingFixtures";
 import { getOnTrackTestingFixtures } from "./onTrackTestingFixtures";
-import { getCapitalEfficiencyTestingFixtures, getStakingTestingFixtures } from "./capitalEfficiencyStakingTestingFixtures";
+import { getStakingTestingFixtures } from "./capitalEfficiencyStakingTestingFixtures";
 import "./testingPage.css";
 
-/** The nine suggestion categories, in the existing product order. */
+/** The mounted suggestion categories, in the existing product order. Step 24A — the generic Capital
+ * Efficiency tab was removed (no mounted "Review Idle Assets" suggestion remains). */
 const TABS = [
   { id: "safety_buffer", label: "Safety Buffer" },
   { id: "rebalance", label: "Rebalance" },
-  { id: "capital_efficiency", label: "Capital Efficiency" },
   { id: "trim", label: "Trim" },
   { id: "staking", label: "Staking" },
   { id: "stable_yield", label: "Stable Yield" },
@@ -93,7 +93,6 @@ export default function TestingPage() {
   // ---- Production-derived gallery sources (each runs the canonical assessment/rule + card mapper). ----
   const safetyBufferFixtures = useMemo(() => getSafetyBufferTestingFixtures(), []);
   const rebalanceFixtures = useMemo(() => getRebalanceTestingFixtures(), []);
-  const capitalEfficiencyFixtures = useMemo(() => getCapitalEfficiencyTestingFixtures(), []);
   const trimFixtures = useMemo(() => getTrimTestingFixtures(), []);
   const stakingFixtures = useMemo(() => getStakingTestingFixtures(), []);
   const positionOptimizationFixtures = useMemo(() => getPositionOptimizationTestingFixtures(), []);
@@ -106,7 +105,6 @@ export default function TestingPage() {
   // Per-category Review selection. Switching tabs closes any open modal (see selectTab).
   const [selectedSafetyBufferId, setSelectedSafetyBufferId] = useState<string | null>(null);
   const [selectedRebalanceId, setSelectedRebalanceId] = useState<string | null>(null);
-  const [selectedCapitalEfficiencyId, setSelectedCapitalEfficiencyId] = useState<string | null>(null);
   const [selectedTrimId, setSelectedTrimId] = useState<string | null>(null);
   const [selectedStakingId, setSelectedStakingId] = useState<string | null>(null);
   const [selectedStableYieldId, setSelectedStableYieldId] = useState<string | null>(null);
@@ -115,7 +113,6 @@ export default function TestingPage() {
 
   const selectedSafetyBuffer = selectedSafetyBufferId ? safetyBufferFixtures.find((f) => f.id === selectedSafetyBufferId && f.card && f.card.action_kind === "review_only") : undefined;
   const selectedRebalance = selectedRebalanceId ? rebalanceFixtures.find((f) => f.id === selectedRebalanceId && f.card) : undefined;
-  const selectedCapitalEfficiency = selectedCapitalEfficiencyId ? capitalEfficiencyFixtures.find((f) => f.id === selectedCapitalEfficiencyId && f.card) : undefined;
   const selectedTrim = selectedTrimId ? trimFixtures.find((f) => f.id === selectedTrimId && f.card) : undefined;
   const selectedStaking = selectedStakingId ? stakingFixtures.find((f) => f.id === selectedStakingId && f.card) : undefined;
   const selectedPositionOptimization = selectedPositionOptimizationId ? positionOptimizationFixtures.find((f) => f.id === selectedPositionOptimizationId && f.card) : undefined;
@@ -159,16 +156,6 @@ export default function TestingPage() {
       onReview: () => setSelectedRebalanceId(f.id),
     }))),
     [rebalanceFixtures]
-  );
-
-  const capitalEfficiencyEntries = useMemo<GalleryEntry[]>(
-    () => dedupeByCardFace(capitalEfficiencyFixtures.filter((f) => f.card).map((f) => ({
-      key: f.id,
-      stateLabel: f.label,
-      card: toSuggestionCard(f.card!),
-      onReview: () => setSelectedCapitalEfficiencyId(f.id),
-    }))),
-    [capitalEfficiencyFixtures]
   );
 
   const trimEntries = useMemo<GalleryEntry[]>(
@@ -239,7 +226,6 @@ export default function TestingPage() {
   const entriesByTab: Record<TabId, GalleryEntry[]> = {
     safety_buffer: safetyBufferEntries,
     rebalance: rebalanceEntries,
-    capital_efficiency: capitalEfficiencyEntries,
     trim: trimEntries,
     staking: stakingEntries,
     stable_yield: stableYieldEntries,
@@ -253,7 +239,6 @@ export default function TestingPage() {
     setActive(id);
     setSelectedSafetyBufferId(null);
     setSelectedRebalanceId(null);
-    setSelectedCapitalEfficiencyId(null);
     setSelectedTrimId(null);
     setSelectedStakingId(null);
     setSelectedStableYieldId(null);
@@ -349,14 +334,6 @@ export default function TestingPage() {
         />
       )}
 
-      {selectedCapitalEfficiency?.card?.reviewDetails && (
-        <SuggestionReviewModal
-          details={selectedCapitalEfficiency.card.reviewDetails}
-          showGuardrails
-          onClose={() => setSelectedCapitalEfficiencyId(null)}
-        />
-      )}
-
       {selectedTrim?.card?.reviewDetails && (
         <SuggestionReviewModal
           details={selectedTrim.card.reviewDetails}
@@ -388,6 +365,9 @@ export default function TestingPage() {
         <SuggestionReviewModal
           contributionReview={selectedScenario.review}
           showGuardrails
+          {...(selectedScenario.pipeline?.suggestion?.contributionPlan?.planKind === "staged_excess_usdc_dca"
+            ? { swapAction: GALLERY_MODAL_PRESETS.dca.readiness, swapQuoteIsDca: true, swapQuotePresetAssessments: GALLERY_MODAL_PRESETS.dca.presets, swapQuoteNowMs: GALLERY_NOW }
+            : {})}
           onClose={() => setSelectedScenarioId(null)}
         />
       )}
@@ -399,8 +379,6 @@ export default function TestingPage() {
           onClose={() => setSelectedPositionOptimizationId(null)}
         />
       )}
-
-      <SwapQuoteGalleryStates />
     </main>
   );
 }

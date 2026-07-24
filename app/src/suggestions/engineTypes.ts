@@ -177,7 +177,16 @@ export type GuardrailCode =
   | "protocol_selection"
   | "cost_available"
   | "liquidity_available"
-  | "slippage_available";
+  | "slippage_available"
+  // Step 24A — JUP staking: exact-identity + custody + governed-product checks (never swap-route checks).
+  | "asset_identity"
+  | "direct_wallet_availability"
+  | "transferable_balance"
+  | "protocol_approval"
+  | "product_availability"
+  | "reward_terms"
+  | "unstaking_terms"
+  | "asset_conflict";
 
 export interface SuggestionGuardrail {
   code: GuardrailCode;

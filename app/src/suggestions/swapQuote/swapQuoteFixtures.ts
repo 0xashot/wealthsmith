@@ -29,6 +29,7 @@ import { presentSwapQuote, notReadyView, notRequiredView, unavailableView, EXCLU
 import { validateSanitizedAssessment, swapQuoteRequestKey } from "./swapQuoteClient";
 import { deriveRailSwapActions } from "./railSwapActions";
 import type { SuggestionCardState } from "../../types/dashboard";
+import { buildProviderSwapUrl, buildSwapHandoff } from "./providerSwapLinks";
 
 export interface SwapFixtureCheck { name: string; pass: boolean; detail: string; }
 
@@ -460,10 +461,27 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
   const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/^\s*\/\/.*$/gm, "");
   const compFiles = ["src/components/swapQuote/SwapQuoteComparisonSection.tsx", "src/components/swapQuote/SwapQuoteSelectedState.tsx", "src/components/swapQuote/SwapQuoteUnavailableState.tsx", "src/components/swapQuote/useSwapQuoteComparison.ts", "src/components/SuggestionReviewModal.tsx"].map((f) => stripComments(readSrc(f))).join("\n");
   add("SWC-21: UI components import NO server tree / provider client / SDK / RPC", !/server\/swapQuote|jupiterQuoteClient|raydiumQuoteClient|orcaQuoteClient|@orca-so|@solana\/web3|SOLANA_RPC/.test(compFiles), "no server/provider import");
-  add("SWC-22: UI code has NO execution CTA (Swap/Execute/Confirm/Sign/Open Platform/Connect to execute) and no guaranteed/executable-depth claim (comments stripped)", !/>\s*(Swap|Execute|Confirm|Sign|Open Platform|Open and swap|Connect to execute)\s*</.test(compFiles) && !/guaranteed|executable depth/i.test(compFiles), "no exec cta");
+  add("SWC-22: UI code performs NO IN-APP execution (no sign/send/simulate/build-transaction/wallet-adapter/execute) and makes no guaranteed/executable-depth claim (comments stripped)", !/signTransaction|signAllTransactions|sendTransaction|simulateTransaction|new Transaction|VersionedTransaction|@solana\/wallet-adapter|\.execute\(|Connect to execute/i.test(compFiles) && !/guaranteed|executable depth/i.test(compFiles), "no in-app execution");
   add("SWC-23: Refresh control only re-requests (no wallet connect / provider open / transaction) — code, comments stripped", (() => { const u = stripComments(readSrc("src/components/swapQuote/SwapQuoteUnavailableState.tsx")); return /Refresh comparison/.test(u) && !/connect|signTransaction|sendTransaction|window\.open/i.test(u); })(), "refresh safe");
   add("SWC-24: the section is placed INSIDE the Review modal (SuggestionReviewModal renders SwapQuoteComparisonSection)", /SwapQuoteComparisonSection/.test(readSrc("src/components/SuggestionReviewModal.tsx")), "in modal");
   add("SWC-25: the suggestion CARD face does NOT render the route section (card unchanged)", !/SwapQuoteComparisonSection/.test(readSrc("src/components/SuggestionCard.tsx")), "card unchanged");
+  add("SWC-26: the view exposes the SELECTED provider id (for the logo) on eligible states, null otherwise", presentSwapQuote(selected, { nowMs: NOW }).selectedProviderId === "raydium" && presentSwapQuote(equivalent, { nowMs: NOW }).selectedProviderId === "jupiter" && presentSwapQuote(noRoute, { nowMs: NOW }).selectedProviderId === null, "selected provider id");
+  add("SWC-27: the selected-route logo is decorative (aria-hidden) — the provider NAME is in text, never conveyed by icon alone", (() => { const s = readSrc("src/components/swapQuote/SwapQuoteSelectedState.tsx"); return /swap-quote__provider-logo/.test(s) && /aria-hidden="true"/.test(s) && /view\.providerLabel/.test(s) && /resolveProtocolIcon/.test(s); })(), "logo a11y");
+
+  // ---- 23C.2: read-only "Swap on <provider>" handoff ----
+  add("SWC-28: handoff links out to the SELECTED provider's OWN swap page (per-provider URL), reflecting the live winner", (() => {
+    const ray = buildSwapHandoff("raydium", USDC, WSOL, "1000"); const jup = buildSwapHandoff("jupiter", USDC, WSOL, "1000"); const orc = buildSwapHandoff("orca", USDC, WSOL, "1000");
+    return ray?.providerName === "Raydium" && /raydium\.io\/swap/.test(ray?.swapUrl ?? "") && jup?.providerName === "Jupiter" && /jup\.ag\/swap/.test(jup?.swapUrl ?? "") && /orca\.so/.test(orc?.swapUrl ?? "") && buildSwapHandoff(null, USDC, WSOL) === null;
+  })(), "provider handoff url");
+  add("SWC-29: the modal footer is a READ-ONLY external link (Cancel + 'Swap on <provider>', target=_blank rel=noopener, 'No transaction is prepared') — no in-app execution", (() => {
+    const m = readSrc("src/components/SuggestionReviewModal.tsx");
+    return /Swap on \{swapHandoff\.providerName\}/.test(m) && /href=\{swapHandoff\.swapUrl\}/.test(m) && /target="_blank"/.test(m) && /rel="noopener noreferrer"/.test(m) && /No transaction is prepared/.test(m) && />\s*Cancel\s*</.test(m) && !/signTransaction|sendTransaction|Connect to execute/i.test(stripComments(m));
+  })(), "read-only footer");
+  add("SWC-30: the handoff appears ONLY for a single-leg eligible selected route (multi-leg + non-eligible report no handoff)", (() => {
+    const s = stripComments(readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx"));
+    return /singleLeg && singleView && isEligibleResultKind\(singleView\.kind\) && singleView\.selectedProviderId/.test(s) && /onHandoff\?\.\(null\)/.test(s);
+  })(), "handoff single-leg eligible");
+  add("SWC-31: buildProviderSwapUrl maps native SOL to the wrapped-SOL alias for Raydium and includes the amount when supported", (() => { const u = buildProviderSwapUrl("raydium", WSOL, USDC, "5"); return /inputMint=sol/.test(u) && /inputAmount=5/.test(u); })(), "sol alias + amount");
 
   return checks;
 }
@@ -508,7 +526,7 @@ export function runRailSwapActionFixtureChecks(): SwapFixtureCheck[] {
   const readSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
   const rail = readSrc("src/components/RealWalletSuggestionsRail.tsx");
   add("SWR-9: the shared rail passes swapAction + isDca + fetcher to BOTH the contribution (DCA) and details (Rebalance/Trim) modals", (rail.match(/swapAction=\{selectedId \? rail\?\.swapActionById/g) ?? []).length >= 2 && /swapQuoteIsDca=\{selectedCard\?\.category === "dca"\}/.test(rail), "rail wiring");
-  add("SWR-10: no quote request occurs before Review opens — the section renders only inside the modal, and the hook loads only when enabled", (() => { const hook = readSrc("src/components/swapQuote/useSwapQuoteComparison.ts"); const modal = readSrc("src/components/SuggestionReviewModal.tsx"); return /if \(!enabled\b/.test(hook) && /swapAction &&/.test(modal); })(), "no prefetch");
+  add("SWR-10: no quote request occurs before Review opens — the section renders only inside the modal, and the hook loads only when enabled", (() => { const hook = readSrc("src/components/swapQuote/useSwapQuoteComparison.ts"); const modal = readSrc("src/components/SuggestionReviewModal.tsx"); return /if \(!enabled\b/.test(hook) && /swapAction \? \(/.test(modal); })(), "no prefetch");
   add("SWR-11: Demo rails carry a DETERMINISTIC fetcher (offline) — never the live client", /swapQuoteFetcher: demoSwapQuoteFetcher/.test(readSrc("src/pages/DemoDashboardPage.tsx")) && /Never calls a provider or the WealthSmith service/.test(readSrc("src/suggestions/swapQuote/demoSwapQuote.ts")), "demo offline");
 
   return checks;

@@ -240,6 +240,23 @@ export const TOKEN_REGISTRY: Record<string, TokenInfo> = {
     type: "token",
     source: "wallet",
   },
+  // dogwifhat — an approved meme/long-tail asset (Trim-only ownership; never staking/Capital Efficiency).
+  EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm: {
+    symbol: "WIF",
+    name: "dogwifhat",
+    icon: "assets/icons/token/wif.png",
+    type: "token",
+    source: "wallet",
+  },
+  // Jupiter (JUP) governance token — owned by the dedicated JUP Staking branch (Step 24A). NOT a meme
+  // coin, NOT generic idle capital, NOT JupSOL (a different mint/identity).
+  JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN: {
+    symbol: "JUP",
+    name: "Jupiter",
+    icon: "assets/icons/token/jup.svg",
+    type: "token",
+    source: "wallet",
+  },
   So11111111111111111111111111111111111111112: {
     symbol: "SOL",
     name: "Wrapped SOL",
