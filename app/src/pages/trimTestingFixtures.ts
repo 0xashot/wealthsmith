@@ -19,7 +19,10 @@ const w = (o: Partial<WalletPosition>): WalletPosition => ({ id: "x", source: "w
 const usdc = (v: number, id = "usdc") => w({ id, symbol: "USDC", name: "USD Coin", mint: USDC, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v, icon: "assets/icons/token/usdc.svg" });
 const tok = (v: number, id: string, mint = `Mint-${id}`, raw?: string) => w({ id, symbol: `TK${id}`, name: `Token ${id}`, mint, amount: raw ?? String(Math.max(1, Math.round(v))), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v });
 const wsol = (v: number) => w({ id: "wsol", symbol: "SOL", name: "Wrapped SOL", mint: WSOL, amount: String(Math.round(v * 1e9)), uiAmount: v, decimals: 9, priceUsd: 1, valueUsd: v });
-const fakeUsdc = (v: number) => w({ id: "fakeusdc", symbol: "USDC", name: "USD Coin", mint: "FakeUSDCMint1111", amount: String(v), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
+// A spoofed USDC — symbol claims "USDC" but the mint is non-canonical, so Trim classifies it by mint as
+// non-core. Labeled "Fake USDC" so the gallery card reads clearly ("Swap $X of Fake USDC to USDC") instead
+// of the confusing "USDC to USDC". Identity (the wrong mint) is what makes it a Trim candidate, not the label.
+const fakeUsdc = (v: number) => w({ id: "fakeusdc", symbol: "fake USDC", name: "fake USDC", mint: "FakeUSDCMint1111", amount: String(v), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
 const t22 = (v: number, state: string, id = "t22") => w({ id, symbol: `TX${id}`, name: `T22 ${id}`, mint: `T22Mint-${id}`, tokenProgram: TOKEN_2022_PROGRAM_ID, transferabilityState: state, amount: String(Math.round(v)), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v, liquidValueUsd: state === "transferable" ? v : 0 });
 const staleTok = (v: number) => w({ id: "st", symbol: "TKst", name: "Stale token", mint: "StaleMint", amount: String(v), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v, withdrawalState: "stale" });
 const unknownTok = () => w({ id: "unk", symbol: "9x", name: "Unknown token", mint: "UnkMint", uiAmount: 5, amount: "5", valueUsd: null });

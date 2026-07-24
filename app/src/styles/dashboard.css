@@ -3851,7 +3851,9 @@
 
 /* Step 23C — read-only "Suggested route" comparison section inside the Review modal. Supplemental styling only;
    the section reuses the existing review-modal section/metric/hint classes. */
-.swap-quote__section,
+.swap-quote__section {
+  padding-top: var(--spacing-stack-gap-sm);
+}
 .swap-quote__plan {
   border-top: 1px solid var(--color-border-subtle, var(--color-border-default));
   padding-top: var(--spacing-stack-gap-sm);
@@ -3869,6 +3871,20 @@
   width: 20px;
   height: 20px;
   border-radius: var(--radius-control-sm);
+}
+.swap-quote__route-value {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+}
+.swap-quote__banner {
+  margin: var(--spacing-stack-gap-sm) 0 0;
+  padding: var(--spacing-inset-sm, 10px) var(--spacing-inset-md, 12px);
+  border-radius: var(--radius-control-md, 8px);
+  background: var(--color-surface-muted, var(--color-background-subtle, rgba(120, 120, 140, 0.08)));
+  border: 1px solid var(--color-border-subtle, var(--color-border-default));
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
 }
 .swap-quote__alternatives > summary {
   cursor: pointer;

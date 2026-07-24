@@ -270,6 +270,14 @@ export function buildReviewDetails(args: {
   otherProtocolsToReview?: SuggestionReviewDetails["otherProtocolsToReview"];
   /** Step 19C — extra review-only limitations appended after the standard ones (e.g. Trim transferability). */
   additionalLimitations?: SuggestionReviewDetails["limitations"];
+  /** Step 24A.x — Position Optimization "Position details" modal layout (hides Key metrics + Guardrails). */
+  positionReview?: boolean;
+  /** Render metric cards without the "Key metrics" heading. */
+  hideMetricsHeading?: boolean;
+  /** Hide the internal Guardrails checklist for this suggestion. */
+  hideGuardrails?: boolean;
+  /** "Excluded from Safety Buffer" rows (frozen stablecoins, etc.). */
+  excludedAssets?: SuggestionReviewDetails["excludedAssets"];
 }): SuggestionReviewDetails {
   const informational = args.actionKind === "informational";
   const excludeExec = args.routeEvaluationDisplay != null;
@@ -283,7 +291,8 @@ export function buildReviewDetails(args: {
     metrics: args.metrics,
     involvedAssets: args.involvedAssets ?? [],
     involvedPositions: args.involvedPositions ?? [],
-    calculations: args.calculations ?? [],
+    // Safety Buffer modals omit the "How this was calculated" section — the focused card set already states the numbers.
+    calculations: args.category === "buffer" ? [] : (args.calculations ?? []),
     guardrailSummary: summarizeGuardrails(args.guardrails, args.protocolSelection, excludeExec),
     limitations: informational
       ? [...extraLimitations]
@@ -293,6 +302,10 @@ export function buildReviewDetails(args: {
       : informational
         ? [...INFORMATIONAL_SAFETY_NOTES]
         : [...ACTIONABLE_SAFETY_NOTES],
+    ...(args.positionReview ? { positionReview: true } : {}),
+    ...(args.hideMetricsHeading ? { hideMetricsHeading: true } : {}),
+    ...(args.hideGuardrails ? { hideGuardrails: true } : {}),
+    ...(args.excludedAssets && args.excludedAssets.length > 0 ? { excludedAssets: args.excludedAssets } : {}),
     ...(args.protocolSelectionDisplay ? { protocolSelectionDisplay: args.protocolSelectionDisplay } : {}),
     ...(args.routeEvaluationDisplay ? { routeEvaluation: args.routeEvaluationDisplay } : {}),
     ...(args.externalLink ? { externalLink: args.externalLink } : {}),

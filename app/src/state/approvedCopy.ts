@@ -202,12 +202,42 @@ export const REAL_WALLET_VALUE_DESC =
 export const SUGGESTION_BUFFER_TITLE = "Top Up Your Safety Buffer";
 export const SUGGESTION_BUFFER_DESCRIPTION =
   "Your stablecoin reserve is below target. Add funds to fully cover your Safety Buffer before investing further.";
+/* Detailed, numbers-rich buffer body for a definite (non-range, non-plan) shortfall. {current}/{covered}/{target}/
+ * {targetMonths}/{shortfall} come from the canonical Safety Buffer assessment — never invented. */
+export const SUGGESTION_BUFFER_SHORTFALL_DETAIL =
+  "You currently have {current} in your Safety Buffer, enough to cover {covered}. Your target is {target}, or {targetMonths}. Add {shortfall} in USDC before investing further.";
+/* Range shortfall (some stablecoin value is still being verified): {current} confirmed + {beingVerified} pending
+ * against {target}; the confirmed minimum to add now is {shortfall}, and {additional} more may be needed later. */
+export const SUGGESTION_BUFFER_RANGE_DETAIL =
+  "You have {current} confirmed in your Safety Buffer, and another {beingVerified} is still being verified. Your target is {target}. Add at least {shortfall} now; depending on the verification result, you may need another {additional} later.";
+/* Small definite gap where the covered months round to the target months — the "enough to cover N months / target
+ * N months" phrasing would read as funded, so state the gap directly. {shortfall}/{months} from the assessment. */
+export const SUGGESTION_BUFFER_NEARTARGET_DETAIL =
+  "You’re {shortfall} short of your {months}-month Safety Buffer target. Add {shortfall} in USDC to fully fund it before investing further.";
+/* Below-minimum informational gap ("nearly funded"): the exact remaining gap is too small for a separate top-up. */
+export const SUGGESTION_BUFFER_NEARLY_FUNDED_DETAIL =
+  "You’re {shortfall} short of your Safety Buffer target. The remaining gap is too small for a separate top-up, so you can cover it with your next contribution.";
+/* Plan-backed shortfall where the next planned contribution FULLY covers the gap → complete it via that contribution. */
+export const SUGGESTION_BUFFER_PLAN_DETAIL =
+  "Your Safety Buffer is {shortfall} below target. Direct your next planned contribution to USDC to fully fund it before investing further.";
+/* A frozen (not transferable) stablecoin is excluded from the eligible reserve. {verified}/{shortfall}/{target} +
+ * a count-aware clause about the excluded holding(s). */
+export const SUGGESTION_BUFFER_FROZEN_DETAIL =
+  "You have {verified} in eligible stablecoins. {frozenClause} Add {shortfall} in USDC to reach your {target} target.";
+export const SUGGESTION_BUFFER_FROZEN_ONE =
+  "One stablecoin holding is frozen and can’t be used as a liquid reserve, so it isn’t counted.";
+export const SUGGESTION_BUFFER_FROZEN_MANY =
+  "{n} stablecoin holdings are frozen and can’t be used as a liquid reserve, so they aren’t counted.";
 /* Step 21C — canonical Safety Buffer state copy. Honest, review-only, and never treats unresolved value as zero,
  * never presents a plan amount as the total gap, and never implies immediate transfer capability. */
 export const SUGGESTION_BUFFER_RANGE_DESCRIPTION =
   "Your stablecoin reserve is below target. Additional stablecoin value is still being verified and may reduce the remaining gap.";
 export const SUGGESTION_BUFFER_PLAN_DESCRIPTION =
   "Part of your next contribution is allocated to your Safety Buffer. The confirmed gap after this contribution is shown separately.";
+/* Plan-backed PARTIAL: the next contribution reduces but does not close the confirmed gap — direct it to USDC and
+ * state plainly that the remaining amount still needs adding afterward. {shortfall} is the confirmed gap (Amount needed). */
+export const SUGGESTION_BUFFER_PLAN_PARTIAL_DETAIL =
+  "Your Safety Buffer is {shortfall} below target. Use your next contribution toward USDC to reduce the gap. You’ll still need to add the remaining amount afterward.";
 export const SUGGESTION_BUFFER_NEARLY_FUNDED_TITLE = "Safety Buffer Is Nearly Funded";
 export const SUGGESTION_BUFFER_NEARLY_FUNDED_DESCRIPTION =
   "The remaining gap is below the current action threshold.";
@@ -294,6 +324,40 @@ export const SUGGESTION_PO_REASON_MISSING_APY = "Current APY data could not be v
 export const SUGGESTION_PO_REASON_LOW_YIELD = "One or more positions have a verified, comparable APY below the review threshold. Review them to compare their current yield with other eligible options.";
 export const SUGGESTION_PO_REASON_CONCENTRATION = "A single deployed position makes up a large share of your portfolio. Review it to assess its yield and concentration.";
 export const SUGGESTION_PO_REASON_SHARED = "Multiple positions have exposure to the same underlying asset. Review them to understand your combined exposure and concentration.";
+/* Position-specific card/modal copy when exactly ONE deployed position is flagged and its protocol has a
+ * known display name — clearer than the generic wording. `{protocol}` / `{amount}` / `{share}` / `{count}`
+ * are interpolated from real assessment data (never invented). Still review-only; no exit/switch/withdraw. */
+export const SUGGESTION_PO_NAMED_TITLE = "Review Your {protocol} Position";
+export const SUGGESTION_PO_NAMED_IMPACT = "Review {amount} in {protocol}";
+export const SUGGESTION_PO_MULTI_IMPACT = "Review {amount} across {count} positions";
+export const SUGGESTION_PO_NAMED_CONCENTRATION = "Your {protocol} position represents {share}% of your portfolio. Review whether you’re comfortable keeping this much in a single yield position.";
+export const SUGGESTION_PO_NAMED_LOW_YIELD = "Your {protocol} position has a verified APY below the review threshold. Review whether its current yield still fits your plan.";
+export const SUGGESTION_PO_NAMED_MISSING_APY = "We couldn’t verify a current APY for your {protocol} position. Review the latest yield information before relying on it.";
+export const SUGGESTION_PO_NAMED_SHARED = "Your {protocol} position shares underlying exposure with other holdings. Review your combined exposure to the same asset.";
+/* Low-yield single position — a "Compare" treatment naming the held asset + its actual sourced APY. {kind} is
+ * "staking " for LST/native-stake positions, "" otherwise (never claims "staking" for a non-staking position). */
+export const SUGGESTION_PO_LOW_TITLE = "Compare Your {asset} Yield";
+export const SUGGESTION_PO_LOW_IMPACT = "Compare {amount} in {asset}";
+export const SUGGESTION_PO_LOW_DESCRIPTION = "Your {asset} position currently earns {apy}% APY. Similar vetted {kind}options may offer a higher yield, so it may be worth comparing alternatives.";
+/* Detailed modal-body explanation for a single concentrated position — shows the real numbers behind the flag.
+ * {protocol}/{value}/{gross}/{share}/{threshold}/{pp} come from the assessment (position value, gross assets,
+ * its share, the concentration threshold, and points above it). Never invented. */
+export const SUGGESTION_PO_NAMED_CONCENTRATION_DETAIL = "Your {protocol} position is worth {value} out of your {gross} portfolio, so it represents {share}% of your assets. WealthSmith flags a single position when it reaches {threshold}% or more, so this position is {pp} percentage points above the review threshold.";
+/* One position flagged for BOTH concentration AND missing APY → a combined body naming the held asset + its share. */
+export const SUGGESTION_PO_CONCENTRATION_MISSING = "Your {asset} position represents {share}% of your portfolio, and we couldn’t verify its current APY. Review whether you’re comfortable with this level of concentration and check the latest yield information.";
+/* Shared-underlying-exposure copy: multiple positions linked to ONE underlying asset (e.g. JitoSOL + mSOL → SOL).
+ * {asset}/{members}/{linkword}/{share}/{amount}/{count} come from the exposure group + its members. Never invented. */
+export const SUGGESTION_PO_SHARED_TITLE = "Review Your {asset} Exposure";
+export const SUGGESTION_PO_SHARED_DESCRIPTION = "Your {members} positions are {linkword} linked to {asset}. Together, they represent {share}% of your portfolio. Review whether this matches your intended {asset} allocation.";
+export const SUGGESTION_PO_SHARED_IMPACT = "Review {amount} across {count} {asset} positions";
+/* When shared exposure fires ALONGSIDE other issues (concentration / missing APY / low yield), the heading stays
+ * generic ("Review Yield Positions") and the body is assembled from these fragments over real assessment values. */
+export const SUGGESTION_PO_MULTI_LEAD = "Your {members} positions represent {share}% of your portfolio.";
+export const SUGGESTION_PO_MULTI_CONC = " {asset} alone accounts for {share}%";
+export const SUGGESTION_PO_MULTI_CONC_APY = ", and we couldn’t verify its current APY";
+export const SUGGESTION_PO_MULTI_REVIEW = " Review {both} positions to assess your {asset} exposure";
+export const SUGGESTION_PO_MULTI_YIELD_MISSING = " and check the latest yield information";
+export const SUGGESTION_PO_MULTI_YIELD_LOW = " and compare their current yields";
 export const SUGGESTION_PO_POS_MISSING_APY = "Current APY data unavailable";
 export const SUGGESTION_PO_POS_LOW_YIELD = "Fresh comparable APY below review threshold";
 export const SUGGESTION_PO_POS_CONCENTRATION = "High single-position share";

@@ -32,6 +32,10 @@ export interface BufferPositionReview {
   token: string;
   /** Formatted deposited amount (e.g. "2,000 USDC") when known; null when it cannot be attributed. */
   amountDisplay: string | null;
+  /** Numeric deposited amount (token units) when attributable — for the "Excluded from Safety Buffer" table. */
+  uiAmount: number | null;
+  /** USD value of the excluded (not-yet-counted) position when known — for the "Excluded from Safety Buffer" table. */
+  valueUsd: number | null;
   /** The canonical vault / market / reserve address the position was identified by (never a display name). */
   positionAddress: string | null;
   approvalStatus: BufferPositionApprovalStatus;
@@ -131,6 +135,11 @@ export function deriveBufferPositionReview(
       curator: id.curator ?? null,
       token,
       amountDisplay: formatTokenAmount(amount, token),
+      uiAmount: typeof position.uiAmount === "number" ? position.uiAmount : null,
+      valueUsd:
+        (typeof position.valueUsd === "number" ? position.valueUsd : null) ??
+        (source.unresolvedValueUsd > 0 ? source.unresolvedValueUsd : null) ??
+        num(source.recognizedValueUsd),
       positionAddress,
       approvalStatus: "not_vetted",
       approvedDestination: destination.name,

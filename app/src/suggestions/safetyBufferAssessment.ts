@@ -103,6 +103,14 @@ export interface SafetyBufferContributionAssessment {
   contributionWarnings: string[];
 }
 
+/** A stablecoin holding excluded from buffer coverage (safe display: no wallet/account id). */
+export interface SafetyBufferExcludedHolding {
+  symbol: string;
+  uiAmount: number | null;
+  valueUsd: number | null;
+  reason: string;
+}
+
 export interface SafetyBufferAssessment {
   // ---- Target ----
   monthlyExpensesUsd: number | null;
@@ -146,6 +154,11 @@ export interface SafetyBufferAssessment {
    * destination; null otherwise (→ the generic "Verify Your Safety Buffer" state). The UI renders it deterministically.
    */
   bufferPositionReview: BufferPositionReview | null;
+  /**
+   * Stablecoin holdings EXCLUDED from buffer coverage because they are frozen / not transferable (safe display only:
+   * symbol + amount + value + reason, never a wallet/account id). Empty when nothing was excluded for that reason.
+   */
+  excludedStableHoldings?: SafetyBufferExcludedHolding[];
   // ---- Meta ----
   blockingReasons: string[];
   warnings: string[];
@@ -370,8 +383,14 @@ export function deriveSafetyBufferAssessment(input: SafetyBufferAssessmentInput)
   const reviewConfidenceGate: SbGateState =
     coverageState === "unresolved" ? "unresolved" : "allowed";
 
+  // Stablecoins excluded because they are frozen / not transferable (safe symbol + amount + value only).
+  const excludedStableHoldings: SafetyBufferExcludedHolding[] = (coverage.sources ?? [])
+    .filter((s) => s.inclusionState === "excluded_unavailable" && s.recognizedValueUsd != null)
+    .map((s) => ({ symbol: s.symbol ?? "Stablecoin", uiAmount: s.uiAmount ?? null, valueUsd: s.recognizedValueUsd, reason: "Frozen" }));
+
   return {
     ...base,
+    excludedStableHoldings,
     verifiedLiquidStableValueUsd: verified,
     unresolvedStableValueUsd: unresolved,
     maximumPossibleCoverageUsd,

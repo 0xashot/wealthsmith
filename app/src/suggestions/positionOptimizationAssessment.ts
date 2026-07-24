@@ -171,6 +171,19 @@ export interface PositionOptimizationPosition {
   lowYieldEligible: boolean;
   concentrationEligible: boolean;
   sharedExposureEligible: boolean;
+  /**
+   * Read-only "Manage" destination for a NATIVE STAKE position only — the validator's block-explorer page captured
+   * at detection (its PUBLIC vote account, NEVER the user's stake account). Null for every other position type
+   * (those resolve Manage from the approved protocol registry). Safe display only; never a transaction/signature.
+   */
+  manageUrl: string | null;
+  /**
+   * Read-only venue/product display name for a DEPLOYED lending/vault position (e.g. "Steakhouse USDC",
+   * "USDC on Kamino") — resolved from the curated-lending product name or position name, so two same-token
+   * positions on different venues are distinguishable. Null for LSTs / native stake (their token already
+   * identifies them). A display LABEL only — never a mint/account/obligation/reserve id.
+   */
+  venueLabel: string | null;
   actionabilityState: PoActionability;
   reviewEligibilityState: PoReviewEligibility;
   exclusionReasons: string[];
@@ -475,6 +488,10 @@ export function derivePositionOptimizationAssessment(input: PositionOptimization
       lifecycleState, apy, exposures, underlyingIdentities: exposures.map((e) => e.exposureId).filter((x) => x !== "unresolved"),
       duplicateState: dedupeInvalid ? "duplicate_invalid" : "unique",
       missingDataEligible, lowYieldEligible, concentrationEligible, sharedExposureEligible,
+      // Native stake only: carry the detection-time validator page (public vote account); other types use the registry.
+      manageUrl: positionType === "native_stake" ? (p.manageUrl ?? null) : null,
+      // Deployed lending/vault only: a safe venue/product name so two same-token positions are distinguishable.
+      venueLabel: positionType !== "lst" && positionType !== "native_stake" ? (p.curatedLending?.productName ?? p.name ?? p.protocol ?? null) : null,
       actionabilityState: "review_only",
       reviewEligibilityState, exclusionReasons, unresolvedReasons, methodologyVersion: posMethodology,
     };

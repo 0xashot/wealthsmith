@@ -391,6 +391,17 @@ export interface ReviewPosition {
   iconPath?: string;
   /** Read-only per-position review link to the protocol's own page (new tab). Never a transaction/signature. Absent when no approved manage URL exists. */
   reviewLink?: ReviewExternalLink;
+  /**
+   * Step 24A.x (Position Optimization "Position details" table) — the HELD asset behind the position, resolved from the
+   * position's primary exposure mint via the approved token registry (never a symbol guess). `assetSymbol` is the token
+   * label (e.g. "JitoSOL"/"SOL"/"USDC"); `assetIconPath` is its approved token icon; `assetUrl` links to the read-only
+   * Solscan token page when a mint is known. Read-only identity only — never implies the asset can move.
+   */
+  assetSymbol?: string;
+  assetIconPath?: string;
+  assetUrl?: string;
+  /** Read-only venue/product subtitle under the asset (e.g. "Steakhouse USDC") so same-token positions differ. */
+  assetVenue?: string;
 }
 
 export interface ReviewCalculation {
@@ -402,6 +413,9 @@ export interface ReviewCalculation {
   difference?: number;
   threshold?: number;
   unit?: string;
+  /** Optional per-field unit overrides — e.g. current/target are USD but the ratio difference/threshold are "%". */
+  differenceUnit?: string;
+  thresholdUnit?: string;
 }
 
 /** Guardrails grouped into drawer-ready, user-facing labels (never raw codes). */
@@ -450,6 +464,16 @@ export interface ReviewSummary {
   categoryLabel: string;
 }
 
+/** One row of the "Excluded from Safety Buffer" table (safe display only — never a wallet/account id). */
+export interface ReviewExcludedAsset {
+  symbol: string;
+  icon?: string;
+  mint?: string;
+  amount?: number;
+  valueUsd?: number;
+  reason: string;
+}
+
 export interface SuggestionReviewDetails {
   summary: ReviewSummary;
   metrics: ReviewMetric[];
@@ -459,6 +483,21 @@ export interface SuggestionReviewDetails {
   guardrailSummary: ReviewGuardrailSummary;
   limitations: ReviewLimitation[];
   safetyNotes: ReviewSafetyNote[];
+  /**
+   * Step 24A.x — Position Optimization review layout. When true the modal hides the generic "Key metrics" and
+   * "Guardrails" sections and renders the involved positions as a "Position details" table (Asset / Value /
+   * Portfolio share / APY / Manage). Set ONLY by the Position Optimization mapper; other categories omit it.
+   */
+  positionReview?: boolean;
+  /** When true the modal renders the metric cards WITHOUT the "Key metrics" heading (a cleaner, self-explanatory set). */
+  hideMetricsHeading?: boolean;
+  /** When true the modal hides the internal Guardrails checklist for this suggestion (e.g. the Safety Buffer top-up). */
+  hideGuardrails?: boolean;
+  /**
+   * Read-only "Excluded from Safety Buffer" table (Asset / Amount / Value / Reason) — e.g. a frozen stablecoin that
+   * can't be counted as a liquid reserve. Safe display identity only; never implies the asset can be moved.
+   */
+  excludedAssets?: ReviewExcludedAsset[];
   /**
    * Optional protocol-display fields shared by Demo Mode (now) and real wallet
    * mode (later). The real engine never populates them until production selection

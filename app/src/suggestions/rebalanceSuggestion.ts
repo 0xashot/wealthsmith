@@ -14,30 +14,25 @@ import type { EngineSuggestion, SuggestionGuardrail } from "./engineTypes";
 import {
   SUGGESTION_ENGINE_VERSION,
   MIN_SUGGESTION_AMOUNT_USD,
-  REBALANCE_DELTA_THRESHOLD_PCT,
   GUARDRAIL_STATUS_NOT_EVALUATED,
 } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
-import { buildReviewDetails, usdMetric, pctMetric, metric } from "./suggestionReviewDetails";
+import { buildReviewDetails, pctMetric, metric } from "./suggestionReviewDetails";
 import type { RebalanceAssessment, RebalanceUsdcSource, NativeSolRebalanceSourceAssessment } from "./rebalanceAssessment";
 import { cryptoToStablesSourceGate } from "./rebalanceAssessment";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
+/** Percent display: 1-decimal, trailing .0 dropped (e.g. 10 → "10", 70.5 → "70.5"). Matches the allocation cards. */
+const pctText = (n: number): string => (Math.round(n * 10) / 10).toLocaleString("en-US", { maximumFractionDigits: 1 });
+
 /**
- * Step 22F (slice 3) — honest, non-timing market-context suffix for the Rebalance review reason. Shown ONLY for a
- * real five-factor target: `full` discloses the 10% market input + CoinMarketCap attribution + the "not a buy/sell
- * signal" clarification; `degraded_market_excluded` discloses the exclusion + renormalization. Transitional Demo/testing
- * targets (`marketIncluded` false and not degraded) get NO suffix — behavior unchanged. Never shows a raw score/band,
- * never a stale value as current, never Neutral, never market-timing language.
+ * Step 24J — the market-INCLUDED disclosure ("Current market conditions are included as 10% …" + CoinMarketCap
+ * attribution) was removed from the Rebalance review body per product copy. The market factor is still used in the
+ * target calculation; only its explanatory paragraph is gone. The DEGRADED-exclusion disclosure is retained: when
+ * market data was stale/unavailable it honestly explains the exclusion + renormalization. Never timing/score/band.
  */
 function marketReviewSuffix(a: RebalanceAssessment): string {
-  if (a.marketIncluded) {
-    const adj = typeof a.marketAdjustmentVsProfileOnlyPct === "number"
-      ? ` The market component adjusted your stable target by ${a.marketAdjustmentVsProfileOnlyPct >= 0 ? "+" : ""}${(Math.round(a.marketAdjustmentVsProfileOnlyPct * 10) / 10).toFixed(1)} percentage points versus your profile-only target.`
-      : "";
-    return ` Current market conditions are included as 10% of your target-allocation calculation.${adj} Data source: CoinMarketCap — broad crypto-market sentiment; this index does not directly create buy or sell recommendations.`;
-  }
   if (a.targetConfidence === "degraded_market_excluded") {
     return " Market data was unavailable or outside its approved freshness window. The market component was excluded, and the remaining profile factors were renormalized.";
   }
@@ -92,6 +87,20 @@ function buildStablesToCryptoCard(
   const delta = assessment.rawCryptoDeltaPct ?? 0; // Slice 3.1 — raw magnitude drives scoring; display rounding never scores.
   const ratio = Math.min(Math.abs(delta) / 100, 1);
 
+  // 24J — plain-language card/modal copy + a focused before/after-swap card set. The "after swap" allocation is
+  // derived deterministically from how much of the required correction the suggested amount covers (a full swap
+  // reaches the target; a partial swap moves proportionally toward it). Stable falls by exactly what crypto rises.
+  const curCrypto = assessment.currentCryptoPct ?? 0;
+  const tgtCrypto = assessment.targetCryptoPct ?? 0;
+  const curStable = assessment.currentStablePct ?? 0;
+  const swapFraction = requiredCorrectionUsd > 0 ? Math.min(suggestedAmountUsd / requiredCorrectionUsd, 1) : 0;
+  const afterCrypto = curCrypto + swapFraction * (tgtCrypto - curCrypto);
+  const afterStable = curStable - (afterCrypto - curCrypto);
+  const goalClause = partial ? "to move closer to your target" : "to reach your target";
+  const cardBody =
+    `Your portfolio currently has ${pctText(curCrypto)}% in crypto, below your ${pctText(tgtCrypto)}% target. ` +
+    `Swap $${Math.round(suggestedAmountUsd).toLocaleString("en-US")} of excess USDC to SOL ${goalClause} while keeping your Safety Buffer fully funded.`;
+
   const guardrails: SuggestionGuardrail[] = [
     { code: "pricing_available", status: "passed" },
     { code: "buffer_protection", status: "passed" }, // source is excess ABOVE the buffer; buffer untouched
@@ -107,25 +116,20 @@ function buildStablesToCryptoCard(
     actionKind: "review_only",
     guardrails,
     protocolSelection,
-    reason: "Your stablecoin allocation is above target. Verified excess USDC could help close the gap in your SOL allocation while keeping your Safety Buffer covered." + marketReviewSuffix(assessment),
+    // Modal reason is the plain-language card body (+ a degraded-market exclusion note only when applicable).
+    reason: cardBody + marketReviewSuffix(assessment),
+    hideMetricsHeading: true,
+    hideGuardrails: true,
     metrics: [
-      pctMetric("Current crypto allocation", assessment.currentCryptoPct ?? 0),
-      pctMetric("Target crypto allocation", assessment.targetCryptoPct ?? 0),
-      pctMetric("Current stablecoin allocation", assessment.currentStablePct ?? 0),
-      pctMetric("Target stablecoin allocation", assessment.targetStablePct ?? 0),
-      pctMetric("Allocation difference", delta),
-      usdMetric("Amount needed to rebalance", requiredCorrectionUsd),
-      usdMetric("Verified USDC above buffer", source.verifiedExcessValueUsd),
-      usdMetric("Suggested rebalance amount", suggestedAmountUsd),
-      ...(estimatedDestinationSol !== null ? [metric("Estimated SOL amount", estimatedDestinationSol, "token_amount", "SOL")] : []),
+      metric("Send", `${Math.round(suggestedAmountUsd).toLocaleString("en-US")} USDC`, "count"),
+      ...(estimatedDestinationSol !== null ? [metric("Receive", `~${pctText(estimatedDestinationSol)} SOL`, "count")] : []),
+      pctMetric("Current crypto allocation", curCrypto),
+      pctMetric("Crypto allocation after swap", afterCrypto),
+      pctMetric("Current stablecoin allocation", curStable),
+      pctMetric("Stablecoin allocation after swap", afterStable),
     ],
-    // Involved assets section removed for Rebalance (allocation review is a bucket-level source→target move,
-    // not a per-holding list); the metrics + calculations carry the source/target context.
-    calculations: [
-      { label: "Allocation drift", formula: "current − target", currentValue: assessment.currentCryptoPct ?? 0, targetValue: assessment.targetCryptoPct ?? 0, difference: delta, threshold: REBALANCE_DELTA_THRESHOLD_PCT, unit: "%" },
-      { label: "Safety Buffer protected", formula: "only direct-wallet USDC above the buffer is used", currentValue: source.verifiedTransferableValueUsd, targetValue: source.reservedForSafetyBufferUsd, difference: source.verifiedExcessValueUsd, unit: "USD" },
-      { label: "Amount capped to verified source", formula: "min(required correction, verified excess USDC)", currentValue: requiredCorrectionUsd, targetValue: source.verifiedExcessValueUsd, difference: suggestedAmountUsd, unit: "USD" },
-    ],
+    // No "How this was calculated" section for Rebalance — the before/after cards carry the source→target context;
+    // the read-only "Swap Route" section carries the execution figures.
   });
 
   return {
@@ -137,6 +141,7 @@ function buildStablesToCryptoCard(
     description_key: partial
       ? "suggestion.rebalance.stables_to_crypto.partial.description"
       : "suggestion.rebalance.stables_to_crypto.full.description",
+    descriptionOverride: cardBody,
     action_kind: "review_only",
     is_actionable: true,
     is_top_pick: false,
@@ -194,6 +199,19 @@ function buildCryptoToStablesCard(
   const delta = assessment.rawCryptoDeltaPct ?? 0; // Slice 3.1 — raw magnitude drives scoring; display rounding never scores.
   const ratio = Math.min(Math.abs(delta) / 100, 1);
 
+  // 24J — mirror of the USDC→SOL card: plain-language copy + a focused before/after-swap card set. Crypto falls by
+  // how much of the required correction the suggested amount covers (full → target); stable rises by the same amount.
+  const curCrypto = assessment.currentCryptoPct ?? 0;
+  const tgtCrypto = assessment.targetCryptoPct ?? 0;
+  const curStable = assessment.currentStablePct ?? 0;
+  const swapFraction = requiredCorrectionUsd > 0 ? Math.min(suggestedAmountUsd / requiredCorrectionUsd, 1) : 0;
+  const afterCrypto = curCrypto - swapFraction * (curCrypto - tgtCrypto);
+  const afterStable = curStable + (curCrypto - afterCrypto);
+  const cardBody =
+    `Your crypto allocation is above target. ` +
+    `Swap $${Math.round(suggestedAmountUsd).toLocaleString("en-US")} of excess SOL to USDC to move closer to your target ` +
+    `while keeping 0.1 SOL available for fees and wallet activity.`;
+
   const guardrails: SuggestionGuardrail[] = [
     { code: "pricing_available", status: "passed" },
     { code: "buffer_protection", status: "passed" }, // Safety Buffer governed separately; still gated by calc
@@ -210,27 +228,20 @@ function buildCryptoToStablesCard(
     actionKind: "review_only",
     guardrails,
     protocolSelection,
-    reason: "Your crypto allocation is above target. Available direct-wallet SOL could help close the gap in your stablecoin allocation while keeping 0.1 SOL available for wallet operations." + marketReviewSuffix(assessment),
+    // Modal reason is the plain-language card body (+ a degraded-market exclusion note only when applicable).
+    reason: cardBody + marketReviewSuffix(assessment),
+    hideMetricsHeading: true,
+    hideGuardrails: true,
     metrics: [
-      pctMetric("Current crypto allocation", assessment.currentCryptoPct ?? 0),
-      pctMetric("Target crypto allocation", assessment.targetCryptoPct ?? 0),
-      pctMetric("Current stablecoin allocation", assessment.currentStablePct ?? 0),
-      pctMetric("Target stablecoin allocation", assessment.targetStablePct ?? 0),
-      pctMetric("Allocation delta", delta),
-      usdMetric("Required correction", requiredCorrectionUsd),
-      metric("Verified wallet SOL", nativeSol.recognizedSol ?? 0, "token_amount", "SOL"),
-      metric("SOL operating reserve", nativeSol.requiredNativeReserveSol ?? 0, "token_amount", "SOL"),
-      metric("Available SOL after reserve", nativeSol.technicallyAvailableSol ?? 0, "token_amount", "SOL"),
-      usdMetric("Available SOL value", availableValueUsd),
-      usdMetric("Suggested rebalance amount", suggestedAmountUsd),
-      metric("Estimated SOL to move", approximateSourceSol, "token_amount", "SOL"),
+      metric("Send", `~${pctText(approximateSourceSol)} SOL`, "count"),
+      metric("Receive", `~${Math.round(suggestedAmountUsd).toLocaleString("en-US")} USDC`, "count"),
+      pctMetric("Current crypto allocation", curCrypto),
+      pctMetric("Crypto allocation after swap", afterCrypto),
+      pctMetric("Current stablecoin allocation", curStable),
+      pctMetric("Stablecoin allocation after swap", afterStable),
     ],
-    // Involved assets section removed for Rebalance (see the USDC→SOL branch above) — bucket-level move.
-    calculations: [
-      { label: "Allocation drift", formula: "current − target", currentValue: assessment.currentCryptoPct ?? 0, targetValue: assessment.targetCryptoPct ?? 0, difference: delta, threshold: REBALANCE_DELTA_THRESHOLD_PCT, unit: "%" },
-      { label: "Wallet operating reserve protected", formula: "0.1 SOL is withheld from source capacity", currentValue: nativeSol.recognizedSol ?? 0, targetValue: nativeSol.requiredNativeReserveSol ?? 0, difference: nativeSol.technicallyAvailableSol ?? 0, unit: "SOL" },
-      { label: "Amount capped to available source", formula: "min(required correction, available SOL value)", currentValue: requiredCorrectionUsd, targetValue: availableValueUsd, difference: suggestedAmountUsd, unit: "USD" },
-    ],
+    // No "How this was calculated" section — the before/after cards carry the source→target context; the read-only
+    // "Swap Route" section carries the execution figures.
   });
 
   return {
@@ -241,6 +252,7 @@ function buildCryptoToStablesCard(
     description_key: partial
       ? "suggestion.rebalance.crypto_to_stables.partial.description"
       : "suggestion.rebalance.crypto_to_stables.full.description",
+    descriptionOverride: cardBody,
     action_kind: "review_only",
     is_actionable: true,
     is_top_pick: false,

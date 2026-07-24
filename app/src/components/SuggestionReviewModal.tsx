@@ -453,9 +453,9 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </section>
           )}
 
-          {metrics.length > 0 && (
+          {metrics.length > 0 && !details.positionReview && (
             <section className="review-modal__section" aria-label="Key metrics">
-              <h3 className="review-modal__section-title">Key metrics</h3>
+              {!details.hideMetricsHeading && <h3 className="review-modal__section-title">Key metrics</h3>}
               <dl className="review-modal__metrics">
                 {metrics.map((m) => (
                   <div key={m.label} className="review-modal__metric">
@@ -513,53 +513,107 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </section>
           )}
 
-          {involvedPositions.length > 0 && (
-            /* Rendered like the Portfolio "Involved assets"/"Staked Assets" table: Protocol (logo + name
-               linking to the protocol page) / APY / USD Value / a review-only "Manage" handoff (new tab). */
-            <section className="review-modal__section" aria-label="Involved positions">
-              <h3 className="review-modal__section-title">Involved positions</h3>
+          {details.excludedAssets && details.excludedAssets.length > 0 && (
+            /* Read-only "Excluded from Safety Buffer" table: Asset (token logo + symbol) / Amount / Value / Reason
+               (e.g. a frozen stablecoin that can't count as a liquid reserve). Identity display only — never movable. */
+            <section className="review-modal__section" aria-label="Excluded from Safety Buffer">
+              <h3 className="review-modal__section-title">Excluded from Safety Buffer</h3>
               <div className="portfolio-table__scroll">
                 <table className="portfolio-table">
                   <thead>
                     <tr>
-                      <th scope="col" className="portfolio-table__cell portfolio-table__header">Protocol</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header">Asset</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">Amount</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">Value</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {details.excludedAssets.map((a, i) => {
+                      const iconUrl = a.icon ? resolveTokenIcon(a.icon).url : fallbackTokenUrl;
+                      return (
+                        <tr key={`${a.symbol}-${i}`}>
+                          <td className="portfolio-table__cell">
+                            <span className="asset-identity">
+                              <img className="asset-identity__icon" src={iconUrl} alt="" width={24} height={24} aria-hidden="true" />
+                              <span className="asset-identity__name">{a.symbol}</span>
+                            </span>
+                          </td>
+                          <td className="portfolio-table__cell portfolio-table__cell--right">
+                            <span className="portfolio-table__value">{typeof a.amount === "number" ? tokenAmount(a.amount) : "—"}</span>
+                          </td>
+                          <td className="portfolio-table__cell portfolio-table__cell--right">
+                            <span className="portfolio-table__value">{typeof a.valueUsd === "number" ? usd(a.valueUsd) : "—"}</span>
+                          </td>
+                          <td className="portfolio-table__cell portfolio-table__cell--right">
+                            <span className="portfolio-table__value">{a.reason}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+
+          {involvedPositions.length > 0 && (
+            /* Position Optimization "Position details" table: Asset (token logo + symbol linking to its read-only
+               Solscan token page) / Value / Portfolio share / APY / a review-only "Manage" handoff (new tab). */
+            <section className="review-modal__section" aria-label="Position details">
+              <h3 className="review-modal__section-title">Position details</h3>
+              <div className="portfolio-table__scroll">
+                <table className="portfolio-table">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header">Asset</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">Value</th>
+                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">Portfolio share</th>
                       <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">APY</th>
-                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">USD Value</th>
                       <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right"><span className="sr-only">Manage</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     {involvedPositions.map((p, i) => {
-                      // Approved protocol logo only — resolveProtocolIcon returns null (render nothing) when missing.
-                      const protocolIcon = p.iconPath ? resolveProtocolIcon(p.iconPath) : null;
-                      const name = p.reviewLink?.label ?? p.protocol ?? p.name ?? p.symbol ?? "Position";
-                      const url = p.reviewLink?.url;
+                      // Asset identity: the held token's icon + symbol. Fall back to the protocol logo/name when the
+                      // underlying token can't be resolved. resolveProtocolIcon returns null when the logo is missing.
+                      const assetIcon = p.assetIconPath ? resolveTokenIcon(p.assetIconPath).url : (p.iconPath ? resolveProtocolIcon(p.iconPath) : null) ?? fallbackTokenUrl;
+                      const assetLabel = p.assetSymbol ?? p.reviewLink?.label ?? p.protocol ?? p.name ?? "Position";
+                      const assetHref = p.assetUrl;
+                      const manageName = p.reviewLink?.label ?? p.protocol ?? assetLabel;
+                      const manageUrl = p.reviewLink?.url;
                       return (
                         <tr key={`${p.protocol ?? "pos"}-${i}`}>
                           <td className="portfolio-table__cell">
                             <span className="asset-identity">
-                              {protocolIcon && <img className="asset-identity__icon" src={protocolIcon} alt="" width={24} height={24} aria-hidden="true" />}
-                              {url ? (
-                                <a className="deploy-table__asset-link" href={url} target="_blank" rel="noopener noreferrer">{name}</a>
-                              ) : (
-                                <span className="asset-identity__name">{name}</span>
-                              )}
+                              {assetIcon && <img className="asset-identity__icon" src={assetIcon} alt="" width={24} height={24} aria-hidden="true" />}
+                              <span className="asset-identity__text">
+                                {assetHref ? (
+                                  <a className="deploy-table__asset-link" href={assetHref} target="_blank" rel="noopener noreferrer">{assetLabel}</a>
+                                ) : (
+                                  <span className="asset-identity__name">{assetLabel}</span>
+                                )}
+                                {p.assetVenue && <span className="asset-identity__symbol">{p.assetVenue}</span>}
+                              </span>
                             </span>
-                          </td>
-                          <td className="portfolio-table__cell portfolio-table__cell--right">
-                            <span className="portfolio-table__value">{typeof p.apy === "number" ? `${num1(p.apy)}%` : "—"}</span>
                           </td>
                           <td className="portfolio-table__cell portfolio-table__cell--right">
                             <span className="portfolio-table__value">{typeof p.valueUsd === "number" ? usd(p.valueUsd) : "—"}</span>
                           </td>
                           <td className="portfolio-table__cell portfolio-table__cell--right">
-                            {url && (
+                            <span className="portfolio-table__value">{typeof p.portfolioSharePct === "number" ? `${num1(p.portfolioSharePct)}%` : "—"}</span>
+                          </td>
+                          <td className="portfolio-table__cell portfolio-table__cell--right">
+                            <span className="portfolio-table__value">{typeof p.apy === "number" ? `${num1(p.apy)}%` : "—"}</span>
+                          </td>
+                          <td className="portfolio-table__cell portfolio-table__cell--right">
+                            {manageUrl && (
                               <a
                                 className="portfolio-table__manage"
-                                href={url}
+                                href={manageUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                aria-label={`Manage on ${name} in a new tab. No transaction is created.`}
+                                aria-label={`Manage on ${manageName} in a new tab. No transaction is created.`}
                               >
                                 <span>Manage</span>
                                 <ButtonIcon src={externalLinkUrl} />
@@ -591,10 +645,10 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                         <span>Target {formatCalcValue(c.targetValue, c.unit)}</span>
                       )}
                       {typeof c.difference === "number" && (
-                        <span>Difference {formatCalcValue(c.difference, c.unit)}</span>
+                        <span>Difference {formatCalcValue(c.difference, c.differenceUnit ?? c.unit)}</span>
                       )}
                       {typeof c.threshold === "number" && (
-                        <span>Threshold {formatCalcValue(c.threshold, c.unit)}</span>
+                        <span>Threshold {formatCalcValue(c.threshold, c.thresholdUnit ?? c.unit)}</span>
                       )}
                     </span>
                   </li>
@@ -603,7 +657,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </section>
           )}
 
-          {showGuardrails && guardrailGroups.length > 0 && (
+          {showGuardrails && !details.positionReview && !details.hideGuardrails && guardrailGroups.length > 0 && (
             <section className="review-modal__section" aria-label="Guardrails">
               <h3 className="review-modal__section-title">Guardrails</h3>
               <div className="review-modal__guardrails">

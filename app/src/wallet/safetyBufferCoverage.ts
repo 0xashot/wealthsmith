@@ -35,6 +35,9 @@ export interface SafetyBufferCoverageSource {
   positionClass: string;
   protocol: string | null;
   assetMint: string | null;
+  /** Safe display identity for an EXCLUDED holding table (never a wallet/account id). */
+  symbol?: string | null;
+  uiAmount?: number | null;
   recognizedValueUsd: number | null;
   verifiedLiquidValueUsd: number;
   delayedValueUsd: number;
@@ -73,6 +76,8 @@ export function classifyPositionCoverage(p: WalletPosition): SafetyBufferCoverag
     positionId: p.id,
     protocol: p.protocol ?? null,
     assetMint: p.mint ?? null,
+    symbol: p.symbol ?? null,
+    uiAmount: p.uiAmount ?? null,
     delayedValueUsd: 0,
     unavailableValueUsd: 0,
     unresolvedValueUsd: 0,
