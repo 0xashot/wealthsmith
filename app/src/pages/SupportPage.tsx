@@ -35,14 +35,12 @@ interface Props {
   pushToast: (message: string, helper?: string) => void;
   onNavigate: (id: string) => void;
   onDisconnect: () => void;
-  onCopyAddress: (address: string) => void;
 }
 
 export default function SupportPage({
   pushToast,
   onNavigate,
   onDisconnect,
-  onCopyAddress,
 }: Props) {
   const [query, setQuery] = useState("");
   const [contactOpen, setContactOpen] = useState(false);
@@ -95,7 +93,6 @@ export default function SupportPage({
           askButtonRef={askButtonRef}
           activePage="support"
           onNavigate={onNavigate}
-          onCopyAddress={onCopyAddress}
           onDisconnect={onDisconnect}
           onOpenAskSmithAi={openAskSmithAi}
         />

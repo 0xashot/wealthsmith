@@ -119,7 +119,7 @@ export default function ProjectedGrowthChart({ growth }: { growth: ProjectedGrow
           Legend Markers; label comes from the series data */}
       <div className="chart-legend">
         <span className="chart-legend__item">
-          <LegendMarker variant="line" colorToken="--color-chart-series-1" />
+          <LegendMarker variant="dot" colorToken="--color-chart-series-1" />
           {series.label}
         </span>
       </div>

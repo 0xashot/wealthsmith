@@ -473,6 +473,20 @@
   text-align: center;
 }
 
+/* A placeholder allocation group (disconnected, or no plan yet): empty tracks + $0 in disabled colors. */
+.allocation__group--empty .allocation__group-label,
+.allocation__group--empty .allocation__row-label,
+.allocation__group--empty .allocation__value {
+  color: var(--color-text-disabled);
+}
+/* "Set your goal & risk" prompt below the allocation while there is no recommended target. */
+.allocation__empty-desc {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
 /* ---------- Real-wallet dashboard sections (heading above card content) ---------- */
 
 .dash-section {
@@ -654,6 +668,13 @@
   height: var(--spacing-stack-gap-sm);
   width: 100%;
   border-radius: var(--radius-control-pill);
+}
+
+/* Projected Growth loading: a block the height of the chart plot area. */
+.skeleton--chart {
+  height: 200px;
+  width: 100%;
+  border-radius: var(--radius-chart-bar);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1243,9 +1264,8 @@
 
 .toast-host {
   position: fixed;
-  bottom: var(--spacing-page-padding-desktop);
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 32px;
+  left: 32px;
   display: grid;
   gap: var(--spacing-inline-gap-sm);
   z-index: var(--zIndex-feedback-toast);

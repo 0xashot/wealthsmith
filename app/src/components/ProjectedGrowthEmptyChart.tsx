@@ -63,7 +63,7 @@ export default function ProjectedGrowthEmptyChart({ description }: { description
 
       <div className="chart-legend pg-empty__legend">
         <span className="chart-legend__item">
-          <LegendMarker variant="line" colorToken="--color-text-disabled" />
+          <LegendMarker variant="dot" colorToken="--color-text-disabled" />
           Growth
         </span>
       </div>

@@ -35,8 +35,6 @@ import type { SavedGoal } from "./types/goal";
 import type { TourStage } from "./pages/OnboardingExperience";
 import {
   DEMO_EXIT_TOAST,
-  TOAST_ADDRESS_COPIED,
-  TOAST_COPY_FAILED,
   ONBOARDING_FINISH_TOAST,
   ONBOARDING_FINISH_HELPER,
 } from "./state/approvedCopy";
@@ -220,16 +218,6 @@ function MainApp() {
   };
   const closeConnectModal = () => setConnectModalOpen(false);
 
-  // Copy the REAL connected address (passed up from the Global Nav pill menu).
-  const copyWalletAddress = async (address: string) => {
-    try {
-      await navigator.clipboard.writeText(address);
-      pushToast(TOAST_ADDRESS_COPIED);
-    } catch {
-      pushToast(TOAST_COPY_FAILED);
-    }
-  };
-
   // Finish Setup (onboarding complete): commit the collected answers into the same
   // local savedGoal state Goal Settings uses, mark onboarding complete, land on the
   // Dashboard, and toast. No Dashboard recalculation (Option A — Goal-page-scoped).
@@ -275,7 +263,6 @@ function MainApp() {
         mode={mode === "connected" ? "connected" : "disconnected"}
         onConnectWallet={openConnectModal}
         onTryDemo={goDemo}
-        onCopyAddress={copyWalletAddress}
         onDisconnect={disconnectWallet}
         onComplete={handleOnboardingComplete}
         onTour={startOnboardingTour}
@@ -292,7 +279,6 @@ function MainApp() {
         pushToast={pushToast}
         onNavigate={navigate}
         onDisconnect={disconnectWallet}
-        onCopyAddress={copyWalletAddress}
         savedGoal={savedGoal}
       />
     );
@@ -302,7 +288,6 @@ function MainApp() {
         pushToast={pushToast}
         onNavigate={navigate}
         onDisconnect={disconnectWallet}
-        onCopyAddress={copyWalletAddress}
         savedGoal={savedGoal}
         onSaveGoal={setSavedGoal}
       />
@@ -313,7 +298,6 @@ function MainApp() {
         pushToast={pushToast}
         onNavigate={navigate}
         onDisconnect={disconnectWallet}
-        onCopyAddress={copyWalletAddress}
       />
     );
   } else {
@@ -326,7 +310,6 @@ function MainApp() {
         onDisconnect={disconnectWallet}
         onConnectWallet={openConnectModal}
         onTryDemo={goDemo}
-        onCopyAddress={copyWalletAddress}
         goal={savedGoal}
       />
     );

@@ -224,7 +224,7 @@ import { deriveJupStakingSuggestion, JUP_STAKING_SUGGESTION_ID } from "./jupStak
 import { deriveStakingSuggestion } from "./stakingSuggestion";
 import { assessJupStaking, type JupStakingCandidateContext } from "./jupStakingSelection";
 import { getApprovedJupStakingProduct, JUPITER_JUP_STAKING_PRODUCT, JUPITER_JUP_STAKING_PRODUCT_ID, type JupStakingProductRecord } from "./jupStakingProductRegistry";
-import { deriveAllocationMethodologyCopy, ALLOCATION_METHODOLOGY_FULL, ALLOCATION_TARGET_CURRENT } from "../state/approvedCopy";
+import { ALLOCATION_METHODOLOGY } from "../state/approvedCopy";
 import { buildCanonicalTargetTestingScenario as buildCttScenario, testingGoal as cttGoal } from "./testing/canonicalTargetTestingScenario";
 
 /**
@@ -18623,7 +18623,7 @@ export function runDashboardTargetMountFixtureChecks(): FixtureCheck[] {
   add("DSH-5: real-wallet WITHOUT a market cache → targetSummary fails closed (unresolved, null percentages, no risk-only fallback)", (() => { const t = railNoCache.targetSummary; return t != null && t.state === "unresolved" && t.targetCryptoPct === null && t.targetStablePct === null; })(), "fail closed");
   add("DSH-6: Demo/testing rail exposes NO targetSummary (dashboard keeps its existing display)", railDemo.targetSummary === undefined, "demo none");
   add("DSH-7: DashboardBody consumes targetSummary and does NOT call deriveRecommendedAllocation / RISK_TARGET_ALLOCATION / fetch the market cache", (() => { const s = readIfSrc("src/components/DashboardBody.tsx"); return /targetSummary/.test(s) && !/deriveRecommendedAllocation/.test(s) && !/RISK_TARGET_ALLOCATION/.test(s) && !/useMarketConditionsCache|market-conditions-cache/.test(s); })(), "no legacy");
-  add("DSH-8: DashboardBody renders the safe state captions (current / market-excluded / loading / unavailable)", (() => { const s = readIfSrc("src/components/DashboardBody.tsx"); return /ALLOCATION_TARGET_CURRENT/.test(s) && /ALLOCATION_MARKET_EXCLUDED/.test(s) && /ALLOCATION_TARGET_LOADING/.test(s) && /ALLOCATION_TARGET_UNAVAILABLE/.test(s); })(), "captions");
+  add("DSH-8: DashboardBody renders NO visible target-state caption below the allocation (removed); the loading/unavailable caption strings are gone and no card__caption carries a target-state constant", (() => { const s = readIfSrc("src/components/DashboardBody.tsx"); return !/ALLOCATION_TARGET_LOADING/.test(s) && !/ALLOCATION_TARGET_UNAVAILABLE/.test(s) && !/card__caption">\{ALLOCATION_(TARGET_CURRENT|MARKET_EXCLUDED)\}/.test(s); })(), "no target caption");
   add("DSH-9: dashboard target captions add NO market score/band/CoinMarketCap/observation-time (Slice-6 surface)", (() => { const c = readIfSrc("src/state/approvedCopy.ts"); const i = c.indexOf("ALLOCATION_TARGET_CURRENT ="); const block = i >= 0 ? c.slice(i, i + 400) : ""; return /Market data was excluded from this calculation/.test(block) && /All target-allocation inputs are current/.test(block) && !/CoinMarketCap|Fear|Greed|\/100|score|band|observ/i.test(block); })(), "no market UI");
   add("DSH-10: privacy — targetSummary carries no income/expenses/net cash flow/savings rate/market score/band/cache/key", (() => { const s = JSON.stringify(railFull.targetSummary); return !/income|expenses|net_?cash|savingsRate|"score"|"band"|cacheVersion|apiKey/i.test(s); })(), "privacy");
   add("DSH-11: display rounding only — targetSummary stores the raw canonical percentages (not pre-rounded)", (() => { const t = railFull.targetSummary; const ct = railFull.targetContext?.canonicalTargetAllocation; return t != null && ct != null && t.targetCryptoPct === ct.targetCryptoPct && t.targetStablePct === ct.targetStablePct; })(), "raw stored");
@@ -18688,7 +18688,7 @@ export function runMarketConditionsSurfaceFixtureChecks(): FixtureCheck[] {
   add("MCS-16: full target percentages equal Rebalance/DCA/dashboard values (same canonical object)", (() => { const ct = full.targetContext?.canonicalTargetAllocation; return ct != null && full.targetSummary?.targetCryptoPct === ct.targetCryptoPct; })(), "one target");
 
   // ---- Copy correction ----
-  add("MCS-17: mounted dashboard FULL methodology copy is CANONICAL five-factor (the rendered ALLOCATION_METHODOLOGY_FULL, no 'risk-based'/'based on your risk level')", (() => { const fullText = copySrc.match(/ALLOCATION_METHODOLOGY_FULL =\s*\n?\s*"([^"]*)"/)?.[1] ?? ""; return /risk tolerance, timeline, financial goal, cash flow, and current market conditions/.test(fullText) && !/risk-based|based on your risk level/i.test(fullText); })(), "canonical copy");
+  add("MCS-17: the single allocation methodology tooltip names the five inputs + latest-available market conditions + the planning-only disclaimer (no 'risk-based'/'based on your risk level')", (() => { const t = ALLOCATION_METHODOLOGY; return /risk tolerance, timeline, financial goal, cash flow, and the latest available market conditions/.test(t) && /For planning only, not financial advice\./.test(t) && !/risk-based|based on your risk level/i.test(t); })(), "single tooltip copy");
 
   // ---- Attribution rules ----
   add("MCS-18: CoinMarketCap attribution present ONLY beside current data (full has sourceName; degraded/stale/unavailable/loading do not)", (() => { return full.marketSummary!.sourceName === "CoinMarketCap" && stale.marketSummary!.sourceName === null && degraded.marketSummary!.sourceName === null && loadingR.marketSummary!.sourceName === null; })(), "attribution gated");
@@ -18700,41 +18700,27 @@ export function runMarketConditionsSurfaceFixtureChecks(): FixtureCheck[] {
 }
 
 /* ------------------------------------------------------------------ *
- * Step 22F (slice 6.1) — STATE-AWARE dashboard methodology copy + canonical band-boundary passthrough. Validates that
- * `deriveAllocationMethodologyCopy(state)` returns copy matching the canonical target state (full cites current market
- * conditions; degraded says market was excluded; unavailable/blocked make no five-factor claim; loading/unresolved make
- * no inclusion/exclusion claim), that no single state renders a contradictory pair, that the dashboard consumes the
- * derivation (not the old static text), that the surface passes the canonical production band through without UI
- * reclassification, and that the legitimate Safety-Buffer risk-based-months copy is untouched.
+ * Allocation methodology tooltip + canonical band-boundary passthrough. Validates that the allocation methodology
+ * tooltip is now ONE state-independent sentence (five inputs + "latest available market conditions" + planning-only
+ * disclaimer), shown in every case including disconnected; that the honest "latest available" hedge avoids asserting
+ * "current market conditions" or "market data was excluded"; that DashboardBody renders the single ALLOCATION_METHODOLOGY
+ * (the prior state-aware derivation is removed); that the per-state allocation CARD captions stay state-aware; that the
+ * surface passes the canonical production band through without UI reclassification; and that the Safety-Buffer copy is
+ * untouched.
  * ------------------------------------------------------------------ */
 export function runAllocationMethodologyCopyFixtureChecks(): FixtureCheck[] {
   const checks: FixtureCheck[] = [];
   const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
   const readIfSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
-  const includesMarket = /current market conditions/i;
-  const excludedMarket = /Market data was excluded/i;
-  const full = deriveAllocationMethodologyCopy("full");
-  const degraded = deriveAllocationMethodologyCopy("degraded_market_excluded");
-  const loading = deriveAllocationMethodologyCopy("loading");
-  const unresolved = deriveAllocationMethodologyCopy("unresolved");
-  const unavailable = deriveAllocationMethodologyCopy("unavailable");
-  const blocked = deriveAllocationMethodologyCopy("blocked");
   const dashSrc = readIfSrc("src/components/DashboardBody.tsx");
   const copySrc = readIfSrc("src/state/approvedCopy.ts");
 
-  // ---- State-aware copy ----
-  add("MCC-1: FULL methodology copy cites current market conditions + names the profile factors; does NOT say excluded", includesMarket.test(full) && /risk tolerance, timeline, financial goal, cash flow/.test(full) && !excludedMarket.test(full), "full copy");
-  add("MCC-2: DEGRADED copy says market data was excluded + names the four profile factors; does NOT claim current market inclusion; does NOT say all inputs current", excludedMarket.test(degraded) && /risk tolerance, timeline, financial goal, and cash flow/.test(degraded) && !includesMarket.test(degraded) && !/all target-allocation inputs are current/i.test(degraded), "degraded copy");
-  add("MCC-3: DEGRADED copy is renormalized four-factor language — never Neutral/risk-only/incomplete", !/neutral|risk-only|only risk tolerance|incomplete/i.test(degraded), "degraded accurate");
-  add("MCC-4: UNAVAILABLE + BLOCKED make no five-factor completion claim (no factor enumeration, no current market conditions)", !includesMarket.test(unavailable) && !/risk tolerance, timeline/.test(unavailable) && unavailable === blocked && !includesMarket.test(blocked), "unavailable copy");
-  add("MCC-5: LOADING + UNRESOLVED make no inclusion/exclusion claim (neutral)", !includesMarket.test(loading) && !excludedMarket.test(loading) && loading === unresolved && !includesMarket.test(unresolved) && !excludedMarket.test(unresolved), "loading copy");
-
-  // ---- No contradiction in any single state ----
-  add("MCC-6: no single state's methodology copy contains BOTH 'current market conditions' and 'market data was excluded'", [full, degraded, loading, unresolved, unavailable, blocked].every((c) => !(includesMarket.test(c) && excludedMarket.test(c))), "no contradiction");
-  add("MCC-7: FULL methodology (current market conditions) pairs with the FULL allocation caption (all inputs current) — consistent, not contradictory", includesMarket.test(full) && includesMarket.test(ALLOCATION_METHODOLOGY_FULL) && /All target-allocation inputs are current/.test(ALLOCATION_TARGET_CURRENT) && !excludedMarket.test(ALLOCATION_TARGET_CURRENT), "full pair");
-
-  // ---- Dashboard consumes the derivation ----
-  add("MCC-8: DashboardBody renders deriveAllocationMethodologyCopy(targetState) in the allocation info popover — NOT the old static ALLOCATION_INFO_TEXT", /deriveAllocationMethodologyCopy\(targetState\)/.test(dashSrc) && !/\{ALLOCATION_INFO_TEXT\}/.test(dashSrc), "state-aware wired");
+  // ---- One state-independent methodology tooltip (shown in every case, incl. disconnected) ----
+  add("MCC-1: the single tooltip names the five inputs (risk, timeline, goal, cash flow, latest-available market conditions) + the planning-only disclaimer", /risk tolerance, timeline, financial goal, cash flow, and the latest available market conditions/.test(ALLOCATION_METHODOLOGY) && /For planning only, not financial advice\./.test(ALLOCATION_METHODOLOGY), "single tooltip");
+  add("MCC-2: the tooltip uses the honest 'latest available' hedge — it does NOT assert 'current market conditions' were definitely used, and does NOT say 'market data was excluded'", /latest available market conditions/.test(ALLOCATION_METHODOLOGY) && !/\bcurrent market conditions\b/.test(ALLOCATION_METHODOLOGY) && !/Market data was excluded/i.test(ALLOCATION_METHODOLOGY), "honest hedge");
+  add("MCC-3: DashboardBody renders the single ALLOCATION_METHODOLOGY in the allocation info popover — not the old state-aware derivation, not the legacy ALLOCATION_INFO_TEXT", /\{ALLOCATION_METHODOLOGY\}/.test(dashSrc) && !/deriveAllocationMethodologyCopy/.test(dashSrc) && !/\{ALLOCATION_INFO_TEXT\}/.test(dashSrc), "single wired");
+  add("MCC-4: the prior state-aware methodology API is fully removed from approvedCopy (no deriveAllocationMethodologyCopy / _FULL / _DEGRADED / _LOADING)", !/deriveAllocationMethodologyCopy|ALLOCATION_METHODOLOGY_FULL|ALLOCATION_METHODOLOGY_DEGRADED|ALLOCATION_METHODOLOGY_LOADING/.test(copySrc), "state-aware removed");
+  add("MCC-5: the visible per-state allocation caption below the chart is REMOVED (no card__caption target-state line); market-inclusion context survives only in the chart's screen-reader summary", !/card__caption">\{ALLOCATION_(TARGET_CURRENT|MARKET_EXCLUDED|TARGET_LOADING|TARGET_UNAVAILABLE)\}/.test(dashSrc) && /ALLOCATION_MARKET_EXCLUDED/.test(dashSrc), "caption removed");
 
   // ---- Band-boundary passthrough (UI never classifies) ----
   add("MCC-9: canonical band boundaries are proven at the ASSESSMENT level (MC-1: 24/25/49/50/59/60/74/75) — no duplicate UI threshold logic", (() => { const comp = readIfSrc("src/components/MarketConditionsSurface.tsx"); const fx = readIfSrc("src/suggestions/suggestionEngine.fixtures.ts"); return /cls\(24\) === "extreme_fear" && cls\(25\) === "fear"/.test(fx) && !/score >=|score <|>= 25|>= 50|>= 60|>= 75/.test(comp); })(), "assessment boundaries");

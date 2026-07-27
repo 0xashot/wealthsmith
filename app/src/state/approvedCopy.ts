@@ -7,24 +7,10 @@
  * copy exists").
  */
 
-/* ---------- Wallet menu (content/wallet-copy.md, checklist §5.4) ---------- */
+/* ---------- Wallet menu (content/wallet-copy.md) ---------- */
 
-/** checklists/mvp-implementation-checklist.md §5.4: "Wallet menu may contain Copy Address." */
-export const WALLET_MENU_COPY_ADDRESS = "Copy Address";
-
-/** content/wallet-copy.md — Wallet Menu Copy, approved menu item */
+/** content/wallet-copy.md — Wallet Menu Copy, the only menu item. */
 export const WALLET_MENU_DISCONNECT = "Disconnect Wallet";
-
-/** content/wallet-copy.md — Wallet Menu Copy, optional wallet menu helper */
-export const WALLET_MENU_HELPER = "Your funds stay in your wallet.";
-
-/* ---------- Toasts (components/toast.md examples; fixture copies) ---------- */
-
-/** components/toast.md — approved toast example */
-export const TOAST_ADDRESS_COPIED = "Address copied.";
-
-/** components/toast.md — approved toast example */
-export const TOAST_COPY_FAILED = "Could not copy address.";
 
 /* ---------- Disconnected dashboard states ---------- */
 
@@ -588,6 +574,8 @@ export const ALLOCATION_LABEL_STABLES = "Stables";
 /** Current vs Recommended Allocation — group labels + compare captions. */
 export const ALLOCATION_GROUP_CURRENT = "Current";
 export const ALLOCATION_GROUP_RECOMMENDED = "Recommended";
+/** Allocation empty state (disconnected / no plan): shown under the disabled illustrative bars. */
+export const ALLOCATION_EMPTY_PROMPT = "Add your goal and risk to view your ideal portfolio mix.";
 export const ALLOCATION_COMPARE_CAPTION =
   "Your live mix vs your target allocation. Your target is based on your risk tolerance, timeline, financial goal, cash flow, and current market conditions — a modeled target, not advice.";
 export const ALLOCATION_NO_RISK =
@@ -610,33 +598,13 @@ export const MARKET_CONDITIONS_UNAVAILABLE_SIMPLE = "Market data is currently un
 export const MARKET_CONDITIONS_EXCLUDED =
   "The market component was excluded, and the remaining profile factors were renormalized.";
 export const MARKET_CONDITIONS_STALE = "Market data is outside its approved freshness window.";
-/* Step 22F (slice 6.1) — STATE-AWARE target-allocation methodology copy. The methodology sentence must match the
- * canonical target state: a full target may cite current market conditions; a degraded target must say market data
- * was excluded (never both); unavailable/blocked make no five-factor completion claim; loading/unresolved make no
- * inclusion/exclusion claim. */
-export const ALLOCATION_METHODOLOGY_FULL =
-  "Your target allocation is based on your risk tolerance, timeline, financial goal, cash flow, and current market conditions. For planning only, not financial advice.";
-export const ALLOCATION_METHODOLOGY_DEGRADED =
-  "Your target allocation uses your risk tolerance, timeline, financial goal, and cash flow. Market data was excluded because it was unavailable or outside its approved freshness window. For planning only, not financial advice.";
-export const ALLOCATION_METHODOLOGY_LOADING = "Your target allocation is being calculated.";
-/**
- * Derive the allocation methodology popover copy from the CANONICAL target state (never from score presence or a
- * recomputed confidence). `state` is `RailTargetSummary.state`: full | degraded_market_excluded | unavailable |
- * blocked | unresolved | loading.
- */
-export function deriveAllocationMethodologyCopy(state: string): string {
-  switch (state) {
-    case "full":
-      return ALLOCATION_METHODOLOGY_FULL;
-    case "degraded_market_excluded":
-      return ALLOCATION_METHODOLOGY_DEGRADED;
-    case "loading":
-    case "unresolved":
-      return ALLOCATION_METHODOLOGY_LOADING;
-    default: // unavailable | blocked → no five-factor completion claim
-      return ALLOCATION_TARGET_UNAVAILABLE;
-  }
-}
+/* Target-allocation methodology tooltip — ONE sentence for every case (connected, disconnected, and stale/excluded
+ * market data). "the latest available market conditions" is honest across states: the engine uses the freshest market
+ * reading that passes its freshness gate, and none when no fresh reading is available. Keeps the planning-only
+ * disclaimer. (The per-state allocation CARD captions below — current / market-excluded / loading / unavailable —
+ * remain state-aware; this replaces only the tooltip's prior state-aware copy.) */
+export const ALLOCATION_METHODOLOGY =
+  "Recommended allocation is based on your risk tolerance, timeline, financial goal, cash flow, and the latest available market conditions. For planning only, not financial advice.";
 /* Current vs Recommended Allocation "how it works" info popover. */
 export const ALLOCATION_INFO_ARIA =
   "How Current vs Recommended Allocation is calculated";

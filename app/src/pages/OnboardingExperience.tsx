@@ -38,7 +38,6 @@ interface Props {
   /** Global-nav Try Demo Mode entry (not offered inside the onboarding panel). */
   onTryDemo: () => void;
   /** Connected phase: wallet menu actions. */
-  onCopyAddress: (address: string) => void;
   onDisconnect: () => void;
   /** Finish Setup: commit answers + complete onboarding (connected phase). */
   onComplete: (savedGoal: SavedGoal) => void;
@@ -57,7 +56,6 @@ export default function OnboardingExperience({
   mode,
   onConnectWallet,
   onTryDemo,
-  onCopyAddress,
   onDisconnect,
   onComplete,
   onTour,
@@ -119,7 +117,6 @@ export default function OnboardingExperience({
         onboardingActive
         onConnectWallet={onConnectWallet}
         onTryDemo={onTryDemo}
-        onCopyAddress={onCopyAddress}
         onDisconnect={onDisconnect}
       />
 

@@ -45,7 +45,6 @@ interface Props {
   onDisconnect: () => void;
   onConnectWallet: () => void;
   onTryDemo: () => void;
-  onCopyAddress: (address: string) => void;
   /** connected only: in-app page switch + active page (undefined disables nav) */
   activePage?: string;
   onNavigate?: (id: string) => void;
@@ -58,7 +57,6 @@ export default function DashboardPage({
   onDisconnect,
   onConnectWallet,
   onTryDemo,
-  onCopyAddress,
   activePage,
   onNavigate,
   goal,
@@ -99,7 +97,6 @@ export default function DashboardPage({
         askButtonRef={askButtonRef}
         activePage={activePage}
         onNavigate={onNavigate}
-        onCopyAddress={onCopyAddress}
         onDisconnect={disconnect}
         onConnectWallet={connectWallet}
         onTryDemo={onTryDemo}

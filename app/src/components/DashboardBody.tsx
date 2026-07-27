@@ -51,17 +51,15 @@ import {
   PG_INFO_UNAVAILABLE_INTRO,
   PG_INFO_UNAVAILABLE_CONNECT,
   PG_INFO_FOOTER,
-  ALLOCATION_NEEDS_PRICING,
+  ALLOCATION_EMPTY_PROMPT,
   ALLOCATION_INFO_ARIA,
-  deriveAllocationMethodologyCopy,
+  ALLOCATION_METHODOLOGY,
   ALLOCATION_GROUP_CURRENT,
   ALLOCATION_GROUP_RECOMMENDED,
   ALLOCATION_LABEL_CRYPTO,
   ALLOCATION_LABEL_STABLES,
   ALLOCATION_TARGET_CURRENT,
   ALLOCATION_MARKET_EXCLUDED,
-  ALLOCATION_TARGET_LOADING,
-  ALLOCATION_TARGET_UNAVAILABLE,
 } from "../state/approvedCopy";
 
 /** Whole-dollar USD (no cents) — used for the Current vs Recommended rows. */
@@ -93,15 +91,6 @@ function DashSection({
       {caption && <p className="dash-section__caption">{caption}</p>}
       {children}
     </section>
-  );
-}
-
-/** Muted, single-line "unavailable" card body. */
-function UnavailableCard({ text }: { text: string }) {
-  return (
-    <div className="card empty-card">
-      <p className="empty-card__description">{text}</p>
-    </div>
   );
 }
 
@@ -230,6 +219,18 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
   // (anyUnpriced), a $0 would be misleading, so that case keeps the muted "—" + needs-pricing caption.
   const emptyZero = !priced && !value.anyUnpriced;
 
+  // One allocation row: a real coloured bar + value when `pct` is present, otherwise an empty track + $0
+  // (used for the disabled/placeholder groups — disconnected wallet, or connected with no plan yet).
+  const allocationRow = (label: string, pct: number | null, usd: number, variant: "current" | "recommended") => (
+    <div className="allocation__row">
+      <span className="allocation__row-label">{label}</span>
+      <div className="allocation__track">
+        {pct != null && <div className={`allocation__bar allocation__bar--${variant}`} style={{ width: `${pct}%` }} />}
+      </div>
+      <span className="allocation__value">{usd0(usd)}</span>
+    </div>
+  );
+
   return (
     <>
       {warning && status !== "idle" && (
@@ -290,12 +291,16 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
       {/* Safety Buffer — stablecoin reserve (incl. supplied USDC) vs expenses. */}
       <DashSection title={s.safety_buffer.title} caption={SAFETY_BUFFER_CAPTION}>
         {loading ? (
+          // Mirrors the funded card: coverage value, progress bar, caption, legend.
           <div className="card">
             <div className="buffer__values">
               <span className="skeleton skeleton--value" />
             </div>
             <div className="skeleton skeleton--bar" />
             <span className="skeleton skeleton--line" />
+            <div className="chart-legend">
+              <span className="skeleton skeleton--line-short" />
+            </div>
           </div>
         ) : buffer ? (
           <div id="safety-buffer" tabIndex={-1} className="card">
@@ -371,16 +376,11 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
         }
       >
         {loading ? (
+          // Mirrors the projection card: the chart plot area + a legend.
           <div className="card">
-            <div className="snapshot__grid">
-              <div className="metric">
-                <span className="skeleton skeleton--line-short" />
-                <span className="skeleton skeleton--value" />
-              </div>
-              <div className="metric">
-                <span className="skeleton skeleton--line-short" />
-                <span className="skeleton skeleton--value" />
-              </div>
+            <div className="skeleton skeleton--chart" />
+            <div className="chart-legend">
+              <span className="skeleton skeleton--line-short" />
             </div>
           </div>
         ) : projectionGrowth ? (
@@ -394,96 +394,67 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
       <DashSection
         title={s.allocation.title}
         action={
+          // Open UP and anchored RIGHT: the icon sits at the section's right edge, so a downward,
+          // left-anchored popover overflowed the viewport (horizontal scrollbar → the page "jumped").
           loading ? undefined : (
-            <InfoPopover label={ALLOCATION_INFO_ARIA}>
-              {/* Step 22F (slice 6.1) — STATE-AWARE methodology copy: full cites current market conditions; degraded
-                  says market data was excluded; unavailable/blocked make no five-factor claim; loading stays neutral. */}
-              <p className="info-popover__text">{deriveAllocationMethodologyCopy(targetState)}</p>
+            <InfoPopover label={ALLOCATION_INFO_ARIA} direction="up" align="right">
+              {/* One methodology sentence for every case (connected, disconnected, stale market data). */}
+              <p className="info-popover__text">{ALLOCATION_METHODOLOGY}</p>
             </InfoPopover>
           )
         }
       >
         {loading ? (
+          // Mirrors the real layout: two groups (Current + Recommended), each a label + two label/bar/value rows, + legend.
           <div className="card">
-            <div className="skeleton skeleton--bar" />
-            <div className="skeleton skeleton--bar" />
-          </div>
-        ) : showAllocation ? (
-          <div className="card">
-            <div className="allocation__groups" role="img" aria-label={allocationSummary}>
-              {/* Current — live wallet allocation (values unchanged from before). */}
-              <div className="allocation__group">
-                <span className="allocation__group-label">{ALLOCATION_GROUP_CURRENT}</span>
-                <div className="allocation__row">
-                  <span className="allocation__row-label">{ALLOCATION_LABEL_CRYPTO}</span>
-                  <div className="allocation__track">
-                    <div
-                      className="allocation__bar allocation__bar--current"
-                      style={{ width: `${cryptoPct}%` }}
-                    />
-                  </div>
-                  <span className="allocation__value">{usd0(cryptoUsd)}</span>
-                </div>
-                <div className="allocation__row">
-                  <span className="allocation__row-label">{ALLOCATION_LABEL_STABLES}</span>
-                  <div className="allocation__track">
-                    <div
-                      className="allocation__bar allocation__bar--recommended"
-                      style={{ width: `${stablePct}%` }}
-                    />
-                  </div>
-                  <span className="allocation__value">{usd0(stableUsd)}</span>
-                </div>
-              </div>
-
-              {/* Recommended — the shared CANONICAL target (Step 22F slice 5), shown only for a usable target. */}
-              {targetUsable && (
-                <div className="allocation__group">
-                  <span className="allocation__group-label">
-                    {ALLOCATION_GROUP_RECOMMENDED}
-                  </span>
-                  <div className="allocation__row">
-                    <span className="allocation__row-label">{ALLOCATION_LABEL_CRYPTO}</span>
-                    <div className="allocation__track">
-                      <div
-                        className="allocation__bar allocation__bar--current"
-                        style={{ width: `${targetCryptoPct}%` }}
-                      />
+            <div className="allocation__groups">
+              {[0, 1].map((g) => (
+                <div className="allocation__group" key={g}>
+                  <span className="skeleton skeleton--line-short" />
+                  {[0, 1].map((r) => (
+                    <div className="allocation__row" key={r}>
+                      <span className="skeleton skeleton--line-short" />
+                      <span className="skeleton skeleton--bar" />
+                      <span className="skeleton skeleton--line-short" />
                     </div>
-                    <span className="allocation__value">{usd0(targetCryptoUsd as number)}</span>
-                  </div>
-                  <div className="allocation__row">
-                    <span className="allocation__row-label">{ALLOCATION_LABEL_STABLES}</span>
-                    <div className="allocation__track">
-                      <div
-                        className="allocation__bar allocation__bar--recommended"
-                        style={{ width: `${targetStablePct}%` }}
-                      />
-                    </div>
-                    <span className="allocation__value">{usd0(targetStableUsd as number)}</span>
-                  </div>
+                  ))}
                 </div>
-              )}
+              ))}
             </div>
-            {/* Step 22F (slice 5) — safe target-state treatment: degraded disclosure / current confirmation /
-                loading / unavailable. No risk-only percentages, no market score/band (Slice-6 surface). */}
-            {targetUsable && targetMarketExcluded && <p className="card__caption">{ALLOCATION_MARKET_EXCLUDED}</p>}
-            {targetUsable && !targetMarketExcluded && <p className="card__caption">{ALLOCATION_TARGET_CURRENT}</p>}
-            {!targetUsable && targetLoadingTreatment && <p className="card__caption">{ALLOCATION_TARGET_LOADING}</p>}
-            {!targetUsable && !targetLoadingTreatment && <p className="card__caption">{ALLOCATION_TARGET_UNAVAILABLE}</p>}
             <div className="chart-legend">
-              <span className="chart-legend__item">
-                <LegendMarker variant="dot" colorToken="--color-chart-series-1" />
-                {ALLOCATION_LABEL_CRYPTO}
-              </span>
-              <span className="chart-legend__item">
-                <LegendMarker variant="dot" colorToken="--color-chart-series-3" />
-                {ALLOCATION_LABEL_STABLES}
-              </span>
+              <span className="skeleton skeleton--line-short" />
             </div>
           </div>
         ) : (
-          <UnavailableCard text={ALLOCATION_NEEDS_PRICING} />
+          <div className="card">
+            <div className="allocation__groups" role="img" aria-label={allocationSummary}>
+              {/* Current — live wallet allocation when priced; otherwise (disconnected) empty tracks + $0, disabled. */}
+              <div className={"allocation__group" + (showAllocation ? "" : " allocation__group--empty")}>
+                <span className="allocation__group-label">{ALLOCATION_GROUP_CURRENT}</span>
+                {allocationRow(ALLOCATION_LABEL_CRYPTO, showAllocation ? cryptoPct : null, showAllocation ? cryptoUsd : 0, "current")}
+                {allocationRow(ALLOCATION_LABEL_STABLES, showAllocation ? stablePct : null, showAllocation ? stableUsd : 0, "recommended")}
+              </div>
+
+              {/* Recommended — the shared CANONICAL target when usable; otherwise (no plan yet) empty tracks + $0, disabled. */}
+              <div className={"allocation__group" + (targetUsable ? "" : " allocation__group--empty")}>
+                <span className="allocation__group-label">{ALLOCATION_GROUP_RECOMMENDED}</span>
+                {allocationRow(ALLOCATION_LABEL_CRYPTO, targetUsable ? (targetCryptoPct as number) : null, targetUsable ? (targetCryptoUsd as number) : 0, "current")}
+                {allocationRow(ALLOCATION_LABEL_STABLES, targetUsable ? (targetStablePct as number) : null, targetUsable ? (targetStableUsd as number) : 0, "recommended")}
+              </div>
+            </div>
+            <div className="chart-legend">
+              <span className="chart-legend__item">
+                <LegendMarker variant="dot" colorToken={showAllocation ? "--color-chart-series-1" : "--color-text-disabled"} />
+                {ALLOCATION_LABEL_CRYPTO}
+              </span>
+              <span className="chart-legend__item">
+                <LegendMarker variant="dot" colorToken={showAllocation ? "--color-chart-series-3" : "--color-text-disabled"} />
+                {ALLOCATION_LABEL_STABLES}
+              </span>
+            </div>
+            {/* Prompt shown while there is no recommended target (disconnected, or connected with no plan yet). */}
+            {!targetUsable && <p className="empty-card__description allocation__empty-desc">{ALLOCATION_EMPTY_PROMPT}</p>}
+          </div>
         )}
       </DashSection>
     </>

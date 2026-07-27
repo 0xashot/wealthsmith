@@ -17,9 +17,7 @@ import type { GlobalNavState, WalletState } from "../types/dashboard";
 import {
   CONNECT_WALLET_LABEL,
   TRY_DEMO_MODE,
-  WALLET_MENU_COPY_ADDRESS,
   WALLET_MENU_DISCONNECT,
-  WALLET_MENU_HELPER,
 } from "../state/approvedCopy";
 import { useWalletDisplay } from "../wallet/useWalletDisplay";
 import logoUrl from "../../../assets/logo/wealthsmith-full-lockup.svg";
@@ -55,8 +53,6 @@ interface Props {
   /** In-app page switch (connected only). Dashboard/Portfolio navigate; other
    *  items are no-ops. When undefined, no nav item navigates. */
   onNavigate?: (id: string) => void;
-  /** Copy the connected wallet address (the real base58 address is passed in). */
-  onCopyAddress?: (address: string) => void;
   onDisconnect?: () => void;
   onConnectWallet?: () => void;
   onTryDemo?: () => void;
@@ -75,7 +71,6 @@ export default function GlobalNav({
   activePage,
   onboardingActive,
   onNavigate,
-  onCopyAddress,
   onDisconnect,
   onConnectWallet,
   onTryDemo,
@@ -96,7 +91,6 @@ export default function GlobalNav({
   const pillAccessibleLabel = realWallet
     ? `Connected wallet: ${realWallet.name}, address ending ${realWallet.addressShort}. Open wallet menu.`
     : walletPillLabel;
-  const copyAddress = realWallet?.address ?? wallet?.address ?? "";
 
   const [menuOpen, setMenuOpen] = useState(false);
   const pillRef = useRef<HTMLButtonElement>(null);
@@ -226,19 +220,6 @@ export default function GlobalNav({
               </button>
               {menuOpen && (
                 <div ref={menuRef} className="wallet-menu" role="menu">
-                  {copyAddress && (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="wallet-menu__item"
-                      onClick={() => {
-                        closeMenu(true);
-                        onCopyAddress?.(copyAddress);
-                      }}
-                    >
-                      {WALLET_MENU_COPY_ADDRESS}
-                    </button>
-                  )}
                   <button
                     type="button"
                     role="menuitem"
@@ -250,7 +231,6 @@ export default function GlobalNav({
                   >
                     {WALLET_MENU_DISCONNECT}
                   </button>
-                  <p className="wallet-menu__helper">{WALLET_MENU_HELPER}</p>
                 </div>
               )}
             </div>

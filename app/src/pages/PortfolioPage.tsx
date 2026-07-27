@@ -36,7 +36,6 @@ interface Props {
   pushToast: (message: string, helper?: string) => void;
   onNavigate: (id: string) => void;
   onDisconnect: () => void;
-  onCopyAddress: (address: string) => void;
   /** Saved plan — drives the same real-wallet Suggestion Engine rail as Dashboard. */
   savedGoal?: SavedGoal;
 }
@@ -45,7 +44,6 @@ export default function PortfolioPage({
   pushToast,
   onNavigate,
   onDisconnect,
-  onCopyAddress,
   savedGoal,
 }: Props) {
   const [smithOpen, setSmithOpen] = useState(false);
@@ -73,7 +71,6 @@ export default function PortfolioPage({
         askButtonRef={askButtonRef}
         activePage="portfolio"
         onNavigate={onNavigate}
-        onCopyAddress={onCopyAddress}
         onDisconnect={onDisconnect}
         onOpenAskSmithAi={openAskSmithAi}
       />

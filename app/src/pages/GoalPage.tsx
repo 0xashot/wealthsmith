@@ -29,7 +29,6 @@ interface Props {
   pushToast: (message: string, helper?: string) => void;
   onNavigate: (id: string) => void;
   onDisconnect: () => void;
-  onCopyAddress: (address: string) => void;
   savedGoal: SavedGoal;
   onSaveGoal: (goal: SavedGoal) => void;
 }
@@ -38,7 +37,6 @@ export default function GoalPage({
   pushToast,
   onNavigate,
   onDisconnect,
-  onCopyAddress,
   savedGoal,
   onSaveGoal,
 }: Props) {
@@ -64,7 +62,6 @@ export default function GoalPage({
         askButtonRef={askButtonRef}
         activePage="goal"
         onNavigate={onNavigate}
-        onCopyAddress={onCopyAddress}
         onDisconnect={onDisconnect}
         onOpenAskSmithAi={openAskSmithAi}
       />
