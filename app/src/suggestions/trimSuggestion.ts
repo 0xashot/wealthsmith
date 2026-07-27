@@ -13,14 +13,13 @@
  */
 import type { EngineSuggestion, SuggestionGuardrail, SuggestionReasonCode, ReviewAsset } from "./engineTypes";
 import type { ReviewLimitation } from "./engineTypes";
-import { SUGGESTION_ENGINE_VERSION, MIN_TRIM_SUGGESTION_USD, TRIM_PORTFOLIO_SHARE_THRESHOLD, GUARDRAIL_STATUS_NOT_EVALUATED } from "./engineThresholds";
+import { SUGGESTION_ENGINE_VERSION, MIN_TRIM_SUGGESTION_USD, GUARDRAIL_STATUS_NOT_EVALUATED } from "./engineThresholds";
 import { notApplicableProtocolSelection } from "./protocolSelection";
-import { buildReviewDetails, usdMetric, pctMetric, metric } from "./suggestionReviewDetails";
+import { buildReviewDetails } from "./suggestionReviewDetails";
 import type { TrimAssessment } from "./trimAssessment";
 import { TOKEN_REGISTRY } from "../wallet/walletPosition";
 import {
-  SUGGESTION_TRIM_REASON_AGGREGATE, SUGGESTION_TRIM_REASON_CONCENTRATION, SUGGESTION_TRIM_REASON_SMALL,
-  SUGGESTION_TRIM_EXPLAIN_AGGREGATE, SUGGESTION_TRIM_EXPLAIN_CONCENTRATION, SUGGESTION_TRIM_EXPLAIN_SMALL,
+  SUGGESTION_TRIM_SINGLE_DESCRIPTION, SUGGESTION_TRIM_FROZEN_SINGLE_DESCRIPTION, SUGGESTION_TRIM_MULTI_DESCRIPTION, SUGGESTION_TRIM_SMALL_DESCRIPTION, SUGGESTION_TRIM_ALLTHREE_DESCRIPTION,
   SUGGESTION_TRIM_LIMIT_TRANSFER_UNAVAILABLE, SUGGESTION_TRIM_LIMIT_TRANSFER_UNRESOLVED, SUGGESTION_TRIM_LIMIT_TRANSFER_BOTH,
 } from "../state/approvedCopy";
 
@@ -28,6 +27,11 @@ import {
 export const TRIM_SUGGESTION_ID = "trim_long_tail_assets";
 
 const round1Pct = (fraction: number): number => Math.round(fraction * 1000) / 10;
+
+/** Spell out small counts ("three small positions"); fall back to digits beyond the table. */
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"];
+const countWord = (n: number): string => NUMBER_WORDS[n] ?? String(n);
+const capitalize = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
  * Build the canonical `trim_long_tail_assets` card from a TrimAssessment. Returns null unless overall readiness
@@ -47,8 +51,6 @@ export function buildTrimCardFromAssessment(assessment: TrimAssessment, generate
   const denom = assessment.denominatorValueUsd;
   const total = assessment.totalCandidateValueUsd;
   const share = assessment.candidatePortfolioShare ?? 0; // fraction of gross assets
-  const concentratedCount = assessment.concentratedCandidateIds.length;
-  const smallCount = assessment.smallCandidateIds.length;
   const ts = assessment.transferabilitySummary;
 
   // Reason codes — canonical ordering, mapped to the existing engine union (transferability warnings live in
@@ -59,9 +61,6 @@ export function buildTrimCardFromAssessment(assessment: TrimAssessment, generate
   if (hasSmall) reason_codes.push("small_position_cleanup");
   reason_codes.push("non_core_token_exposure");
   reason_codes.push("liquidity_not_evaluated");
-
-  // Review-oriented summary reason (never an instruction). Precedence: concentration → aggregate → small.
-  const reason = hasConcentration ? SUGGESTION_TRIM_REASON_CONCENTRATION : hasAggregate ? SUGGESTION_TRIM_REASON_AGGREGATE : SUGGESTION_TRIM_REASON_SMALL;
 
   const guardrails: SuggestionGuardrail[] = [
     { code: "pricing_available", status: "passed" },
@@ -103,42 +102,69 @@ export function buildTrimCardFromAssessment(assessment: TrimAssessment, generate
   else if (anyUnavailable) additionalLimitations.push({ kind: "transferability_unavailable", text: SUGGESTION_TRIM_LIMIT_TRANSFER_UNAVAILABLE });
   else if (anyUnresolved) additionalLimitations.push({ kind: "transferability_unresolved", text: SUGGESTION_TRIM_LIMIT_TRANSFER_UNRESOLVED });
 
-  const metrics = [
-    usdMetric("Non-core value to review", total),
-    metric("Number of non-core assets", assessment.candidateHoldings.length, "count"),
-    pctMetric("Portfolio share", round1Pct(share)),
-    metric("Concentrated positions", concentratedCount, "count"),
-    metric("Small positions", smallCount, "count"),
-    usdMetric("Transferable value", ts.transferableCandidateValueUsd),
-    ...(anyUnavailable ? [usdMetric("Not currently transferable", ts.unavailableTransferabilityCandidateValueUsd)] : []),
-    ...(anyUnresolved ? [usdMetric("Transferability unverified", ts.unresolvedTransferabilityCandidateValueUsd)] : []),
-  ];
-
-  const calculations = [
-    { label: "Non-core share of gross assets", formula: "non-core value ÷ gross asset value", currentValue: total, targetValue: denom, threshold: round1Pct(TRIM_PORTFOLIO_SHARE_THRESHOLD), difference: round1Pct(share), unit: "USD" },
-    ...(hasAggregate ? [{ label: "Aggregate exposure", formula: SUGGESTION_TRIM_EXPLAIN_AGGREGATE, currentValue: total, targetValue: denom, unit: "USD" }] : []),
-    ...(hasConcentration ? [{ label: "Concentration review", formula: SUGGESTION_TRIM_EXPLAIN_CONCENTRATION, currentValue: concentratedCount, unit: "count" }] : []),
-    ...(hasSmall ? [{ label: "Small positions", formula: SUGGESTION_TRIM_EXPLAIN_SMALL, currentValue: smallCount, targetValue: assessment.smallCandidateCombinedValueUsd, unit: "count" }] : []),
-  ];
-
   // 23C.2 — direct card line. Exact single-asset form when only one non-core asset is in scope; otherwise the
   // generic "assets" form. Destination is USDC (the Trim destination). Read-only: the CTA stays "Review".
   const trimAmountUsd = Math.round(total).toLocaleString("en-US");
-  const trimImpactText = assessment.candidateHoldings.length === 1
-    ? `Swap $${trimAmountUsd} of ${assessment.candidateHoldings[0].symbol} to USDC`
-    : `Swap $${trimAmountUsd} of assets to USDC`;
+  const isSingle = assessment.candidateHoldings.length === 1;
+  // A single frozen / non-transferable asset can't be swapped — never surface a "Swap … to USDC" action for it; the
+  // card action + modal handoff point to Solscan instead, and the read-only Swap Route section is suppressed.
+  const singleFrozen = isSingle && involvedAssets[0]?.actionability === "unavailable";
+  const solscanTokenUrl = assessment.candidateHoldings[0]?.mint ? `https://solscan.io/token/${assessment.candidateHoldings[0].mint}` : undefined;
+  const trimImpactText = singleFrozen
+    ? `Check ${assessment.candidateHoldings[0].symbol} on Solscan`
+    : isSingle
+      ? `Swap $${trimAmountUsd} of ${assessment.candidateHoldings[0].symbol} to USDC`
+      : `Swap $${trimAmountUsd} of assets to USDC`;
+  // Card + modal heading names the single asset's exposure; the multi-asset form is generic non-core exposure.
+  const trimTitle = isSingle ? `Reduce ${assessment.candidateHoldings[0].symbol} exposure` : "Reduce Non-Core Exposure";
+
+  // 24J — plain-language card/modal body. Single non-core asset names it + its portfolio share; a pure small-position
+  // cleanup (below the aggregate-share threshold) is framed as simplification; otherwise the aggregate-share form.
+  const shareText = String(round1Pct(share));
+  const smallIds = assessment.smallCandidateIds;
+  const concIds = assessment.concentratedCandidateIds;
+  const isSmallOnly = hasSmall && !hasAggregate && !hasConcentration;
+  // All three triggers with exactly one concentrated leader and the remaining candidates all small → a decomposed
+  // "leader + smaller positions" body. Requires a clean split (leader + smalls cover every candidate) to stay honest.
+  const concHolding = concIds.length === 1 ? assessment.candidateHoldings.find((h) => h.holdingId === concIds[0]) : undefined;
+  const isAllThree = hasAggregate && hasConcentration && hasSmall && concHolding != null && !smallIds.includes(concHolding.holdingId) && 1 + smallIds.length === assessment.candidateHoldings.length;
+  let descriptionOverride: string;
+  if (singleFrozen) {
+    descriptionOverride = SUGGESTION_TRIM_FROZEN_SINGLE_DESCRIPTION.replace("{asset}", assessment.candidateHoldings[0].symbol).replace("{share}", shareText);
+  } else if (isSingle) {
+    descriptionOverride = SUGGESTION_TRIM_SINGLE_DESCRIPTION.replace("{asset}", assessment.candidateHoldings[0].symbol).replace("{share}", shareText).replace("{amount}", trimAmountUsd);
+  } else if (isAllThree) {
+    const concShare = denom > 0 && concHolding!.recognizedValueUsd !== null ? round1Pct(concHolding!.recognizedValueUsd / denom) : 0;
+    const smallShare = denom > 0 ? round1Pct(assessment.smallCandidateCombinedValueUsd / denom) : 0;
+    descriptionOverride = SUGGESTION_TRIM_ALLTHREE_DESCRIPTION
+      .replace("{count}", capitalize(countWord(assessment.candidateHoldings.length)))
+      .replace("{aggShare}", shareText)
+      .replace("{concAsset}", concHolding!.symbol)
+      .replace("{concShare}", String(concShare))
+      .replace("{smallCount}", countWord(smallIds.length))
+      .replace("{smallShare}", String(smallShare));
+  } else if (isSmallOnly) {
+    descriptionOverride = SUGGESTION_TRIM_SMALL_DESCRIPTION.replace("{count}", countWord(smallIds.length)).replace("{amount}", trimAmountUsd);
+  } else {
+    descriptionOverride = SUGGESTION_TRIM_MULTI_DESCRIPTION.replace("{share}", shareText).replace("{amount}", trimAmountUsd);
+  }
 
   const protocolSelection = notApplicableProtocolSelection("selection_not_required");
   const reviewDetails = buildReviewDetails({
     category: "trim",
     actionKind: "review_only",
-    title: "Reduce Long-Tail Assets", // 23C.2 — keep the modal title identical to the card
+    title: trimTitle, // keep the modal title identical to the card
     guardrails,
     protocolSelection,
-    reason,
-    metrics,
+    // 24J — same plain-language body on the card and in the modal; no Key metrics / Guardrails / calculations.
+    reason: descriptionOverride,
+    metrics: [],
+    hideGuardrails: true,
+    // A frozen / non-transferable asset can't be swapped → suppress the Swap Route section and offer a read-only
+    // "Check on Solscan" handoff instead of a swap CTA.
+    ...(singleFrozen ? { hideSwapRoute: true } : {}),
+    ...(singleFrozen && solscanTokenUrl ? { externalLink: { label: "Solscan", ctaLabel: "Check on Solscan", url: solscanTokenUrl, opensInNewTab: true, secondaryLabel: "Cancel" } } : {}),
     involvedAssets,
-    calculations,
     additionalLimitations,
   });
 
@@ -147,8 +173,9 @@ export function buildTrimCardFromAssessment(assessment: TrimAssessment, generate
     category: "trim",
     reason_codes,
     title_key: "suggestion.trim.title",
-    titleOverride: "Reduce Long-Tail Assets",
+    titleOverride: trimTitle,
     description_key: "suggestion.trim.description",
+    descriptionOverride,
     action_kind: "review_only",
     is_actionable: true,
     is_top_pick: false, // set only by selectTopPick

@@ -20,6 +20,10 @@ export interface ContributionPlanCardPresentation {
 }
 
 const pp1 = (n: number): string => (Math.round(Math.abs(n) * 10) / 10).toFixed(1);
+/** Percent display: 1-decimal, trailing ".0" dropped, with a "%" suffix (e.g. 30 → "30%", 36.4 → "36.4%"). */
+const pctT = (n: number): string => `${Math.round(n * 10) / 10}%`;
+/** Percentage-points display: 1-decimal, trailing ".0" dropped, no suffix (e.g. 17 → "17", 16.5 → "16.5"). */
+const ppT = (n: number): string => `${Math.round(Math.abs(n) * 10) / 10}`;
 
 const FREQ_LABEL: Record<string, string> = { weekly: "weekly", biweekly: "bi-weekly", monthly: "monthly", quarterly: "quarterly", occasional: "occasional" };
 
@@ -53,19 +57,23 @@ export function buildContributionPlanCardPresentation(d: ContributionPlanSuggest
 
   if (d.planKind === "stable_contribution") {
     const title = `Direct Next Contribution to ${token}`;
-    const description = d.amountKind === "exact"
-      ? `Your stablecoin allocation is ${gap} percentage points below target. Direct your next ${freq} contribution to ${token} to move closer to target.`
-      : `Your stablecoin allocation is ${gap} percentage points below target. Direct your next ${freq} contribution of ${amtSingle} to ${token}.`;
+    // 24J — when current / projected / target allocation are all known, name the before→after→target change; else
+    // fall back to the generic gap phrasing.
+    const description = d.currentTargetPct != null && d.projectedTargetPct != null && d.targetPct != null
+      ? `When you make your next ${amtSingle} contribution, put it into ${token}. This would increase your stablecoin allocation from ${pctT(d.currentTargetPct)} to an estimated ${pctT(d.projectedTargetPct)}, moving it closer to your ${pctT(d.targetPct)} target while keeping your Safety Buffer covered.`
+      : d.amountKind === "exact"
+        ? `Your stablecoin allocation is ${gap} percentage points below target. Direct your next ${freq} contribution to ${token} to move closer to target.`
+        : `Your stablecoin allocation is ${gap} percentage points below target. Direct your next ${freq} contribution of ${amtSingle} to ${token}.`;
     return { title, description, tag: "Allocation", impactText: `Add ${amtSingle} of ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
   }
 
   if (d.planKind === "recurring_dca") {
     const title = `Build ${token} Gradually`;
+    // 24J — plain-language body naming the amount + the gradual move toward target. Occasional (already-entered)
+    // contributions keep their own phrasing.
     const description = d.contributionFrequencyId === "occasional"
       ? `${token} is ${gap} percentage points below target. Use the ${amtCompact} contribution you entered to build your ${token} allocation.`
-      : d.amountKind === "exact"
-        ? `${token} is ${gap} percentage points below target. Direct your next ${freq} contribution to ${token} to build the position gradually.`
-        : `${token} is ${gap} percentage points below target. Direct your next ${freq} contribution of ${amtSingle} to ${token}.`;
+      : `Your ${token} allocation is ${d.gapPercentagePoints != null ? ppT(d.gapPercentagePoints) : "0"} percentage points below target. Put your next ${amtSingle} contribution into ${token} to move closer to your target gradually.`;
     return { title, description, tag: "DCA", impactText: `Add ${amtSingle} of ${token}`, ctaLabel: "Review", accessibilityLabel: `${title}. ${description} Read-only plan. Review.`, readOnly: true };
   }
 

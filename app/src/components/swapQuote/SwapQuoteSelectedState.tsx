@@ -11,7 +11,7 @@ import { SWAP_PROVIDER_NAME } from "../../suggestions/swapQuote/swapQuoteContrac
 import { resolveProtocolIcon } from "../../state/iconRegistry";
 
 /** The compact Swap Route section shows only these figures, in this order. */
-const COMPACT_METRIC_LABELS = ["Estimated total cost", "Price impact", "Quote updated"] as const;
+const COMPACT_METRIC_LABELS = ["Estimated total cost", "Price impact"] as const;
 /** Read-only reminder that a live quote can move before the user acts (no transaction is prepared here). */
 const QUOTE_BANNER = "Quotes are time sensitive and may change.";
 

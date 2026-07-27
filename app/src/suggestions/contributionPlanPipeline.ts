@@ -217,7 +217,10 @@ export function buildContributionPlanPipeline(input: BuildContributionPlanPipeli
   }
   if (planResult.status === "ready_exact" || planResult.status === "ready_range") {
     const genMs = Date.parse(input.generatedAt);
-    const suggestion = buildContributionPlanSuggestion(planResult, Number.isNaN(genMs) ? 0 : genMs) ?? undefined;
+    // Sourced unit price of the plan's target asset (valid quote only) → lets the review show the approx token amount.
+    const targetQuote = input.priceQuoteByTargetId?.[planResult.plan?.selectedTargetId ?? ""];
+    const targetPriceUsd = targetQuote != null && validateContributionPriceQuote(targetQuote).valid ? targetQuote.priceUsd : undefined;
+    const suggestion = buildContributionPlanSuggestion(planResult, Number.isNaN(genMs) ? 0 : genMs, targetPriceUsd) ?? undefined;
     return base(dm, "ready", { planResult, plan: planResult.plan, suggestion, productSuggestionGenerated: suggestion != null, productOutputUpdated: suggestion != null, ...(targetMeta ?? {}) });
   }
 

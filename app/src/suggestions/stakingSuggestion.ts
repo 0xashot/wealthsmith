@@ -30,13 +30,15 @@ import {
   getJitoSolBetaProtocolSelectionDisplay,
   getJitoSolBetaRouteEvaluationDisplay,
   getJitoSolExternalStakingLink,
+  getJitoSolBetaMarketData,
   JITOSOL_BETA_LST_SYMBOL,
 } from "./jitoSolBetaActivation";
+import { SUGGESTION_STAKING_SELECTED_DETAIL } from "../state/approvedCopy";
 import { buildMsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingMsolReadOnlyApproval";
 import { buildJupsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingJupsolReadOnlyApproval";
 import { buildBsolReadOnlyReviewCandidateDisplay } from "./solLiquidStakingBsolReadOnlyApproval";
 import { buildNativeStakingReviewCandidateDisplay } from "./solNativeStakingBaselineReadOnlyApproval";
-import type { ProtocolSelection, ReviewSafetyNote, SuggestionReviewDetails } from "./engineTypes";
+import type { ProtocolSelection, ReviewSafetyNote, ReviewMetric, SuggestionReviewDetails } from "./engineTypes";
 
 /** Stable suggestion ID. */
 export const STAKING_SUGGESTION_ID = "staking_idle_sol";
@@ -117,6 +119,11 @@ export function deriveStakingSuggestion(
   let routeEvaluationDisplay: SuggestionReviewDetails["routeEvaluation"] | undefined;
   let externalLink: SuggestionReviewDetails["externalLink"] | undefined;
   let otherProtocolsToReview: SuggestionReviewDetails["otherProtocolsToReview"] | undefined;
+  // 24J — plain-language body + an estimated-income chip, populated only once a protocol + its sourced APY are known.
+  let descriptionOverride: string | undefined;
+  let apyIncomeChip: string | undefined;
+  let focusedStakingMetrics: ReviewMetric[] | undefined;
+  const eligibleSolText = Number(eligibleSol.toFixed(4)).toLocaleString("en-US", { maximumFractionDigits: 4 });
 
   if (isJitoSolBetaReadOnlyEnabled()) {
     const betaSelection = selectJitoSolReadOnlyBeta({
@@ -157,6 +164,28 @@ export function deriveStakingSuggestion(
         // stake account). Review-only; never selected/winner; no execution path.
         buildNativeStakingReviewCandidateDisplay({ checkedAt: new Date(generatedAt).toISOString() }),
       ];
+      // Estimated income from the selected protocol's sourced market data (real numbers; never a promised return).
+      // Drives the card body, the "+$X/year (Y% APY)" chip, and the focused modal card set.
+      const md = getJitoSolBetaMarketData();
+      const jitoApyPct = md.apyPct;
+      const apyText = jitoApyPct.toLocaleString("en-US", { maximumFractionDigits: 2 });
+      const annualIncomeUsd = eligibleValueUsd * (jitoApyPct / 100);
+      const stakeUsdText = `$${Math.round(eligibleValueUsd).toLocaleString("en-US")}`;
+      descriptionOverride = SUGGESTION_STAKING_SELECTED_DETAIL
+        .replace("{amount}", eligibleSolText)
+        .replace("{protocol}", betaSelection.selectedProtocolName as string)
+        .replace("{apy}", apyText)
+        .replace("{reserve}", String(SOL_FEE_RESERVE));
+      apyIncomeChip = `+$${Math.round(annualIncomeUsd).toLocaleString("en-US")}/year (${apyText}% APY)`;
+      // Focused modal card set (Stake / Receive with USD sub-values, APY, yearly rewards, unstake timing + fee note).
+      focusedStakingMetrics = [
+        { label: "Stake", value: `${eligibleSolText} SOL`, kind: "count", subValue: stakeUsdText },
+        { label: "Receive", value: `~${eligibleSolText} ${betaSelection.selectedLstSymbol ?? JITOSOL_BETA_LST_SYMBOL}`, kind: "count", subValue: stakeUsdText },
+        { label: "Current APY", value: `${apyText}%`, kind: "count" },
+        { label: "Estimated yearly rewards", value: `~$${Math.round(annualIncomeUsd).toLocaleString("en-US")}`, kind: "count" },
+        { label: "Direct Unstake", value: `~${md.directUnstakeTimeHours} hours`, kind: "count" },
+        { label: "Direct Unstake Fee", value: `${md.directUnstakeFeePct}%`, kind: "count", tooltip: "Applied to the unstaked amount" },
+      ];
       // Read-only recommendation copy — never implies a transaction/signature.
       safetyNotesOverride = [
         { kind: "no_auto_move", text: "WealthSmith does not move funds for you." },
@@ -174,12 +203,17 @@ export function deriveStakingSuggestion(
     protocolSelection,
     // Name the selected protocol in the modal title, matching the card ("Stake SOL on Jito").
     ...(protocolSelection.status === "selected" && protocolSelection.selectedProtocolName ? { title: `Stake SOL on ${protocolSelection.selectedProtocolName}` } : {}),
+    // Modal intro mirrors the card body when a protocol + APY are known.
+    ...(descriptionOverride ? { reason: descriptionOverride } : {}),
     ...(protocolSelectionDisplay ? { protocolSelectionDisplay } : {}),
     ...(safetyNotesOverride ? { safetyNotesOverride } : {}),
     ...(routeEvaluationDisplay ? { routeEvaluationDisplay } : {}),
     ...(externalLink ? { externalLink } : {}),
     ...(otherProtocolsToReview ? { otherProtocolsToReview } : {}),
-    metrics: [
+    // 24J — a selected protocol with sourced APY drives the focused modal (description + a self-explanatory card set,
+    // no ancillary sections). The full metric/protocol/route data stays on the object; the focused layout just hides it.
+    ...(focusedStakingMetrics ? { focusedLayout: true } : {}),
+    metrics: focusedStakingMetrics ?? [
       metric("Liquid SOL", Math.round(totalLiquidSol * 10000) / 10000, "token_amount", "SOL"),
       metric("SOL operating reserve", SOL_FEE_RESERVE, "token_amount", "SOL"),
       metric("SOL eligible for staking", Math.round(eligibleSol * 10000) / 10000, "token_amount", "SOL"),
@@ -207,6 +241,8 @@ export function deriveStakingSuggestion(
 
     title_key: "suggestion.staking.title",
     description_key: "suggestion.staking.description",
+    ...(descriptionOverride ? { descriptionOverride } : {}),
+    ...(apyIncomeChip ? { apyIncomeChip } : {}),
 
     action_kind: "review_only",
     is_actionable: true,

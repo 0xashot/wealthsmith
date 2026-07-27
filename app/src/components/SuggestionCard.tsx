@@ -22,7 +22,9 @@ import type { SuggestionCardState } from "../types/dashboard";
 import type { SolStakingSelectorPresentation } from "../suggestions/solStakingSelectorPresentationTypes";
 import shieldCheckUrl from "../../../assets/icons/ui/shield-check.svg";
 import shieldUrl from "../../../assets/icons/ui/shield.svg";
+import fundBufferUrl from "../../../assets/icons/ui/fund-buffer.svg";
 import goalUrl from "../../../assets/icons/ui/goal.svg";
+import chessKnightUrl from "../../../assets/icons/ui/chess-knight.svg";
 import chartPieUrl from "../../../assets/icons/ui/chart-pie.svg";
 import coinsUrl from "../../../assets/icons/ui/coins.svg";
 import listFilterUrl from "../../../assets/icons/ui/list-filter.svg";
@@ -68,7 +70,7 @@ const PROTOCOL_ICONS: Record<string, string> = {
  * suggestion id is `demo_top_up_safety_buffer`).
  */
 const GENERIC_ICONS_BY_CATEGORY: Record<string, string> = {
-  safety_buffer: shieldCheckUrl,
+  safety_buffer: fundBufferUrl,
   allocation: chartPieUrl,
   capital_efficiency: coinsUrl,
   portfolio_health: listFilterUrl,
@@ -86,6 +88,7 @@ const GENERIC_ICONS_BY_TYPE: Record<string, string> = {
   on_track_goal_check: goalUrl,
   on_track_expense_benchmark: coinsUrl,
   on_track_safety_buffer: shieldUrl,
+  on_track_market_conditions: chessKnightUrl, // informational market-stance card
 };
 
 function resolveCardIcon(card: SuggestionCardState): string | undefined {

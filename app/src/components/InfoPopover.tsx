@@ -14,9 +14,13 @@ interface Props {
   label: string;
   /** Popover content. */
   children: ReactNode;
+  /** Which edge the popover aligns to (default "left"); use "right" near a container's right edge to avoid clipping. */
+  align?: "left" | "right";
+  /** Vertical direction the popover opens (default "down"); use "up" near a container's bottom edge to avoid clipping. */
+  direction?: "up" | "down";
 }
 
-export default function InfoPopover({ label, children }: Props) {
+export default function InfoPopover({ label, children, align = "left", direction = "down" }: Props) {
   const [open, setOpen] = useState(false);
   const popoverId = useId();
 
@@ -42,7 +46,7 @@ export default function InfoPopover({ label, children }: Props) {
         <img src={infoIconUrl} alt="" width={16} height={16} aria-hidden="true" />
       </button>
       {open && (
-        <div role="tooltip" id={popoverId} className="info-popover__popover">
+        <div role="tooltip" id={popoverId} className={`info-popover__popover${align === "right" ? " info-popover__popover--right" : ""}${direction === "up" ? " info-popover__popover--up" : ""}`}>
           {children}
         </div>
       )}

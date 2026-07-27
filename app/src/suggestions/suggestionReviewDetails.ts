@@ -276,6 +276,10 @@ export function buildReviewDetails(args: {
   hideMetricsHeading?: boolean;
   /** Hide the internal Guardrails checklist for this suggestion. */
   hideGuardrails?: boolean;
+  /** Suppress the read-only "Swap Route" section (e.g. a frozen asset that can't be swapped). */
+  hideSwapRoute?: boolean;
+  /** Focused modal layout (description + metric cards + footer only); suppresses the ancillary sections. */
+  focusedLayout?: boolean;
   /** "Excluded from Safety Buffer" rows (frozen stablecoins, etc.). */
   excludedAssets?: SuggestionReviewDetails["excludedAssets"];
 }): SuggestionReviewDetails {
@@ -291,8 +295,9 @@ export function buildReviewDetails(args: {
     metrics: args.metrics,
     involvedAssets: args.involvedAssets ?? [],
     involvedPositions: args.involvedPositions ?? [],
-    // Safety Buffer modals omit the "How this was calculated" section — the focused card set already states the numbers.
-    calculations: args.category === "buffer" ? [] : (args.calculations ?? []),
+    // Safety Buffer and Position Optimization modals omit the "How this was calculated" section — their focused
+    // card sets already state the numbers. (Rebalance drops it at the call site by passing no calculations.)
+    calculations: args.category === "buffer" || args.category === "position_optimization" ? [] : (args.calculations ?? []),
     guardrailSummary: summarizeGuardrails(args.guardrails, args.protocolSelection, excludeExec),
     limitations: informational
       ? [...extraLimitations]
@@ -305,6 +310,8 @@ export function buildReviewDetails(args: {
     ...(args.positionReview ? { positionReview: true } : {}),
     ...(args.hideMetricsHeading ? { hideMetricsHeading: true } : {}),
     ...(args.hideGuardrails ? { hideGuardrails: true } : {}),
+    ...(args.hideSwapRoute ? { hideSwapRoute: true } : {}),
+    ...(args.focusedLayout ? { focusedLayout: true } : {}),
     ...(args.excludedAssets && args.excludedAssets.length > 0 ? { excludedAssets: args.excludedAssets } : {}),
     ...(args.protocolSelectionDisplay ? { protocolSelectionDisplay: args.protocolSelectionDisplay } : {}),
     ...(args.routeEvaluationDisplay ? { routeEvaluation: args.routeEvaluationDisplay } : {}),

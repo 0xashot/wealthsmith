@@ -45,18 +45,18 @@ export type SmithMessage = string | MessageBlock[];
 
 /** Item 1 — disconnected welcome (Smith intro + connect). */
 export const SCRIPT_WELCOME =
-  "Hello, I’m Smith, your AI financial planner.\n" +
-  "I’ll help you understand your portfolio, optimize your mix, and build a strategy for your goals. Let’s start by connecting your wallet so I can load your actual data. You stay in control — I only read balances, never move funds.";
+  "Hi, I’m Smith, your AI financial planner.\n\n" +
+  "I’ll help you understand your portfolio and build a strategy around your goals.\n\n" +
+  "To personalize your guidance, connect your wallet so I can securely read your balances. You stay in control—I can’t move funds or approve transactions.\n\n" +
+  "Ready to connect your wallet?";
 
-/** Item 2 — on connect: wallet connected + scanning (shown as the opener). */
-export const SCRIPT_CONNECTED =
-  "Perfect — wallet connected.\n" +
-  "I’m scanning your holdings and preparing your financial snapshot…";
+/** Item 2 — on connect: wallet connected (safe static opener; makes no claim wallet data was fetched/analyzed). */
+export const SCRIPT_CONNECTED = "Perfect—wallet connected.";
 
 /** Item 3 — snapshot done + first question (goal). */
 const S3 =
-  "Done. I’ve updated your Financial Snapshot with your real wallet data. You can already see your current allocation on the left.\n" +
-  "Let’s personalize your plan around your goals and comfort with risk. What’s your main goal right now?";
+  "I’ve updated your Financial Snapshot with your wallet data. You can see your current allocation on the left.\n\n" +
+  "Now let’s personalize your plan. What’s your main financial goal?";
 
 /** Item 4 — goal acknowledgment. */
 const S4 =
@@ -67,9 +67,7 @@ const S4 =
 const S5 = "What’s your time horizon for this goal? Just roughly is fine.";
 
 /** Item 6 — horizon acknowledgment. */
-const S6 =
-  "Got it — aiming to {goal} within {horizon}.\n" +
-  "Let me adjust your projections and planning horizon accordingly.";
+const S6 = "Got it—you’re aiming to {goalLower} with a {horizonShort} timeline.";
 
 /** Item 7 — risk question. */
 const S7 =
@@ -87,68 +85,53 @@ const S9 =
 
 /** Item 10 — income acknowledgment. */
 const S10 =
-  "Got it — {income} monthly income.\n" +
-  "I’ll use this to calculate your real saving potential, risk buffer, and liquidity safety net.\n" +
-  "Updating your Financial Snapshot and projections...";
+  "Got it—{income} in monthly income.\n\n" +
+  "I’ll use this with your expenses to estimate your saving capacity and required Safety Buffer.";
 
-/** Item 11 — projection statement (fixed illustrative). */
-const S11 =
-  "If you invest 10% of your income monthly, your portfolio could reach ~$12,000 in 5 years, or ~$28,000 in 10 years.";
-
-/** Item 13 — expenses question (transcript numbering skips 12). */
+/** Item 13 — expenses question (transcript numbering skips 12; the fixed illustrative projection was removed). */
 const S13 =
-  "And roughly how much do you spend monthly on essentials — rent, food, bills, etc.?";
+  "About how much do you spend each month on essentials such as rent, food, and bills?";
 
-/** Item 14 — expenses acknowledgment. */
+/** Item 14 — expenses acknowledgment (available cash = income − expenses). */
 const S14 =
-  "Got it — you spend around {expenses} per month.\n" +
-  "That leaves about {available} available for saving or investing monthly.\n" +
-  "I’ll update your dashboard to reflect your real cash flow and safety buffer.";
+  "Based on that, you have about {available} left each month for saving or investing.";
 
 /** Item 15 — financial-picture statement. */
 const S15 =
-  "Perfect — your financial picture is clear now.\n" +
-  "With ~{available} free each month, you can comfortably grow your portfolio while keeping a strong safety net.";
+  "I’ll use this to calculate your Safety Buffer and shape a realistic contribution plan.";
 
 /** Item 16 — contribution-rhythm question. */
 const S16 =
-  "Next, let’s set your contribution rhythm — how often you plan to add funds to your portfolio.";
+  "How often do you plan to add funds to your portfolio?";
 
-/** Item 17 — contribution acknowledgment (the saving-amount input follows). */
+/** Item 17 — contribution acknowledgment + the saving-amount question (the amount input follows).
+ *  Occasional contributions get their own variant (no fixed cadence, so the question asks per-contribution). */
 const S17 =
-  "Perfect — we’ll plan around {frequencyLower} contributions.\n" +
-  "Consistency compounds growth, so even small monthly steps will move you closer to your goal.\n" +
-  "Updating your dashboard projections and plan cadence...";
+  "We’ll plan around {cadence} contributions.\n\n" +
+  "How much would you like to invest {cadence_label}?";
+const S17_OCCASIONAL =
+  "We’ll plan around occasional contributions.\n\n" +
+  "About how much do you usually expect to invest each time?";
 
-/** Item 18 — saving-amount acknowledgment. */
-const S18 =
-  "Great — I’ll model your plan using {saving}/month as a starting rhythm.\n" +
-  "You’ll see your Projected Growth update after each real contribution.\n" +
-  "And if your income or expenses change, I’ll adjust your target automatically.";
-
-/** Item 20 — portfolio-tour intro (quick actions rendered separately). */
-const S20 =
-  "Let’s take a closer look at your portfolio — to see how your assets are currently positioned.";
 
 /** Item 21 — Portfolio page tour (static), as structured, scannable content. */
 export const SCRIPT_PORTFOLIO_TOUR: MessageBlock[] = [
-  { type: "p", text: "Here’s your full Portfolio Overview." },
-  { type: "p", text: "You’ll see:" },
+  { type: "p", text: "Here’s your portfolio." },
+  { type: "p", text: "You can see:" },
   {
     type: "bullets",
     items: [
-      { label: "Balance Overview", text: "all wallets and holdings in one view." },
-      { label: "Crypto Assets Allocation", text: "how your crypto is balanced." },
-      { label: "Assets Deployment Overview", text: "where your funds are working right now." },
+      { label: "Balance Overview", text: "your total portfolio value split between crypto and stables." },
+      { label: "Crypto Assets Allocation", text: "the assets that make up your portfolio." },
+      {
+        label: "Asset Deployment Overview",
+        text: "what remains liquid, what is staked, and what is deployed in yield strategies, including APY and estimated earnings where available.",
+      },
     ],
   },
   {
     type: "p",
-    text: "As you start investing or rebalancing, I’ll keep these updated automatically.",
-  },
-  {
-    type: "p",
-    text: "Next, let’s visit your Goal Page so you can see how everything connects.",
+    text: "Next, let’s visit your Goal page to see how your portfolio aligns with your plan.",
   },
 ];
 
@@ -179,6 +162,15 @@ function availableCash(a: OnboardingAnswers): string {
   return `$${(income - expenses).toLocaleString()}`;
 }
 
+/** Adverbial cadence phrase per contribution-frequency slug ("How much would you like to invest {cadence_label}?"). */
+const CADENCE_LABEL: Record<string, string> = {
+  weekly: "each week",
+  biweekly: "every two weeks",
+  monthly: "each month",
+  quarterly: "each quarter",
+  occasional: "each time",
+};
+
 /** Replace {tokens} with the user's echoed answers. */
 function fill(template: string, a: OnboardingAnswers): string {
   const goal = labelFor(FINANCIAL_GOAL_OPTIONS, a.financial_goal);
@@ -187,10 +179,15 @@ function fill(template: string, a: OnboardingAnswers): string {
   const frequency = labelFor(CONTRIBUTION_OPTIONS, a.contribution_frequency);
   const map: Record<string, string> = {
     goal,
+    goalLower: goal.toLowerCase(),
     horizon,
+    // Adjectival horizon for "a {horizonShort} timeline": lowercase + singular unit ("10+ Years" → "10+ year").
+    horizonShort: horizon.toLowerCase().replace(/s$/, ""),
     risk,
     frequency,
     frequencyLower: frequency.toLowerCase(),
+    cadence: frequency.toLowerCase(),
+    cadence_label: CADENCE_LABEL[a.contribution_frequency] ?? "regularly",
     income: formatMoney(a.income),
     expenses: formatMoney(a.expenses),
     available: availableCash(a),
@@ -218,11 +215,11 @@ export function stepLeadMessage(index: number, a: OnboardingAnswers): string {
     case 3:
       return fill(S8, a) + P + S9;
     case 4:
-      return fill(S10, a) + P + S11 + P + S13;
+      return fill(S10, a) + P + S13;
     case 5:
       return fill(S14, a) + P + fill(S15, a) + P + S16;
     case 6:
-      return fill(S17, a);
+      return a.contribution_frequency === "occasional" ? S17_OCCASIONAL : fill(S17, a);
     default:
       return "";
   }
@@ -235,55 +232,35 @@ export function stepLeadMessage(index: number, a: OnboardingAnswers): string {
  */
 export function summaryMessage(a: OnboardingAnswers): MessageBlock[] {
   return [
-    { type: "p", text: fill(S18, a) },
-    {
-      type: "p",
-      text: "All set — I’ve built your personalized plan based on everything you shared:",
-    },
+    { type: "p", text: "Your personalized plan is ready." },
+    { type: "p", text: "Here’s what I’ve used:" },
     {
       type: "bullets",
       items: [
         { label: "Goal", text: labelFor(FINANCIAL_GOAL_OPTIONS, a.financial_goal) },
-        { label: "Horizon", text: labelFor(TIMELINE_OPTIONS, a.timeline) },
-        { label: "Risk", text: labelFor(RISK_OPTIONS, a.risk_tolerance) },
-        { label: "Income", text: formatMoney(a.income) },
-        { label: "Expenses", text: formatMoney(a.expenses) },
-        { label: "Contribution", text: `${formatMoney(a.saving)}/month` },
+        { label: "Timeline", text: labelFor(TIMELINE_OPTIONS, a.timeline).toLowerCase() },
+        { label: "Risk level", text: labelFor(RISK_OPTIONS, a.risk_tolerance) },
+        { label: "Monthly income", text: formatMoney(a.income) },
+        { label: "Monthly expenses", text: formatMoney(a.expenses) },
+        { label: "Contribution", text: `${formatMoney(a.saving)} per month` },
       ],
     },
-    { type: "p", text: "You can review every detail and fine-tune it anytime." },
-    { type: "p", text: S20 },
+    { type: "p", text: "You can review and adjust these details anytime." },
+    { type: "p", text: "Now let’s look at how your current portfolio compares with your plan." },
   ];
 }
 
-/** Goal page tour message (item 22), structured with the saved answers echoed. */
-export function goalTourMessage(a: OnboardingAnswers): MessageBlock[] {
+/** Goal page tour message (item 22). The plan details are shown in the Goal page itself, so this
+ *  message just orients the user; the param is unused (kept for the shared tour-message signature). */
+export function goalTourMessage(_a: OnboardingAnswers): MessageBlock[] {
   return [
     {
       type: "p",
-      text: "Here’s your current Goal setup — everything you’ve shared so far:",
-    },
-    {
-      type: "bullets",
-      items: [
-        { label: "Goal", text: labelFor(FINANCIAL_GOAL_OPTIONS, a.financial_goal) },
-        { label: "Timeline", text: labelFor(TIMELINE_OPTIONS, a.timeline) },
-        { label: "Risk profile", text: labelFor(RISK_OPTIONS, a.risk_tolerance) },
-        { label: "Monthly income", text: formatMoney(a.income) },
-        { label: "Expenses", text: formatMoney(a.expenses) },
-        {
-          label: "Contribution rhythm",
-          text: `${labelFor(CONTRIBUTION_OPTIONS, a.contribution_frequency)} (${formatMoney(a.saving)})`,
-        },
-      ],
+      text: "This is your Goal page, where you can review and update your plan details anytime.",
     },
     {
       type: "p",
-      text: "You can edit any of these anytime — or just ask me, and I’ll help you update your goal.",
-    },
-    {
-      type: "p",
-      text: "You’re now ready to explore your AI Strategy Steps — actionable insights tailored to your goals, risk, and cash flow.",
+      text: "Next, explore your AI Strategy Steps—personalized recommendations based on your goal, risk profile, cash flow, and portfolio.",
     },
   ];
 }

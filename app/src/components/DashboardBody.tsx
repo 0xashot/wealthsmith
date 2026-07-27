@@ -31,24 +31,21 @@ import type { SavedGoal } from "../types/goal";
 import type { ProjectedGrowthState } from "../types/dashboard";
 import LegendMarker from "./LegendMarker";
 import ProjectedGrowthChart from "./ProjectedGrowthChart";
+import ProjectedGrowthEmptyChart from "./ProjectedGrowthEmptyChart";
 import ProjectedGrowthInfo from "./ProjectedGrowthInfo";
 import InfoPopover from "./InfoPopover";
-import MarketConditionsSurface from "./MarketConditionsSurface";
 import {
   REAL_WALLET_VALUE_DESC,
   FS_TOTAL_VALUE_LABEL,
   FS_TOTAL_VALUE_CAPTION,
   FS_NET_CONTRIB_LABEL,
-  FS_NET_CONTRIB_DESC,
   FS_NET_CONTRIB_ESTIMATE,
   SAFETY_BUFFER_CAPTION,
+  PG_CAPTION,
   SAFETY_BUFFER_FUNDED,
   SAFETY_BUFFER_COVERED_LEGEND,
   SAFETY_BUFFER_NEEDS,
-  PROJECTED_GROWTH_NO_PRICING,
-  PROJECTED_GROWTH_NO_CONTRIB,
-  PROJECTED_GROWTH_NO_HORIZON,
-  PROJECTED_GROWTH_NO_RISK,
+  PROJECTED_GROWTH_EMPTY_PROMPT,
   PG_LABEL_PROJECTED,
   PG_INFO_ARIA,
   PG_INFO_UNAVAILABLE_INTRO,
@@ -152,8 +149,9 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
   // connected and governance is active; idle/no-fetch otherwise). Fed into the rail as a fresh-or-null
   // snapshot so the direct-lending adapter stays fail-closed on any unresolved/stale/error state.
   const klendMarket = useKlendDirectUsdcMarketSnapshot();
-  // Step 22F (slice 5/6) — the shared canonical target summary + the safe market-display summary (Rebalance/DCA share the target).
-  const { targetSummary, marketSummary } = useRailSuggestions({ positions, pricedAsOf, goal, loading: loading === true, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket) });
+  // Step 22F (slice 5) — the shared canonical target summary (Rebalance/DCA share the target). The standalone Market
+  // Conditions surface was removed from the dashboard; the rail still derives its market data for the target allocation.
+  const { targetSummary } = useRailSuggestions({ positions, pricedAsOf, goal, loading: loading === true, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket) });
 
   // Recommended (target) allocation — Step 22F(slice 5): the mounted CANONICAL target, NOT a risk-only derivation.
   // Percentages appear only for a usable (full/degraded) target; every non-usable state shows a safe treatment
@@ -186,15 +184,6 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
     timeline: goal?.timeline,
     riskTolerance: goal?.risk_tolerance,
   });
-  const projectionUnavailableText =
-    projection.status === "no_pricing"
-      ? PROJECTED_GROWTH_NO_PRICING
-      : projection.status === "no_contribution"
-        ? PROJECTED_GROWTH_NO_CONTRIB
-        : projection.status === "no_horizon"
-          ? PROJECTED_GROWTH_NO_HORIZON
-          : PROJECTED_GROWTH_NO_RISK;
-
   // Build the deterministic line-chart state (same chart component as Demo).
   // The prose caption is intentionally blank in real-wallet mode — its content
   // now lives in the "How Projected Growth is calculated" info popover on the
@@ -235,9 +224,11 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
     };
   }
 
-  const totalCaption = priced
-    ? FS_TOTAL_VALUE_CAPTION + (value.anyUnpriced ? " · excludes unpriced positions" : "")
-    : REAL_WALLET_VALUE_DESC;
+  // Caption for the priced Total Portfolio Value ("Crypto + Stablecoins", noting any excluded unpriced positions).
+  const totalCaption = FS_TOTAL_VALUE_CAPTION + (value.anyUnpriced ? " · excludes unpriced positions" : "");
+  // Truly empty (no positions to price) → show a clean $0 starting state. If positions exist but can't be priced
+  // (anyUnpriced), a $0 would be misleading, so that case keeps the muted "—" + needs-pricing caption.
+  const emptyZero = !priced && !value.anyUnpriced;
 
   return (
     <>
@@ -257,12 +248,20 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
                 <span className="skeleton skeleton--value" />
                 <span className="skeleton skeleton--line-short" />
               </>
+            ) : priced ? (
+              <>
+                <span className="hero-card__value">{formatUsd(value.totalUsd as number)}</span>
+                <span className="card__caption">{totalCaption}</span>
+              </>
+            ) : emptyZero ? (
+              <>
+                <span className="hero-card__value">$0</span>
+                <span className="card__caption">{FS_TOTAL_VALUE_CAPTION}</span>
+              </>
             ) : (
               <>
-                <span className={"hero-card__value" + (priced ? "" : " hero-card__value--muted")}>
-                  {priced ? formatUsd(value.totalUsd as number) : "—"}
-                </span>
-                <span className="card__caption">{totalCaption}</span>
+                <span className="hero-card__value hero-card__value--muted">—</span>
+                <span className="card__caption">{REAL_WALLET_VALUE_DESC}</span>
               </>
             )}
           </div>
@@ -280,8 +279,8 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
               </>
             ) : (
               <>
-                <span className="hero-card__value hero-card__value--muted">—</span>
-                <span className="card__caption">{FS_NET_CONTRIB_DESC}</span>
+                <span className="hero-card__value">$0</span>
+                <span className="card__caption">{FS_NET_CONTRIB_ESTIMATE}</span>
               </>
             )}
           </div>
@@ -332,13 +331,25 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
             </div>
           </div>
         ) : (
-          <UnavailableCard text={SAFETY_BUFFER_NEEDS} />
+          <div className="card safety-buffer-empty">
+            {/* Disabled Safety Buffer bar — the same bar, shown in muted colors until monthly expenses +
+                risk tolerance are known (no target computed yet). Decorative; the caption explains the state. */}
+            <div className="progress progress--chart safety-buffer-empty__bar" aria-hidden="true" />
+            <div className="chart-legend safety-buffer-empty__legend">
+              <span className="chart-legend__item">
+                <LegendMarker variant="dot" colorToken="--color-text-disabled" />
+                {SAFETY_BUFFER_COVERED_LEGEND}
+              </span>
+            </div>
+            <p className="empty-card__description safety-buffer-empty__desc">{SAFETY_BUFFER_NEEDS}</p>
+          </div>
         )}
       </DashSection>
 
       {/* Projected Growth — deterministic modeled estimate from priced value + plan. */}
       <DashSection
         title={s.projected_growth.title}
+        caption={PG_CAPTION}
         action={
           projectionInfo ? (
             <ProjectedGrowthInfo
@@ -375,7 +386,7 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
         ) : projectionGrowth ? (
           <ProjectedGrowthChart growth={projectionGrowth} />
         ) : (
-          <UnavailableCard text={projectionUnavailableText} />
+          <ProjectedGrowthEmptyChart description={PROJECTED_GROWTH_EMPTY_PROMPT} />
         )}
       </DashSection>
 
@@ -474,9 +485,6 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
         ) : (
           <UnavailableCard text={ALLOCATION_NEEDS_PRICING} />
         )}
-        {/* Step 22F (slice 6) — ONE informational Market Conditions surface, grouped with the allocation summary.
-            Renders only in real-wallet mode (marketSummary present); informational only, no suggestion/trigger. */}
-        <MarketConditionsSurface summary={marketSummary} />
       </DashSection>
     </>
   );

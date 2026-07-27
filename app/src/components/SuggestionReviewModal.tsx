@@ -14,6 +14,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import ButtonIcon from "./ButtonIcon";
 import Badge from "./Badge";
+import InfoPopover from "./InfoPopover";
+import { useScrollLock } from "./useScrollLock";
 import SolStakingLeaderExplanation from "./SolStakingLeaderExplanation";
 import closeUrl from "../../../assets/icons/ui/close.svg";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
@@ -25,6 +27,7 @@ import type {
 } from "../suggestions/engineTypes";
 import type { ContributionPlanReviewDetails } from "../suggestions/contributionPlanReviewDetails";
 import type { StableYieldReviewPresentation } from "../suggestions/yieldStrategyPlanPresentationTypes";
+import { cardProtocolName } from "../suggestions/yieldStrategyPlanPresentation";
 import type { SwapActionReadiness, SwapQuoteComparisonAssessment } from "../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapQuoteFetcher } from "../suggestions/swapQuote/swapQuoteClient";
 import type { SwapHandoff } from "../suggestions/swapQuote/providerSwapLinks";
@@ -100,6 +103,7 @@ function formatCalcValue(v: number, unit?: string): string {
 }
 
 export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onClose }: Props) {
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -108,8 +112,9 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
   // footer (a link out only; WealthSmith prepares/signs/submits nothing). Null when there is no selected route.
   const [swapHandoff, setSwapHandoff] = useState<SwapHandoff | null>(null);
 
-  // The read-only "Suggested route" section (Rebalance / Trim / eligible DCA), reused across modal variants.
-  const swapSection = swapAction ? (
+  // The read-only "Swap Route" section (Rebalance / Trim / eligible DCA), reused across modal variants. Suppressed
+  // when the suggestion opts out (details.hideSwapRoute) — e.g. a frozen asset that can't be swapped.
+  const swapSection = swapAction && !details?.hideSwapRoute ? (
     <SwapQuoteComparisonSection
       readiness={swapAction}
       enabled
@@ -200,20 +205,21 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
     const amtCompact = Number.isInteger(r.amountUsd)
       ? `$${r.amountUsd.toLocaleString("en-US")}`
       : `$${r.amountUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const whyBody = r.lane === "excess"
-      ? `${amtCompact} of your direct-wallet USDC is above your required Safety Buffer, so you can review allocating it to this strategy.`
-      : `${amtCompact} of your buffer-eligible USDC could earn yield while keeping your required Safety Buffer covered. You can review allocating it to this strategy.`;
-    // "Suggested protocol to review" — only data-backed cards. Kamino lending has no TVL / 30-day APY / unstake
-    // timing / fees (staking-only), and those are never invented; add them here only if real data appears.
-    const protocolCards: [string, string][] = [
-      ["Protocol", r.protocolName],
-      ["Current APY", r.apy.display],
-    ];
-    const keyMetricCards: [string, string][] = [
-      ["USDC", `${r.amountUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC`],
-      ["USDC Value", r.amountDisplay],
-      ...(r.estimatedEarningsDisplay ? [["Estimated earnings", r.estimatedEarningsDisplay] as [string, string]] : []),
-    ];
+    // 24J — focused Stable Yield modal: description + a self-explanatory card set. Finance copy stays deterministic
+    // (amount / protocol / sourced APY only). Kamino USDC lending withdraws on demand → 0-hour, 0-fee unstake.
+    // Over-long protocol names fall back to a generic phrase so the copy never overflows (matches the card).
+    const syProto = cardProtocolName(r.protocolName);
+    const description = r.lane === "excess"
+      ? (r.actionMode === "add_to_existing_strategy"
+          ? `You already have USDC earning yield on ${syProto}. Add ${amtCompact} of excess USDC to the same strategy while keeping your Safety Buffer fully funded.`
+          : r.apy.state === "unavailable"
+            ? `You have ${amtCompact} in USDC above your Safety Buffer, but we couldn’t verify the current APY for this ${syProto === "the selected protocol" ? "strategy" : `${syProto} strategy`}. Check the latest rate before deciding whether to deposit.`
+            : `You have ${amtCompact} in USDC above your Safety Buffer. Deposit it on ${syProto} to earn an estimated ${r.apy.display} APY while keeping your buffer fully funded.`)
+      : (r.actionMode === "start_new_position"
+          ? `Lend ${amtCompact} of your Safety Buffer USDC on ${syProto} to earn an estimated ${r.apy.display} APY. The position will continue to count toward your Safety Buffer while it remains eligible and available for withdrawal.`
+          : `Add ${amtCompact} of your Safety Buffer USDC to your existing ${syProto} lending position to earn an estimated ${r.apy.display} APY while keeping your Safety Buffer fully funded.`);
+    const depositTokens = `${r.amountUsd.toLocaleString("en-US", { maximumFractionDigits: 2 })} USDC`;
+    const estYearly = r.estimatedEarningsDisplay ? r.estimatedEarningsDisplay.replace("+", "~").replace("/year", "") : "—";
     const ext = r.externalLink;
     return (
       <div className="modal-scrim" onClick={onClose}>
@@ -227,57 +233,32 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </button>
           </div>
           <div className="review-modal__body">
-            <section className="review-modal__section" aria-label="Why this fits your plan">
-              <h3 className="review-modal__section-title">Why this fits your plan</h3>
-              <p id={reasonId} className="modal__intro">{whyBody}</p>
+            <section className="review-modal__section" aria-label="Recommendation">
+              <p id={reasonId} className="modal__intro">{description}</p>
             </section>
-            <section className="review-modal__section" aria-label="Suggested protocol to review">
-              <h3 className="review-modal__section-title">Suggested protocol to review</h3>
+            <section className="review-modal__section" aria-label="Deposit details">
               <dl className="review-modal__metrics">
-                {protocolCards.map(([label, value]) => (
-                  <div key={label} className="review-modal__metric">
-                    <dt className="review-modal__metric-label">{label}</dt>
-                    <dd className="review-modal__metric-value">{value}</dd>
-                  </div>
-                ))}
+                <div className="review-modal__metric">
+                  <dt className="review-modal__metric-label">Deposit</dt>
+                  <dd className="review-modal__metric-value">{depositTokens}<span className="review-modal__metric-subvalue">{amtCompact}</span></dd>
+                </div>
+                <div className="review-modal__metric">
+                  <dt className="review-modal__metric-label">Current APY</dt>
+                  <dd className="review-modal__metric-value">{r.apy.display}</dd>
+                </div>
+                <div className="review-modal__metric">
+                  <dt className="review-modal__metric-label">Estimated yearly rewards</dt>
+                  <dd className="review-modal__metric-value">{estYearly}</dd>
+                </div>
+                <div className="review-modal__metric">
+                  <dt className="review-modal__metric-label">Direct Unstake</dt>
+                  <dd className="review-modal__metric-value">0 hours</dd>
+                </div>
+                <div className="review-modal__metric">
+                  <dt className="review-modal__metric-label">Direct Unstake Fee <InfoPopover label="Direct Unstake Fee — more info" direction="up">Applied to the unstaked amount</InfoPopover></dt>
+                  <dd className="review-modal__metric-value">0%</dd>
+                </div>
               </dl>
-            </section>
-            <section className="review-modal__section" aria-label="Key metrics">
-              <h3 className="review-modal__section-title">Key metrics</h3>
-              <dl className="review-modal__metrics">
-                {keyMetricCards.map(([label, value]) => (
-                  <div key={label} className="review-modal__metric">
-                    <dt className="review-modal__metric-label">{label}</dt>
-                    <dd className="review-modal__metric-value">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </section>
-            <section className="review-modal__section" aria-label="Involved assets">
-              <h3 className="review-modal__section-title">Involved assets</h3>
-              <div className="portfolio-table__scroll">
-                <table className="portfolio-table">
-                  <thead>
-                    <tr>
-                      <th scope="col" className="portfolio-table__cell portfolio-table__header">Asset</th>
-                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">Amount</th>
-                      <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">USD Value</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td className="portfolio-table__cell">
-                        <span className="asset-identity">
-                          <img className="asset-identity__icon" src={resolveTokenIcon("assets/icons/token/usdc.svg").url} alt="" width={24} height={24} aria-hidden="true" />
-                          <a className="deploy-table__asset-link" href="https://solscan.io/token/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" target="_blank" rel="noopener noreferrer">USDC</a>
-                        </span>
-                      </td>
-                      <td className="portfolio-table__cell portfolio-table__cell--right"><span className="portfolio-table__value">{tokenAmount(r.amountUsd)}</span></td>
-                      <td className="portfolio-table__cell portfolio-table__cell--right"><span className="portfolio-table__value">{usd(r.amountUsd)}</span></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
             </section>
           </div>
           {ext && (
@@ -316,17 +297,17 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
           </div>
           <div className="review-modal__body">
             <section className="review-modal__section" aria-label="Why this fits your plan">
-              <h3 className="review-modal__section-title">Why this fits your plan</h3>
+              {!cr.focusedLayout && <h3 className="review-modal__section-title">Why this fits your plan</h3>}
               <p id={reasonId} className="modal__intro">{cr.whySection.body}</p>
             </section>
             {cr.keyMetrics.length > 0 && (
               <section className="review-modal__section" aria-label="Key metrics">
-                <h3 className="review-modal__section-title">Key metrics</h3>
+                {!cr.focusedLayout && <h3 className="review-modal__section-title">Key metrics</h3>}
                 <dl className="review-modal__metrics">
                   {cr.keyMetrics.map((m, i) => (
                     <div key={`${m.label}-${i}`} className="review-modal__metric">
                       <dt className="review-modal__metric-label">{m.label}</dt>
-                      <dd className="review-modal__metric-value">{m.value}</dd>
+                      <dd className="review-modal__metric-value">{m.value}{m.subValue && <span className="review-modal__metric-subvalue">{m.subValue}</span>}</dd>
                     </div>
                   ))}
                 </dl>
@@ -335,7 +316,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             {/* Step 22F (slice 4.1) — honest market-context disclosure. Rendered ONLY when the canonical target drove
                 the plan (full → 10% + CoinMarketCap; degraded → exclusion + renormalization); absent for transitional
                 Demo/testing and buffer plans, so no empty section appears. */}
-            {cr.marketContextSection && (
+            {cr.marketContextSection && !cr.focusedLayout && (
               <section className="review-modal__section" aria-label="Market context">
                 <h3 className="review-modal__section-title">{cr.marketContextSection.title}</h3>
                 <p className="modal__intro">{cr.marketContextSection.body}</p>
@@ -365,6 +346,9 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
 
   if (!details) return null;
   const { summary, metrics, involvedAssets, involvedPositions, calculations, guardrailSummary } = details;
+  // Show the "Portfolio share" column only when at least one involved asset carries a share (e.g. Trim); other
+  // modals that list involved assets without a share (staking, stable yield) keep the 3-column table.
+  const showInvolvedAssetShare = involvedAssets.some((a) => typeof a.portfolioSharePct === "number");
 
   const guardrailGroups: {
     title: string;
@@ -421,7 +405,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             {summary.reason}
           </p>
 
-          {details.protocolSelectionDisplay && (
+          {details.protocolSelectionDisplay && !details.focusedLayout && (
             /* Presented like the Key metrics grid: one card per protocol data point (Protocol + market data). */
             <section className="review-modal__section" aria-label="Suggested protocol">
               <h3 className="review-modal__section-title">{details.protocolSelectionDisplay.label}</h3>
@@ -455,19 +439,25 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
 
           {metrics.length > 0 && !details.positionReview && (
             <section className="review-modal__section" aria-label="Key metrics">
-              {!details.hideMetricsHeading && <h3 className="review-modal__section-title">Key metrics</h3>}
+              {!details.hideMetricsHeading && !details.focusedLayout && <h3 className="review-modal__section-title">Key metrics</h3>}
               <dl className="review-modal__metrics">
                 {metrics.map((m) => (
                   <div key={m.label} className="review-modal__metric">
-                    <dt className="review-modal__metric-label">{m.label}</dt>
-                    <dd className="review-modal__metric-value">{formatMetric(m)}</dd>
+                    <dt className="review-modal__metric-label">
+                      {m.label}
+                      {m.tooltip && <InfoPopover label={`${m.label} — more info`} align="right" direction="up">{m.tooltip}</InfoPopover>}
+                    </dt>
+                    <dd className="review-modal__metric-value">
+                      {formatMetric(m)}
+                      {m.subValue && <span className="review-modal__metric-subvalue">{m.subValue}</span>}
+                    </dd>
                   </div>
                 ))}
               </dl>
             </section>
           )}
 
-          {involvedAssets.length > 0 && (
+          {involvedAssets.length > 0 && !details.focusedLayout && (
             /* Every review modal presents involved assets like the Portfolio "Liquid Assets" table: a header
                row (Asset / Amount / USD Value) then a token icon + a symbol linking to the read-only Solscan
                token page (when a mint is known). Read-only identity only — never implies the asset can move. */
@@ -480,6 +470,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                       <th scope="col" className="portfolio-table__cell portfolio-table__header">Asset</th>
                       <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">Amount</th>
                       <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">USD Value</th>
+                      {showInvolvedAssetShare && <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">Portfolio share</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -504,6 +495,11 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                           <td className="portfolio-table__cell portfolio-table__cell--right">
                             <span className="portfolio-table__value">{typeof a.valueUsd === "number" ? usd(a.valueUsd) : "—"}</span>
                           </td>
+                          {showInvolvedAssetShare && (
+                            <td className="portfolio-table__cell portfolio-table__cell--right">
+                              <span className="portfolio-table__value">{typeof a.portfolioSharePct === "number" ? `${a.portfolioSharePct}%` : "—"}</span>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -629,7 +625,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </section>
           )}
 
-          {calculations.length > 0 && (
+          {calculations.length > 0 && !details.focusedLayout && (
             <section className="review-modal__section" aria-label="How this was calculated">
               <h3 className="review-modal__section-title">How this was calculated</h3>
               <ul className="review-modal__list">
@@ -657,7 +653,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </section>
           )}
 
-          {showGuardrails && !details.positionReview && !details.hideGuardrails && guardrailGroups.length > 0 && (
+          {showGuardrails && !details.positionReview && !details.hideGuardrails && !details.focusedLayout && guardrailGroups.length > 0 && (
             <section className="review-modal__section" aria-label="Guardrails">
               <h3 className="review-modal__section-title">Guardrails</h3>
               <div className="review-modal__guardrails">
@@ -681,7 +677,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </section>
           )}
 
-          {details.routeEvaluation && (
+          {details.routeEvaluation && !details.focusedLayout && (
             <section className="review-modal__section" aria-label="Route and execution checks">
               <h3 className="review-modal__section-title">{details.routeEvaluation.title}</h3>
               <p className="review-modal__source-status">{details.routeEvaluation.sourceStatusLabel}</p>
@@ -723,7 +719,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
           {/* READ-ONLY "Other protocols to review" (Step 14L). Approved alternative
               candidates shown for review only — never the selected protocol/winner,
               and never an execution path. */}
-          {details.otherProtocolsToReview && details.otherProtocolsToReview.length > 0 && (
+          {details.otherProtocolsToReview && details.otherProtocolsToReview.length > 0 && !details.focusedLayout && (
             <section className="review-modal__section review-modal__alternatives" aria-label="Other protocols to review">
               <h3 className="review-modal__section-title">Other protocols to review</h3>
               {details.protocolSelectionDisplay && (

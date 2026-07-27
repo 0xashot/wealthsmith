@@ -242,16 +242,26 @@ export default function OnboardingPanel({
           ? summaryMessage(answers)
           : stepLeadMessage(stepIndex, answers);
 
-  // The plan summary is typed out character-by-character even though it is
-  // structured (paragraphs + bold-labelled bullets); the tour messages render
-  // immediately. Plain string messages type out as before.
+  // Every current Smith message types out character-by-character — plain strings and structured messages
+  // alike (the plan summary and the Portfolio/Goal tour bullets). Reduced motion or an Undo-reached step
+  // (skipType) shows the full text immediately.
+  //
+  // Held at rest while disconnected: this hook runs before the disconnected-mode early return, so without
+  // this gate the first connected message (the goal question) would type out invisibly during the
+  // disconnected welcome and be finished before the connected panel ever shows it. Enabling only once
+  // connected makes it animate when it first appears.
   const structured = Array.isArray(rawMessage);
   const typewriterText = structured
     ? blocksPlainText(rawMessage as MessageBlock[])
     : (rawMessage as string);
-  const typeEnabled = !reduced && !skipType && (!structured || isSummary);
+  const typeEnabled = !reduced && !skipType && mode !== "disconnected";
   const { shown: typedMessage, done: titleDone } = useTypewriter(typewriterText, typeEnabled);
   const writing = !titleDone;
+
+  // Disconnected welcome — types out once the first-open loading beat finishes (reduced motion shows it in full).
+  // Gating on `!intro` keeps the typewriter at rest during the loading state, then animates when the welcome appears.
+  const welcomeEnabled = !reduced && !intro;
+  const { shown: welcomeTyped, done: welcomeDone } = useTypewriter(SCRIPT_WELCOME, welcomeEnabled);
 
   // Keep the transcript scrolled to the newest message as it types/advances.
   useLayoutEffect(() => {
@@ -372,7 +382,11 @@ export default function OnboardingPanel({
         <OnboardingProgress current={1} total={ONBOARDING_TOTAL_STEPS} />
         <div className="onboarding-panel__body onboarding-chat">
           <OnboardingMessage>
-            <p className="chat-question">{SCRIPT_WELCOME}</p>
+            <p className="chat-question">
+              {welcomeTyped}
+              {!welcomeDone && <span className="chat-caret" aria-hidden="true" />}
+            </p>
+            {!welcomeDone && <SmithTypingIndicator />}
           </OnboardingMessage>
         </div>
         <div className="onboarding-chat__input">
@@ -465,15 +479,31 @@ export default function OnboardingPanel({
           </div>
         ))}
 
-        {/* Current Smith message — typed plain text, or structured (paragraphs +
-            bullet lists) rendered directly on the surface for long tour messages. */}
+        {/* Prior tour turns persist so the transcript keeps growing instead of replacing the last message.
+            Once the tour begins, the plan summary stays put; once the Goal tour begins, the Portfolio
+            walk-through stays too. Prior turns render in full (the current message is the one that types). */}
+        {tourStage != null && (
+          <div className="chat-turn">
+            <OnboardingMessage>
+              <div className="onboarding-rich">{renderBlocks(summaryMessage(answers))}</div>
+            </OnboardingMessage>
+          </div>
+        )}
+        {tourStage === "goal" && (
+          <div className="chat-turn">
+            <OnboardingMessage>
+              <div className="onboarding-rich">{renderBlocks(SCRIPT_PORTFOLIO_TOUR)}</div>
+            </OnboardingMessage>
+          </div>
+        )}
+
+        {/* Current Smith message — typed plain text, or structured (paragraphs + bullet lists). Structured
+            messages (summary + tour) reveal character-by-character via renderBlocksPartial. */}
         <div className="chat-turn">
           <OnboardingMessage>
             {structured ? (
               <div className="onboarding-rich" id={QUESTION_ID}>
-                {isSummary
-                  ? renderBlocksPartial(rawMessage as MessageBlock[], typedMessage.length)
-                  : renderBlocks(rawMessage as MessageBlock[])}
+                {renderBlocksPartial(rawMessage as MessageBlock[], typedMessage.length)}
               </div>
             ) : (
               <p className="chat-question" id={QUESTION_ID}>

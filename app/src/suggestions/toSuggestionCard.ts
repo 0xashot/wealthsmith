@@ -21,7 +21,7 @@ import { SUGGESTION_COPY, SUGGESTIONS_PARTIAL_PRICING, SUGGESTION_STAKING_SELECT
 import type { SuggestionReasonCode } from "./engineTypes";
 import type { ContributionPlanSuggestion } from "./contributionIntegrationTypes";
 import { buildContributionPlanCardPresentation } from "./contributionPlanPresentation";
-import { buildStableYieldPlanPresentation } from "./yieldStrategyPlanPresentation";
+import { buildStableYieldPlanPresentation, cardProtocolName } from "./yieldStrategyPlanPresentation";
 
 /** Whole-dollar USD (no cents), e.g. "$2,200". */
 const usd0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
@@ -126,7 +126,7 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
         actionability: "actionable",
         severity: "info",
         description: c.description,
-        impact_text: `Amount to review: ${c.amountDisplay}`,
+        impact_text: `Deposit ${c.amountDisplay} USDC on ${cardProtocolName(c.protocolName)}`,
         tag: c.tag,
         // Selected protocol drives the card icon (resolveCardIcon → protocol logo, e.g. Kamino).
         protocolName: c.protocolName,
@@ -163,7 +163,7 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
   // it as a disabled button); informational (On Track) has no CTA. Never
   // executes or signs — the safety booleans are always false.
   const cta: SuggestionCardState["cta"] = {
-    label: informational ? "" : "Review",
+    label: s.ctaLabelOverride ?? (informational ? "" : "Review"),
     action: null,
     executes_transaction: false,
     requires_wallet_signature: false,
@@ -221,6 +221,7 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
     disabled_reason_text: disabled ? BELOW_MIN_REASON : undefined,
     cta,
     ...(s.statusChip ? { statusChip: s.statusChip } : {}),
+    ...(s.apyIncomeChip ? { apyIncomeChip: s.apyIncomeChip } : {}),
     ...selectedProtocolFields,
   };
 }

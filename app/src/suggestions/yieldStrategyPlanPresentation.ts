@@ -38,7 +38,7 @@ const CTA: StableYieldCtaPresentation = { label: "Review", intent: "open_stable_
 
 /** Deterministic title by lane + action mode, naming the selected protocol (no hype, no promises). */
 export function stableYieldTitle(lane: "buffer" | "excess", actionMode: "start_new_position" | "add_to_existing_strategy", protocol: string): string {
-  if (lane === "excess") return actionMode === "start_new_position" ? `Put Excess USDC on ${protocol}` : `Add to Your ${protocol} Strategy`;
+  if (lane === "excess") return actionMode === "start_new_position" ? "Earn Yield on Excess USDC" : `Add to Your ${protocol} Strategy`;
   return actionMode === "start_new_position" ? `Put Buffer Funds on ${protocol}` : `Add to Your ${protocol} Position`;
 }
 
@@ -47,6 +47,13 @@ export function stableYieldTitle(lane: "buffer" | "excess", actionMode: "start_n
 const STABLE_YIELD_CARD_PRODUCT_MAX = 40;
 function cardProductName(product: string): string {
   return product.length <= STABLE_YIELD_CARD_PRODUCT_MAX ? product : "selected stable yield";
+}
+
+/** Longest protocol name the card description names inline; longer names fall back to a generic phrase so the
+ *  card never overflows (the full protocol name still appears in the card title / action line). */
+export const STABLE_YIELD_CARD_PROTOCOL_MAX = 24;
+export function cardProtocolName(protocol: string): string {
+  return protocol.length <= STABLE_YIELD_CARD_PROTOCOL_MAX ? protocol : "the selected protocol";
 }
 
 /** Deterministic single-reason card description (amount is shown separately as the card's impact metric). */
@@ -143,8 +150,22 @@ export function buildStableYieldPlanPresentation(suggestion: EngineSuggestion | 
 
   const amt = formatUsd(meta.amountUsd);
   const title = stableYieldTitle(meta.lane, meta.actionMode, meta.protocolDisplayName);
-  const cardDesc = cardDescription(meta.lane, meta.actionMode, meta.displayName);
   const apy = stableYieldApyPresentation(meta.apy);
+  // 24J — excess-lane / new-position body names the amount above the buffer, the protocol, and the sourced APY
+  // (real numbers only). Falls back to the generic template when no APY is available or for other lane/action cases.
+  const proto = cardProtocolName(meta.protocolDisplayName);
+  const cardDesc =
+    meta.lane === "excess" && meta.actionMode === "start_new_position"
+      ? (apy.state !== "unavailable"
+          ? `You have ${formatUsdTrim(meta.amountUsd)} in USDC above your Safety Buffer. Deposit it on ${proto} to earn an estimated ${apy.display} APY while keeping your buffer fully funded.`
+          : `You have ${formatUsdTrim(meta.amountUsd)} in USDC above your Safety Buffer, but we couldn’t verify the current APY for this ${proto === "the selected protocol" ? "strategy" : `${proto} strategy`}. Check the latest rate before deciding whether to deposit.`)
+      : meta.lane === "excess" && meta.actionMode === "add_to_existing_strategy"
+        ? `You already have USDC earning yield on ${proto}. Add ${formatUsdTrim(meta.amountUsd)} of excess USDC to the same strategy while keeping your Safety Buffer fully funded.`
+        : meta.lane === "buffer" && meta.actionMode === "start_new_position" && apy.state !== "unavailable"
+          ? `Lend ${formatUsdTrim(meta.amountUsd)} of your Safety Buffer USDC on ${proto} to earn an estimated ${apy.display} APY. The position will continue to count toward your Safety Buffer while it remains eligible and available for withdrawal.`
+          : meta.lane === "buffer" && meta.actionMode === "add_to_existing_strategy" && apy.state !== "unavailable"
+            ? `Add ${formatUsdTrim(meta.amountUsd)} of your Safety Buffer USDC to your existing ${proto} lending position to earn an estimated ${apy.display} APY while keeping your Safety Buffer fully funded.`
+            : cardDescription(meta.lane, meta.actionMode, meta.displayName);
   const tag = meta.lane === "buffer" ? "Safety Buffer Yield" : "Excess USDC Yield";
   // Estimated annual income chip: eligible amount × sourced APY. Only when a real APY is available (never
   // invented). Rounded to whole dollars; the APY display keeps its canonical precision.

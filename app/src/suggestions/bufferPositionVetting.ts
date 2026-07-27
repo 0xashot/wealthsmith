@@ -10,8 +10,8 @@
  * Capital, and any future curator are supported through the SAME path: the position carries its resolved identity
  * (`curatedLending`, from Kamino protocol data / the internal registry) — product name, curator, and CANONICAL
  * addresses (vault / market / reserve). Positions are identified by those canonical addresses, never by display name.
- * The only internal policy here is the APPROVED replacement destination per deposited asset (e.g. USDC → Kamino Main
- * Market). Anything not confidently identified, or with no approved destination, fails closed to the generic state.
+ * The only internal policy here is the APPROVED replacement destination per deposited asset (e.g. USDC → Kamino's
+ * SOL/BTC Market). Anything not confidently identified, or with no approved destination, fails closed to the generic state.
  */
 import type { WalletPosition } from "../wallet/walletPosition";
 import type { SafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
@@ -44,9 +44,11 @@ export interface BufferPositionReview {
   detectionConfidence: BufferPositionDetectionConfidence;
 }
 
-/** The approved Kamino Main Market USDC reserve page (built from the canonical on-chain identity — never a guess). */
-export const KAMINO_MAIN_MARKET_USDC_URL =
-  `https://app.kamino.finance/lending/reserve/${KLEND_DIRECT_USDC_IDENTITY.marketAddress}/${KLEND_DIRECT_USDC_IDENTITY.reserveAddress}` as const;
+/**
+ * The approved Kamino SOL/BTC Market USDC lending page. The market formerly known as the "Main Market" was renamed
+ * to the "SOL/BTC Market" (Kamino UI, kamino.com/borrow: "The Main Market has been renamed to the SOL/BTC Market.").
+ */
+export const KAMINO_SOL_BTC_MARKET_USDC_URL = "https://kamino.com/borrow" as const;
 
 /** One approved Safety Buffer replacement destination for a deposited asset (WealthSmith policy — NOT per curator). */
 interface ApprovedDestination {
@@ -62,10 +64,10 @@ interface ApprovedDestination {
  * curator's position in that asset routes to it.
  */
 const APPROVED_DESTINATIONS: Record<string, ApprovedDestination> = {
-  // Kamino + canonical USDC mint → the approved Kamino Main Market USDC reserve.
+  // Kamino + canonical USDC mint → the approved Kamino SOL/BTC Market USDC reserve (formerly the "Main Market").
   [`kamino:${KLEND_DIRECT_USDC_IDENTITY.liquidityMint}`]: {
-    name: "Kamino Main Market",
-    url: KAMINO_MAIN_MARKET_USDC_URL,
+    name: "SOL/BTC Market",
+    url: KAMINO_SOL_BTC_MARKET_USDC_URL,
     approvedReserveAddresses: [KLEND_DIRECT_USDC_IDENTITY.reserveAddress],
   },
 };

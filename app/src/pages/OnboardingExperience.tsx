@@ -14,20 +14,17 @@
  * the global Ask Smith AI button is hidden — the onboarding companion is the only
  * Smith surface.
  *
- * Non-custodial / prototype: no wallet adapter, no signatures, no transactions,
- * no fund movement, no live AI. The tour reuses the connected Portfolio fixtures
- * and previews the collected plan; it does NOT recalculate suggestions, Top Pick,
- * Safety Buffer, projections, allocation, or protocol decisions.
+ * Non-custodial / prototype: read-only wallet connection, no signatures, no
+ * transactions, no fund movement, no live AI. The Portfolio tour shows the REAL
+ * connected-wallet Portfolio (same live read-only component as the standalone
+ * Portfolio page), and the Goal tour previews the collected plan.
  */
 import { dashboardState as s } from "../state/dashboardState";
 import { portfolioState as p } from "../state/portfolioState";
 import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
 import DashboardBody from "../components/DashboardBody";
-import DeploymentOverview from "../components/DeploymentOverview";
-import LiquidAssetsSection from "../components/LiquidAssetsSection";
-import StakedAssetsSection from "../components/StakedAssetsSection";
-import YieldStrategiesSection from "../components/YieldStrategiesSection";
+import RealWalletPortfolio from "../components/RealWalletPortfolio";
 import GoalSettings from "../components/GoalSettings";
 import OnboardingPanel from "../components/OnboardingPanel";
 import type { SavedGoal } from "../types/goal";
@@ -76,17 +73,12 @@ export default function OnboardingExperience({
   // the shared Dashboard body preview. The sidebar (OnboardingPanel) is unchanged.
   let mainColumn;
   if (connected && tourStage === "portfolio") {
+    // Real connected-wallet Portfolio (same component + live read as the standalone
+    // Portfolio page) — the tour previews the user's ACTUAL holdings, not fixtures.
     mainColumn = (
       <>
         <PageHeader header={p.page_header} />
-        <DeploymentOverview
-          title={p.deployment.title}
-          totalValueUsd={p.total_value_usd}
-          segments={p.deployment.segments}
-        />
-        <LiquidAssetsSection section={p.liquid} />
-        <StakedAssetsSection section={p.staked} onManage={() => {}} />
-        <YieldStrategiesSection section={p.yield} onManage={() => {}} />
+        <RealWalletPortfolio pushToast={pushToast} goal={tourGoal ?? undefined} />
       </>
     );
   } else if (connected && tourStage === "goal" && tourGoal) {

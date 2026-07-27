@@ -31,7 +31,8 @@ import { ONE_SF as EP_ONE_SF } from "./klendReserveCapacity";
 import { computeSafetyBufferCoverage as sbCoverage, classifyPositionCoverage as sbClassify, type SafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
 import { deriveSafetyBufferAssessment as sbAssess, SAFETY_BUFFER_ASSESSMENT_VERSION, type SafetyBufferContributionPlanInput } from "./safetyBufferAssessment";
 import { buildSafetyBufferCardFromAssessment } from "./bufferSuggestion";
-import { deriveBufferPositionReview, KAMINO_MAIN_MARKET_USDC_URL } from "./bufferPositionVetting";
+import { deriveBufferPositionReview, KAMINO_SOL_BTC_MARKET_USDC_URL } from "./bufferPositionVetting";
+import { INCORPORATED_SOURCES, SECURITY_HUB_FACTS, RISK_DASHBOARD_FACTS, S2_SCORE_IMPACT, S2_CONFERS, KAMINO_SECURITY_SOURCES_EVIDENCE, S2_MANIFEST_HASH, computeS2ManifestHash } from "./kaminoSecuritySourcesAmendment";
 import { deriveOnTrackAssessment as otAssess, ON_TRACK_ASSESSMENT_VERSION, type OnTrackCandidateContext } from "./onTrackAssessment";
 import { buildOnTrackCardsFromAssessment as otBuildCards, type OnTrackGoalContext } from "./onTrackSuggestion";
 import {
@@ -2300,8 +2301,8 @@ export function runSuggestionEngineFixtureChecks(): FixtureCheck[] {
     );
     const s = r.suggestions[0];
     add(
-      "N: funded + delta 5% → On Track (informational, 3 cards)",
-      r.suggestions.length === 3 &&
+      "N: funded + delta 5% → On Track (informational, 4 cards)",
+      r.suggestions.length === 4 &&
         r.suggestions.every((x) => x.category === "on_track" && x.is_actionable === false && x.is_top_pick === false && x.amount === undefined) &&
         s?.reason_codes.includes("portfolio_aligned") === true,
       `category=${s?.category} actionable=${s?.is_actionable} top_pick=${s?.is_top_pick}`
@@ -2688,10 +2689,11 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
       positions: [cryptoPosition()],
     });
     add(
-      "Me: On Track → scoped informational card, no CTA, no Top Pick (21H multi-card; first is Goal Check)",
+      "Me: On Track → scoped informational Goal Check card, label-only Review Goal prompt, no Top Pick (21H multi-card)",
       /^Goal Check: .+\?$/.test(card?.title ?? "") &&
         card?.actionability === "informational" &&
-        card?.cta.label === "" &&
+        card?.cta.label === "Review Goal" &&
+        card?.cta.action === null &&
         card?.is_top_pick === false,
       `title="${card?.title}" actionability=${card?.actionability} cta="${card?.cta.label}"`
     );
@@ -3082,7 +3084,8 @@ export function runStakingFixtureChecks(): FixtureCheck[] {
     add(
       "9B-J: staking card maps safely (copy, amount, review-only, non-transactional)",
       card?.title === "Stake SOL on Jito" &&
-        card?.description === "You have liquid SOL that could earn staking rewards through Jito." &&
+        card?.description === "You have 9.9 SOL available to stake. Stake it through Jito to earn an estimated 5.36% APY, while keeping 0.1 SOL available for wallet activity." &&
+        /^\+\$[\d,]+\/year \(5\.36% APY\)$/.test(card?.apyIncomeChip ?? "") &&
         /^Stake [\d.,]+ SOL$/.test(card?.impact_text ?? "") && !/\$\d/.test(card?.impact_text ?? "") &&
         card?.cta.label === "Review" &&
         card?.cta.executes_transaction === false &&
@@ -3612,7 +3615,7 @@ export function runJupStakingFixtureChecks(): FixtureCheck[] {
     const sug = deriveJupStakingSuggestion(inp([jupPos(650, 0.8)]), NOW);
     const card = sug ? toSuggestionCard(sug) : undefined;
     add("JUP-CARD-1: card title is exact 'Stake JUP on Jupiter'", card?.title === "Stake JUP on Jupiter", `title=${card?.title}`);
-    add("JUP-CARD-2: card description is exact", card?.description === "Your JUP is currently unstaked and eligible for Jupiter staking rewards.", `desc=${card?.description}`);
+    add("JUP-CARD-2: card description names amount + variable quarterly rewards + 7-day unstaking", card?.description === "Stake 650 JUP with Jupiter to become eligible for variable quarterly rewards. Your JUP will be locked and requires a 7-day unstaking period.", `desc=${card?.description}`);
     add("JUP-CARD-3: action line is exact 'Stake 650 JUP' (token amount, not USD-only)", card?.impact_text === "Stake 650 JUP" && !/\$\d/.test(card?.impact_text ?? ""), `impact=${card?.impact_text}`);
     add("JUP-CARD-4: CTA is Review, non-transactional", card?.cta.label === "Review" && card?.cta.executes_transaction === false && card?.cta.requires_wallet_signature === false && card?.cta.completion_on_click === false && card?.cta.action === null, `cta=${card?.cta.label}`);
     add("JUP-CARD-5: id + staking category (never capital_efficiency)", sug?.id === JUP_STAKING_SUGGESTION_ID && sug?.category === "staking", `${sug?.id}/${sug?.category}`);
@@ -3624,16 +3627,16 @@ export function runJupStakingFixtureChecks(): FixtureCheck[] {
     const sug = deriveJupStakingSuggestion(inp([jupPos(650, 0.8)]), NOW)!;
     const d = sug.reviewDetails!;
     const mval = (label: string) => d.metrics.find((m) => m.label === label)?.value;
-    add("JUP-REV-1: selected protocol + product surfaced", mval("Selected protocol") === "Jupiter" && mval("Product") === "JUP Staking", `${mval("Selected protocol")}/${mval("Product")}`);
-    add("JUP-REV-2: exact amount (JUP) surfaced", d.metrics.some((m) => m.label === "Amount" && m.kind === "token_amount" && m.unit === "JUP" && m.value === 650), "amount");
-    add("JUP-REV-3: variable reward disclosure, no fabricated APY / no 0%", mval("Rewards") === "Rewards are variable and depend on the current Jupiter staking program." && !/%/.test(String(mval("Rewards"))), String(mval("Rewards")));
-    add("JUP-REV-4: current unstaking terms rendered from the governed product", String(mval("Unstaking")) === JUPITER_JUP_STAKING_PRODUCT.unstakingTerms.description, "unstaking from registry");
-    add("JUP-REV-5: 'why Jupiter' selection explanation present", String(mval("Why Jupiter")).includes("only approved JUP staking product"), String(mval("Why Jupiter")));
+    add("JUP-REV-1: focused card set (Stake / Rewards / Direct Unstake / Direct Unstake Fee) under focusedLayout; protocol still selected", (() => { const labels = d.metrics.map((m) => m.label); return ["Stake", "Rewards", "Direct Unstake", "Direct Unstake Fee"].every((l) => labels.includes(l)) && d.focusedLayout === true && sug.protocolSelection?.selectedProtocolName === "Jupiter"; })(), d.metrics.map((m) => m.label).join(","));
+    add("JUP-REV-2: 'Stake' card shows the JUP amount with a USD sub-value ($520 at 650 × $0.80)", (() => { const m = d.metrics.find((x) => x.label === "Stake"); return m?.value === "650 JUP" && m?.subValue === "$520"; })(), `stake=${d.metrics.find((x) => x.label === "Stake")?.value}`);
+    add("JUP-REV-3: rewards are variable quarterly (no fabricated APY / no % in the reward line)", mval("Rewards") === "Variable quarterly rewards" && !/%/.test(String(mval("Rewards"))), String(mval("Rewards")));
+    add("JUP-REV-4: direct-unstake window shown as '7 days'", mval("Direct Unstake") === "7 days", String(mval("Direct Unstake")));
+    add("JUP-REV-5: direct-unstake fee is 0% with a governed tooltip", (() => { const m = d.metrics.find((x) => x.label === "Direct Unstake Fee"); return m?.value === "0%" && m?.tooltip === "Applied to the unstaked amount"; })(), `fee=${d.metrics.find((x) => x.label === "Direct Unstake Fee")?.value}`);
     add("JUP-REV-6: involved asset is JUP ONLY (no multi-asset table)", d.involvedAssets.length === 1 && d.involvedAssets[0].symbol === "JUP", `n=${d.involvedAssets.length}`);
     add("JUP-REV-7: relevant guardrails CHECKED", ["Exact asset identity", "Direct-wallet availability", "Transferable balance", "Minimum suggestion size", "Safety Buffer protection", "Protocol approval", "Product availability", "Current reward terms", "Unstaking terms available", "Asset-level conflicts cleared", "Protocol selection"].every((g) => d.guardrailSummary.checked.includes(g)), d.guardrailSummary.checked.join(","));
     add("JUP-REV-8: swap-route guardrails NOT APPLICABLE (not 'not evaluated')", ["Route cost", "Liquidity depth", "Slippage"].every((g) => d.guardrailSummary.notApplicable.includes(g) && !d.guardrailSummary.notEvaluated.includes(g)), d.guardrailSummary.notApplicable.join(","));
     add("JUP-REV-9: no internal risk score exposed in review details", !/riskScore|risk_score/i.test(JSON.stringify(d)), "no risk score");
-    add("JUP-REV-10: no fabricated APY anywhere in the review", !/\bAPY\b.*\d|\d+(\.\d+)?%/.test(JSON.stringify(d.metrics)), "no fake apy");
+    add("JUP-REV-10: no fabricated APY / reward % (the only % is the governed 0% unstaking fee)", !/\bAPY\b/i.test(JSON.stringify(d.metrics)) && !/\d+(\.\d+)?%/.test(String(mval("Rewards"))) && String(mval("Direct Unstake Fee")) === "0%", "no fake apy");
   }
 
   /* ---- Engine integration + separate cards ---- */
@@ -4115,9 +4118,9 @@ export function runTrimFixtureChecks(): FixtureCheck[] {
     const card = toSuggestionCard(s);
     add(
       "9H-M: canonical trim card maps safely (copy, review-only, non-transactional)",
-      card?.title === "Reduce Long-Tail Assets" &&
+      card?.title === "Reduce TKsynth exposure" &&
         card?.description ===
-          "Some non-core assets make up a meaningful share of your portfolio and may be worth reviewing." &&
+          "TKsynth represents 13.8% of your portfolio. Swap $160 to USDC to reduce non-core exposure." &&
         card?.cta.label === "Review" &&
         card?.cta.executes_transaction === false &&
         card?.cta.action === null,
@@ -4461,17 +4464,20 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
     const ok = labels.length === 4 && ["Amount needed", "Current", "Target", "Current coverage"].every((l) => labels.includes(l)) && d?.hideMetricsHeading === true && d?.hideGuardrails === true && coverage === "0.8 of 3 months";
     add("10A-C: buffer modal → 4-card set (Amount needed/Current/Target/Current coverage), no heading, no guardrails", ok, `labels=${labels.join(" | ")}`);
   }
-  // 10A-D. Staking details: reserve, eligible SOL, eligible value, and protocol
-  // selection now CHECKED (approved JitoSOL read-only recommendation, Step 13G).
+  // 10A-D. Staking details: focused modal card set (Stake/Receive with USD sub-values, APY, yearly rewards, unstake
+  // timing + fee note) under focusedLayout; the full protocol-selection data is preserved (guardrail still checked).
   {
     const d = rd("staking");
     const labels = metricLabels("staking");
+    const stake = d?.metrics.find((m) => m.label === "Stake");
+    const fee = d?.metrics.find((m) => m.label === "Direct Unstake Fee");
     const ok =
-      labels.includes("SOL operating reserve") &&
-      labels.includes("SOL eligible for staking") &&
-      labels.includes("Eligible SOL value") &&
+      ["Stake", "Receive", "Current APY", "Estimated yearly rewards", "Direct Unstake", "Direct Unstake Fee"].every((l) => labels.includes(l)) &&
+      typeof stake?.subValue === "string" && stake!.subValue!.startsWith("$") &&
+      fee?.tooltip === "Applied to the unstaked amount" &&
+      d?.focusedLayout === true &&
       (d?.guardrailSummary.checked ?? []).includes("Protocol selection");
-    add("10A-D: staking details include reserve/eligible SOL/value + protocol selection checked", ok, `checked=${d?.guardrailSummary.checked.join(",")}`);
+    add("10A-D: staking modal → focused card set (Stake/Receive/APY/yearly rewards/unstake+fee), focusedLayout, protocol data preserved", ok, `labels=${labels.join(",")}`);
   }
   // 10A-E. Stable Yield details: liquid stable value, buffer-support note, protocol not evaluated.
   {
@@ -4499,7 +4505,7 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
     const gs = d?.guardrailSummary;
     const reason = d?.summary.reason ?? "";
     const ok =
-      /non-core/i.test(reason) && !/sell|swap|dispose|clean up|remove/i.test(reason) &&
+      /non-core/i.test(reason) && !/sell|dispose|clean up|remove/i.test(reason) && !/\bswap\w*\b(?![^.]*\bto usdc\b)/i.test(reason) &&
       (gs?.notEvaluated ?? []).includes("Liquidity depth") &&
       !(gs?.checked ?? []).includes("Liquidity depth");
     add("10A-G: canonical trim details use a review reason and never claim liquidity evaluated", ok, `reason="${reason}"`);
@@ -4521,13 +4527,16 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
   }
   // 10A-J. No reviewDetails contains forbidden language.
   {
-    const forbidden = ["guaranteed", "optimal", "best", "you should", "we will move", "we will stake", "we will buy", "automatic", "risk-free", "sell", "buy", "swap", "execute", "bad", "unsafe", "highest apy", "safest protocol"];
+    const forbidden = ["guaranteed", "optimal", "best", "you should", "we will move", "we will stake", "we will buy", "automatic", "risk-free", "sell", "buy", "execute", "bad", "unsafe", "highest apy", "safest protocol"];
     // The forbidden-language guard targets WealthSmith's own ADVICE copy. The `externalLink` is an explicit user-choice
     // read-only handoff button to a third party's own page (e.g. "Stake SOL on Jito", "Buy on MoonPay") — the modal
     // already marks it "opens in a new tab, no transaction is created" — so its CTA label is excluded from this scan.
     const json = JSON.stringify(allReviewDetails.map((d) => ({ ...d, externalLink: undefined }))).toLowerCase();
+    // "swap"/"swapping" is permitted ONLY in the approved destination-framed line ("… to USDC" / "… to SOL"); a bare or
+    // imperative "swap" with no destination (e.g. "swap now", "swap your tokens") stays forbidden. CTA remains "Review".
+    const bareSwap = /\bswap\w*\b(?![^.]*\bto (usdc|sol)\b)/.test(json);
     const hits = forbidden.filter((w) => json.includes(w));
-    add("10A-J: reviewDetails advice copy (excluding the external-handoff CTA) contains no forbidden language", hits.length === 0, `hits=${hits.join(",") || "none"}`);
+    add("10A-J: reviewDetails advice copy (excluding the external-handoff CTA) contains no forbidden language", hits.length === 0 && !bareSwap, `hits=${hits.join(",") || "none"}${bareSwap ? ",bare-swap" : ""}`);
   }
   // 10A-K. No raw internal guardrail codes leak into reviewDetails.
   {
@@ -4766,14 +4775,14 @@ export function runFinalSmokeFixtureChecks(): FixtureCheck[] {
       `categories=${cats(r)} top=${topPickCat(r)} tpCount=${topPickCount(r)}`
     );
   }
-  // D. On Track only → no Top Pick, no CTA (no modal).
+  // D. On Track only → no Top Pick, no modal action (goal/expense carry a label-only "Review Goal" prompt; all cta.action null).
   {
     const r = runEngineWithLegacyRebalance(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), FIXTURE_GENERATED_AT);
-    const card = toSuggestionCard(r.suggestions[0]);
+    const ds = r.suggestions.map(toSuggestionCard);
     add(
-      "SMOKE-D: On Track only, no Top Pick, no CTA (no modal)",
-      cats(r).split(",").every((c) => c === "on_track") && cats(r) !== "none" && topPickCount(r) === 0 && card.cta.label === "" && card.cta.action === null,
-      `categories=${cats(r)} tp=${topPickCount(r)} cta="${card.cta.label}"`
+      "SMOKE-D: On Track only, no Top Pick, no modal action (label-only Review Goal prompt)",
+      cats(r).split(",").every((c) => c === "on_track") && cats(r) !== "none" && topPickCount(r) === 0 && ds.every((d) => d.cta.action === null),
+      `categories=${cats(r)} tp=${topPickCount(r)} ctas="${ds.map((d) => d.cta.label).join("|")}"`
     );
   }
   // E. Partial pricing → warning appears and calculable suggestions still render.
@@ -15897,11 +15906,11 @@ export function runYieldStrategyPlanPresentationFixtureChecks(): FixtureCheck[] 
   const bufAdd = buildStableYieldPlanPresentation(suggFor(bufferDecision("leader_held")));
 
   // ---- Card mapping (lane × action mode) ----
-  add("16H-B-D: excess + start_new_position card maps", exStart.card !== null && exStart.card!.lane === "excess" && exStart.card!.actionMode === "start_new_position" && exStart.card!.title === "Put Excess USDC on Kamino", exStart.card?.title ?? "null");
+  add("16H-B-D: excess + start_new_position card maps", exStart.card !== null && exStart.card!.lane === "excess" && exStart.card!.actionMode === "start_new_position" && exStart.card!.title === "Earn Yield on Excess USDC", exStart.card?.title ?? "null");
   add("16H-B-E: excess + add_to_existing_strategy card maps", exAdd.card!.title === "Add to Your Kamino Strategy" && exAdd.card!.actionMode === "add_to_existing_strategy", exAdd.card!.title);
   add("16H-B-F: buffer + start_new_position card maps", bufStart.card!.lane === "buffer" && bufStart.card!.title === "Put Buffer Funds on Kamino", bufStart.card!.title);
   add("16H-B-G: buffer + add_to_existing_strategy card maps", bufAdd.card!.title === "Add to Your Kamino Position", bufAdd.card!.title);
-  add("16H-B-H: title mapping is exhaustive + deterministic", stableYieldTitle("excess", "start_new_position", "Kamino") === "Put Excess USDC on Kamino" && stableYieldTitle("excess", "add_to_existing_strategy", "Kamino") === "Add to Your Kamino Strategy" && stableYieldTitle("buffer", "start_new_position", "Kamino") === "Put Buffer Funds on Kamino" && stableYieldTitle("buffer", "add_to_existing_strategy", "Kamino") === "Add to Your Kamino Position", "mapping");
+  add("16H-B-H: title mapping is exhaustive + deterministic", stableYieldTitle("excess", "start_new_position", "Kamino") === "Earn Yield on Excess USDC" && stableYieldTitle("excess", "add_to_existing_strategy", "Kamino") === "Add to Your Kamino Strategy" && stableYieldTitle("buffer", "start_new_position", "Kamino") === "Put Buffer Funds on Kamino" && stableYieldTitle("buffer", "add_to_existing_strategy", "Kamino") === "Add to Your Kamino Position", "mapping");
 
   // ---- Preservation (no recompute) ----
   add("16H-B-I: exact amount is preserved (display + raw cents)", exStart.card!.amountDisplay === "$500.00" && exStart.card!.amountUsd === 500 && exStart.card!.amountCents === 50000, "$500.00");
@@ -15909,7 +15918,7 @@ export function runYieldStrategyPlanPresentationFixtureChecks(): FixtureCheck[] 
   add("16H-B-K: product identity is preserved", exStart.review!.strategyId === "syn_ex" && exStart.card!.productDisplayName === "Steakhouse-style USDC Vault", "product");
   add("16H-B-L: protocol identity is preserved", exStart.card!.protocolName === "Kamino" && exStart.review!.protocolId === "kamino", "protocol");
   add("16H-B-M: product address is preserved (review surface)", exStart.review!.productAddress === "ADDR_EX", "address");
-  add("16H-B-N: singular lane reason copy (description mentions the single reason)", exStart.card!.description.includes("above the required Safety Buffer") && bufStart.card!.description.includes("keeping your required Safety Buffer covered"), "singular");
+  add("16H-B-N: singular lane reason copy (description mentions the single reason)", exStart.card!.description.includes("above your Safety Buffer") && bufStart.card!.description.includes("count toward your Safety Buffer"), "singular");
 
   // ---- APY presentation states ----
   add("16H-B-O: APY with live provenance", exStart.card!.apy.state === "live_protocol_api" && exStart.card!.apy.display === "5.20%" && exStart.card!.apy.sourceLabel === "Kamino API", exStart.card!.apy.display);
@@ -15988,8 +15997,8 @@ export function runYieldStrategyPlanUiFixtureChecks(): FixtureCheck[] {
   // ---- Card mapper (16H-B card → SuggestionCardState via toSuggestionCard) ----
   const exStart = byId("sy_card_excess_start");
   const card = SY_toSuggestionCard(exStart.suggestion!);
-  add("16H-C-E: the shared card mapper renders the approved presentation title/description/tag", card.title === "Put Excess USDC on Kamino" && card.tag === "Excess USDC Yield" && card.category === "yield_opportunity" && card.type === "deploy_idle_stablecoins", card.title);
-  add("16H-C-F: exact amount is displayed (impact text)", card.impact_text === "Amount to review: $500.00", card.impact_text);
+  add("16H-C-E: the shared card mapper renders the approved presentation title/description/tag", card.title === "Earn Yield on Excess USDC" && card.tag === "Excess USDC Yield" && card.category === "yield_opportunity" && card.type === "deploy_idle_stablecoins", card.title);
+  add("16H-C-F: exact amount is displayed (impact text)", card.impact_text === "Deposit $500.00 USDC on Kamino", card.impact_text);
   add("16H-C-G: the CTA is read-only 'Review Strategy' with all execution booleans false", card.cta.label === "Review" && card.cta.action === null && card.cta.executes_transaction === false && card.cta.requires_wallet_signature === false && card.cta.completion_on_click === false, "read-only");
   add("16H-C-H: the accessible CTA label is supplied", typeof card.accessibleCtaLabel === "string" && card.accessibleCtaLabel!.includes("Review"), "a11y label");
   add("16H-C-I: APY state is surfaced on the card", card.apy?.status === "live_protocol_api" && card.apy?.display === "5.24%", card.apy?.display ?? "none");
@@ -15997,7 +16006,7 @@ export function runYieldStrategyPlanUiFixtureChecks(): FixtureCheck[] {
   add("16H-C-K: APY unavailable renders the canonical text state", SY_toSuggestionCard(byId("sy_card_apy_unavailable").suggestion!).apy?.display === "APY unavailable" && SY_toSuggestionCard(byId("sy_card_apy_unavailable").suggestion!).apy?.status === "unavailable", "unavailable");
   add("16H-C-L: APY provided-without-source maps to 'provided'", SY_toSuggestionCard(byId("sy_card_apy_provided").suggestion!).apy?.status === "provided", "provided");
   add("16H-C-M: Top Pick badge maps from the suggestion flag", SY_toSuggestionCard(byId("sy_card_top_pick").suggestion!).badge === "Top Pick" && SY_toSuggestionCard(byId("sy_card_top_pick").suggestion!).is_top_pick === true && card.badge === "", "top pick");
-  add("16H-C-N: buffer and excess reason copy remain distinct", SY_toSuggestionCard(byId("sy_card_buffer_start").suggestion!).description.includes("Safety Buffer covered") && card.description.includes("above the required Safety Buffer") && SY_toSuggestionCard(byId("sy_card_buffer_start").suggestion!).description !== card.description, "distinct");
+  add("16H-C-N: buffer and excess reason copy remain distinct", SY_toSuggestionCard(byId("sy_card_buffer_start").suggestion!).description.includes("count toward your Safety Buffer") && card.description.includes("above your Safety Buffer") && SY_toSuggestionCard(byId("sy_card_buffer_start").suggestion!).description !== card.description, "distinct");
   add("16H-C-O: amount with cents is preserved (not rounded)", byId("sy_card_amount_cents").card!.impact_text.includes("$1,234.56"), byId("sy_card_amount_cents").card!.impact_text);
 
   // ---- Review VM ----
@@ -16068,7 +16077,7 @@ export function runStableYieldProductIntegrationFixtureChecks(): FixtureCheck[] 
   const demoRail = buildDemoStableYieldRail();
   const demoSyCards = demoRail.cards.filter((c) => c.type === "deploy_idle_stablecoins");
   add("16H-D-I: the demo rail renders exactly one stable-yield card (legacy 'Put Stablecoins to Work' suppressed)", demoSyCards.length === 1, `${demoSyCards.length}`);
-  add("16H-D-J: the demo card is the plan-backed presentation (title/tag/amount from 16H-B)", demoSyCards[0]?.title === "Put Excess USDC on Kamino" && demoSyCards[0]?.tag === "Excess USDC Yield" && demoSyCards[0]?.impact_text === "Amount to review: $500.00", `${demoSyCards[0]?.title}`);
+  add("16H-D-J: the demo card is the plan-backed presentation (title/tag/amount from 16H-B)", demoSyCards[0]?.title === "Earn Yield on Excess USDC" && demoSyCards[0]?.tag === "Excess USDC Yield" && demoSyCards[0]?.impact_text === "Deposit $500.00 USDC on Kamino", `${demoSyCards[0]?.title}`);
   add("16H-D-K: the demo card CTA is read-only 'Review Strategy' (no transaction/signature/completion)", demoSyCards[0]?.cta.label === "Review" && demoSyCards[0]?.cta.action === null && demoSyCards[0]?.cta.executes_transaction === false && demoSyCards[0]?.cta.requires_wallet_signature === false && demoSyCards[0]?.cta.completion_on_click === false, "read-only");
   add("16H-D-L: the demo rail keys the review by the SAME id the card uses (shared modal opens)", demoSyCards[0] != null && demoRail.stableYieldReviewById[demoSyCards[0].id] != null && Object.keys(demoRail.stableYieldReviewById).length === 1, `keys=${Object.keys(demoRail.stableYieldReviewById).length}`);
   add("16H-D-M: the demo rail exposes at most one Top Pick across all cards", demoRail.cards.filter((c) => c.is_top_pick === true).length <= 1, `${demoRail.cards.filter((c) => c.is_top_pick === true).length}`);
@@ -16164,7 +16173,7 @@ export function runStableYieldReleaseGateFixtureChecks(): FixtureCheck[] {
   add("16H-F-M: product / protocol / address / action-mode identity is preserved end-to-end", rev?.strategyId === "demo_usdc_yield_vault" && rev?.protocolName === "Kamino" && rev?.productDisplayName === "Demo USDC Yield Vault" && rev?.productAddress === "DemoUsdcYieldVaultAddr111111111111111111111" && meta?.actionMode === "start_new_position", `${rev?.strategyId}`);
   add("16H-F-N: the suggestion id is derived from the source plan id", meta?.sourcePlanId != null && demo.suggestion?.id === `sy_plan_${meta.sourcePlanId}`, `${demo.suggestion?.id}`);
   add("16H-F-O: the review model is keyed to the same suggestion the card renders", syCards[0] != null && demoRail.stableYieldReviewById[syCards[0].id] != null, "keyed");
-  add("16H-F-P: no legacy duplicate Stable Yield card appears", demoRail.cards.filter((c) => c.category === "yield_opportunity").length === 1 && syCards[0]?.title === "Put Excess USDC on Kamino", "one card");
+  add("16H-F-P: no legacy duplicate Stable Yield card appears", demoRail.cards.filter((c) => c.category === "yield_opportunity").length === 1 && syCards[0]?.title === "Earn Yield on Excess USDC", "one card");
 
   // ---- Demo ordering / Top Pick (engine-owned) ----
   add("16H-F-Q: both lanes rank under the canonical stable_yield category (lane stays metadata)", demo.suggestion?.category === "stable_yield" && CATEGORY_PRIORITY.stable_yield === 6, `${demo.suggestion?.category}`);
@@ -16240,7 +16249,7 @@ export function runStableYieldReleaseGateFixtureChecks(): FixtureCheck[] {
   add("16H-F-AL: the demo path never mutates the production registry array", (() => { const before = JSON.stringify(listYieldStrategies()); buildDemoStableYieldRail(); buildDemoStableYieldDecision(); return JSON.stringify(listYieldStrategies()) === before; })(), "unmutated");
 
   // ---- Presentation ----
-  add("16H-F-AM: deterministic title / tag / CTA label", syCards[0]?.title === "Put Excess USDC on Kamino" && syCards[0]?.tag === "Excess USDC Yield" && syCards[0]?.cta.label === "Review", `${syCards[0]?.title}`);
+  add("16H-F-AM: deterministic title / tag / CTA label", syCards[0]?.title === "Earn Yield on Excess USDC" && syCards[0]?.tag === "Excess USDC Yield" && syCards[0]?.cta.label === "Review", `${syCards[0]?.title}`);
   add("16H-F-AN: the review carries all six canonical sections' content", rev != null && rev.summary.length > 0 && rev.strategyId.length > 0 && rev.amountDisplay.length > 0 && rev.walletUsdcBeforeDisplay.length > 0 && rev.capacity.boundDisplay.length > 0 && rev.rows.length > 0 && rev.disclosures.length === 4, "six sections");
   add("16H-F-AO: no annual-earnings projection is invented and capacity never says 'unlimited'", !/annual|per year|\/yr|you (would|will) earn/i.test(JSON.stringify(rev)) && !/unlimited/i.test(rev?.capacity.boundDisplay + (rev?.capacity.note ?? "")), "no earnings");
   add("16H-F-AP: the APY-unavailable state remains supported by the mapper", stableYieldApyPresentation(undefined).state === "unavailable" && stableYieldApyPresentation(undefined).display === "APY unavailable", "unavailable ok");
@@ -16365,7 +16374,7 @@ export function runStableYieldProductionAdapterFixtureChecks(): FixtureCheck[] {
   add("16H-G-AT: that rejection is diagnosed, not silent (a foreign address mismatches the verified identity)", (() => { const d = buildProductionStableYieldMarketInputs({ checkedAt: CHECKED_AT, sourceRecords: { kamino_steakhouse_usdc: rec() } }).diagnostics; return d.length === 1 && d[0].identityReason === "product_identity_mismatch" && d[0].planningSafe === false; })(), "diagnosed");
   add("16H-G-AU: production STILL returns no_plan and no suggestion after the adapter wiring", (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: CHECKED_AT }); return r.decision?.status === "no_plan" && r.suggestion === null; })(), "no_plan");
   add("16H-G-AV: production still renders NO Stable Yield card", SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
-  add("16H-G-AW: Demo behaviour is unchanged by this step (still exactly one card, $500, 5.15%)", (() => { const rail = buildDemoStableYieldRail(); const sy = rail.cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+  add("16H-G-AW: Demo behaviour is unchanged by this step (still exactly one card, $500, 5.15%)", (() => { const rail = buildDemoStableYieldRail(); const sy = rail.cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Deposit $500.00 USDC on Kamino"; })(), "unchanged");
 
   // ---- Demo / production isolation ----
   add("16H-G-AX: Demo data cannot satisfy a production adapter (demo address is not a candidate)", buildProductionStableYieldMarketInputs({ checkedAt: CHECKED_AT, sourceRecords: { demo_usdc_yield_vault: rec({ productAddress: "DemoUsdcYieldVaultAddr111111111111111111111" }) } }).inputs.length === 0, "rejected");
@@ -16477,7 +16486,7 @@ export function runStableYieldIdentityResolutionFixtureChecks(): FixtureCheck[] 
   add("16H-H-AG: missing risk review still blocks readiness for every candidate", listStableYieldEvidenceManifests().every((m) => m.riskReviewState !== "evidence_complete"), "risk blocks");
 
   // ---- Demo unchanged ----
-  add("16H-H-AH: Demo still produces exactly one unchanged card ($500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+  add("16H-H-AH: Demo still produces exactly one unchanged card ($500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Deposit $500.00 USDC on Kamino"; })(), "unchanged");
   add("16H-H-AI: the Demo product is still absent from the production registry", listYieldStrategies().every((e) => e.strategyId !== "demo_usdc_yield_vault" && e.address !== "DemoUsdcYieldVaultAddr111111111111111111111"), "isolated");
 
   // ---- Flags ----
@@ -16602,7 +16611,7 @@ export function runStableYieldSourcePathFixtureChecks(): FixtureCheck[] {
   // ---- The point: real market data does NOT create eligibility ----
   add("16H-I-AW: an UNAPPROVED product with fresh verified market data is still ineligible", getApprovedYieldStrategies().length === 0 && (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: NOW }); return r.decision?.status === "no_plan" && r.suggestion === null; })(), "no_plan");
   add("16H-I-AX: production still renders NO Stable Yield card", SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
-  add("16H-I-AY: Demo remains unchanged (exactly one synthetic card, $500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+  add("16H-I-AY: Demo remains unchanged (exactly one synthetic card, $500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Deposit $500.00 USDC on Kamino"; })(), "unchanged");
 
   // ---- No SDK/RPC/Node code in the browser path ----
   {
@@ -16678,7 +16687,7 @@ export function runSteakhouseRiskEvidenceFixtureChecks(): FixtureCheck[] {
   add("16H-J-V: capacity is resolved from the reviewed official source, with the citation recorded", (() => { const c = ev.find((e) => e.evidenceId === "sh-cap-02")!; return c.sourceType === "official_docs" && /release\/v2\.2\.2/.test(c.source) && /1d146d7087a76edbbadc14d848ae14295c0745a4/.test(c.source) && /deposit_cap == 0/.test(c.summary) && STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === true; })(), "resolved");
   add("16H-J-W: no product was approved; approved count remains zero", getApprovedYieldStrategies().length === 0 && getYieldStrategy("kamino_steakhouse_usdc")!.lifecycle !== "approved", "0 approved");
   add("16H-J-X: production still returns no_plan and renders no Stable Yield card", (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: "2026-07-16T12:00:00.000Z" }); return r.decision?.status === "no_plan" && r.suggestion === null; })() && SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
-  add("16H-J-Y: Demo remains unchanged (one synthetic card, $500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+  add("16H-J-Y: Demo remains unchanged (one synthetic card, $500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Deposit $500.00 USDC on Kamino"; })(), "unchanged");
 
   // ---- Safety: no risk prose reaches the UI; no execution added ----
   add("16H-J-Z: no risk document or evidence text reaches browser card copy", ["src/components/SuggestionCard.tsx", "src/components/SuggestionReviewModal.tsx", "src/suggestions/toSuggestionCard.ts", "src/suggestions/yieldStrategyPlanPresentation.ts"].every((f) => !readIf(f).includes("steakhouseUsdcRiskEvidence")), "not in UI");
@@ -16838,7 +16847,7 @@ export function runRiskGovernanceFixtureChecks(): FixtureCheck[] {
   // ---- Product remains fail-closed ----
   add("16H-K-BF: no Steakhouse score / review / signoff / approval-eligibility exists", [STEAKHOUSE_RISK_SCORE_ASSIGNED, STEAKHOUSE_HUMAN_REVIEW_COMPLETE, STEAKHOUSE_RISK_SIGNOFF_COMPLETE, STEAKHOUSE_ELIGIBLE_FOR_PRODUCT_APPROVAL].every((f) => f === false), "all false");
   add("16H-K-BG: the governance architecture cannot enable the product — production still no_plan, no card", getApprovedYieldStrategies().length === 0 && (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: "2026-07-16T13:00:00.000Z" }); return r.decision?.status === "no_plan" && r.suggestion === null; })() && SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
-  add("16H-K-BH: Demo remains unchanged", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+  add("16H-K-BH: Demo remains unchanged", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Deposit $500.00 USDC on Kamino"; })(), "unchanged");
 
   // ---- Safety ----
   {
@@ -16992,7 +17001,7 @@ export function runInternalTestingRouteFixtureChecks(): FixtureCheck[] {
   add("16H-K2-R: rubric approval + reviewer authorization are unchanged", PROTOCOL_RISK_RUBRIC_V1_APPROVED === true && AUTHORIZED_PRODUCTION_REVIEWER_CONFIGURED === true && listAuthorizedReviewers().length === 1, "unchanged");
   add("16H-K2-S: Steakhouse remains unscored, unreviewed, unsigned and unapproved", [STEAKHOUSE_RISK_SCORE_ASSIGNED, STEAKHOUSE_HUMAN_REVIEW_COMPLETE, STEAKHOUSE_RISK_SIGNOFF_COMPLETE, STEAKHOUSE_ELIGIBLE_FOR_PRODUCT_APPROVAL].every((f) => f === false) && buildSteakhouseReviewerWorksheet().rows.every((r) => r.reviewerScore === null), "unscored");
   add("16H-K2-T: production approved-product count remains zero and no card renders", getApprovedYieldStrategies().length === 0 && (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: "2026-07-16T14:00:00.000Z" }); return r.decision?.status === "no_plan" && r.suggestion === null; })() && SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
-  add("16H-K2-U: Demo behaviour is unchanged (one card, $500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+  add("16H-K2-U: Demo behaviour is unchanged (one card, $500.00)", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Deposit $500.00 USDC on Kamino"; })(), "unchanged");
   add("16H-K2-V: capacity + deposit state evidence untouched", STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === true && STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED === false, "untouched");
 
   return checks;
@@ -18014,7 +18023,7 @@ export function runSteakhouseEvidenceClosureFixtureChecks(): FixtureCheck[] {
   add("16H-L-BB: the worksheet remains completely unscored and unsigned", (() => { const w = buildSteakhouseReviewerWorksheet(); return w.rows.every((r) => r.reviewerScore === null && r.reviewerRationale === null && r.reviewerConfidence === null && r.reviewerId === null) && w.overallScore === null && w.signoff === null && w.productApproved === false; })(), "unscored");
   add("16H-L-BC: capacity remains verified_uncapped and was NOT reclassified", (() => { const c = JSON.parse(readIf("public/generated/stable-yield-market-cache.json")); return c.capacityState === "verified_uncapped" && c.capacitySourceCommit === "1d146d7087a76edbbadc14d848ae14295c0745a4" && STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED === true; })(), "unchanged");
   add("16H-L-BD: production approved-product count is zero and no card renders", getApprovedYieldStrategies().length === 0 && (() => { const r = deriveStableYieldPlanSuggestion({ dataMode: "real_wallet", positions: [], checkedAt: "2026-07-16T15:00:00.000Z" }); return r.decision?.status === "no_plan" && r.suggestion === null; })() && SY_deriveRail({ positions: DEMO_STABLE_YIELD_POSITIONS, pricedAsOf: DEMO_STABLE_YIELD_PRICED_AS_OF, goal: DEMO_STABLE_YIELD_GOAL }).cards.every((c) => c.type !== "deploy_idle_stablecoins"), "no card");
-  add("16H-L-BE: Demo remains unchanged", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Amount to review: $500.00"; })(), "unchanged");
+  add("16H-L-BE: Demo remains unchanged", (() => { const sy = buildDemoStableYieldRail().cards.filter((c) => c.type === "deploy_idle_stablecoins"); return sy.length === 1 && sy[0].impact_text === "Deposit $500.00 USDC on Kamino"; })(), "unchanged");
   add("16H-L-BF: no execution / signature / external CTA was added", !/sendTransaction|signTransaction|window\.open|deposit\(|withdraw\(|approved:\s*true/.test(src), "read-only");
 
   return checks;
@@ -18576,7 +18585,7 @@ export function runDcaContributionCanonicalMountFixtureChecks(): FixtureCheck[] 
   add("D41-4: EVERY mode with a null planDca → NO DCA — the legacy evaluator is UNREACHABLE through the engine (no opt-in exists)", (() => { const inputs = d41Inputs(); const bo = bufferOverrideFromInputs(inputs, FIXTURE_GENERATED_AT); const oto = onTrackOverrideFromInputs(inputs, FIXTURE_GENERATED_AT, undefined); const t = runSuggestionEngineRaw(inputs, FIXTURE_GENERATED_AT, null, null, undefined, undefined, undefined, undefined, bo, oto); return !t.suggestions.some((s) => s.category === "dca"); })(), "no legacy path");
   add("D41-5: real-wallet INCOMPLETE Safety Buffer + NO target → buffer contribution preserved, NO target failure, NO DCA (short-circuit before target)", (() => { const res = deriveContributionSuggestion({ dataMode: "real_wallet", positions: DEMO_POSITIONS, pricedAsOf: Date.parse("2026-07-01T00:00:00.000Z"), goal: DEMO_GOAL, buffer: { stableUsd: 800, targetUsd: 3000, targetMonths: 3, coveragePct: 26.67, monthsCovered: 0.8, fullyFunded: false } }); return res.suggestion?.category === "buffer" && !(res.pipeline?.blockers ?? []).some((b) => b.startsWith("target_")); })(), "buffer short-circuit");
   add("D41-6: the contribution pipeline no longer references deriveRecommendedAllocation ANYWHERE; the buffer-complete path fails closed on a missing/undefined target in every mode", (() => { const s = readSrc("src/suggestions/contributionPlanPipeline.ts"); return !/deriveRecommendedAllocation/.test(s) && /if \(input\.targetAllocation === undefined\) \{[\s\S]*?return fail\("blocked_policy", \["target_unresolved"\]\);/.test(s); })(), "no risk-only in pipeline");
-  add("D41-7: the production Review modal RENDERS marketContextSection (title + body + rows), guarded so buffer/degraded show no empty section", (() => { const m = readSrc("src/components/SuggestionReviewModal.tsx"); return /cr\.marketContextSection && \(/.test(m) && /cr\.marketContextSection\.body/.test(m) && /cr\.marketContextSection\.rows\.map/.test(m); })(), "modal renders");
+  add("D41-7: the production Review modal RENDERS marketContextSection (title + body + rows), guarded so buffer/degraded show no empty section", (() => { const m = readSrc("src/components/SuggestionReviewModal.tsx"); return /cr\.marketContextSection &&[^\n]*\(/.test(m) && /cr\.marketContextSection\.body/.test(m) && /cr\.marketContextSection\.rows\.map/.test(m); })(), "modal renders");
   add("D41-8: the legacy `deriveDcaSuggestion` evaluator is NOT imported or called by the mounted engine (engine.ts has zero references)", (() => { const e = readSrc("src/suggestions/engine.ts"); return !/deriveDcaSuggestion/.test(e) && !/from "\.\/dcaSuggestion"/.test(e); })(), "not engine-wired");
   add("D41-9: zero risk-only DCA anywhere in the pipeline — no RISK_TARGET_ALLOCATION, no riskOnlyCanonicalTargetTransitional, no deriveRecommendedAllocation, no transitional_risk_only", (() => { const s = readSrc("src/suggestions/contributionPlanPipeline.ts"); return !/RISK_TARGET_ALLOCATION/.test(s) && !/riskOnlyCanonicalTargetTransitional/.test(s) && !/deriveRecommendedAllocation/.test(s) && !/transitional_risk_only/.test(s); })(), "no risk-only");
 
@@ -18654,7 +18663,7 @@ export function runMarketConditionsSurfaceFixtureChecks(): FixtureCheck[] {
 
   // ---- Architecture ----
   add("MCS-1: rail exposes a minimal safe marketSummary (derived ONCE from the shared MarketConditionAssessment)", (() => { return full.marketSummary != null && (railSrc.match(/deriveRailMarketSummary\(targetContext\)/g) ?? []).length === 1; })(), "one summary");
-  add("MCS-2: DashboardBody renders MarketConditionsSurface from marketSummary (no provider fetch / no target or band recompute in the component)", (() => { return /MarketConditionsSurface/.test(dashSrc) && /marketSummary/.test(dashSrc) && !/pro-api|X-CMC|fetch\(|deriveRecommendedAllocation|buildCanonicalTargetAllocation|MARKET_BAND_DISPLAY_LABEL|classifyMarketConditionScore|deriveTargetAllocationAssessment/.test(compSrc); })(), "informational only");
+  add("MCS-2: the standalone Market Conditions surface is REMOVED from the dashboard; the component (still present) stays informational-only (no provider fetch / no target or band recompute)", (() => { return !/MarketConditionsSurface/.test(dashSrc) && !/pro-api|X-CMC|fetch\(|deriveRecommendedAllocation|buildCanonicalTargetAllocation|MARKET_BAND_DISPLAY_LABEL|classifyMarketConditionScore|deriveTargetAllocationAssessment/.test(compSrc); })(), "removed from dashboard");
   add("MCS-3: NO direct market trigger — marketSummary is computed AFTER the engine and never passed into runSuggestionEngine; the engine reads no market score/band", (() => { const engineCallIdx = railSrc.indexOf("runSuggestionEngine("); const summaryIdx = railSrc.indexOf("deriveRailMarketSummary(targetContext)"); return summaryIdx > engineCallIdx && !/marketSummary/.test(railSrc.slice(engineCallIdx, railSrc.indexOf(");", engineCallIdx))) && !/marketSummary|marketBand|marketScore/.test(engineSrc); })(), "no trigger");
   add("MCS-4: NO standalone market/Fear-Greed suggestion candidate is emitted", (() => { return full.cards.every((c: { category?: string; id?: string }) => c.category !== "market_conditions" && c.category !== "fear_greed" && !/fear|greed|market_condition/i.test(c.id ?? "")); })(), "no candidate");
 
@@ -18761,7 +18770,7 @@ export function runDemoMarketMigrationFixtureChecks(): FixtureCheck[] {
   add("DEMO7-6: Demo passes a DETERMINISTIC governed cache to the production rail — no real cache fetch (no useMarketConditionsCache), no provider host", (() => { return /buildDemoMarketCacheInput\(DEMO_PRICED_AS_OF\)/.test(demoScenarioSrc) && /marketConditionsCacheState: DEMO_MARKET_CACHE_STATE/.test(demoScenarioSrc) && !/useMarketConditionsCache|pro-api|X-CMC|fetch\(/.test(demoScenarioSrc) && !/useMarketConditionsCache|pro-api|X-CMC|fetch\(/.test(demoMarketSrc); })(), "no real cache");
   add("DEMO7-7: Demo uses the CANONICAL path (marketSummary/targetSummary present ⇒ no risk-only transitional target)", (() => { return rail.marketSummary != null && rail.targetSummary != null && !/riskOnlyCanonicalTargetTransitional/.test(demoScenarioSrc); })(), "no transitional");
   add("DEMO7-8: the deterministic Demo market fixture uses the APPROVED CoinMarketCap source identity + methodology (production classifies the band)", (() => { return /sourceId: "coinmarketcap_crypto_fear_greed"/.test(demoMarketSrc) && /methodologyVersion: "cmc_fng_methodology_2026_1"/.test(demoMarketSrc); })(), "approved source");
-  add("DEMO7-9: the Demo dashboard renders the production MarketConditionsSurface from the Demo market summary", (() => { return /MarketConditionsSurface/.test(demoPageSrc) && /demoContributionRail\.marketSummary/.test(demoPageSrc); })(), "demo surface");
+  add("DEMO7-9: the standalone Market Conditions surface is REMOVED from the Demo dashboard (the Demo rail still derives its deterministic market summary)", (() => { return !/MarketConditionsSurface/.test(demoPageSrc) && rail.marketSummary != null; })(), "demo surface removed");
   add("DEMO7-10: visible Demo card set is unchanged (Safety-Buffer-incomplete Demo still shows the buffer card, no market-driven card injected)", (() => { return rail.cards.some((c: { category?: string }) => c.category === "safety_buffer") && !rail.cards.some((c: { category?: string; id?: string }) => c.category === "market_conditions" || /fear|greed/i.test(c.id ?? "")); })(), "cards unchanged");
 
   return checks;
@@ -18963,6 +18972,7 @@ export async function printFixtureResults(): Promise<void> {
     ...(await runSwapQuoteServerFixtureChecks()),
     ...runStep22GCloseoutFixtureChecks(),
     ...runBufferPositionReviewFixtureChecks(),
+    ...runKaminoSecuritySourcesAmendmentFixtureChecks(),
     ...runSlice7DTeardownFixtureChecks(),
     ...runSlice7CTestingMigrationFixtureChecks(),
     ...runSlice7BRebalanceMigrationFixtureChecks(),
@@ -21810,14 +21820,14 @@ export function runBufferPositionReviewFixtureChecks(): FixtureCheck[] {
   add("BPR-1b: a DIFFERENT curator (Steakhouse) flows through the SAME path with ITS resolved product — not a hardcoded phrase", steakRun.card!.description.startsWith("We found 2,000 USDC in Steakhouse USDC Vault on Kamino.") && steakRun.review!.curator === "Steakhouse Financial", `desc=${steakRun.card!.description.slice(0, 50)}`);
   add("BPR-2: unknown amount → card body omits an invented amount ('We found USDC in …')", noAmt.card!.description === "We found USDC in Steakhouse USDC Vault on Kamino. This lending position has not yet passed WealthSmith's vetting for Safety Buffer use, so we do not currently count it toward your buffer.", noAmt.card!.description.slice(0, 40));
   // ---- Deterministic modal copy ----
-  add("BPR-3: modal title is 'Move Your Safety Buffer USDC' and body states not-vetted + the approved destination", known.eng!.reviewDetails!.summary.title === "Move Your Safety Buffer USDC" && /has not yet passed WealthSmith's vetting/.test(known.eng!.reviewDetails!.summary.reason) && /Move the funds to USDC lending in Kamino Main Market/.test(known.eng!.reviewDetails!.summary.reason), known.eng!.reviewDetails!.summary.title);
+  add("BPR-3: modal title is 'Move Your Safety Buffer USDC' and body states not-vetted + the approved destination", known.eng!.reviewDetails!.summary.title === "Move Your Safety Buffer USDC" && /has not yet passed WealthSmith's vetting/.test(known.eng!.reviewDetails!.summary.reason) && /Move the funds to USDC lending in SOL\/BTC Market/.test(known.eng!.reviewDetails!.summary.reason), known.eng!.reviewDetails!.summary.title);
   // ---- CTAs + destination URL ----
   add("BPR-4: card CTA always says 'Review' and is non-transactional (no execution, no signature, no in-app action)", known.card!.cta.label === "Review" && known.card!.cta.executes_transaction === false && known.card!.cta.requires_wallet_signature === false && known.card!.cta.action === null, `cta=${known.card!.cta.label}`);
-  add("BPR-5: modal primary CTA is 'Move to Kamino Main Market' → the approved Kamino Main Market URL, opens in a new tab, secondary 'Cancel'", (() => { const e = known.eng!.reviewDetails!.externalLink!; return e.ctaLabel === "Move to Kamino Main Market" && e.url === KAMINO_MAIN_MARKET_USDC_URL && e.opensInNewTab === true && e.secondaryLabel === "Cancel"; })(), "primary cta");
-  add("BPR-6: the destination URL is the canonical Kamino Main Market USDC reserve (never empty → never a broken external CTA)", KAMINO_MAIN_MARKET_USDC_URL.startsWith("https://app.kamino.finance/lending/reserve/") && known.eng!.reviewDetails!.externalLink!.url.length > 0, KAMINO_MAIN_MARKET_USDC_URL);
+  add("BPR-5: modal primary CTA is 'Move to SOL/BTC Market' → the approved SOL/BTC Market URL, opens in a new tab, secondary 'Cancel'", (() => { const e = known.eng!.reviewDetails!.externalLink!; return e.ctaLabel === "Move to SOL/BTC Market" && e.url === KAMINO_SOL_BTC_MARKET_USDC_URL && e.opensInNewTab === true && e.secondaryLabel === "Cancel"; })(), "primary cta");
+  add("BPR-6: the destination URL is the approved Kamino SOL/BTC Market lending page (never empty → never a broken external CTA)", KAMINO_SOL_BTC_MARKET_USDC_URL === "https://kamino.com/borrow" && known.eng!.reviewDetails!.externalLink!.url.length > 0, KAMINO_SOL_BTC_MARKET_USDC_URL);
   // ---- Safety Buffer calculation: unvetted USDC excluded ----
   add("BPR-7: the unvetted USDC is EXCLUDED from Safety Buffer coverage (verified liquid = direct USDC only; excluded_unresolved source)", known.coverage.verifiedLiquidStableValueUsd === 1000 && known.coverage.sources.some((s) => s.inclusionState === "excluded_unresolved" && s.positionId === "cv"), `verified=${known.coverage.verifiedLiquidStableValueUsd}`);
-  add("BPR-8: approved Kamino Main Market USDC IS counted (verified liquid) → NO review, normal Safety Buffer rules (definite shortfall card)", approved.review === null && approved.coverage.verifiedLiquidStableValueUsd === 2500 && approved.card!.title === "Top Up Your Safety Buffer", `verified=${approved.coverage.verifiedLiquidStableValueUsd}`);
+  add("BPR-8: approved Kamino SOL/BTC Market USDC IS counted (verified liquid) → NO review, normal Safety Buffer rules (definite shortfall card)", approved.review === null && approved.coverage.verifiedLiquidStableValueUsd === 2500 && approved.card!.title === "Top Up Your Safety Buffer", `verified=${approved.coverage.verifiedLiquidStableValueUsd}`);
   // ---- Modal layout: focused 4-card set (no 'Key metrics' heading, no Guardrails) + 'Excluded from Safety Buffer' table ----
   add("BPR-9: unvetted position modal → focused cards [Amount needed, Current, Target, Current coverage], no heading/guardrails, no legacy 'Detected'/'Additional' metrics", (() => { const d = known.eng!.reviewDetails!; const labels = d.metrics.map((m) => m.label); return labels.join(",") === "Amount needed,Current,Target,Current coverage" && d.metrics.find((m) => m.label === "Amount needed")?.value === 2000 && d.metrics.find((m) => m.label === "Current")?.value === 1000 && d.metrics.find((m) => m.label === "Target")?.value === 3000 && d.hideMetricsHeading === true && d.hideGuardrails === true; })(), known.eng!.reviewDetails!.metrics.map((m) => m.label).join(","));
   add("BPR-9-nocalc: Safety Buffer modals emit NO 'How this was calculated' section (calculations empty) across plain-shortfall AND unvetted-position cases", (() => { const definite = run([usdc(1000)], 1000, 3); return definite.eng!.title_key === "suggestion.buffer.title" && (definite.eng!.reviewDetails?.calculations.length ?? -1) === 0 && (known.eng!.reviewDetails?.calculations.length ?? -1) === 0; })(), "no buffer calculations");
@@ -21828,10 +21838,10 @@ export function runBufferPositionReviewFixtureChecks(): FixtureCheck[] {
   add("BPR-11: missing destination mapping → NO review; generic fallback, never an external CTA", noDest.review === null && (noDest.eng == null || noDest.eng.reviewDetails?.externalLink == null), `review=${noDest.review}`);
   // ---- No unsafe/security claims + no frontend inference ----
   add("BPR-12: copy never calls the position 'unsafe'/'insecure'/'failed' or makes a security claim", (() => { const blob = `${known.card!.title} ${known.card!.description} ${known.eng!.reviewDetails!.summary.reason}`.toLowerCase(); return !/unsafe|insecure|\bfailed\b|not secure|dangerous|risky|hack/.test(blob) && /has not yet passed wealthsmith's vetting/.test(blob); })(), "no security claims");
-  add("BPR-13: NO frontend inference — the modal component contains no protocol/product/destination literals (they come from bufferPositionReview)", (() => { const comp = readIfSrc("src/components/SuggestionReviewModal.tsx"); return !/Steakhouse|Allez|Sentora|Kamino Main Market|app\.kamino/.test(comp); })(), "no UI inference");
+  add("BPR-13: NO frontend inference — the modal component contains no protocol/product/destination literals (they come from bufferPositionReview)", (() => { const comp = readIfSrc("src/components/SuggestionReviewModal.tsx"); return !/Steakhouse|Allez|Sentora|SOL\/BTC Market|app\.kamino/.test(comp); })(), "no UI inference");
   add("BPR-14: NO curator is hardcoded in the engine CODE — with comments stripped, the vetting module names NO curator (Steakhouse/Sentora/Allez/Gauntlet/…); it resolves them from the position", (() => { const mod = readIfSrc("src/suggestions/bufferPositionVetting.ts"); const code = mod.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, ""); return code.length > 0 && !/Steakhouse|Sentora|Allez|Gauntlet|RockawayX|MEV Capital/.test(code); })(), "curator-agnostic");
   add("BPR-15: positions are identified by CANONICAL ADDRESS (vault/market/reserve), not display name — the review carries the canonical positionAddress", known.review != null && typeof known.review.positionAddress === "string" && known.review.positionAddress === "A11ezVau1t1111111111111111111111111111111111", `addr=${known.review?.positionAddress}`);
-  add("BPR-16: the review carries the resolved structured fields dynamically (product/curator/approval/destination)", known.review != null && known.review.type === "buffer_position_review" && known.review.reason === "buffer_position_not_vetted" && known.review.protocol === "Kamino" && known.review.product === "Allez USDC" && known.review.curator === "Allez Labs" && known.review.approvalStatus === "not_vetted" && known.review.approvedDestination === "Kamino Main Market" && known.review.detectionConfidence === "high", `product=${known.review?.product}`);
+  add("BPR-16: the review carries the resolved structured fields dynamically (product/curator/approval/destination)", known.review != null && known.review.type === "buffer_position_review" && known.review.reason === "buffer_position_not_vetted" && known.review.protocol === "Kamino" && known.review.product === "Allez USDC" && known.review.curator === "Allez Labs" && known.review.approvalStatus === "not_vetted" && known.review.approvedDestination === "SOL/BTC Market" && known.review.detectionConfidence === "high", `product=${known.review?.product}`);
   // ---- Real detection path: the production Steakhouse vault mapper now carries curatedLending → specific card ----
   add("BPR-17: the REAL Steakhouse detection mapper populates curatedLending (canonical vault address + product) so a live wallet gets the specific card, not the generic fallback", (() => {
     const record = stBuild({ totalShareRaw: "2000000000", recognizedUnderlyingRaw: "2000000000", vaultMaxInstantWithdrawableRaw: null, vaultGate: "permitted", reserveGate: "unresolved", vaultFresh: true, price: { usdcPriceUsd: 1, fresh: true }, apy: { valuePct: 3.63, fresh: true }, observedAt: "2026-07-15T00:00:00.000Z", sourceSlot: 1 });
@@ -21849,6 +21859,26 @@ export function runBufferPositionReviewFixtureChecks(): FixtureCheck[] {
   // ---- Review modal chrome: no Top Pick chip; Guardrails are a TESTING-ONLY diagnostic ----
   add("BPR-21: the review modal renders NO 'Top Pick' badge (chip removed) and no isTopPick prop remains", (() => { const m = readIfSrc("src/components/SuggestionReviewModal.tsx"); return !/label="Top Pick"/.test(m) && !/isTopPick/.test(m) && !/review-modal__eyebrow/.test(m); })(), "no top pick chip");
   add("BPR-22: Guardrails are gated behind showGuardrails; the /testing gallery passes it, Real Wallet + Demo (the rail) do NOT — so users never see the internal checklist", (() => { const m = readIfSrc("src/components/SuggestionReviewModal.tsx"); const rail = readIfSrc("src/components/RealWalletSuggestionsRail.tsx"); const testing = readIfSrc("src/pages/TestingPage.tsx"); return /showGuardrails &&[^\n]*guardrailGroups\.length > 0/.test(m) && !/showGuardrails/.test(rail) && /showGuardrails/.test(testing); })(), "guardrails testing-only");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * Step 16H-S.2 — the kaminoSecuritySourcesAmendment. Proves the two product-owner-supplied Kamino sources
+ * (kamino.com/security + risk.kamino.finance), reviewed live 2026-07-27, are recorded as facts WITHOUT moving
+ * any score, conferring approval/eligibility, or claiming coverage of the current on-chain binary.
+ * ------------------------------------------------------------------ */
+export function runKaminoSecuritySourcesAmendmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+
+  add("KSS-1: the amendment adds EXACTLY the two supplied canonical URLs", KAMINO_SECURITY_SOURCES_EVIDENCE.sourcesAdded.length === 2 && KAMINO_SECURITY_SOURCES_EVIDENCE.sourcesAdded.includes("https://kamino.com/security") && KAMINO_SECURITY_SOURCES_EVIDENCE.sourcesAdded.includes("https://risk.kamino.finance/") && INCORPORATED_SOURCES.reviewedAt === "2026-07-27", KAMINO_SECURITY_SOURCES_EVIDENCE.sourcesAdded.join(","));
+  add("KSS-2: the security hub is recorded as the successor to the /docs/security/* citations (relocation, not deletion)", INCORPORATED_SOURCES.securityHub.url === "https://kamino.com/security" && /docs\/security/.test(INCORPORATED_SOURCES.securityHub.relationshipToPriorCitations) && /NOT deleted|not deleted/i.test(INCORPORATED_SOURCES.securityHub.relationshipToPriorCitations), "relocation recorded");
+  add("KSS-3: verified security-hub facts (20 audits / 5 auditors / 0 critical, 4 formal verifications, $1.5M ImmuneFi)", SECURITY_HUB_FACTS.auditSummary.totalAudits === 20 && SECURITY_HUB_FACTS.auditSummary.auditors === 5 && SECURITY_HUB_FACTS.auditSummary.criticalVulnerabilities === 0 && SECURITY_HUB_FACTS.formalVerifications.length === 4 && SECURITY_HUB_FACTS.bugBounty.cap === "$1,500,000", `${SECURITY_HUB_FACTS.auditSummary.totalAudits} audits`);
+  add("KSS-4: the newer March 2026 v1.16.0/v1.17.0 audits are recorded but the '0 critical' / 'no incident' aggregate claims are explicitly NOT used as USDC-reserve evidence", SECURITY_HUB_FACTS.newerLendAudits.length === 2 && SECURITY_HUB_FACTS.newerLendAudits.every((a) => /v1\.1[67]\.0/.test(a.report) && a.date === "2026-03") && /NOT used as evidence/.test(SECURITY_HUB_FACTS.marketingClaimNotUsed), "newer audits + claim discipline");
+  add("KSS-5: the risk dashboard STILL labels the primary market 'Main Market' — corroborates the SOL/BTC alias from a second surface", RISK_DASHBOARD_FACTS.primaryMarket.dashboardLabel === "Main Market" && RISK_DASHBOARD_FACTS.title === "Kamino Lend Analysis" && RISK_DASHBOARD_FACTS.aggregate.totalTvlUsd === 1_333_645_940, RISK_DASHBOARD_FACTS.primaryMarket.dashboardLabel);
+  add("KSS-6: incorporating these sources moves NO score and confers NO approval / Safety-Buffer eligibility / binary coverage", S2_SCORE_IMPACT.scoresChanged === false && S2_SCORE_IMPACT.approvalConferred === false && S2_SCORE_IMPACT.safetyBufferEligibilityChanged === false && S2_CONFERS.scoresAssigned === false && S2_CONFERS.transactionConstructedOrSimulated === false && (S2_CONFERS.doesNotConfer as readonly string[]).includes("coverage of the current on-chain binary"), "no score / no approval");
+  add("KSS-7: the S.2 manifest hash is deterministic and content-bound", S2_MANIFEST_HASH === computeS2ManifestHash() && /^kamino_security_sources_[0-9a-f]{8}$/.test(S2_MANIFEST_HASH), S2_MANIFEST_HASH);
 
   return checks;
 }
@@ -22002,8 +22032,8 @@ export function runOnTrackProductionFixtureChecks(): FixtureCheck[] {
   const bufferCard = (a = eligible()) => cards(a).find((c) => c.id === "on_track_safety_buffer") ?? null;
 
   // ---- Mapper contract (multi-card, Step 21H) ----
-  add("OTM-1: eligible assessment → 3 informational on_track cards (goal/expense/buffer), none actionable/top-pick, no amount/reviewDetails", (() => { const cs = cards(); const ids = cs.map((c) => c.id); return cs.length === 3 && ids.includes("on_track_goal_check") && ids.includes("on_track_expense_benchmark") && ids.includes("on_track_safety_buffer") && cs.every((c) => c.category === "on_track" && c.action_kind === "informational" && c.is_actionable === false && c.is_top_pick === false && c.amount == null && c.reviewDetails == null); })(), "contract");
-  add("OTM-2: mapped cards → distinct icon types / analytics portfolio_health / empty CTA / no Top Pick badge", (() => { const ds = cards().map(toSuggestionCard); const types = ds.map((d) => d.type); return types.includes("on_track_goal_check") && types.includes("on_track_expense_benchmark") && types.includes("on_track_safety_buffer") && ds.every((d) => d.category === "portfolio_health" && d.cta.label === "" && d.cta.action === null && d.is_top_pick === false); })(), "mapped");
+  add("OTM-1: eligible assessment → 4 informational on_track cards (goal/expense/buffer/market), none actionable/top-pick, no amount/reviewDetails", (() => { const cs = cards(); const ids = cs.map((c) => c.id); return cs.length === 4 && ids.includes("on_track_goal_check") && ids.includes("on_track_expense_benchmark") && ids.includes("on_track_safety_buffer") && ids.includes("on_track_market_conditions") && cs.every((c) => c.category === "on_track" && c.action_kind === "informational" && c.is_actionable === false && c.is_top_pick === false && c.amount == null && c.reviewDetails == null); })(), "contract");
+  add("OTM-2: mapped cards → distinct icon types / analytics portfolio_health / label-only Review Goal prompt on goal+expense / no CTA on buffer+market / never actionable", (() => { const ds = cards().map(toSuggestionCard); const types = ds.map((d) => d.type); const byType = (t: string) => ds.find((d) => d.type === t)!; return types.includes("on_track_goal_check") && types.includes("on_track_expense_benchmark") && types.includes("on_track_safety_buffer") && types.includes("on_track_market_conditions") && byType("on_track_goal_check").cta.label === "Review Goal" && byType("on_track_expense_benchmark").cta.label === "Review Goal" && byType("on_track_safety_buffer").cta.label === "" && byType("on_track_market_conditions").cta.label === "" && ds.every((d) => d.category === "portfolio_health" && d.cta.action === null && d.is_top_pick === false); })(), "mapped");
   add("OTM-3: card copy is scoped review-prompt / verified-buffer copy (not 'Your Plan Is On Track')", (() => { const ds = cards().map(toSuggestionCard); const goal = ds.find((d) => d.type === "on_track_goal_check")!; const buf = ds.find((d) => d.type === "on_track_safety_buffer")!; return goal.title === "Goal Check: Retire Early?" && /5-year horizon/.test(goal.description) && buf.title === "Safety Buffer: 100% Funded" && buf.statusChip === "Protected" && !ds.some((d) => /Plan Is On Track/.test(d.title + d.description)); })(), "scoped copy");
   add("OTM-4: scoped reason code present (buffer_and_allocation_within_range), no broad-health code", (() => { const c = bufferCard()!; return c.reason_codes.includes("buffer_and_allocation_within_range") && !c.reason_codes.some((r) => /plan_healthy|portfolio_healthy|no_changes/.test(r)); })(), "reason code");
   add("OTM-5: scores are zero/null (impact 0, urgency 0, efficiency null)", (() => { const c = bufferCard()!; return c.scores?.impact === 0 && c.scores?.urgency === 0 && c.scores?.efficiency === null; })(), "scores");
@@ -22021,7 +22051,7 @@ export function runOnTrackProductionFixtureChecks(): FixtureCheck[] {
   add("OTM-11: engine — a visible actionable candidate (staking) suppresses On Track", (() => { const r = runSuggestionEngineRaw(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [solPosition(10)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); return r.suggestions.some((s) => s.category === "staking") && !r.suggestions.some((s) => s.category === "on_track"); })(), "candidate suppresses");
   add("OTM-12: engine — proven material Rebalance need (no card) suppresses On Track", (() => { const r = runSuggestionEngineRaw(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(null, "allowed", true))); return !r.suggestions.some((s) => s.category === "on_track"); })(), "material suppresses");
   add("OTM-13: engine — ABSENT onTrackOverride fails closed (no On Track)", (() => { const r = runSuggestionEngineRaw(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete()); return !r.suggestions.some((s) => s.category === "on_track"); })(), "fail closed");
-  add("OTM-14: On Track never Top Pick + priority 99 + three informational cards", (() => { const r = runSuggestionEngineRaw(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); const ot = r.suggestions.filter((s) => s.category === "on_track"); return ot.length === 3 && ot.every((o) => o.is_top_pick === false) && CATEGORY_PRIORITY.on_track === 99; })(), "ordering/top pick");
+  add("OTM-14: On Track never Top Pick + priority 99 + four informational cards", (() => { const r = runSuggestionEngineRaw(inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }), GEN, null, null, undefined, undefined, undefined, undefined, bufferComplete(), oto(sbC(), ra(2, "allowed"))); const ot = r.suggestions.filter((s) => s.category === "on_track"); return ot.length === 4 && ot.every((o) => o.is_top_pick === false) && CATEGORY_PRIORITY.on_track === 99; })(), "ordering/top pick");
 
   // ---- Legacy disposition + privacy + read-only ----
   add("OTM-15: engine has NO mounted legacy On Track rule; consumes deriveOnTrackAssessment + mapper", (() => { const eng = readIfSrc("src/suggestions/engine.ts"); return !/deriveOnTrackSuggestion\(/.test(eng) && !/allows\("onTrack"\)/.test(eng) && /deriveOnTrackAssessment\(/.test(eng) && /buildOnTrackCardsFromAssessment\(/.test(eng); })(), "no legacy rule");
@@ -23398,11 +23428,16 @@ export function runTrimProductionFixtureChecks(): FixtureCheck[] {
   const c1 = trimCardFor([usdc(1000), tok(300, "a")]);
   add("TC-1: mounted card keeps id/category/title/action_kind/top-pick contract", c1 !== null && c1!.id === "trim_long_tail_assets" && c1!.category === "trim" && c1!.title_key === "suggestion.trim.title" && c1!.description_key === "suggestion.trim.description" && c1!.action_kind === "review_only" && c1!.is_top_pick === false, "contract");
   add("TC-2: amount equals canonical total candidate value", c1!.amount?.valueUsd === 300 && c1!.amount?.label === "Assets to review", "amount");
-  add("TC-2b: title override = 'Reduce Long-Tail Assets'", c1!.titleOverride === "Reduce Long-Tail Assets", `title=${c1!.titleOverride}`);
+  add("TC-2b: single non-core asset → title names its exposure ('Reduce TKa exposure')", c1!.titleOverride === "Reduce TKa exposure" && c1!.reviewDetails?.summary.title === "Reduce TKa exposure", `title=${c1!.titleOverride}`);
+  add("TC-2b2: multiple non-core assets → generic 'Reduce Non-Core Exposure' title", (() => { const c = trimCardFor([usdc(1000), tok(200, "a"), tok(150, "b")]); return c!.titleOverride === "Reduce Non-Core Exposure" && c!.reviewDetails?.summary.title === "Reduce Non-Core Exposure"; })(), "multi title");
   add("TC-2c: SINGLE non-core asset → exact card line 'Swap $300 of TKa to USDC'", c1!.impactTextOverride === "Swap $300 of TKa to USDC", `impact=${c1!.impactTextOverride}`);
   add("TC-2d: MULTIPLE non-core assets → generic 'Swap $350 of assets to USDC'", trimCardFor([usdc(1000), tok(200, "a"), tok(150, "b")])!.impactTextOverride === "Swap $350 of assets to USDC", "multi");
-  add("TC-3: non-core-asset-count metric equals canonical candidate count", (() => { const m = c1!.reviewDetails?.metrics?.find((x) => x.label === "Number of non-core assets"); return m?.value === 1; })(), "count");
-  add("TC-4: portfolio share uses the AUTHORITATIVE gross denominator", (() => { const m = c1!.reviewDetails?.metrics?.find((x) => x.label === "Portfolio share"); return m?.value === Math.round((300 / 1300) * 1000) / 10; })(), "authoritative share");
+  add("TC-3: involved-assets list equals the canonical candidate count (Key metrics section removed)", (() => { return (c1!.reviewDetails?.metrics?.length ?? -1) === 0 && (c1!.reviewDetails?.involvedAssets ?? []).length === 1; })(), "count");
+  add("TC-4: involved-asset portfolio share uses the AUTHORITATIVE gross denominator", (() => { const a = c1!.reviewDetails?.involvedAssets?.[0]; return a?.portfolioSharePct === Math.round((300 / 1300) * 1000) / 10; })(), "authoritative share");
+  add("TC-4b: Trim card+modal body names the single asset + share + amount; NO Key metrics / Guardrails / calculations", (() => { const rd = c1!.reviewDetails; const expected = "TKa represents 23.1% of your portfolio. Swap $300 to USDC to reduce non-core exposure."; return c1!.descriptionOverride === expected && rd?.summary.reason === expected && (rd?.metrics.length ?? -1) === 0 && (rd?.calculations.length ?? -1) === 0 && rd?.hideGuardrails === true; })(), "trim body");
+  add("TC-4c: small-position cleanup (3 tiny holdings, below aggregate-share threshold) → simplification copy with spelled-out count", (() => { const c = trimCardFor([usdc(3000), tok(50, "s1"), tok(25, "s2"), tok(25, "s3")]); const expected = "You have three small non-core positions worth $100 in total. Consider swapping them to USDC to simplify your portfolio."; return c!.descriptionOverride === expected && c!.reviewDetails?.summary.reason === expected; })(), "small copy");
+  add("TC-4d: all three triggers (concentrated leader + 3 smalls) → decomposed leader/smaller-positions copy", (() => { const c = trimCardFor([usdc(500), tok(300, "big"), tok(40, "s1"), tok(40, "s2"), tok(40, "s3")]); const expected = "Four non-core assets represent 45.7% of your portfolio. TKbig alone accounts for 32.6%, while three smaller positions add another 13%. Consider swapping them to USDC to reduce non-core exposure and simplify your portfolio."; return c!.descriptionOverride === expected && c!.reviewDetails?.summary.reason === expected; })(), "all-three copy");
+  add("TC-4e: frozen single non-core asset → frozen copy, 'Check on Solscan' action, Swap Route suppressed, 'Check on Solscan' Solscan handoff", (() => { const c = trimCardFor([usdc(1000), t22Candidate(300, "frozen")]); const rd = c!.reviewDetails; const expected = "TXt22 represents 23.1% of your portfolio, but the token is currently frozen and can’t be transferred. Review the position and check its status before taking action."; return c!.descriptionOverride === expected && rd?.summary.reason === expected && c!.titleOverride === "Reduce TXt22 exposure" && c!.impactTextOverride === "Check TXt22 on Solscan" && rd?.hideSwapRoute === true && rd?.externalLink?.ctaLabel === "Check on Solscan" && /solscan\.io\/token\/T22Mint-t22/.test(rd?.externalLink?.url ?? ""); })(), "frozen trim");
   add("TC-5: multiple accounts of one mint appear as ONE involved asset", (() => { const c = trimCardFor([usdc(1000), tok(60, "x1", "MintX", "60"), tok(50, "x2", "MintX", "50")]); const ia = c!.reviewDetails?.involvedAssets ?? []; return ia.filter((a) => (a.valueUsd ?? 0) === 110).length === 1 && ia.length === 1; })(), "one involved asset");
   add("TC-6: involved assets carry NO raw balance / account id / dedupe key", (() => { const s = JSON.stringify(c1!.reviewDetails?.involvedAssets); return !s.includes("rawBalance") && !s.includes("dedupeKey") && !s.includes("holdingId") && !s.includes("sourcePositionIds"); })(), "no raw fields");
   add("TC-7: no token selected for sale; review_only, no execution CTA", (() => { const s = JSON.stringify(c1); return c1!.action_kind === "review_only" && !s.includes("sell") && !s.includes("swapRoute") && !s.includes("signTransaction") && !(c1 as unknown as { cta?: unknown }).cta; })(), "no cta");
@@ -23462,7 +23497,7 @@ export function runTrimProductionFixtureChecks(): FixtureCheck[] {
   add("TD-9: staking + Trim coexist", (() => { const inp = inputsFor({ allocation: allocationFixture(15000, 62, 2), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [solPosition(10)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, null, undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "staking") && r.suggestions.some((s) => s.category === "trim"); })(), "staking+trim");
   add("TD-10: direct lending (stable_yield) + Trim coexist", (() => { const inp = inputsFor({ allocation: allocationFixture(15000, 62, 2), safetyBuffer: bufferFixture(5000, 1000, 3), positions: [stablePosition("USDC", 10000)] }); const r = runSuggestionEngine(inp, FIXTURE_GENERATED_AT, null, mkSug15H("sy", "stable_yield"), undefined, undefined, { candidate: tCard }); return r.suggestions.some((s) => s.category === "stable_yield") && r.suggestions.some((s) => s.category === "trim"); })(), "sy+trim");
   add("TD-11: category ordering unchanged (buffer1..posOpt8, trim=4)", CATEGORY_PRIORITY.buffer === 1 && CATEGORY_PRIORITY.rebalance === 2 && CATEGORY_PRIORITY.capital_efficiency === 3 && CATEGORY_PRIORITY.trim === 4 && CATEGORY_PRIORITY.staking === 5 && CATEGORY_PRIORITY.position_optimization === 8, "ordering");
-  add("TD-12: user-facing Trim copy has no cleanup/sell/dispose/swap instruction", (() => { const copy = readIfSrc("src/state/approvedCopy.ts"); const trimLines = copy.split("\n").filter((l) => /SUGGESTION_TRIM/.test(l) && /=/.test(l)).join(" "); return !/clean ?up|\bsell\b|dispose|\bswap\b|consolidate now|\bremove\b/i.test(trimLines); })(), "review copy");
+  add("TD-12: user-facing Trim copy has no cleanup/sell/dispose/remove instruction; any 'swap' is the approved destination-framed line ('swap $… to USDC')", (() => { const copy = readIfSrc("src/state/approvedCopy.ts"); const trimLines = copy.split("\n").filter((l) => /SUGGESTION_TRIM/.test(l) && /=/.test(l)).join(" "); return !/clean ?up|\bsell\b|dispose|consolidate now|\bremove\b/i.test(trimLines) && !/\bswap\w*\b(?![^.]*\bto USDC\b)/i.test(trimLines); })(), "review copy");
   add("TD-13: internal small_position_cleanup remains a machine code only (not visible instruction copy)", (() => { const trim = readIfSrc("src/suggestions/trimSuggestion.ts"); return /small_position_cleanup/.test(trim) && !/"[^"]*clean ?up[^"]*"/i.test(readIfSrc("src/state/approvedCopy.ts")); })(), "internal code");
   add("TD-14: no route/quote/transaction/signature/execution in the full Trim path", (() => { const blob = readIfSrc("src/suggestions/trimAssessment.ts") + readIfSrc("src/suggestions/trimSuggestion.ts") + readIfSrc("src/pages/trimTestingFixtures.ts"); return !/swapRoute|routePlan|getQuote|aggregator|signTransaction|sendTransaction|simulateTransaction|receivedAmount|guaranteedOutput/.test(blob); })(), "read-only path");
   add("TD-15: card carries no wallet/account/dedupe/raw-balance analytics fields", (() => { const s = JSON.stringify(tCard); return !s.includes("dedupeKey") && !s.includes("rawBalance") && !s.includes("sourcePositionIds") && !s.includes("holdingId") && !/[1-9A-HJ-NP-Za-km-z]{40,}/.test(s); })(), "privacy");
@@ -23517,7 +23552,7 @@ export function runPositionOptimizationProductionFixtureChecks(): FixtureCheck[]
   add("PO-COPY-6: modal body spells out the real numbers (value / gross / share / threshold / pp)", c1!.reviewDetails?.summary.reason === "Your Jito position is worth $1,500 out of your $2,500 portfolio, so it represents 60% of your assets. WealthSmith flags a single position when it reaches 50% or more, so this position is 10 percentage points above the review threshold.", c1!.reviewDetails?.summary.reason ?? "");
   add("PO-COPY-7: modal body (detailed) diverges from the short card description", (() => { const card = toSuggestionCard(c1!); return c1!.reviewDetails?.summary.reason !== card.description && /out of your \$2,500 portfolio/.test(c1!.reviewDetails?.summary.reason ?? ""); })(), "modal ≠ card body");
   add("PO-COPY-8: Position details row = held asset (JitoSOL) + value + portfolio share + APY; asset links to Solscan token page; Manage links to the protocol page", (() => { const p = c1!.reviewDetails?.involvedPositions?.[0]; return p?.assetSymbol === "JitoSOL" && p?.assetIconPath === "assets/icons/token/jitosol.svg" && p?.valueUsd === 1500 && p?.portfolioSharePct === 60 && p?.apy === 7 && p?.assetUrl === "https://solscan.io/token/J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn" && p?.reviewLink?.url === "https://www.jito.network/staking/"; })(), "asset→token, manage→protocol");
-  add("PO-COPY-9: concentration calc share difference/threshold render as % (not USD)", (() => { const c = c1!.reviewDetails?.calculations?.find((x) => x.label === "Single-position concentration"); return c?.difference === 60 && c?.differenceUnit === "%" && c?.threshold === 50 && c?.thresholdUnit === "%" && c?.currentValue === 1500 && c?.unit === "USD"; })(), "calc % units");
+  add("PO-COPY-9: Position Optimization modals emit NO 'How this was calculated' section (calculations empty)", (c1!.reviewDetails?.calculations.length ?? -1) === 0, "no PO calculations");
   add("PO-COPY-11: single position with concentration + missing APY → combined body (asset-named share + APY gap); title stays 'Review Your Jito Position'", (() => { const c = poCardFor([usdc(500), lst(1500, JITOSOL, null)]); const card = toSuggestionCard(c!); return card.title === "Review Your Jito Position" && card.impact_text === "Review $1,500 in JitoSOL" && card.description === "Your JitoSOL position represents 75% of your portfolio, and we couldn’t verify its current APY. Review whether you’re comfortable with this level of concentration and check the latest yield information." && c!.reviewDetails?.summary.reason === card.description; })(), "conc+missing combined copy");
   add("PO-LST-MANAGE: an LST resolves its Manage link from the staking protocol registered to its mint (mSOL → Marinade); asset links to the mSOL token page", (() => { const msol = W({ id: "ms", type: "lst", symbol: "mSOL", name: "Marinade Staked SOL", mint: MSOL, uiAmount: 1, amount: "1", detection: "recognized_lst_mint", valueUsd: 1500 }); const c = poCardFor([usdc(1000), msol]); if (!c) return false; const p = (c.reviewDetails?.involvedPositions ?? []).find((r) => r.assetSymbol === "mSOL"); return p?.reviewLink?.url === "https://app.marinade.finance" && p?.assetUrl === `https://solscan.io/token/${MSOL}`; })(), "mSOL manage→Marinade");
   add("PO-STAKE-MANAGE: native SOL staking → SOL asset links to the wrapped-SOL token page; Manage links to the validator page (public vote account); no user stake-account/dedupe identity leaks", (() => { const c = poCardFor([usdc(500), stake(1500)]); if (!c) return false; const p = c.reviewDetails?.involvedPositions?.[0]; const s = JSON.stringify(c); return p?.assetSymbol === "SOL" && p?.assetUrl === "https://solscan.io/token/So11111111111111111111111111111111111111112" && p?.reviewLink?.url === "https://solscan.io/account/Vote111111111111111111111111111111111111111" && !s.includes("stakeAcc1") && !s.includes("stakeAccounts") && !s.includes("dedupeKey") && !s.includes("economicPositionKey"); })(), "native stake manage→validator");
@@ -23532,7 +23567,7 @@ export function runPositionOptimizationProductionFixtureChecks(): FixtureCheck[]
   // ---- Trigger-family independence via the mapper ----
   add("PO-10: concentration trigger alone → card with concentration_risk", (() => { const c = poCardFor(conc()); return c !== null && c!.reason_codes.includes("concentration_risk"); })(), "concentration");
   add("PO-11: missing-APY trigger → card with missing_apy_data", (() => { const c = poCardFor(missing()); return c !== null && c!.reason_codes.includes("missing_apy_data"); })(), "missing");
-  add("PO-12: shared-underlying-exposure trigger → card with duplicate_exposure code + friendly group label", (() => { const c = poCardFor(shared()); const calcs = JSON.stringify(c!.reviewDetails?.calculations); return c !== null && c!.reason_codes.includes("duplicate_exposure") && /Shared underlying exposure/.test(calcs); })(), "shared");
+  add("PO-12: shared-underlying-exposure trigger → card with duplicate_exposure code + friendly shared-exposure copy (no raw group id)", (() => { const c = poCardFor(shared()); return c !== null && c!.reason_codes.includes("duplicate_exposure") && /linked to/.test(c!.descriptionOverride ?? ""); })(), "shared");
 
   // ---- APY governance: low-yield unreachable in production; honest display states ----
   add("PO-13: production LST at 0.5% + concentration → card WITHOUT low_yield_position (low-yield unreachable)", (() => { const c = poCardFor([usdc(1000), lst(1500, JITOSOL, 0.5)]); return c !== null && !c!.reason_codes.includes("low_yield_position") && c!.reason_codes.includes("concentration_risk"); })(), "no low yield");

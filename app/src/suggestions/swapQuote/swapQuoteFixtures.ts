@@ -526,7 +526,7 @@ export function runRailSwapActionFixtureChecks(): SwapFixtureCheck[] {
   const readSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
   const rail = readSrc("src/components/RealWalletSuggestionsRail.tsx");
   add("SWR-9: the shared rail passes swapAction + isDca + fetcher to BOTH the contribution (DCA) and details (Rebalance/Trim) modals", (rail.match(/swapAction=\{selectedId \? rail\?\.swapActionById/g) ?? []).length >= 2 && /swapQuoteIsDca=\{selectedCard\?\.category === "dca"\}/.test(rail), "rail wiring");
-  add("SWR-10: no quote request occurs before Review opens — the section renders only inside the modal, and the hook loads only when enabled", (() => { const hook = readSrc("src/components/swapQuote/useSwapQuoteComparison.ts"); const modal = readSrc("src/components/SuggestionReviewModal.tsx"); return /if \(!enabled\b/.test(hook) && /swapAction \? \(/.test(modal); })(), "no prefetch");
+  add("SWR-10: no quote request occurs before Review opens — the section renders only inside the modal, and the hook loads only when enabled", (() => { const hook = readSrc("src/components/swapQuote/useSwapQuoteComparison.ts"); const modal = readSrc("src/components/SuggestionReviewModal.tsx"); return /if \(!enabled\b/.test(hook) && /swapAction &&[^\n]*\? \(/.test(modal); })(), "no prefetch");
   add("SWR-11: Demo rails carry a DETERMINISTIC fetcher (offline) — never the live client", /swapQuoteFetcher: demoSwapQuoteFetcher/.test(readSrc("src/pages/DemoDashboardPage.tsx")) && /Never calls a provider or the WealthSmith service/.test(readSrc("src/suggestions/swapQuote/demoSwapQuote.ts")), "demo offline");
 
   return checks;

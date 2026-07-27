@@ -22,6 +22,8 @@ import {
   SUGGESTION_ON_TRACK_GOAL_TITLE, SUGGESTION_ON_TRACK_GOAL_DESCRIPTION,
   SUGGESTION_ON_TRACK_EXPENSE_TITLE, SUGGESTION_ON_TRACK_EXPENSE_DESCRIPTION,
   SUGGESTION_ON_TRACK_BUFFER_TITLE, SUGGESTION_ON_TRACK_BUFFER_DESCRIPTION, SUGGESTION_ON_TRACK_BUFFER_CHIP,
+  SUGGESTION_ON_TRACK_REVIEW_GOAL_CTA,
+  SUGGESTION_ON_TRACK_MARKET_TITLE, SUGGESTION_ON_TRACK_MARKET_DESCRIPTION,
 } from "../state/approvedCopy";
 
 /** Stable suggestion IDs (IDs must not change across runs/copy updates). */
@@ -29,6 +31,7 @@ export const ON_TRACK_SUGGESTION_ID = "on_track";
 export const ON_TRACK_GOAL_CARD_ID = "on_track_goal_check";
 export const ON_TRACK_EXPENSE_CARD_ID = "on_track_expense_benchmark";
 export const ON_TRACK_BUFFER_CARD_ID = "on_track_safety_buffer";
+export const ON_TRACK_MARKET_CARD_ID = "on_track_market_conditions";
 
 /** Real saved-plan inputs the On Track cards interpolate. Slugs (never labels); nulls when unknown. */
 export interface OnTrackGoalContext {
@@ -79,7 +82,7 @@ function onTrackGuardrails(): SuggestionGuardrail[] {
 
 function onTrackCard(
   id: string, cardType: string, title: string, description: string, a: OnTrackAssessment, generatedAt: number,
-  statusChip?: string,
+  statusChip?: string, ctaLabelOverride?: string,
 ): EngineSuggestion {
   return {
     id,
@@ -92,6 +95,9 @@ function onTrackCard(
     descriptionOverride: description,
     cardTypeOverride: cardType,
     ...(statusChip ? { statusChip } : {}),
+    // A label-only "Review Goal" prompt on the goal/expense cards. It opens the Goal page in the mounted app (no
+    // navigation is wired in the /testing gallery); it never proposes or executes a transaction.
+    ...(ctaLabelOverride ? { ctaLabelOverride } : {}),
     action_kind: "informational",
     is_actionable: false,
     is_top_pick: false, // set only by selectTopPick; On Track is never eligible
@@ -126,7 +132,7 @@ export function buildOnTrackCardsFromAssessment(
       ON_TRACK_GOAL_CARD_ID, "on_track_goal_check",
       SUGGESTION_ON_TRACK_GOAL_TITLE.replace("{goal}", goalLabel),
       SUGGESTION_ON_TRACK_GOAL_DESCRIPTION.replace("{horizon}", horizonPhrase),
-      a, generatedAt,
+      a, generatedAt, undefined, SUGGESTION_ON_TRACK_REVIEW_GOAL_CTA,
     ));
   }
 
@@ -136,7 +142,7 @@ export function buildOnTrackCardsFromAssessment(
       ON_TRACK_EXPENSE_CARD_ID, "on_track_expense_benchmark",
       SUGGESTION_ON_TRACK_EXPENSE_TITLE,
       SUGGESTION_ON_TRACK_EXPENSE_DESCRIPTION.replace("{expenses}", usd0(goal.monthlyExpensesUsd)),
-      a, generatedAt,
+      a, generatedAt, undefined, SUGGESTION_ON_TRACK_REVIEW_GOAL_CTA,
     ));
   }
 
@@ -149,6 +155,15 @@ export function buildOnTrackCardsFromAssessment(
       a, generatedAt, SUGGESTION_ON_TRACK_BUFFER_CHIP,
     ));
   }
+
+  // Card 4 — Market-conditions strategy (informational). States the current defensive stance without sentiment
+  // labels or buy/sell timing language, consistent with the Rebalance/DCA market disclosures. No CTA, no modal.
+  cards.push(onTrackCard(
+    ON_TRACK_MARKET_CARD_ID, "on_track_market_conditions",
+    SUGGESTION_ON_TRACK_MARKET_TITLE,
+    SUGGESTION_ON_TRACK_MARKET_DESCRIPTION,
+    a, generatedAt,
+  ));
 
   return cards;
 }

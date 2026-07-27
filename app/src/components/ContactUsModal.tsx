@@ -14,6 +14,7 @@
  */
 import { useEffect, useId, useRef, useState } from "react";
 import ButtonIcon from "./ButtonIcon";
+import { useScrollLock } from "./useScrollLock";
 import closeUrl from "../../../assets/icons/ui/close.svg";
 import {
   CONTACT_TITLE,
@@ -41,6 +42,7 @@ export default function ContactUsModal({ onClose, onSubmit }: Props) {
   const [email, setEmail] = useState("");
   const [description, setDescription] = useState("");
   const [showErrors, setShowErrors] = useState(false);
+  useScrollLock();
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
 

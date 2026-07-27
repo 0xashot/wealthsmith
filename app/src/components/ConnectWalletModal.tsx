@@ -22,6 +22,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState, type WalletName } from "@solana/wallet-adapter-base";
 import ButtonIcon from "./ButtonIcon";
+import { useScrollLock } from "./useScrollLock";
 import closeUrl from "../../../assets/icons/ui/close.svg";
 import phantomUrl from "../../../assets/icons/wallet/phantom.svg";
 import solflareUrl from "../../../assets/icons/wallet/solflare.svg";
@@ -74,6 +75,7 @@ function mapError(e: unknown): ErrState {
 
 export default function ConnectWalletModal({ onClose }: Props) {
   const { wallets, select, connect, connecting, connected, wallet } = useWallet();
+  useScrollLock();
 
   const [pendingName, setPendingName] = useState<string | null>(null);
   const [error, setError] = useState<ErrState | null>(null);

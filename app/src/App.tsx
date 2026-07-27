@@ -110,7 +110,7 @@ export default function App() {
 
 function MainApp() {
   // Real wallet-adapter state drives connected/disconnected. No signing, no reads.
-  const { connected, publicKey, disconnect } = useWallet();
+  const { connected, publicKey, disconnect, select } = useWallet();
   const walletConnected = connected && !!publicKey;
 
   const [activePage, setActivePage] = useState<ConnectedPage>("dashboard");
@@ -161,6 +161,11 @@ function MainApp() {
       pushToast(dashboardState.wallet.copy.connected_toast);
     } else if (was && !walletConnected) {
       setActivePage("dashboard");
+      // Deselect the adapter on EVERY disconnect (app menu OR the extension side). The wallet-adapter
+      // keeps the last wallet "selected" after a disconnect, so a later reconnect would call
+      // select(sameWallet) — a no-op that never re-drives the connect flow, leaving the Connect modal
+      // stuck on "Connecting…". Deselecting makes the next connect start fresh, like the first one.
+      select(null);
       pushToast(
         dashboardState.transitions.disconnect_wallet.copy.toast,
         dashboardState.transitions.disconnect_wallet.copy.helper
@@ -191,8 +196,8 @@ function MainApp() {
     if (id === "dashboard" || id === "portfolio") setActivePage(id);
   };
 
-  // Disconnect the REAL wallet (wallet menu / page). The transition effect handles
-  // the toast + returning to the Dashboard. No fake connected state is preserved.
+  // Disconnect the REAL wallet (wallet menu / page). The transition effect handles the toast,
+  // returning to the Dashboard, and deselecting the adapter. No fake connected state is preserved.
   const disconnectWallet = () => {
     void disconnect();
   };

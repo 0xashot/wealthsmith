@@ -322,6 +322,10 @@ export interface ReviewMetric {
   value: string | number;
   unit?: string;
   kind: ReviewMetricKind;
+  /** Optional secondary line under the value, rendered in a subdued color (e.g. the USD value under a token amount). */
+  subValue?: string;
+  /** Optional hover/focus tooltip text; when set the label shows an info icon that reveals this note. */
+  tooltip?: string;
 }
 
 export type ReviewAssetRole =
@@ -493,6 +497,14 @@ export interface SuggestionReviewDetails {
   hideMetricsHeading?: boolean;
   /** When true the modal hides the internal Guardrails checklist for this suggestion (e.g. the Safety Buffer top-up). */
   hideGuardrails?: boolean;
+  /** When true the modal suppresses the read-only "Swap Route" section (e.g. a frozen asset that can't be swapped). */
+  hideSwapRoute?: boolean;
+  /**
+   * "Focused" modal layout (description + a self-explanatory metric-card set + footer only). Suppresses the
+   * Key-metrics heading, Guardrails, How-this-was-calculated, Involved-assets, protocol-selection, route-evaluation,
+   * and other-protocols sections — the underlying data stays on the object; it just isn't rendered.
+   */
+  focusedLayout?: boolean;
   /**
    * Read-only "Excluded from Safety Buffer" table (Asset / Amount / Value / Reason) — e.g. a frozen stablecoin that
    * can't be counted as a liquid reserve. Safe display identity only; never implies the asset can be moved.
@@ -738,8 +750,16 @@ export interface EngineSuggestion {
   impactTextOverride?: string;
   /** Card `type` override so sibling cards in one category can resolve distinct icons (e.g. goal/coins/shield). */
   cardTypeOverride?: string;
+  /**
+   * CTA-label override for informational cards that still surface a review prompt (On Track goal/expense →
+   * "Review Goal"). When set it REPLACES the empty informational label so the card renders a label-only button;
+   * it never makes the card actionable and never proposes or executes a transaction.
+   */
+  ctaLabelOverride?: string;
   /** Optional success status chip rendered on the card (e.g. "Protected" with a shield-check icon). */
   statusChip?: string;
+  /** Optional estimated-income chip (e.g. "+$26/year (5.36% APY)") — real numbers only, never a promised return. */
+  apyIncomeChip?: string;
 
   engine_version: string;
   /** Input-snapshot time (ms epoch) — supports stale detection on refresh. */

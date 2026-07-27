@@ -23,9 +23,13 @@
 
 .global-nav-wrap {
   /* spec: outer offset 24px top/left/right */
-  padding: 24px 24px 0;
-  position: relative;
+  padding: 24px 24px 12px;
+  /* Sticky: the global nav stays visible while the page scrolls. The wrap carries the app-shell
+     background so page content scrolling underneath never shows through the outer offset. */
+  position: sticky;
+  top: 0;
   z-index: var(--zIndex-navigation-primary);
+  background: var(--color-surface-main);
 }
 
 .global-nav {
@@ -437,6 +441,38 @@
   color: var(--color-text-secondary);
 }
 
+/* Disconnected / no-inputs Safety Buffer: the bar rendered in disabled colors + a centered prompt. */
+.safety-buffer-empty__bar {
+  /* Empty track in the subdued (disabled) neutral — no fill until a target exists. */
+  background: var(--color-subdued-neutral-background-default);
+}
+.safety-buffer-empty__legend .chart-legend__item {
+  color: var(--color-text-disabled);
+}
+.safety-buffer-empty__desc {
+  text-align: center;
+}
+
+/* Disconnected / no-plan Projected Growth: the same line/dots/axis as the connected chart, but subdued
+   and without value labels, plus a prompt. */
+.pg-empty__line {
+  stroke: var(--color-text-disabled);
+  stroke-width: 2;
+}
+.pg-empty__dot {
+  fill: var(--color-text-disabled);
+}
+.pg-empty__axis-label {
+  font: var(--typography-chart-label-font);
+  fill: var(--color-text-disabled);
+}
+.pg-empty__legend .chart-legend__item {
+  color: var(--color-text-disabled);
+}
+.pg-empty__desc {
+  text-align: center;
+}
+
 /* ---------- Real-wallet dashboard sections (heading above card content) ---------- */
 
 .dash-section {
@@ -455,6 +491,7 @@
 
 .info-popover {
   display: inline-flex;
+  position: relative;
 }
 
 .info-popover__button {
@@ -497,6 +534,16 @@
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-surface-md);
   box-shadow: var(--shadow-card-default);
+}
+/* Right-aligned variant — grows leftward from the icon so it stays inside a right-edge container (e.g. a metric card). */
+.info-popover__popover--right {
+  left: auto;
+  right: 0;
+}
+/* Upward variant — opens above the icon so it isn't clipped by a container's bottom edge (e.g. the modal footer). */
+.info-popover__popover--up {
+  top: auto;
+  bottom: calc(100% + var(--spacing-inline-gap-xs));
 }
 
 .info-popover__text {
@@ -2086,6 +2133,9 @@
 }
 
 .review-modal__metric-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
   font: var(--typography-label-sm-font);
   color: var(--color-text-secondary);
 }
@@ -2095,6 +2145,15 @@
   font: var(--typography-heading-sm-font);
   color: var(--color-text-primary);
   overflow-wrap: anywhere;
+}
+
+/* Subdued secondary line under a metric value (e.g. the USD value under "3.9 SOL"), matching the description tone. */
+.review-modal__metric-subvalue {
+  display: block;
+  margin-top: 2px;
+  font: var(--typography-body-sm-font);
+  font-weight: 400;
+  color: var(--color-text-secondary);
 }
 
 .review-modal__list {

@@ -94,6 +94,7 @@ function buildStablesToCryptoCard(
   const tgtCrypto = assessment.targetCryptoPct ?? 0;
   const curStable = assessment.currentStablePct ?? 0;
   const swapFraction = requiredCorrectionUsd > 0 ? Math.min(suggestedAmountUsd / requiredCorrectionUsd, 1) : 0;
+  const swapUsdText = `$${Math.round(suggestedAmountUsd).toLocaleString("en-US")}`;
   const afterCrypto = curCrypto + swapFraction * (tgtCrypto - curCrypto);
   const afterStable = curStable - (afterCrypto - curCrypto);
   const goalClause = partial ? "to move closer to your target" : "to reach your target";
@@ -121,8 +122,8 @@ function buildStablesToCryptoCard(
     hideMetricsHeading: true,
     hideGuardrails: true,
     metrics: [
-      metric("Send", `${Math.round(suggestedAmountUsd).toLocaleString("en-US")} USDC`, "count"),
-      ...(estimatedDestinationSol !== null ? [metric("Receive", `~${pctText(estimatedDestinationSol)} SOL`, "count")] : []),
+      { ...metric("Send", `${Math.round(suggestedAmountUsd).toLocaleString("en-US")} USDC`, "count"), subValue: swapUsdText },
+      ...(estimatedDestinationSol !== null ? [{ ...metric("Receive", `~${pctText(estimatedDestinationSol)} SOL`, "count"), subValue: swapUsdText }] : []),
       pctMetric("Current crypto allocation", curCrypto),
       pctMetric("Crypto allocation after swap", afterCrypto),
       pctMetric("Current stablecoin allocation", curStable),
@@ -205,6 +206,7 @@ function buildCryptoToStablesCard(
   const tgtCrypto = assessment.targetCryptoPct ?? 0;
   const curStable = assessment.currentStablePct ?? 0;
   const swapFraction = requiredCorrectionUsd > 0 ? Math.min(suggestedAmountUsd / requiredCorrectionUsd, 1) : 0;
+  const swapUsdText = `$${Math.round(suggestedAmountUsd).toLocaleString("en-US")}`;
   const afterCrypto = curCrypto - swapFraction * (curCrypto - tgtCrypto);
   const afterStable = curStable + (curCrypto - afterCrypto);
   const cardBody =
@@ -233,8 +235,8 @@ function buildCryptoToStablesCard(
     hideMetricsHeading: true,
     hideGuardrails: true,
     metrics: [
-      metric("Send", `~${pctText(approximateSourceSol)} SOL`, "count"),
-      metric("Receive", `~${Math.round(suggestedAmountUsd).toLocaleString("en-US")} USDC`, "count"),
+      { ...metric("Send", `~${pctText(approximateSourceSol)} SOL`, "count"), subValue: swapUsdText },
+      { ...metric("Receive", `~${Math.round(suggestedAmountUsd).toLocaleString("en-US")} USDC`, "count"), subValue: swapUsdText },
       pctMetric("Current crypto allocation", curCrypto),
       pctMetric("Crypto allocation after swap", afterCrypto),
       pctMetric("Current stablecoin allocation", curStable),

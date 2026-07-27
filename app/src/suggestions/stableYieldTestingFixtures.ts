@@ -96,7 +96,7 @@ export const STABLE_YIELD_TESTING_FIXTURES: StableYieldTestingFixture[] = [
   fx("sy_card_excess_start", "card", "Excess · start new position", "Excess lane, no existing position; live APY.", suggestionFor(excessDecision(), APY_LIVE)),
   fx("sy_card_excess_add", "card", "Excess · add to existing", "Excess lane, existing leader position detected.", suggestionFor(excessDecision({ leaderPos: "leader_held" }), APY_LIVE)),
   fx("sy_card_buffer_start", "card", "Buffer · start new position", "Buffer lane (minimum injected); approved-fallback APY.", suggestionFor(bufferDecision(), APY_FALLBACK)),
-  fx("sy_card_buffer_add", "card", "Buffer · add to existing", "Buffer lane, existing position; APY unavailable.", suggestionFor(bufferDecision("leader_held"))),
+  fx("sy_card_buffer_add", "card", "Buffer · add to existing", "Buffer lane, existing position; approved-fallback APY.", suggestionFor(bufferDecision("leader_held"), APY_FALLBACK)),
   fx("sy_card_top_pick", "card", "Top Pick treatment", "The card marked as the Top Pick.", suggestionFor(excessDecision(), APY_LIVE, true)),
   fx("sy_card_non_top_pick", "card", "Non-Top-Pick", "A normal (non-Top-Pick) card.", suggestionFor(excessDecision(), APY_LIVE)),
   fx("sy_card_apy_live", "card", "APY · live protocol/API", "APY sourced from a live protocol API.", suggestionFor(excessDecision(), APY_LIVE)),

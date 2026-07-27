@@ -24,7 +24,6 @@ import FinancialSnapshot from "../components/FinancialSnapshot";
 import SafetyBufferCard from "../components/SafetyBufferCard";
 import ProjectedGrowthChart from "../components/ProjectedGrowthChart";
 import AllocationChart from "../components/AllocationChart";
-import MarketConditionsSurface from "../components/MarketConditionsSurface";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import { demoSwapQuoteFetcher } from "../suggestions/swapQuote/demoSwapQuote";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
@@ -112,9 +111,6 @@ export default function DemoDashboardPage({
           <SafetyBufferCard buffer={d.safety_buffer} />
           <ProjectedGrowthChart growth={d.projected_growth} />
           <AllocationChart allocation={demoAllocation} />
-          {/* Step 22F (slice 7) — the SAME production Market Conditions surface, from the deterministic Demo market
-              fixture (no real cache, no provider). Fear 39/100, CoinMarketCap attribution, 10% explanation. */}
-          <MarketConditionsSurface summary={demoContributionRail.marketSummary} />
         </main>
 
         {railMode === "ask_smith_ai" ? (

@@ -124,7 +124,7 @@ export function getSafetyBufferTestingFixtures(): SafetyBufferTestingFixture[] {
     fxReal("position_steakhouse", "32. Unvetted Steakhouse USDC Vault (Steakhouse Financial) → specific card (test example, not special-cased)", [usdc(1000), steakhouseUnresolved(2000)], 1000, 3),
     fxReal("position_no_amount", "33. Unvetted curated vault without an attributable amount → specific card, no invented amount", [usdc(1000), steakhouseNoAmount()], 1000, 3),
     fxReal("position_low_confidence", "34. Unresolvable position (no canonical identity) → generic 'Verify Your Safety Buffer' fallback", [usdc(1000), unmappedVaultUnresolved(2000)], 1000, 3),
-    fxReal("position_approved_kamino", "35. Approved Kamino Main Market position → normal rules (no review/move), definite shortfall", [usdc(500), kaminoLiquid(2000)], 1000, 3),
+    fxReal("position_approved_kamino", "35. Approved Kamino SOL/BTC Market position → normal rules (no review/move), definite shortfall", [usdc(500), kaminoLiquid(2000)], 1000, 3),
     fxReal("position_plus_shortfall", "36. Unvetted position PLUS an additional shortfall → distinguish detected (not counted) vs additional needed", [usdc(1000), allezUnresolved(2000)], 2000, 3),
   ];
 }

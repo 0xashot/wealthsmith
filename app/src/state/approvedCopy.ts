@@ -288,6 +288,13 @@ export const SUGGESTION_ON_TRACK_BUFFER_TITLE = "Safety Buffer: 100% Funded";
 export const SUGGESTION_ON_TRACK_BUFFER_DESCRIPTION =
   "You have {months} months of expenses secured in USDC. This protects your growth assets from market volatility.";
 export const SUGGESTION_ON_TRACK_BUFFER_CHIP = "Protected";
+/* Review-Goal CTA on the Goal Check / Expense Benchmark cards — opens the Goal page (in-app view switch). */
+export const SUGGESTION_ON_TRACK_REVIEW_GOAL_CTA = "Review Goal";
+/* Market-conditions strategy card. Informational stance only — deliberately avoids Fear/Greed sentiment labels and
+ * buy/sell timing language (consistent with the Rebalance/DCA market disclosures). Values are representative. */
+export const SUGGESTION_ON_TRACK_MARKET_TITLE = "Strategy: Defensive";
+export const SUGGESTION_ON_TRACK_MARKET_DESCRIPTION =
+  "Market conditions favor a more defensive stance right now, so you’re holding 40% in stables. This is informational — not a buy or sell recommendation.";
 /* Copy for the full suggestion category set. Non-advisory, non-promissory,
  * non-transactional. */
 export const SUGGESTION_CAPITAL_EFFICIENCY_TITLE = "Review Idle Assets";
@@ -301,11 +308,16 @@ export const SUGGESTION_STAKING_DESCRIPTION =
 export const SUGGESTION_STAKING_SELECTED_TITLE = "Stake SOL on {protocol}";
 export const SUGGESTION_STAKING_SELECTED_DESCRIPTION =
   "You have liquid SOL that could earn staking rewards through {protocol}.";
+/* 24J — richer selected-protocol body naming the eligible amount, the estimated (real, sourced) APY, and the kept
+ * operating reserve. Set as a descriptionOverride once a protocol + its APY are known. Never a promised return.
+ * {amount}=eligible SOL, {protocol}=selected name, {apy}=sourced APY %, {reserve}=fee reserve SOL. */
+export const SUGGESTION_STAKING_SELECTED_DETAIL =
+  "You have {amount} SOL available to stake. Stake it through {protocol} to earn an estimated {apy}% APY, while keeping {reserve} SOL available for wallet activity.";
 /* Step 24A — dedicated JUP Staking suggestion (Staking category, separate card from SOL staking). Read-only
  * review; no fixed-return promise, no external execution CTA. `{amount}` is the formatted transferable JUP. */
 export const SUGGESTION_JUP_STAKING_TITLE = "Stake JUP on Jupiter";
 export const SUGGESTION_JUP_STAKING_DESCRIPTION =
-  "Your JUP is currently unstaked and eligible for Jupiter staking rewards.";
+  "Stake {amount} JUP with Jupiter to become eligible for variable quarterly rewards. Your JUP will be locked and requires a 7-day unstaking period.";
 export const SUGGESTION_JUP_STAKING_ACTION = "Stake {amount} JUP";
 export const SUGGESTION_JUP_STAKING_REWARDS_VARIABLE =
   "Rewards are variable and depend on the current Jupiter staking program.";
@@ -379,6 +391,20 @@ export const SUGGESTION_TRIM_DESCRIPTION =
   "Some non-core assets make up a meaningful share of your portfolio and may be worth reviewing.";
 /* Step 19C — review-oriented Trim wording (never an instruction to sell/remove/consolidate). Trigger
  * explanations + transferability limitations for the canonical Trim review details. */
+/* 24J — plain-language Trim card/modal body. Single form names the one non-core asset + its portfolio share;
+ * the multi form aggregates. {asset}=symbol, {share}=portfolio %, {amount}=whole-dollar total. Review-only. */
+export const SUGGESTION_TRIM_SINGLE_DESCRIPTION = "{asset} represents {share}% of your portfolio. Swap ${amount} to USDC to reduce non-core exposure.";
+/* Single non-core asset that is currently frozen / non-transferable — never implies it can be moved; points the user to
+ * check the position's status. {asset}=symbol, {share}=portfolio %. Uses a curly apostrophe to match codebase style. */
+export const SUGGESTION_TRIM_FROZEN_SINGLE_DESCRIPTION = "{asset} represents {share}% of your portfolio, but the token is currently frozen and can’t be transferred. Review the position and check its status before taking action.";
+export const SUGGESTION_TRIM_MULTI_DESCRIPTION = "Your non-core assets represent {share}% of your portfolio. Swap ${amount} to USDC to reduce non-core exposure.";
+/* Small-position case (several tiny non-core holdings, below the aggregate-share threshold). {count}=spelled-out
+ * number of small positions, {amount}=whole-dollar combined total. Framed as simplification, review-only. */
+export const SUGGESTION_TRIM_SMALL_DESCRIPTION = "You have {count} small non-core positions worth ${amount} in total. Consider swapping them to USDC to simplify your portfolio.";
+/* All-three-triggers case: one concentrated non-core asset plus several small ones. Breaks the aggregate share into the
+ * concentrated leader + the combined smaller positions. {count}=total non-core (capitalized), {aggShare}=aggregate %,
+ * {concAsset}=leader symbol, {concShare}=leader %, {smallCount}=spelled-out small count, {smallShare}=combined small %. */
+export const SUGGESTION_TRIM_ALLTHREE_DESCRIPTION = "{count} non-core assets represent {aggShare}% of your portfolio. {concAsset} alone accounts for {concShare}%, while {smallCount} smaller positions add another {smallShare}%. Consider swapping them to USDC to reduce non-core exposure and simplify your portfolio.";
 export const SUGGESTION_TRIM_REASON_AGGREGATE = "Non-core assets make up a meaningful share of your portfolio and may be worth reviewing.";
 export const SUGGESTION_TRIM_REASON_CONCENTRATION = "A non-core token represents a meaningful share of your portfolio.";
 export const SUGGESTION_TRIM_REASON_SMALL = "Several small non-core positions add complexity worth reviewing.";
@@ -469,6 +495,9 @@ export const PROJECTED_GROWTH_NEEDS =
 /* Real-wallet Projected Growth — deterministic estimate + typed unavailable states
  * (rules/financial-logic-boundaries.md — Projected Growth). Modeled assumptions,
  * never expected returns/predictions/guarantees/advice. */
+/** Projected Growth empty state (no plan / disconnected): shown under the illustrative disabled chart. */
+export const PROJECTED_GROWTH_EMPTY_PROMPT =
+  "Set your goal and timeline so Smith AI can generate a personalized projection.";
 export const PROJECTED_GROWTH_NO_PRICING =
   "Projected Growth needs pricing data before it can be shown.";
 export const PROJECTED_GROWTH_NO_CONTRIB =
@@ -513,9 +542,11 @@ export const REAL_WALLET_NONE_DETECTED = "None detected in this wallet.";
 export const FS_TOTAL_VALUE_LABEL = "Total Portfolio Value";
 export const FS_TOTAL_VALUE_CAPTION = "Crypto + Stablecoins";
 export const FS_NET_CONTRIB_LABEL = "Net Contributions";
-export const FS_NET_CONTRIB_DESC = "Net contributions need transaction history.";
-/** Shown with a sourced net-contributions estimate. */
-export const FS_NET_CONTRIB_ESTIMATE = "Estimated net deposits over the last 12 months";
+/** Net-contributions caption — same for the sourced value and the $0 empty state. */
+export const FS_NET_CONTRIB_ESTIMATE = "Invested over the last 12 months";
+
+/** Projected Growth (real wallet) — section caption under the title. */
+export const PG_CAPTION = "Modeled using your strategy settings over your selected timeline";
 
 /** Safety Buffer (real wallet) — stablecoin reserve vs monthly expenses. */
 export const SAFETY_BUFFER_CAPTION =

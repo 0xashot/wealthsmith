@@ -11,10 +11,10 @@
  */
 import type { WalletPosition } from "../wallet/walletPosition";
 import type { SuggestionEngineInputs } from "./engineInputs";
-import type { EngineSuggestion, SuggestionGuardrail } from "./engineTypes";
+import type { EngineSuggestion, SuggestionGuardrail, ReviewMetric } from "./engineTypes";
 import { SUGGESTION_ENGINE_VERSION, MIN_STAKING_SUGGESTION_USD } from "./engineThresholds";
 import { selectedProtocolSelection } from "./protocolSelection";
-import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
+import { buildReviewDetails } from "./suggestionReviewDetails";
 import { resolveAssetOwnerForPosition, JUP_MINT, TOKEN_PROGRAM_ID } from "./productAssetOwnership";
 import { assessJupStaking, type JupStakingCandidateContext } from "./jupStakingSelection";
 import { getApprovedJupStakingProduct } from "./jupStakingProductRegistry";
@@ -22,8 +22,6 @@ import {
   SUGGESTION_JUP_STAKING_TITLE,
   SUGGESTION_JUP_STAKING_DESCRIPTION,
   SUGGESTION_JUP_STAKING_ACTION,
-  SUGGESTION_JUP_STAKING_REWARDS_VARIABLE,
-  SUGGESTION_JUP_STAKING_WHY_JUPITER,
 } from "../state/approvedCopy";
 
 /** Stable suggestion ID. */
@@ -132,25 +130,25 @@ export function deriveJupStakingSuggestion(
     dataSources: ["Governed JUP staking product registry"],
   });
 
-  const rewardsValue =
-    selection.estimatedApyPct != null ? `${selection.estimatedApyPct}% (approved)` : SUGGESTION_JUP_STAKING_REWARDS_VARIABLE;
+  const cardBody = SUGGESTION_JUP_STAKING_DESCRIPTION.replace("{amount}", fmtJup(amount));
+  const jupUsdText = `$${Math.round(value).toLocaleString("en-US")}`;
+  // 24J — focused modal card set (Stake with USD sub-value, variable rewards, unstake window + zero fee note).
+  const focusedMetrics: ReviewMetric[] = [
+    { label: "Stake", value: `${fmtJup(amount)} JUP`, kind: "count", subValue: jupUsdText },
+    { label: "Rewards", value: "Variable quarterly rewards", kind: "count" },
+    { label: "Direct Unstake", value: "7 days", kind: "count" },
+    { label: "Direct Unstake Fee", value: "0%", kind: "count", tooltip: "Applied to the unstaked amount" },
+  ];
 
   const reviewDetails = buildReviewDetails({
     category: "staking",
     actionKind: "review_only",
     title: SUGGESTION_JUP_STAKING_TITLE,
-    reason: SUGGESTION_JUP_STAKING_DESCRIPTION,
+    reason: cardBody,
     guardrails,
     protocolSelection,
-    metrics: [
-      metric("Amount", amount, "token_amount", "JUP"),
-      usdMetric("USD value", value),
-      metric("Selected protocol", "Jupiter", "count"),
-      metric("Product", "JUP Staking", "count"),
-      metric("Rewards", rewardsValue, "count"),
-      metric("Unstaking", product.unstakingTerms.description ?? "See Jupiter for current terms", "count"),
-      metric("Why Jupiter", SUGGESTION_JUP_STAKING_WHY_JUPITER, "count"),
-    ],
+    focusedLayout: true,
+    metrics: focusedMetrics,
     involvedAssets: [
       {
         symbol: "JUP",
@@ -200,7 +198,7 @@ export function deriveJupStakingSuggestion(
 
     // Deterministic, fully-resolved card copy (Staking category names SOL by default; these override it).
     titleOverride: SUGGESTION_JUP_STAKING_TITLE,
-    descriptionOverride: SUGGESTION_JUP_STAKING_DESCRIPTION,
+    descriptionOverride: cardBody,
     impactTextOverride: SUGGESTION_JUP_STAKING_ACTION.replace("{amount}", fmtJup(amount)),
 
     protocolSelection,

@@ -1,0 +1,83 @@
+name: Refresh market-conditions cache
+
+# Keeps app/public/generated/market-conditions-cache.json fresh so the target-allocation
+# "market conditions" input stays inside its 36h freshness window without a running backend.
+#
+# The CoinMarketCap key never touches the client: it is a REPOSITORY SECRET read only here,
+# in CI, by scripts/refresh-market-conditions.mjs (which never logs or writes the key). The
+# browser keeps reading the pre-fetched static JSON artifact.
+#
+# REQUIRED ONE-TIME SETUP (only a repo admin can do this):
+#   Settings → Secrets and variables → Actions → New repository secret
+#     Name:  COINMARKETCAP_API_KEY   (do NOT prefix with VITE_)
+#     Value: your CoinMarketCap Pro key with access to v3/fear-and-greed/latest
+
+on:
+  schedule:
+    # Twice daily (06:00 & 18:00 UTC). The freshness window is 36h, so two runs a day give a
+    # safety margin: if one run fails, the next is only 12h later and the cache is still fresh.
+    - cron: "0 6,18 * * *"
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+# Only one refresh at a time; a queued run waits rather than racing the push.
+concurrency:
+  group: refresh-market-conditions
+  cancel-in-progress: false
+
+permissions:
+  contents: write # needed to push the refreshed cache back to the branch
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Refresh market-conditions cache
+        working-directory: app
+        env:
+          # Read from the repository secret; the script reads process.env and never logs it.
+          COINMARKETCAP_API_KEY: ${{ secrets.COINMARKETCAP_API_KEY }}
+        run: npm run market:refresh-conditions
+
+      - name: Validate cache
+        working-directory: app
+        run: npm run market:validate-conditions
+
+      - name: Commit & push when the reading changed
+        run: |
+          set -euo pipefail
+          FILE="app/public/generated/market-conditions-cache.json"
+
+          # Compare only the market READING (observedAt/score/band), not the per-run housekeeping
+          # timestamps (generatedAt/retrievedAt/validUntil) — so we don't commit on every run.
+          reading() { jq -S '{observedAt, score, band}' "$1"; }
+          NEW="$(reading "$FILE")"
+          OLD="$(git show "HEAD:$FILE" | jq -S '{observedAt, score, band}')"
+
+          if [ "$NEW" = "$OLD" ]; then
+            echo "Market reading unchanged — reverting timestamp-only diff, nothing to commit."
+            git checkout -- "$FILE"
+            exit 0
+          fi
+
+          echo "Market reading changed:"
+          echo "  old: $OLD"
+          echo "  new: $NEW"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$FILE"
+          git commit -m "chore: refresh market-conditions cache"
+          git push

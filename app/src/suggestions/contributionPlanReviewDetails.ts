@@ -14,6 +14,8 @@ export const CONTRIBUTION_PLAN_READ_ONLY_NOTICE = "Read-only plan. WealthSmith d
 export interface ReviewRow {
   label: string;
   value: string;
+  /** Optional subdued secondary line under the value (e.g. the USD value under a token amount). */
+  subValue?: string;
 }
 export interface ReviewStep {
   label: string;
@@ -48,9 +50,15 @@ export interface ContributionPlanReviewDetails {
   readOnlyNotice: string;
   closeLabel: "Close";
   executionControlsPresent: false;
+  /** Focused modal layout (description + card set only) — suppresses the section headings. */
+  focusedLayout?: boolean;
 }
 
 const pct1 = (n: number): string => `${(Math.round(n * 10) / 10).toFixed(1)}%`;
+/** Percent display: 1-decimal, trailing ".0" dropped, with a "%" suffix (30 → "30%", 36.4 → "36.4%"). */
+const pctT = (n: number): string => `${Math.round(n * 10) / 10}%`;
+/** Percentage-points display: 1-decimal, trailing ".0" dropped, no suffix (17 → "17", 16.5 → "16.5"). */
+const ppT = (n: number): string => `${Math.round(Math.abs(n) * 10) / 10}`;
 const pp1 = (n: number): string => (Math.round(Math.abs(n) * 10) / 10).toFixed(1);
 const FREQ_LABEL: Record<string, string> = { weekly: "Weekly", biweekly: "Bi-Weekly", monthly: "Monthly", quarterly: "Quarterly", occasional: "Occasional" };
 const SOURCE_LABEL: Record<string, string> = { upcoming_contribution: "Upcoming contribution", existing_excess_usdc: "Existing excess USDC" };
@@ -120,26 +128,99 @@ export function buildContributionPlanReviewDetails(d: ContributionPlanSuggestion
   } else if (d.planKind === "stable_contribution") {
     details.title = `Direct Next Contribution to ${token}`;
     details.summaryRows = [{ label: "Target", value: token }, { label: "Funding source", value: "Upcoming contribution" }, { label: "Amount", value: amt }, ...(d.contributionFrequencyId ? [{ label: "Frequency", value: FREQ_LABEL[d.contributionFrequencyId] }] : [])];
-    details.whySection.body = `Your stablecoin allocation is ${d.gapPercentagePoints != null ? pp1(d.gapPercentagePoints) : "0.0"} percentage points below target. Directing new contributions to stablecoins moves it closer while keeping your Safety Buffer covered.`;
+    // 24J — focused modal: plain-language before→after→target body + a four-card set (contribution + allocation
+    // change). The full allocation/summary/funding data stays on the object; the focused layout just isn't rendered.
+    const haveAlloc = d.currentTargetPct != null && d.projectedTargetPct != null && d.targetPct != null;
+    // Whole amounts drop the ".00" ("$1,000") to match the card; ranges/cents keep the full amount text.
+    const amtTrim = d.amountKind === "exact" && d.exactAmountUsd != null && Number.isInteger(d.exactAmountUsd)
+      ? `$${d.exactAmountUsd.toLocaleString("en-US")}` : amt;
+    details.whySection.body = haveAlloc
+      ? `When you make your next ${amtTrim} contribution, put it into ${token}. This would increase your stablecoin allocation from ${pctT(d.currentTargetPct as number)} to an estimated ${pctT(d.projectedTargetPct as number)}, moving it closer to your ${pctT(d.targetPct as number)} target while keeping your Safety Buffer covered.`
+      : `Your stablecoin allocation is ${d.gapPercentagePoints != null ? pp1(d.gapPercentagePoints) : "0.0"} percentage points below target. Directing new contributions to stablecoins moves it closer while keeping your Safety Buffer covered.`;
     details.allocationSection = { title: "Allocation impact", rows: allocationRows() };
     details.safetyBufferSection = { title: "Safety Buffer", rows: [{ label: "Status", value: "Covered — not reduced by this plan" }] };
+    // Read-only external handoff (like the recurring DCA): a future contribution has no on-chain source yet, so offer
+    // a user-click Moonpay link to buy the target directly (opens in a new tab; WealthSmith prepares no transaction).
+    details.externalLink = { label: "Moonpay", url: `https://www.moonpay.com/buy/${token.toLowerCase()}`, ctaLabel: `Buy ${token} on Moonpay`, secondaryLabel: "Cancel", opensInNewTab: true };
+    if (haveAlloc) {
+      details.focusedLayout = true;
+      // Stablecoin contribution is 1:1 with USD, so show the token amount ("1,000 USDC") with the USD as a sub-value.
+      const stableUsd = d.amountKind === "exact" ? d.exactAmountUsd : d.representativeAmountUsd;
+      const stableTokenText = stableUsd != null ? stableUsd.toLocaleString("en-US", { maximumFractionDigits: 2 }) : null;
+      details.keyMetrics = [
+        stableTokenText != null
+          ? { label: "Next contribution", value: `${stableTokenText} ${token}`, subValue: amtTrim }
+          : { label: "Next contribution", value: `${amtTrim} to ${token}` },
+        { label: "Current stablecoin allocation", value: pctT(d.currentTargetPct as number) },
+        { label: "After this contribution", value: pctT(d.projectedTargetPct as number) },
+        { label: "Target stablecoin allocation", value: pctT(d.targetPct as number) },
+      ];
+    }
   } else if (d.planKind === "recurring_dca") {
     details.title = `Build ${token} Gradually`;
     details.summaryRows = [{ label: "Target", value: token }, { label: "Funding source", value: "Upcoming contribution" }, { label: "Amount", value: amt }, ...(d.contributionFrequencyId ? [{ label: "Frequency", value: FREQ_LABEL[d.contributionFrequencyId] }] : [])];
-    details.whySection.body = `${token} is ${d.gapPercentagePoints != null ? pp1(d.gapPercentagePoints) : "0.0"} percentage points below target. Your regular contribution schedule already provides a gradual approach, so each contribution does not need to be split into smaller purchases.`;
+    // Per-contribution amount: the exact amount, or a range's single representative (a one-cent reconciliation split).
+    const perContribUsd = d.amountKind === "exact" ? d.exactAmountUsd : d.representativeAmountUsd;
+    // Projected allocation after one contribution — exact plans carry a single figure; ranges carry min/max that round
+    // to the same value for a one-cent split, so either bound represents the projection.
+    const projectedPct = d.projectedTargetPct ?? d.maximumProjectedTargetPct ?? d.minimumProjectedTargetPct;
+    const dcaHaveAlloc = d.currentTargetPct != null && projectedPct != null && d.targetPct != null && perContribUsd != null;
+    const fmtTrimDca = (usd: number): string => Number.isInteger(usd) ? `$${usd.toLocaleString("en-US")}` : `$${usd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const dcaAmtTrim = perContribUsd != null ? fmtTrimDca(perContribUsd) : amt;
+    // 24J — focused modal: plain-language gap→gradual body + a crypto-allocation card set (a growth-lane DCA builds
+    // the volatile/crypto bucket toward target). The full allocation/cadence data stays on the object, just unrendered.
+    details.whySection.body = `Your ${token} allocation is ${d.gapPercentagePoints != null ? ppT(d.gapPercentagePoints) : "0"} percentage points below target. Put your next ${dcaAmtTrim} contribution into ${token} to move closer to your target gradually.`;
     details.allocationSection = { title: "Allocation impact", rows: allocationRows() };
     details.cadenceSection = { title: "Cadence", rows: [{ label: "Cadence", value: d.contributionFrequencyId === "occasional" ? "Occasional (entered amount)" : FREQ_LABEL[d.contributionFrequencyId ?? ""] ?? "—" }, { label: "Structure", value: "The contribution cadence is the gradual structure" }] };
     details.safetyBufferSection = { title: "Safety Buffer", rows: [{ label: "Status", value: "Covered — not reduced by this plan" }] };
+    if (dcaHaveAlloc) {
+      details.focusedLayout = true;
+      // When a sourced target price is available, show the approximate token amount ("~6.67 SOL") with the USD as a
+      // sub-value; otherwise fall back to the USD amount ("$461.54 to SOL").
+      const tokenAmt = typeof d.targetPriceUsd === "number" && d.targetPriceUsd > 0
+        ? (Math.round(((perContribUsd as number) / d.targetPriceUsd) * 100) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })
+        : null;
+      details.keyMetrics = [
+        tokenAmt != null
+          ? { label: "Next contribution", value: `~${tokenAmt} ${token}`, subValue: dcaAmtTrim }
+          : { label: "Next contribution", value: `${dcaAmtTrim} to ${token}` },
+        { label: "Current crypto allocation", value: pctT(d.currentTargetPct as number) },
+        { label: "After this contribution", value: pctT(projectedPct as number) },
+        { label: "Target crypto allocation", value: pctT(d.targetPct as number) },
+      ];
+    }
     // 23C.2 — this is a FUTURE contribution with no on-chain source yet (no swap route). Offer a read-only Moonpay
     // handoff to acquire the target directly (opens Moonpay in a new tab; WealthSmith prepares no transaction).
     details.externalLink = { label: "Moonpay", url: `https://www.moonpay.com/buy/${token.toLowerCase()}`, ctaLabel: `Buy ${token} on Moonpay`, secondaryLabel: "Cancel", opensInNewTab: true };
   } else {
-    details.title = `Move ${d.sourceAssetSymbol ?? "USDC"} Into ${token}`;
-    details.summaryRows = [{ label: "Source", value: d.sourceAssetSymbol ?? "USDC" }, { label: "Target", value: token }, { label: "Total staged amount", value: amt }, { label: "Timing", value: "Available now" }, { label: "Steps", value: `${d.steps.length}` }, { label: "Period", value: `${d.durationDays ?? 14}-day relative period` }];
+    const src = d.sourceAssetSymbol ?? "USDC";
+    details.title = `Move ${src} Into ${token}`;
+    details.summaryRows = [{ label: "Source", value: src }, { label: "Target", value: token }, { label: "Total staged amount", value: amt }, { label: "Timing", value: "Available now" }, { label: "Steps", value: `${d.steps.length}` }, { label: "Period", value: `${d.durationDays ?? 14}-day relative period` }];
     details.whySection.body = `${token} is ${d.gapPercentagePoints != null ? pp1(d.gapPercentagePoints) : "0.0"} percentage points below its target. This stages liquid USDC above your Safety Buffer across four steps while keeping total portfolio value constant.`;
     details.scheduleSection = { title: "Plan schedule", steps: d.steps.map((s, i) => ({ label: STEP_LABEL(s.relativeDayOffset, i), amount: s.amountUsd != null ? formatUsd(s.amountUsd) : "—" })) };
     details.allocationSection = { title: "Allocation impact", rows: [...allocationRows(), { label: "Portfolio total", value: "Unchanged (internal reallocation)" }] };
     details.safetyBufferSection = { title: "Safety Buffer", rows: [...bufferRows, { label: "Status", value: "Preserved" }] };
+    // 24J — focused modal: description + a Send/Receive + crypto-allocation card set. The read-only Swap Route section
+    // (rendered from the funded-DCA swapAction) and its handoff footer are NOT gated by focusedLayout, so they remain.
+    const stagedUsd = d.amountKind === "exact" ? d.exactAmountUsd : (d.representativeAmountUsd ?? d.maximumAmountUsd);
+    const stagedProjPct = d.projectedTargetPct ?? d.maximumProjectedTargetPct ?? d.minimumProjectedTargetPct;
+    if (d.currentTargetPct != null && stagedProjPct != null && d.targetPct != null && stagedUsd != null) {
+      details.focusedLayout = true;
+      const stagedUsdText = Number.isInteger(stagedUsd) ? `$${stagedUsd.toLocaleString("en-US")}` : `$${stagedUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const srcAmtText = stagedUsd.toLocaleString("en-US", { maximumFractionDigits: 2 }); // USDC ≈ $1
+      const solAmtText = typeof d.targetPriceUsd === "number" && d.targetPriceUsd > 0
+        ? (Math.round((stagedUsd / d.targetPriceUsd) * 100) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })
+        : null;
+      details.keyMetrics = [
+        { label: "Send", value: `${srcAmtText} ${src}`, subValue: stagedUsdText },
+        solAmtText != null
+          ? { label: "Receive", value: `~${solAmtText} ${token}`, subValue: stagedUsdText }
+          : { label: "Receive", value: `${stagedUsdText} of ${token}` },
+        { label: "Current crypto allocation", value: pctT(d.currentTargetPct) },
+        { label: "After this contribution", value: pctT(stagedProjPct) },
+        { label: "Target crypto allocation", value: pctT(d.targetPct) },
+      ];
+    }
   }
 
   // Alternative source (context only — no second plan, no source switcher).

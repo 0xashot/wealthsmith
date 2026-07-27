@@ -104,6 +104,9 @@ export interface ContributionPlanSuggestionData {
   maximumProjectedTargetPct?: number;
   targetPct?: number;
   gapPercentagePoints?: number;
+  /** Sourced USD unit price of the target asset (when a fresh, valid quote drove the plan) — lets the review show the
+   *  approximate token amount for a USD-denominated contribution. Omitted when no valid price is available. */
+  targetPriceUsd?: number;
 
   requiredBufferUsd?: number;
   currentBufferUsd?: number;

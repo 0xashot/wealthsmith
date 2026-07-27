@@ -64,7 +64,7 @@ function point(plan: ContributionPlan, which: "exact" | "minimum" | "maximum"): 
 }
 
 /** Build the structured payload from the plan (engine values only — the UI never recalculates). */
-function buildPayload(plan: ContributionPlan, planKind: ContributionPlanSuggestionPlanKind): ContributionPlanSuggestionData {
+function buildPayload(plan: ContributionPlan, planKind: ContributionPlanSuggestionPlanKind, targetPriceUsd?: number): ContributionPlanSuggestionData {
   const target = getInvestmentTarget(plan.selectedTargetId);
   const source = plan.sourceAssetId ? getInvestmentTarget("usdc") : undefined;
   const exact = point(plan, "exact");
@@ -94,6 +94,7 @@ function buildPayload(plan: ContributionPlan, planKind: ContributionPlanSuggesti
     // Allocation projection (non-buffer).
     ...(!isBuffer && allocPoint ? { currentTargetPct: allocPoint.sourceTargetPct, targetPct: allocPoint.targetPct, gapPercentagePoints: allocPoint.targetPct != null && allocPoint.sourceTargetPct != null ? allocPoint.targetPct - allocPoint.sourceTargetPct : undefined } : {}),
     ...(!isBuffer && exact ? { projectedTargetPct: exact.projectedTargetPct } : {}),
+    ...(!isBuffer && typeof targetPriceUsd === "number" && targetPriceUsd > 0 ? { targetPriceUsd } : {}),
     ...(!isBuffer && min && max ? { minimumProjectedTargetPct: min.projectedTargetPct, maximumProjectedTargetPct: max.projectedTargetPct } : {}),
     // Safety Buffer projection.
     ...(isBuffer && (exact ?? max) ? (() => { const p = (exact ?? max)!; return { requiredBufferUsd: p.requiredBufferUsd, currentBufferUsd: p.sourceEligibleBufferUsd, projectedBufferUsd: p.projectedEligibleBufferUsd, currentBufferShortfallUsd: p.requiredBufferUsd != null && p.sourceEligibleBufferUsd != null ? Math.max(0, p.requiredBufferUsd - p.sourceEligibleBufferUsd) : undefined, projectedBufferShortfallUsd: p.projectedBufferShortfallUsd }; })() : {}),
@@ -125,11 +126,11 @@ function scoresFor(plan: ContributionPlan): { impact: number; urgency: number; e
 }
 
 /** Build the plan-backed engine suggestion, or null when the plan result is not ready. */
-export function buildContributionPlanSuggestion(planResult: ContributionPlanGenerationResult, generatedAtMs: number): ContributionPlanSuggestion | null {
+export function buildContributionPlanSuggestion(planResult: ContributionPlanGenerationResult, generatedAtMs: number, targetPriceUsd?: number): ContributionPlanSuggestion | null {
   if (!planResult.plan || (planResult.status !== "ready_exact" && planResult.status !== "ready_range")) return null;
   const plan = planResult.plan;
   const m = mapKind(plan);
-  const payload = buildPayload(plan, m.planKind);
+  const payload = buildPayload(plan, m.planKind, targetPriceUsd);
   const guardrails: SuggestionGuardrail[] = [
     { code: "pricing_available", status: "passed" },
     { code: "buffer_protection", status: "passed" },
