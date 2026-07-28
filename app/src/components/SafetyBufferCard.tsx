@@ -24,28 +24,32 @@ export default function SafetyBufferCard({ buffer }: { buffer: SafetyBufferState
         <span className="buffer__secondary">{buffer.display.secondary_value}</span>
       </div>
       <div
-        className="progress"
+        className="progress progress--hatched"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(pct)}
         aria-label={buffer.progress.accessibility_label}
       >
-        <div
-          className="progress__fill progress__fill--danger"
-          style={{ width: `${pct}%` }}
-        />
+        {/* Omit the fill entirely when nothing is funded, so the hatched track keeps
+            its fully rounded pill shape (no square left edge from a 0-width fill). */}
+        {pct > 0 && (
+          <div
+            className="progress__fill"
+            style={{ width: `${pct}%` }}
+          />
+        )}
       </div>
       <p className="buffer__caption">{buffer.display.caption}</p>
       {/* content order per patterns/dashboard-layout.md Safety Buffer:
           title, metric, progress bar, explanation text, then the centered
           Covered Buffer legend last. Approved dot marker; marker color
-          matches the progress fill (danger while underfunded) */}
+          matches the progress fill (the buffer fill colour, never danger). */}
       <div className="chart-legend">
         <span className="chart-legend__item">
           <LegendMarker
             variant="dot"
-            colorToken="--color-feedback-danger-background-solid"
+            colorToken="--color-chart-series-4"
           />
           Covered Buffer
         </span>

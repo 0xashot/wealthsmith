@@ -21,7 +21,8 @@ import { usd0, formatAmount, explorerUrl, manageUrlFor } from "./deployTable";
 import ManageHandoff from "./ManageHandoff";
 import { resolveTokenIcon } from "../state/iconRegistry";
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
-import { VALUE_EXCLUDES_UNPRICED, REAL_WALLET_NONE_DETECTED } from "../state/approvedCopy";
+import SkeletonDeployCard from "./SkeletonDeployCard";
+import { VALUE_EXCLUDES_UNPRICED } from "../state/approvedCopy";
 
 /** Sourced APY (percent) → "5.24%", or "—". */
 const formatApy = (apy: number | null | undefined) =>
@@ -42,6 +43,8 @@ interface Props {
   /** Value column header ("USD Value" for Staked, "Value" for Yield). */
   valueHeader: string;
   positions: WalletPosition[];
+  /** True while prices are still loading — shows a content-shaped skeleton instead of premature "—". */
+  loading?: boolean;
   /** Primary asset-cell label; defaults to the symbol. */
   primaryLabel?: (p: WalletPosition) => string;
   /** Secondary line under the asset label (e.g. the protocol name). */
@@ -57,12 +60,26 @@ export default function EarningAssetsCard({
   caption,
   valueHeader,
   positions,
+  loading,
   primaryLabel = (p) => p.symbol,
   subLabel = (p) => p.protocol,
   onManageOpen,
   completeness,
 }: Props) {
   const headingId = useId();
+
+  // While the portfolio is still loading, skeleton the whole card rather than
+  // flashing "—" values or a premature "none detected" empty state.
+  if (loading) {
+    return (
+      <SkeletonDeployCard
+        title={title}
+        caption={caption}
+        headers={["Asset", "Amount", valueHeader, "APY", "Est. Earnings", ""]}
+        rows={Math.max(positions.length, 1)}
+      />
+    );
+  }
 
   // Priced rows first (largest value on top), unpriced after in detected order.
   const rows = [...positions].sort((a, b) => (b.valueUsd ?? -1) - (a.valueUsd ?? -1));
@@ -73,20 +90,19 @@ export default function EarningAssetsCard({
 
   return (
     <section className="card" aria-labelledby={headingId}>
-      <h3 id={headingId} className="card__title">
+      <h3 id={headingId} className="card__title deploy-card__title">
         {title}
       </h3>
-      <p className="deploy-card__total">{totalUsd != null ? usd0(totalUsd) : "—"}</p>
+      <p className="deploy-card__total">
+        {rows.length === 0 ? "$0" : totalUsd != null ? usd0(totalUsd) : "—"}
+      </p>
       <p className="card__caption">
         {caption}
         {anyUnpriced ? ` ${VALUE_EXCLUDES_UNPRICED}` : ""}
       </p>
 
-      {rows.length === 0 ? (
-        <p className="portfolio-table__empty-description" role="status">
-          {REAL_WALLET_NONE_DETECTED}
-        </p>
-      ) : (
+      {/* Empty category: just the $0 total + caption above — no table, no "none detected". */}
+      {rows.length === 0 ? null : (
         <div className="portfolio-table__scroll">
           <table className="portfolio-table" aria-labelledby={headingId}>
             <thead>

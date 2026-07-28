@@ -12,7 +12,7 @@
  * label text. Axis labels: typography.chart.label; value labels:
  * typography.chart.value.
  */
-import { useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { ProjectedGrowthState } from "../types/dashboard";
 import LegendMarker from "./LegendMarker";
 
@@ -28,6 +28,8 @@ const fmtUsd = (v: number) => `$${v.toLocaleString("en-US")}`;
 export default function ProjectedGrowthChart({ growth }: { growth: ProjectedGrowthState }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(FALLBACK_W);
+  const [hovered, setHovered] = useState<number | null>(null);
+  const areaPatternId = useId();
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -60,6 +62,11 @@ export default function ProjectedGrowthChart({ growth }: { growth: ProjectedGrow
     .map((p, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(p.value_usd)}`)
     .join(" ");
 
+  /* Area under the line: the line, then down to the baseline and back — filled with
+     the light-blue dotted pattern. Drawn behind the line + points. */
+  const areaPath =
+    `${path} L${x(points.length - 1)},${H - PAD.bottom} L${x(0)},${H - PAD.bottom} Z`;
+
   const summary =
     `${growth.title}. ${series.label}: ` +
     points.map((p) => `year ${p.year} ${fmtUsd(p.value_usd)}`).join(", ") +
@@ -83,6 +90,17 @@ export default function ProjectedGrowthChart({ growth }: { growth: ProjectedGrow
           role="img"
           aria-label={summary}
         >
+          {/* Light-blue dotted pattern that fills the area under the line. */}
+          <defs>
+            <pattern
+              id={areaPatternId}
+              width="5"
+              height="5"
+              patternUnits="userSpaceOnUse"
+            >
+              <circle className="chart__area-dot" cx="1" cy="1" r="1" />
+            </pattern>
+          </defs>
           {/* baseline + gridlines */}
           <line
             className="chart__axis"
@@ -91,10 +109,26 @@ export default function ProjectedGrowthChart({ growth }: { growth: ProjectedGrow
             x2={W - PAD.right}
             y2={H - PAD.bottom}
           />
+          <path className="chart__area" d={areaPath} fill={`url(#${areaPatternId})`} />
           <path className="chart__line" d={path} fill="none" />
+          {/* Vertical guide from baseline to the hovered point. */}
+          {hovered != null && (
+            <line
+              className="chart__guide"
+              x1={x(hovered)}
+              y1={y(points[hovered].value_usd)}
+              x2={x(hovered)}
+              y2={H - PAD.bottom}
+            />
+          )}
           {points.map((p, i) => (
             <g key={p.year}>
-              <circle className="chart__dot" cx={x(i)} cy={y(p.value_usd)} r={4} />
+              <circle
+                className={"chart__dot" + (hovered === i ? " chart__dot--active" : "")}
+                cx={x(i)}
+                cy={y(p.value_usd)}
+                r={hovered === i ? 5.5 : 4}
+              />
               <text
                 className="chart__value-label"
                 x={x(i)}
@@ -113,7 +147,43 @@ export default function ProjectedGrowthChart({ growth }: { growth: ProjectedGrow
               </text>
             </g>
           ))}
+          {/* Transparent per-point hover columns (each spans to its neighbours' midpoints). */}
+          {points.map((p, i) => {
+            const half = (W - PAD.left - PAD.right) / (points.length - 1) / 2;
+            return (
+              <rect
+                key={`hit-${p.year}`}
+                className="chart__hit"
+                x={x(i) - half}
+                y={0}
+                width={half * 2}
+                height={H}
+                onMouseEnter={() => setHovered(i)}
+                onMouseLeave={() => setHovered(null)}
+              />
+            );
+          })}
         </svg>
+        {hovered != null && (
+          <div
+            className="chart-tooltip"
+            role="status"
+            style={{
+              left: Math.min(Math.max(x(hovered), 96), W - 96),
+              top: y(points[hovered].value_usd),
+            }}
+          >
+            <div className="chart-tooltip__year">
+              {points[hovered].label ?? `Year ${points[hovered].year}`}
+            </div>
+            <div className="chart-tooltip__value">{fmtUsd(points[hovered].value_usd)}</div>
+            {hovered > 0 && (
+              <div className="chart-tooltip__delta">
+                +{fmtUsd(points[hovered].value_usd - points[0].value_usd)} from today
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {/* approved line marker for the line series per components/chart.md
           Legend Markers; label comes from the series data */}

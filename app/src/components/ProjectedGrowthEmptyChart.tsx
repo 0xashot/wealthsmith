@@ -6,7 +6,7 @@
  * no data-point value labels. Purely decorative (aria-hidden); the description below explains that a real,
  * personalized projection appears once the goal and timeline are set. No projection math, no invented numbers.
  */
-import { useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import LegendMarker from "./LegendMarker";
 
 const H = 200;
@@ -21,6 +21,7 @@ const MAX_Y = 160;
 export default function ProjectedGrowthEmptyChart({ description }: { description: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(FALLBACK_W);
+  const areaPatternId = useId();
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -37,11 +38,19 @@ export default function ProjectedGrowthEmptyChart({ description }: { description
   const x = (i: number) => PAD.left + (i / (X_LABELS.length - 1)) * (W - PAD.left - PAD.right);
   const y = (v: number) => H - PAD.bottom - (v / MAX_Y) * (H - PAD.top - PAD.bottom);
   const path = SERIES.map((v, i) => `${i === 0 ? "M" : "L"}${x(i)},${y(v)}`).join(" ");
+  /* Area under the illustrative line — filled with the disabled-grey dotted pattern. */
+  const areaPath = `${path} L${x(SERIES.length - 1)},${H - PAD.bottom} L${x(0)},${H - PAD.bottom} Z`;
 
   return (
     <section className="card" aria-label="Illustrative Projected Growth placeholder">
       <div ref={hostRef} className="chart-host">
         <svg className="chart" width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden="true" focusable="false">
+          {/* Disabled-grey dotted pattern that fills the area under the line. */}
+          <defs>
+            <pattern id={areaPatternId} width="5" height="5" patternUnits="userSpaceOnUse">
+              <circle className="pg-empty__area-dot" cx="1" cy="1" r="1" />
+            </pattern>
+          </defs>
           <line
             className="chart__axis"
             x1={PAD.left}
@@ -49,6 +58,7 @@ export default function ProjectedGrowthEmptyChart({ description }: { description
             x2={W - PAD.right}
             y2={H - PAD.bottom}
           />
+          <path className="pg-empty__area" d={areaPath} fill={`url(#${areaPatternId})`} />
           <path className="pg-empty__line" d={path} fill="none" />
           {SERIES.map((v, i) => (
             <g key={i}>

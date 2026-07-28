@@ -20,6 +20,9 @@
 /** The internal route path. Never linked from product navigation. */
 export const TESTING_PAGE_ROUTE = "/testing";
 
+/** Internal Portfolio empty/loading-states design surface. Same build-time gate as `/testing`. */
+export const PORTFOLIO_TESTING_PAGE_ROUTE = "/portfolio-testing";
+
 /**
  * The internal-build flag. Default is FALSE — a public production build must opt in explicitly, and
  * nothing but an explicit env var can turn it on.

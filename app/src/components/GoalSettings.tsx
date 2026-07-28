@@ -10,7 +10,7 @@
  * projection / allocation / suggestion / Top Pick recalculation, no wallet
  * signature, no transaction. The examples/ fixture is never mutated.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FINANCIAL_GOAL_OPTIONS,
   RISK_OPTIONS,
@@ -37,16 +37,19 @@ import {
   GOAL_SAVE,
   GOAL_DISCARD,
   GOAL_SAVED_TOAST,
-  GOAL_PROTOTYPE_NOTE,
   GOAL_ERR_REQUIRED_AMOUNT,
   GOAL_ERR_INVALID_AMOUNT,
   GOAL_ERR_POSITIVE_AMOUNT,
   GOAL_EDIT_DISABLED_TOOLTIP,
+  GOAL_DISCARD_CONFIRM_TITLE,
+  GOAL_DISCARD_CONFIRM_BODY,
+  GOAL_DISCARD_CONFIRM_CANCEL,
 } from "../state/approvedCopy";
 import type { GoalOption, SavedGoal } from "../types/goal";
 import PageHeader from "./PageHeader";
 import ToggleSwitch from "./ToggleSwitch";
 import SelectMenu from "./SelectMenu";
+import ConfirmDialog from "./ConfirmDialog";
 
 interface Props {
   savedGoal: SavedGoal;
@@ -55,6 +58,8 @@ interface Props {
   /** When true, editing is not allowed (onboarding tour / demo): the Edit Mode
    *  toggle is disabled and shows an explanatory tooltip. */
   editingDisabled?: boolean;
+  /** Reports whether there are unsaved edits, so the parent can guard navigation away. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 /** String-based edit draft (currency fields kept as raw text while typing). */
@@ -134,14 +139,23 @@ export default function GoalSettings({
   onSaveGoal,
   pushToast,
   editingDisabled = false,
+  onDirtyChange,
 }: Props) {
   const [editMode, setEditMode] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => draftFromSaved(savedGoal));
   const [showErrors, setShowErrors] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const errors = validate(draft);
   const hasErrors = Object.keys(errors).length > 0;
   const hasChanges = draftHasChanges(draft, savedGoal);
+  const dirty = editMode && hasChanges;
+
+  // Report unsaved-edits state up so the parent can guard navigation away.
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+    return () => onDirtyChange?.(false);
+  }, [dirty, onDirtyChange]);
 
   // Edit Mode toggle. On: seed a fresh draft from saved. Off: only leave when
   // there are no unsaved changes (never silently discard/save — pattern rule).
@@ -160,6 +174,13 @@ export default function GoalSettings({
     setDraft(draftFromSaved(savedGoal));
     setShowErrors(false);
     setEditMode(false);
+    setShowDiscardConfirm(false);
+  };
+
+  // Discard click: confirm first when there are unsaved edits; otherwise just leave edit mode.
+  const requestDiscard = () => {
+    if (hasChanges) setShowDiscardConfirm(true);
+    else discard();
   };
 
   const save = () => {
@@ -264,19 +285,19 @@ export default function GoalSettings({
 
   return (
     <>
-      <PageHeader header={{ title: GOAL_PAGE_TITLE }} />
-
-      <p className="goal-note">{GOAL_PROTOTYPE_NOTE}</p>
-
-      <div className="goal-toolbar">
-        <ToggleSwitch
-          checked={editMode}
-          onChange={onToggleEdit}
-          label={GOAL_EDIT_MODE_LABEL}
-          labelId={editLabelId}
-          disabled={editingDisabled}
-          tooltip={GOAL_EDIT_DISABLED_TOOLTIP}
-        />
+      {/* Page title + Edit Mode toggle on one aligned row. */}
+      <div className="goal-header">
+        <PageHeader header={{ title: GOAL_PAGE_TITLE }} />
+        <div className="goal-toolbar">
+          <ToggleSwitch
+            checked={editMode}
+            onChange={onToggleEdit}
+            label={GOAL_EDIT_MODE_LABEL}
+            labelId={editLabelId}
+            disabled={editingDisabled}
+            tooltip={GOAL_EDIT_DISABLED_TOOLTIP}
+          />
+        </div>
       </div>
 
       <section className="card" aria-labelledby="goal-sec-1">
@@ -339,19 +360,37 @@ export default function GoalSettings({
       </section>
 
       {editMode && (
-        <div className="goal-actions">
-          <button type="button" className="goal-btn goal-btn--secondary" onClick={discard}>
-            {GOAL_DISCARD}
-          </button>
-          <button
-            type="button"
-            className="goal-btn goal-btn--primary"
-            onClick={save}
-            disabled={!hasChanges}
-          >
-            {GOAL_SAVE}
-          </button>
-        </div>
+        <>
+          {/* Reserve space so the fixed footer never covers the last section. */}
+          <div className="goal-edit-actions-spacer" aria-hidden="true" />
+          <div className="goal-edit-actions">
+            <div className="goal-edit-actions__inner">
+              <button type="button" className="goal-btn goal-btn--secondary" onClick={requestDiscard}>
+                {GOAL_DISCARD}
+              </button>
+              <button
+                type="button"
+                className="goal-btn goal-btn--primary"
+                onClick={save}
+                disabled={!hasChanges}
+              >
+                {GOAL_SAVE}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {showDiscardConfirm && (
+        <ConfirmDialog
+          title={GOAL_DISCARD_CONFIRM_TITLE}
+          body={GOAL_DISCARD_CONFIRM_BODY}
+          cancelLabel={GOAL_DISCARD_CONFIRM_CANCEL}
+          confirmLabel={GOAL_DISCARD}
+          danger
+          onCancel={() => setShowDiscardConfirm(false)}
+          onConfirm={discard}
+        />
       )}
     </>
   );

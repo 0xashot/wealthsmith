@@ -17,6 +17,8 @@ import { useState } from "react";
 import SuggestionRail from "./SuggestionRail";
 import EmptyStateCard from "./EmptyStateCard";
 import SuggestionReviewModal from "./SuggestionReviewModal";
+import SmithInitialLoadingState from "./SmithInitialLoadingState";
+import ButtonIcon from "./ButtonIcon";
 import { useSolStakingSelectorPresentation } from "../hooks/useSolStakingSelectorPresentation";
 import type { RailSuggestions } from "../suggestions/useRailSuggestions";
 import type { RightRailState, SuggestionCardState } from "../types/dashboard";
@@ -24,9 +26,14 @@ import { railOnTrackUnavailableMessage } from "./portfolioCompletenessUi";
 import {
   REAL_WALLET_SUGGESTIONS_TITLE,
   SUGGESTIONS_RAIL_DESC,
-  SUGGESTIONS_LOADING,
+  SUGGESTIONS_PREPARING,
   SUGGESTIONS_UNAVAILABLE,
 } from "../state/approvedCopy";
+import sparcleUrl from "../../../assets/icons/ui/sparcle.svg";
+
+/** The loading animation plays once and reveals nothing itself — the parent
+ *  swaps in the ready rail when `loading` flips — so onComplete is a no-op. */
+const noop = () => {};
 
 interface Props {
   rail: RailSuggestions | null;
@@ -83,9 +90,25 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
   ) : null;
 
   if (rail?.loading) {
+    // Same header as the ready/default state (icon + title + description); the
+    // single card shows the animated Smith AI symbol + a "preparing" label,
+    // mirroring the first-open "Smith AI getting ready" beat.
     return (
       <aside className="suggestion-rail" aria-label={railLabel}>
-        <EmptyStateCard title={REAL_WALLET_SUGGESTIONS_TITLE} description={SUGGESTIONS_LOADING} />
+        <div className="suggestion-rail__header">
+          <h2 className="suggestion-rail__title">
+            <span className="suggestion-rail__title-icon">
+              <ButtonIcon src={sparcleUrl} size={24} />
+            </span>
+            {REAL_WALLET_SUGGESTIONS_TITLE}
+          </h2>
+          <p className="suggestion-rail__description">{SUGGESTIONS_RAIL_DESC}</p>
+        </div>
+        <div className="suggestion-rail__cards">
+          <div className="card suggestion-rail__preparing">
+            <SmithInitialLoadingState onComplete={noop} label={SUGGESTIONS_PREPARING} />
+          </div>
+        </div>
       </aside>
     );
   }

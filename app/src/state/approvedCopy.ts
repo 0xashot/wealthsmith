@@ -53,6 +53,36 @@ export const SMITH_FALLBACK =
 
 /** patterns/dashboard-layout.md — accessibility example */
 export const SMITH_CLOSE_LABEL = "Close Ask Smith AI panel";
+/** Short hover/focus tooltip on the Ask Smith AI close control. */
+export const SMITH_CLOSE_TOOLTIP = "Close";
+
+/** Ask Smith AI header "More" menu — mirrors the onboarding More menu. Clear
+ *  History resets the conversation to Smith's opener; Send Feedback is an
+ *  explain-only affordance (no message is sent, matching the prototype). */
+export const SMITH_MORE = "More";
+export const SMITH_CLEAR_HISTORY = "Clear History";
+export const SMITH_SEND_FEEDBACK = "Send Feedback";
+
+/** Per-message like/dislike tooltips + accessible labels. */
+export const SMITH_FEEDBACK_HELPFUL = "Helpful";
+export const SMITH_FEEDBACK_NOT_HELPFUL = "Not helpful";
+
+/** Send Feedback sub-page (opened from the More menu or a message thumb).
+ *  Explain-only: nothing is sent — matching the prototype's non-sending Contact Us. */
+export const SMITH_FEEDBACK_BACK = "Back";
+export const SMITH_FEEDBACK_SUBTITLE = "Tell us what’s on your mind";
+export const SMITH_FEEDBACK_RATING_LABEL = "Was Smith AI helpful?";
+export const SMITH_FEEDBACK_MESSAGE_LABEL = "Message";
+export const SMITH_FEEDBACK_MESSAGE_ERROR = "Tell us what you’d like to share";
+export const SMITH_FEEDBACK_NOTE = "WealthSmith doesn’t use your data to train AI models.";
+export const SMITH_FEEDBACK_SENT_TOAST = "Feedback sent";
+
+/** Clear History confirmation (destructive) + its success toast. */
+export const SMITH_CLEAR_CONFIRM_TITLE = "Clear Smith AI History?";
+export const SMITH_CLEAR_CONFIRM_BODY =
+  "This will remove your Smith AI history and you won’t be able to restore it.";
+export const SMITH_CLEAR_CONFIRM_CANCEL = "Cancel";
+export const SMITH_HISTORY_CLEARED_TOAST = "History cleared";
 
 /** components/smith-ai-initial-loading-state.md — visible + status copy shown with
  *  the first-open Smith AI loading animation (paired copy, per the animation
@@ -75,6 +105,10 @@ export const ASK_SMITH_LABEL_SUPPORT = "Ask Smith AI about support topics";
 
 /** components/global-nav.md / rules/demo-mode-rules.md — primary CTA */
 export const TRY_DEMO_MODE = "Try Demo Mode";
+
+/** Hover tooltip on the disabled Portfolio / Goal / Support nav items (disconnected / onboarding). */
+export const NAV_DISABLED_TOOLTIP =
+  "Available once your wallet is connected and onboarding is complete.";
 
 /** dashboard-demo-state.json demo_banner.title (also announcement.md) */
 export const DEMO_BANNER_TITLE = "You’re in demo mode.";
@@ -408,8 +442,11 @@ export const SUGGESTIONS_UNAVAILABLE =
 export const SUGGESTIONS_PARTIAL_PRICING =
   "Some assets are not priced yet, so suggestions may be incomplete.";
 /** Real-wallet suggestion rail: header sub-copy + loading state. */
-export const SUGGESTIONS_RAIL_DESC = "Based on your live wallet and saved plan.";
+export const SUGGESTIONS_RAIL_DESC = "Personalized based on your plan.";
 export const SUGGESTIONS_LOADING = "Preparing your suggestions…";
+/** Loading card label — paired with the animated Smith AI symbol (like the
+ *  first-open "Smith AI getting ready" beat). */
+export const SUGGESTIONS_PREPARING = "Preparing your personalized suggestions";
 export const SUGGESTION_COPY: Record<string, string> = {
   "suggestion.buffer.title": SUGGESTION_BUFFER_TITLE,
   "suggestion.buffer.description": SUGGESTION_BUFFER_DESCRIPTION,
@@ -527,6 +564,8 @@ export const REAL_WALLET_NONE_DETECTED = "None detected in this wallet.";
 /** Financial Snapshot (real wallet) — two hero cards. */
 export const FS_TOTAL_VALUE_LABEL = "Total Portfolio Value";
 export const FS_TOTAL_VALUE_CAPTION = "Crypto + Stablecoins";
+/** Trailing period for the Total Portfolio Value trend badge (value-weighted 24h change). */
+export const FS_CHANGE_PERIOD = "today";
 export const FS_NET_CONTRIB_LABEL = "Net Contributions";
 /** Net-contributions caption — same for the sourced value and the $0 empty state. */
 export const FS_NET_CONTRIB_ESTIMATE = "Invested over the last 12 months";
@@ -537,8 +576,6 @@ export const PG_CAPTION = "Modeled using your strategy settings over your select
 /** Safety Buffer (real wallet) — stablecoin reserve vs monthly expenses. */
 export const SAFETY_BUFFER_CAPTION =
   "Stablecoin reserve covering 1–6 months of expenses before any investment actions.";
-export const SAFETY_BUFFER_FUNDED =
-  "Fully funded — your stablecoin reserve covers your target.";
 export const SAFETY_BUFFER_COVERED_LEGEND = "Covered Buffer";
 
 /** Product section titles (approved product section names — reused live). */
@@ -547,6 +584,9 @@ export const DASH_ASSET_MIX_CAPTION =
   "Breakdown of detected assets by category. Value-based allocation needs pricing data.";
 export const PORT_BALANCE_TITLE = "Balance Overview";
 export const PORT_ALLOCATION_TITLE = "Crypto Assets Allocation";
+/** Donut empty-state descriptions (shown under the $0 ring when nothing is priced yet). */
+export const PORT_BALANCE_EMPTY = "Your split between crypto and stablecoins will appear here.";
+export const PORT_ALLOCATION_EMPTY = "Here you will see your portfolio breakdown.";
 export const PORT_DEPLOYMENT_TITLE = "Asset Deployment Overview";
 export const PORT_LIQUID_TITLE = "Liquid Assets";
 export const PORT_LIQUID_CAPTION =
@@ -656,6 +696,11 @@ export const GOAL_HELPER_SAVING = "We’ll use this to model your contribution p
 /** patterns/goal-settings.md — footer actions. */
 export const GOAL_SAVE = "Save Changes";
 export const GOAL_DISCARD = "Discard Changes";
+/** Discard-confirmation dialog (unsaved Goal edits: Discard click or navigating away). */
+export const GOAL_DISCARD_CONFIRM_TITLE = "Discard Changes?";
+export const GOAL_DISCARD_CONFIRM_BODY =
+  "You have unsaved changes. Are you sure you want to discard them?";
+export const GOAL_DISCARD_CONFIRM_CANCEL = "Cancel";
 
 /** patterns/goal-settings.md — Save Confirmation; also content/empty-error-loading-copy.md + content/ui-copy-rules.md. */
 export const GOAL_SAVED_TOAST = "Goal settings saved";
@@ -683,6 +728,11 @@ export const SUPPORT_SEARCH_LABEL = "Search support articles";
 export const SUPPORT_NO_RESULT_TITLE = "No help articles found";
 export const SUPPORT_NO_RESULT_DESC = "Try another keyword, ask Smith AI, or contact us.";
 
+/** Support page — "still need help" contact CTA (below the FAQ). */
+export const SUPPORT_HELP_CTA_TITLE = "Still need help?";
+export const SUPPORT_HELP_CTA_DESC =
+  "We’re happy to assist — get in touch and we’ll get back within 24 hours.";
+
 /* Contact Us modal (patterns/support-center.md — Contact Us Modal + Decisions). */
 /** patterns/support-center.md — Contact Us entry point / modal title. */
 export const CONTACT_TITLE = "Contact Us";
@@ -696,7 +746,7 @@ export const CONTACT_SAFETY_NOTE = "Do not include seed phrases, private keys, o
 /** Approved prototype note (Decision A) — visible in the Contact Us modal. */
 export const CONTACT_PROTOTYPE_NOTE = "This prototype does not send support messages.";
 /** Approved prototype-safe success toast (Decision A — replaces "Message sent"). */
-export const CONTACT_SUCCESS_TOAST = "Message saved in this prototype.";
+export const CONTACT_SUCCESS_TOAST = "Message sent";
 /** patterns/support-center.md — Contact Form Validation copy. */
 export const CONTACT_ERR_EMAIL_REQUIRED = "Enter your email so we can reply.";
 export const CONTACT_ERR_EMAIL_INVALID = "Enter a valid email address.";
@@ -857,9 +907,5 @@ export const ONBOARDING_REVIEW_COMPANION =
   "You can edit any of these later from Goal settings.";
 export const ONBOARDING_FINISH = "Finish Setup";
 /** onboarding-copy.md — Finish / Transition Step (Success title), used as the
- *  completion toast. */
-export const ONBOARDING_FINISH_TOAST = "Your WealthSmith dashboard is ready";
-/** onboarding-copy.md — Finish / Transition Step (completion reassurance helper).
- *  Shown with the completion toast; must not imply funds moved or transactions. */
-export const ONBOARDING_FINISH_HELPER =
-  "You’ll see your portfolio view next. Nothing has been moved or changed.";
+ *  completion toast. No description. */
+export const ONBOARDING_FINISH_TOAST = "Onboarding completed";

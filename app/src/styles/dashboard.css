@@ -101,6 +101,7 @@
 }
 
 .global-nav__item {
+  position: relative; /* anchor for the disabled-item hover tooltip */
   display: inline-block;
   padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
   border-radius: var(--radius-control-sm);
@@ -161,6 +162,20 @@
   color: var(--color-text-primary);
   font: var(--typography-label-md-font);
   cursor: pointer;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+.global-nav__wallet-pill:hover {
+  background: var(--color-action-secondary-background-hover);
+  border-color: var(--color-border-strong);
+}
+
+/* Selected: the wallet menu is open (aria-expanded) — a stronger tint + border. */
+.global-nav__wallet-pill[aria-expanded="true"] {
+  background: var(--color-action-secondary-background-pressed);
+  border-color: var(--color-border-strong);
 }
 
 .global-nav__wallet-pill:focus-visible {
@@ -169,6 +184,9 @@
 }
 
 .global-nav__ask-smith {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
   border-radius: var(--radius-control-md);
   border: none;
@@ -184,6 +202,13 @@
 
 .global-nav__ask-smith:hover {
   background: var(--color-action-primary-background-hover);
+}
+
+/* Active while the Ask Smith AI panel is open — a deeper pressed fill so the
+   trigger reads as "on". */
+.global-nav__ask-smith--active,
+.global-nav__ask-smith--active:hover {
+  background: var(--color-action-primary-background-pressed);
 }
 
 .global-nav__ask-smith:focus-visible {
@@ -264,6 +289,12 @@
   margin: 0;
   font: var(--typography-heading-md-font);
   color: var(--color-text-primary);
+}
+
+/* Asset Deployment category titles (Liquid / Staked / Yield) — a step smaller than
+   the "Asset Deployment Overview" section heading (heading-sm 16px vs heading-md 18px). */
+.deploy-card__title {
+  font: var(--typography-heading-sm-font);
 }
 
 .card__caption {
@@ -437,8 +468,114 @@
   background: var(--color-chart-series-4);
 }
 
+/* Hatched Safety Buffer track: the empty (unfilled) portion shows a diagonal grey
+   hatch inside an outline (border + lines share one colour); the solid fill covers
+   the left. Fill colour is the component's own (series-4 when funded, danger when
+   underfunded). Used by both the connected and the Demo Safety Buffer bars. */
+.progress--hatched,
+.progress--hatched .progress__fill {
+  border-radius: var(--radius-chart-bar);
+}
+.progress--hatched {
+  /* Outline as an INSET shadow (not a border) so the gap element — clipped to the
+     content box by overflow:hidden — can break the outline too, and the fill covers
+     it on the funded side (borderless teal). Border + lines share one colour. */
+  box-shadow: inset 0 0 0 1px var(--color-border-strong);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-border-strong) 0,
+    var(--color-border-strong) 1px,
+    transparent 1px,
+    transparent 8px
+  );
+}
+/* Funded segment: always the Safety Buffer fill colour — never turns red/danger,
+   regardless of how underfunded the reserve is. Square right corners + a right
+   border, so it ends flush with a vertical line against the gap. */
+.progress--hatched .progress__fill {
+  position: relative;
+  background: var(--color-chart-series-4);
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: 1px solid var(--color-border-strong);
+}
+/* Card-coloured gap, then a left border that closes the unfunded (hatched) segment. */
+.progress--hatched .progress__fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 5px;
+  background: var(--color-surface-card);
+  border-right: 1px solid var(--color-border-strong);
+}
+
 .buffer__caption--ok {
   color: var(--color-text-secondary);
+}
+
+/* Safety Buffer bar + its hover/focus USD-breakdown popover. */
+.buffer__bar-wrap {
+  position: relative;
+}
+
+/* Keyboard focus ring on the bar (it's now focusable to reveal the popover). */
+.buffer__bar-wrap .progress:focus-visible {
+  outline: 2px solid var(--color-action-primary-background-default);
+  outline-offset: 3px;
+}
+
+.buffer__popover {
+  position: absolute;
+  bottom: calc(100% + var(--spacing-inline-gap-xs));
+  left: 0;
+  z-index: 20;
+  min-width: 200px;
+  display: grid;
+  gap: var(--spacing-stack-gap-xs);
+  padding: var(--spacing-card-padding-sm);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-card-default);
+  /* Hidden until the bar is hovered or focused. */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms;
+}
+
+.buffer__bar-wrap:hover .buffer__popover,
+.buffer__bar-wrap:focus-within .buffer__popover {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.buffer__popover-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-md);
+}
+
+.buffer__popover-label {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.buffer__popover-value {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Target row: a divider above and emphasis, since it's the goal the others sum toward. */
+.buffer__popover-row--total {
+  margin-top: 2px;
+  padding-top: var(--spacing-stack-gap-xs);
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 /* Disconnected / no-inputs Safety Buffer: the bar rendered in disabled colors + a centered prompt. */
@@ -461,6 +598,12 @@
 }
 .pg-empty__dot {
   fill: var(--color-text-disabled);
+}
+/* Disabled-grey dotted fill under the placeholder line (higher opacity than the
+   blue version so the lighter grey still reads at the same density). */
+.pg-empty__area-dot {
+  fill: var(--color-text-disabled);
+  opacity: 0.5;
 }
 .pg-empty__axis-label {
   font: var(--typography-chart-label-font);
@@ -617,8 +760,21 @@
   color: var(--color-text-primary);
 }
 
+/* Total Portfolio Value + its 24h trend badge on one line (badge to the right). */
+.hero-card__value-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .hero-card__value--muted {
   color: var(--color-text-secondary);
+}
+
+/* Trailing period word in a trend badge (e.g. "today") — same colour, lighter weight. */
+.trend__period {
+  font-weight: 500;
 }
 
 /* Hero-card heading (e.g. "Total Portfolio Value") darker than its description. */
@@ -629,6 +785,10 @@
 /* ---------- Skeleton loading placeholders ---------- */
 
 .skeleton {
+  /* inline-block so width/height apply even outside a flex/grid container
+     (e.g. inside table cells) — an inline element would collapse to nothing. */
+  display: inline-block;
+  vertical-align: middle;
   border-radius: var(--radius-control-sm);
   background: linear-gradient(
     90deg,
@@ -690,6 +850,7 @@
    no viewBox stretching (components/chart.md Label Typography) */
 .chart-host {
   width: 100%;
+  position: relative;
 }
 
 .chart {
@@ -708,6 +869,12 @@
   stroke-width: 2;
 }
 
+/* Light-blue dotted fill under the projected-growth line. */
+.chart__area-dot {
+  fill: var(--color-chart-series-1);
+  opacity: 0.28;
+}
+
 .chart__dot {
   fill: var(--color-chart-series-1);
 }
@@ -723,6 +890,61 @@
 .chart__axis-label {
   font: var(--typography-chart-label-font);
   fill: var(--color-text-secondary);
+}
+
+/* ---------- Projected Growth hover tooltip ---------- */
+
+/* Vertical guide dropped from the hovered point to the baseline. */
+.chart__guide {
+  stroke: var(--color-chart-series-1);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.5;
+}
+
+.chart__dot--active {
+  stroke: var(--color-surface-card);
+  stroke-width: 2;
+}
+
+/* Transparent hover columns capturing the mouse across the plot. */
+.chart__hit {
+  fill: transparent;
+}
+
+/* Card-styled tooltip floating above the hovered point (centre-anchored).
+   Fixed width so every point's tooltip is identical in size. */
+.chart-tooltip {
+  position: absolute;
+  z-index: 20;
+  transform: translate(-50%, calc(-100% - 14px));
+  width: 232px;
+  display: grid;
+  gap: 4px;
+  padding: var(--spacing-card-padding-sm);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-card-default);
+  pointer-events: none;
+}
+
+.chart-tooltip__year {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.chart-tooltip__value {
+  font: var(--typography-metric-secondary-font);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-tooltip__delta {
+  font: var(--typography-body-sm-font);
+  color: var(--color-feedback-success-text-tint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* ---------- Allocation chart ---------- */
@@ -808,6 +1030,74 @@
   text-align: right;
 }
 
+/* Hover/focus USD breakdown popover on a Current-vs-Recommended bar. */
+.allocation__row--hoverable {
+  position: relative;
+}
+
+.allocation__row--hoverable .allocation__track:focus-visible {
+  outline: 2px solid var(--color-action-primary-background-default);
+  outline-offset: 3px;
+}
+
+.allocation__popover {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + var(--spacing-inline-gap-xs));
+  transform: translateX(-50%);
+  z-index: 20;
+  width: 204px;
+  display: grid;
+  gap: 4px;
+  padding: var(--spacing-card-padding-sm);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-card-default);
+  /* Hidden until the bar/row is hovered or focused. */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease, visibility 120ms;
+  pointer-events: none;
+}
+
+.allocation__row--hoverable:hover .allocation__popover,
+.allocation__row--hoverable:focus-within .allocation__popover {
+  opacity: 1;
+  visibility: visible;
+}
+
+.allocation__popover-title {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+
+.allocation__popover-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-md);
+}
+
+.allocation__popover-label {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.allocation__popover-value {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Difference row: a divider above it, since it summarises the two above. */
+.allocation__popover-row--diff {
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
 /* ---------- Donut Allocation Chart (components/donut-allocation-chart.md) ---------- */
 
 .donut {
@@ -816,6 +1106,39 @@
 
 .donut__plot {
   width: 100%;
+  position: relative;
+}
+
+/* Hover popover over a donut segment — mirrors the Dashboard tooltips. */
+.donut__popover {
+  position: absolute;
+  z-index: 20;
+  min-width: 132px;
+  display: grid;
+  gap: 2px;
+  padding: var(--spacing-card-padding-sm);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
+  box-shadow: var(--shadow-card-default);
+  text-align: left;
+  pointer-events: none;
+}
+
+.donut__popover-label {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.donut__popover-value {
+  font: var(--typography-metric-secondary-font);
+  color: var(--color-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.donut__popover-pct {
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
 }
 
 .donut__svg {
@@ -826,6 +1149,24 @@
 
 .donut__track {
   stroke: var(--color-border-subtle);
+}
+
+/* Empty donut: centered $0 ring with a caption below (no segments/legend). */
+.donut-card--empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--spacing-stack-gap-sm);
+  text-align: center;
+}
+.donut__empty-ring {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.donut__empty-desc {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
 }
 
 /* Center total matches the dashboard metric value (e.g. Net Contributions). */
@@ -964,6 +1305,16 @@
   margin: 0;
   font: var(--typography-heading-lg-font);
   color: var(--color-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Sparkle icon left of the title — 24px, primary colour (paints the masked icon). */
+.suggestion-rail__title-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-action-primary-background-default);
 }
 
 .suggestion-rail__description {
@@ -975,6 +1326,13 @@
 .suggestion-rail__cards {
   display: grid;
   gap: var(--spacing-card-gap-md);
+}
+
+/* Loading card: same card shell as a suggestion, holding the centered animated
+   Smith AI symbol + "preparing" label (the .smith-initial-loading fills it). */
+.suggestion-rail__preparing {
+  display: flex;
+  min-height: 240px;
 }
 
 /* Soft partial-pricing notice above the suggestion cards. */
@@ -1172,6 +1530,11 @@
   cursor: pointer;
 }
 
+/* Hover state matching the onboarding Connect Wallet button (goal-btn--primary). */
+.global-nav__connect:hover {
+  background: var(--color-action-primary-background-hover);
+}
+
 /* Try Demo Mode — secondary (outline) per components/global-nav.md */
 .global-nav__try-demo {
   padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
@@ -1196,6 +1559,20 @@
 /* ---------- Step 2: Demo Mode banner (components/announcement.md) ---------- */
 
 /* full-width, above Global Nav; persistent; brand background + inverse text */
+/* Demo Mode header: the banner + global nav stick to the top of the screen as one
+   unit while the page scrolls. The nav is static inside it (the wrapper is the
+   sticky element), so both pin together with no height math. */
+.demo-header {
+  position: sticky;
+  top: 0;
+  /* Above page content while scrolling, but below overlays (scrim/modal/toast)
+     so a modal dims the header instead of leaving it highlighted. */
+  z-index: var(--zIndex-navigation-primary);
+}
+.demo-header .global-nav-wrap {
+  position: static;
+}
+
 .demo-banner {
   width: 100%;
   background: var(--color-action-primary-background-default);
@@ -1276,10 +1653,19 @@
   align-items: center;
   gap: var(--spacing-inline-gap-md);
   padding: var(--spacing-inline-gap-md) var(--spacing-inline-gap-lg);
-  background: var(--color-surface-card);
-  border: 1px solid var(--color-border-subtle);
+  /* Always-dark toast surface (Canvas / Dark #121212), regardless of page theme. */
+  background: var(--color-surface-canvasDark);
+  border: 1px solid var(--color-border-subtleDark);
   border-radius: var(--radius-surface-md);
   box-shadow: var(--shadow-overlay-dropdown);
+}
+
+/* Success icon (circle-check), tinted with the success solid green via CSS mask. */
+.toast__icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  background: var(--color-feedback-success-background-solid);
 }
 
 .toast__body {
@@ -1288,12 +1674,12 @@
 
 .toast__message {
   font: var(--typography-label-md-font);
-  color: var(--color-text-primary);
+  color: var(--color-text-primaryDark);
 }
 
 .toast__helper {
   font: var(--typography-caption-default-font);
-  color: var(--color-text-secondary);
+  color: var(--color-text-disabledDark);
 }
 
 .toast__dismiss {
@@ -1303,6 +1689,14 @@
   border-radius: var(--radius-control-sm);
   background: transparent;
   cursor: pointer;
+}
+
+/* Close glyph tinted Gray 500 via CSS mask (no gray-500 token in the system). */
+.toast__dismiss-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  background: #6b7280;
 }
 
 /* ---------- Step 3: Ask Smith AI panel (dashboard-layout Mode 3) ---------- */
@@ -1339,6 +1733,17 @@
     top: var(--smith-panel-top-offset);
     height: calc(100dvh - var(--smith-panel-top-offset) - var(--spacing-page-padding-desktop));
     max-height: calc(100dvh - var(--smith-panel-top-offset) - var(--spacing-page-padding-desktop));
+  }
+}
+
+/* Demo Mode: the sticky header is the blue demo banner (~70px) + the Global Nav,
+   taller than the connected nav. Without this, the sticky Ask Smith AI panel
+   sticks too high and its top scrolls UNDER the demo banner. Bump the panel's top
+   offset by the banner height (the :has() scopes it to any demo page's app-shell,
+   so it also fixes Goal/Support in Demo Mode). */
+@media (min-width: 1280px) {
+  .app-shell:has(.demo-header) .smith-panel {
+    --smith-panel-top-offset: calc(70px + 24px + 64px + var(--spacing-page-padding-desktop));
   }
 }
 
@@ -1384,19 +1789,9 @@
   font: var(--typography-heading-md-font);
 }
 
-.smith-panel__close {
-  display: inline-flex;
-  padding: var(--spacing-inline-gap-sm);
-  border: none;
-  border-radius: var(--radius-control-sm);
-  background: transparent;
-  cursor: pointer;
-}
-
-.smith-panel__close:hover,
-.smith-panel__close:focus-visible {
-  background: var(--color-subdued-neutral-background-default);
-}
+/* The Ask Smith AI header controls (More menu + Close) reuse the onboarding
+   header-action treatment (.onboarding-undo / .onboarding-more / .onboarding-menu)
+   so icon size, color, and hover states stay identical across the two flows. */
 
 /* conversation area: fills the space between header and the bottom
    cluster; scrolls internally when content exceeds available height */
@@ -1411,21 +1806,172 @@
 
 .smith-panel__feedback {
   display: flex;
-  gap: var(--spacing-inline-gap-sm);
+  justify-content: flex-end;
+  gap: var(--spacing-inline-gap-xs);
+  margin-top: var(--spacing-stack-gap-xs);
 }
 
 .smith-panel__feedback-btn {
+  position: relative;
   display: inline-flex;
-  padding: var(--spacing-inline-gap-sm);
-  border: 1px solid var(--color-border-subtle);
+  padding: 4px;
+  border: none;
   border-radius: var(--radius-control-sm);
   background: transparent;
   cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+/* Hover/focus tooltip (Helpful / Not helpful). Anchored above and to the right
+   edge of the thumb so the label extends left INTO the panel — a centered
+   tooltip would overflow the right-aligned thumbs past .smith-panel's
+   overflow:hidden and get clipped. */
+.smith-panel__feedback-btn[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  padding: var(--spacing-inline-gap-xs) var(--spacing-inline-gap-sm);
+  border-radius: var(--radius-control-sm);
+  background: var(--color-text-primary);
+  color: var(--color-surface-card);
+  font: var(--typography-caption-default-font);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: var(--zIndex-smithAI-panel);
+}
+
+.smith-panel__feedback-btn[data-tooltip]:hover::after,
+.smith-panel__feedback-btn[data-tooltip]:focus-visible::after {
+  opacity: 1;
+}
+
+.smith-panel__feedback-btn:hover {
+  opacity: 1;
+  background: var(--color-action-secondary-background-hover);
+}
+
+.smith-panel__feedback-btn[aria-pressed="true"] {
+  opacity: 1;
+  background: var(--color-action-secondary-background-pressed);
 }
 
 .smith-panel__feedback-btn[aria-pressed="true"] {
   background: var(--color-subdued-blue-background-default);
   border-color: var(--color-action-secondary-stroke-default);
+}
+
+/* ---- Send Feedback sub-page (opened from the More menu or a message thumb) ---- */
+
+/* Header lead group: back chevron + "Send Feedback" title, left-aligned. */
+.smith-panel__header-lead {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+  min-width: 0;
+}
+
+.smith-panel__feedback-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-md);
+  /* Inset the scroll box so a focused control's 4px ring isn't clipped by the
+     overflow; the matching negative margin keeps content aligned with the header. */
+  margin-inline: calc(-1 * var(--spacing-inline-gap-xs));
+  padding-inline: var(--spacing-inline-gap-xs);
+  padding-bottom: var(--spacing-inline-gap-xs);
+}
+
+.smith-panel__feedback-subtitle {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}
+
+.smith-panel__feedback-rating {
+  display: flex;
+  gap: var(--spacing-inline-gap-sm);
+}
+
+/* Rating thumbs — larger than the inline message thumbs; the icon inherits the
+   button color (currentColor mask) so a selected thumb reads blue. */
+.smith-panel__rating-btn {
+  display: inline-flex;
+  padding: var(--spacing-inline-gap-sm);
+  border: none;
+  border-radius: var(--radius-control-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.smith-panel__rating-btn:hover {
+  background: var(--color-action-secondary-background-hover);
+  color: var(--color-text-primary);
+}
+
+.smith-panel__rating-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
+.smith-panel__rating-btn[aria-pressed="true"] {
+  background: var(--color-subdued-blue-background-default);
+  color: var(--color-action-primary-background-default);
+}
+
+.smith-panel__feedback-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-xs);
+}
+
+.smith-panel__feedback-label {
+  /* Matches the Contact Us field labels (.goal-field__label). */
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.smith-panel__feedback-textarea {
+  width: 100%;
+  min-height: 84px;
+  resize: vertical;
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control-md);
+  background: var(--color-surface-canvas);
+  font: var(--typography-body-md-font);
+  color: var(--color-text-primary);
+}
+
+.smith-panel__feedback-textarea:focus-visible {
+  outline: none;
+  border-color: var(--color-action-secondary-stroke-default);
+  box-shadow: var(--shadow-control-focus);
+}
+
+/* Error state: danger border (matching the Contact Us field), kept even while
+   focused so the invalid field stays clearly flagged. */
+.smith-panel__feedback-textarea[aria-invalid="true"],
+.smith-panel__feedback-textarea[aria-invalid="true"]:focus-visible {
+  border-color: var(--color-feedback-danger-background-solid);
+}
+
+.smith-panel__feedback-submit {
+  align-self: flex-start;
+}
+
+.smith-panel__feedback-note {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
 }
 
 /* Free-text ask field (sits in the .chat-input__row next to the Send button). */
@@ -2459,6 +3005,13 @@
   color: var(--color-text-secondary);
 }
 
+/* Page title + Edit Mode toggle aligned on one row. */
+.goal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-md);
+}
 .goal-toolbar {
   display: flex;
   justify-content: flex-end;
@@ -2801,10 +3354,49 @@
   color: var(--color-feedback-danger-text-tint);
 }
 
+/* Shared action row (modals, Support) — buttons right-aligned. */
 .goal-actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--spacing-inline-gap-md);
+}
+
+/* Goal Edit Mode actions — a footer fixed to the bottom of the screen (full-width
+   background) so Discard / Save are always visible. The inner row aligns the
+   buttons to the page content; the spacer reserves flow space so the footer
+   never covers the last section. */
+.goal-edit-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--color-surface-canvas);
+  border-top: 1px solid var(--color-border-subtle);
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
+}
+.goal-edit-actions__inner {
+  max-width: var(--responsive-layout-container-wide);
+  margin: 0 auto;
+  padding: var(--spacing-inline-gap-md) var(--spacing-page-padding-mobile);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-inline-gap-md);
+}
+.goal-edit-actions-spacer {
+  height: 80px;
+}
+@media (min-width: 768px) {
+  .goal-edit-actions__inner {
+    padding-left: var(--spacing-page-padding-tablet);
+    padding-right: var(--spacing-page-padding-tablet);
+  }
+}
+@media (min-width: 1280px) {
+  .goal-edit-actions__inner {
+    padding-left: var(--spacing-page-padding-desktop);
+    padding-right: var(--spacing-page-padding-desktop);
+  }
 }
 
 .goal-btn {
@@ -2838,6 +3430,22 @@
   background: var(--color-action-primary-background-hover);
 }
 
+.goal-btn--danger {
+  border: none;
+  background: var(--color-feedback-danger-background-solid);
+  color: var(--color-action-primary-text-default);
+  box-shadow: var(--shadow-control-default);
+}
+
+.goal-btn--danger:hover:not(:disabled) {
+  background: var(--color-feedback-danger-text-tint);
+}
+
+/* Compact confirmation dialog (e.g. discard unsaved Goal edits). */
+.confirm-dialog {
+  max-width: 420px;
+}
+
 /* Disabled primary per components/button.md (Disabled): keep the disabled
    background token, but use the approved muted foreground (color.text.secondary)
    for the label — the disabled-text token is too low-contrast (~1.19:1) on the
@@ -2861,18 +3469,64 @@
   -webkit-appearance: none;
 }
 
+/* "Still need help?" contact CTA — left-aligned, no card, below the FAQ. */
+.support-help-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-stack-gap-sm);
+}
+.support-help-cta__title {
+  margin: 0;
+  font: var(--typography-heading-lg-font);
+  color: var(--color-text-primary);
+}
+.support-help-cta__desc {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}
+
 /* FAQ accordion (components/accordion.md) */
+/* Support page: a fixed 848px reading column, centered. A definite width (not
+   max-width + auto margins) so it never shrinks to its content when items collapse. */
+.support-main {
+  width: min(100%, 848px);
+  justify-self: center;
+}
+
+/* When the Ask Smith AI panel is open, size the main column to 848px (not 1fr) and
+   centre the two-column group — so the gap to the panel matches the other pages. */
+@media (min-width: 1280px) {
+  .support-dashboard:not(.dashboard--single) {
+    grid-template-columns: min(100%, 848px) minmax(320px, 380px);
+    justify-content: center;
+  }
+}
+
+/* Category = a heading above its FAQ cards (not itself a card). */
+.support-category {
+  display: grid;
+  gap: var(--spacing-stack-gap-sm);
+}
+.support-category__title {
+  margin: 0;
+  font: var(--typography-heading-lg-font);
+  color: var(--color-text-primary);
+}
+
+/* Each FAQ item is its own card, stacked with a gap. */
 .accordion {
   display: grid;
+  gap: var(--spacing-stack-gap-sm);
 }
 
 .accordion__item {
-  border-top: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-md);
 }
 
-.accordion__item:first-child {
-  border-top: none;
-}
 
 .accordion__heading {
   margin: 0;
@@ -2884,14 +3538,18 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-inline-gap-md);
-  padding: var(--spacing-inline-gap-md) var(--spacing-inline-gap-xs);
+  padding: var(--spacing-card-padding-md);
   border: none;
-  border-radius: var(--radius-control-sm);
   background: transparent;
   color: var(--color-text-primary);
   font: var(--typography-heading-sm-font);
   text-align: left;
   cursor: pointer;
+}
+
+/* Bold FAQ question. */
+.accordion__question {
+  font-weight: 700;
 }
 
 .accordion__trigger:focus-visible {
@@ -2917,7 +3575,7 @@
 .accordion__panel {
   display: grid;
   gap: var(--spacing-stack-gap-sm);
-  padding: 0 var(--spacing-inline-gap-xs) var(--spacing-inline-gap-md);
+  padding: 0 var(--spacing-card-padding-md) var(--spacing-card-padding-md);
   animation: modal-scrim-in var(--motion-surface-fadeIn-duration)
     var(--motion-surface-fadeIn-easing);
 }
@@ -2925,7 +3583,7 @@
 .accordion__text {
   margin: 0;
   font: var(--typography-body-md-font);
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
 }
 
 .accordion__list {
@@ -2934,7 +3592,7 @@
   display: grid;
   gap: var(--spacing-inline-gap-xs);
   font: var(--typography-body-md-font);
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3241,8 +3899,40 @@
    non-interactive; Dashboard stays active. */
 .global-nav__item--disabled {
   color: var(--color-text-disabled);
+  /* Not a pointer, and never navigates (the click handler no-ops); pointer-events stay ON so the
+     hover tooltip can appear. */
   cursor: default;
+}
+
+/* Disabled items must NOT react to hover (no colour/background change) — only the tooltip appears,
+   so they never read as clickable. Overrides .global-nav__item:hover. */
+.global-nav__item--disabled:hover {
+  color: var(--color-text-disabled);
+  background: transparent;
+}
+
+/* Hover tooltip on a disabled nav item (disconnected / onboarding): a dark bubble below the item. */
+.global-nav__item--disabled[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 220px;
+  padding: var(--spacing-inline-gap-xs) var(--spacing-inline-gap-sm);
+  border-radius: var(--radius-control-sm);
+  background: var(--color-text-primary);
+  color: var(--color-surface-card);
+  font: var(--typography-caption-default-font);
+  text-align: center;
+  opacity: 0;
   pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: var(--zIndex-navigation-primary);
+}
+.global-nav__item--disabled[data-tooltip]:hover::after {
+  opacity: 1;
 }
 
 /* Review step (Step 3): labelled summary rows (definition list). */
@@ -3296,6 +3986,11 @@
 
 /* Gemini-style assistant message: NO chat bubble — the text renders directly on
    the panel surface (no background, border, radius, or shadow). */
+/* Grouped consecutive message: no avatar, but keep the avatar's width so text stays aligned. */
+.onboarding-msg__avatar-spacer {
+  flex-shrink: 0;
+  width: 28px;
+}
 .onboarding-msg__content {
   min-width: 0;
   display: flex;

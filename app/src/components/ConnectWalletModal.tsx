@@ -153,8 +153,8 @@ export default function ConnectWalletModal({ onClose }: Props) {
   return (
     <div
       className="modal-scrim"
-      onClick={() => {
-        if (!busy) onClose();
+      onMouseDown={(e) => {
+        if (!busy && e.target === e.currentTarget) onClose();
       }}
     >
       <div

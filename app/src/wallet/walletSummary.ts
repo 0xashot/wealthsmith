@@ -215,6 +215,27 @@ export function deriveValueBreakdown(positions: WalletPosition[]): ValueBreakdow
   return { totalUsd, anyUnpriced, byCategory };
 }
 
+/**
+ * Value-weighted 24h price change (percent) across the portfolio's priced
+ * positions, using only each position's SOURCED `change24hPct` (Jupiter — never
+ * invented). A position with no sourced change is excluded from both the weighted
+ * sum and its weight, so the result reflects only the value that has a real
+ * figure. Returns null when nothing has a sourced change (the badge then hides).
+ * Stablecoins legitimately contribute a ~0% change and hold the average down.
+ */
+export function derivePortfolioDayChangePct(positions: WalletPosition[]): number | null {
+  let weighted = 0;
+  let weight = 0;
+  for (const p of positions) {
+    if (typeof p.valueUsd !== "number" || p.valueUsd <= 0) continue;
+    if (typeof p.change24hPct !== "number") continue;
+    weighted += p.valueUsd * p.change24hPct;
+    weight += p.valueUsd;
+  }
+  if (weight <= 0) return null;
+  return weighted / weight;
+}
+
 /* ------------------------------------------------------------------ *
  * Safety Buffer — a cautious stablecoin reserve view. Counts ONLY
  * recognized stablecoins the wallet holds PLUS stablecoin-denominated

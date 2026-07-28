@@ -28,15 +28,20 @@ import DemoDashboardPage from "./pages/DemoDashboardPage";
 import DemoPortfolioPage from "./pages/DemoPortfolioPage";
 import ToastHost, { type ToastData } from "./components/ToastHost";
 import ConnectWalletModal from "./components/ConnectWalletModal";
+import ConfirmDialog from "./components/ConfirmDialog";
 import { dashboardState } from "./state/dashboardState";
 import { initialSavedGoal } from "./state/goalState";
+import { DEMO_GOAL } from "./suggestions/demoContributionScenario";
 import { isOnboardingActive, buildSavedGoal, type OnboardingAnswers } from "./state/onboardingState";
 import type { SavedGoal } from "./types/goal";
 import type { TourStage } from "./pages/OnboardingExperience";
 import {
   DEMO_EXIT_TOAST,
   ONBOARDING_FINISH_TOAST,
-  ONBOARDING_FINISH_HELPER,
+  GOAL_DISCARD,
+  GOAL_DISCARD_CONFIRM_TITLE,
+  GOAL_DISCARD_CONFIRM_BODY,
+  GOAL_DISCARD_CONFIRM_CANCEL,
 } from "./state/approvedCopy";
 import {
   isInternalSolLstPreviewRouteEnabled,
@@ -61,7 +66,8 @@ import {
  * scope, since the requirement is that the route is unreachable, not that the score is a secret.
  */
 const TestingPage = lazy(() => import("./pages/TestingPage"));
-import { isTestingPageEnabled, TESTING_PAGE_ROUTE } from "./pages/internalTestingRoute";
+const PortfolioTestingPage = lazy(() => import("./pages/PortfolioTestingPage"));
+import { isTestingPageEnabled, TESTING_PAGE_ROUTE, PORTFOLIO_TESTING_PAGE_ROUTE } from "./pages/internalTestingRoute";
 import "./styles/dashboard.css";
 
 export type AppMode = "connected" | "demo" | "disconnected";
@@ -89,6 +95,18 @@ export default function App() {
       </Suspense>
     );
   }
+  // Internal Portfolio empty/loading-states design surface — same build-time gate.
+  if (
+    isTestingPageEnabled() &&
+    typeof window !== "undefined" &&
+    window.location.pathname === PORTFOLIO_TESTING_PAGE_ROUTE
+  ) {
+    return (
+      <Suspense fallback={null}>
+        <PortfolioTestingPage />
+      </Suspense>
+    );
+  }
   if (
     isInternalSolLstPreviewRouteEnabled() &&
     typeof window !== "undefined" &&
@@ -112,12 +130,17 @@ function MainApp() {
   const walletConnected = connected && !!publicKey;
 
   const [activePage, setActivePage] = useState<ConnectedPage>("dashboard");
+  // Unsaved-Goal-edits guard: block navigation away until the user confirms discarding.
+  const [goalDirty, setGoalDirty] = useState(false);
+  const [pendingNav, setPendingNav] = useState<ConnectedPage | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   // Local, in-memory saved plan state for the Goal page (Option A: Goal-page
   // scope only — no propagation into Dashboard/derived outputs this slice).
   const [savedGoal, setSavedGoal] = useState<SavedGoal>(initialSavedGoal);
-  // Demo Mode is independent of the wallet (sample data).
+  // Demo Mode is independent of the wallet (sample data). The demo Goal page edits
+  // this sample goal locally so it never touches the user's real savedGoal.
+  const [demoGoal, setDemoGoal] = useState<SavedGoal>(DEMO_GOAL);
   const [demoActive, setDemoActive] = useState(false);
   // Onboarding gate. Starts incomplete so the first real wallet connection lands
   // in onboarding (Variant 4). Finish Setup sets it true and it persists for the
@@ -133,9 +156,9 @@ function MainApp() {
 
   const mode: AppMode = demoActive ? "demo" : walletConnected ? "connected" : "disconnected";
 
-  const pushToast = (message: string, helper?: string) => {
+  const pushToast = (message: string, helper?: string, variant: ToastData["variant"] = "success") => {
     const id = nextToastId.current++;
-    setToasts((prev) => [...prev, { id, message, helper }]);
+    setToasts((prev) => [...prev, { id, message, helper, variant }]);
     window.setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 6000);
@@ -164,10 +187,8 @@ function MainApp() {
       // select(sameWallet) — a no-op that never re-drives the connect flow, leaving the Connect modal
       // stuck on "Connecting…". Deselecting makes the next connect start fresh, like the first one.
       select(null);
-      pushToast(
-        dashboardState.transitions.disconnect_wallet.copy.toast,
-        dashboardState.transitions.disconnect_wallet.copy.helper
-      );
+      // No helper line ("Your funds stay in your wallet.") — the confirmation alone is enough.
+      pushToast(dashboardState.transitions.disconnect_wallet.copy.toast);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletConnected]);
@@ -185,13 +206,21 @@ function MainApp() {
 
   // In-app page switch (connected only).
   const navigate = (id: string) => {
-    if (id === "dashboard" || id === "portfolio" || id === "goal" || id === "support")
-      setActivePage(id);
+    if (id !== "dashboard" && id !== "portfolio" && id !== "goal" && id !== "support") return;
+    // Leaving the Goal page with unsaved edits → confirm discarding first.
+    if (activePage === "goal" && id !== "goal" && goalDirty) {
+      setPendingNav(id);
+      return;
+    }
+    setActivePage(id);
   };
 
-  // Demo Mode page switch — only Dashboard ↔ Portfolio have demo pages.
+  // Demo Mode page switch — Dashboard / Portfolio / Goal / Support are all
+  // available in Demo (sample data), matching the connected nav.
   const demoNavigate = (id: string) => {
-    if (id === "dashboard" || id === "portfolio") setActivePage(id);
+    if (id === "dashboard" || id === "portfolio" || id === "goal" || id === "support") {
+      setActivePage(id);
+    }
   };
 
   // Disconnect the REAL wallet (wallet menu / page). The transition effect handles the toast,
@@ -227,7 +256,7 @@ function MainApp() {
     setActivePage("dashboard");
     setTourStage(null);
     setTourGoal(null);
-    pushToast(ONBOARDING_FINISH_TOAST, ONBOARDING_FINISH_HELPER);
+    pushToast(ONBOARDING_FINISH_TOAST);
   };
 
   // Start the guided tour: keep the onboarding layout (and its sidebar) in place.
@@ -247,6 +276,27 @@ function MainApp() {
           onExitDemo={exitDemo}
           onConnectWallet={openConnectModal}
           onNavigate={demoNavigate}
+          goal={demoGoal}
+        />
+      ) : activePage === "goal" ? (
+        <GoalPage
+          mode="demo"
+          pushToast={pushToast}
+          onNavigate={demoNavigate}
+          onDisconnect={disconnectWallet}
+          onExitDemo={exitDemo}
+          onConnectWallet={openConnectModal}
+          savedGoal={demoGoal}
+          onSaveGoal={setDemoGoal}
+        />
+      ) : activePage === "support" ? (
+        <SupportPage
+          mode="demo"
+          pushToast={pushToast}
+          onNavigate={demoNavigate}
+          onDisconnect={disconnectWallet}
+          onExitDemo={exitDemo}
+          onConnectWallet={openConnectModal}
         />
       ) : (
         <DemoDashboardPage
@@ -255,14 +305,31 @@ function MainApp() {
           onConnectWallet={openConnectModal}
           onNavigate={demoNavigate}
           activePage={activePage}
+          goal={demoGoal}
         />
       );
+  } else if (activePage === "support") {
+    // Support is available in every non-demo mode, including disconnected /
+    // mid-onboarding (FAQ + Contact Us need no wallet). Takes precedence over the
+    // onboarding gate so it is reachable from the disconnected landing nav.
+    page = (
+      <SupportPage
+        mode={mode === "connected" ? "connected" : "disconnected"}
+        onboardingActive={onboardingActive}
+        pushToast={pushToast}
+        onNavigate={navigate}
+        onDisconnect={disconnectWallet}
+        onConnectWallet={openConnectModal}
+        onTryDemo={goDemo}
+      />
+    );
   } else if (onboardingActive) {
     page = (
       <OnboardingExperience
         mode={mode === "connected" ? "connected" : "disconnected"}
         onConnectWallet={openConnectModal}
         onTryDemo={goDemo}
+        onNavigate={navigate}
         onDisconnect={disconnectWallet}
         onComplete={handleOnboardingComplete}
         onTour={startOnboardingTour}
@@ -290,14 +357,7 @@ function MainApp() {
         onDisconnect={disconnectWallet}
         savedGoal={savedGoal}
         onSaveGoal={setSavedGoal}
-      />
-    );
-  } else if (mode === "connected" && activePage === "support") {
-    page = (
-      <SupportPage
-        pushToast={pushToast}
-        onNavigate={navigate}
-        onDisconnect={disconnectWallet}
+        onDirtyChange={setGoalDirty}
       />
     );
   } else {
@@ -319,6 +379,21 @@ function MainApp() {
     <>
       <div ref={pageWrapRef}>{page}</div>
       {connectModalOpen && <ConnectWalletModal onClose={closeConnectModal} />}
+      {pendingNav && (
+        <ConfirmDialog
+          title={GOAL_DISCARD_CONFIRM_TITLE}
+          body={GOAL_DISCARD_CONFIRM_BODY}
+          cancelLabel={GOAL_DISCARD_CONFIRM_CANCEL}
+          confirmLabel={GOAL_DISCARD}
+          danger
+          onCancel={() => setPendingNav(null)}
+          onConfirm={() => {
+            setGoalDirty(false);
+            setActivePage(pendingNav);
+            setPendingNav(null);
+          }}
+        />
+      )}
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
     </>
   );

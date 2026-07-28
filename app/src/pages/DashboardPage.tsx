@@ -60,6 +60,7 @@ export default function DashboardPage({
   activePage,
   onNavigate,
   goal,
+  pushToast,
 }: Props) {
   const connected = mode === "connected";
   const [railMode, setRailMode] = useState<RightRailMode>("suggestions");
@@ -100,6 +101,7 @@ export default function DashboardPage({
         onDisconnect={disconnect}
         onConnectWallet={connectWallet}
         onTryDemo={onTryDemo}
+        askActive={railMode === "ask_smith_ai"}
         onOpenAskSmithAi={openAskSmithAi}
       />
 
@@ -114,7 +116,11 @@ export default function DashboardPage({
         </main>
 
         {connected && railMode === "ask_smith_ai" ? (
-          <AskSmithAiPanel content={realWalletSmithAiContent} onClose={closeAskSmithAi} />
+          <AskSmithAiPanel
+            content={realWalletSmithAiContent}
+            onClose={closeAskSmithAi}
+            pushToast={pushToast}
+          />
         ) : connected ? (
           // Deterministic engine output via the SAME shared rail the Portfolio
           // uses (loading / available / unavailable). Never demo fixtures.

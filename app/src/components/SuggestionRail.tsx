@@ -6,8 +6,10 @@
  * No sorting, ranking, or Top Pick selection happens here.
  */
 import SuggestionCard from "./SuggestionCard";
+import ButtonIcon from "./ButtonIcon";
 import type { RightRailState, SuggestionCardState } from "../types/dashboard";
 import type { SolStakingSelectorPresentation } from "../suggestions/solStakingSelectorPresentationTypes";
+import sparcleUrl from "../../../assets/icons/ui/sparcle.svg";
 
 interface Props {
   rail: RightRailState;
@@ -31,7 +33,12 @@ export default function SuggestionRail({
   return (
     <aside className="suggestion-rail" aria-label={railLabel}>
       <div className="suggestion-rail__header">
-        <h2 className="suggestion-rail__title">{rail.title}</h2>
+        <h2 className="suggestion-rail__title">
+          <span className="suggestion-rail__title-icon">
+            <ButtonIcon src={sparcleUrl} size={24} />
+          </span>
+          {rail.title}
+        </h2>
         <p className="suggestion-rail__description">{rail.description}</p>
       </div>
       {notice && (

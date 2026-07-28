@@ -470,7 +470,8 @@ export default function OnboardingPanel({
         {/* Answered turns: Smith's scripted message + the user's reply bubble. */}
         {GOAL_SETUP_STEPS.slice(0, stepIndex).map((s, i) => (
           <div className="chat-turn" key={`turn-${i}`}>
-            <OnboardingMessage>
+            {/* The first turn directly follows the "wallet connected" opener → group under its avatar. */}
+            <OnboardingMessage grouped={i === 0}>
               <p className="chat-question">{stepLeadMessage(i, answers)}</p>
             </OnboardingMessage>
             <div className="chat-user">
@@ -500,7 +501,8 @@ export default function OnboardingPanel({
         {/* Current Smith message — typed plain text, or structured (paragraphs + bullet lists). Structured
             messages (summary + tour) reveal character-by-character via renderBlocksPartial. */}
         <div className="chat-turn">
-          <OnboardingMessage>
+          {/* At step 0 the current message (goal question) directly follows the opener → one shared avatar. */}
+          <OnboardingMessage grouped={stepIndex === 0}>
             {structured ? (
               <div className="onboarding-rich" id={QUESTION_ID}>
                 {renderBlocksPartial(rawMessage as MessageBlock[], typedMessage.length)}

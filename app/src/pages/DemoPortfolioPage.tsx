@@ -3,13 +3,14 @@
  * wallet's holdings). Mirrors the connected Portfolio structure — the Balance
  * Overview + Crypto Assets Allocation donuts, then the Asset Deployment Overview
  * section (Liquid Assets / Staked Assets / Yield Strategies) — driven by the
- * approved demo holdings (demoWalletPositions: SOL $5,500 / BONK $1,200 /
- * USDC $800; all liquid, so the earning categories show their empty states).
+ * approved rich demo holdings (demoWalletPositions: $26,900 across liquid tokens,
+ * LSTs, and Kamino lends), so all three earning categories are populated. The
+ * suggestions rail is the SAME shared demo rail the Demo Dashboard renders.
  *
  * Non-custodial / MVP-safe: no wallet pill, no wallet adapter, no signature, no
  * transaction, no fund movement. Demo suggestions/Top Pick are sample only.
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { demoDashboardState as d } from "../state/demoDashboardState";
 import { demoSmithAiContent } from "../state/demoSmithAi";
 import { demoWalletPositions } from "../state/demoWalletPositions";
@@ -27,21 +28,25 @@ import {
   PORT_YIELD_CAPTION,
   PROTOCOL_OPENED_TOAST,
 } from "../state/approvedCopy";
-import type { SuggestionCardState } from "../types/dashboard";
 import GlobalNav from "../components/GlobalNav";
 import DemoBanner from "../components/DemoBanner";
 import PageHeader from "../components/PageHeader";
 import PortfolioAllocationDonuts from "../components/PortfolioAllocationDonuts";
 import LiquidAssetsCard from "../components/LiquidAssetsCard";
 import EarningAssetsCard from "../components/EarningAssetsCard";
-import SuggestionRail from "../components/SuggestionRail";
+import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
+import type { SavedGoal } from "../types/goal";
+import { demoSwapQuoteFetcher } from "../suggestions/swapQuote/demoSwapQuote";
+import { buildDemoContributionRail } from "../suggestions/demoContributionScenario";
 
 interface Props {
   pushToast: (message: string, helper?: string) => void;
   onExitDemo: () => void;
   onConnectWallet: () => void;
   onNavigate: (id: string) => void;
+  /** The (editable) Demo sample goal — edits on the Demo Goal page recompute the rail. */
+  goal: SavedGoal;
 }
 
 export default function DemoPortfolioPage({
@@ -49,6 +54,7 @@ export default function DemoPortfolioPage({
   onExitDemo,
   onConnectWallet,
   onNavigate,
+  goal,
 }: Props) {
   const [railMode, setRailMode] = useState<"suggestions" | "ask_smith_ai">("suggestions");
   const askButtonRef = useRef<HTMLButtonElement>(null);
@@ -59,10 +65,11 @@ export default function DemoPortfolioPage({
     askButtonRef.current?.focus();
   };
   const onExternalHandoff = () => pushToast(PROTOCOL_OPENED_TOAST);
-  const onReviewSuggestion = (card: SuggestionCardState) => {
-    const el = document.getElementById(`suggestion-${card.id}`);
-    el?.scrollIntoView({ block: "nearest" });
-  };
+
+  // The SAME shared demo rail the Demo Dashboard renders, so Smith AI Suggestions
+  // are identical across Demo Dashboard and Portfolio (matching connected mode,
+  // where both pages share one rail). Recomputes when the sample goal is edited.
+  const demoContributionRail = useMemo(() => buildDemoContributionRail(goal, demoWalletPositions), [goal]);
 
   const liquid = getLiquidPositions(demoWalletPositions);
   const staked = getStakedPositions(demoWalletPositions);
@@ -70,19 +77,22 @@ export default function DemoPortfolioPage({
 
   return (
     <div className="app-shell">
-      <DemoBanner banner={d.demo_banner} onExit={onExitDemo} onConnect={onConnectWallet} />
-
-      <GlobalNav
-        mode="demo"
-        nav={d.global_nav}
-        navLabel={d.accessibility.global_nav_label}
-        askSmithAiLabel={d.accessibility.ask_smith_ai_label}
-        askAvailable={d.smith_ai.available}
-        askButtonRef={askButtonRef}
-        activePage="portfolio"
-        onNavigate={onNavigate}
-        onOpenAskSmithAi={openAskSmithAi}
-      />
+      {/* Banner + nav stick to the top together as one sticky header. */}
+      <div className="demo-header">
+        <DemoBanner banner={d.demo_banner} onExit={onExitDemo} onConnect={onConnectWallet} />
+        <GlobalNav
+          mode="demo"
+          nav={d.global_nav}
+          navLabel={d.accessibility.global_nav_label}
+          askSmithAiLabel={d.accessibility.ask_smith_ai_label}
+          askAvailable={d.smith_ai.available}
+          askButtonRef={askButtonRef}
+          activePage="portfolio"
+          onNavigate={onNavigate}
+          askActive={railMode === "ask_smith_ai"}
+          onOpenAskSmithAi={openAskSmithAi}
+        />
+      </div>
 
       <div className="dashboard">
         <main className="dashboard__main">
@@ -114,13 +124,15 @@ export default function DemoPortfolioPage({
         </main>
 
         {railMode === "ask_smith_ai" ? (
-          <AskSmithAiPanel content={demoSmithAiContent} onClose={closeAskSmithAi} />
+          <AskSmithAiPanel
+            content={demoSmithAiContent}
+            onClose={closeAskSmithAi}
+            pushToast={pushToast}
+          />
         ) : (
-          <SuggestionRail
-            rail={d.right_rail}
+          <RealWalletSuggestionsRail
+            rail={{ ...demoContributionRail, swapQuoteFetcher: demoSwapQuoteFetcher }}
             railLabel={d.accessibility.right_rail_label}
-            onExternalHandoff={onExternalHandoff}
-            onReview={onReviewSuggestion}
           />
         )}
       </div>

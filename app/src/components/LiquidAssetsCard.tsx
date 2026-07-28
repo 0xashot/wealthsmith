@@ -11,57 +11,22 @@
  * tab (read-only block-explorer view, rel="noopener noreferrer").
  */
 import { useId, useState } from "react";
+import { TrendIcon } from "./TrendBadge";
 import type { WalletPosition } from "../wallet/walletPosition";
 import type { PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
 import { positionCompletenessNote } from "./portfolioCompletenessUi";
 import { usd0, formatAmount, explorerUrl } from "./deployTable";
 import { resolveTokenIcon } from "../state/iconRegistry";
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
+import SkeletonDeployCard from "./SkeletonDeployCard";
 import {
   PORT_LIQUID_TITLE,
   PORT_LIQUID_CAPTION,
   VALUE_EXCLUDES_UNPRICED,
-  REAL_WALLET_NONE_DETECTED,
 } from "../state/approvedCopy";
 
 const ROWS_PER_PAGE_OPTIONS = [5, 10, 25];
 const DEFAULT_ROWS_PER_PAGE = 5;
-
-function TrendIcon({ dir }: { dir: "up" | "down" | "flat" }) {
-  return (
-    <svg
-      className="trend__icon"
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {dir === "up" && (
-        <>
-          <polyline points="1 11.5 5.5 7 8.5 10 15 3.5" />
-          <polyline points="10.5 3.5 15 3.5 15 8" />
-        </>
-      )}
-      {dir === "down" && (
-        <>
-          <polyline points="1 4.5 5.5 9 8.5 6 15 12.5" />
-          <polyline points="10.5 12.5 15 12.5 15 8" />
-        </>
-      )}
-      {dir === "flat" && (
-        <>
-          <line x1="1" y1="8" x2="14" y2="8" />
-          <polyline points="10.5 4.5 14 8 10.5 11.5" />
-        </>
-      )}
-    </svg>
-  );
-}
 
 /** Sourced 24h change → signed percent + trend icon; "—" when not sourced. */
 function ChangeCell({ pct }: { pct: number | null | undefined }) {
@@ -80,11 +45,25 @@ function ChangeCell({ pct }: { pct: number | null | undefined }) {
 
 interface Props {
   positions: WalletPosition[];
+  /** True while prices are still loading — shows a content-shaped skeleton instead of premature "—". */
+  loading?: boolean;
   /** Step 17H.3 — mounted completeness result (never recomputed here); drives per-row notes. */
   completeness?: PortfolioCompletenessResult | null;
 }
 
-export default function LiquidAssetsCard({ positions, completeness }: Props) {
+export default function LiquidAssetsCard({ positions, loading, completeness }: Props) {
+  // While the portfolio is still loading, skeleton the whole card rather than
+  // flashing "—" values or a premature "none detected" empty state.
+  if (loading) {
+    return (
+      <SkeletonDeployCard
+        title={PORT_LIQUID_TITLE}
+        caption={PORT_LIQUID_CAPTION}
+        headers={["Asset", "Amount", "USD Value", "24h Change"]}
+        rows={Math.max(positions.length, 1)}
+      />
+    );
+  }
   const headingId = useId();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS_PER_PAGE);
@@ -104,20 +83,19 @@ export default function LiquidAssetsCard({ positions, completeness }: Props) {
 
   return (
     <section className="card" aria-labelledby={headingId}>
-      <h3 id={headingId} className="card__title">
+      <h3 id={headingId} className="card__title deploy-card__title">
         {PORT_LIQUID_TITLE}
       </h3>
-      <p className="deploy-card__total">{totalUsd != null ? usd0(totalUsd) : "—"}</p>
+      <p className="deploy-card__total">
+        {rows.length === 0 ? "$0" : totalUsd != null ? usd0(totalUsd) : "—"}
+      </p>
       <p className="card__caption">
         {PORT_LIQUID_CAPTION}
         {anyUnpriced ? ` ${VALUE_EXCLUDES_UNPRICED}` : ""}
       </p>
 
-      {rows.length === 0 ? (
-        <p className="portfolio-table__empty-description" role="status">
-          {REAL_WALLET_NONE_DETECTED}
-        </p>
-      ) : (
+      {/* Empty category: just the $0 total + caption above — no table, no "none detected". */}
+      {rows.length === 0 ? null : (
         <>
           <div className="portfolio-table__scroll">
             <table className="portfolio-table" aria-labelledby={headingId}>

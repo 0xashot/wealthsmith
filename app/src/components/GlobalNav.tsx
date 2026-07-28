@@ -18,9 +18,12 @@ import {
   CONNECT_WALLET_LABEL,
   TRY_DEMO_MODE,
   WALLET_MENU_DISCONNECT,
+  NAV_DISABLED_TOOLTIP,
 } from "../state/approvedCopy";
 import { useWalletDisplay } from "../wallet/useWalletDisplay";
+import ButtonIcon from "./ButtonIcon";
 import logoUrl from "../../../assets/logo/wealthsmith-full-lockup.svg";
+import sparcleUrl from "../../../assets/icons/ui/sparcle.svg";
 import phantomIconUrl from "../../../assets/icons/wallet/phantom.svg";
 import solflareIconUrl from "../../../assets/icons/wallet/solflare.svg";
 import backpackIconUrl from "../../../assets/icons/wallet/backpack.svg";
@@ -39,6 +42,8 @@ interface Props {
   navLabel: string;
   askSmithAiLabel: string;
   askAvailable: boolean;
+  /** True while the Ask Smith AI panel is open → the trigger shows an active state. */
+  askActive?: boolean;
   /** connected only */
   wallet?: WalletState;
   walletPillLabel?: string;
@@ -65,6 +70,7 @@ export default function GlobalNav({
   navLabel,
   askSmithAiLabel,
   askAvailable,
+  askActive,
   wallet,
   walletPillLabel,
   askButtonRef,
@@ -161,11 +167,14 @@ export default function GlobalNav({
         <ul className="global-nav__items">
           {nav.nav_items.map((item) => {
             const isActive = activePage ? item.id === activePage : item.active;
-            // While onboarding is active, only Dashboard is enabled; Portfolio/
-            // Goal/Support are disabled (Variants 1 & 4) — except the active tab
-            // during the end-of-onboarding tour, which highlights (Open Portfolio /
-            // Open Goal) but is still not a navigation target (no onNavigate here).
-            const disabled = !!onboardingActive && item.id !== "dashboard" && !isActive;
+            // While onboarding is active, Dashboard and Support stay enabled;
+            // Portfolio/Goal (wallet-specific) are disabled (Variants 1 & 4) —
+            // except the active tab during the end-of-onboarding tour, which
+            // highlights (Open Portfolio / Open Goal) but is still not a navigation
+            // target (no onNavigate here). Support is always reachable (FAQ/contact
+            // need no wallet), including when disconnected.
+            const disabled =
+              !!onboardingActive && item.id !== "dashboard" && item.id !== "support" && !isActive;
             const navigable =
               !disabled &&
               !!onNavigate &&
@@ -184,6 +193,7 @@ export default function GlobalNav({
                   href={item.href}
                   aria-current={isActive ? "page" : undefined}
                   aria-disabled={disabled ? true : undefined}
+                  data-tooltip={disabled ? NAV_DISABLED_TOOLTIP : undefined}
                   tabIndex={disabled ? -1 : undefined}
                   onClick={(e) => {
                     // SPA: never trigger a real browser navigation. Only the
@@ -257,10 +267,15 @@ export default function GlobalNav({
             <button
               ref={askButtonRef}
               type="button"
-              className="global-nav__ask-smith"
+              className={
+                "global-nav__ask-smith" +
+                (askActive ? " global-nav__ask-smith--active" : "")
+              }
               aria-label={askSmithAiLabel}
+              aria-pressed={askActive}
               onClick={onOpenAskSmithAi}
             >
+              <ButtonIcon src={sparcleUrl} size={16} />
               {nav.right_actions.ask_smith_ai.label}
             </button>
           )}

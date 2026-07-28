@@ -17,6 +17,9 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import LegendMarker from "./LegendMarker";
 
+/** Whole-dollar USD (no cents) for the hover popover value. */
+const usd0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+
 export interface DonutSegment {
   id: string;
   label: string;
@@ -46,10 +49,19 @@ interface Props {
 
 const MIN_H = 220;
 const R = 68;
-const STROKE = 22;
-/** Target visible gap between adjacent segments, on each side (px). */
+const STROKE = 18;
+const CIRC = 2 * Math.PI * R;
+/** Visible gap between adjacent segments, AFTER the round caps (px). */
 const GAP_PX = 4;
-const GAP_DEG = ((GAP_PX + STROKE) / (2 * Math.PI * R)) * 360;
+const GAP_DEG = (GAP_PX / CIRC) * 360;
+/** Reach of one round line-cap (half the stroke), as an angle. */
+const CAP_DEG = (STROKE / 2 / CIRC) * 360;
+/** Inset each segment end by a full cap + half the gap, so two adjacent round
+ *  caps always leave GAP_PX between them regardless of slice size. */
+const INSET_DEG = CAP_DEG + GAP_DEG / 2;
+/** Minimum drawn arc so a tiny slice still renders (as a rounded dot) without its
+ *  caps overrunning the neighbours. */
+const MIN_ARC_DEG = 2;
 /** Anchor just under the segment's outer edge so leaders emerge from the color. */
 const ANCHOR_R = R + STROKE / 2 - 3;
 const FALLBACK_W = 640;
@@ -91,6 +103,8 @@ export default function DonutAllocationChart({
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [measured, setMeasured] = useState(FALLBACK_W);
+  // Hover popover: which segment + cursor position within the plot.
+  const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
 
   useLayoutEffect(() => {
     const host = hostRef.current;
@@ -135,9 +149,26 @@ export default function DonutAllocationChart({
   }
 
   if (totalValueUsd == null || segments.length === 0) {
+    // Empty state: the donut track ring with a $0 center, and the caption below —
+    // so it reads as the real chart waiting for data, not a bare message.
+    const EW = 220;
+    const EC = EW / 2;
     return (
-      <div className="card empty-card">
-        <p className="empty-card__description">{emptyState}</p>
+      <div className="card donut-card donut-card--empty">
+        <svg
+          className="donut__empty-ring"
+          width={EW}
+          height={EW}
+          viewBox={`0 0 ${EW} ${EW}`}
+          role="img"
+          aria-label={ariaSummary}
+        >
+          <circle className="donut__track" cx={EC} cy={EC} r={R} strokeWidth={STROKE} fill="none" />
+          <text className="donut__center" x={EC} y={EC} textAnchor="middle" dominantBaseline="central">
+            $0
+          </text>
+        </svg>
+        <p className="donut__empty-desc">{emptyState}</p>
       </div>
     );
   }
@@ -146,23 +177,25 @@ export default function DonutAllocationChart({
   const CX = W / 2; // donut centered in the full card width
   const showCallouts = W >= CALLOUT_MIN_W;
 
-  // Cumulative arcs, clockwise from the top. The gap is shrunk for slices smaller
-  // than the gap so a tiny slice stays a tiny arc (never inverts into a giant arc
-  // when the gap would exceed the slice).
+  // Cumulative arcs, clockwise from the top. Each segment is inset by INSET_DEG on
+  // both ends so adjacent round caps leave GAP_PX between them (a real gap that no
+  // longer collapses on small slices). A slice too small to keep a drawn arc after
+  // the inset falls back to a centered minimum arc (a rounded dot), so tiny
+  // adjacent slices still don't overlap.
   let cursor = 0;
   const arcs = segments.map((seg) => {
     const sweep = (Math.max(0, seg.percent) / 100) * 360;
     const rawStart = cursor;
     const rawEnd = cursor + sweep;
     cursor = rawEnd;
-    const gap = Math.min(GAP_DEG, sweep * 0.6);
-    return {
-      seg,
-      sweep,
-      start: rawStart + gap / 2,
-      end: rawEnd - gap / 2,
-      mid: rawStart + sweep / 2,
-    };
+    const mid = rawStart + sweep / 2;
+    let start = rawStart + INSET_DEG;
+    let end = rawEnd - INSET_DEG;
+    if (end - start < MIN_ARC_DEG) {
+      start = mid - MIN_ARC_DEG / 2;
+      end = mid + MIN_ARC_DEG / 2;
+    }
+    return { seg, sweep, start, end, mid };
   });
 
   const calloutSegs = showCallouts ? arcs.filter((a) => a.seg.callout && a.seg.percent >= 1) : [];
@@ -271,11 +304,17 @@ export default function DonutAllocationChart({
               .map((a) => (
                 <path
                   key={a.seg.id}
+                  className="donut__segment"
                   d={arc(CX, CY, a.start, a.end, R)}
                   fill="none"
                   strokeWidth={STROKE}
                   strokeLinecap="round"
                   style={{ stroke: `var(${a.seg.colorToken})` } as CSSProperties}
+                  onMouseMove={(e) => {
+                    const rect = hostRef.current?.getBoundingClientRect();
+                    if (rect) setHover({ id: a.seg.id, x: e.clientX - rect.left, y: e.clientY - rect.top });
+                  }}
+                  onMouseLeave={() => setHover(null)}
                 />
               ))}
 
@@ -312,6 +351,30 @@ export default function DonutAllocationChart({
               {centerLabel}
             </text>
           </svg>
+
+          {/* Hover popover: segment label, its USD value, and share of portfolio. */}
+          {hover && (() => {
+            const seg = segments.find((s) => s.id === hover.id);
+            if (!seg) return null;
+            const openBelow = hover.y < 84;
+            return (
+              <div
+                className="donut__popover"
+                role="status"
+                style={{
+                  left: Math.min(Math.max(hover.x, 80), W - 80),
+                  top: hover.y,
+                  transform: openBelow
+                    ? "translate(-50%, 16px)"
+                    : "translate(-50%, calc(-100% - 16px))",
+                }}
+              >
+                <div className="donut__popover-label">{seg.label}</div>
+                <div className="donut__popover-value">{usd0(seg.valueUsd)}</div>
+                <div className="donut__popover-pct">{Math.round(seg.percent)}% of portfolio</div>
+              </div>
+            );
+          })()}
         </div>
 
         <ul className="donut__legend">

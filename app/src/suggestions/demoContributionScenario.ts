@@ -34,10 +34,17 @@ export const DEMO_GOAL: SavedGoal = { financial_goal: "build_long_term_wealth", 
  * no duplicate buffer, no stable contribution. Rendered through the shared `RealWalletSuggestionsRail`
  * → shared card + shared review modal.
  */
-export function buildDemoContributionRail(): RailSuggestions {
+export function buildDemoContributionRail(
+  goal: SavedGoal = DEMO_GOAL,
+  positions: WalletPosition[] = DEMO_POSITIONS,
+): RailSuggestions {
   // Step 22F (slice 7) — Demo consumes the SAME production five-factor target path via a DETERMINISTIC governed market
   // fixture (no real cache, no provider, no wall-clock). The canonical target + Market Conditions surface are derived,
   // not transitional.
-  const data = deriveRailSuggestions({ positions: DEMO_POSITIONS, pricedAsOf: DEMO_PRICED_AS_OF, goal: DEMO_GOAL, dataMode: "demo_fixture", marketConditionsCacheInput: buildDemoMarketCacheInput(DEMO_PRICED_AS_OF), marketConditionsCacheState: DEMO_MARKET_CACHE_STATE, targetGeneratedAt: DEMO_PRICED_AS_OF });
+  //
+  // `goal`/`positions` default to the canonical DEMO_GOAL + DEMO_POSITIONS (so every fixture/no-arg caller is
+  // byte-identical). The Demo UI passes the (editable) sample goal and the richer demo holdings so the Demo Dashboard +
+  // Portfolio recompute exactly like the connected app. Snapshot time and market cache stay fixed for determinism.
+  const data = deriveRailSuggestions({ positions, pricedAsOf: DEMO_PRICED_AS_OF, goal, dataMode: "demo_fixture", marketConditionsCacheInput: buildDemoMarketCacheInput(DEMO_PRICED_AS_OF), marketConditionsCacheState: DEMO_MARKET_CACHE_STATE, targetGeneratedAt: DEMO_PRICED_AS_OF });
   return { ...data, loading: false };
 }

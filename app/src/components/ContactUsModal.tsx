@@ -3,14 +3,13 @@
  *
  * PROTOTYPE ONLY. Validates email + description locally and, on a valid submit,
  * calls `onSubmit` — which does NOT send an email, submit a ticket, make a
- * network request, or attach wallet data. It never asks for a seed phrase,
- * private key, password, recovery phrase, or backup file (only warns not to
- * include them). No wallet connection or signature is involved.
+ * network request, or attach wallet data. No wallet connection or signature is
+ * involved.
  *
- * Accessibility: role="dialog" + aria-modal, labelled by the title and described
- * by the prototype note; focus moves in on open, is trapped while open, Escape /
- * Cancel / close button close it; typed input is preserved on validation error.
- * (Background inert + focus-return to the trigger are handled by SupportPage.)
+ * Accessibility: role="dialog" + aria-modal, labelled by the title; focus moves in
+ * on open, is trapped while open, Escape / Cancel / close button / scrim click all
+ * close it; typed input is preserved on validation error. (Background inert +
+ * focus-return to the trigger are handled by SupportPage.)
  */
 import { useEffect, useId, useRef, useState } from "react";
 import ButtonIcon from "./ButtonIcon";
@@ -22,8 +21,6 @@ import {
   CONTACT_FIELD_DESCRIPTION,
   CONTACT_CANCEL,
   CONTACT_SEND,
-  CONTACT_SAFETY_NOTE,
-  CONTACT_PROTOTYPE_NOTE,
   CONTACT_CLOSE_LABEL,
   CONTACT_ERR_EMAIL_REQUIRED,
   CONTACT_ERR_EMAIL_INVALID,
@@ -48,7 +45,6 @@ export default function ContactUsModal({ onClose, onSubmit }: Props) {
 
   const uid = useId();
   const titleId = `${uid}-title`;
-  const noteId = `${uid}-note`;
   const emailErrId = `${uid}-email-err`;
   const descErrId = `${uid}-desc-err`;
 
@@ -103,14 +99,18 @@ export default function ContactUsModal({ onClose, onSubmit }: Props) {
   const showDescErr = showErrors && descError;
 
   return (
-    <div className="modal-scrim">
+    <div
+      className="modal-scrim"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
         ref={dialogRef}
         className="modal contact-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        aria-describedby={noteId}
         onKeyDown={onKeyDown}
       >
         <div className="modal__header">
@@ -126,10 +126,6 @@ export default function ContactUsModal({ onClose, onSubmit }: Props) {
             <ButtonIcon src={closeUrl} size={18} />
           </button>
         </div>
-
-        <p id={noteId} className="contact-modal__note">
-          {CONTACT_PROTOTYPE_NOTE}
-        </p>
 
         <div className="goal-field">
           <label className="goal-field__label" htmlFor={`${uid}-email`}>
@@ -172,8 +168,6 @@ export default function ContactUsModal({ onClose, onSubmit }: Props) {
             </p>
           )}
         </div>
-
-        <p className="contact-modal__safety">{CONTACT_SAFETY_NOTE}</p>
 
         <div className="goal-actions">
           <button type="button" className="goal-btn goal-btn--secondary" onClick={onClose}>

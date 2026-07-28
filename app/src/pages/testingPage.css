@@ -13,6 +13,22 @@
   gap: var(--spacing-section-gap-md);
 }
 
+/* Portfolio empty/loading design surface — one labelled group per state. */
+.portfolio-testing__group {
+  display: grid;
+  gap: var(--spacing-stack-gap-xs);
+}
+.portfolio-testing__group-title {
+  margin: 0;
+  font: var(--typography-heading-md-font);
+  color: var(--color-text-primary);
+}
+.portfolio-testing__stage {
+  max-width: 920px;
+  display: grid;
+  gap: var(--spacing-section-gap-md);
+}
+
 .testing-page__header {
   display: grid;
   gap: var(--spacing-stack-gap-xs);

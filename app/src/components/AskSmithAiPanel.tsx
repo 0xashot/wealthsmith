@@ -14,18 +14,44 @@
  * input returns the approved fallback. No recommendation creation, no Top Pick or
  * protocol selection, no execution of any kind.
  */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { SmithAiContent } from "../types/dashboard";
 import OnboardingMessage from "./OnboardingMessage";
 import SmithTypingIndicator from "./SmithTypingIndicator";
 import SmithInitialLoadingState from "./SmithInitialLoadingState";
+import ConfirmDialog from "./ConfirmDialog";
 import ButtonIcon from "./ButtonIcon";
 import { useReducedMotion } from "./useReducedMotion";
 import { useTypewriter } from "./useTypewriter";
 import { sessionFlags } from "../state/sessionFlags";
-import { SMITH_CLOSE_LABEL, SMITH_SAFETY_NOTE, ONBOARDING_SEND } from "../state/approvedCopy";
+import {
+  SMITH_CLOSE_LABEL,
+  SMITH_CLOSE_TOOLTIP,
+  SMITH_MORE,
+  SMITH_CLEAR_HISTORY,
+  SMITH_SEND_FEEDBACK,
+  SMITH_FEEDBACK_HELPFUL,
+  SMITH_FEEDBACK_NOT_HELPFUL,
+  SMITH_FEEDBACK_BACK,
+  SMITH_FEEDBACK_SUBTITLE,
+  SMITH_FEEDBACK_RATING_LABEL,
+  SMITH_FEEDBACK_MESSAGE_LABEL,
+  SMITH_FEEDBACK_MESSAGE_ERROR,
+  SMITH_FEEDBACK_NOTE,
+  SMITH_FEEDBACK_SENT_TOAST,
+  SMITH_CLEAR_CONFIRM_TITLE,
+  SMITH_CLEAR_CONFIRM_BODY,
+  SMITH_CLEAR_CONFIRM_CANCEL,
+  SMITH_HISTORY_CLEARED_TOAST,
+  SMITH_SAFETY_NOTE,
+  ONBOARDING_SEND,
+} from "../state/approvedCopy";
 import closeUrl from "../../../assets/icons/ui/close.svg";
+import moreUrl from "../../../assets/icons/ui/more.svg";
+import chevronLeftUrl from "../../../assets/icons/ui/chevron-left.svg";
 import arrowUpUrl from "../../../assets/icons/ui/arrow-up.svg";
+import brushCleaningUrl from "../../../assets/icons/ui/brush-cleaning.svg";
+import messageCircleUrl from "../../../assets/icons/ui/message-circle.svg";
 import thumbsUpUrl from "../../../assets/icons/ui/thumbs-up.svg";
 import thumbsDownUrl from "../../../assets/icons/ui/thumbs-down.svg";
 
@@ -37,14 +63,30 @@ interface Entry {
 interface Props {
   content: SmithAiContent;
   onClose: () => void;
+  /** Show the approved toast after a confirmed Clear History. */
+  pushToast?: (message: string, helper?: string) => void;
 }
 
-export default function AskSmithAiPanel({ content, onClose }: Props) {
+export default function AskSmithAiPanel({ content, onClose, pushToast }: Props) {
   const reduced = useReducedMotion();
   const closeRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLButtonElement>(null);
+  const messageRef = useRef<HTMLTextAreaElement>(null);
+  const messageId = useId();
+  const messageErrorId = `${messageId}-error`;
   const [input, setInput] = useState("");
-  const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  // Which panel view is showing: the chat, or the Send Feedback sub-page.
+  const [view, setView] = useState<"chat" | "feedback">("chat");
+  // Send Feedback sub-page draft (sentiment + message). Explain-only; never sent.
+  const [feedbackRating, setFeedbackRating] = useState<"up" | "down" | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState("");
+  // Show the "message required" error only after a submit attempt.
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([
     { prompt: null, response: content.opener },
   ]);
@@ -84,19 +126,240 @@ export default function AskSmithAiPanel({ content, onClose }: Props) {
 
   const sendDisabled = writing || input.trim() === "";
 
+  const closeMenu = (refocus: boolean) => {
+    setMenuOpen(false);
+    if (refocus) moreRef.current?.focus();
+  };
+  // Clear History: confirm first (destructive, not restorable), then reset the
+  // conversation to Smith's opener (shown in full), drop any per-message ratings
+  // and the draft, and show the approved toast. Explain-only, purely local.
+  const askClearHistory = () => {
+    closeMenu(false);
+    setConfirmClear(true);
+  };
+  const cancelClear = () => {
+    setConfirmClear(false);
+    moreRef.current?.focus();
+  };
+  const confirmClearHistory = () => {
+    setEntries([{ prompt: null, response: content.opener }]);
+    setInput("");
+    setConfirmClear(false);
+    pushToast?.(SMITH_HISTORY_CLEARED_TOAST);
+    moreRef.current?.focus();
+  };
+
+  // Send Feedback sub-page: opened from the More menu (no pre-selected sentiment)
+  // or from a message thumb (that sentiment pre-selected). Explain-only.
+  const openFeedback = (rating: "up" | "down" | null) => {
+    setFeedbackRating(rating);
+    setFeedbackMessage("");
+    setFeedbackSubmitted(false);
+    setView("feedback");
+  };
+  const backToChat = () => {
+    setView("chat");
+    setFeedbackRating(null);
+    setFeedbackMessage("");
+    setFeedbackSubmitted(false);
+    moreRef.current?.focus();
+  };
+  const messageError = feedbackMessage.trim() === "" ? SMITH_FEEDBACK_MESSAGE_ERROR : undefined;
+  const showMessageError = feedbackSubmitted && !!messageError;
+  const submitFeedback = () => {
+    setFeedbackSubmitted(true);
+    if (messageError) {
+      messageRef.current?.focus();
+      return;
+    }
+    // Stub: no network, no email, no ticket — matches the prototype's Contact Us.
+    pushToast?.(SMITH_FEEDBACK_SENT_TOAST);
+    backToChat();
+  };
+  const openFeedbackFromMenu = () => {
+    closeMenu(false);
+    openFeedback(null);
+  };
+
+  // Focus the back control when the Send Feedback sub-page opens.
+  useEffect(() => {
+    if (view === "feedback") backRef.current?.focus();
+  }, [view]);
+
+  // Close the More menu on outside pointerdown; focus the first item when it opens.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (
+        !menuRef.current?.contains(e.target as Node) &&
+        !moreRef.current?.contains(e.target as Node)
+      ) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [menuOpen]);
+
   return (
-    <aside className="smith-panel" aria-label={content.panelLabel}>
+    <aside
+      className="smith-panel"
+      aria-label={content.panelLabel}
+      onKeyDown={
+        view === "feedback"
+          ? (e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                backToChat();
+              }
+            }
+          : undefined
+      }
+    >
+      {view === "feedback" ? (
+        <>
+          <div className="smith-panel__header">
+            <div className="smith-panel__header-lead">
+              <button
+                ref={backRef}
+                type="button"
+                className="onboarding-undo"
+                aria-label={SMITH_FEEDBACK_BACK}
+                data-tooltip={SMITH_FEEDBACK_BACK}
+                onClick={backToChat}
+              >
+                <ButtonIcon src={chevronLeftUrl} size={18} />
+              </button>
+              <h2 className="smith-panel__title">{SMITH_SEND_FEEDBACK}</h2>
+            </div>
+            <button
+              type="button"
+              className="onboarding-undo"
+              aria-label={SMITH_CLOSE_LABEL}
+              data-tooltip={SMITH_CLOSE_TOOLTIP}
+              onClick={onClose}
+            >
+              <ButtonIcon src={closeUrl} size={18} />
+            </button>
+          </div>
+
+          <div className="smith-panel__feedback-page">
+            <p className="smith-panel__feedback-subtitle">{SMITH_FEEDBACK_SUBTITLE}</p>
+            <div
+              className="smith-panel__feedback-rating"
+              role="group"
+              aria-label={SMITH_FEEDBACK_RATING_LABEL}
+            >
+              <button
+                type="button"
+                className="smith-panel__rating-btn"
+                aria-label={SMITH_FEEDBACK_HELPFUL}
+                aria-pressed={feedbackRating === "up"}
+                onClick={() => setFeedbackRating((r) => (r === "up" ? null : "up"))}
+              >
+                <ButtonIcon src={thumbsUpUrl} size={16} />
+              </button>
+              <button
+                type="button"
+                className="smith-panel__rating-btn"
+                aria-label={SMITH_FEEDBACK_NOT_HELPFUL}
+                aria-pressed={feedbackRating === "down"}
+                onClick={() => setFeedbackRating((r) => (r === "down" ? null : "down"))}
+              >
+                <ButtonIcon src={thumbsDownUrl} size={16} />
+              </button>
+            </div>
+            <div className="smith-panel__feedback-field">
+              <label className="smith-panel__feedback-label" htmlFor={messageId}>
+                {SMITH_FEEDBACK_MESSAGE_LABEL}
+              </label>
+              <textarea
+                ref={messageRef}
+                id={messageId}
+                className="smith-panel__feedback-textarea"
+                rows={3}
+                value={feedbackMessage}
+                onChange={(e) => setFeedbackMessage(e.target.value)}
+                aria-invalid={showMessageError ? true : undefined}
+                aria-describedby={showMessageError ? messageErrorId : undefined}
+              />
+              {showMessageError && (
+                <p className="goal-field__error" id={messageErrorId} role="alert">
+                  {messageError}
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="goal-btn goal-btn--primary smith-panel__feedback-submit"
+              onClick={submitFeedback}
+            >
+              {SMITH_SEND_FEEDBACK}
+            </button>
+            <p className="smith-panel__feedback-note">{SMITH_FEEDBACK_NOTE}</p>
+          </div>
+        </>
+      ) : (
+        <>
       <div className="smith-panel__header">
         <h2 className="smith-panel__title">Ask Smith AI</h2>
-        <button
-          ref={closeRef}
-          type="button"
-          className="smith-panel__close"
-          aria-label={SMITH_CLOSE_LABEL}
-          onClick={onClose}
+        <div
+          className="onboarding-panel__header-actions"
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && menuOpen) {
+              e.preventDefault();
+              closeMenu(true);
+            }
+          }}
         >
-          <img src={closeUrl} alt="" width={16} height={16} aria-hidden="true" />
-        </button>
+          <div className="onboarding-more">
+            <button
+              ref={moreRef}
+              type="button"
+              className="onboarding-undo onboarding-more__btn"
+              aria-label={SMITH_MORE}
+              data-tooltip={SMITH_MORE}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <ButtonIcon src={moreUrl} size={18} />
+            </button>
+            {menuOpen && (
+              <div ref={menuRef} className="onboarding-menu" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="onboarding-menu__item"
+                  onClick={askClearHistory}
+                >
+                  <ButtonIcon src={brushCleaningUrl} size={18} />
+                  <span>{SMITH_CLEAR_HISTORY}</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="onboarding-menu__item"
+                  onClick={openFeedbackFromMenu}
+                >
+                  <ButtonIcon src={messageCircleUrl} size={18} />
+                  <span>{SMITH_SEND_FEEDBACK}</span>
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            ref={closeRef}
+            type="button"
+            className="onboarding-undo"
+            aria-label={SMITH_CLOSE_LABEL}
+            data-tooltip={SMITH_CLOSE_TOOLTIP}
+            onClick={onClose}
+          >
+            <ButtonIcon src={closeUrl} size={18} />
+          </button>
+        </div>
       </div>
 
       {intro ? (
@@ -119,35 +382,38 @@ export default function AskSmithAiPanel({ content, onClose }: Props) {
                   {isLast && writing && <span className="chat-caret" aria-hidden="true" />}
                 </p>
                 {isLast && writing && <SmithTypingIndicator />}
+                {/* Like / dislike appear under the reply once it has finished;
+                    selecting one opens the Send Feedback sub-page, pre-rated. */}
+                {(!isLast || done) && (
+                  <div className="smith-panel__feedback">
+                    <button
+                      type="button"
+                      className="smith-panel__feedback-btn"
+                      aria-label={SMITH_FEEDBACK_HELPFUL}
+                      data-tooltip={SMITH_FEEDBACK_HELPFUL}
+                      onClick={() => openFeedback("up")}
+                    >
+                      <img src={thumbsUpUrl} alt="" width={16} height={16} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="smith-panel__feedback-btn"
+                      aria-label={SMITH_FEEDBACK_NOT_HELPFUL}
+                      data-tooltip={SMITH_FEEDBACK_NOT_HELPFUL}
+                      onClick={() => openFeedback("down")}
+                    >
+                      <img src={thumbsDownUrl} alt="" width={16} height={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                )}
               </OnboardingMessage>
             </div>
           );
         })}
       </div>
 
-      {/* Reply controls: feedback, quick-reply chips, and a free-text ask. */}
+      {/* Reply controls: quick-reply chips and a free-text ask. */}
       <div className="smith-panel__replies">
-        <div className="smith-panel__feedback">
-          <button
-            type="button"
-            className="smith-panel__feedback-btn"
-            aria-label="Helpful"
-            aria-pressed={feedback === "up"}
-            onClick={() => setFeedback(feedback === "up" ? null : "up")}
-          >
-            <img src={thumbsUpUrl} alt="" width={16} height={16} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="smith-panel__feedback-btn"
-            aria-label="Not helpful"
-            aria-pressed={feedback === "down"}
-            onClick={() => setFeedback(feedback === "down" ? null : "down")}
-          >
-            <img src={thumbsDownUrl} alt="" width={16} height={16} aria-hidden="true" />
-          </button>
-        </div>
-
         <div className="choice-chip-group">
           {content.prompts.map((prompt) => (
             <button
@@ -197,6 +463,20 @@ export default function AskSmithAiPanel({ content, onClose }: Props) {
 
       <p className="smith-panel__safety-note">{SMITH_SAFETY_NOTE}</p>
         </>
+      )}
+        </>
+      )}
+
+      {confirmClear && (
+        <ConfirmDialog
+          title={SMITH_CLEAR_CONFIRM_TITLE}
+          body={SMITH_CLEAR_CONFIRM_BODY}
+          cancelLabel={SMITH_CLEAR_CONFIRM_CANCEL}
+          confirmLabel={SMITH_CLEAR_HISTORY}
+          onCancel={cancelClear}
+          onConfirm={confirmClearHistory}
+          danger
+        />
       )}
     </aside>
   );

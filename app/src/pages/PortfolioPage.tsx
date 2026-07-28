@@ -72,6 +72,7 @@ export default function PortfolioPage({
         activePage="portfolio"
         onNavigate={onNavigate}
         onDisconnect={onDisconnect}
+        askActive={smithOpen}
         onOpenAskSmithAi={openAskSmithAi}
       />
 
@@ -93,7 +94,11 @@ export default function PortfolioPage({
         </main>
 
         {smithOpen ? (
-          <AskSmithAiPanel content={realWalletSmithAiContent} onClose={closeAskSmithAi} />
+          <AskSmithAiPanel
+            content={realWalletSmithAiContent}
+            onClose={closeAskSmithAi}
+            pushToast={pushToast}
+          />
         ) : (
           // Same shared real-wallet Suggestion Engine rail as the Dashboard.
           <RealWalletSuggestionsRail rail={rail} railLabel={connected.accessibility.right_rail_label} />

@@ -14,12 +14,13 @@ import DonutAllocationChart, { type DonutSegment } from "./DonutAllocationChart"
 import type { PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
 import { portfolioTotalDisplay, COMPLETENESS_COPY } from "./portfolioCompletenessUi";
 import {
-  ALLOCATION_NEEDS_PRICING,
   ALLOCATION_LABEL_CRYPTO,
   ALLOCATION_LABEL_STABLES,
   VALUE_EXCLUDES_UNPRICED,
   PORT_BALANCE_TITLE,
   PORT_ALLOCATION_TITLE,
+  PORT_BALANCE_EMPTY,
+  PORT_ALLOCATION_EMPTY,
 } from "../state/approvedCopy";
 
 /** Whole-dollar USD (no cents) for the donut center values. */
@@ -87,7 +88,7 @@ export default function PortfolioAllocationDonuts({ positions, loading, complete
           totalValueUsd={total}
           centerLabel={totalDisplay.text}
           segments={balanceSegments}
-          emptyState={ALLOCATION_NEEDS_PRICING}
+          emptyState={PORT_BALANCE_EMPTY}
           warning={value.anyUnpriced ? VALUE_EXCLUDES_UNPRICED : undefined}
           ariaSummary={totalDisplay.authoritative ? balanceSummary : `${COMPLETENESS_COPY.unresolvedTotalAria}. ${balanceSummary}`}
           loading={loading && total == null}
@@ -100,7 +101,7 @@ export default function PortfolioAllocationDonuts({ positions, loading, complete
           totalValueUsd={assetAlloc.totalUsd}
           centerLabel={assetAlloc.totalUsd != null ? usd0(assetAlloc.totalUsd) : ""}
           segments={assetAlloc.segments}
-          emptyState={ALLOCATION_NEEDS_PRICING}
+          emptyState={PORT_ALLOCATION_EMPTY}
           warning={assetAlloc.anyUnpriced ? VALUE_EXCLUDES_UNPRICED : undefined}
           ariaSummary={assetSummary}
           loading={loading && assetAlloc.totalUsd == null}

@@ -37,6 +37,9 @@ interface Props {
   onConnectWallet: () => void;
   /** Global-nav Try Demo Mode entry (not offered inside the onboarding panel). */
   onTryDemo: () => void;
+  /** In-app nav switch — only Support is reachable from here (FAQ/contact need no
+   *  wallet); Portfolio/Goal stay gated during onboarding. */
+  onNavigate?: (id: string) => void;
   /** Connected phase: wallet menu actions. */
   onDisconnect: () => void;
   /** Finish Setup: commit answers + complete onboarding (connected phase). */
@@ -56,6 +59,7 @@ export default function OnboardingExperience({
   mode,
   onConnectWallet,
   onTryDemo,
+  onNavigate,
   onDisconnect,
   onComplete,
   onTour,
@@ -115,6 +119,7 @@ export default function OnboardingExperience({
         askAvailable={false}
         activePage={connected && tourStage ? tourStage : "dashboard"}
         onboardingActive
+        onNavigate={onNavigate}
         onConnectWallet={onConnectWallet}
         onTryDemo={onTryDemo}
         onDisconnect={onDisconnect}

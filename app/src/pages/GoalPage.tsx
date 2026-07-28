@@ -22,6 +22,7 @@ import { goalSmithAiContent } from "../state/goalSmithAi";
 import { ASK_SMITH_LABEL_GOAL } from "../state/approvedCopy";
 import type { SavedGoal } from "../types/goal";
 import GlobalNav from "../components/GlobalNav";
+import DemoHeader from "../components/DemoHeader";
 import GoalSettings from "../components/GoalSettings";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 
@@ -31,6 +32,13 @@ interface Props {
   onDisconnect: () => void;
   savedGoal: SavedGoal;
   onSaveGoal: (goal: SavedGoal) => void;
+  /** Reports unsaved Goal edits up so App can guard navigation away. */
+  onDirtyChange?: (dirty: boolean) => void;
+  /** "connected" (wallet pill) or "demo" (blue demo banner + demo nav). */
+  mode?: "connected" | "demo";
+  /** Demo Mode only. */
+  onExitDemo?: () => void;
+  onConnectWallet?: () => void;
 }
 
 export default function GoalPage({
@@ -39,9 +47,14 @@ export default function GoalPage({
   onDisconnect,
   savedGoal,
   onSaveGoal,
+  onDirtyChange,
+  mode = "connected",
+  onExitDemo,
+  onConnectWallet,
 }: Props) {
   const [smithOpen, setSmithOpen] = useState(false);
   const askButtonRef = useRef<HTMLButtonElement>(null);
+  const isDemo = mode === "demo";
 
   const openAskSmithAi = () => setSmithOpen(true);
   const closeAskSmithAi = () => {
@@ -51,28 +64,45 @@ export default function GoalPage({
 
   return (
     <div className="app-shell">
-      <GlobalNav
-        mode="connected"
-        nav={connected.global_nav}
-        wallet={connected.wallet}
-        navLabel={connected.accessibility.global_nav_label}
-        walletPillLabel={connected.accessibility.wallet_pill_label}
-        askSmithAiLabel={ASK_SMITH_LABEL_GOAL}
-        askAvailable={true}
-        askButtonRef={askButtonRef}
-        activePage="goal"
-        onNavigate={onNavigate}
-        onDisconnect={onDisconnect}
-        onOpenAskSmithAi={openAskSmithAi}
-      />
+      {isDemo ? (
+        <DemoHeader
+          activePage="goal"
+          askButtonRef={askButtonRef}
+          askActive={smithOpen}
+          onExitDemo={onExitDemo ?? (() => {})}
+          onConnectWallet={onConnectWallet ?? (() => {})}
+          onNavigate={onNavigate}
+          onOpenAskSmithAi={openAskSmithAi}
+        />
+      ) : (
+        <GlobalNav
+          mode="connected"
+          nav={connected.global_nav}
+          wallet={connected.wallet}
+          navLabel={connected.accessibility.global_nav_label}
+          walletPillLabel={connected.accessibility.wallet_pill_label}
+          askSmithAiLabel={ASK_SMITH_LABEL_GOAL}
+          askAvailable={true}
+          askButtonRef={askButtonRef}
+          activePage="goal"
+          onNavigate={onNavigate}
+          onDisconnect={onDisconnect}
+          askActive={smithOpen}
+          onOpenAskSmithAi={openAskSmithAi}
+        />
+      )}
 
       <div className={"dashboard" + (smithOpen ? "" : " dashboard--single")}>
         <main className="dashboard__main">
-          <GoalSettings savedGoal={savedGoal} onSaveGoal={onSaveGoal} pushToast={pushToast} />
+          <GoalSettings savedGoal={savedGoal} onSaveGoal={onSaveGoal} pushToast={pushToast} onDirtyChange={onDirtyChange} />
         </main>
 
         {smithOpen && (
-          <AskSmithAiPanel content={goalSmithAiContent} onClose={closeAskSmithAi} />
+          <AskSmithAiPanel
+            content={goalSmithAiContent}
+            onClose={closeAskSmithAi}
+            pushToast={pushToast}
+          />
         )}
       </div>
     </div>

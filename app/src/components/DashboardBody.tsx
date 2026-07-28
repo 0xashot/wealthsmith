@@ -12,37 +12,40 @@
  * shows a polished unavailable state IN THE SAME CARD. No fixture values, no
  * invented USD/APY/allocation. READ-ONLY: nothing is signed, sent, or moved.
  */
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { useWalletPortfolio } from "../wallet/useWalletPortfolio";
 import { useNetContributions } from "../wallet/useNetContributions";
 import {
   deriveValueBreakdown,
   deriveStableValue,
   deriveSafetyBuffer,
+  derivePortfolioDayChangePct,
   formatUsd,
 } from "../wallet/walletSummary";
 import { deriveProjection } from "../wallet/projectedGrowth";
 import { getSafetyBufferTargetMonths } from "../wallet/safetyBufferTarget";
-import { useRailSuggestions, type RailSuggestions } from "../suggestions/useRailSuggestions";
+import { useRailSuggestions, type RailSuggestions, type RailTargetSummary } from "../suggestions/useRailSuggestions";
 import { useKlendDirectUsdcMarketSnapshot, freshSnapshotOrNull } from "../suggestions/useKlendDirectUsdcMarketSnapshot";
 import { dashboardState as s } from "../state/dashboardState";
 import { RISK_OPTIONS, labelFor } from "../state/goalState";
 import type { SavedGoal } from "../types/goal";
+import type { WalletPosition } from "../wallet/walletPosition";
 import type { ProjectedGrowthState } from "../types/dashboard";
 import LegendMarker from "./LegendMarker";
 import ProjectedGrowthChart from "./ProjectedGrowthChart";
 import ProjectedGrowthEmptyChart from "./ProjectedGrowthEmptyChart";
 import ProjectedGrowthInfo from "./ProjectedGrowthInfo";
 import InfoPopover from "./InfoPopover";
+import TrendBadge from "./TrendBadge";
 import {
   REAL_WALLET_VALUE_DESC,
   FS_TOTAL_VALUE_LABEL,
   FS_TOTAL_VALUE_CAPTION,
+  FS_CHANGE_PERIOD,
   FS_NET_CONTRIB_LABEL,
   FS_NET_CONTRIB_ESTIMATE,
   SAFETY_BUFFER_CAPTION,
   PG_CAPTION,
-  SAFETY_BUFFER_FUNDED,
   SAFETY_BUFFER_COVERED_LEGEND,
   SAFETY_BUFFER_NEEDS,
   PROJECTED_GROWTH_EMPTY_PROMPT,
@@ -64,6 +67,19 @@ import {
 
 /** Whole-dollar USD (no cents) — used for the Current vs Recommended rows. */
 const usd0 = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+
+/** Hover-breakdown content for one allocation bar (Current-vs-Recommended). */
+interface AllocPopover {
+  title: string;
+  primaryLabel: string;
+  primaryUsd: number;
+  secondaryLabel: string;
+  secondaryUsd: number;
+  /** Signed percentage-point difference of this bar's series vs the other, e.g. "+34%". */
+  diff: string;
+  /** One-sentence a11y label for the focusable bar. */
+  aria: string;
+}
 
 /** A dashboard section: heading (+ optional caption/title accessory) above the card. */
 function DashSection({
@@ -102,13 +118,48 @@ interface Props {
   goal?: SavedGoal;
   /** Real-wallet only: receive engine suggestions for the right rail. */
   onSuggestions?: (data: RailSuggestions) => void;
+  /** Demo Mode: render the SAME body from sample data (no live wallet read). The
+   *  live hooks still run (rules of hooks), but their output is overridden so Demo
+   *  and connected are byte-identical layout, differing only in the data. */
+  demo?: {
+    positions: WalletPosition[];
+    pricedAsOf: number;
+    netContributionsUsd: number;
+    targetSummary?: RailTargetSummary;
+  };
 }
 
-export default function DashboardBody({ goal, onSuggestions }: Props) {
-  const { status, positions, warning, pricedAsOf, loading } = useWalletPortfolio();
-  const contrib = useNetContributions();
+export default function DashboardBody({ goal, onSuggestions, demo }: Props) {
+  const bufferPopoverId = useId();
+  const wallet = useWalletPortfolio();
+  const liveContrib = useNetContributions();
+  const klendMarket = useKlendDirectUsdcMarketSnapshot();
+  // The rail hook always runs on the LIVE wallet read (never Demo data) so
+  // connected behavior is unchanged; in Demo the lift is disabled and the target
+  // summary is taken from the injected Demo rail below.
+  const { targetSummary: liveTargetSummary } = useRailSuggestions({
+    positions: wallet.positions,
+    pricedAsOf: wallet.pricedAsOf,
+    goal,
+    loading: wallet.loading === true,
+    onSuggestions: demo ? undefined : onSuggestions,
+    klendMarketSnapshot: freshSnapshotOrNull(klendMarket),
+  });
+
+  // Effective data source: Demo sample data, else the live read-only wallet read.
+  const status = demo ? "ready" : wallet.status;
+  const positions = demo ? demo.positions : wallet.positions;
+  const warning = demo ? undefined : wallet.warning;
+  const pricedAsOf = demo ? demo.pricedAsOf : wallet.pricedAsOf;
+  const loading = demo ? false : wallet.loading;
+  const contribLoading = demo ? false : liveContrib.loading;
+  const netContributionsUsd = demo ? demo.netContributionsUsd : (liveContrib.summary?.netUsd ?? null);
+  const targetSummary = demo ? demo.targetSummary : liveTargetSummary;
   const value = deriveValueBreakdown(positions);
   const priced = value.totalUsd != null;
+  // Value-weighted 24h change across priced holdings (sourced per-token; null when
+  // nothing has a sourced change) — the trend badge beside Total Portfolio Value.
+  const dayChangePct = derivePortfolioDayChangePct(positions);
   const monthlyExpenses = goal?.expenses_monthly;
 
   // Safety Buffer only once prices are loaded, so a 0 reserve is genuinely "no
@@ -120,7 +171,6 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
     pricedAsOf != null
       ? deriveSafetyBuffer(positions, monthlyExpenses, bufferTargetMonths)
       : null;
-  const bufferLow = buffer != null && buffer.coveragePct < 34;
 
   // Current allocation (Crypto vs Stables) from sourced value only.
   const total = value.totalUsd ?? 0;
@@ -129,18 +179,6 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
   const cryptoPct = total > 0 ? (cryptoUsd / total) * 100 : 0;
   const stablePct = total > 0 ? (stableUsd / total) * 100 : 0;
   const showAllocation = priced && total > 0;
-
-  // Deterministic Suggestion Engine (real wallet) — the SAME shared hook the
-  // Portfolio uses, so both pages show identical suggestions. It re-derives its
-  // inputs from the live positions + saved goal (recalculating no pricing,
-  // buffer target, allocation target, or Top Pick) and lifts the rail payload.
-  // Step 16H-S.5 — live Kamino Direct market snapshot (read-only; fetches only when a real wallet is
-  // connected and governance is active; idle/no-fetch otherwise). Fed into the rail as a fresh-or-null
-  // snapshot so the direct-lending adapter stays fail-closed on any unresolved/stale/error state.
-  const klendMarket = useKlendDirectUsdcMarketSnapshot();
-  // Step 22F (slice 5) — the shared canonical target summary (Rebalance/DCA share the target). The standalone Market
-  // Conditions surface was removed from the dashboard; the rail still derives its market data for the target allocation.
-  const { targetSummary } = useRailSuggestions({ positions, pricedAsOf, goal, loading: loading === true, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket) });
 
   // Recommended (target) allocation — Step 22F(slice 5): the mounted CANONICAL target, NOT a risk-only derivation.
   // Percentages appear only for a usable (full/degraded) target; every non-usable state shows a safe treatment
@@ -221,15 +259,80 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
 
   // One allocation row: a real coloured bar + value when `pct` is present, otherwise an empty track + $0
   // (used for the disabled/placeholder groups — disconnected wallet, or connected with no plan yet).
-  const allocationRow = (label: string, pct: number | null, usd: number, variant: "current" | "recommended") => (
-    <div className="allocation__row">
+  // When `pop` is provided, hovering/focusing the bar reveals a Current-vs-Recommended breakdown.
+  const allocationRow = (
+    label: string,
+    pct: number | null,
+    usd: number,
+    variant: "current" | "recommended",
+    pop?: AllocPopover | null,
+  ) => (
+    <div className={"allocation__row" + (pop ? " allocation__row--hoverable" : "")}>
       <span className="allocation__row-label">{label}</span>
-      <div className="allocation__track">
+      <div
+        className="allocation__track"
+        tabIndex={pop ? 0 : undefined}
+        aria-label={pop ? pop.aria : undefined}
+      >
         {pct != null && <div className={`allocation__bar allocation__bar--${variant}`} style={{ width: `${pct}%` }} />}
       </div>
       <span className="allocation__value">{usd0(usd)}</span>
+      {pop && (
+        <div className="allocation__popover" aria-hidden="true">
+          <div className="allocation__popover-title">{pop.title}</div>
+          <div className="allocation__popover-row">
+            <span className="allocation__popover-label">{pop.primaryLabel}</span>
+            <span className="allocation__popover-value">{usd0(pop.primaryUsd)}</span>
+          </div>
+          <div className="allocation__popover-row">
+            <span className="allocation__popover-label">{pop.secondaryLabel}</span>
+            <span className="allocation__popover-value">{usd0(pop.secondaryUsd)}</span>
+          </div>
+          <div className="allocation__popover-row allocation__popover-row--diff">
+            <span className="allocation__popover-label">Difference</span>
+            <span className="allocation__popover-value">{pop.diff}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
+
+  // Hover-breakdown popovers for the four allocation bars — only when BOTH the live
+  // current mix and a usable recommended target exist (otherwise the bars are empty).
+  const allocReady = showAllocation && targetUsable;
+  const diffText = (a: number, b: number) => {
+    const r = Math.round(a - b);
+    return `${r > 0 ? "+" : r < 0 ? "-" : ""}${Math.abs(r)}%`;
+  };
+  const mkPop = (
+    group: string,
+    asset: string,
+    primaryLabel: string,
+    primaryUsd: number,
+    secondaryLabel: string,
+    secondaryUsd: number,
+    diffA: number,
+    diffB: number,
+  ): AllocPopover => {
+    const diff = diffText(diffA, diffB);
+    return {
+      title: `${group} ${asset}`,
+      primaryLabel,
+      primaryUsd,
+      secondaryLabel,
+      secondaryUsd,
+      diff,
+      aria: `${group} ${asset}. ${primaryLabel} ${usd0(primaryUsd)}. ${secondaryLabel} ${usd0(secondaryUsd)}. Difference ${diff}.`,
+    };
+  };
+  const pops = allocReady
+    ? {
+        currentCrypto: mkPop(ALLOCATION_GROUP_CURRENT, ALLOCATION_LABEL_CRYPTO, ALLOCATION_GROUP_CURRENT, cryptoUsd, ALLOCATION_GROUP_RECOMMENDED, targetCryptoUsd as number, cryptoPct, targetCryptoPct as number),
+        currentStables: mkPop(ALLOCATION_GROUP_CURRENT, ALLOCATION_LABEL_STABLES, ALLOCATION_GROUP_CURRENT, stableUsd, ALLOCATION_GROUP_RECOMMENDED, targetStableUsd as number, stablePct, targetStablePct as number),
+        recCrypto: mkPop(ALLOCATION_GROUP_RECOMMENDED, ALLOCATION_LABEL_CRYPTO, ALLOCATION_GROUP_RECOMMENDED, targetCryptoUsd as number, ALLOCATION_GROUP_CURRENT, cryptoUsd, targetCryptoPct as number, cryptoPct),
+        recStables: mkPop(ALLOCATION_GROUP_RECOMMENDED, ALLOCATION_LABEL_STABLES, ALLOCATION_GROUP_RECOMMENDED, targetStableUsd as number, ALLOCATION_GROUP_CURRENT, stableUsd, targetStablePct as number, stablePct),
+      }
+    : null;
 
   return (
     <>
@@ -251,7 +354,12 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
               </>
             ) : priced ? (
               <>
-                <span className="hero-card__value">{formatUsd(value.totalUsd as number)}</span>
+                <span className="hero-card__value-row">
+                  <span className="hero-card__value">{formatUsd(value.totalUsd as number)}</span>
+                  {dayChangePct != null && (
+                    <TrendBadge pct={dayChangePct} period={FS_CHANGE_PERIOD} />
+                  )}
+                </span>
                 <span className="card__caption">{totalCaption}</span>
               </>
             ) : emptyZero ? (
@@ -268,14 +376,14 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
           </div>
           <div className="card">
             <span className="metric__label">{FS_NET_CONTRIB_LABEL}</span>
-            {contrib.loading ? (
+            {contribLoading ? (
               <>
                 <span className="skeleton skeleton--value" />
                 <span className="skeleton skeleton--line-short" />
               </>
-            ) : contrib.summary ? (
+            ) : netContributionsUsd != null ? (
               <>
-                <span className="hero-card__value">{formatUsd(contrib.summary.netUsd)}</span>
+                <span className="hero-card__value">{formatUsd(netContributionsUsd)}</span>
                 <span className="card__caption">{FS_NET_CONTRIB_ESTIMATE}</span>
               </>
             ) : (
@@ -313,21 +421,41 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
                 {buffer.targetMonths === 1 ? "month" : "months"}
               </span>
             </div>
-            <div
-              className="progress progress--chart"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={Math.round(buffer.coveragePct)}
-              aria-label={`Safety Buffer is ${Math.round(buffer.coveragePct)} percent covered.`}
-            >
-              <div className="progress__fill" style={{ width: `${buffer.coveragePct}%` }} />
+            {/* Hover/focus the bar to reveal the USD breakdown (covered / remaining / target). */}
+            <div className="buffer__bar-wrap">
+              <div
+                className="progress progress--chart progress--hatched"
+                role="progressbar"
+                tabIndex={0}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(buffer.coveragePct)}
+                aria-label={`Safety Buffer is ${Math.round(buffer.coveragePct)} percent covered.`}
+                aria-describedby={bufferPopoverId}
+              >
+                {/* Omit the fill when nothing is funded, so the hatched track keeps its
+                    fully rounded pill shape (no square left edge from a 0-width fill). */}
+                {buffer.coveragePct > 0 && (
+                  <div className="progress__fill" style={{ width: `${buffer.coveragePct}%` }} />
+                )}
+              </div>
+              <div className="buffer__popover" role="tooltip" id={bufferPopoverId}>
+                <div className="buffer__popover-row">
+                  <span className="buffer__popover-label">Covered</span>
+                  <span className="buffer__popover-value">{formatUsd(buffer.stableUsd)}</span>
+                </div>
+                <div className="buffer__popover-row">
+                  <span className="buffer__popover-label">Remaining</span>
+                  <span className="buffer__popover-value">
+                    {formatUsd(Math.max(0, buffer.targetUsd - buffer.stableUsd))}
+                  </span>
+                </div>
+                <div className="buffer__popover-row buffer__popover-row--total">
+                  <span className="buffer__popover-label">Target</span>
+                  <span className="buffer__popover-value">{formatUsd(buffer.targetUsd)}</span>
+                </div>
+              </div>
             </div>
-            <p className={"buffer__caption" + (bufferLow ? "" : " buffer__caption--ok")}>
-              {buffer.fullyFunded
-                ? `${SAFETY_BUFFER_FUNDED} ${formatUsd(buffer.stableUsd)} reserve.`
-                : `${formatUsd(buffer.targetUsd - buffer.stableUsd)} remaining to reach your ${buffer.targetMonths}-month target (${formatUsd(buffer.stableUsd)} of ${formatUsd(buffer.targetUsd)}).`}
-            </p>
             <div className="chart-legend">
               <span className="chart-legend__item">
                 <LegendMarker variant="dot" colorToken="--color-chart-series-4" />
@@ -431,15 +559,15 @@ export default function DashboardBody({ goal, onSuggestions }: Props) {
               {/* Current — live wallet allocation when priced; otherwise (disconnected) empty tracks + $0, disabled. */}
               <div className={"allocation__group" + (showAllocation ? "" : " allocation__group--empty")}>
                 <span className="allocation__group-label">{ALLOCATION_GROUP_CURRENT}</span>
-                {allocationRow(ALLOCATION_LABEL_CRYPTO, showAllocation ? cryptoPct : null, showAllocation ? cryptoUsd : 0, "current")}
-                {allocationRow(ALLOCATION_LABEL_STABLES, showAllocation ? stablePct : null, showAllocation ? stableUsd : 0, "recommended")}
+                {allocationRow(ALLOCATION_LABEL_CRYPTO, showAllocation ? cryptoPct : null, showAllocation ? cryptoUsd : 0, "current", pops?.currentCrypto)}
+                {allocationRow(ALLOCATION_LABEL_STABLES, showAllocation ? stablePct : null, showAllocation ? stableUsd : 0, "recommended", pops?.currentStables)}
               </div>
 
               {/* Recommended — the shared CANONICAL target when usable; otherwise (no plan yet) empty tracks + $0, disabled. */}
               <div className={"allocation__group" + (targetUsable ? "" : " allocation__group--empty")}>
                 <span className="allocation__group-label">{ALLOCATION_GROUP_RECOMMENDED}</span>
-                {allocationRow(ALLOCATION_LABEL_CRYPTO, targetUsable ? (targetCryptoPct as number) : null, targetUsable ? (targetCryptoUsd as number) : 0, "current")}
-                {allocationRow(ALLOCATION_LABEL_STABLES, targetUsable ? (targetStablePct as number) : null, targetUsable ? (targetStableUsd as number) : 0, "recommended")}
+                {allocationRow(ALLOCATION_LABEL_CRYPTO, targetUsable ? (targetCryptoPct as number) : null, targetUsable ? (targetCryptoUsd as number) : 0, "current", pops?.recCrypto)}
+                {allocationRow(ALLOCATION_LABEL_STABLES, targetUsable ? (targetStablePct as number) : null, targetUsable ? (targetStableUsd as number) : 0, "recommended", pops?.recStables)}
               </div>
             </div>
             <div className="chart-legend">

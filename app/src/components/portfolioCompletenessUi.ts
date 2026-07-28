@@ -62,7 +62,9 @@ export function positionUnresolvedReason(a: PositionCompletenessAssessment | nul
   if (!a) return null;
   if (a.positionClass === "hubble_debt" && a.liabilityState === "unresolved") return "Debt value could not be verified";
   if (a.valueState === "unresolved" || a.valueState === "stale") return "Current value could not be verified";
-  if (a.liquidityState === "unresolved" && (a.positionClass === "kamino_direct" || a.positionClass === "steakhouse" || a.positionClass === "jupiter_lend" || a.positionClass === "native_stake")) return "Withdrawal availability could not be verified";
+  // Native SOL stake is always withdrawable (deactivate + withdraw after cooldown), so we
+  // never surface an unverified-withdrawal note for it — only protocol lending positions do.
+  if (a.liquidityState === "unresolved" && (a.positionClass === "kamino_direct" || a.positionClass === "steakhouse" || a.positionClass === "jupiter_lend")) return "Withdrawal availability could not be verified";
   if (a.transferabilityState === "unresolved") return "Transferability could not be verified";
   if (a.exposureState === "unsupported" || a.exposureState === "unresolved") return "Underlying SOL could not be refreshed";
   if (a.identityState === "unsupported") return "Position type is not fully supported";
