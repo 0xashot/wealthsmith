@@ -184,9 +184,9 @@ export function buildContributionPlanReviewDetails(d: ContributionPlanSuggestion
         tokenAmt != null
           ? { label: "Next contribution", value: `~${tokenAmt} ${token}`, subValue: dcaAmtTrim }
           : { label: "Next contribution", value: `${dcaAmtTrim} to ${token}` },
-        { label: "Current crypto allocation", value: pctT(d.currentTargetPct as number) },
+        { label: `Current ${token} allocation`, value: pctT(d.currentTargetPct as number) },
         { label: "After this contribution", value: pctT(projectedPct as number) },
-        { label: "Target crypto allocation", value: pctT(d.targetPct as number) },
+        { label: `Target ${token} allocation`, value: pctT(d.targetPct as number) },
       ];
     }
     // 23C.2 — this is a FUTURE contribution with no on-chain source yet (no swap route). Offer a read-only Moonpay
@@ -216,9 +216,9 @@ export function buildContributionPlanReviewDetails(d: ContributionPlanSuggestion
         solAmtText != null
           ? { label: "Receive", value: `~${solAmtText} ${token}`, subValue: stagedUsdText }
           : { label: "Receive", value: `${stagedUsdText} of ${token}` },
-        { label: "Current crypto allocation", value: pctT(d.currentTargetPct) },
+        { label: `Current ${token} allocation`, value: pctT(d.currentTargetPct) },
         { label: "After this contribution", value: pctT(stagedProjPct) },
-        { label: "Target crypto allocation", value: pctT(d.targetPct) },
+        { label: `Target ${token} allocation`, value: pctT(d.targetPct) },
       ];
     }
   }

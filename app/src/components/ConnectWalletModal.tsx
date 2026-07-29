@@ -31,6 +31,10 @@ import {
   WALLET_CONNECT_MODAL_TITLE,
   WALLET_CONNECTING,
   WALLET_CONNECT_CLOSE_LABEL,
+  WALLET_CONNECT_TERMS_LABEL,
+  WALLET_CONNECT_TERMS_URL,
+  WALLET_CONNECT_PRIVACY_LABEL,
+  WALLET_CONNECT_PRIVACY_URL,
   WALLET_NOT_DETECTED_ROW,
   WALLET_NOT_DETECTED_TITLE,
   WALLET_NOT_DETECTED_DESC,
@@ -226,6 +230,19 @@ export default function ConnectWalletModal({ onClose }: Props) {
             );
           })}
         </ul>
+
+        {/* Legal note: connecting agrees to Terms + acknowledges Privacy (links open in a new tab). */}
+        <p className="wallet-connect__legal">
+          By connecting your wallet, you agree to our{" "}
+          <a href={WALLET_CONNECT_TERMS_URL} target="_blank" rel="noopener noreferrer">
+            {WALLET_CONNECT_TERMS_LABEL}
+          </a>{" "}
+          and acknowledge our{" "}
+          <a href={WALLET_CONNECT_PRIVACY_URL} target="_blank" rel="noopener noreferrer">
+            {WALLET_CONNECT_PRIVACY_LABEL}
+          </a>
+          .
+        </p>
 
         {/* Polite live region so the transient connecting state is announced. */}
         <span className="sr-only" role="status">

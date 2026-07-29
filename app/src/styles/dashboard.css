@@ -2361,6 +2361,30 @@
     var(--motion-overlay-enter-easing);
 }
 
+/* Connect Wallet legal note under the wallet list; labels link out in a new tab. */
+.wallet-connect__legal {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.wallet-connect__legal a {
+  color: var(--color-action-primary-background-default);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.wallet-connect__legal a:hover {
+  color: var(--color-action-primary-background-hover);
+}
+
+.wallet-connect__legal a:focus-visible {
+  outline: none;
+  border-radius: var(--radius-control-sm);
+  box-shadow: var(--shadow-control-focus);
+}
+
 .modal {
   position: relative;
   z-index: var(--zIndex-overlay-modal);

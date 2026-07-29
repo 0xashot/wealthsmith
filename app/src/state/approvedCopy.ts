@@ -156,6 +156,12 @@ export const WALLET_CONNECTING = "Connecting...";
 /** patterns/wallet-connection.md — Modal Accessibility, close button accessible label. */
 export const WALLET_CONNECT_CLOSE_LABEL = "Close connect wallet dialog";
 
+/** Legal note shown under the wallet list; the two labels link out (new tab). */
+export const WALLET_CONNECT_TERMS_LABEL = "Terms of Service";
+export const WALLET_CONNECT_TERMS_URL = "https://wealthsmith.ai/terms.html";
+export const WALLET_CONNECT_PRIVACY_LABEL = "Privacy Policy";
+export const WALLET_CONNECT_PRIVACY_URL = "https://wealthsmith.ai/privacy.html";
+
 /* content/wallet-copy.md — Wallet Not Installed / connection-failed / rejected states. */
 export const WALLET_NOT_DETECTED_ROW = "Not detected";
 export const WALLET_NOT_DETECTED_TITLE = "Wallet not detected";
@@ -674,9 +680,10 @@ export const GOAL_SECTION_CONTRIBUTION = "Contribution and Timeline";
 
 /** patterns/goal-settings.md — Edit Mode (visible toggle label). */
 export const GOAL_EDIT_MODE_LABEL = "Edit Mode";
-/** Shown on the disabled Edit Mode toggle (onboarding tour / demo). */
+/** Shown on the disabled Edit Mode toggle during the onboarding tour (Demo Mode's
+ *  Goal page is editable, so it is no longer mentioned). */
 export const GOAL_EDIT_DISABLED_TOOLTIP =
-  "Unable to edit your goal during the onboarding or in demo mode.";
+  "Unable to edit your goal during the onboarding.";
 
 /** patterns/goal-settings.md — Field Groups (field labels). */
 export const GOAL_FIELD_FINANCIAL_GOAL = "Financial Goal";
