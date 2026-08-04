@@ -260,13 +260,24 @@ function isStableMint(mint: string): boolean {
 function stableValueOf(p: WalletPosition): number {
   if (typeof p.valueUsd !== "number") return 0;
   if (isStablecoin(p)) return p.valueUsd;
-  if (
-    p.type === "protocol" &&
-    p.legs &&
-    p.legs.length > 0 &&
-    p.legs.every((l) => l.side !== "debt" && isStableMint(l.mint))
-  ) {
-    return p.valueUsd;
+  // A borrowed balance is a liability, never stable ASSET value.
+  if (p.side === "borrowed") return 0;
+  if (p.type === "protocol") {
+    /**
+     * Denominated in a recognized stable mint — e.g. USDC supplied to a lending
+     * market. The canonical existing-position rows (Kamino Direct, Steakhouse)
+     * carry the underlying mint but NO `legs`, so the leg test below missed them
+     * and their whole balance fell through to crypto: a wallet holding $15k of
+     * lent USDC read as 100% crypto / $0 stables on the allocation card.
+     *
+     * `isStablecoin` cannot cover this because it requires `type === "token"`.
+     * Rebalance already classifies these correctly via its own `isStableAsset`;
+     * this keeps the portfolio-wide split in agreement with it.
+     */
+    if (typeof p.mint === "string" && isStableMint(p.mint)) return p.valueUsd;
+    if (p.legs && p.legs.length > 0 && p.legs.every((l) => l.side !== "debt" && isStableMint(l.mint))) {
+      return p.valueUsd;
+    }
   }
   return 0;
 }

@@ -36,6 +36,7 @@ import ProjectedGrowthChart from "./ProjectedGrowthChart";
 import ProjectedGrowthEmptyChart from "./ProjectedGrowthEmptyChart";
 import ProjectedGrowthInfo from "./ProjectedGrowthInfo";
 import InfoPopover from "./InfoPopover";
+import { useManualAssets } from "../wallet/manualAssetPositions";
 import TrendBadge from "./TrendBadge";
 import {
   REAL_WALLET_VALUE_DESC,
@@ -43,6 +44,8 @@ import {
   FS_TOTAL_VALUE_CAPTION,
   FS_CHANGE_PERIOD,
   FS_NET_CONTRIB_LABEL,
+  FS_NET_CONTRIB_INFO_ARIA,
+  FS_NET_CONTRIB_MANUAL_NOTE,
   FS_NET_CONTRIB_ESTIMATE,
   SAFETY_BUFFER_CAPTION,
   PG_CAPTION,
@@ -137,6 +140,7 @@ export default function DashboardBody({ goal, onSuggestions, demo }: Props) {
   // The rail hook always runs on the LIVE wallet read (never Demo data) so
   // connected behavior is unchanged; in Demo the lift is disabled and the target
   // summary is taken from the injected Demo rail below.
+  const manual = useManualAssets();
   const { targetSummary: liveTargetSummary } = useRailSuggestions({
     positions: wallet.positions,
     pricedAsOf: wallet.pricedAsOf,
@@ -144,6 +148,9 @@ export default function DashboardBody({ goal, onSuggestions, demo }: Props) {
     loading: wallet.loading === true,
     onSuggestions: demo ? undefined : onSuggestions,
     klendMarketSnapshot: freshSnapshotOrNull(klendMarket),
+    // Allocation MEASUREMENT only — so the card below and the Rebalance
+    // suggestion always agree about how much crypto the user holds.
+    externalMeasurementPositions: manual.positions,
   });
 
   // Effective data source: Demo sample data, else the live read-only wallet read.
@@ -151,15 +158,34 @@ export default function DashboardBody({ goal, onSuggestions, demo }: Props) {
   const positions = demo ? demo.positions : wallet.positions;
   const warning = demo ? undefined : wallet.warning;
   const pricedAsOf = demo ? demo.pricedAsOf : wallet.pricedAsOf;
-  const loading = demo ? false : wallet.loading;
+  // The external BTC/ETH price feed counts toward "still loading": it resolves
+  // faster than the wallet read, so without it Total Portfolio Value would
+  // briefly show the manually added assets alone before the wallet arrives.
+  // The external BTC/ETH feed counts as "still loading" on the LIVE path, where it
+  // resolves faster than the wallet read — without it the cards would briefly show
+  // a portfolio made of the manually added assets alone. Demo data is synchronous
+  // and stays instant; there the feed only gates the merge below.
+  const loading = demo ? false : wallet.loading || manual.pricesLoading;
   const contribLoading = demo ? false : liveContrib.loading;
   const netContributionsUsd = demo ? demo.netContributionsUsd : (liveContrib.summary?.netUsd ?? null);
   const targetSummary = demo ? demo.targetSummary : liveTargetSummary;
-  const value = deriveValueBreakdown(positions);
+  // Manually added External Holdings (BTC/ETH) count toward what the user OWNS,
+  // so they join Total Portfolio Value, its 24h badge, and the allocation card.
+  // They deliberately do NOT join `positions` — the Safety Buffer, projections,
+  // and the contribution/DCA pipeline keep reading the real wallet alone.
+  // Withheld until nothing is loading, so the card never shows a total made up of
+  // the manual assets alone while the wallet read is still in flight, and never
+  // adds them mid-render once their price lands.
+  const totalValuePositions =
+    !loading && !manual.pricesLoading && manual.positions.length > 0
+      ? [...positions, ...manual.positions]
+      : positions;
+
+  const value = deriveValueBreakdown(totalValuePositions);
   const priced = value.totalUsd != null;
   // Value-weighted 24h change across priced holdings (sourced per-token; null when
   // nothing has a sourced change) — the trend badge beside Total Portfolio Value.
-  const dayChangePct = derivePortfolioDayChangePct(positions);
+  const dayChangePct = derivePortfolioDayChangePct(totalValuePositions);
   const monthlyExpenses = goal?.expenses_monthly;
 
   // Safety Buffer only once prices are loaded, so a 0 reserve is genuinely "no
@@ -172,9 +198,12 @@ export default function DashboardBody({ goal, onSuggestions, demo }: Props) {
       ? deriveSafetyBuffer(positions, monthlyExpenses, bufferTargetMonths)
       : null;
 
-  // Current allocation (Crypto vs Stables) from sourced value only.
-  const total = value.totalUsd ?? 0;
-  const stableUsd = deriveStableValue(positions);
+  // Current allocation (Crypto vs Stables) from sourced value only. Uses the SAME
+  // set fed to the Rebalance measurement above (real wallet + manually added
+  // external holdings), so the card and the suggestion can never contradict.
+  const allocationValue = deriveValueBreakdown(totalValuePositions);
+  const total = allocationValue.totalUsd ?? 0;
+  const stableUsd = deriveStableValue(totalValuePositions);
   const cryptoUsd = Math.max(0, total - stableUsd);
   const cryptoPct = total > 0 ? (cryptoUsd / total) * 100 : 0;
   const stablePct = total > 0 ? (stableUsd / total) * 100 : 0;
@@ -375,7 +404,12 @@ export default function DashboardBody({ goal, onSuggestions, demo }: Props) {
             )}
           </div>
           <div className="card">
-            <span className="metric__label">{FS_NET_CONTRIB_LABEL}</span>
+            <span className="metric__label metric__label--with-info">
+              {FS_NET_CONTRIB_LABEL}
+              <InfoPopover label={FS_NET_CONTRIB_INFO_ARIA} align="right">
+                <p className="info-popover__text">{FS_NET_CONTRIB_MANUAL_NOTE}</p>
+              </InfoPopover>
+            </span>
             {contribLoading ? (
               <>
                 <span className="skeleton skeleton--value" />

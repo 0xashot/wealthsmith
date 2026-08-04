@@ -90,15 +90,26 @@ export function buildSafetyBufferCardFromAssessment(a: SafetyBufferAssessment, g
       { code: "liquidity_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
       { code: "slippage_available", status: GUARDRAIL_STATUS_NOT_EVALUATED },
     ];
-    // Focused 4-card set (no "Key metrics" heading, no Guardrails): the verified-only gap the excluded position leaves
-    // open, current verified reserve, target, and current coverage. The excluded position itself is broken out below.
+    // Focused 4-card set (no "Key metrics" heading, no Guardrails), in the same
+    // order as every other buffer modal: where you are (Current, Current coverage),
+    // where you're aiming (Target), then the gap.
+    //
+    // "Amount to move" is the UNVETTED POSITION'S OWN VALUE — not the buffer gap.
+    // This card's action is to move funds that already exist ("Move to SOL/BTC
+    // Market"), and the two are NOT the same number: with a $6,000 target, $1,000
+    // verified and $2,000 sitting unvetted, the gap is $5,000 but only $2,000 can
+    // be moved. Labelling the gap "Amount to move" would state an amount the user
+    // cannot actually move. Omitted entirely when the position has no sourced
+    // value, rather than falling back to the gap.
     const hasMonths = a.targetMonths != null && a.monthsCoveredVerified != null;
     const coverageCard = hasMonths ? [metric("Current coverage", `${months2(a.monthsCoveredVerified as number)} of ${months2(a.targetMonths as number)} months`, "count")] : [];
     const metrics: ReviewMetric[] = [
-      usdMetric("Amount needed", worst),
       usdMetric("Current", verified ?? 0),
-      ...(target != null ? [usdMetric("Target", target)] : []),
       ...coverageCard,
+      ...(target != null ? [usdMetric("Target", target)] : []),
+      ...(typeof r.valueUsd === "number"
+        ? [{ ...usdMetric("Amount to move", r.valueUsd), emphasis: "primary" as const }]
+        : []),
     ];
     // "Excluded from Safety Buffer" table — the detected-but-not-counted position (Asset / Amount / Value / Reason).
     const excludedReviewAssets: ReviewExcludedAsset[] = [{
@@ -161,7 +172,23 @@ export function buildSafetyBufferCardFromAssessment(a: SafetyBufferAssessment, g
     // real numbers on the card AND modal, drop the "Key metrics" heading, and hide the Guardrails checklist.
     const hasMonths = a.targetMonths != null && a.monthsCoveredVerified != null;
     const coverageCard = hasMonths ? [metric("Current coverage", `${months2(a.monthsCoveredVerified as number)} of ${months2(a.targetMonths as number)} months`, "count")] : [];
+    /**
+     * The single figure the modal is asking the user to act on. Ordered LAST so the
+     * cards read as a story — where you are (Current, Current coverage), where
+     * you're aiming (Target), then what to do — and emphasized in the primary
+     * color so that answer is findable at a glance.
+     */
+    const amountToAdd = { ...usdMetric(isRange ? "Minimum amount to add" : "Amount to add", proven), emphasis: "primary" as const };
     let detailedBody: string | undefined;
+    /**
+     * True only when `detailedBody` states the position and carries NO instruction
+     * of its own. The card pairs the body with its action line ("Add $2,000 to
+     * your Safety Buffer."), but that line does not travel into the modal — so the
+     * modal appends it to the reason, and the user sees the same two facts in both
+     * places. Every other variant already ends with its own instruction; appending
+     * there would say it twice.
+     */
+    let bodyOmitsAction = false;
     let focusedMetrics: ReviewMetric[] | undefined;
     let bufferTitleOverride: string | undefined;
     let excludedReviewAssets: ReviewExcludedAsset[] | undefined;
@@ -173,36 +200,42 @@ export function buildSafetyBufferCardFromAssessment(a: SafetyBufferAssessment, g
     if (planFullyCovers && verified != null && target != null && hasMonths) {
       bufferTitleOverride = "Complete Your Safety Buffer";
       detailedBody = SUGGESTION_BUFFER_PLAN_DETAIL.replace("{shortfall}", usd0(proven));
-      focusedMetrics = [usdMetric("Amount needed", proven), usdMetric("Current", verified), usdMetric("Target", target), ...coverageCard, usdMetric("Next planned contribution", a.contribution.plannedContributionUsd as number)];
+      focusedMetrics = [usdMetric("Current", verified), ...coverageCard, usdMetric("Target", target), usdMetric("Next planned contribution", a.contribution.plannedContributionUsd as number), amountToAdd];
     } else if (planReady && a.contribution.plannedContributionUsd != null && verified != null && target != null && hasMonths) {
       // Plan-backed PARTIAL: the next contribution reduces but does NOT close the confirmed gap. Primary amount stays
       // the confirmed gap; direct the contribution to USDC and note the remainder still needs adding afterward.
       detailedBody = SUGGESTION_BUFFER_PLAN_PARTIAL_DETAIL.replace("{shortfall}", usd0(proven));
-      focusedMetrics = [usdMetric("Amount needed", proven), usdMetric("Current", verified), usdMetric("Target", target), ...coverageCard, usdMetric("Next planned contribution", a.contribution.plannedContributionUsd as number)];
+      focusedMetrics = [usdMetric("Current", verified), ...coverageCard, usdMetric("Target", target), usdMetric("Next planned contribution", a.contribution.plannedContributionUsd as number), amountToAdd];
     } else if (!planReady && verified != null && target != null && hasMonths) {
       if (!isRange && frozenHoldings.length > 0) {
         // A frozen (not transferable) stablecoin is excluded from the eligible reserve → name the eligible amount and
         // the excluded holding(s), and surface them in an "Excluded from Safety Buffer" table.
         const frozenClause = frozenHoldings.length === 1 ? SUGGESTION_BUFFER_FROZEN_ONE : SUGGESTION_BUFFER_FROZEN_MANY.replace("{n}", String(frozenHoldings.length));
+        // Position + reason only; the amount and target live on the card's action
+        // line and the modal's metric cards, so the modal appends the action line.
+        bodyOmitsAction = true;
         detailedBody = SUGGESTION_BUFFER_FROZEN_DETAIL
           .replace("{verified}", usd0(verified))
-          .replace("{frozenClause}", frozenClause)
-          .replace("{shortfall}", usd0(proven))
-          .replace("{target}", usd0(target));
-        focusedMetrics = [usdMetric("Amount needed", proven), usdMetric("Current", verified), usdMetric("Target", target), ...coverageCard];
+          .replace("{frozenClause}", frozenClause);
+        focusedMetrics = [usdMetric("Current", verified), ...coverageCard, usdMetric("Target", target), amountToAdd];
         excludedReviewAssets = frozenHoldings.map((h) => ({ symbol: h.symbol, ...(h.uiAmount != null ? { amount: h.uiAmount } : {}), ...(h.valueUsd != null ? { valueUsd: h.valueUsd } : {}), reason: h.reason, ...(STABLE_ICON[h.symbol] ? { icon: STABLE_ICON[h.symbol] } : {}) }));
       } else if (!isRange) {
-        // When the covered months round to the target months (e.g. 2.95 → "3" vs target "3"), the "cover N months /
-        // target N months" phrasing reads as funded — state the gap directly instead.
-        detailedBody = monthsPhrase(a.monthsCoveredVerified as number) === monthsPhrase(a.targetMonths as number)
+        // When the covered months round to the target months (e.g. 2.95 → "3" vs target "3"), the
+        // "covering N of your N-month target" phrasing reads as funded — state the gap directly instead.
+        const nearTarget = monthsPhrase(a.monthsCoveredVerified as number) === monthsPhrase(a.targetMonths as number);
+        // The near-target line ends with its own "Add …" instruction; the shortfall
+        // body deliberately does not (the card's action line carries it).
+        bodyOmitsAction = !nearTarget;
+        detailedBody = nearTarget
           ? SUGGESTION_BUFFER_NEARTARGET_DETAIL.replace(/\{shortfall\}/g, usd0(proven)).replace("{months}", months2(a.targetMonths as number))
           : SUGGESTION_BUFFER_SHORTFALL_DETAIL
               .replace("{current}", usd0(verified))
-              .replace("{covered}", monthsPhrase(a.monthsCoveredVerified as number))
-              .replace("{target}", usd0(target))
-              .replace("{targetMonths}", monthsPhrase(a.targetMonths as number))
-              .replace("{shortfall}", usd0(proven));
-        focusedMetrics = [usdMetric("Amount needed", proven), usdMetric("Current", verified), usdMetric("Target", target), ...coverageCard];
+              // Bare numbers — the sentence supplies "-month target" itself. Same
+              // round1 the near-target branch compares on, so the copy can never
+              // disagree with the branch that selected it.
+              .replace("{coveredMonths}", String(round1(a.monthsCoveredVerified as number)))
+              .replace("{targetMonths}", String(round1(a.targetMonths as number)));
+        focusedMetrics = [usdMetric("Current", verified), ...coverageCard, usdMetric("Target", target), amountToAdd];
       } else if (a.maximumPossibleCoverageUsd != null) {
         const beingVerified = a.maximumPossibleCoverageUsd - verified;
         const additional = worst - proven;
@@ -212,9 +245,21 @@ export function buildSafetyBufferCardFromAssessment(a: SafetyBufferAssessment, g
           .replace("{target}", usd0(target))
           .replace("{shortfall}", usd0(proven))
           .replace("{additional}", usd0(additional));
-        focusedMetrics = [usdMetric("Amount needed", proven), usdMetric("Current", verified), usdMetric("Being verified", beingVerified), usdMetric("Target", target), ...coverageCard];
+        focusedMetrics = [usdMetric("Current", verified), ...coverageCard, usdMetric("Being verified", beingVerified), usdMetric("Target", target), amountToAdd];
       }
     }
+    // The card's action line. The modal has no separate action line, so when the
+    // body carries no instruction of its own the reason appends this — same two
+    // facts (where you are, what to do) in both surfaces, stated once each.
+    const bufferActionLine = isRange
+      ? `Add at least ${usd0(proven)} to your Safety Buffer.`
+      : `Add ${usd0(proven)} to your Safety Buffer.`;
+    // Name the amount on the primary button too, so the modal's answer and its
+    // action agree without the user re-reading the metric cards.
+    const bufferBuyCtaLabel = isRange ? `Buy at least ${usd0(proven)} in USDC` : `Buy ${usd0(proven)} in USDC`;
+    const bufferModalReason = detailedBody
+      ? (bodyOmitsAction ? `${detailedBody} ${bufferActionLine}` : detailedBody)
+      : undefined;
     const metrics: ReviewMetric[] = focusedMetrics ?? [
           usdMetric("Verified liquid reserve", verified ?? 0),
           ...(isRange && a.maximumPossibleCoverageUsd != null ? [usdMetric("Maximum possible coverage", a.maximumPossibleCoverageUsd)] : []),
@@ -238,12 +283,12 @@ export function buildSafetyBufferCardFromAssessment(a: SafetyBufferAssessment, g
       action_kind: "review_only",
       is_actionable: true,
       amount: { valueUsd: proven, label: isRange ? "Minimum amount needed" : "Amount needed" },
-      impactTextOverride: isRange ? `Add at least ${usd0(proven)} to your Safety Buffer.` : `Add ${usd0(proven)} to your Safety Buffer.`,
+      impactTextOverride: bufferActionLine,
       to: { bucket: "stables" },
       post_buffer_months: a.targetMonths ?? undefined,
       scores: { impact: score, urgency: score, efficiency: null },
       guardrails,
-      reviewDetails: buildReviewDetails({ category: "buffer", actionKind: "review_only", ...(detailedBody ? { reason: detailedBody, hideMetricsHeading: true, hideGuardrails: true } : {}), ...(excludedReviewAssets ? { excludedAssets: excludedReviewAssets } : {}), guardrails, protocolSelection: base.protocolSelection, metrics, externalLink: BUFFER_MOONPAY_LINK }),
+      reviewDetails: buildReviewDetails({ category: "buffer", actionKind: "review_only", ...(detailedBody ? { reason: bufferModalReason as string, hideMetricsHeading: true, hideGuardrails: true } : {}), ...(excludedReviewAssets ? { excludedAssets: excludedReviewAssets } : {}), guardrails, protocolSelection: base.protocolSelection, metrics, externalLink: { ...BUFFER_MOONPAY_LINK, ctaLabel: bufferBuyCtaLabel } }),
     };
   }
 

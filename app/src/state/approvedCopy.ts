@@ -26,6 +26,8 @@ export const DISCONNECTED_HELPER = "Your funds stay in your wallet.";
 
 /** components/global-nav.md / content — approved CTA label */
 export const CONNECT_WALLET_LABEL = "Connect Wallet";
+/** Shortened Global Nav CTA label shown ONLY on mobile (<1280px). */
+export const CONNECT_WALLET_SHORT = "Connect";
 
 /** patterns/dashboard-layout.md — Suggestions empty state */
 export const SUGGESTIONS_EMPTY_TITLE = "No suggestions yet";
@@ -105,10 +107,17 @@ export const ASK_SMITH_LABEL_SUPPORT = "Ask Smith AI about support topics";
 
 /** components/global-nav.md / rules/demo-mode-rules.md — primary CTA */
 export const TRY_DEMO_MODE = "Try Demo Mode";
+/** Shortened Global Nav CTA label shown ONLY on mobile (<1280px). */
+export const TRY_DEMO_MODE_SHORT = "Demo";
 
 /** Hover tooltip on the disabled Portfolio / Goal / Support nav items (disconnected / onboarding). */
 export const NAV_DISABLED_TOOLTIP =
   "Available once your wallet is connected and onboarding is complete.";
+
+/** Mobile Global Nav — hamburger button + slide-in nav drawer. */
+export const NAV_MENU_OPEN = "Open menu";
+export const NAV_MENU_CLOSE = "Close menu";
+export const NAV_MENU_TITLE = "Menu";
 
 /** dashboard-demo-state.json demo_banner.title (also announcement.md) */
 export const DEMO_BANNER_TITLE = "You’re in demo mode.";
@@ -120,8 +129,14 @@ export const DEMO_BANNER_DESCRIPTION =
 /** dashboard-demo-state.json demo_banner.actions[0].label */
 export const DEMO_BANNER_EXIT = "Exit Demo";
 
+/** Shortened banner exit label used only on mobile (< 1280px). */
+export const DEMO_BANNER_EXIT_SHORT = "Exit";
+
 /** dashboard-demo-state.json demo_banner.actions[1].label */
 export const DEMO_BANNER_CONNECT = "Connect Wallet";
+
+/** Shortened banner connect label used only on mobile (< 1280px). */
+export const DEMO_BANNER_CONNECT_SHORT = "Connect";
 
 /** dashboard-demo-state.json demo_banner.accessibility.label */
 export const DEMO_BANNER_ARIA = "Demo Mode is active. This is a sample portfolio.";
@@ -228,10 +243,20 @@ export const REAL_WALLET_VALUE_DESC =
 export const SUGGESTION_BUFFER_TITLE = "Top Up Your Safety Buffer";
 export const SUGGESTION_BUFFER_DESCRIPTION =
   "Your stablecoin reserve is below target. Add funds to fully cover your Safety Buffer before investing further.";
-/* Detailed, numbers-rich buffer body for a definite (non-range, non-plan) shortfall. {current}/{covered}/{target}/
- * {targetMonths}/{shortfall} come from the canonical Safety Buffer assessment — never invented. */
+/* Detailed, numbers-rich buffer body for a definite (non-range, non-plan) shortfall.
+ * {current}/{coveredMonths}/{targetMonths} come from the canonical Safety Buffer
+ * assessment — never invented. Both month values are BARE NUMBERS here (the
+ * sentence supplies the unit), unlike the metric cards which carry their own.
+ * The hyphenated "{targetMonths}-month target" reads correctly at EVERY value
+ * ("0.4 of your 1-month target", "4 of your 6-month target") and matches the
+ * near-target variant's existing "your {months}-month Safety Buffer target".
+ *
+ * One sentence, one comparison: where you are against where you're aiming. The
+ * "add {shortfall}" instruction lives in the card's action line ("Add $2,000 to
+ * your Safety Buffer."), and the target DOLLAR figure is the modal's "Target"
+ * metric — repeating either here just said the same thing twice. */
 export const SUGGESTION_BUFFER_SHORTFALL_DETAIL =
-  "You currently have {current} in your Safety Buffer, enough to cover {covered}. Your target is {target}, or {targetMonths}. Add {shortfall} in USDC before investing further.";
+  "You have {current} in your Safety Buffer, covering {coveredMonths} of your {targetMonths}-month target.";
 /* Range shortfall (some stablecoin value is still being verified): {current} confirmed + {beingVerified} pending
  * against {target}; the confirmed minimum to add now is {shortfall}, and {additional} more may be needed later. */
 export const SUGGESTION_BUFFER_RANGE_DETAIL =
@@ -246,10 +271,15 @@ export const SUGGESTION_BUFFER_NEARLY_FUNDED_DETAIL =
 /* Plan-backed shortfall where the next planned contribution FULLY covers the gap → complete it via that contribution. */
 export const SUGGESTION_BUFFER_PLAN_DETAIL =
   "Your Safety Buffer is {shortfall} below target. Direct your next planned contribution to USDC to fully fund it before investing further.";
-/* A frozen (not transferable) stablecoin is excluded from the eligible reserve. {verified}/{shortfall}/{target} +
- * a count-aware clause about the excluded holding(s). */
+/* A frozen (not transferable) stablecoin is excluded from the eligible reserve:
+ * {verified} + a count-aware clause about the excluded holding(s).
+ *
+ * States the eligible position and WHY it is lower than expected — nothing else.
+ * The amount to add is the card's action line ("Add $2,000 to your Safety
+ * Buffer.") and the modal's emphasized "Amount to add" card; the target is the
+ * modal's "Target" card. Repeating either here said the same thing twice. */
 export const SUGGESTION_BUFFER_FROZEN_DETAIL =
-  "You have {verified} in eligible stablecoins. {frozenClause} Add {shortfall} in USDC to reach your {target} target.";
+  "You have {verified} in eligible stablecoins. {frozenClause}";
 export const SUGGESTION_BUFFER_FROZEN_ONE =
   "One stablecoin holding is frozen and can’t be used as a liquid reserve, so it isn’t counted.";
 export const SUGGESTION_BUFFER_FROZEN_MANY =
@@ -575,6 +605,11 @@ export const FS_CHANGE_PERIOD = "today";
 export const FS_NET_CONTRIB_LABEL = "Net Contributions";
 /** Net-contributions caption — same for the sourced value and the $0 empty state. */
 export const FS_NET_CONTRIB_ESTIMATE = "Invested over the last 12 months";
+/** Net Contributions info icon — why manually added assets are not counted here. */
+export const FS_NET_CONTRIB_INFO_ARIA = "About Net Contributions";
+export const FS_NET_CONTRIB_MANUAL_NOTE =
+  "Bitcoin and Ethereum are added manually, so we don\u2019t know when they were invested. " +
+  "They count toward your Total Portfolio Value but are not included here.";
 
 /** Projected Growth (real wallet) — section caption under the title. */
 export const PG_CAPTION = "Modeled using your strategy settings over your selected timeline";
@@ -916,3 +951,45 @@ export const ONBOARDING_FINISH = "Finish Setup";
 /** onboarding-copy.md — Finish / Transition Step (Success title), used as the
  *  completion toast. No description. */
 export const ONBOARDING_FINISH_TOAST = "Onboarding completed";
+
+
+/* ---------- Portfolio: External Holdings (manually added BTC/ETH) ---------- */
+
+/** Portfolio section heading (peer of "Asset Deployment Overview"). */
+export const EXT_HOLDINGS_SECTION_TITLE = "External Holdings";
+/** Card title. */
+export const EXT_MANUAL_TITLE = "Manually Added Assets";
+/** Card caption. */
+export const EXT_MANUAL_CAPTION =
+  "Bitcoin and Ethereum held outside your connected Solana wallet.";
+/** Per-row action label. */
+export const EXT_ADD_LABEL = "Add";
+
+/* ---------- External Holdings: Add manual asset modal ---------- */
+
+/** Modal headings, one per addable chain. */
+export const EXT_ADD_BTC_TITLE = "Add Bitcoin";
+export const EXT_ADD_ETH_TITLE = "Add Ethereum";
+/** Same dialog, reopened on an already-added asset to update the amount. */
+export const EXT_MANAGE_BTC_TITLE = "Manage Bitcoin";
+export const EXT_MANAGE_ETH_TITLE = "Manage Ethereum";
+
+/** Amount field labels. */
+export const EXT_BTC_AMOUNT_LABEL = "Bitcoin amount";
+export const EXT_ETH_AMOUNT_LABEL = "Ethereum amount";
+
+/** Neutral numeric placeholder shared by both amount fields. */
+export const EXT_AMOUNT_PLACEHOLDER = "0.00";
+
+/** Modal action labels. */
+export const EXT_CANCEL_LABEL = "Cancel";
+export const EXT_CONFIRM_LABEL = "Confirm";
+export const EXT_CLOSE_LABEL = "Close";
+
+/** Precision error: each chain has its own decimal limit (BTC 8, ETH 18). */
+export const extDecimalsError = (chainName: string, decimals: number) =>
+  `${chainName} supports up to ${decimals} decimal places.`;
+/** Row action once an amount has been added. */
+export const EXT_MANAGE_LABEL = "Manage";
+/** Confirmation toast after an amount is added, e.g. "BTC added". */
+export const extAddedToast = (symbol: string) => `${symbol} added`;

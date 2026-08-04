@@ -22,6 +22,8 @@ import SmithInitialLoadingState from "./SmithInitialLoadingState";
 import ConfirmDialog from "./ConfirmDialog";
 import ButtonIcon from "./ButtonIcon";
 import { useReducedMotion } from "./useReducedMotion";
+import { useIsMobileViewport } from "./useIsMobileViewport";
+import { useScrollLock } from "./useScrollLock";
 import { useTypewriter } from "./useTypewriter";
 import { sessionFlags } from "../state/sessionFlags";
 import {
@@ -69,6 +71,9 @@ interface Props {
 
 export default function AskSmithAiPanel({ content, onClose, pushToast }: Props) {
   const reduced = useReducedMotion();
+  // On mobile (<1280px) the panel covers the viewport, so lock background scroll
+  // while it's open. On desktop it's a side panel — the page scrolls as usual.
+  useScrollLock(useIsMobileViewport());
   const closeRef = useRef<HTMLButtonElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLButtonElement>(null);

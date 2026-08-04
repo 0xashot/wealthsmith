@@ -23,6 +23,7 @@ import { useSolStakingSelectorPresentation } from "../hooks/useSolStakingSelecto
 import type { RailSuggestions } from "../suggestions/useRailSuggestions";
 import type { RightRailState, SuggestionCardState } from "../types/dashboard";
 import { railOnTrackUnavailableMessage } from "./portfolioCompletenessUi";
+import { useDismissedSuggestions } from "../state/dismissedSuggestions";
 import {
   REAL_WALLET_SUGGESTIONS_TITLE,
   SUGGESTIONS_RAIL_DESC,
@@ -49,6 +50,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
   // level from the same-origin runtime artifact (no external provider calls). Demo and Real
   // Wallet consume the SAME presentation object. It never changes selectedProtocolId.
   const { presentation: stakingPresentation } = useSolStakingSelectorPresentation();
+  const { dismiss } = useDismissedSuggestions();
 
   // Read-only "Review": open the details modal when the engine produced details
   // for this suggestion (all Step 10A suggestions do).
@@ -66,6 +68,15 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
   const detailsForModal = selectedDetails && isStakingSelected && stakingPresentation
     ? { ...selectedDetails, selectorPresentation: stakingPresentation }
     : selectedDetails;
+  // Acknowledge an OBSERVATION from its own modal. Only observation cards carry a
+  // dismissal signature, so every other family renders no Dismiss control at all.
+  const onDismissSelected = selectedCard?.dismissalSignature
+    ? () => {
+        dismiss(selectedCard.dismissalSignature as string);
+        setSelectedId(null);
+      }
+    : undefined;
+
   const reviewModal = selectedStableYieldReview ? (
     <SuggestionReviewModal
       stableYieldReview={selectedStableYieldReview}
@@ -85,6 +96,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
       swapAction={selectedId ? rail?.swapActionById?.[selectedId] : undefined}
       swapQuoteIsDca={selectedCard?.category === "dca"}
       swapQuoteFetcher={rail?.swapQuoteFetcher}
+      onDismiss={onDismissSelected}
       onClose={() => setSelectedId(null)}
     />
   ) : null;

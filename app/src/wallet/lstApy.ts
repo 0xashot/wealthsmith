@@ -14,11 +14,17 @@
  * Two LSTs need a different source: Marinade's mSOL (its own program → Marinade
  * API), and Sanctum Infinity INF (a multi-LST pool with no single stake pool, and
  * Sanctum's APY endpoint returns 0 → DefiLlama's maintained yields feed).
- * READ-ONLY: getProgramAccounts + getStakePoolAccount + read-only HTTP GETs; no
+ * Pool discovery: each supported LST already carries its canonical pool address
+ * (SUPPORTED_LSTS.expectedPool), so the pool is read directly and accepted only
+ * if its on-chain poolMint matches the mint. The getProgramAccounts scan remains
+ * as a fallback — it is an expensive indexed method that public RPCs commonly
+ * reject, which previously left every stake-pool LST with no APY at all.
+ * READ-ONLY: getAccountInfo + getStakePoolAccount + read-only HTTP GETs; no
  * signing.
  */
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getStakePoolAccount } from "@solana/spl-stake-pool";
+import { lstIdentityByMint } from "./lstUnderlyingNormalization";
 
 /** Stake-pool programs that share the SPL StakePool account layout. */
 const STAKE_POOL_PROGRAMS = [
@@ -75,7 +81,29 @@ async function fetchDefiLlamaApy(poolId: string): Promise<number | undefined> {
   }
 }
 
-/** APY (percent) per stake-pool LST mint, via last-epoch exchange-rate growth. */
+/** Compute APY from a decoded StakePool account's last-epoch exchange-rate growth. */
+function apyFromStakePool(d: { totalLamports: unknown; poolTokenSupply: unknown; lastEpochTotalLamports: unknown; lastEpochPoolTokenSupply: unknown }, epochsPerYear: number): number | undefined {
+  const rate = Number(d.totalLamports) / Number(d.poolTokenSupply);
+  const lastRate = Number(d.lastEpochTotalLamports) / Number(d.lastEpochPoolTokenSupply);
+  if (!(rate > 0) || !(lastRate > 0)) return undefined;
+  const apy = (Math.pow(1 + (rate / lastRate - 1), epochsPerYear) - 1) * 100;
+  return Number.isFinite(apy) && apy >= 0 ? apy : undefined;
+}
+
+/** APY (percent) per stake-pool LST mint, via last-epoch exchange-rate growth.
+ *
+ * Resolution order per mint:
+ *   1. the KNOWN pool account for that LST (SUPPORTED_LSTS.expectedPool) — a single
+ *      cheap getAccountInfo, and the pool is ACCEPTED ONLY IF its on-chain
+ *      `poolMint` equals the mint we asked for, so a stale constant can never
+ *      mis-attribute an APY;
+ *   2. otherwise a getProgramAccounts scan to discover the pool.
+ *
+ * Why the known pool comes first: `getProgramAccounts` is an expensive indexed
+ * method that the default public RPC (and most free tiers) reject or time out on —
+ * which silently left every stake-pool LST (JupSOL / JitoSOL / bSOL) with no APY.
+ * The scan is now only a fallback for an LST we have no pool constant for.
+ */
 async function fetchStakePoolApys(
   connection: Connection,
   mints: string[]
@@ -94,26 +122,40 @@ async function fetchStakePoolApys(
 
   await Promise.all(
     mints.map(async (mint) => {
-      try {
-        for (const program of STAKE_POOL_PROGRAMS) {
+      // (1) Known pool account — cheap, and identity-checked against poolMint.
+      const known = lstIdentityByMint(mint)?.expectedPool;
+      if (known) {
+        try {
+          const pool = await getStakePoolAccount(connection, new PublicKey(known));
+          if (pool.account.data.poolMint.toBase58() === mint) {
+            const apy = apyFromStakePool(pool.account.data, epochsPerYear);
+            if (apy !== undefined) {
+              out.set(mint, apy);
+              return;
+            }
+          }
+        } catch {
+          // fall through to discovery
+        }
+      }
+
+      // (2) Discovery fallback. Each program is tried INDEPENDENTLY: a failure on
+      // one (rate limit / unsupported method) must not abort the remaining
+      // programs — that previously hid JupSOL, whose program is listed last.
+      for (const program of STAKE_POOL_PROGRAMS) {
+        try {
           const accts = await connection.getProgramAccounts(new PublicKey(program), {
             filters: [{ memcmp: { offset: POOL_MINT_OFFSET, bytes: mint } }],
             dataSlice: { offset: 0, length: 0 },
           });
           if (accts.length === 0) continue;
           const pool = await getStakePoolAccount(connection, accts[0].pubkey);
-          const d = pool.account.data;
-          const rate = Number(d.totalLamports) / Number(d.poolTokenSupply);
-          const lastRate =
-            Number(d.lastEpochTotalLamports) / Number(d.lastEpochPoolTokenSupply);
-          if (rate > 0 && lastRate > 0) {
-            const apy = (Math.pow(1 + (rate / lastRate - 1), epochsPerYear) - 1) * 100;
-            if (Number.isFinite(apy) && apy >= 0) out.set(mint, apy);
-          }
+          const apy = apyFromStakePool(pool.account.data, epochsPerYear);
+          if (apy !== undefined) out.set(mint, apy);
           break;
+        } catch {
+          // best-effort per PROGRAM — keep trying the others
         }
-      } catch {
-        // best-effort per mint
       }
     })
   );

@@ -361,11 +361,17 @@ export const CONTRIBUTION_POLICY_UPDATES_PRODUCT_OUTPUT = false;
 export const SOL_CONTRIBUTION_TARGET_MODELED = true;
 export const SOL_CONTRIBUTION_TARGET_ENABLED_FOR_MVP = true;
 
+/**
+ * BTC/ETH are ENABLED as MANUAL-ENTRY growth contribution targets: a contribution
+ * can be split toward them (growth_target_suballocation_v1), but there is still no
+ * wallet connector, no ownership verification, and no execution — amounts are
+ * stated by the user in External Holdings.
+ */
 export const BTC_CONTRIBUTION_TARGET_MODELED = true;
-export const BTC_CONTRIBUTION_TARGET_ENABLED = false;
+export const BTC_CONTRIBUTION_TARGET_ENABLED = true;
 
 export const ETH_CONTRIBUTION_TARGET_MODELED = true;
-export const ETH_CONTRIBUTION_TARGET_ENABLED = false;
+export const ETH_CONTRIBUTION_TARGET_ENABLED = true;
 
 export const RWA_TARGET_MODEL_SUPPORTED = true;
 export const RWA_CONTRIBUTION_TARGET_ENABLED = false;
@@ -444,7 +450,7 @@ const REGISTRY: InvestmentTargetDefinition[] = [
     activationBlockers: [],
     notes: ["SOL is the enabled MVP growth DCA target. Contribution amount, allocation gap, and suitability are decided later by deterministic policy layers, not here."],
   },
-  // BTC — NATIVE Bitcoin, MODELED but not enabled. Never wrapped BTC.
+  // BTC — NATIVE Bitcoin, ENABLED as a manual-entry growth contribution target. Never wrapped BTC.
   {
     schemaVersion: INVESTMENT_TARGET_SCHEMA_VERSION,
     targetId: "btc",
@@ -452,25 +458,27 @@ const REGISTRY: InvestmentTargetDefinition[] = [
     symbol: "BTC",
     displayName: "Bitcoin",
     category: "growth_crypto",
-    lifecycleStatus: "modeled_not_enabled",
+    lifecycleStatus: "enabled",
     holdingSources: ["manual_entry"],
+    // Reduce-source is retained for modelling completeness but can never fire: a
+    // manual_entry position is excluded inside rebalanceAssessment (unverifiable).
     suggestionRoles: ["contribution_growth_target", "rebalance_increase_target", "rebalance_reduce_source"],
-    canBeContributionTarget: false,
+    canBeContributionTarget: true,
     canFundContributionPlan: false,
     canServeAsSafetyBuffer: false,
     canReceiveStableAllocation: false,
     priceRequirements: { priceRequiredForContributionPlanning: true, maximumPriceAgeMs: INVESTMENT_TARGET_DEFAULT_PRICE_MAX_AGE_MS },
-    allocationRequirements: { targetAllocationRequired: true, allocationPolicyKey: "growth_target_allocation_v_future", maximumOvershootAllowed: false },
-    minimumRequirements: { minimumPolicyKey: "dca_minimum_v_future" },
-    suitabilityPolicyKey: "btc_growth_suitability_v_future",
+    allocationRequirements: { targetAllocationRequired: true, allocationPolicyKey: "growth_target_suballocation_v1", maximumOvershootAllowed: false },
+    minimumRequirements: { minimumPolicyKey: "dca_minimum_v1" },
+    suitabilityPolicyKey: "btc_growth_suitability_v1",
     executionStatus: "read_only_only",
     transactionsEnabled: false,
     walletSignatureRequired: false,
-    enabledForMvp: false,
-    activationBlockers: ["target_disabled", "price_source_not_configured", "target_allocation_not_configured", "suitability_policy_not_configured", "manual_entry_not_supported"],
-    notes: ["Native Bitcoin (assetId 'bitcoin:native'), NOT wrapped BTC. Manual entry is MODELED only — no BTC wallet connector, no ownership verification, no execution. Disabled until a future step explicitly activates it."],
+    enabledForMvp: true,
+    activationBlockers: [],
+    notes: ["Native Bitcoin (assetId 'bitcoin:native'), NOT wrapped BTC. Amounts come from MANUAL ENTRY (External Holdings) — stated by the user, never read or verified on-chain — so BTC can receive a contribution split but can never fund a plan, back the Safety Buffer, or be sold by a suggestion. Price is sourced read-only from the public feed; execution remains read-only."],
   },
-  // ETH — NATIVE Ethereum, MODELED but not enabled. Never wrapped ETH.
+  // ETH — NATIVE Ethereum, ENABLED as a manual-entry growth contribution target. Never wrapped ETH.
   {
     schemaVersion: INVESTMENT_TARGET_SCHEMA_VERSION,
     targetId: "eth",
@@ -478,23 +486,25 @@ const REGISTRY: InvestmentTargetDefinition[] = [
     symbol: "ETH",
     displayName: "Ethereum",
     category: "growth_crypto",
-    lifecycleStatus: "modeled_not_enabled",
+    lifecycleStatus: "enabled",
     holdingSources: ["manual_entry"],
+    // Reduce-source is retained for modelling completeness but can never fire: a
+    // manual_entry position is excluded inside rebalanceAssessment (unverifiable).
     suggestionRoles: ["contribution_growth_target", "rebalance_increase_target", "rebalance_reduce_source"],
-    canBeContributionTarget: false,
+    canBeContributionTarget: true,
     canFundContributionPlan: false,
     canServeAsSafetyBuffer: false,
     canReceiveStableAllocation: false,
     priceRequirements: { priceRequiredForContributionPlanning: true, maximumPriceAgeMs: INVESTMENT_TARGET_DEFAULT_PRICE_MAX_AGE_MS },
-    allocationRequirements: { targetAllocationRequired: true, allocationPolicyKey: "growth_target_allocation_v_future", maximumOvershootAllowed: false },
-    minimumRequirements: { minimumPolicyKey: "dca_minimum_v_future" },
-    suitabilityPolicyKey: "eth_growth_suitability_v_future",
+    allocationRequirements: { targetAllocationRequired: true, allocationPolicyKey: "growth_target_suballocation_v1", maximumOvershootAllowed: false },
+    minimumRequirements: { minimumPolicyKey: "dca_minimum_v1" },
+    suitabilityPolicyKey: "eth_growth_suitability_v1",
     executionStatus: "read_only_only",
     transactionsEnabled: false,
     walletSignatureRequired: false,
-    enabledForMvp: false,
-    activationBlockers: ["target_disabled", "price_source_not_configured", "target_allocation_not_configured", "suitability_policy_not_configured", "manual_entry_not_supported"],
-    notes: ["Native Ethereum (assetId 'ethereum:native'), NOT wrapped ETH. Manual entry is MODELED only — no ETH wallet connector, no ownership verification, no execution. Disabled until a future step explicitly activates it."],
+    enabledForMvp: true,
+    activationBlockers: [],
+    notes: ["Native Ethereum (assetId 'ethereum:native'), NOT wrapped ETH. Amounts come from MANUAL ENTRY (External Holdings) — stated by the user, never read or verified on-chain — so ETH can receive a contribution split but can never fund a plan, back the Safety Buffer, or be sold by a suggestion. Price is sourced read-only from the public feed; execution remains read-only."],
   },
 ];
 

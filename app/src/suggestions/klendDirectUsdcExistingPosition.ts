@@ -280,7 +280,7 @@ export const WITHDRAWAL_STATE_COPY: Record<PositionWithdrawalState, string> = {
 /* ------------------------------------------------------------------ *
  * Normalization into the canonical WalletPosition + deduplication (pure).
  * ------------------------------------------------------------------ */
-import type { WalletPosition } from "../wallet/walletPosition";
+import { lookupMint, type WalletPosition } from "../wallet/walletPosition";
 
 export const KLEND_DIRECT_POSITION_ID = `klend-direct-${POSITION_IDENTITY.reserveAddress}` as const;
 
@@ -304,6 +304,22 @@ export function toWalletPosition(r: KlendDirectExistingPositionResult): WalletPo
     uiAmount: resolved ? (r.recognizedUnderlyingTokenAmount as number) : cTokenTokens,
     decimals: resolved ? POSITION_IDENTITY.liquidityDecimals : POSITION_IDENTITY.cTokenDecimals,
     protocol: "Kamino",
+    // Always the USDC icon from the approved mint registry: the asset IS USDC even
+    // in the unresolved branch, where `mint` is the cToken and would otherwise fall
+    // back to the generic token glyph. The raw obligation row this replaces carried
+    // it, so omitting it here silently downgraded the row's icon.
+    icon: lookupMint(POSITION_IDENTITY.liquidityMint)?.icon,
+    // The economic exposure as `legs`, like every other protocol row. The raw
+    // obligation row this replaces carried legs, and each field this canonical row
+    // dropped relative to it became its own production bug (value → APY → icon →
+    // stable classification); legs is the last of them. RESOLVED ONLY: the leg is
+    // the redeemed underlying amount, so consumers that value or classify by legs
+    // (pricing pass, stable split) agree with `valueUsd` by construction. In the
+    // unresolved branch the underlying amount is unknown — emitting a cToken leg
+    // would invite a wrong price, so there are deliberately no legs there.
+    ...(resolved && typeof r.recognizedUnderlyingTokenAmount === "number"
+      ? { legs: [{ mint: r.liquidityMint, uiAmount: r.recognizedUnderlyingTokenAmount, side: "long" as const }] }
+      : {}),
     detection: "protocol_api",
     side: "supplied",
     apy: r.apyPct,
@@ -331,6 +347,35 @@ export function dedupeKlendDirectPosition(positions: WalletPosition[]): WalletPo
     if (p.source === "kamino" && p.detection === "protocol_api" && typeof p.id === "string" && p.id.includes(POSITION_IDENTITY.reserveAddress)) return false;
     return true;
   });
+}
+
+/**
+ * PURE: synthesize the wallet's cToken input from OBLIGATION-held collateral.
+ *
+ * A deposit made through Kamino's own app leaves no cTokens in the wallet — the
+ * obligation holds them — so the direct token-account scan finds nothing and the
+ * whole 17A methodology used to be skipped (surfacing "Verify Your Safety
+ * Buffer" for a fully vetted deposit). The obligation reports that same balance
+ * for the same reserve; this converts it into the exact account shape the
+ * discovery validator already checks (identity, token program, decimals).
+ *
+ * ONLY the approved reserve is promoted: any other market or reserve returns
+ * null and stays exactly as detected — not vetted, not counted.
+ */
+export function obligationCTokenAccount(
+  collateralRawByReserve: Record<string, string>,
+  ownerB58: string
+): WalletTokenAccountInput | null {
+  const raw = collateralRawByReserve[POSITION_IDENTITY.reserveAddress];
+  if (!raw || raw === "0") return null;
+  return {
+    address: `klend-obligation-${POSITION_IDENTITY.reserveAddress}`,
+    mint: POSITION_IDENTITY.cTokenMint,
+    tokenProgram: POSITION_IDENTITY.tokenProgram,
+    amountRaw: raw,
+    decimals: POSITION_IDENTITY.cTokenDecimals,
+    owner: ownerB58,
+  };
 }
 
 /** Merge the rich position into the wallet set: dedupe conflicting rows, then append exactly one row. */

@@ -4,6 +4,10 @@
  * mode) so `overflow: hidden` actually stops the scroll. The removed scrollbar
  * width is added back as padding so the page (and the sticky nav) doesn't shift.
  * Ref-counted at module scope so stacked modals don't unlock early.
+ *
+ * `enabled` (default true) lets a caller scope the lock — e.g. a panel that only
+ * covers the viewport on mobile passes a live `isMobile` flag, so the lock engages
+ * and releases as the viewport crosses the breakpoint.
  */
 import { useEffect } from "react";
 
@@ -11,8 +15,9 @@ let lockCount = 0;
 let savedOverflow = "";
 let savedPaddingRight = "";
 
-export function useScrollLock() {
+export function useScrollLock(enabled: boolean = true) {
   useEffect(() => {
+    if (!enabled) return;
     const root = document.documentElement;
     if (lockCount === 0) {
       const scrollbarWidth = window.innerWidth - root.clientWidth;
@@ -32,5 +37,5 @@ export function useScrollLock() {
         root.style.paddingRight = savedPaddingRight;
       }
     };
-  }, []);
+  }, [enabled]);
 }

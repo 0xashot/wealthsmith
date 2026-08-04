@@ -98,9 +98,14 @@ function buildStablesToCryptoCard(
   const afterCrypto = curCrypto + swapFraction * (tgtCrypto - curCrypto);
   const afterStable = curStable - (afterCrypto - curCrypto);
   const goalClause = partial ? "to move closer to your target" : "to reach your target";
+  // "USDC above your Safety Buffer" states the source AND the protection in one
+  // phrase — the old copy said "excess USDC … while keeping your Safety Buffer
+  // fully funded", which spent a clause restating what "above your buffer"
+  // already means. The buffer guarantee is unchanged: the source is still only
+  // ever the excess above it (see the buffer_protection guardrail below).
   const cardBody =
-    `Your portfolio currently has ${pctText(curCrypto)}% in crypto, below your ${pctText(tgtCrypto)}% target. ` +
-    `Swap $${Math.round(suggestedAmountUsd).toLocaleString("en-US")} of excess USDC to SOL ${goalClause} while keeping your Safety Buffer fully funded.`;
+    `Crypto makes up ${pctText(curCrypto)}% of your portfolio, below your ${pctText(tgtCrypto)}% target. ` +
+    `Swap ${swapUsdText} of USDC above your Safety Buffer into SOL ${goalClause}.`;
 
   const guardrails: SuggestionGuardrail[] = [
     { code: "pricing_available", status: "passed" },

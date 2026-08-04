@@ -34,6 +34,8 @@ import PageHeader from "../components/PageHeader";
 import PortfolioAllocationDonuts from "../components/PortfolioAllocationDonuts";
 import LiquidAssetsCard from "../components/LiquidAssetsCard";
 import EarningAssetsCard from "../components/EarningAssetsCard";
+import ExternalHoldingsSection from "../components/ExternalHoldingsSection";
+import { useManualAssets } from "../wallet/manualAssetPositions";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 import type { SavedGoal } from "../types/goal";
@@ -69,9 +71,20 @@ export default function DemoPortfolioPage({
   // The SAME shared demo rail the Demo Dashboard renders, so Smith AI Suggestions
   // are identical across Demo Dashboard and Portfolio (matching connected mode,
   // where both pages share one rail). Recomputes when the sample goal is edited.
-  const demoContributionRail = useMemo(() => buildDemoContributionRail(goal, demoWalletPositions), [goal]);
+  // Manually added External Holdings (BTC/ETH): DISPLAY arrays below, plus the
+  // allocation MEASUREMENT fed to the demo rail (never positions, never a source).
+  const manual = useManualAssets();
+  const demoContributionRail = useMemo(() => buildDemoContributionRail(goal, demoWalletPositions, manual.positions), [goal, manual.positions]);
 
-  const liquid = getLiquidPositions(demoWalletPositions);
+  // Demo positions are available synchronously, but a manually added BTC/ETH
+  // amount is not priced until the external feed answers — so hold the merged
+  // set back until it has, rather than letting the charts jump when it lands.
+  const displayPositions =
+    !manual.pricesLoading && manual.positions.length > 0
+      ? [...demoWalletPositions, ...manual.positions]
+      : demoWalletPositions;
+
+  const liquid = getLiquidPositions(displayPositions);
   const staked = getStakedPositions(demoWalletPositions);
   const protocol = getProtocolPositions(demoWalletPositions);
 
@@ -99,7 +112,7 @@ export default function DemoPortfolioPage({
           <PageHeader header={p.page_header} />
           {/* Composition donuts (Balance Overview + Crypto Assets Allocation) from
               the sample demo holdings. */}
-          <PortfolioAllocationDonuts positions={demoWalletPositions} />
+          <PortfolioAllocationDonuts positions={displayPositions} />
 
           {/* Asset Deployment Overview — same category tables as the connected
               Portfolio, from the sample holdings. */}
@@ -109,7 +122,7 @@ export default function DemoPortfolioPage({
             <EarningAssetsCard
               title={PORT_STAKED_TITLE}
               caption={PORT_STAKED_CAPTION}
-              valueHeader="USD Value"
+              valueHeader="Value"
               positions={staked}
               onManageOpen={onExternalHandoff}
             />
@@ -121,6 +134,15 @@ export default function DemoPortfolioPage({
               onManageOpen={onExternalHandoff}
             />
           </section>
+
+          {/* External Holdings — same section as the connected Portfolio. */}
+          <ExternalHoldingsSection
+            amounts={manual.amounts}
+            prices={manual.prices}
+            onSetAmount={manual.setAmount}
+            onClearAmount={manual.clearAmount}
+            pushToast={pushToast}
+          />
         </main>
 
         {railMode === "ask_smith_ai" ? (

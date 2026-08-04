@@ -69,6 +69,9 @@ const TestingPage = lazy(() => import("./pages/TestingPage"));
 const PortfolioTestingPage = lazy(() => import("./pages/PortfolioTestingPage"));
 import { isTestingPageEnabled, TESTING_PAGE_ROUTE, PORTFOLIO_TESTING_PAGE_ROUTE } from "./pages/internalTestingRoute";
 import "./styles/dashboard.css";
+// Mobile/tablet overrides (< 1280px) — loaded last so it wins; every rule is
+// scoped inside a max-width media query, so the desktop design is never affected.
+import "./styles/mobile.css";
 
 export type AppMode = "connected" | "demo" | "disconnected";
 export type ConnectedPage = "dashboard" | "portfolio" | "goal" | "support";

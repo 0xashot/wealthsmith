@@ -87,6 +87,16 @@
   box-shadow: var(--shadow-control-focus);
 }
 
+/* Mobile-only chrome (symbol logo, hamburger, short CTA/banner labels) — hidden
+   on desktop; shown/styled in mobile.css (<1280px). Desktop layout unchanged. */
+.global-nav__logo-symbol,
+.global-nav__menu-btn,
+.global-nav__cta-short,
+.global-nav__wallet-pill-short,
+.demo-banner__action-short {
+  display: none;
+}
+
 .global-nav__items {
   display: flex;
   align-items: center;
@@ -1326,6 +1336,18 @@
 .suggestion-rail__cards {
   display: grid;
   gap: var(--spacing-card-gap-md);
+}
+
+/* The group for OBSERVATION cards. Visually IDENTICAL to the cards above it —
+   the same stack, the same gap, no rule or heading (a divider made the two read
+   as different kinds of content, which they are not from the UI's perspective).
+   The distinction is behavioral only: observations sort last, are never Top
+   Pick, and can be acknowledged from their modal. */
+.suggestion-rail__group {
+  display: grid;
+  gap: var(--spacing-card-gap-md);
+  /* No own margin: the parent .suggestion-rail grid already gaps its children,
+     so any extra here doubles the space and reintroduces a visual break. */
 }
 
 /* Loading card: same card shell as a suggestion, holding the centered animated
@@ -2737,6 +2759,13 @@
   overflow-wrap: anywhere;
 }
 
+/* The one figure the card is asking the user to act on (e.g. "Amount to add").
+   Value only — the label stays neutral, so the emphasis reads as the answer
+   rather than as a highlighted row. */
+.review-modal__metric-value--primary {
+  color: var(--color-action-primary-background-default);
+}
+
 /* Subdued secondary line under a metric value (e.g. the USD value under "3.9 SOL"), matching the description tone. */
 .review-modal__metric-subvalue {
   display: block;
@@ -3674,6 +3703,15 @@
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-surface-md);
   box-shadow: var(--shadow-card-default);
+}
+
+/* Desktop: the mobile onboarding wrapper is transparent (the panel stays a plain
+   grid child) and its branded top bar is hidden. mobile.css turns both on. */
+.onboarding-mobile-shell {
+  display: contents;
+}
+.onboarding-mobile-topbar {
+  display: none;
 }
 
 /* desktop/wide: sticky assistant sidebar sized to fit inside the viewport — the
@@ -4698,4 +4736,12 @@
 .swap-quote__refresh {
   align-self: flex-start;
   margin-top: var(--spacing-stack-gap-sm);
+}
+
+
+/* Metric label with a trailing info affordance (e.g. Net Contributions). */
+.metric__label--with-info {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
 }

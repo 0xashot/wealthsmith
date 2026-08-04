@@ -28,6 +28,7 @@ import { demoSwapQuoteFetcher } from "../suggestions/swapQuote/demoSwapQuote";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 import type { SavedGoal } from "../types/goal";
 import { buildDemoContributionRail, DEMO_PRICED_AS_OF } from "../suggestions/demoContributionScenario";
+import { useManualAssets } from "../wallet/manualAssetPositions";
 
 type RightRailMode = "suggestions" | "ask_smith_ai";
 
@@ -59,7 +60,10 @@ export default function DemoDashboardPage({
   // Pick). Rendered via the shared rail; its canonical target summary also feeds
   // the dashboard body's Recommended allocation (so body ⇔ rail agree). Recomputes
   // when the user edits the sample goal on the Demo Goal page.
-  const demoContributionRail = useMemo(() => buildDemoContributionRail(goal, demoWalletPositions), [goal]);
+  // Allocation MEASUREMENT only, matching the live rail, so the Demo dashboard's
+  // allocation card and its Rebalance suggestion always agree.
+  const manual = useManualAssets();
+  const demoContributionRail = useMemo(() => buildDemoContributionRail(goal, demoWalletPositions, manual.positions), [goal, manual.positions]);
 
   const openAskSmithAi = () => setRailMode("ask_smith_ai");
   const closeAskSmithAi = () => {

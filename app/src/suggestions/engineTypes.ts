@@ -326,6 +326,13 @@ export interface ReviewMetric {
   subValue?: string;
   /** Optional hover/focus tooltip text; when set the label shows an info icon that reveals this note. */
   tooltip?: string;
+  /**
+   * Render the VALUE in the primary action color. Reserved for the one figure the
+   * card is asking the user to act on (e.g. the Safety Buffer's "Amount to add"),
+   * so the modal has a single visual answer to "what do I do?". Presentation only:
+   * it changes no number, ordering, or eligibility.
+   */
+  emphasis?: "primary";
 }
 
 export type ReviewAssetRole =
@@ -748,6 +755,22 @@ export interface EngineSuggestion {
    * Buffer."). Never freeform LLM text, never invented — the `amount`/`amount.label` still drive the Review modal.
    */
   impactTextOverride?: string;
+  /**
+   * True when the card asks the user to NOTICE something rather than to DO
+   * something. `action_kind: "review_only"` does not capture this — every family
+   * is review-only in a non-custodial product — but a Safety Buffer shortfall has
+   * a concrete next step (deposit), whereas "your positions look concentrated"
+   * does not: reviewing IS the action. Observations get a quieter rail treatment
+   * and can be acknowledged; actionable suggestions cannot.
+   */
+  observationOnly?: boolean;
+  /**
+   * Signature of the CONDITION behind an observation, so acknowledging it hides
+   * THIS situation rather than the category forever — the signature changes when
+   * the situation materially changes and the card returns. Set only alongside
+   * `observationOnly`. See state/dismissedSuggestions.ts.
+   */
+  dismissalSignature?: string;
   /** Card `type` override so sibling cards in one category can resolve distinct icons (e.g. goal/coins/shield). */
   cardTypeOverride?: string;
   /**

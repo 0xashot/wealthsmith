@@ -24,8 +24,25 @@ export function formatAmount(p: WalletPosition): string {
   return `${amount} ${p.symbol}`;
 }
 
-/** Solscan token address page for the row (native SOL / native stake → the native SOL page). */
+/**
+ * Whole-token amount + symbol, e.g. "30 SOL", "15,255 USDC" — the fractional part
+ * is dropped (truncated, so the figure never rounds up past the real balance).
+ * Used for the simplified mobile earning tables; the precise amount stays on
+ * desktop and via the asset's explorer link.
+ */
+export function formatAmountWhole(p: WalletPosition): string {
+  const amount =
+    p.uiAmount != null ? Math.trunc(p.uiAmount).toLocaleString("en-US") : p.amount;
+  return `${amount} ${p.symbol}`;
+}
+
+/**
+ * Block-explorer page for the row. A position that carries its own explorer wins
+ * (a manually added BTC/ETH holding lives on its own chain, not Solana);
+ * otherwise Solscan by mint (native SOL / native stake → the native SOL page).
+ */
 export function explorerUrl(p: WalletPosition): string | undefined {
+  if (p.explorerUrl) return p.explorerUrl;
   const mint = p.type === "native" || p.type === "stake" ? NATIVE_SOL_ID : p.mint;
   return mint ? `https://solscan.io/token/${mint}` : undefined;
 }

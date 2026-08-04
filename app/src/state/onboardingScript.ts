@@ -58,6 +58,10 @@ const S3 =
   "I’ve updated your Financial Snapshot with your wallet data. You can see your current allocation on the left.\n\n" +
   "Now let’s personalize your plan. What’s your main financial goal?";
 
+/** Item 3 (mobile) — the snapshot line is dropped: the full-screen onboarding
+ *  hides the Dashboard, so "you can see your allocation on the left" doesn't apply. */
+const S3_MOBILE = "Now let’s personalize your plan. What’s your main financial goal?";
+
 /** Item 4 — goal acknowledgment. */
 const S4 =
   "Great — focusing on {goal}.\n" +
@@ -204,10 +208,10 @@ const P = "\n\n";
  * It composes the previous answer's acknowledgment + any interstitial statement
  * + this step's question, echoing the user's real answers.
  */
-export function stepLeadMessage(index: number, a: OnboardingAnswers): string {
+export function stepLeadMessage(index: number, a: OnboardingAnswers, mobile = false): string {
   switch (index) {
     case 0:
-      return S3;
+      return mobile ? S3_MOBILE : S3;
     case 1:
       return fill(S4, a) + P + S5;
     case 2:
@@ -230,7 +234,12 @@ export function stepLeadMessage(index: number, a: OnboardingAnswers): string {
  * structured so the plan reads as bold-labelled bullets — the same scannable
  * styling as the Goal tour, not a cramped inline string.
  */
-export function summaryMessage(a: OnboardingAnswers): MessageBlock[] {
+/**
+ * Plan summary. On mobile the closing "let's look at your portfolio" line is
+ * dropped — the mobile onboarding ends at Finish (no Portfolio tour), so there is
+ * nothing to segue to. Desktop keeps the full message and the tour.
+ */
+export function summaryMessage(a: OnboardingAnswers, mobile = false): MessageBlock[] {
   return [
     { type: "p", text: "Your personalized plan is ready." },
     { type: "p", text: "Here’s what I’ve used:" },
@@ -246,7 +255,14 @@ export function summaryMessage(a: OnboardingAnswers): MessageBlock[] {
       ],
     },
     { type: "p", text: "You can review and adjust these details anytime." },
-    { type: "p", text: "Now let’s look at how your current portfolio compares with your plan." },
+    ...(mobile
+      ? []
+      : [
+          {
+            type: "p" as const,
+            text: "Now let’s look at how your current portfolio compares with your plan.",
+          },
+        ]),
   ];
 }
 

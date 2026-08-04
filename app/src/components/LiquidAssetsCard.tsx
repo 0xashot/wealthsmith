@@ -1,7 +1,7 @@
 /**
  * LiquidAssetsCard — the "Liquid Assets" card of the Asset Deployment Overview
  * (patterns/portfolio-overview.md): heading, the summed sourced USD total of the
- * category, a caption, and a 4-column table (Asset / Amount / USD Value /
+ * category, a caption, and a 4-column table (Asset / Amount / Value /
  * 24h Change) with client-side pagination when there are more than 5 rows.
  *
  * Honest values only: the total sums SOURCED position values (unpriced rows show
@@ -59,7 +59,7 @@ export default function LiquidAssetsCard({ positions, loading, completeness }: P
       <SkeletonDeployCard
         title={PORT_LIQUID_TITLE}
         caption={PORT_LIQUID_CAPTION}
-        headers={["Asset", "Amount", "USD Value", "24h Change"]}
+        headers={["Asset", "Amount", "Value", "24h Change"]}
         rows={Math.max(positions.length, 1)}
       />
     );
@@ -108,7 +108,7 @@ export default function LiquidAssetsCard({ positions, loading, completeness }: P
                     Amount
                   </th>
                   <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">
-                    USD Value
+                    Value
                   </th>
                   <th scope="col" className="portfolio-table__cell portfolio-table__header portfolio-table__cell--right">
                     24h Change

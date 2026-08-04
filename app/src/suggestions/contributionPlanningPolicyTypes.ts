@@ -16,6 +16,22 @@ export const DCA_MINIMUM_POLICY_VERSION = "1.0.0";
 export const SOL_GROWTH_SUITABILITY_POLICY_ID = "sol_growth_suitability_v1";
 export const SOL_GROWTH_SUITABILITY_POLICY_VERSION = "1.0.0";
 
+/**
+ * BTC / ETH growth suitability. The suitability EVALUATOR is asset-agnostic — it
+ * gates on the registry lifecycle flags, the recognized onboarding profile, and a
+ * configured target allocation. These ids simply declare that the two assets are
+ * governed by that same v1 rule, now that the risk-tiered sub-allocation policy
+ * (growth_target_suballocation_v1) supplies their target percentages.
+ *
+ * Holding source is MANUAL ENTRY: amounts are stated by the user and are never
+ * read or verified on-chain, so neither asset can fund a plan, serve as a Safety
+ * Buffer, or be a Rebalance sell source.
+ */
+export const BTC_GROWTH_SUITABILITY_POLICY_ID = "btc_growth_suitability_v1";
+export const BTC_GROWTH_SUITABILITY_POLICY_VERSION = "1.0.0";
+export const ETH_GROWTH_SUITABILITY_POLICY_ID = "eth_growth_suitability_v1";
+export const ETH_GROWTH_SUITABILITY_POLICY_VERSION = "1.0.0";
+
 export const CONTRIBUTION_PRICE_POLICY_ID = "contribution_price_freshness_v1";
 export const CONTRIBUTION_PRICE_POLICY_VERSION = "1.0.0";
 

@@ -25,7 +25,10 @@ import type { SuggestionReviewDetails } from "./engineTypes";
 import {
   deriveValueBreakdown,
   deriveSafetyBuffer,
+  deriveStableValue,
 } from "../wallet/walletSummary";
+import { computeContributionAllocationSplit } from "./contributionAllocationSplit";
+import { buildContributionSplitCards, type ContributionLegPrices } from "./contributionSplitSuggestion";
 import { getSafetyBufferTargetMonths } from "../wallet/safetyBufferTarget";
 import { buildSuggestionEngineInputs } from "./engineInputAdapter";
 import { runSuggestionEngine } from "./engine";
@@ -48,6 +51,7 @@ import { buildPositionOptimizationCardFromAssessment } from "./positionOptimizat
 import { derivePortfolioAssetAccounting } from "../wallet/portfolioAssetAccounting";
 import { toSuggestionCards, warningsToNotice } from "./toSuggestionCard";
 import { deriveContributionSuggestion } from "./contributionProductInput";
+import { deriveSolEconomicExposureUsd } from "./contributionPortfolioAdapter";
 import { deriveStableYieldPlanSuggestion } from "./stableYieldProductInput";
 import { evaluateDirectLendingForRail, type RuntimeSuppressionReason } from "./directUsdcLendingRuntimeAdapter";
 import { KLEND_DIRECT_USDC_IDENTITY, toRuntimeMarketInput, capacityCoversAmount, type KlendDirectUsdcMarketSnapshot } from "./klendDirectUsdcMarketData";
@@ -247,6 +251,17 @@ export function deriveRailSuggestions(args: {
    * `marketConditionsCacheState` is provided (real-wallet), the rail derives the ONE shared target context; when
    * absent (Demo / callers without the cache), no context is derived and behavior is byte-identical to before.
    */
+  /**
+   * Manually added External Holdings (BTC/ETH). They join the ALLOCATION
+   * MEASUREMENT only — the Rebalance assessment below — so the dashboard's
+   * "Current vs Recommended Allocation" card and the Rebalance suggestion always
+   * agree about how much crypto the user holds. They are deliberately NOT added
+   * to `positions`, so the Safety Buffer, completeness, the contribution/DCA
+   * pipeline, and every funding-source selection keep reading the real connected
+   * wallet alone. They can never become a Rebalance SOURCE (enforced inside
+   * rebalanceAssessment by the `manual_entry` exclusion).
+   */
+  externalMeasurementPositions?: WalletPosition[];
   marketConditionsCacheInput?: unknown | null;
   marketConditionsCacheState?: MarketConditionsCacheState;
   targetGeneratedAt?: number;
@@ -352,8 +367,11 @@ export function deriveRailSuggestions(args: {
   // Step 18C/22F — one authoritative Rebalance result from the canonical assessment, computed ONCE over the same
   // merged positions + mounted completeness + the SAME canonical coverage object, consuming the canonical target
   // above. `material` preserves conflict suppression even without a card.
+  // Measurement includes manually added external holdings; sources cannot (above).
+  const external = args.externalMeasurementPositions ?? [];
+  const measuredPositions = external.length > 0 ? [...positions, ...external] : positions;
   const rebalanceAssessment = deriveRebalanceAssessment({
-    positions, portfolioCompleteness: completeness.result, safetyBufferCoverage: bufferCoverage,
+    positions: measuredPositions, portfolioCompleteness: completeness.result, safetyBufferCoverage: bufferCoverage,
     targetAllocation: rebalanceTarget, targetState: rebalanceTargetState, requiredBufferUsd, generatedAt: pricedAsOf ?? Date.now(),
   });
   const usdcSource = selectRebalanceUsdcSource(positions, requiredBufferUsd, pricedAsOf ?? Date.now());
@@ -393,6 +411,9 @@ export function deriveRailSuggestions(args: {
   const positionOptimizationAssessment = derivePositionOptimizationAssessment({
     positions, portfolioCompleteness: completeness.result, safetyBufferCoverage: bufferCoverage,
     requiredBufferUsd, portfolioAccounting, generatedAt: pricedAsOf ?? Date.now(),
+    // Measurement only — widens the share denominator to the portfolio the user
+    // sees; the manual positions themselves are never flaggable.
+    externalMeasurementValueUsd: external.reduce((s, p) => s + (typeof p.valueUsd === "number" ? p.valueUsd : 0), 0),
   });
   const positionOptimizationOverride = {
     candidate: buildPositionOptimizationCardFromAssessment(positionOptimizationAssessment, pricedAsOf ?? 0),
@@ -419,9 +440,64 @@ export function deriveRailSuggestions(args: {
     bufferSatisfied: safetyBufferAssessment.presentationState === "complete",
     blocksDownstream: safetyBufferAssessment.presentationState !== "complete",
   };
+  // "Maintain the recommended allocation" contribution split — when the buffer is funded and a usable
+  // target exists, the monthly contribution is deployed to KEEP the portfolio at target (not dumped into
+  // SOL). It emits up to two cards (SOL leg + USDC leg) and REPLACES the single SOL DCA. Skipped when
+  // ANY material Rebalance owns the drift (the same conflict authority the engine applies to its DCA —
+  // never a Rebalance card and a contribution card pulling in parallel), and for non-monthly cadences
+  // (the split copy is monthly-denominated; other cadences keep the cadence-aware pipeline DCA).
+  const splitContribution = (() => {
+    if (safetyBufferAssessment.presentationState !== "complete") return null;
+    // Suppress the contribution plan only when a Rebalance card will ACTUALLY be
+    // shown. `material` reflects the CALCULATION gate alone, so a real drift whose
+    // SOURCE gate is blocked — e.g. every stablecoin is protocol-held and therefore
+    // existing-position-only — is material but renders nothing. Suppressing on
+    // materiality alone then left the user with neither suggestion: a silent dead
+    // zone where the only remaining card was an observation.
+    if (rebalanceOverride.material && rebalanceOverride.card != null) return null;
+    if (rebalanceTarget == null || typeof rebalanceTarget.targetCryptoPct !== "number") return null;
+    if (goal?.contribution_frequency !== "monthly") return null;
+    const monthly = goal?.monthly_saving_goal;
+    if (!(typeof monthly === "number" && monthly > 0)) return null;
+    // Growth assets the user HOLDS: SOL from the real wallet, BTC/ETH from the
+    // manually added external holdings. Only these participate in the split — the
+    // sub-allocation policy never introduces an asset the user has not chosen.
+    const heldGrowthTargetIds: string[] = [];
+    if (deriveSolEconomicExposureUsd(positions) > 0) heldGrowthTargetIds.push("sol");
+    for (const e of external) {
+      const sym = e.symbol.toUpperCase();
+      if (sym === "BTC" && !heldGrowthTargetIds.includes("btc")) heldGrowthTargetIds.push("btc");
+      if (sym === "ETH" && !heldGrowthTargetIds.includes("eth")) heldGrowthTargetIds.push("eth");
+    }
+    // Measured total/stable (includes external holdings) so the split agrees with
+    // the allocation card and the Rebalance measurement.
+    const measuredTotal = deriveValueBreakdown(measuredPositions).totalUsd ?? total;
+    return computeContributionAllocationSplit({
+      totalUsd: measuredTotal,
+      stableUsd: deriveStableValue(measuredPositions),
+      monthlyContributionUsd: monthly,
+      targetCryptoPct: rebalanceTarget.targetCryptoPct,
+      heldGrowthTargetIds,
+      riskLevel: goal?.risk_tolerance ?? null,
+    });
+  })();
+  const splitApplies = !!splitContribution && splitContribution.legs.some((l) => l.applies);
+  // Sourced per-asset prices for the modal's token amounts: SOL from the wallet
+  // read, BTC/ETH from the manual positions' own sourced price feed.
+  const legPrices: ContributionLegPrices = {};
+  if (typeof solPrice === "number" && solPrice > 0) legPrices.sol = solPrice;
+  for (const e of external) {
+    const sym = e.symbol.toUpperCase();
+    if (typeof e.priceUsd === "number" && e.priceUsd > 0) {
+      if (sym === "BTC") legPrices.btc = e.priceUsd;
+      if (sym === "ETH") legPrices.eth = e.priceUsd;
+    }
+  }
+  const splitCards = splitApplies && splitContribution ? buildContributionSplitCards(splitContribution, legPrices) : null;
+
   // The plan-backed BUFFER candidate is now normalized into the assessment above — do not also pass it to the
-  // engine as a contributionSuggestion (that path only carries the DCA plan candidate now).
-  const contributionCandidate = contribution.suggestion?.category === "buffer" ? null : contribution.suggestion;
+  // engine as a contributionSuggestion. When the split applies it REPLACES the single SOL DCA candidate.
+  const contributionCandidate = splitApplies ? null : (contribution.suggestion?.category === "buffer" ? null : contribution.suggestion);
 
   const engineResult = runSuggestionEngine(
     buildSuggestionEngineInputs({
@@ -446,6 +522,15 @@ export function deriveRailSuggestions(args: {
     { safetyBufferAssessment, rebalanceAssessment, portfolioCompleteness: completeness.result }
   );
   const cards = toSuggestionCards(engineResult.suggestions);
+  // Insert the allocation-split contribution cards (SOL leg + USDC leg) BEFORE any review-style card
+  // (Position Optimization "Review Your SOL Exposure" / Capital Efficiency "Review Idle Assets"):
+  // actionable contribution plans read above the informational reviews. Otherwise appended last.
+  // Never Top Pick, never reorders anything else.
+  if (splitCards) {
+    const reviewIdx = cards.findIndex((c) => c.type === "review_yield_strategy" || c.type === "review_idle_assets");
+    if (reviewIdx >= 0) cards.splice(reviewIdx, 0, ...splitCards.cards);
+    else cards.push(...splitCards.cards);
+  }
 
   // Step 16H-S.3/S.4 — the approved Kamino Direct USDC-lending suggestion, evaluated through the SAME
   // deterministic runtime adapter the /testing page uses. Governance is derived from the activation
@@ -525,7 +610,7 @@ export function deriveRailSuggestions(args: {
   // "unvetted USDC position" review, the authoritative modal is the buffer card's own reviewDetails ("Move Your
   // Safety Buffer USDC"); the contribution review would otherwise SHADOW it (the rail resolves contribution reviews
   // before reviewDetails), opening the wrong "Directing $X from your next contribution" modal. Drop it in that case.
-  const contributionReviewById = { ...contribution.reviewById };
+  const contributionReviewById = { ...contribution.reviewById, ...(splitCards ? splitCards.contributionReviewById : {}) };
   if (safetyBufferAssessment.bufferPositionReview != null) delete contributionReviewById[BUFFER_SUGGESTION_ID];
   // Step 23C.1 — exact quote-ready swap actions per card, derived ONLY through the Step-23A boundary adapters
   // (no financial recalculation here). USDC funding uses the coverage's $1 basis; native SOL uses the fresh SOL
@@ -570,8 +655,10 @@ export function useRailSuggestions(args: {
   onSuggestions?: (data: RailSuggestions) => void;
   /** Step 16H-S.5 — the live Kamino Direct market snapshot from useKlendDirectUsdcMarketSnapshot (fresh or null). */
   klendMarketSnapshot?: KlendDirectUsdcMarketSnapshot | null;
+  /** Manually added External Holdings — allocation MEASUREMENT only (see deriveRailSuggestions). */
+  externalMeasurementPositions?: WalletPosition[];
 }): { portfolioCompleteness?: PortfolioCompletenessResult; targetSummary?: RailTargetSummary; marketSummary?: RailMarketSummary } {
-  const { positions, pricedAsOf, goal, loading, onSuggestions, klendMarketSnapshot } = args;
+  const { positions, pricedAsOf, goal, loading, onSuggestions, klendMarketSnapshot, externalMeasurementPositions } = args;
   // Step 22F (slice 2) — load the published, same-origin market-conditions cache (real-wallet path only; the hook
   // never calls CoinMarketCap and holds no key). The parsed artifact + state feed the pure rail, which derives the
   // ONE shared target context. Nothing consumes it yet, so no user-facing behavior changes.
@@ -583,6 +670,7 @@ export function useRailSuggestions(args: {
     pricedAsOf,
     goal,
     klendMarketSnapshot: klendMarketSnapshot ?? undefined,
+    ...(externalMeasurementPositions ? { externalMeasurementPositions } : {}),
     marketConditionsCacheInput: marketCache.cacheInput,
     marketConditionsCacheState: marketCache.cacheState,
     targetGeneratedAt: pricedAsOf ?? undefined,

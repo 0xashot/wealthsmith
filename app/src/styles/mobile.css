@@ -1,0 +1,281 @@
+/**
+ * mobile.css — MOBILE / TABLET overrides (< 1280px), loaded AFTER dashboard.css.
+ *
+ * The desktop design (>= 1280px) is the locked baseline: EVERY rule in this file
+ * lives inside `@media (max-width: 1279px)`, so nothing here can ever affect the
+ * desktop layout. Add mobile-only work here; never edit desktop base rules for a
+ * mobile reason.
+ *
+ * All values use design-system tokens (spacing / color / radius / z-index /
+ * motion) — no magic numbers beyond documented layout literals.
+ */
+
+/* Drawer slide-in from the right (used only by the mobile nav drawer below). */
+@keyframes nav-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 1279px) {
+  /* ---------- Onboarding → mobile (full-screen, non-dismissable takeover) ----------
+     When the wallet isn't connected, onboarding fills the viewport and covers the
+     Global Nav so it can't be navigated away from until the user finishes (or
+     picks Connect / Demo). The shell is the fixed ground (a touch darker than the
+     cards); a branded top bar sits above the onboarding card. z-index is above the
+     nav (200) but below the Connect Wallet modal scrim (500) so it still opens. */
+  .onboarding-mobile-shell {
+    position: fixed;
+    inset: 0;
+    z-index: var(--zIndex-menu-tooltip);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-stack-gap-md);
+    padding: var(--spacing-page-padding-mobile);
+    padding-bottom: calc(
+      var(--spacing-page-padding-mobile) + env(safe-area-inset-bottom, 0px)
+    );
+    background: var(--color-surface-main);
+    overflow: hidden;
+  }
+
+  /* Branded top bar — mirrors the Global Nav shell (a white card) but logo-only. */
+  .onboarding-mobile-topbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-card-padding-md);
+    background: var(--color-surface-canvas);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-surface-md);
+    box-shadow: var(--shadow-card-default);
+  }
+  .onboarding-mobile-topbar__logo {
+    height: 32px;
+    width: auto;
+  }
+
+  /* The onboarding card fills the remaining height, white against the shell. */
+  .onboarding-panel {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+    background: var(--color-surface-canvas);
+  }
+
+  /* ---------- Portfolio earning tables → mobile (Staked Assets / Yield Strategies) ----------
+     Simplify to Asset · Amount · Est. Earnings: hide the Value (3rd), APY (4th),
+     and Manage (6th) columns. Scoped to `.portfolio-table--earning` so the Liquid
+     Assets table and other portfolio tables are untouched. */
+  .portfolio-table--earning th:nth-child(3),
+  .portfolio-table--earning td:nth-child(3),
+  .portfolio-table--earning th:nth-child(4),
+  .portfolio-table--earning td:nth-child(4),
+  .portfolio-table--earning th:nth-child(6),
+  .portfolio-table--earning td:nth-child(6) {
+    display: none;
+  }
+
+  /* The whole row is the tap target (opens the protocol page in a new tab). */
+  .deploy-row--tappable {
+    cursor: pointer;
+  }
+  .deploy-row--tappable:active {
+    background: var(--color-subdued-neutral-background-default);
+  }
+  .deploy-row--tappable:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-control-focus);
+  }
+
+  /* ---------- Demo banner → mobile (title-only + short button labels) ---------- */
+
+  /* Drop the long description; the title "You're in demo mode." stands alone. */
+  .demo-banner__description {
+    display: none;
+  }
+
+  /* "Exit Demo" → "Exit", "Connect Wallet" → "Connect". */
+  .demo-banner__action-full {
+    display: none;
+  }
+  .demo-banner__action-short {
+    display: inline;
+  }
+
+  /* ---------- Connected wallet pill → mobile (icon + last-4 only) ---------- */
+
+  /* Drop the provider name; keep the wallet icon + last-4 address. */
+  .global-nav__wallet-pill-full {
+    display: none;
+  }
+  .global-nav__wallet-pill-short {
+    display: inline;
+  }
+
+  /* ---------- Ask Smith AI → mobile (icon-only, 24×24 icon) ---------- */
+
+  /* Drop the text label; the button collapses to a square icon control. The
+     aria-label keeps it accessible. */
+  .global-nav__ask-smith-label {
+    display: none;
+  }
+  .global-nav__ask-smith {
+    gap: 0;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+  /* ButtonIcon sets the size inline (16px); override to 24px for mobile only
+     (button stays 40×40). !important is required to beat the inline style. */
+  .global-nav__ask-smith .btn-icon {
+    width: 24px !important;
+    height: 24px !important;
+  }
+
+  /* ---------- Global Nav → mobile (symbol logo + hamburger + drawer) ---------- */
+
+  /* Swap the full lockup for the symbol, and move the inline items into the drawer. */
+  .global-nav__logo-full {
+    display: none;
+  }
+  .global-nav__logo-symbol {
+    display: inline-flex;
+  }
+  .global-nav__items {
+    display: none;
+  }
+
+  .global-nav__menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-control-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    /* Sits last in the bar (to the right of the actions). */
+    order: 1;
+    transition-property: var(--motion-interaction-hover-property);
+    transition-duration: var(--motion-interaction-hover-duration);
+    transition-timing-function: var(--motion-interaction-hover-easing);
+  }
+
+  /* Shorten the disconnected CTAs on mobile: "Try Demo Mode" → "Demo",
+     "Connect Wallet" → "Connect". */
+  .global-nav__cta-full {
+    display: none;
+  }
+  .global-nav__cta-short {
+    display: inline;
+  }
+  .global-nav__menu-btn:hover {
+    background: var(--color-subdued-neutral-background-default);
+    color: var(--color-text-primary);
+  }
+  .global-nav__menu-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-control-focus);
+  }
+
+  /* Drawer: full-screen panel that slides in from the right (portaled to <body>). */
+  .nav-drawer-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: var(--zIndex-navigation-mobileDrawer);
+    display: flex;
+    justify-content: flex-end;
+    background: var(--color-overlay-scrim);
+    animation: modal-scrim-in var(--motion-overlay-enter-duration)
+      var(--motion-overlay-enter-easing);
+  }
+
+  .nav-drawer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-stack-gap-md);
+    width: 100%;
+    height: 100%;
+    padding: var(--spacing-card-padding-md);
+    background: var(--color-surface-card);
+    box-shadow: var(--shadow-overlay-drawer);
+    animation: nav-drawer-in var(--motion-overlay-enter-duration)
+      var(--motion-overlay-enter-easing);
+  }
+
+  .nav-drawer__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .nav-drawer__title {
+    margin: 0;
+    font: var(--typography-heading-md-font);
+    color: var(--color-text-primary);
+  }
+
+  .nav-drawer__close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-control-sm);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+  }
+  .nav-drawer__close:hover {
+    background: var(--color-subdued-neutral-background-default);
+    color: var(--color-text-primary);
+  }
+  .nav-drawer__close:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-control-focus);
+  }
+
+  .nav-drawer__items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-inline-gap-xs);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .nav-drawer__item {
+    display: block;
+    padding: var(--spacing-inline-gap-md);
+    border-radius: var(--radius-control-md);
+    font: var(--typography-label-md-font);
+    color: var(--color-text-secondary);
+    text-decoration: none;
+  }
+  .nav-drawer__item:hover {
+    background: var(--color-subdued-neutral-background-default);
+    color: var(--color-text-primary);
+  }
+  .nav-drawer__item:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-control-focus);
+  }
+  .nav-drawer__item--active {
+    color: var(--color-action-primary-background-default);
+    background: var(--color-subdued-blue-background-default);
+  }
+  .nav-drawer__item--disabled {
+    color: var(--color-text-disabled);
+    pointer-events: none;
+  }
+}

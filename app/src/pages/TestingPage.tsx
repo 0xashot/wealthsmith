@@ -21,6 +21,7 @@
 import { useMemo, useRef, useState } from "react";
 import SuggestionCard from "../components/SuggestionCard";
 import SuggestionReviewModal from "../components/SuggestionReviewModal";
+import { runAllContributionSplitTestingCases } from "./contributionSplitTestingFixtures";
 import { GALLERY_MODAL_PRESETS, GALLERY_NOW } from "./swapQuoteTestingFixtures";
 import type { SuggestionCardState } from "../types/dashboard";
 import { TESTING_PREVIEW_NOT_LIVE } from "./testingPageFixtures";
@@ -99,6 +100,9 @@ export default function TestingPage() {
   const onTrackFixtures = useMemo(() => getOnTrackTestingFixtures(), []);
   // Step 15H — the DCA scenarios run the REAL contribution pipeline (no hand-built cards).
   const contributionScenarios = useMemo(() => runAllContributionTestingScenarios(), []);
+  // The multi-asset contribution SPLIT cards (Build SOL / BTC / ETH Gradually + the
+  // stable leg) — the cards a real wallet actually renders.
+  const splitCases = useMemo(() => runAllContributionSplitTestingCases(), []);
 
   const [active, setActive] = useState<TabId>("safety_buffer");
 
@@ -109,6 +113,8 @@ export default function TestingPage() {
   const [selectedStakingId, setSelectedStakingId] = useState<string | null>(null);
   const [selectedStableYieldId, setSelectedStableYieldId] = useState<string | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
+  /** Split cards are keyed by BOTH the case and the card, since a case emits several. */
+  const [selectedSplitKey, setSelectedSplitKey] = useState<string | null>(null);
   const [selectedPositionOptimizationId, setSelectedPositionOptimizationId] = useState<string | null>(null);
 
   const selectedSafetyBuffer = selectedSafetyBufferId ? safetyBufferFixtures.find((f) => f.id === selectedSafetyBufferId && f.card && f.card.action_kind === "review_only") : undefined;
@@ -117,6 +123,11 @@ export default function TestingPage() {
   const selectedStaking = selectedStakingId ? stakingFixtures.find((f) => f.id === selectedStakingId && f.card) : undefined;
   const selectedPositionOptimization = selectedPositionOptimizationId ? positionOptimizationFixtures.find((f) => f.id === selectedPositionOptimizationId && f.card) : undefined;
   const selectedScenario = selectedScenarioId ? contributionScenarios.find((s) => s.id === selectedScenarioId) : undefined;
+  const selectedSplitReview = (() => {
+    if (!selectedSplitKey) return undefined;
+    const [caseId, cardId] = selectedSplitKey.split("::");
+    return splitCases.find((c) => c.id === caseId)?.reviewById[cardId];
+  })();
   const selectedStableYield = selectedStableYieldId ? STABLE_YIELD_TESTING_FIXTURES.find((f) => f.id === selectedStableYieldId) : undefined;
   const selectedStableYieldReview = selectedStableYield?.suggestion ? buildStableYieldPlanPresentation(selectedStableYield.suggestion).review : null;
 
@@ -202,6 +213,18 @@ export default function TestingPage() {
     [contributionScenarios]
   );
 
+  // The contribution SPLIT cards join the DCA tab: same family, and they are what a
+  // real wallet renders. One case emits several cards, so each gets its own entry.
+  const splitEntries = useMemo<GalleryEntry[]>(
+    () => splitCases.flatMap((c) => c.cards.map((card) => ({
+      key: `${c.id}__${card.id}`,
+      stateLabel: `${c.label} — ${c.note}`,
+      card,
+      onReview: () => setSelectedSplitKey(`${c.id}::${card.id}`),
+    }))),
+    [splitCases]
+  );
+
   const positionOptimizationEntries = useMemo<GalleryEntry[]>(
     () => dedupeByCardFace(positionOptimizationFixtures.filter((f) => f.card).map((f) => ({
       key: f.id,
@@ -229,7 +252,7 @@ export default function TestingPage() {
     trim: trimEntries,
     staking: stakingEntries,
     stable_yield: stableYieldEntries,
-    dca: dcaEntries,
+    dca: dedupeByCardFace([...dcaEntries, ...splitEntries]),
     position_optimization: positionOptimizationEntries,
     on_track: onTrackEntries,
   };
@@ -243,6 +266,7 @@ export default function TestingPage() {
     setSelectedStakingId(null);
     setSelectedStableYieldId(null);
     setSelectedScenarioId(null);
+    setSelectedSplitKey(null);
     setSelectedPositionOptimizationId(null);
   }
 
@@ -369,6 +393,14 @@ export default function TestingPage() {
             ? { swapAction: GALLERY_MODAL_PRESETS.dca.readiness, swapQuoteIsDca: true, swapQuotePresetAssessments: GALLERY_MODAL_PRESETS.dca.presets, swapQuoteNowMs: GALLERY_NOW }
             : {})}
           onClose={() => setSelectedScenarioId(null)}
+        />
+      )}
+
+      {selectedSplitReview && (
+        <SuggestionReviewModal
+          contributionReview={selectedSplitReview}
+          showGuardrails
+          onClose={() => setSelectedSplitKey(null)}
         />
       )}
 

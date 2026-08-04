@@ -49,7 +49,15 @@ export interface WalletPosition {
     | "direct_wallet_balance"
     | "recognized_lst_mint"
     | "protocol_api"
-    | "native_stake";
+    | "native_stake"
+    /**
+     * Manually stated by the user (External Holdings — BTC/ETH held outside the
+     * connected Solana wallet). NOT read or verified on-chain, so it must never
+     * satisfy a check that requires a real wallet balance. Every existing
+     * detection test is an equality check, so this value simply never matches —
+     * manual assets stay out of the Suggestion Engine by construction.
+     */
+    | "manual_entry";
   /**
    * USD spot price per whole token, from an APPROVED price feed only (DefiLlama /
    * Jupiter — see tokenPrices.ts). Never invented. Undefined/null when no confident
@@ -100,6 +108,13 @@ export interface WalletPosition {
    * app page, or show no Manage link at all — never an invented URL).
    */
   manageUrl?: string;
+  /**
+   * Read-only block-explorer destination for the asset row, when the default
+   * (Solscan, by Solana mint) is not the right chain — e.g. a manually added
+   * BTC/ETH holding, whose explorer is mempool.space / etherscan.io. Absent for
+   * ordinary Solana positions, which derive their link from `mint`.
+   */
+  explorerUrl?: string;
   /**
    * Step 17A — existing-position enrichment for products that expose a recognized vs currently-liquid
    * split (e.g. Kamino Direct USDC lending). All optional and backward-compatible; a position without

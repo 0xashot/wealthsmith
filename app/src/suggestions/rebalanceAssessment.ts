@@ -193,6 +193,12 @@ function buildSourceCandidate(p: WalletPosition, bucket: "crypto" | "stable"): R
   };
   const exclude = (state: SourceEligibilityState, reason: string): RebalanceSourceCandidate => ({ ...base, eligibilityState: state, exclusionReasons: [reason] });
 
+  // Manually stated External Holdings (BTC/ETH) COUNT toward the allocation
+  // measurement but can never be a source: WealthSmith cannot verify the balance,
+  // quote a route, or confirm a sale. Excluded here (not at the call site) so no
+  // caller can turn one into a sell recommendation.
+  if (p.detection === "manual_entry") return exclude("unsupported", "manually stated holding; not verifiable or transferable by WealthSmith");
+
   // Excluded classes (never a Rebalance source in MVP).
   if (cls === "kamino_direct") return exclude("existing_position_only", "Kamino Direct is existing-position-only / protocol-held");
   if (cls === "steakhouse") return exclude("existing_position_only", "Steakhouse is existing-position-only / excluded from suggestions");

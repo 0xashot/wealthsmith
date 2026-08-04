@@ -18,6 +18,7 @@ import { SUGGESTION_ENGINE_VERSION, MIN_POSITION_REVIEW_USD, POSITION_CONCENTRAT
 import { notApplicableProtocolSelection } from "./protocolSelection";
 import { getProtocolCandidateById } from "./protocolRegistry";
 import { lookupMint } from "../wallet/walletPosition";
+import { buildDismissalSignature } from "../state/dismissedSuggestions";
 import { buildReviewDetails, usdMetric, metric } from "./suggestionReviewDetails";
 import type { PositionOptimizationAssessment, PositionOptimizationPosition, PoApyState, PoLifecycle } from "./positionOptimizationAssessment";
 import {
@@ -74,7 +75,10 @@ export function buildPositionOptimizationCardFromAssessment(assessment: Position
   if (assessment.totalFlaggedValueUsd < MIN_POSITION_REVIEW_USD) return null;
   if (assessment.flaggedPositions.length === 0) return null;
 
-  const gross = assessment.grossAssetValueUsd;
+  // The SHARE denominator: wallet gross + measurement-only external holdings —
+  // shares, the concentration reason, scores, and the dismissal signature all use
+  // this one value so the copy and the trigger can never disagree.
+  const gross = assessment.measuredGrossAssetValueUsd;
   const total = assessment.totalFlaggedValueUsd;
 
   // Reason codes (compatibility) — canonical order, deduped.
@@ -345,6 +349,21 @@ export function buildPositionOptimizationCardFromAssessment(assessment: Position
     description_key: "suggestion.position_optimization.description",
     action_kind: "review_only",
     is_actionable: true,
+    // An OBSERVATION: there is no next step to take here — reviewing is the
+    // action — so it gets the quieter rail treatment and can be acknowledged.
+    observationOnly: true,
+    // Keyed to the flagged positions and their concentration / yield / reasons,
+    // so "I've reviewed this" hides THIS situation and the card returns by itself
+    // once any of it materially changes.
+    dismissalSignature: buildDismissalSignature(
+      "position_optimization",
+      assessment.flaggedPositions.map((p) => ({
+        positionId: p.positionId,
+        portfolioSharePct: gross > 0 && p.recognizedValueUsd !== null ? round1Pct(p.recognizedValueUsd / gross) : null,
+        apyPct: p.apy.apyValuePct,
+        reasons: positionReasons(p).reasons,
+      }))
+    ),
     is_top_pick: false, // set only by selectTopPick
     amount: { valueUsd: total, label: "Positions to review" },
     ...(titleOverride ? { titleOverride } : {}),

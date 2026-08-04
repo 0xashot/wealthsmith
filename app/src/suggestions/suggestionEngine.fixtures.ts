@@ -25,6 +25,13 @@ import { deriveDirectLendingExcessUsd as scExcess, deriveDirectLendingSuitabilit
 import type { SafetyBuffer as SCBuffer } from "../wallet/walletSummary";
 import { HUMAN_REVIEW_AMENDMENT_RECORD as AM_RECORD, AMENDMENT_REVIEWER_AUTHORIZATION as AM_AUTH, EFFECTIVE_REVIEW_CHAIN as AM_CHAIN, getEffectiveCompatibleRiskProfileIds as amCompatible, isRiskProfileCompatible as amIsCompat, REVIEW_AMENDMENT_VALIDATION as AM_VALID, HUMAN_REVIEW_AMENDMENT_MANIFEST_HASH as AM_HASH } from "./directUsdcLendingHumanReviewAmendment";
 import { DIRECT_LENDING_PROFILE_TESTING_ROWS as AM_PROFILE_ROWS } from "./directUsdcLendingTestingFixtures";
+import { buildDismissalSignature, dismissSignature, isSignatureDismissed, resetDismissedSuggestions } from "../state/dismissedSuggestions";
+import { deriveStableValue as wsStableValue } from "../wallet/walletSummary";
+import { parseKaminoObligationEntries, collateralRawFromEntries } from "../wallet/protocolPositions";
+import { applyPrice as wpApplyPrice } from "../wallet/useWalletPortfolio";
+import { derivePositionOptimizationAssessment as poDerive } from "./positionOptimizationAssessment";
+import * as REC from "./klendObligationRecordedFixture";
+import { obligationCTokenAccount as epObAccount } from "./klendDirectUsdcExistingPosition";
 import { buildKlendDirectUsdcExistingPosition as epBuild, toWalletPosition as epToWallet, dedupeKlendDirectPosition as epDedupe, mergeKlendDirectPosition as epMerge, KLEND_DIRECT_POSITION_DEDUPE_KEY as EP_KEY, KLEND_DIRECT_POSITION_ID as EP_ID, type KlendDirectExistingPositionInput as EPInput } from "./klendDirectUsdcExistingPosition";
 import { POSITION_IDENTITY as EP_POS_ID, EXPECTED_TOKEN_PROGRAM_ID as EP_TOKPROG } from "./klendDirectLendingPosition";
 import { ONE_SF as EP_ONE_SF } from "./klendReserveCapacity";
@@ -1192,7 +1199,12 @@ import { CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID as PRICE_SRC_15H } from "./contr
 import { toSuggestionCard as toSuggestionCard15H } from "./toSuggestionCard";
 import { buildDemoContributionRail, DEMO_POSITIONS, DEMO_GOAL } from "./demoContributionScenario";
 import { buildDemoExactSolStakingRail as buildDemoStakingRail15H } from "./demoExactSolStakingScenario";
-import { deriveContributionSuggestion, isDirectWalletUsdc } from "./contributionProductInput";
+import { deriveContributionSuggestion, isDirectWalletUsdc, isCryptoBucketAtOrAboveTarget } from "./contributionProductInput";
+import { computeContributionAllocationSplit, legAmount, legApplies } from "./contributionAllocationSplit";
+import { buildContributionSplitCards } from "./contributionSplitSuggestion";
+import { manualAmountError, isClearingAmount } from "../state/manualAssets";
+import { buildGrowthSubAllocation, validateGrowthSubAllocation, growthSubAllocationWeightsAreWellFormed, GROWTH_SUB_ALLOCATION_WEIGHTS } from "./growthTargetSubAllocationPolicy";
+import { buildGrowthTargetAllocationPolicyResult as buildGrowthAlloc, validateGrowthTargetAllocationPolicyResult as validateGrowthAlloc } from "./growthTargetAllocationPolicy";
 import {
   CONTRIBUTION_DEMO_PIPELINE_ENABLED as DEMO_PIPELINE_FLAG,
   CONTRIBUTION_REAL_WALLET_PIPELINE_ENABLED as REAL_WALLET_PIPELINE_FLAG,
@@ -2580,7 +2592,7 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
     add(
       "Ma: buffer actionable → mapped card (numbers-rich description, amount, review-only, top pick)",
       card?.title === "Top Up Your Safety Buffer" &&
-        card?.description === "You currently have $800 in your Safety Buffer, enough to cover 0.8 months. Your target is $3,000, or 3 months. Add $2,200 in USDC before investing further." &&
+        card?.description === "You have $800 in your Safety Buffer, covering 0.8 of your 3-month target." &&
         card?.impact_text.includes("$2,200") === true &&
         card?.actionability === "actionable" &&
         card?.cta.label === "Review" &&
@@ -2590,16 +2602,20 @@ export function runMapperFixtureChecks(): FixtureCheck[] {
     );
   }
 
-  // Ma-detail. Definite shortfall → numbers-rich body ($4,000 / 4mo → $6,000 / 6mo → add $2,000) on card AND modal.
+  // Ma-detail. Definite shortfall → numbers-rich body on the card, paired with its
+  // action line. The MODAL has no separate action line, so its reason carries both
+  // sentences — the card's body plus that same action line, never a third wording.
   {
     const r = runEngineWithLegacyRebalance(inputsFor({ safetyBuffer: bufferFixture(4000, 1000, 6) }), FIXTURE_GENERATED_AT);
     const s = r.suggestions[0];
     const card = s ? toSuggestionCard(s) : undefined;
-    const expected = "You currently have $4,000 in your Safety Buffer, enough to cover 4 months. Your target is $6,000, or 6 months. Add $2,000 in USDC before investing further.";
+    const body = "You have $4,000 in your Safety Buffer, covering 4 of your 6-month target.";
+    const action = "Add $2,000 to your Safety Buffer.";
     add(
-      "Ma-detail: definite shortfall numbers-rich body on card AND modal; impact line unchanged",
-      card?.description === expected && s?.reviewDetails?.summary.reason === expected && card?.impact_text === "Add $2,000 to your Safety Buffer.",
-      `desc="${card?.description}"`
+      "Ma-detail: definite shortfall body on the card; modal reason = body + the SAME action line",
+      card?.description === body && card?.impact_text === action
+        && s?.reviewDetails?.summary.reason === `${body} ${action}`,
+      `desc="${card?.description}" | reason="${s?.reviewDetails?.summary.reason}"`
     );
   }
 
@@ -4461,8 +4477,13 @@ export function runReviewDetailsFixtureChecks(): FixtureCheck[] {
     const labels = metricLabels("buffer");
     const d = rd("buffer");
     const coverage = (d?.metrics ?? []).find((m) => m.label === "Current coverage")?.value;
-    const ok = labels.length === 4 && ["Amount needed", "Current", "Target", "Current coverage"].every((l) => labels.includes(l)) && d?.hideMetricsHeading === true && d?.hideGuardrails === true && coverage === "0.8 of 3 months";
-    add("10A-C: buffer modal → 4-card set (Amount needed/Current/Target/Current coverage), no heading, no guardrails", ok, `labels=${labels.join(" | ")}`);
+    // ORDER is asserted, not just membership: the cards read where-you-are →
+    // where-you're-aiming → what-to-do, and the action figure is emphasized.
+    const amountCard = (d?.metrics ?? []).find((m) => m.label === "Amount to add");
+    const ok = labels.join("|") === "Current|Current coverage|Target|Amount to add"
+      && amountCard?.emphasis === "primary"
+      && d?.hideMetricsHeading === true && d?.hideGuardrails === true && coverage === "0.8 of 3 months";
+    add("10A-C: buffer modal → ordered 4-card set (Current/Current coverage/Target/Amount to add), amount emphasized, no heading/guardrails", ok, `labels=${labels.join(" | ")}`);
   }
   // 10A-D. Staking details: focused modal card set (Stake/Receive with USD sub-values, APY, yearly rewards, unstake
   // timing + fee note) under focusedLayout; the full protocol-selection data is preserved (guardrail still checked).
@@ -12410,18 +12431,18 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   add("15A-AA: BTC represents native BTC", btc.assetId === "bitcoin:native", btc.assetId);
   add("15A-AB: BTC does not represent wrapped BTC", !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(btc.assetId) && !btc.assetId.toLowerCase().includes("wbtc"), "native");
   add("15A-AC: BTC supports manual_entry", btc.holdingSources.includes("manual_entry"), "manual");
-  add("15A-AD: BTC is modeled_not_enabled", btc.lifecycleStatus === "modeled_not_enabled" && btc.enabledForMvp === false, "modeled");
-  add("15A-AE: BTC is not enabled for contribution suggestions", btc.canBeContributionTarget === false && BTC_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
-  add("15A-AF: BTC fails closed with explicit blockers", btc.activationBlockers.includes("target_disabled") && btc.activationBlockers.includes("price_source_not_configured") && btc.activationBlockers.includes("suitability_policy_not_configured"), btc.activationBlockers.join(","));
+  add("15A-AD: BTC is an ENABLED manual-entry growth target", btc.lifecycleStatus === "enabled" && btc.enabledForMvp === true && btc.holdingSources.join(",") === "manual_entry", "enabled");
+  add("15A-AE: BTC can RECEIVE a contribution but can never FUND one, back the buffer, or take stable allocation", btc.canBeContributionTarget === BTC_CONTRIBUTION_TARGET_ENABLED && btc.canBeContributionTarget === true && btc.canFundContributionPlan === false && btc.canServeAsSafetyBuffer === false && btc.canReceiveStableAllocation === false, "receive only");
+  add("15A-AF: BTC activation blockers are cleared and its policies are the v1 keys (never _v_future)", btc.activationBlockers.length === 0 && btc.suitabilityPolicyKey === "btc_growth_suitability_v1" && btc.allocationRequirements.allocationPolicyKey === "growth_target_suballocation_v1" && btc.minimumRequirements.minimumPolicyKey === "dca_minimum_v1", btc.activationBlockers.join(",") || "cleared");
 
   // 15A-AG…AM. ETH.
   add("15A-AG: ETH exists", eth != null, "exists");
   add("15A-AH: ETH represents native ETH", eth.assetId === "ethereum:native", eth.assetId);
   add("15A-AI: ETH does not represent wrapped ETH", !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(eth.assetId) && !eth.assetId.toLowerCase().includes("weth"), "native");
   add("15A-AJ: ETH supports manual_entry", eth.holdingSources.includes("manual_entry"), "manual");
-  add("15A-AK: ETH is modeled_not_enabled", eth.lifecycleStatus === "modeled_not_enabled" && eth.enabledForMvp === false, "modeled");
-  add("15A-AL: ETH is not enabled for contribution suggestions", eth.canBeContributionTarget === false && ETH_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
-  add("15A-AM: ETH fails closed with explicit blockers", eth.activationBlockers.includes("target_disabled") && eth.activationBlockers.includes("target_allocation_not_configured"), eth.activationBlockers.join(","));
+  add("15A-AK: ETH is an ENABLED manual-entry growth target", eth.lifecycleStatus === "enabled" && eth.enabledForMvp === true && eth.holdingSources.join(",") === "manual_entry", "enabled");
+  add("15A-AL: ETH can RECEIVE a contribution but can never FUND one, back the buffer, or take stable allocation", eth.canBeContributionTarget === ETH_CONTRIBUTION_TARGET_ENABLED && eth.canBeContributionTarget === true && eth.canFundContributionPlan === false && eth.canServeAsSafetyBuffer === false && eth.canReceiveStableAllocation === false, "receive only");
+  add("15A-AM: ETH activation blockers are cleared and its policies are the v1 keys (never _v_future)", eth.activationBlockers.length === 0 && eth.suitabilityPolicyKey === "eth_growth_suitability_v1" && eth.allocationRequirements.allocationPolicyKey === "growth_target_suballocation_v1" && eth.minimumRequirements.minimumPolicyKey === "dca_minimum_v1", eth.activationBlockers.join(",") || "cleared");
 
   // 15A-AN…AV. RWA extensibility.
   add("15A-AN: RWA category exists", validateInvestmentTargetDefinition(syntheticRwa).valid === true && syntheticRwa.category === "rwa", "category");
@@ -12465,9 +12486,9 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   }
 
   // 15A-BQ…BU. Manual-entry boundaries.
-  add("15A-BQ: manual BTC is modeled but not implemented", btc.holdingSources.includes("manual_entry") && btc.enabledForMvp === false && btc.activationBlockers.includes("manual_entry_not_supported"), "modeled");
-  add("15A-BR: manual ETH is modeled but not implemented", eth.holdingSources.includes("manual_entry") && eth.enabledForMvp === false && eth.activationBlockers.includes("manual_entry_not_supported"), "modeled");
-  add("15A-BS: no ownership verification is implied", /cannot verify ownership|no ownership verification/i.test(readIf("src/suggestions/investmentTargetRegistry.md")) && /ownership verification/i.test(btc.notes.join(" ")), "no verification");
+  add("15A-BQ: BTC is MANUAL-ENTRY only — no connector, and it stays read-only", btc.holdingSources.join(",") === "manual_entry" && btc.executionStatus === "read_only_only" && btc.transactionsEnabled === false && btc.walletSignatureRequired === false, "manual read-only");
+  add("15A-BR: ETH is MANUAL-ENTRY only — no connector, and it stays read-only", eth.holdingSources.join(",") === "manual_entry" && eth.executionStatus === "read_only_only" && eth.transactionsEnabled === false && eth.walletSignatureRequired === false, "manual read-only");
+  add("15A-BS: no ownership verification is implied", /cannot verify ownership|no ownership verification/i.test(readIf("src/suggestions/investmentTargetRegistry.md")) && /never read or verified on-chain/i.test(btc.notes.join(" ")), "no verification");
   add("15A-BT: no BTC wallet connector is added", !existsSync(`${root}/src/wallet/bitcoinWallet.ts`) && !existsSync(`${root}/src/wallet/btcConnector.ts`) && btc.holdingSources.join(",") === "manual_entry", "no connector");
   add("15A-BU: no ETH wallet connector is added", !existsSync(`${root}/src/wallet/ethereumWallet.ts`) && !existsSync(`${root}/src/wallet/ethConnector.ts`) && eth.holdingSources.join(",") === "manual_entry", "no connector");
 
@@ -12501,8 +12522,8 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   add("15A-CC: rhythm normalization now exists (enabled at Step 15B)", CONTRIBUTION_RHYTHM_NORMALIZATION_EXISTS === true, "enabled");
   add("15A-CD: allocation-gap engine now exists (enabled at Step 15D)", TARGET_ALLOCATION_GAP_ENGINE_EXISTS === true, "exists");
   add("15A-CE: DCA plan generation and (Step 15H) DCA suggestion now exist", DCA_PLAN_GENERATION_EXISTS === true && DCA_SUGGESTION_ENABLED === true, "exists");
-  add("15A-CF: BTC contribution suggestions remain disabled", BTC_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
-  add("15A-CG: ETH contribution suggestions remain disabled", ETH_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
+  add("15A-CF: BTC contribution suggestions are enabled, and the flag agrees with the registry entry", BTC_CONTRIBUTION_TARGET_ENABLED === true && getInvestmentTarget("btc")!.canBeContributionTarget === BTC_CONTRIBUTION_TARGET_ENABLED, "enabled");
+  add("15A-CG: ETH contribution suggestions are enabled, and the flag agrees with the registry entry", ETH_CONTRIBUTION_TARGET_ENABLED === true && getInvestmentTarget("eth")!.canBeContributionTarget === ETH_CONTRIBUTION_TARGET_ENABLED, "enabled");
   add("15A-CH: RWA contribution suggestions remain disabled", RWA_CONTRIBUTION_TARGET_ENABLED === false, "disabled");
 
   // 15A-CI…CK. Execution invariants.
@@ -12515,7 +12536,7 @@ export function runInvestmentTargetRegistryFixtureChecks(): FixtureCheck[] {
   }
 
   // Accessor smoke.
-  add("15A-accessors: enabled/mvp/modeled accessors are consistent", getEnabledInvestmentTargets().map((t) => t.targetId).join(",") === "usdc,sol" && getMvpInvestmentTargets().map((t) => t.targetId).join(",") === "usdc,sol" && getModeledFutureTargets().map((t) => t.targetId).join(",") === "btc,eth" && getSafetyBufferTargets().map((t) => t.targetId).join(",") === "usdc" && getStableAllocationDestinations().map((t) => t.targetId).join(",") === "usdc" && getEnabledContributionGrowthTargets().map((t) => t.targetId).join(",") === "sol", "ok");
+  add("15A-accessors: enabled/mvp/modeled accessors are consistent", getEnabledInvestmentTargets().map((t) => t.targetId).join(",") === "usdc,sol,btc,eth" && getMvpInvestmentTargets().map((t) => t.targetId).join(",") === "usdc,sol,btc,eth" && getModeledFutureTargets().length === 0 && getSafetyBufferTargets().map((t) => t.targetId).join(",") === "usdc" && getStableAllocationDestinations().map((t) => t.targetId).join(",") === "usdc" && getEnabledContributionGrowthTargets().map((t) => t.targetId).join(",") === "sol,btc,eth", "ok");
 
   return checks;
 }
@@ -12713,7 +12734,7 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   // Existing engine → adapter (prompt example: 40/60 → usdc 40, sol 60 via risk "medium").
   const rec = fxRiskTarget(60, 40); // cryptoPct 60, stablePct 40
   const allocInput = { targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION };
-  const alloc = buildGrowthTargetAllocationPolicyResult(allocInput);
+  const alloc = buildGrowthTargetAllocationPolicyResult(allocInput, { enabledGrowthTargetIds: ["sol"] });
   const minimumPolicy = getDcaMinimumPolicy();
   const solTechCtx: InvestmentTargetTechnicalContext = {
     checkedAt: CHECKED,
@@ -12745,21 +12766,21 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   add("15C-J: volatile/growth target is preserved exactly", alloc.growthBucketTargetPct === rec.cryptoPct && alloc.growthBucketTargetPct === 60, `${alloc.growthBucketTargetPct}`);
   add("15C-K: stable plus growth equals 100 within tolerance", Math.abs(alloc.stableBucketTargetPct + alloc.growthBucketTargetPct - 100) < 1e-9, "100");
   add("15C-L: source engine version is preserved", alloc.sourceEngineVersion === SUGGESTION_ENGINE_VERSION, alloc.sourceEngineVersion);
-  { const frac = buildGrowthTargetAllocationPolicyResult({ targetStablePct: 40.123, targetVolatilePct: 59.877, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }); add("15C-M: the policy does not round engine output", frac.stableBucketTargetPct === 40.123 && frac.growthBucketTargetPct === 59.877, "unrounded"); }
+  { const frac = buildGrowthTargetAllocationPolicyResult({ targetStablePct: 40.123, targetVolatilePct: 59.877, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }, { enabledGrowthTargetIds: ["sol"] }); add("15C-M: the policy does not round engine output", frac.stableBucketTargetPct === 40.123 && frac.growthBucketTargetPct === 59.877, "unrounded"); }
   add("15C-N: USDC receives the stable bucket for MVP contribution planning", alloc.targetPctByInvestmentTargetId.usdc === 40, `${alloc.targetPctByInvestmentTargetId.usdc}`);
   add("15C-O: SOL receives the growth bucket while it is the only enabled growth target", alloc.targetPctByInvestmentTargetId.sol === 60, `${alloc.targetPctByInvestmentTargetId.sol}`);
   add("15C-P: no allocation gap is calculated", alloc.allocationGapEvaluated === false && validateGrowthTargetAllocationPolicyResult(alloc).valid === true, "no gap");
 
   // 15C-Q…W. Single-target + future extensibility.
-  add("15C-Q: SOL is the only enabled growth target", getEnabledContributionGrowthTargets().map((t) => t.targetId).join(",") === "sol", "sol only");
+  add("15C-Q: the enabled growth targets are SOL (wallet) + BTC/ETH (manual entry)", getEnabledContributionGrowthTargets().map((t) => t.targetId).join(",") === "sol,btc,eth", "sol,btc,eth");
   add("15C-R: single-enabled-target mapping is explicitly marked", alloc.singleEnabledGrowthTargetPolicyApplied === true && alloc.futureGrowthSuballocationRequired === false, "marked");
   {
     const multi = buildGrowthTargetAllocationPolicyResult(allocInput, { enabledGrowthTargetIds: ["sol", "btc"] });
     add("15C-S: enabling a second growth target without sub-allocation policy fails closed", multi.status === "invalid" && multi.blockers.includes("multiple_growth_targets_require_suballocation_policy"), "fail closed");
     add("15C-T: the system does not divide the growth bucket equally automatically", Object.keys(multi.targetPctByInvestmentTargetId).length === 0 && multi.futureGrowthSuballocationRequired === true, "no equal split");
   }
-  add("15C-U: BTC remains disabled", btc.lifecycleStatus === "modeled_not_enabled" && BTC_ENABLED_15C === false, "disabled");
-  add("15C-V: ETH remains disabled", getInvestmentTarget("eth")!.lifecycleStatus === "modeled_not_enabled" && ETH_ENABLED_15C === false, "disabled");
+  add("15C-U: BTC is enabled, its exported flag agrees, and it is governed by the versioned sub-allocation policy", btc.lifecycleStatus === "enabled" && BTC_ENABLED_15C === true && btc.allocationRequirements.allocationPolicyKey === "growth_target_suballocation_v1", "enabled");
+  add("15C-V: ETH is enabled, its exported flag agrees, and it is governed by the versioned sub-allocation policy", getInvestmentTarget("eth")!.lifecycleStatus === "enabled" && ETH_ENABLED_15C === true && getInvestmentTarget("eth")!.allocationRequirements.allocationPolicyKey === "growth_target_suballocation_v1", "enabled");
   add("15C-W: RWA contribution targets remain disabled", RWA_ENABLED_15C === false, "disabled");
 
   // 15C-X…Z. Safety Buffer boundaries.
@@ -12806,13 +12827,13 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   add("15C-BF: invalid risk fails", evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, riskLevel: "ultra" } }).status === "invalid_profile", "invalid risk");
   add("15C-BG: invalid horizon fails", evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, timeHorizon: "100_years" } }).status === "invalid_profile", "invalid horizon");
   {
-    const zeroGrowth = buildGrowthTargetAllocationPolicyResult({ targetStablePct: 100, targetVolatilePct: 0, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+    const zeroGrowth = buildGrowthTargetAllocationPolicyResult({ targetStablePct: 100, targetVolatilePct: 0, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }, { enabledGrowthTargetIds: ["sol"] });
     add("15C-BH: zero growth target fails suitability", evaluateContributionTargetSuitability(sol, { ...suitCtx, targetAllocationResult: zeroGrowth }).status === "not_suitable", "not suitable");
   }
-  add("15C-BI: disabled target fails suitability", evaluateContributionTargetSuitability(btc, { ...suitCtx, targetId: "btc" }).status === "target_disabled", "disabled");
+  add("15C-BI: a DISABLED target still fails suitability (synthetic — every registry target is now enabled)", (() => { const disabled = { ...btc, lifecycleStatus: "modeled_not_enabled" as const, enabledForMvp: false, canBeContributionTarget: false }; return evaluateContributionTargetSuitability(disabled, { ...suitCtx, targetId: disabled.targetId }).status === "target_disabled"; })(), "disabled");
   {
     const vlRec = fxRiskTarget(20, 80); // crypto 20
-    const vlAlloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: vlRec.stablePct, targetVolatilePct: vlRec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+    const vlAlloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: vlRec.stablePct, targetVolatilePct: vlRec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }, { enabledGrowthTargetIds: ["sol"] });
     add("15C-BJ: Very Low risk is not independently banned when the engine returns positive growth allocation", vlAlloc.targetPctByInvestmentTargetId.sol === 20 && evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, riskLevel: "very_low" }, targetAllocationResult: vlAlloc }).status === "suitable_for_gap_evaluation", "not banned");
   }
   add("15C-BK: Six-month horizon is not independently banned when the engine returns positive growth allocation", evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, timeHorizon: "6_months" } }).status === "suitable_for_gap_evaluation", "not banned");
@@ -12825,7 +12846,7 @@ export function runContributionPlanningPolicyFixtureChecks(): FixtureCheck[] {
   // 15C-BQ…CB. Combined policy eligibility.
   add("15C-BQ: complete synthetic SOL context reaches ready_for_allocation_gap_evaluation", combined.status === "ready_for_allocation_gap_evaluation" && combined.readyForAllocationGapEvaluation === true && validateContributionTargetPolicyEligibility(combined).valid === true, combined.status);
   add("15C-BR: technical-readiness failure blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: evaluateInvestmentTargetTechnicalEligibility(sol, { ...solTechCtx, priceStatusByTargetId: {} }), targetAllocationResult: alloc, suitabilityResult: suit, priceQuote: freshQuote, minimumPolicy }).status === "blocked_technical_readiness", "blocked");
-  add("15C-BS: invalid allocation policy blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: buildGrowthTargetAllocationPolicyResult({ targetStablePct: 50, targetVolatilePct: 40, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }), suitabilityResult: suit, priceQuote: freshQuote, minimumPolicy }).status === "blocked_target_allocation", "blocked");
+  add("15C-BS: invalid allocation policy blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: buildGrowthTargetAllocationPolicyResult({ targetStablePct: 50, targetVolatilePct: 40, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }, { enabledGrowthTargetIds: ["sol"] }), suitabilityResult: suit, priceQuote: freshQuote, minimumPolicy }).status === "blocked_target_allocation", "blocked");
   add("15C-BT: suitability failure blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: evaluateContributionTargetSuitability(sol, { ...suitCtx, profile: { ...suitCtx.profile, goal: "bad" } }), priceQuote: freshQuote, minimumPolicy }).status === "blocked_suitability", "blocked");
   add("15C-BU: missing price blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: suit, minimumPolicy }).status === "blocked_price", "blocked");
   add("15C-BV: stale price blocks", evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHECKED, technicalEligibility: techElig, targetAllocationResult: alloc, suitabilityResult: suit, priceQuote: evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: STALE, checkedAt: CHECKED }), minimumPolicy }).status === "blocked_price", "blocked");
@@ -12915,7 +12936,7 @@ export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
 
   // 15C target-allocation policy (usdc 40, sol 60 via risk "medium").
   const rec = fxRiskTarget(60, 40);
-  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }, { enabledGrowthTargetIds: ["sol"] });
 
   // A READY SOL policy eligibility (reuses the 15C pipeline).
   const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
@@ -13019,7 +13040,7 @@ export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
   add("15D-AN: at-target produces a zero external cap", usdcCore.maximumExternalContributionIncreaseWithoutOvershootUsd === 0, "0");
   add("15D-AO: overweight produces a zero external cap", usdcBV.maximumExternalContributionIncreaseWithoutOvershootUsd === 0, "0");
   {
-    const alloc0 = buildGrowthTargetAllocationPolicyResult({ targetStablePct: 100, targetVolatilePct: 0, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+    const alloc0 = buildGrowthTargetAllocationPolicyResult({ targetStablePct: 100, targetVolatilePct: 0, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }, { enabledGrowthTargetIds: ["sol"] });
     const a0 = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(1000, [mkExp("usdc", usdcT.assetId, 1000), mkExp("sol", solT.assetId, 0)]), targetAllocationResult: alloc0, policyEligibilityByTargetId: solReady, generatedAt: GEN, checkedAt: CHK });
     const sol0 = a0.targetResults.find((t) => t.targetId === "sol")!;
     add("15D-AP: 0% target allows no increase", sol0.targetPct === 0 && sol0.maximumExternalContributionIncreaseWithoutOvershootUsd === 0 && sol0.maximumInternalReallocationIncreaseWithoutOvershootUsd === 0, "no increase");
@@ -13071,8 +13092,8 @@ export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
   add("15D-BO: ready SOL policy eligibility allows future growth-gap evaluation", solCore.eligibleForFutureGrowthContributionEvaluation === true && solCore.contributionTargetPolicyReady === true && aCore.status === "complete", "ready");
   add("15D-BP: blocked SOL policy eligibility blocks the analysis", aBlocked.status === "blocked_policy_readiness" && aBlocked.blockers.includes("contribution_target_policy_not_ready"), aBlocked.status);
   add("15D-BQ: USDC gap may be calculated but USDC is not marked as a growth contribution target", usdcCore.currentPct === 40 && usdcCore.eligibleForFutureGrowthContributionEvaluation === false, "context only");
-  add("15D-BR: BTC remains ineligible as a contribution target", isEnabledGrowthContributionTarget("btc") === false, "ineligible");
-  add("15D-BS: ETH remains ineligible as a contribution target", isEnabledGrowthContributionTarget("eth") === false, "ineligible");
+  add("15D-BR: BTC is now an eligible growth contribution target (manual entry)", isEnabledGrowthContributionTarget("btc") === true, "eligible");
+  add("15D-BS: ETH is now an eligible growth contribution target (manual entry)", isEnabledGrowthContributionTarget("eth") === true, "eligible");
   add("15D-BT: RWA contribution targets remain disabled", RWA_ENABLED_15C === false && getInvestmentTarget("rwa") === undefined, "disabled");
   add("15D-BU: calculated underweight does not mean selected", solCore.classification === "underweight_trigger_met" && solCore.targetSelected === false, "not selected");
 
@@ -13098,7 +13119,7 @@ export function runContributionAllocationGapFixtureChecks(): FixtureCheck[] {
     const synthBtc: GrowthTargetAllocationPolicyResult = { ...alloc, stableBucketTargetPct: 40, growthBucketTargetPct: 60, enabledGrowthTargetIds: ["btc"], singleEnabledGrowthTargetPolicyApplied: true, targetPctByInvestmentTargetId: { usdc: 40, btc: 60 } };
     const aBtc = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("usdc", usdcT.assetId, 4000), mkExp("btc", btcT.assetId, 3000, ["manual_entry"])]), targetAllocationResult: synthBtc, generatedAt: GEN, checkedAt: CHK });
     const btcRes = aBtc.targetResults.find((t) => t.targetId === "btc")!;
-    add("15D-CD: engine can calculate a synthetic future BTC target from a supplied valid future allocation policy", aBtc.status === "complete" && btcRes.currentPct === 30 && btcRes.internalReallocationUsdToReachTarget === 3000 && btcRes.eligibleForFutureGrowthContributionEvaluation === false, "btc gap");
+    add("15D-CD: engine computes the BTC gap from a supplied allocation policy; with no policy-eligibility supplied it stays readiness-blocked and never marks BTC eligible", aBtc.status === "blocked_policy_readiness" && btcRes.currentPct === 30 && btcRes.internalReallocationUsdToReachTarget === 3000 && btcRes.eligibleForFutureGrowthContributionEvaluation === false, "btc gap");
     const synthEth: GrowthTargetAllocationPolicyResult = { ...alloc, stableBucketTargetPct: 40, growthBucketTargetPct: 60, enabledGrowthTargetIds: ["eth"], singleEnabledGrowthTargetPolicyApplied: true, targetPctByInvestmentTargetId: { usdc: 40, eth: 60 } };
     const aEth2 = buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("usdc", usdcT.assetId, 5000), mkExp("eth", ethT.assetId, 2000, ["manual_entry"])]), targetAllocationResult: synthEth, generatedAt: GEN, checkedAt: CHK });
     add("15D-CE: engine can calculate a synthetic future ETH target", aEth2.targetResults.find((t) => t.targetId === "eth")!.targetPct === 60, "eth gap");
@@ -13188,7 +13209,7 @@ export function runContributionPriorityFixtureChecks(): FixtureCheck[] {
   const mkSnap = (total: number, exposures: ContributionPortfolioTargetExposure[]): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd: total, targetExposures: exposures, valuationStatus: "current", notes: [] });
 
   const rec = fxRiskTarget(60, 40);
-  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }, { enabledGrowthTargetIds: ["sol"] });
 
   const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
   const techElig = evaluateInvestmentTargetTechnicalEligibility(solT, techCtx);
@@ -13291,11 +13312,11 @@ export function runContributionPriorityFixtureChecks(): FixtureCheck[] {
 
   // 15E-BA…BK. Growth context.
   add("15E-BA: growth targets come from the enabled registry list", buildContributionGrowthPriorityContext(gapGrowthTrigger).eligibleGrowthTargetIds.includes("sol"), "registry");
-  add("15E-BB: SOL is the current enabled growth target", getEnabledContributionGrowthTargets().map((t) => t.targetId).join(",") === "sol", "sol");
+  add("15E-BB: the enabled growth targets are SOL + BTC/ETH", getEnabledContributionGrowthTargets().map((t) => t.targetId).join(",") === "sol,btc,eth", "sol,btc,eth");
   add("15E-BC: growth context preserves allocation-policy order", buildContributionGrowthPriorityContext(gapGrowthTrigger).eligibleGrowthTargetIds.join(",") === "sol", "order");
   add("15E-BD: growth percentages are not recalculated", !engSrc.includes("currentPct ="), "reused");
   add("15E-BE: growth target requires policy readiness", buildContributionGrowthPriorityContext(buildContributionAllocationGapAnalysis({ snapshot: mkSnap(10000, [mkExp("usdc", usdcT.assetId, 4000), mkExp("sol", solT.assetId, 5000)]), targetAllocationResult: alloc, policyEligibilityByTargetId: {}, generatedAt: GEN, checkedAt: CHK })).eligibleGrowthTargetIds.length === 0, "requires ready");
-  add("15E-BF: disabled growth target is excluded", getEnabledContributionGrowthTargets().every((t) => t.targetId !== "btc" && t.targetId !== "eth"), "excluded");
+  add("15E-BF: every enabled growth target is lifecycle-enabled and contribution-capable (nothing disabled slips in)", getEnabledContributionGrowthTargets().every((t) => t.lifecycleStatus === "enabled" && t.enabledForMvp === true && t.canBeContributionTarget === true), "all enabled");
   add("15E-BG: underweight growth below 5 points does not meet trigger", buildContributionGrowthPriorityContext(buildGap(4000, 5700, 10000)).triggerMetGrowthTargetIds.length === 0, "below");
   add("15E-BH: growth at exactly 5 points meets trigger", buildContributionGrowthPriorityContext(buildGap(4000, 5500, 10000)).triggerMetGrowthTargetIds.join(",") === "sol", "met");
   add("15E-BI: growth above 5 points meets trigger", buildContributionGrowthPriorityContext(buildGap(4000, 5000, 10000)).triggerMetGrowthTargetIds.join(",") === "sol", "met");
@@ -13436,7 +13457,7 @@ export function runContributionFundingFixtureChecks(): FixtureCheck[] {
   const mkSnap = (total: number, exposures: ContributionPortfolioTargetExposure[]): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd: total, targetExposures: exposures, valuationStatus: "current", notes: [] });
 
   const rec = fxRiskTarget(60, 40);
-  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }, { enabledGrowthTargetIds: ["sol"] });
   const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
   const techElig = evaluateInvestmentTargetTechnicalEligibility(solT, techCtx);
   const suit = evaluateContributionTargetSuitability(solT, { checkedAt: CHK, targetId: "sol", profile: { goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, targetAllocationResult: alloc });
@@ -13697,7 +13718,7 @@ export function runContributionPlanFixtureChecks(): FixtureCheck[] {
   const mkExp = (targetId: string, assetId: string, valueUsd: number): ContributionPortfolioTargetExposure => ({ targetId, assetId, valueUsd, holdingSources: ["connected_wallet"], valuationReady: true, notes: [] });
   const mkSnap = (total: number, exposures: ContributionPortfolioTargetExposure[]): ContributionPortfolioAllocationSnapshot => ({ snapshotId: "snap-1", calculatedAt: CAL, checkedAt: CHK, sourcePortfolioVersion: "portfolio-v1", totalPortfolioValueUsd: total, targetExposures: exposures, valuationStatus: "current", notes: [] });
   const rec = fxRiskTarget(60, 40);
-  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+  const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct: rec.stablePct, targetVolatilePct: rec.cryptoPct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION }, { enabledGrowthTargetIds: ["sol"] });
   const techCtx: InvestmentTargetTechnicalContext = { checkedAt: CHK, availableHoldingSources: ["connected_wallet", "protocol_position", "manual_entry"], priceStatusByTargetId: { sol: { available: true, fetchedAt: CHK } }, configuredAllocationPolicyKeys: ["growth_target_allocation_v1"], configuredMinimumPolicyKeys: ["dca_minimum_v1"], configuredSuitabilityPolicyKeys: ["sol_growth_suitability_v1"], approvedTargetIds: [] };
   const readyElig = evaluateContributionTargetPolicyEligibility({ targetId: "sol", checkedAt: CHK, technicalEligibility: evaluateInvestmentTargetTechnicalEligibility(solT, techCtx), targetAllocationResult: alloc, suitabilityResult: evaluateContributionTargetSuitability(solT, { checkedAt: CHK, targetId: "sol", profile: { goal: "build_long_term_wealth", riskLevel: "medium", timeHorizon: "5_years" }, targetAllocationResult: alloc }), priceQuote: evaluateContributionPriceQuote({ targetId: "sol", assetId: PRICE_SOL_MINT, priceUsd: 150, sourceId: CANONICAL_CONTRIBUTION_PRICE_SOURCE_ID, fetchedAt: CHK, checkedAt: CHK }), minimumPolicy: getDcaMinimumPolicy() });
   const solReady = { sol: readyElig };
@@ -18492,7 +18513,7 @@ export function runRebalanceCanonicalMountFixtureChecks(): FixtureCheck[] {
   add("RBM-8: below-$50 correction → no actionable card (existing minimum, unchanged)", (() => { const c = cardOf([solP(70), usdcP(30)], CT(60, 40)); return c === null; })(), "below 50");
 
   // ---- Review copy ----
-  add("RBM-9: rebalance review reason is the plain-language body only — NO market-inclusion/CoinMarketCap disclosure, no timing/score/band", (() => { const c = cardOf([solP(300), usdcP(700)], CT(60, 40)); const r = c?.reviewDetails?.summary.reason ?? ""; return c != null && !/target-allocation calculation|CoinMarketCap|market component adjusted/.test(r) && !/\b\d{1,3}\/100\b|Fear|Greed|time to (buy|sell)|bullish|bearish/.test(r) && /in crypto, below your/.test(r); })(), "no market disclosure");
+  add("RBM-9: rebalance review reason is the plain-language body only — NO market-inclusion/CoinMarketCap disclosure, no timing/score/band", (() => { const c = cardOf([solP(300), usdcP(700)], CT(60, 40)); const r = c?.reviewDetails?.summary.reason ?? ""; return c != null && !/target-allocation calculation|CoinMarketCap|market component adjusted/.test(r) && !/\b\d{1,3}\/100\b|Fear|Greed|time to (buy|sell)|bullish|bearish/.test(r) && /of your portfolio, below your/.test(r); })(), "no market disclosure");
   add("RBM-10: degraded review discloses exclusion + renormalization, no score/band/Neutral", (() => { const c = cardOf([solP(300), usdcP(700)], CT(60, 40, "degraded_market_excluded")); const r = c?.reviewDetails?.summary.reason ?? ""; return c != null && /market component was excluded, and the remaining profile factors were renormalized/.test(r) && !/CoinMarketCap|\/100|Neutral|Fear|Greed/.test(r); })(), "degraded review");
   add("RBM-11: transitional target review shows NO market copy (Demo/testing unchanged)", (() => { const c = cardOf([solP(300), usdcP(700)], CT(60, 40, "full", false)); const r = c?.reviewDetails?.summary.reason ?? ""; return c != null && !/CoinMarketCap|10% of your target-allocation/.test(r); })(), "transitional review");
 
@@ -18588,6 +18609,346 @@ export function runDcaContributionCanonicalMountFixtureChecks(): FixtureCheck[] 
   add("D41-7: the production Review modal RENDERS marketContextSection (title + body + rows), guarded so buffer/degraded show no empty section", (() => { const m = readSrc("src/components/SuggestionReviewModal.tsx"); return /cr\.marketContextSection &&[^\n]*\(/.test(m) && /cr\.marketContextSection\.body/.test(m) && /cr\.marketContextSection\.rows\.map/.test(m); })(), "modal renders");
   add("D41-8: the legacy `deriveDcaSuggestion` evaluator is NOT imported or called by the mounted engine (engine.ts has zero references)", (() => { const e = readSrc("src/suggestions/engine.ts"); return !/deriveDcaSuggestion/.test(e) && !/from "\.\/dcaSuggestion"/.test(e); })(), "not engine-wired");
   add("D41-9: zero risk-only DCA anywhere in the pipeline — no RISK_TARGET_ALLOCATION, no riskOnlyCanonicalTargetTransitional, no deriveRecommendedAllocation, no transitional_risk_only", (() => { const s = readSrc("src/suggestions/contributionPlanPipeline.ts"); return !/RISK_TARGET_ALLOCATION/.test(s) && !/riskOnlyCanonicalTargetTransitional/.test(s) && !/deriveRecommendedAllocation/.test(s) && !/transitional_risk_only/.test(s); })(), "no risk-only");
+
+  // ---- Top-level allocation guard: never grow crypto (SOL) when the WHOLE crypto bucket is at/over target ----
+  // Unit: the guard compares the crypto bucket (total − stable) to targetCryptoPct, matching the allocation card.
+  add("DCG-1: isCryptoBucketAtOrAboveTarget — crypto over target → true; under → false; at target → true", (() => {
+    const over = isCryptoBucketAtOrAboveTarget(26900, 9500, CT(63.5, 36.5));   // 64.7% ≥ 63.5% (the demo)
+    const under = isCryptoBucketAtOrAboveTarget(13300, 9000, CT(60, 40));      // 32.3% < 60%
+    const at = isCryptoBucketAtOrAboveTarget(10000, 4000, CT(60, 40));         // exactly 60%
+    return over === true && under === false && at === true;
+  })(), "bucket vs target");
+  add("DCG-2: guard fails closed — no/invalid target or non-positive total → false (never suppresses)", (() => {
+    return isCryptoBucketAtOrAboveTarget(26900, 9500, null) === false
+      && isCryptoBucketAtOrAboveTarget(26900, 9500, undefined) === false
+      && isCryptoBucketAtOrAboveTarget(0, 0, CT(60, 40)) === false;
+  })(), "fail closed");
+
+  // End-to-end: SOL-family underweight (would DCA) BUT total crypto (incl. a non-SOL memecoin) is over target → suppressed.
+  const bonk = (v: number) => ({ id: "b", source: "wallet", type: "token", symbol: "BONK", name: "Bonk", detection: "direct_wallet_balance", valueUsd: v, uiAmount: v, priceUsd: 0.00003 } as unknown as WalletPosition);
+  // total 10,000 · SOL 5,000 (SOL-family 50% < 60%) · BONK 1,500 (non-stable, non-SOL) · USDC 3,500 (stable)
+  // → total crypto = 6,500 = 65% ≥ 60% target. Buffer funded from the USDC; a monthly contribution exists.
+  const overTargetPositions = [usdc(3500), sol(5000), bonk(1500)];
+  const overTargetBuffer = { stableUsd: 3500, targetUsd: 3500, targetMonths: 3, coveragePct: 100, monthsCovered: 90, fullyFunded: true };
+  add("DCG-3: SOL-family underweight but total crypto ≥ target (memecoin fills the bucket) → DCA suppressed (no card)", (() => {
+    const res = run(CT(60, 40), "full", { positions: overTargetPositions, buffer: overTargetBuffer });
+    return res.suggestion === null; // pipeline still ran; the guard removed the growth DCA
+  })(), "guard suppresses");
+  add("DCG-4: mirror — same shape but total crypto UNDER target (smaller memecoin) → DCA still fires (guard does not over-suppress)", (() => {
+    // total 10,000 · SOL 5,000 (50%) · BONK 200 · USDC 4,800 (stable) → crypto = 5,200 = 52% < 60% → allowed.
+    const res = run(CT(60, 40), "full", { positions: [usdc(4800), sol(5000), bonk(200)], buffer: { stableUsd: 4800, targetUsd: 4800, targetMonths: 3, coveragePct: 100, monthsCovered: 90, fullyFunded: true } });
+    return res.suggestion?.category === "dca";
+  })(), "under-target still DCAs");
+
+  // ---- Contribution allocation split (maintain/restore recommended allocation) ----
+  const approxUsd = (a: number, b: number) => Math.abs(a - b) <= 0.51;
+  add("CAS-1: near target (the demo) → split both legs; SOL+USDC sum to the contribution; leg amounts restore the target", (() => {
+    // demo: total 26,900 · stable 9,500 · target crypto 63.5% · monthly 1,000
+    const s = computeContributionAllocationSplit({ totalUsd: 26900, stableUsd: 9500, monthlyContributionUsd: 1000, targetCryptoPct: 63.5 });
+    if (!s) return false;
+    // crypto leg = 63.5% × 27,900 − 17,400 = 316.5 ; stable leg = 683.5
+    return approxUsd(legAmount(s, "sol"), 316.5) && approxUsd(legAmount(s, "usdc"), 683.5) && approxUsd(legAmount(s, "sol") + legAmount(s, "usdc"), 1000) && legApplies(s, "sol") && legApplies(s, "usdc");
+  })(), "split restores");
+  add("CAS-2: crypto far UNDER target → whole contribution to SOL (USDC leg below min is rolled in)", (() => {
+    // total 10,000 · stable 5,000 (crypto 50%) · target 90% → crypto leg would exceed → all to SOL
+    const s = computeContributionAllocationSplit({ totalUsd: 10000, stableUsd: 5000, monthlyContributionUsd: 1000, targetCryptoPct: 90 });
+    return !!s && approxUsd(legAmount(s, "sol"), 1000) && legAmount(s, "usdc") === 0 && legApplies(s, "sol") && !legApplies(s, "usdc");
+  })(), "all SOL");
+  add("CAS-3: crypto far OVER target → whole contribution to USDC (SOL leg below min is rolled in)", (() => {
+    // total 10,000 · stable 1,000 (crypto 90%) · target 30% → crypto over → all to USDC
+    const s = computeContributionAllocationSplit({ totalUsd: 10000, stableUsd: 1000, monthlyContributionUsd: 1000, targetCryptoPct: 30 });
+    return !!s && legAmount(s, "sol") === 0 && approxUsd(legAmount(s, "usdc"), 1000) && !legApplies(s, "sol") && legApplies(s, "usdc");
+  })(), "all USDC");
+  add("CAS-4: fails closed on invalid input (non-positive total/contribution, stable>total, out-of-range target)", (() => {
+    return computeContributionAllocationSplit({ totalUsd: 0, stableUsd: 0, monthlyContributionUsd: 1000, targetCryptoPct: 60 }) === null
+      && computeContributionAllocationSplit({ totalUsd: 1000, stableUsd: 2000, monthlyContributionUsd: 100, targetCryptoPct: 60 }) === null
+      && computeContributionAllocationSplit({ totalUsd: 1000, stableUsd: 100, monthlyContributionUsd: 0, targetCryptoPct: 60 }) === null
+      && computeContributionAllocationSplit({ totalUsd: 1000, stableUsd: 100, monthlyContributionUsd: 100, targetCryptoPct: 140 }) === null;
+  })(), "fail closed");
+  add("CAS-5: split cards — near target (demo) → TWO cards (SOL + USDC), correct ids/amounts, neither Top Pick, each has a contribution review", (() => {
+    const s = computeContributionAllocationSplit({ totalUsd: 26900, stableUsd: 9500, monthlyContributionUsd: 1000, targetCryptoPct: 63.5 });
+    if (!s) return false;
+    const { cards, contributionReviewById } = buildContributionSplitCards(s, { sol: 150 });
+    const solC = cards.find((c) => c.id === "contribution_split_sol");
+    const usdcC = cards.find((c) => c.id === "contribution_split_usdc");
+    return cards.length === 2 && !!solC && !!usdcC && /Add \$317 of SOL/.test(solC.impact_text) && /Add \$684 of USDC/.test(usdcC.impact_text)
+      && solC.is_top_pick === false && usdcC.is_top_pick === false && !!contributionReviewById[solC.id] && !!contributionReviewById[usdcC.id];
+  })(), "two cards");
+  add("CAS-6: split cards — far under target → ONE SOL card only; far over → ONE USDC card only", (() => {
+    const under = computeContributionAllocationSplit({ totalUsd: 10000, stableUsd: 5000, monthlyContributionUsd: 1000, targetCryptoPct: 90 });
+    const over = computeContributionAllocationSplit({ totalUsd: 10000, stableUsd: 1000, monthlyContributionUsd: 1000, targetCryptoPct: 30 });
+    if (!under || !over) return false;
+    const u = buildContributionSplitCards(under, { sol: 150 }).cards;
+    const o = buildContributionSplitCards(over, { sol: 150 }).cards;
+    return u.length === 1 && u[0].id === "contribution_split_sol" && o.length === 1 && o[0].id === "contribution_split_usdc";
+  })(), "single-leg cards");
+  add("CAS-7: SOL split modal is DCA-consistent — 2 metric cards (Next contribution X SOL/$Y · Target crypto allocation) + Cancel / Buy SOL on Moonpay footer; no % arithmetic in the split body", (() => {
+    const s = computeContributionAllocationSplit({ totalUsd: 26900, stableUsd: 9500, monthlyContributionUsd: 1000, targetCryptoPct: 63.5 });
+    if (!s) return false;
+    const r = buildContributionSplitCards(s, { sol: 150 }).contributionReviewById["contribution_split_sol"];
+    if (!r) return false;
+    const m = r.keyMetrics;
+    return r.focusedLayout === true && m.length === 2
+      && m[0].label === "Next contribution" && /SOL$/.test(m[0].value) && m[0].subValue === "$317"
+      && m[1].label === "Target crypto allocation" && m[1].value === "63.5%"
+      && !/today|after the full contribution|Safety Buffer stays covered/.test(r.whySection.body)
+      && r.externalLink?.ctaLabel === "Buy SOL on Moonpay" && r.externalLink?.secondaryLabel === "Cancel"
+      && r.closeLabel === "Close" && r.executionControlsPresent === false;
+  })(), "DCA-consistent SOL modal");
+  add("CAS-8: USDC split modal → Next contribution 684 USDC/$684 + Target stablecoin allocation + Buy USDC on Moonpay", (() => {
+    const s = computeContributionAllocationSplit({ totalUsd: 26900, stableUsd: 9500, monthlyContributionUsd: 1000, targetCryptoPct: 63.5 });
+    if (!s) return false;
+    const r = buildContributionSplitCards(s, { sol: 150 }).contributionReviewById["contribution_split_usdc"];
+    if (!r) return false;
+    const m = r.keyMetrics;
+    return m.length === 2 && m[0].value === "684 USDC" && m[0].subValue === "$684"
+      && m[1].label === "Target stablecoin allocation" && m[1].value === "36.5%"
+      && r.externalLink?.ctaLabel === "Buy USDC on Moonpay";
+  })(), "DCA-consistent USDC modal");
+  // ---- External Holdings: manual amount validation (Add Bitcoin / Add Ethereum) ----
+  add("EXT-1: blank / non-numeric / non-positive amounts are rejected with the approved errors", (() => {
+    const btc = (v: string) => manualAmountError(v, 8, "Bitcoin");
+    return btc("") === "Enter an amount to continue."
+      && btc("   ") === "Enter an amount to continue."
+      && btc("abc") === "Enter a valid amount."
+      && btc("1e5") === "Enter a valid amount."
+      && btc("-1") === "Enter a valid amount."
+      && btc(".") === "Enter a valid amount."
+      && btc("0") === "Enter a positive amount."
+      && btc("0.00") === "Enter a positive amount.";
+  })(), "invalid rejected");
+  add("EXT-2: per-chain precision — BTC caps at 8 decimals, ETH at 18; within-limit amounts pass", (() => {
+    return manualAmountError("0.123456789", 8, "Bitcoin") === "Bitcoin supports up to 8 decimal places."
+      && manualAmountError("0.0952245", 8, "Bitcoin") === undefined
+      && manualAmountError("0.12345678", 8, "Bitcoin") === undefined
+      && manualAmountError("0.1234567891234567891", 18, "Ethereum") === "Ethereum supports up to 18 decimal places."
+      && manualAmountError("1.5", 18, "Ethereum") === undefined;
+  })(), "precision");
+  add("EXT-3: thousands separators/whitespace are tolerated; a valid amount returns no error", (() => {
+    return manualAmountError(" 1,234.5 ", 8, "Bitcoin") === undefined
+      && manualAmountError("2", 8, "Bitcoin") === undefined;
+  })(), "separators");
+  // ---- Growth sub-allocation policy (splits the crypto sleeve across held SOL/BTC/ETH) ----
+  const approx = (a: number, b: number, tol = 1e-6) => Math.abs(a - b) <= tol;
+  add("GSA-1: every approved weights row totals 100, and risk tiers move BTC down / SOL up as risk rises", (() => {
+    const w = GROWTH_SUB_ALLOCATION_WEIGHTS;
+    const order = ["very_low", "low", "medium", "high", "very_high"];
+    const btcDescending = order.every((r, i) => i === 0 || w[order[i - 1]].btc >= w[r].btc);
+    const solAscending = order.every((r, i) => i === 0 || w[order[i - 1]].sol <= w[r].sol);
+    return growthSubAllocationWeightsAreWellFormed() && btcDescending && solAscending;
+  })(), "weights well-formed");
+  add("GSA-2: held-only — SOL-only holder gets NO split (existing single-target behavior preserved)", (() => {
+    const r = buildGrowthSubAllocation({ growthBucketPct: 63.5, riskLevel: "medium", heldTargetIds: ["sol"] });
+    return r.status === "not_applicable" && Object.keys(r.targetPctByInvestmentTargetId).length === 0;
+  })(), "single target unchanged");
+  add("GSA-3: held-only — an unheld asset NEVER appears in the split (no asset-selection advice)", (() => {
+    const r = buildGrowthSubAllocation({ growthBucketPct: 63.5, riskLevel: "medium", heldTargetIds: ["sol", "btc"] });
+    return r.status === "configured" && r.participatingTargetIds.join(",") === "btc,sol"
+      && r.targetPctByInvestmentTargetId.eth === undefined && r.sharePctByInvestmentTargetId.eth === undefined;
+  })(), "never introduces assets");
+  add("GSA-4: SOL+BTC at medium risk → 57.1% / 42.9% of the sleeve; per-target pcts total the growth bucket", (() => {
+    const r = buildGrowthSubAllocation({ growthBucketPct: 63.5, riskLevel: "medium", heldTargetIds: ["btc", "sol"] });
+    if (r.status !== "configured") return false;
+    // medium weights BTC 40 / SOL 30 → renormalized over the two held: 40/70, 30/70.
+    const shareBtc = r.sharePctByInvestmentTargetId.btc as number;
+    const shareSol = r.sharePctByInvestmentTargetId.sol as number;
+    const totalPct = (r.targetPctByInvestmentTargetId.btc as number) + (r.targetPctByInvestmentTargetId.sol as number);
+    return approx(shareBtc, (40 / 70) * 100) && approx(shareSol, (30 / 70) * 100)
+      && approx(shareBtc + shareSol, 100) && approx(totalPct, 63.5);
+  })(), "renormalized split");
+  add("GSA-5: all three held — shares total 100 and per-target pcts total the growth bucket, at every risk level", (() => {
+    return ["very_low", "low", "medium", "high", "very_high"].every((risk) => {
+      const r = buildGrowthSubAllocation({ growthBucketPct: 60, riskLevel: risk, heldTargetIds: ["btc", "eth", "sol"] });
+      if (r.status !== "configured" || !validateGrowthSubAllocation(r).valid) return false;
+      const shares = Object.values(r.sharePctByInvestmentTargetId) as number[];
+      const pcts = Object.values(r.targetPctByInvestmentTargetId) as number[];
+      return approx(shares.reduce((a, b) => a + b, 0), 100) && approx(pcts.reduce((a, b) => a + b, 0), 60);
+    });
+  })(), "totals hold");
+  add("GSA-6: risk tilt is real — a very_high holder gets more SOL than a very_low holder for the same holdings", (() => {
+    const lo = buildGrowthSubAllocation({ growthBucketPct: 60, riskLevel: "very_low", heldTargetIds: ["btc", "eth", "sol"] });
+    const hi = buildGrowthSubAllocation({ growthBucketPct: 60, riskLevel: "very_high", heldTargetIds: ["btc", "eth", "sol"] });
+    return (hi.targetPctByInvestmentTargetId.sol as number) > (lo.targetPctByInvestmentTargetId.sol as number)
+      && (hi.targetPctByInvestmentTargetId.btc as number) < (lo.targetPctByInvestmentTargetId.btc as number);
+  })(), "risk tilt");
+  add("GSA-7: fails closed — unknown/missing risk, out-of-range bucket, and no holdings each yield no split", (() => {
+    const noRisk = buildGrowthSubAllocation({ growthBucketPct: 60, riskLevel: null, heldTargetIds: ["btc", "sol"] });
+    const badRisk = buildGrowthSubAllocation({ growthBucketPct: 60, riskLevel: "reckless", heldTargetIds: ["btc", "sol"] });
+    const badBucket = buildGrowthSubAllocation({ growthBucketPct: 140, riskLevel: "medium", heldTargetIds: ["btc", "sol"] });
+    const nothing = buildGrowthSubAllocation({ growthBucketPct: 60, riskLevel: "medium", heldTargetIds: [] });
+    return noRisk.status === "invalid" && noRisk.blockers.includes("risk_level_missing_or_unknown")
+      && badRisk.status === "invalid" && badRisk.blockers.includes("risk_level_missing_or_unknown")
+      && badBucket.status === "invalid" && badBucket.blockers.includes("growth_bucket_invalid")
+      && nothing.status === "not_applicable" && nothing.blockers.includes("no_held_growth_targets")
+      && [noRisk, badRisk, badBucket, nothing].every((r) => Object.keys(r.targetPctByInvestmentTargetId).length === 0);
+  })(), "fail closed");
+  add("GSA-8: the policy decides percentages only — no amount, funding source, suggestion, or execution", (() => {
+    const r = buildGrowthSubAllocation({ growthBucketPct: 60, riskLevel: "medium", heldTargetIds: ["btc", "sol"] });
+    return r.contributionAmountCalculated === false && r.fundingSourceSelected === false
+      && r.suggestionGenerated === false && r.transactionsEnabled === false;
+  })(), "percentages only");
+
+  // ---- growthTargetAllocationPolicy now consumes the sub-allocation for multi-target cohorts ----
+  const allocIn = { targetStablePct: 36.5, targetVolatilePct: 63.5, sourceEngineVersion: "test" };
+  add("GSA-9: SINGLE growth target is byte-identical to before (no regression for today's SOL-only product)", (() => {
+    const r = buildGrowthAlloc(allocIn, { enabledGrowthTargetIds: ["sol"] });
+    return r.status === "configured" && r.singleEnabledGrowthTargetPolicyApplied === true
+      && r.targetPctByInvestmentTargetId.sol === 63.5 && r.targetPctByInvestmentTargetId.usdc === 36.5
+      && validateGrowthAlloc(r).valid;
+  })(), "single unchanged");
+  add("GSA-10: MULTI growth targets + held SOL/BTC + risk → split maps through; growth entries total the bucket", (() => {
+    const r = buildGrowthAlloc(allocIn, { enabledGrowthTargetIds: ["sol", "btc", "eth"], riskLevel: "medium", heldGrowthTargetIds: ["sol", "btc"] });
+    if (r.status !== "configured" || !validateGrowthAlloc(r).valid) return false;
+    const btc = r.targetPctByInvestmentTargetId.btc as number;
+    const sol = r.targetPctByInvestmentTargetId.sol as number;
+    return r.targetPctByInvestmentTargetId.eth === undefined            // never introduces an unheld asset
+      && Math.abs(btc + sol - 63.5) < 1e-6                              // totals the growth bucket
+      && Math.abs(btc - (40 / 70) * 63.5) < 1e-6                        // medium-risk renormalized weights
+      && r.singleEnabledGrowthTargetPolicyApplied === false;
+  })(), "multi split mapped");
+  add("GSA-11: MULTI enabled but only ONE held → whole growth bucket maps to that asset (no invented split)", (() => {
+    const r = buildGrowthAlloc(allocIn, { enabledGrowthTargetIds: ["sol", "btc", "eth"], riskLevel: "medium", heldGrowthTargetIds: ["btc"] });
+    return r.status === "configured" && r.targetPctByInvestmentTargetId.btc === 63.5
+      && r.targetPctByInvestmentTargetId.sol === undefined && r.singleEnabledGrowthTargetPolicyApplied === true
+      && validateGrowthAlloc(r).valid;
+  })(), "one held maps whole");
+  add("GSA-12: MULTI targets still FAIL CLOSED without risk level or with nothing held", (() => {
+    const noRisk = buildGrowthAlloc(allocIn, { enabledGrowthTargetIds: ["sol", "btc"], heldGrowthTargetIds: ["sol", "btc"] });
+    const noneHeld = buildGrowthAlloc(allocIn, { enabledGrowthTargetIds: ["sol", "btc"], riskLevel: "medium", heldGrowthTargetIds: [] });
+    return noRisk.status === "invalid" && noRisk.blockers.includes("multiple_growth_targets_require_suballocation_policy")
+      && noneHeld.status === "invalid" && noneHeld.blockers.includes("multiple_growth_targets_require_suballocation_policy");
+  })(), "multi fails closed");
+
+  add("EXT-3b: zero is rejected when ADDING but accepted when MANAGING (clears the holding); negatives always rejected", (() => {
+    const add0 = manualAmountError("0", 8, "Bitcoin");                 // adding → must be positive
+    const manage0 = manualAmountError("0", 8, "Bitcoin", true);        // managing → allowed
+    const manage0dp = manualAmountError("0.00", 8, "Bitcoin", true);   // 0.00 is still zero
+    const manageNeg = manualAmountError("-1", 8, "Bitcoin", true);     // never valid
+    return add0 === "Enter a positive amount." && manage0 === undefined && manage0dp === undefined
+      && manageNeg === "Enter a valid amount."
+      && isClearingAmount("0") === true && isClearingAmount("0.00") === true
+      && isClearingAmount("0.5") === false;
+  })(), "zero clears on manage");
+  add("EXT-4: the engine core never references manual assets (engine / inputs / wallet summary stay clean)", (() => {
+    const files = ["src/suggestions/engine.ts", "src/suggestions/engineInputAdapter.ts", "src/wallet/walletSummary.ts"];
+    return files.every((f) => !/ExternalHoldings|ManualAsset|manualAmount|useManualAssets/.test(readSrc(f)));
+  })(), "engine clean");
+  add("EXT-7: manual assets reach the rail ONLY as an allocation measurement — positions, buffer, completeness, and the contribution pipeline keep reading the real wallet", (() => {
+    const r = readSrc("src/suggestions/useRailSuggestions.ts");
+    // The merged set is used for the Rebalance measurement and nothing else.
+    const measuresRebalance = /positions: measuredPositions, portfolioCompleteness/.test(r);
+    const bufferReal = /computeSafetyBufferCoverage\(positions/.test(r) || /deriveCompletenessGates\(positions/.test(r);
+    const contributionReal = /deriveContributionSuggestion\(\{\s*\n?\s*dataMode, positions, pricedAsOf, goal, buffer,/.test(r);
+    const engineInputsReal = /buildSuggestionEngineInputs\(\{\s*\n?\s*positions,/.test(r);
+    return measuresRebalance && bufferReal && contributionReal && engineInputsReal;
+  })(), "measurement only");
+  add("EXT-8: a manually stated holding can NEVER be a Rebalance source (excluded inside the assessment, not at a call site)", (() => {
+    const src = readSrc("src/suggestions/rebalanceAssessment.ts");
+    // The exclusion sits in buildSourceCandidate, before any class-based branch.
+    const idx = src.indexOf('p.detection === "manual_entry"');
+    const kaminoIdx = src.indexOf('cls === "kamino_direct"');
+    return idx > 0 && kaminoIdx > idx && /return exclude\("unsupported", "manually stated holding/.test(src);
+  })(), "never a sell source");
+  add("EXT-5: manual assets reach DISPLAY only — the suggestion rail still receives the real wallet positions, never the merged display array", (() => {
+    const rw = readSrc("src/components/RealWalletPortfolio.tsx");
+    const demo = readSrc("src/pages/DemoPortfolioPage.tsx");
+    // Real wallet: the rail gets `positions`; only the donuts/liquid get the merge.
+    const railGetsRealOnly = /useRailSuggestions\(\{ positions, pricedAsOf/.test(rw) && !/useRailSuggestions\(\{ *displayPositions/.test(rw);
+    const displayMerged = /PortfolioAllocationDonuts positions=\{displayPositions\}/.test(rw) && /getLiquidPositions\(displayPositions\)/.test(rw);
+    // Demo: the rail's POSITIONS arg stays the sample wallet; manual assets may
+    // only appear as the third (measurement-only) argument, never as positions.
+    const demoRailRealOnly = /buildDemoContributionRail\(goal, demoWalletPositions(, manual\.positions)?\)/.test(demo) && !/buildDemoContributionRail\(goal, displayPositions/.test(demo);
+    const demoDisplayMerged = /PortfolioAllocationDonuts positions=\{displayPositions\}/.test(demo) && /getLiquidPositions\(displayPositions\)/.test(demo);
+    // Staked/Yield keep reading real positions (manual assets are spot holdings).
+    const stakedRealOnly = /getStakedPositions\(positions\)/.test(rw) && /getStakedPositions\(demoWalletPositions\)/.test(demo);
+    return railGetsRealOnly && displayMerged && demoRailRealOnly && demoDisplayMerged && stakedRealOnly;
+  })(), "display-only merge");
+  add("EXT-6: manual positions are marked `manual_entry` so they can never satisfy a verified-wallet-balance check", (() => {
+    const src = readSrc("src/wallet/manualAssetPositions.ts");
+    const usdcGate = readSrc("src/suggestions/contributionProductInput.ts");
+    // The gate that classifies spendable USDC requires direct_wallet_balance.
+    return /detection: "manual_entry"/.test(src)
+      && !/detection: "direct_wallet_balance"/.test(src)
+      && /p\.detection === "direct_wallet_balance"/.test(usdcGate);
+  })(), "fails verified checks");
+
+  // ---- Multi-asset contribution split (BTC / ETH / SOL / USDC) ----
+  add("CAS-20: holding SOL+BTC at medium risk → THREE legs (BTC, SOL, USDC) totalling the contribution; ETH absent", (() => {
+    const s = computeContributionAllocationSplit({
+      totalUsd: 26900, stableUsd: 9500, monthlyContributionUsd: 1000, targetCryptoPct: 63.5,
+      heldGrowthTargetIds: ["sol", "btc"], riskLevel: "medium",
+    });
+    if (!s) return false;
+    const ids = s.legs.map((l) => l.targetId).sort().join(",");
+    const total = s.legs.reduce((sum, l) => sum + l.usd, 0);
+    // crypto portion 316.5 splits 40/70 BTC and 30/70 SOL; USDC keeps 683.5
+    return ids === "btc,sol,usdc" && approxUsd(total, 1000) && s.growthSubAllocated === true
+      && approxUsd(legAmount(s, "btc"), 316.5 * (40 / 70)) && approxUsd(legAmount(s, "sol"), 316.5 * (30 / 70))
+      && legAmount(s, "eth") === 0;
+  })(), "three legs");
+  add("CAS-21: holding all three at high risk → FOUR legs; SOL leg exceeds BTC leg (risk tilt carries through)", (() => {
+    const s = computeContributionAllocationSplit({
+      totalUsd: 26900, stableUsd: 9500, monthlyContributionUsd: 4000, targetCryptoPct: 63.5,
+      heldGrowthTargetIds: ["sol", "btc", "eth"], riskLevel: "high",
+    });
+    if (!s) return false;
+    const total = s.legs.reduce((sum, l) => sum + l.usd, 0);
+    return s.legs.length === 4 && approxUsd(total, 4000)
+      && legAmount(s, "sol") > legAmount(s, "btc") && legAmount(s, "btc") > 0 && legAmount(s, "eth") > 0;
+  })(), "four legs risk tilt");
+  add("CAS-22: SOL-only holder is UNCHANGED — one growth leg, no sub-allocation (no regression)", (() => {
+    const s = computeContributionAllocationSplit({
+      totalUsd: 26900, stableUsd: 9500, monthlyContributionUsd: 1000, targetCryptoPct: 63.5,
+      heldGrowthTargetIds: ["sol"], riskLevel: "medium",
+    });
+    return !!s && s.growthSubAllocated === false && approxUsd(legAmount(s, "sol"), 316.5)
+      && approxUsd(legAmount(s, "usdc"), 683.5) && legAmount(s, "btc") === 0;
+  })(), "sol-only unchanged");
+  add("CAS-23: an unheld asset NEVER receives contribution money", (() => {
+    const s = computeContributionAllocationSplit({
+      totalUsd: 26900, stableUsd: 9500, monthlyContributionUsd: 1000, targetCryptoPct: 63.5,
+      heldGrowthTargetIds: ["btc"], riskLevel: "medium",
+    });
+    return !!s && legAmount(s, "sol") === 0 && legAmount(s, "eth") === 0 && legAmount(s, "btc") > 0;
+  })(), "never unheld");
+  add("CAS-24: below-minimum legs are dropped and redistributed — shown legs still total the contribution exactly", (() => {
+    // A tiny contribution cannot support 4 cards; the survivors absorb the rest.
+    const s = computeContributionAllocationSplit({
+      totalUsd: 26900, stableUsd: 9500, monthlyContributionUsd: 120, targetCryptoPct: 63.5,
+      heldGrowthTargetIds: ["sol", "btc", "eth"], riskLevel: "medium",
+    });
+    if (!s) return false;
+    const shown = s.legs.filter((l) => l.applies);
+    return shown.every((l) => l.usd >= 50) && approxUsd(s.legs.reduce((sum, l) => sum + l.usd, 0), 120);
+  })(), "minimum redistributed");
+  add("CAS-25: multi-asset cards — one card per leg with its own id, Moonpay handoff, and target-allocation metric", (() => {
+    const s = computeContributionAllocationSplit({
+      totalUsd: 26900, stableUsd: 9500, monthlyContributionUsd: 4000, targetCryptoPct: 63.5,
+      heldGrowthTargetIds: ["sol", "btc", "eth"], riskLevel: "medium",
+    });
+    if (!s) return false;
+    const { cards, contributionReviewById } = buildContributionSplitCards(s, { sol: 150, btc: 62000, eth: 1800 });
+    const ids = cards.map((c) => c.id).sort().join(",");
+    const btcReview = contributionReviewById["contribution_split_btc"];
+    return ids === "contribution_split_btc,contribution_split_eth,contribution_split_sol,contribution_split_usdc"
+      && cards.every((c) => c.is_top_pick === false && c.cta.executes_transaction === false)
+      && btcReview?.externalLink?.ctaLabel === "Buy BTC on Moonpay"
+      && /BTC$/.test(btcReview.keyMetrics[0].value)
+      && btcReview.keyMetrics[1].label === "Target crypto allocation";
+  })(), "card per leg");
+
+  // Conflict authority is ANY material Rebalance (never just crypto→stables) that
+  // will ACTUALLY render. A material drift whose SOURCE gate is blocked produces no
+  // card, and suppressing on materiality alone left the rail with neither the
+  // Rebalance nor the contribution plan — see OBS-18.
+  add("CAS-9: rail split gate — buffer complete + ANY-material-Rebalance-THAT-RENDERS conflict authority (not just crypto→stables) + monthly-cadence gate + fail-closed target; the split REPLACES the pipeline DCA candidate", (() => {
+    const r = readSrc("src/suggestions/useRailSuggestions.ts");
+    return /safetyBufferAssessment\.presentationState !== "complete"\) return null;[\s\S]{0,600}rebalanceOverride\.material && rebalanceOverride\.card != null\) return null;/.test(r)
+      && !/rebalanceOverride\.materialCryptoToStables\) return null;/.test(r)
+      && /goal\?\.contribution_frequency !== "monthly"\) return null;/.test(r)
+      && /rebalanceTarget == null \|\| typeof rebalanceTarget\.targetCryptoPct !== "number"\) return null;/.test(r)
+      && /const contributionCandidate = splitApplies \? null/.test(r);
+  })(), "gate + conflict authority");
 
   return checks;
 }
@@ -18797,7 +19158,7 @@ export function runSlice7BRebalanceMigrationFixtureChecks(): FixtureCheck[] {
   add("7B-10: Case E — degraded market-excluded target → eligible Rebalance card; confidence degraded, market NOT included", (() => { const f = byId("degraded_excluded")!; return f.assessment.targetConfidence === "degraded_market_excluded" && f.assessment.marketIncluded === false && f.card?.id === "rebalance_to_plan" && f.assessment.direction === "stables_to_crypto"; })(), "degraded card");
 
   // ---- Review copy ----
-  add("7B-11: full-Fear rebalance review reason carries NO market-inclusion/CoinMarketCap disclosure and no timing words", (() => { const r = byId("full")!.card?.reviewDetails?.summary.reason ?? ""; return !/target-allocation calculation|CoinMarketCap|market component adjusted/.test(r) && !/Fear|Greed|bullish|bearish|buy the dip/.test(r) && /in crypto, below your/.test(r); })(), "no market disclosure");
+  add("7B-11: full-Fear rebalance review reason carries NO market-inclusion/CoinMarketCap disclosure and no timing words", (() => { const r = byId("full")!.card?.reviewDetails?.summary.reason ?? ""; return !/target-allocation calculation|CoinMarketCap|market component adjusted/.test(r) && !/Fear|Greed|bullish|bearish|buy the dip/.test(r) && /of your portfolio, below your/.test(r); })(), "no market disclosure");
   add("7B-12: degraded Review discloses exclusion + renormalization; NO score/band/CoinMarketCap/Neutral", (() => { const r = byId("degraded_excluded")!.card?.reviewDetails?.summary.reason ?? ""; return /market component was excluded, and the remaining profile factors were renormalized/.test(r) && !/CoinMarketCap|\/100|Neutral|Fear|Greed/.test(r); })(), "degraded review");
 
   // ---- No direct trigger + preserved rules ----
@@ -19005,6 +19366,8 @@ export async function printFixtureResults(): Promise<void> {
     ...runSafetyBufferOnTrackCloseoutFixtureChecks(),
     ...runKlendDirectPositionFailClosedFixtureChecks(),
     ...runKlendDirectExistingPositionFixtureChecks(),
+    ...runObservationDismissalFixtureChecks(),
+    ...runRecordedObligationFixtureChecks(),
     ...runDirectLendingProfileCompatibilityFixtureChecks(),
     ...runDirectLendingComponentActivationFixtureChecks(),
     ...runKlendMarketDataFixtureChecks(),
@@ -21433,6 +21796,298 @@ export function runDirectLendingProfileCompatibilityFixtureChecks(): FixtureChec
  * Accessibility (liquid); exact cToken mint only; recognized/liquid separate;
  * dedupes the API/generic rows; fail-closed; assessment/governance immutable.
  * ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ *
+ * OBSERVATION cards + condition-keyed dismissal. An observation ("Review Yield
+ * Positions") asks the user to NOTICE something, not to do something: it gets a
+ * quieter rail group, is never Top Pick, and can be acknowledged — but the
+ * acknowledgement is keyed to the CONDITION, so it re-raises on a material change.
+ * ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ *
+ * REC — recorded-obligation end-to-end regression. Replays a RECORDED Kamino
+ * obligations API response (klendObligationRecordedFixture.ts) through the REAL
+ * production chain: parse → collateral extraction → account synthesis → 17A
+ * redemption/withdrawal math → Safety Buffer. This is the obligation-held
+ * deposit path that shipped with no end-to-end coverage and hid four bugs.
+ * ------------------------------------------------------------------ */
+export function runRecordedObligationFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const NOW = Date.parse("2026-08-03T12:00:00.000Z");
+
+  // The full production chain, from the recorded response body to a WalletPosition.
+  const chain = (response: unknown, market: string) => {
+    const entries = parseKaminoObligationEntries(response, market);
+    const collateral = collateralRawFromEntries(entries);
+    const account = epObAccount(collateral, REC.RECORDED_OWNER);
+    const record = account
+      ? epBuild({
+          accounts: [account], walletAddress: REC.RECORDED_OWNER, walletSourceSlot: 436752001,
+          reserve: REC.RECORDED_RESERVE_SNAPSHOT as never,
+          price: { usdcPriceUsd: 1, fresh: true },
+          apy: { valuePct: 4.19, fresh: true, rateKind: "estimated_variable_apy" },
+          observedAt: "2026-08-03T12:00:00.000Z", nowMs: NOW,
+        })
+      : null;
+    return { entries, collateral, account, record, position: record ? epToWallet(record) : null };
+  };
+
+  const main = chain(REC.RECORDED_OBLIGATIONS_RESPONSE, REC.RECORDED_MARKET);
+
+  add("REC-1: recorded response parses to exactly ONE supplied entry (padding rows skipped)", (() => {
+    return main.entries.length === 1 && main.entries[0].side === "supplied"
+      && main.entries[0].reserve === REC.RECORDED_RESERVE
+      && main.entries[0].rawAmount === REC.RECORDED_COLLATERAL_RAW;
+  })(), `entries=${main.entries.length}`);
+  add("REC-2: collateral extraction carries the exact raw cToken amount", main.collateral[REC.RECORDED_RESERVE] === REC.RECORDED_COLLATERAL_RAW, "exact raw");
+  add("REC-3: the synthesized account passes the 17A discovery validator", main.record?.positionExists === true && main.record?.cTokenBalanceRaw === REC.RECORDED_COLLATERAL_RAW, "accepted");
+  add("REC-4: redemption math resolves the recorded USD value, fully withdrawable", (() => {
+    const w = main.position;
+    return !!w && typeof w.valueUsd === "number" && Math.abs(w.valueUsd - REC.RECORDED_EXPECTED_USD) < 0.01
+      && w.withdrawalState === "fully_withdrawable"
+      && typeof w.liquidValueUsd === "number" && Math.abs(w.liquidValueUsd - REC.RECORDED_EXPECTED_USD) < 0.01;
+  })(), `value=${main.position?.valueUsd}`);
+  add("REC-5: the Safety Buffer counts the recorded deposit as verified liquid (COMPLETE at a $9k target)", (() => {
+    const w = main.position;
+    if (!w) return false;
+    const cov = sbCoverage([w], 9_000);
+    return cov.coverageState === "complete" && Math.abs(cov.verifiedLiquidStableValueUsd - REC.RECORDED_EXPECTED_USD) < 0.01
+      && cov.unresolvedStableValueUsd === 0 && cov.sources[0].inclusionState === "included_liquid";
+  })(), "complete");
+  add("REC-6: an obligation in an UNVETTED market/reserve parses but is NEVER promoted", (() => {
+    const r = chain(REC.RECORDED_UNVETTED_RESPONSE, "ByYiZxp8QrdN9qbdtaAiePN8AAr3qvTPppNJDpf5DVJ5");
+    return r.entries.length === 1 && r.account === null && r.position === null;
+  })(), "not promoted");
+  add("REC-7: a borrow-only obligation never synthesizes supplied collateral", (() => {
+    const r = chain(REC.RECORDED_BORROW_ONLY_RESPONSE, REC.RECORDED_MARKET);
+    return r.entries.length === 1 && r.entries[0].side === "borrowed" && r.account === null;
+  })(), "no supplied");
+  add("REC-8: malformed responses yield no entries and never throw", (() => {
+    try {
+      return parseKaminoObligationEntries(null, "m").length === 0
+        && parseKaminoObligationEntries({ not: "an array" }, "m").length === 0
+        && parseKaminoObligationEntries([{ state: null }, { state: { deposits: null, borrows: null } }, 42], "m").length === 0;
+    } catch { return false; }
+  })(), "fail closed");
+  add("REC-10: the canonical row emits ONE underlying leg that agrees with its own valueUsd", (() => {
+    // Legs is the last field the canonical row dropped relative to the raw
+    // obligation row (value → APY → icon → stable classification each became a
+    // production bug). The leg must be the REDEEMED underlying amount, so a
+    // legs-based valuation agrees with the adapter's USD by construction.
+    const w = main.position;
+    if (!w || !w.legs || w.legs.length !== 1) return false;
+    const leg = w.legs[0];
+    const legValue = leg.uiAmount * 1; // recorded price basis: $1 USDC
+    return leg.mint === EP_POS_ID.liquidityMint && leg.side === "long"
+      && typeof w.valueUsd === "number" && Math.abs(legValue - w.valueUsd) < 0.01;
+  })(), "legs agree");
+  add("REC-11: the UNRESOLVED branch emits NO legs (a cToken leg would invite a wrong price)", (() => {
+    const account = epObAccount(main.collateral, REC.RECORDED_OWNER);
+    if (!account) return false;
+    const record = epBuild({
+      accounts: [account], walletAddress: REC.RECORDED_OWNER, walletSourceSlot: 436752001,
+      reserve: { ...REC.RECORDED_RESERVE_SNAPSHOT, collateralMintTotalSupplyRaw: null } as never,
+      price: { usdcPriceUsd: 1, fresh: true },
+      apy: { valuePct: null, fresh: false, rateKind: "estimated_variable_apy" },
+      observedAt: "2026-08-03T12:00:00.000Z", nowMs: NOW,
+    });
+    const w = epToWallet(record);
+    return !!w && w.legs === undefined;
+  })(), "no unresolved legs");
+  add("REC-12: the pricing pass NEVER overwrites the adapter-priced value via legs", (() => {
+    // The 17A redemption math is authoritative; feed-summed legs only FILL a
+    // missing value. A divergent feed price must leave the adapter's USD intact.
+    const w = main.position;
+    if (!w || typeof w.valueUsd !== "number") return false;
+    const divergent = new Map([[EP_POS_ID.liquidityMint, { priceUsd: 0.5 }]]);
+    const priced = wpApplyPrice(w, divergent);
+    const rawLegsRow = { ...w, valueUsd: null } as typeof w;
+    const filled = wpApplyPrice(rawLegsRow, new Map([[EP_POS_ID.liquidityMint, { priceUsd: 1 }]]));
+    return priced.valueUsd === w.valueUsd
+      && typeof filled.valueUsd === "number" && Math.abs(filled.valueUsd - REC.RECORDED_EXPECTED_USD) < 0.01;
+  })(), "authoritative value");
+  add("REC-13: the review modal's venue for the recorded position reads 'Kamino', not the product name", (() => {
+    // The venue under the asset answers "where is it?" — the protocol. The row's
+    // own name ("Kamino Direct USDC") restates the asset and read as clutter.
+    const w = main.position;
+    if (!w) return false;
+    const a = poDerive({ positions: [w], generatedAt: NOW });
+    const pos = [...a.flaggedPositions, ...(a as { canonicalPositions?: { venueLabel: string | null }[] }).canonicalPositions ?? []][0];
+    return pos != null && pos.venueLabel === "Kamino";
+  })(), "venue label");
+  add("REC-14: the portfolio-share denominator includes manual BTC/ETH (measurement only)", (() => {
+    // "85% of your portfolio" must mean the portfolio the user SEES — Total
+    // Portfolio Value includes the manually added holdings. Wallet-only, the
+    // recorded position is 100% of gross; with $5,000 of external holdings the
+    // SAME position reads ~75.3%, and card copy + trigger use the same number.
+    const w = main.position;
+    if (!w) return false;
+    const walletOnly = poDerive({ positions: [w], generatedAt: NOW });
+    const widened = poDerive({ positions: [w], generatedAt: NOW, externalMeasurementValueUsd: 5_000 });
+    const expected = (w.valueUsd as number) / ((w.valueUsd as number) + 5_000);
+    const card = poBuildCard(widened, NOW);
+    const shownShare = card?.reviewDetails?.involvedPositions?.[0]?.portfolioSharePct;
+    return walletOnly.measuredGrossAssetValueUsd === walletOnly.grossAssetValueUsd
+      && Math.abs(widened.measuredGrossAssetValueUsd - (walletOnly.grossAssetValueUsd + 5_000)) < 0.01
+      && typeof shownShare === "number" && Math.abs(shownShare - expected * 100) < 0.1;
+  })(), "measured denominator");
+  add("REC-15: below the 50% measured share, the concentration observation honestly disappears", (() => {
+    // The user's real case: adding enough BTC/ETH dilutes the lend below the
+    // trigger — the trigger and the copy must agree, so the card goes away
+    // rather than claiming a share the portfolio no longer supports.
+    const w = main.position;
+    if (!w) return false;
+    const diluted = poDerive({ positions: [w], generatedAt: NOW, externalMeasurementValueUsd: 16_000 });
+    // 15,263.6 / 31,263.6 ≈ 48.8% < 50%
+    return diluted.triggerStates.concentration !== "triggered" && poBuildCard(diluted, NOW) === null
+      // …and garbage external input fails closed to the wallet-only denominator.
+      && poDerive({ positions: [w], generatedAt: NOW, externalMeasurementValueUsd: Number.NaN }).measuredGrossAssetValueUsd
+         === poDerive({ positions: [w], generatedAt: NOW }).grossAssetValueUsd;
+  })(), "honest disappearance");
+  add("DSQ-1: the demo swap quote DERIVES its cost from the action — % always equals $ ÷ input", (() => {
+    // Regression: the fixture used to hardcode "$0.03 · 0.09%", values authored for
+    // a ~$15 swap, which then showed unchanged under a $605 suggestion (and were
+    // not self-consistent even at the original size).
+    const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/swapQuote/demoSwapQuote.ts`, "utf8"); } catch { return ""; } })();
+    return /computeSwapCostBreakdown\(/.test(src)
+      && /estimatedTotalCostUsd: cost\.estimatedTotalCostUsd, estimatedTotalCostPct: cost\.estimatedTotalCostPct/.test(src)
+      && !/estimatedTotalCostUsd: [\d.]+/.test(src) && !/estimatedTotalCostPct: [\d.]+/.test(src);
+  })(), "derived cost");
+  add("DSQ-2: it prices the OUTPUT token by the output asset, and fails closed without a USD notional", (() => {
+    // Deriving output tokens from the input token count would assume both sides
+    // cost the same per token (605 USDC → "604 SOL"). No notional → no quote.
+    const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/swapQuote/demoSwapQuote.ts`, "utf8"); } catch { return ""; } })();
+    return /demoPriceUsd\(action\.outputAsset\.mint\)/.test(src)
+      && /impliedOutTokens = outUsd \/ outPrice/.test(src)
+      && /if \(inputUsd == null \|\| !Number\.isFinite\(inputUsd\) \|\| inputUsd <= 0\) return null;/.test(src);
+  })(), "priced by output asset");
+  add("REC-9: an exhausted reserve turns the SAME recorded deposit into zero verified liquid", (() => {
+    const account = epObAccount(collateralRawFromEntries(parseKaminoObligationEntries(REC.RECORDED_OBLIGATIONS_RESPONSE, REC.RECORDED_MARKET)), REC.RECORDED_OWNER);
+    if (!account) return false;
+    const record = epBuild({
+      accounts: [account], walletAddress: REC.RECORDED_OWNER, walletSourceSlot: 436752001,
+      reserve: { ...REC.RECORDED_RESERVE_SNAPSHOT, totalAvailableLiquidityRaw: "0" } as never,
+      price: { usdcPriceUsd: 1, fresh: true },
+      apy: { valuePct: 4.19, fresh: true, rateKind: "estimated_variable_apy" },
+      observedAt: "2026-08-03T12:00:00.000Z", nowMs: NOW,
+    });
+    const w = epToWallet(record);
+    return !!w && sbCoverage([w], 9_000).verifiedLiquidStableValueUsd === 0;
+  })(), "fails closed");
+  return checks;
+}
+
+export function runObservationDismissalFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const sig = (over: Partial<{ id: string; share: number | null; apy: number | null; reasons: string[] }> = {}) =>
+    buildDismissalSignature("position_optimization", [{
+      positionId: over.id ?? "pos-1",
+      portfolioSharePct: over.share === undefined ? 85.1 : over.share,
+      apyPct: over.apy === undefined ? 4.19 : over.apy,
+      reasons: over.reasons ?? ["po_position_concentration"],
+    }]);
+
+  // --- Signature stability: immaterial drift must NOT re-raise ---
+  add("OBS-1: identical conditions produce an identical signature", sig() === sig(), "stable");
+  add("OBS-2: a small share move within the bucket does NOT re-raise", sig({ share: 85.1 }) === sig({ share: 89.9 }), "same bucket");
+  add("OBS-3: a small APY move within the bucket does NOT re-raise", sig({ apy: 4.19 }) === sig({ apy: 4.99 }), "same bucket");
+  add("OBS-4: signature order does not depend on reason order", (() => {
+    const a = buildDismissalSignature("k", [{ positionId: "p", reasons: ["b", "a"] }]);
+    const b = buildDismissalSignature("k", [{ positionId: "p", reasons: ["a", "b"] }]);
+    return a === b;
+  })(), "order-insensitive");
+  add("OBS-5: position order does not change the signature", (() => {
+    const a = buildDismissalSignature("k", [{ positionId: "p1" }, { positionId: "p2" }]);
+    const b = buildDismissalSignature("k", [{ positionId: "p2" }, { positionId: "p1" }]);
+    return a === b;
+  })(), "order-insensitive");
+
+  // --- Re-raise: a MATERIAL change must produce a different signature ---
+  add("OBS-6: crossing a concentration bucket RE-RAISES", sig({ share: 85 }) !== sig({ share: 95 }), "re-raised");
+  add("OBS-7: a material APY drop RE-RAISES", sig({ apy: 4.19 }) !== sig({ apy: 2.10 }), "re-raised");
+  add("OBS-8: a NEW flagged reason RE-RAISES", sig() !== sig({ reasons: ["po_position_concentration", "po_position_low_yield"] }), "re-raised");
+  add("OBS-9: a NEWLY flagged position RE-RAISES", (() => {
+    const one = buildDismissalSignature("k", [{ positionId: "p1" }]);
+    const two = buildDismissalSignature("k", [{ positionId: "p1" }, { positionId: "p2" }]);
+    return one !== two;
+  })(), "re-raised");
+  add("OBS-10: unresolved share is its own bucket (becoming resolved re-raises)", sig({ share: null }) !== sig({ share: 85 }), "re-raised");
+
+  // --- Store semantics ---
+  add("OBS-11: dismissing hides ONLY the exact condition", (() => {
+    resetDismissedSuggestions();
+    dismissSignature(sig());
+    const set = new Set([sig()]);
+    return isSignatureDismissed(sig(), set) && !isSignatureDismissed(sig({ share: 95 }), set);
+  })(), "exact only");
+  add("OBS-12: a blank signature is never dismissible (actionable cards can't be hidden)", (() => {
+    resetDismissedSuggestions();
+    dismissSignature("");
+    return !isSignatureDismissed(undefined, new Set()) && !isSignatureDismissed("", new Set([""]));
+  })(), "not dismissible");
+  add("OBS-13: reset clears every dismissal", (() => {
+    dismissSignature(sig());
+    resetDismissedSuggestions();
+    return !isSignatureDismissed(sig(), new Set());
+  })(), "cleared");
+
+  // --- Card/engine contract ---
+  add("OBS-14: an observation is NEVER promoted to Top Pick", (() => {
+    const base: any = { id: "a", category: "position_optimization", is_actionable: true, action_kind: "review_only", scores: { impact: 1, urgency: 1, efficiency: 1 } };
+    const obs = { ...base, observationOnly: true };
+    const act = { ...base, id: "b", category: "buffer" };
+    const picked = selectTopPick([obs, act] as any);
+    return picked.find((p) => p.id === "a")?.is_top_pick === false && picked.find((p) => p.id === "b")?.is_top_pick === true;
+  })(), "never top pick");
+  add("OBS-15: only an observation carries a dismissal signature onto the card", (() => {
+    const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/toSuggestionCard.ts`, "utf8"); } catch { return ""; } })();
+    return /s\.observationOnly === true && s\.dismissalSignature \? \{ dismissalSignature/.test(src)
+      && /observationOnly === true[\s\S]{0,40}"observation"/.test(src);
+  })(), "observation only");
+  add("OBS-16: the rail filters dismissed cards in the VIEW (engine stays pure)", (() => {
+    const src = (() => { try { return readFileSync(`${process.cwd()}/src/components/SuggestionRail.tsx`, "utf8"); } catch { return ""; } })();
+    return /isSignatureDismissed\(c\.dismissalSignature, dismissed\)/.test(src)
+      && /actionability !== "observation"/.test(src) && /actionability === "observation"/.test(src);
+  })(), "view-level");
+  add("OBS-20: the /testing DCA tab covers the BTC/ETH contribution-split cards, built by PRODUCTION code", (() => {
+    // The gallery must run the real split calculator + card builder, never a
+    // hand-written card, so a policy change is visible there immediately.
+    const fx = (() => { try { return readFileSync(`${process.cwd()}/src/pages/contributionSplitTestingFixtures.ts`, "utf8"); } catch { return ""; } })();
+    const page = (() => { try { return readFileSync(`${process.cwd()}/src/pages/TestingPage.tsx`, "utf8"); } catch { return ""; } })();
+    const usesProduction = /computeContributionAllocationSplit\(/.test(fx) && /buildContributionSplitCards\(/.test(fx);
+    const noHandWrittenCard = !/title:\s*"Build (BTC|ETH|SOL) Gradually"/.test(fx);
+    const noNetworkOrClock = !/fetch\(|Date\.now\(/.test(fx);
+    const mountedOnDcaTab = /runAllContributionSplitTestingCases/.test(page) && /dca: dedupeByCardFace\(\[\.\.\.dcaEntries, \.\.\.splitEntries\]\)/.test(page);
+    return usesProduction && noHandWrittenCard && noNetworkOrClock && mountedOnDcaTab;
+  })(), "gallery coverage");
+  add("OBS-19: a protocol position denominated in a stable mint counts as STABLE (not crypto)", (() => {
+    // The canonical Kamino Direct row carries the underlying mint but no `legs`,
+    // so the portfolio-wide split used to read $15k of lent USDC as 100% crypto.
+    const klend: any = { id: "k", source: "kamino", type: "protocol", symbol: "USDC", mint: EP_POS_ID.liquidityMint,
+      valueUsd: 15260.6, side: "supplied", existingPositionOnly: true, candidateId: "kamino_usdc_lending" };
+    const sol: any = { id: "s", source: "wallet", type: "stake", symbol: "SOL", valueUsd: 2671.2 };
+    const borrowed: any = { id: "b", source: "kamino", type: "protocol", symbol: "USDC",
+      mint: EP_POS_ID.liquidityMint, side: "borrowed", valueUsd: 500 };
+    // …and a BORROWED stable is a liability, never stable asset value.
+    return Math.round(wsStableValue([klend, sol])) === 15261 && wsStableValue([borrowed]) === 0;
+  })(), "protocol stable");
+  add("OBS-18: a material Rebalance with NO renderable card must not silence the contribution plan", (() => {
+    // The dead zone: `material` reflects the CALCULATION gate only. When the SOURCE
+    // gate is blocked (every stablecoin protocol-held → existing-position-only) the
+    // Rebalance card is null, so suppressing on materiality alone left the rail with
+    // nothing but an observation.
+    const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/useRailSuggestions.ts`, "utf8"); } catch { return ""; } })();
+    return /rebalanceOverride\.material && rebalanceOverride\.card != null/.test(src);
+  })(), "no dead zone");
+  add("OBS-17: dismissal gates no suggestion, amount, or eligibility", (() => {
+    // The store must be imported ONLY by the view + the signature producer — never
+    // by an assessment/policy module that decides what to suggest.
+    const files = ["src/suggestions/positionOptimizationAssessment.ts", "src/suggestions/suggestionEngine.ts", "src/wallet/safetyBufferCoverage.ts"];
+    return files.every((f) => { try { return !/dismissedSuggestions/.test(readFileSync(`${process.cwd()}/${f}`, "utf8")); } catch { return true; } });
+  })(), "no engine coupling");
+  return checks;
+}
+
 export function runKlendDirectExistingPositionFixtureChecks(): FixtureCheck[] {
   const checks: FixtureCheck[] = [];
   const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
@@ -21497,6 +22152,87 @@ export function runKlendDirectExistingPositionFixtureChecks(): FixtureCheck[] {
     return rows.length === 1 && !merged.some((p) => p.mint === EP_POS_ID.cTokenMint && p.id !== EP_ID);
   })(), "one row");
   add("EP-21: no position → merge appends nothing (no fake row)", (() => { const merged = epMerge([], epBuild(input({ accounts: [] }))); return merged.length === 0; })(), "no fake");
+
+  // --- Obligation-held collateral (a deposit made through Kamino's own app leaves
+  //     NO cTokens in the wallet; the obligation holds them). The SAME approved
+  //     methodology must run, so a vetted deposit counts toward the Safety Buffer
+  //     instead of falling through to the generic "unresolved" protocol branch. ---
+  const obligationAcct = acct({ address: `klend-obligation-${EP_POS_ID.reserveAddress}`, amountRaw: "12779612" });
+  add("EP-24: obligation-derived collateral is accepted by the approved adapter", (() => {
+    const r = epBuild(input({ accounts: [obligationAcct] }));
+    return r.positionExists === true && r.cTokenBalanceRaw === "12779612";
+  })(), "accepted");
+  add("EP-25: obligation-derived position resolves recognized AND liquid (not unresolved)", (() => {
+    const w = epToWallet(epBuild(input({ accounts: [obligationAcct] })));
+    return !!w && w.existingPositionOnly === true && w.candidateId === "kamino_usdc_lending"
+      && typeof w.recognizedValueUsd === "number" && typeof w.liquidValueUsd === "number"
+      && (w.liquidValueUsd as number) > 0 && (w.liquidValueUsd as number) <= (w.recognizedValueUsd as number);
+  })(), "resolved");
+  add("EP-26: the Safety Buffer counts it as verified liquid (no 'verify your buffer')", (() => {
+    const w = epToWallet(epBuild(input({ accounts: [obligationAcct] })))!;
+    const cov = sbCoverage([w], 10_000);
+    return cov.verifiedLiquidStableValueUsd > 0 && cov.unresolvedStableValueUsd === 0
+      && cov.sources[0].inclusionState === "included_liquid";
+  })(), "counted");
+  add("EP-27: an exhausted reserve still yields ZERO verified liquid (methodology unchanged)", (() => {
+    // Same obligation collateral, but the reserve has no withdrawable liquidity.
+    const w = epToWallet(epBuild(input({ accounts: [obligationAcct], reserve: { ...reserve, totalAvailableLiquidityRaw: "0" } })));
+    const cov = w ? sbCoverage([w], 10_000) : null;
+    return !!cov && cov.verifiedLiquidStableValueUsd === 0;
+  })(), "fails closed");
+  add("EP-28: only the ONE approved reserve is promoted from an obligation", (() => {
+    // BEHAVIORAL: the synthesis helper returns an account only for the approved
+    // reserve; unvetted reserves and zero balances yield null. A thin regex keeps
+    // the React mount bound to that helper.
+    const approved = epObAccount({ [EP_POS_ID.reserveAddress]: "12779612672" }, "W1");
+    const unvetted = epObAccount({ H3t6qZ1JkguCNTi9uzVKqQ7dvt2cum4XiXWom6Gn5e5S: "82999908930" }, "W1");
+    const zero = epObAccount({ [EP_POS_ID.reserveAddress]: "0" }, "W1");
+    const src = (() => { try { return readFileSync(`${process.cwd()}/src/wallet/useWalletPortfolio.ts`, "utf8"); } catch { return ""; } })();
+    return approved !== null && approved.mint === EP_POS_ID.cTokenMint && approved.owner === "W1"
+      && unvetted === null && zero === null
+      && /obligationCTokenAccount\(kaminoCollateralRaw, owner\.toBase58\(\)\)/.test(src);
+  })(), "approved reserve only");
+  add("EP-33: the vetted Kamino lending APY is SOURCED (shown), not 'unsupported'", (() => {
+    const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/positionOptimizationAssessment.ts`, "utf8"); } catch { return ""; } })();
+    // Integrated only for the vetted candidate, and only when a value exists — a
+    // MISSING value must NOT become `missing_expected` (that would make the
+    // position newly eligible for a missing-data review).
+    return /p\.candidateId === "kamino_usdc_lending" && v !== null/.test(src)
+      && /sourced\("kamino_klend_reserve_metrics", "lending_supply_apy"/.test(src);
+  })(), "sourced APY");
+  add("EP-34: …and it stays INELIGIBLE for a low-yield review (display-only change)", (() => {
+    // Low-yield review requires `sourced_fresh`; with no approved production
+    // freshness policy this resolves to `sourced_freshness_unverified`.
+    const src = (() => { try { return readFileSync(`${process.cwd()}/src/suggestions/positionOptimizationAssessment.ts`, "utf8"); } catch { return ""; } })();
+    const lowYieldNeedsFresh = /lowYieldEligible = [^;]*apy\.apyState === "sourced_fresh"/.test(src);
+    const noApprovedPolicy = (() => { const p = lookupApyFreshnessPolicy("kamino_klend_reserve_metrics", "lending_supply_apy"); return p === null || p.policyState !== "approved"; })();
+    return lowYieldNeedsFresh && noApprovedPolicy;
+  })(), "not newly eligible");
+  add("EP-32: the canonical row carries the approved USDC icon in BOTH branches", (() => {
+    // Resolved (mint = USDC) and unresolved (mint = cToken) must both show USDC —
+    // the unresolved branch would otherwise fall back to the generic token glyph.
+    const resolved = epToWallet(epBuild(input({ accounts: [obligationAcct] })));
+    const unresolved = epToWallet(epBuild(input({ accounts: [obligationAcct], reserve: { ...reserve, collateralMintTotalSupplyRaw: null } })));
+    return resolved?.icon === "assets/icons/token/usdc.svg" && unresolved?.icon === "assets/icons/token/usdc.svg";
+  })(), "usdc icon");
+  add("EP-29: an unpriced position resolves NOTHING (the failure this guards against)", (() => {
+    // No fresh USDC price → no USD at all → the buffer can only say "unresolved",
+    // which is what surfaced as "Current value could not be verified".
+    const w = epToWallet(epBuild(input({ accounts: [obligationAcct], price: { usdcPriceUsd: null, fresh: false } })));
+    return !!w && w.valueUsd == null && sbCoverage([w], 10_000).coverageState === "unresolved";
+  })(), "unpriced → unresolved");
+  add("EP-30: the mount sources the USDC price from the PRICE FEED, not a wallet USDC row", (() => {
+    // A user who lent ALL of their USDC holds none loose, so looking for a USDC
+    // position in the wallet leaves the lending position permanently unpriced.
+    const src = (() => { try { return readFileSync(`${process.cwd()}/src/wallet/useWalletPortfolio.ts`, "utf8"); } catch { return ""; } })();
+    return /sourcedUsdcPriceUsd = prices\.get\(KLEND_DIRECT_IDENTITY\.liquidityMint\)/.test(src)
+      && /usdcPriceUsd: sourcedUsdcPriceUsd \?\?|sourcedUsdcPriceUsd \?\? merged\.find/.test(src);
+  })(), "feed-sourced price");
+  add("EP-31: the mount passes a real sourced supply APY (never a hardcoded null)", (() => {
+    const src = (() => { try { return readFileSync(`${process.cwd()}/src/wallet/useWalletPortfolio.ts`, "utf8"); } catch { return ""; } })();
+    return /klendApyPct = kaminoSupplyApyPct\[KLEND_DIRECT_IDENTITY\.reserveAddress\]/.test(src)
+      && /apy: \{ valuePct: klendApyPct, fresh: klendApyPct != null/.test(src);
+  })(), "sourced APY");
 
   // --- Immutability + read-only ---
   add("EP-22: assessment/governance/policy immutable; Steakhouse/Jupiter unaffected", DA_OUTCOME.unroundedAggregate === 5.93 && DA_OUTCOME.meetsMinimum === false && DA_MANIFEST_HASH === "direct_assessment_54a11ba3" && DL_CATMIN === 5.5 && DL_UNIMIN === 7 && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions", "immutable");
@@ -21655,11 +22391,11 @@ export function runSafetyBufferAssessmentFixtureChecks(): FixtureCheck[] {
   add("SBA-11: verified exactly at target → complete (equality funds)", (() => { const a = A(cov({ target: 3000, verified: 3000, state: "complete" }), 1000, 3); return a.presentationState === "complete" && a.fullyFunded === true && a.verifiedOnlyShortfallUsd === 0; })(), "exact target");
   add("SBA-12: complete coverageConfidence = verified_complete", A(cov({ target: 3000, verified: 3200, state: "complete" }), 1000, 3).coverageConfidence === "verified_complete", "confidence");
 
-  add("SBA-RANGE-COPY: range shortfall → 'confirmed / being verified' body on card AND modal; 5-card set (Amount needed/Current/Being verified/Target/Current coverage), no heading, no guardrails; impact unchanged", (() => { const a = A(cov({ target: 3000, verified: 2000, unresolved: 500, state: "incomplete" }), 1000, 3); const c = buildSafetyBufferCardFromAssessment(a, GEN); if (!c) return false; const card = toSuggestionCard(c); const d = c.reviewDetails; const expected = "You have $2,000 confirmed in your Safety Buffer, and another $500 is still being verified. Your target is $3,000. Add at least $500 now; depending on the verification result, you may need another $500 later."; const labels = (d?.metrics ?? []).map((m) => m.label); const cov5 = (d?.metrics ?? []).find((m) => m.label === "Current coverage")?.value; return card.description === expected && d?.summary.reason === expected && card.impact_text === "Add at least $500 to your Safety Buffer." && labels.length === 5 && ["Amount needed", "Current", "Being verified", "Target", "Current coverage"].every((l) => labels.includes(l)) && cov5 === "2 of 3 months" && d?.hideMetricsHeading === true && d?.hideGuardrails === true; })(), "range detailed copy");
+  add("SBA-RANGE-COPY: range shortfall → 'confirmed / being verified' body on card AND modal; 5-card set (Amount needed/Current/Being verified/Target/Current coverage), no heading, no guardrails; impact unchanged", (() => { const a = A(cov({ target: 3000, verified: 2000, unresolved: 500, state: "incomplete" }), 1000, 3); const c = buildSafetyBufferCardFromAssessment(a, GEN); if (!c) return false; const card = toSuggestionCard(c); const d = c.reviewDetails; const expected = "You have $2,000 confirmed in your Safety Buffer, and another $500 is still being verified. Your target is $3,000. Add at least $500 now; depending on the verification result, you may need another $500 later."; const labels = (d?.metrics ?? []).map((m) => m.label); const cov5 = (d?.metrics ?? []).find((m) => m.label === "Current coverage")?.value; return card.description === expected && d?.summary.reason === expected && card.impact_text === "Add at least $500 to your Safety Buffer." && d?.externalLink?.ctaLabel === "Buy at least $500 in USDC" && labels.length === 5 && ["Current", "Current coverage", "Being verified", "Target", "Minimum amount to add"].every((l) => labels.includes(l)) && cov5 === "2 of 3 months" && d?.hideMetricsHeading === true && d?.hideGuardrails === true; })(), "range detailed copy");
 
-  add("SBA-FROZEN-COPY: frozen stablecoin excluded → 'eligible stablecoins' body + 'Excluded from Safety Buffer' table (USDC / 2000 / $2,000 / Frozen)", (() => { const positions = [{ id: "u", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", amount: "1000000000", uiAmount: 1000, decimals: 6, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: 1000 }, { id: "t22", source: "wallet", type: "token", symbol: "USDC", name: "USDC (Token-2022)", mint: "Usdc2022Mint1111", amount: "2000", uiAmount: 2000, decimals: 6, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: 2000, withdrawalState: "currently_unavailable" }] as unknown as WalletPosition[]; const coverage = sbCoverage(positions, 3000); const a = sbAssess({ coverage, monthlyExpensesUsd: 1000, targetMonths: 3, contributionPlan: null, generatedAt: GEN }); const c = buildSafetyBufferCardFromAssessment(a, GEN); if (!c) return false; const card = toSuggestionCard(c); const expected = "You have $1,000 in eligible stablecoins. One stablecoin holding is frozen and can’t be used as a liquid reserve, so it isn’t counted. Add $2,000 in USDC to reach your $3,000 target."; const ex = c.reviewDetails?.excludedAssets ?? []; return card.description === expected && c.reviewDetails?.summary.reason === expected && ex.length === 1 && ex[0].symbol === "USDC" && ex[0].amount === 2000 && ex[0].valueUsd === 2000 && ex[0].reason === "Frozen" && c.reviewDetails?.hideMetricsHeading === true && c.reviewDetails?.hideGuardrails === true; })(), "frozen excluded copy");
+  add("SBA-FROZEN-COPY: frozen stablecoin excluded → 'eligible stablecoins' body + 'Excluded from Safety Buffer' table (USDC / 2000 / $2,000 / Frozen)", (() => { const positions = [{ id: "u", source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", amount: "1000000000", uiAmount: 1000, decimals: 6, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: 1000 }, { id: "t22", source: "wallet", type: "token", symbol: "USDC", name: "USDC (Token-2022)", mint: "Usdc2022Mint1111", amount: "2000", uiAmount: 2000, decimals: 6, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: 2000, withdrawalState: "currently_unavailable" }] as unknown as WalletPosition[]; const coverage = sbCoverage(positions, 3000); const a = sbAssess({ coverage, monthlyExpensesUsd: 1000, targetMonths: 3, contributionPlan: null, generatedAt: GEN }); const c = buildSafetyBufferCardFromAssessment(a, GEN); if (!c) return false; const card = toSuggestionCard(c); const body = "You have $1,000 in eligible stablecoins. One stablecoin holding is frozen and can’t be used as a liquid reserve, so it isn’t counted."; const action = "Add $2,000 to your Safety Buffer."; const ex = c.reviewDetails?.excludedAssets ?? []; return card.description === body && card.impact_text === action && c.reviewDetails?.summary.reason === `${body} ${action}` && ex.length === 1 && ex[0].symbol === "USDC" && ex[0].amount === 2000 && ex[0].valueUsd === 2000 && ex[0].reason === "Frozen" && c.reviewDetails?.hideMetricsHeading === true && c.reviewDetails?.hideGuardrails === true; })(), "frozen excluded copy");
 
-  add("SBA-PLAN-COPY: plan fully covers gap → 'Complete Your Safety Buffer' + plan body (card+modal); 5 cards incl. Next planned contribution; no heading/guardrails", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 1000 }); const c = buildSafetyBufferCardFromAssessment(a, GEN); if (!c) return false; const card = toSuggestionCard(c); const d = c.reviewDetails; const expected = "Your Safety Buffer is $1,000 below target. Direct your next planned contribution to USDC to fully fund it before investing further."; const labels = (d?.metrics ?? []).map((m) => m.label); const npc = (d?.metrics ?? []).find((m) => m.label === "Next planned contribution")?.value; return card.title === "Complete Your Safety Buffer" && card.description === expected && d?.summary.reason === expected && card.impact_text === "Add $1,000 to your Safety Buffer." && labels.length === 5 && ["Amount needed", "Current", "Target", "Current coverage", "Next planned contribution"].every((l) => labels.includes(l)) && npc === 1000 && d?.hideMetricsHeading === true && d?.hideGuardrails === true; })(), "plan-full copy");
+  add("SBA-PLAN-COPY: plan fully covers gap → 'Complete Your Safety Buffer' + plan body (card+modal); 5 cards incl. Next planned contribution; no heading/guardrails", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 1000 }); const c = buildSafetyBufferCardFromAssessment(a, GEN); if (!c) return false; const card = toSuggestionCard(c); const d = c.reviewDetails; const expected = "Your Safety Buffer is $1,000 below target. Direct your next planned contribution to USDC to fully fund it before investing further."; const labels = (d?.metrics ?? []).map((m) => m.label); const npc = (d?.metrics ?? []).find((m) => m.label === "Next planned contribution")?.value; return card.title === "Complete Your Safety Buffer" && card.description === expected && d?.summary.reason === expected && card.impact_text === "Add $1,000 to your Safety Buffer." && labels.length === 5 && ["Current", "Current coverage", "Target", "Next planned contribution", "Amount to add"].every((l) => labels.includes(l)) && npc === 1000 && d?.hideMetricsHeading === true && d?.hideGuardrails === true; })(), "plan-full copy");
 
   // ---- Incomplete (proven shortfall) ----
   add("SBA-13: no unresolved value, verified 2000/3000 → incomplete, provenMin 1000 = verifiedOnly 1000, generic mode", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3); return a.presentationState === "definite_shortfall" && a.provenMinimumShortfallUsd === 1000 && a.verifiedOnlyShortfallUsd === 1000 && a.displayMode === "generic_definite_shortfall" && a.overallReadiness === "allowed"; })(), "no unresolved");
@@ -21678,7 +22414,7 @@ export function runSafetyBufferAssessmentFixtureChecks(): FixtureCheck[] {
 
   // ---- Contribution normalization ----
   add("SBA-24: generic definite-shortfall (no plan) → contribution none", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3); return a.contribution.contributionPlanState === "none" && a.displayMode === "generic_definite_shortfall"; })(), "generic none");
-  add("SBA-PLAN-PARTIAL-COPY: plan partially covers gap → 'below target / reduce the gap / remaining amount afterward' body (card+modal); 5 cards incl. Next planned contribution; no heading/guardrails", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 400 }); const c = buildSafetyBufferCardFromAssessment(a, GEN); if (!c) return false; const card = toSuggestionCard(c); const d = c.reviewDetails; const expected = "Your Safety Buffer is $1,000 below target. Use your next contribution toward USDC to reduce the gap. You’ll still need to add the remaining amount afterward."; const labels = (d?.metrics ?? []).map((m) => m.label); const npc = (d?.metrics ?? []).find((m) => m.label === "Next planned contribution")?.value; return card.title === "Top Up Your Safety Buffer" && card.description === expected && d?.summary.reason === expected && card.impact_text === "Add $1,000 to your Safety Buffer." && labels.length === 5 && ["Amount needed", "Current", "Target", "Current coverage", "Next planned contribution"].every((l) => labels.includes(l)) && npc === 400 && d?.hideMetricsHeading === true && d?.hideGuardrails === true; })(), "plan-partial copy");
+  add("SBA-PLAN-PARTIAL-COPY: plan partially covers gap → 'below target / reduce the gap / remaining amount afterward' body (card+modal); 5 cards incl. Next planned contribution; no heading/guardrails", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 400 }); const c = buildSafetyBufferCardFromAssessment(a, GEN); if (!c) return false; const card = toSuggestionCard(c); const d = c.reviewDetails; const expected = "Your Safety Buffer is $1,000 below target. Use your next contribution toward USDC to reduce the gap. You’ll still need to add the remaining amount afterward."; const labels = (d?.metrics ?? []).map((m) => m.label); const npc = (d?.metrics ?? []).find((m) => m.label === "Next planned contribution")?.value; return card.title === "Top Up Your Safety Buffer" && card.description === expected && d?.summary.reason === expected && card.impact_text === "Add $1,000 to your Safety Buffer." && labels.length === 5 && ["Current", "Current coverage", "Target", "Next planned contribution", "Amount to add"].every((l) => labels.includes(l)) && npc === 400 && d?.hideMetricsHeading === true && d?.hideGuardrails === true; })(), "plan-partial copy");
 
   add("SBA-25: plan-backed FULL contribution covers proven shortfall → ready, remaining 0, plan_backed mode", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 1000 }); return a.contribution.planCouldFullyCoverProvenShortfall === true && a.contribution.remainingProvenShortfallAfterPlanUsd === 0 && a.contribution.contributionPlanState === "ready" && a.displayMode === "plan_backed_definite_shortfall"; })(), "plan full");
   add("SBA-26: plan-backed PARTIAL (planned 400 < proven 1000) → partial, remaining 600", (() => { const a = A(cov({ target: 3000, verified: 2000, state: "incomplete" }), 1000, 3, { planIsReady: true, planIsRange: false, plannedContributionUsd: 400 }); return a.contribution.planIsPartial === true && a.contribution.remainingProvenShortfallAfterPlanUsd === 600 && a.contribution.contributionPlanState === "partial"; })(), "plan partial");
@@ -21815,10 +22551,13 @@ export function runBufferPositionReviewFixtureChecks(): FixtureCheck[] {
   add("BPR-7: the unvetted USDC is EXCLUDED from Safety Buffer coverage (verified liquid = direct USDC only; excluded_unresolved source)", known.coverage.verifiedLiquidStableValueUsd === 1000 && known.coverage.sources.some((s) => s.inclusionState === "excluded_unresolved" && s.positionId === "cv"), `verified=${known.coverage.verifiedLiquidStableValueUsd}`);
   add("BPR-8: approved Kamino SOL/BTC Market USDC IS counted (verified liquid) → NO review, normal Safety Buffer rules (definite shortfall card)", approved.review === null && approved.coverage.verifiedLiquidStableValueUsd === 2500 && approved.card!.title === "Top Up Your Safety Buffer", `verified=${approved.coverage.verifiedLiquidStableValueUsd}`);
   // ---- Modal layout: focused 4-card set (no 'Key metrics' heading, no Guardrails) + 'Excluded from Safety Buffer' table ----
-  add("BPR-9: unvetted position modal → focused cards [Amount needed, Current, Target, Current coverage], no heading/guardrails, no legacy 'Detected'/'Additional' metrics", (() => { const d = known.eng!.reviewDetails!; const labels = d.metrics.map((m) => m.label); return labels.join(",") === "Amount needed,Current,Target,Current coverage" && d.metrics.find((m) => m.label === "Amount needed")?.value === 2000 && d.metrics.find((m) => m.label === "Current")?.value === 1000 && d.metrics.find((m) => m.label === "Target")?.value === 3000 && d.hideMetricsHeading === true && d.hideGuardrails === true; })(), known.eng!.reviewDetails!.metrics.map((m) => m.label).join(","));
+  add("BPR-9: unvetted position modal → focused cards in the shared buffer order [Current, Current coverage, Target, Amount to move], no heading/guardrails, no legacy 'Detected'/'Additional' metrics", (() => { const d = known.eng!.reviewDetails!; const labels = d.metrics.map((m) => m.label); return labels.join(",") === "Current,Current coverage,Target,Amount to move"
+      // The POSITION's own value (what can actually be moved), emphasized.
+      && d.metrics.find((m) => m.label === "Amount to move")?.value === 2000
+      && d.metrics.find((m) => m.label === "Amount to move")?.emphasis === "primary" && d.metrics.find((m) => m.label === "Current")?.value === 1000 && d.metrics.find((m) => m.label === "Target")?.value === 3000 && d.hideMetricsHeading === true && d.hideGuardrails === true; })(), known.eng!.reviewDetails!.metrics.map((m) => m.label).join(","));
   add("BPR-9-nocalc: Safety Buffer modals emit NO 'How this was calculated' section (calculations empty) across plain-shortfall AND unvetted-position cases", (() => { const definite = run([usdc(1000)], 1000, 3); return definite.eng!.title_key === "suggestion.buffer.title" && (definite.eng!.reviewDetails?.calculations.length ?? -1) === 0 && (known.eng!.reviewDetails?.calculations.length ?? -1) === 0; })(), "no buffer calculations");
   add("BPR-9b: unvetted position modal → 'Excluded from Safety Buffer' table row (USDC / 2,000 / $2,000 / Unvetted)", (() => { const ex = known.eng!.reviewDetails!.excludedAssets ?? []; return ex.length === 1 && ex[0].symbol === "USDC" && ex[0].amount === 2000 && ex[0].valueUsd === 2000 && ex[0].reason === "Unvetted"; })(), `ex=${JSON.stringify(known.eng!.reviewDetails!.excludedAssets)}`);
-  add("BPR-9c: unvetted PLUS additional shortfall → 'Amount needed' is the verified-only gap (target − verified = 5000), same focused card set", (() => { const d = both.eng!.reviewDetails!; const labels = d.metrics.map((m) => m.label); return both.card!.title === "Review Your Safety Buffer USDC" && labels.join(",") === "Amount needed,Current,Target,Current coverage" && d.metrics.find((m) => m.label === "Amount needed")?.value === 5000 && (d.excludedAssets ?? []).some((x) => x.symbol === "USDC" && x.reason === "Unvetted"); })(), both.eng!.reviewDetails!.metrics.map((m) => m.label).join(","));
+  add("BPR-9c: unvetted PLUS additional shortfall → 'Amount to move' is the POSITION's value (2000), NOT the larger verified-only gap (5000) — the user cannot move more than is there", (() => { const d = both.eng!.reviewDetails!; const labels = d.metrics.map((m) => m.label); return both.card!.title === "Review Your Safety Buffer USDC" && labels.join(",") === "Current,Current coverage,Target,Amount to move" && d.metrics.find((m) => m.label === "Amount to move")?.value === 2000 && d.metrics.every((m) => m.value !== 5000) && (d.excludedAssets ?? []).some((x) => x.symbol === "USDC" && x.reason === "Unvetted"); })(), both.eng!.reviewDetails!.metrics.map((m) => m.label).join(","));
   // ---- Generic fallback ----
   add("BPR-10: unmapped / low-confidence position → NO review; generic 'Verify Your Safety Buffer' fallback", low.review === null && low.card!.title === "Verify Your Safety Buffer", `title=${low.card!.title}`);
   add("BPR-11: missing destination mapping → NO review; generic fallback, never an external CTA", noDest.review === null && (noDest.eng == null || noDest.eng.reviewDetails?.externalLink == null), `review=${noDest.review}`);
@@ -23579,7 +24318,11 @@ export function runPositionOptimizationProductionFixtureChecks(): FixtureCheck[]
 
   // ---- Ordering + Top Pick ----
   add("PO-27: category ordering unchanged; position_optimization is the lowest (8)", CATEGORY_PRIORITY.buffer === 1 && CATEGORY_PRIORITY.rebalance === 2 && CATEGORY_PRIORITY.capital_efficiency === 3 && CATEGORY_PRIORITY.trim === 4 && CATEGORY_PRIORITY.staking === 5 && CATEGORY_PRIORITY.stable_yield === 6 && CATEGORY_PRIORITY.dca === 7 && CATEGORY_PRIORITY.position_optimization === 8, "ordering");
-  add("PO-28: Position-Optimization-only → it becomes Top Pick (no higher candidate)", (() => { const inp = inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); return r.suggestions.find((s) => s.is_top_pick)?.category === "position_optimization"; })(), "po top pick");
+  // Position Optimization is an OBSERVATION — "notice this", with no next step to
+  // take — so it is never promoted to Top Pick, even when it is the ONLY card. A
+  // rail whose single card says "review your positions" must not present that as
+  // the most valuable thing to act on. (Was: it became Top Pick by default.)
+  add("PO-28: Position-Optimization-only → NO Top Pick (an observation is never promoted)", (() => { const inp = inputsFor({ allocation: aligned(), safetyBuffer: funded(), positions: [cryptoPosition(100)] }); const r = runSuggestionEngine(inp, GEN, null, null, undefined, undefined, undefined, { candidate: po() }); const poSug = r.suggestions.find((s) => s.category === "position_optimization"); return poSug !== undefined && poSug.observationOnly === true && r.suggestions.every((s) => s.is_top_pick === false); })(), "no top pick");
   add("PO-29: Position Optimization NOT Top Pick when Rebalance present (Rebalance outranks)", (() => { const r = runSuggestionEngine(railInp(), GEN, null, null, undefined, { card: mkSug15H("reb", "rebalance"), material: true }, undefined, { candidate: po() }); return r.suggestions.find((s) => s.is_top_pick)?.category === "rebalance"; })(), "reb top");
 
   // ---- Disposition + regression ----
@@ -23684,7 +24427,7 @@ export function runPositionOptimizationAssessmentFixtureChecks(): FixtureCheck[]
   // ---- Shared underlying exposure ----
   add("PZ-29: active stake + JitoSOL → native_sol shared exposure group", (() => { const a = A([usdc(2000), stake(300), lst(300, JITOSOL, 7)]); const g = a.sharedExposureGroups.find((x) => x.exposureId === "native_sol"); return g !== undefined && g.memberPositionIds.length === 2 && a.triggerStates.sharedExposure === "triggered"; })(), "native_sol group");
   add("PZ-30: cross-protocol USDC supply groups by exact canonical USDC mint", (() => { const a = A([usdc(2000), kaminoUsdc(300, "kd", "klend:1"), steakUsdc(300, "st", "steak:1")]); const g = a.sharedExposureGroups.find((x) => x.exposureId === `stable:${USDC}`); return g !== undefined && g.memberPositionIds.length === 2; })(), "usdc group");
-  add("PO-VENUE: two same-token (USDC) positions on different venues → distinct venue subtitles; both link to the USDC token page", (() => { const c = poBuildCard(A([usdc(2000), kaminoUsdc(300, "kd", "klend:1"), steakUsdc(300, "st", "steak:1")]), GEN); if (!c) return false; const usdcRows = (c.reviewDetails?.involvedPositions ?? []).filter((r) => r.assetSymbol === "USDC"); const venues = usdcRows.map((r) => r.assetVenue).sort(); return usdcRows.length === 2 && venues[0] === "Steakhouse USDC" && venues[1] === "USDC on Kamino" && usdcRows.every((r) => r.assetUrl === `https://solscan.io/token/${USDC}`) && usdcRows.every((r) => r.reviewLink?.url === "https://app.kamino.finance"); })(), "venue subtitles + Manage");
+  add("PO-VENUE: two same-token (USDC) positions on different venues → distinct venue subtitles; both link to the USDC token page", (() => { const c = poBuildCard(A([usdc(2000), kaminoUsdc(300, "kd", "klend:1"), steakUsdc(300, "st", "steak:1")]), GEN); if (!c) return false; const usdcRows = (c.reviewDetails?.involvedPositions ?? []).filter((r) => r.assetSymbol === "USDC"); const venues = usdcRows.map((r) => r.assetVenue).sort(); return usdcRows.length === 2 && venues[0] === "Kamino" && venues[1] === "Steakhouse USDC" && usdcRows.every((r) => r.assetUrl === `https://solscan.io/token/${USDC}`) && usdcRows.every((r) => r.reviewLink?.url === "https://app.kamino.finance"); })(), "venue subtitles + Manage");
   add("PZ-31: USDC and USDT are SEPARATE exposure groups (no broad STABLE bucket)", (() => { const a = A([usdc(2000), kaminoUsdc(300, "k1", "klend:1"), usdtSupply(300, "kt", "klend:t")]); return !a.sharedExposureGroups.some((x) => x.memberPositionIds.length >= 2 && x.exposureId.startsWith("stable:")); })(), "usdc≠usdt");
   add("PZ-32: group EXACTLY $250 and 5% qualifies; each member EXACTLY $50 included", (() => { const a = A([usdc(4750), kaminoUsdc(125, "k1", "d1"), steakUsdc(125, "k2", "d2")]); const g = a.sharedExposureGroups.find((x) => x.exposureId === `stable:${USDC}`); return g?.combinedValueUsd === 250 && Math.abs((g?.portfolioShare ?? 0) - 0.05) < 1e-9; })(), "group boundary");
   add("PZ-33: one member does not form a group", A([usdc(2000), kaminoUsdc(3000)]).sharedExposureGroups.length === 0, "one member");
@@ -23799,7 +24542,7 @@ export function runRebalanceStep18GFixtureChecks(): FixtureCheck[] {
   add("RG-24: full USDC→SOL + full SOL→USDC cards carry renderable reviewDetails", (() => { const a = byId("full")!.card?.reviewDetails; const b = byId("crypto_full")!.card?.reviewDetails; return !!a && a.metrics.length > 0 && !!b && b.metrics.length > 0; })(), "review details");
   add("RG-25: SOL→USDC modal shows focused before/after-swap cards, no Key-metrics heading, no Guardrails, no calculations; body keeps the 0.1 SOL reserve", (() => { const c = byId("crypto_full")!.card; const rd = c?.reviewDetails; const labels = (rd?.metrics ?? []).map((x) => x.label); return ["Send", "Receive", "Current crypto allocation", "Crypto allocation after swap", "Current stablecoin allocation", "Stablecoin allocation after swap"].every((l) => labels.includes(l)) && (rd?.calculations.length ?? -1) === 0 && rd?.hideMetricsHeading === true && rd?.hideGuardrails === true && /Swap \$[\d,]+ of excess SOL to USDC to move closer to your target/.test(c?.descriptionOverride ?? "") && /0\.1 SOL available for fees and wallet activity/.test(c?.descriptionOverride ?? ""); })(), "focused cards");
   add("RG-26: USDC→SOL modal shows the focused before/after-swap card set, no Key-metrics heading, no Guardrails, no calculations", (() => { const rd = byId("full")!.card?.reviewDetails; const labels = (rd?.metrics ?? []).map((x) => x.label); return ["Send", "Receive", "Current crypto allocation", "Crypto allocation after swap", "Current stablecoin allocation", "Stablecoin allocation after swap"].every((l) => labels.includes(l)) && (rd?.calculations.length ?? -1) === 0 && rd?.hideMetricsHeading === true && rd?.hideGuardrails === true; })(), "focused cards");
-  add("RG-26b: USDC→SOL full → plain-language before/after descriptionOverride; crypto rises toward target after swap", (() => { const c = byId("full")!.card; const m = c?.reviewDetails?.metrics ?? []; const cur = m.find((x) => x.label === "Current crypto allocation")?.value as number; const after = m.find((x) => x.label === "Crypto allocation after swap")?.value as number; const d = c?.descriptionOverride ?? ""; return /^Your portfolio currently has .+% in crypto, below your .+% target\. Swap \$[\d,]+ of excess USDC to SOL to reach your target while keeping your Safety Buffer fully funded\.$/.test(d) && typeof cur === "number" && typeof after === "number" && after > cur; })(), "copy + after");
+  add("RG-26b: USDC→SOL full → plain-language before/after descriptionOverride; crypto rises toward target after swap", (() => { const c = byId("full")!.card; const m = c?.reviewDetails?.metrics ?? []; const cur = m.find((x) => x.label === "Current crypto allocation")?.value as number; const after = m.find((x) => x.label === "Crypto allocation after swap")?.value as number; const d = c?.descriptionOverride ?? ""; return /^Crypto makes up .+% of your portfolio, below your .+% target\. Swap \$[\d,]+ of USDC above your Safety Buffer into SOL to reach your target\.$/.test(d) && typeof cur === "number" && typeof after === "number" && after > cur; })(), "copy + after");
 
   // ---- Read-only across the whole Rebalance path ----
   add("RG-27: no route/quote/transaction/signature/execution behavior in the Rebalance path", (() => { const blob = read("src/suggestions/rebalanceAssessment.ts") + rebSuggSrc + railSrc; const bad = ["swapRoute", "routePlan", "signTransaction", "sendTransaction", "simulateTransaction", "aggregator", "getQuote", "buildSwap"]; return bad.every((t) => !blob.includes(t)); })(), "read-only");

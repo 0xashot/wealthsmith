@@ -174,7 +174,17 @@ export function buildContributionPlanPipeline(input: BuildContributionPlanPipeli
     targetStablePct = ct.targetStablePct;
     targetVolatilePct = ct.targetCryptoPct;
     targetMeta = canonicalTargetMeta(ct);
-    const alloc = buildGrowthTargetAllocationPolicyResult({ targetStablePct, targetVolatilePct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION });
+    // With BTC/ETH now enabled growth targets, the allocation policy needs to know which
+    // growth assets this user actually HOLDS (and their risk level) to apply the versioned
+    // sub-allocation. Held = the snapshot's non-stable target exposures with real value, so a
+    // SOL-only portfolio still maps the whole growth bucket to SOL exactly as before.
+    const heldGrowthTargetIds = input.portfolioSnapshot.targetExposures
+      .filter((e) => e.targetId !== "usdc" && typeof e.valueUsd === "number" && e.valueUsd > 0)
+      .map((e) => e.targetId);
+    const alloc = buildGrowthTargetAllocationPolicyResult(
+      { targetStablePct, targetVolatilePct, sourceEngineVersion: SUGGESTION_ENGINE_VERSION },
+      { riskLevel: typeof input.profile.riskLevel === "string" ? input.profile.riskLevel : null, heldGrowthTargetIds },
+    );
     if (alloc.status !== "configured") return fail("blocked_policy", ["allocation_policy_invalid"]);
 
     const techCtx: InvestmentTargetTechnicalContext = {

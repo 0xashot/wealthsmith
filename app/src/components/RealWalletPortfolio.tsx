@@ -22,6 +22,8 @@ import { useRailSuggestions, type RailSuggestions } from "../suggestions/useRail
 import { useKlendDirectUsdcMarketSnapshot, freshSnapshotOrNull } from "../suggestions/useKlendDirectUsdcMarketSnapshot";
 import type { SavedGoal } from "../types/goal";
 import PortfolioAllocationDonuts from "./PortfolioAllocationDonuts";
+import ExternalHoldingsSection from "./ExternalHoldingsSection";
+import { useManualAssets } from "../wallet/manualAssetPositions";
 import LiquidAssetsCard from "./LiquidAssetsCard";
 import EarningAssetsCard from "./EarningAssetsCard";
 import EmptyStateCard from "./EmptyStateCard";
@@ -47,10 +49,15 @@ interface Props {
 
 export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: Props) {
   const { status, positions, error, pricedAsOf, loading: reading } = useWalletPortfolio();
-  // "Settled" = the read AND pricing pass have both completed. Until then every
-  // deployment card skeletons, so no category flashes its "none detected" empty
-  // state while positions/prices are still resolving.
-  const settled = status === "ready" && !reading;
+  // Manually added External Holdings (BTC/ETH) — display + allocation measurement.
+  const manual = useManualAssets();
+  // "Settled" = the wallet read, its pricing pass, AND the external BTC/ETH price
+  // feed have all completed. Until then every deployment card skeletons, so no
+  // category flashes its "none detected" empty state while data is still
+  // resolving. The external feed is part of this because it resolves FASTER than
+  // the wallet: without it the page would briefly render a portfolio composed of
+  // nothing but the manually added assets.
+  const settled = status === "ready" && !reading && !manual.pricesLoading;
   // The rail shows the "preparing" loader on the SAME lifecycle as the body
   // skeletons (read + pricing), not just the initial read. This keeps it from
   // flashing a partial-pricing notice or an "unavailable" card while prices are
@@ -61,9 +68,20 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
   // SAME shared hook + engine the Dashboard uses — no Portfolio-specific
   // suggestion logic. It reuses THIS component's single wallet read.
   const klendMarket = useKlendDirectUsdcMarketSnapshot();
-  const rail = useRailSuggestions({ positions, pricedAsOf, goal, loading: railLoading, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket) });
+  const rail = useRailSuggestions({ positions, pricedAsOf, goal, loading: railLoading, onSuggestions, klendMarketSnapshot: freshSnapshotOrNull(klendMarket), externalMeasurementPositions: manual.positions });
 
-  const liquid = getLiquidPositions(positions);
+  // These join the DISPLAY arrays below; the rail above receives them only as an
+  // allocation MEASUREMENT input (never as positions, never as a sell source).
+  //
+  // Held back until `settled`: the donuts drop their skeleton as soon as they can
+  // compute a total, so contributing manual assets early would render a portfolio
+  // that is 100% BTC/ETH while the wallet is still being read. Withholding them
+  // (rather than forcing the skeleton on) also preserves the no-flash behaviour on
+  // a background refresh, where the wallet positions are retained.
+  const displayPositions =
+    settled && manual.positions.length > 0 ? [...positions, ...manual.positions] : positions;
+
+  const liquid = getLiquidPositions(displayPositions);
   const staked = getStakedPositions(positions);
   const protocol = getProtocolPositions(positions);
 
@@ -76,7 +94,7 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
       ) : (
         <>
           {/* Balance Overview + Crypto Assets Allocation composition donuts. */}
-          <PortfolioAllocationDonuts positions={positions} loading={!settled} completeness={rail.portfolioCompleteness} />
+          <PortfolioAllocationDonuts positions={displayPositions} loading={!settled} completeness={rail.portfolioCompleteness} />
 
           {/* Asset Deployment Overview — the three category tables under one section
               heading. Every card skeletons until the read + pricing settle, so no
@@ -94,7 +112,7 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
             <EarningAssetsCard
               title={PORT_STAKED_TITLE}
               caption={PORT_STAKED_CAPTION}
-              valueHeader="USD Value"
+              valueHeader="Value"
               positions={staked}
               loading={!settled}
               onManageOpen={onManageOpen}
@@ -113,6 +131,16 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
               completeness={rail.portfolioCompleteness}
             />
           </section>
+
+          {/* External Holdings — manually added BTC/ETH (empty state for now).
+              Display-only: never part of totals, allocation, or suggestions. */}
+          <ExternalHoldingsSection
+            amounts={manual.amounts}
+            prices={manual.prices}
+            onSetAmount={manual.setAmount}
+            onClearAmount={manual.clearAmount}
+            pushToast={pushToast}
+          />
         </>
       )}
     </>

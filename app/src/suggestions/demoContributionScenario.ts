@@ -37,6 +37,10 @@ export const DEMO_GOAL: SavedGoal = { financial_goal: "build_long_term_wealth", 
 export function buildDemoContributionRail(
   goal: SavedGoal = DEMO_GOAL,
   positions: WalletPosition[] = DEMO_POSITIONS,
+  /** Manually added External Holdings — allocation MEASUREMENT only, exactly as
+   *  the live rail receives them, so the Demo allocation card and the Demo
+   *  Rebalance suggestion can never contradict each other. */
+  externalMeasurementPositions?: WalletPosition[],
 ): RailSuggestions {
   // Step 22F (slice 7) — Demo consumes the SAME production five-factor target path via a DETERMINISTIC governed market
   // fixture (no real cache, no provider, no wall-clock). The canonical target + Market Conditions surface are derived,
@@ -45,6 +49,6 @@ export function buildDemoContributionRail(
   // `goal`/`positions` default to the canonical DEMO_GOAL + DEMO_POSITIONS (so every fixture/no-arg caller is
   // byte-identical). The Demo UI passes the (editable) sample goal and the richer demo holdings so the Demo Dashboard +
   // Portfolio recompute exactly like the connected app. Snapshot time and market cache stay fixed for determinism.
-  const data = deriveRailSuggestions({ positions, pricedAsOf: DEMO_PRICED_AS_OF, goal, dataMode: "demo_fixture", marketConditionsCacheInput: buildDemoMarketCacheInput(DEMO_PRICED_AS_OF), marketConditionsCacheState: DEMO_MARKET_CACHE_STATE, targetGeneratedAt: DEMO_PRICED_AS_OF });
+  const data = deriveRailSuggestions({ positions, pricedAsOf: DEMO_PRICED_AS_OF, goal, dataMode: "demo_fixture", ...(externalMeasurementPositions?.length ? { externalMeasurementPositions } : {}), marketConditionsCacheInput: buildDemoMarketCacheInput(DEMO_PRICED_AS_OF), marketConditionsCacheState: DEMO_MARKET_CACHE_STATE, targetGeneratedAt: DEMO_PRICED_AS_OF });
   return { ...data, loading: false };
 }

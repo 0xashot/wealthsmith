@@ -36,6 +36,7 @@ import { fetchNativeStakePositions, fetchKaminoPositions } from "./protocolPosit
 import {
   buildKlendDirectUsdcExistingPosition,
   mergeKlendDirectPosition,
+  obligationCTokenAccount,
   type KlendDirectReserveSnapshot,
 } from "../suggestions/klendDirectUsdcExistingPosition";
 import { POSITION_IDENTITY as KLEND_DIRECT_IDENTITY, EXPECTED_TOKEN_PROGRAM_ID as KLEND_CLASSIC_TOKEN_PROGRAM, type WalletTokenAccountInput } from "../suggestions/klendDirectLendingPosition";
@@ -285,7 +286,7 @@ function priceMintFor(p: WalletPosition): string | undefined {
  * (debt legs subtract). If ANY required price is missing, valueUsd stays null so
  * the row shows "—" (never a partial or invented value).
  */
-function applyPrice(
+export function applyPrice(
   p: WalletPosition,
   prices: Map<string, { priceUsd: number; change24hPct?: number }>
 ): WalletPosition {
@@ -304,6 +305,13 @@ function applyPrice(
     return p;
   }
   if (p.legs && p.legs.length > 0) {
+    // An adapter-priced row (e.g. the canonical Kamino Direct position, whose USD
+    // comes from the 17A redemption math) is AUTHORITATIVE: the feed-summed legs
+    // value is nearly identical, and "nearly" is exactly where a silent divergence
+    // would hide. Legs pricing only ever FILLS a missing value, never replaces one.
+    // Every pre-existing legs row (raw obligation, vault) enters this pass with
+    // valueUsd null, so nothing else changes behavior.
+    if (typeof p.valueUsd === "number") return p;
     let total = 0;
     for (const leg of p.legs) {
       const pi = prices.get(leg.mint);
@@ -627,11 +635,15 @@ export function useWalletPortfolio(): WalletPortfolio {
         ...(splOk ? accountsOf(splRes.value) : []),
         ...(tok22Ok ? accountsOf(tok22Res.value) : []),
       ];
+      const kamino = kaminoRes.status === "fulfilled" ? kaminoRes.value : null;
       const protocolPositions: WalletPosition[] = [
         ...(stakeRes.status === "fulfilled" ? stakeRes.value : []),
-        ...(kaminoRes.status === "fulfilled" ? kaminoRes.value : []),
+        ...(kamino ? kamino.positions : []),
         ...(kaminoVaultRes.status === "fulfilled" ? kaminoVaultRes.value : []),
       ];
+      // Supplied cToken units per reserve, for the Step 17A adapter below.
+      const kaminoCollateralRaw = kamino?.collateralRawByReserve ?? {};
+      const kaminoSupplyApyPct = kamino?.supplyApyPctByReserve ?? {};
       // Held Jito VRTs + Sanctum LSTs are classified via these maps in buildPositions.
       const vrtMap = jitoRes.status === "fulfilled" ? jitoRes.value : undefined;
       const sanctumMap = sanctumRes.status === "fulfilled" ? sanctumRes.value : undefined;
@@ -785,6 +797,12 @@ export function useWalletPortfolio(): WalletPortfolio {
         for (const leg of p.legs ?? []) priceMints.push(leg.mint);
       }
       let pricedAsOf: number | undefined;
+      // Kept from the pricing pass for the 17A mount below. It must come from the
+      // PRICE FEED, not from a USDC row in the wallet: a user who lent all of their
+      // USDC holds none loose, and looking for one there left the lending position
+      // permanently unpriced ("Current value could not be verified"). The klend
+      // position contributes the USDC mint through its legs, so the feed has it.
+      let sourcedUsdcPriceUsd: number | null = null;
       if (priceMints.length > 0) {
         const prices = await withTimeout(
           loadTokenPrices(priceMints),
@@ -795,6 +813,7 @@ export function useWalletPortfolio(): WalletPortfolio {
         if (prices.size > 0) {
           merged = merged.map((p) => applyPrice(p, prices));
           pricedAsOf = Date.now();
+          sourcedUsdcPriceUsd = prices.get(KLEND_DIRECT_IDENTITY.liquidityMint)?.priceUsd ?? null;
           // Step 17C — fill the Steakhouse existing-position USD from the fresh USDC price. applyPrice
           // already set valueUsd (recognized); here recognized/liquid USD are derived from the token
           // amounts × the fresh exact-mint price (never a $1 assumption). Stale price → USD stays null.
@@ -830,6 +849,15 @@ export function useWalletPortfolio(): WalletPortfolio {
             decimals: Number(info!.tokenAmount!.decimals),
             owner: owner.toBase58(),
           }));
+        // A deposit made through Kamino's own app leaves NO cTokens in the wallet —
+        // the obligation holds them — so when the scan above finds nothing, the
+        // obligation's collateral for the ONE approved reserve is synthesized into
+        // the same validated account shape (see obligationCTokenAccount; covered
+        // end-to-end by the REC recorded-obligation fixtures).
+        if (cTokenAccounts.length === 0) {
+          const fromObligation = obligationCTokenAccount(kaminoCollateralRaw, owner.toBase58());
+          if (fromObligation) cTokenAccounts.push(fromObligation);
+        }
         if (cTokenAccounts.length > 0) {
           const nowIso = new Date().toISOString();
           const currentSlot = await withTimeout(connection.getSlot(), TOKEN_TIMEOUT_MS, "klend_reserve_slot").catch(() => 0);
@@ -842,14 +870,22 @@ export function useWalletPortfolio(): WalletPortfolio {
             if (!cancelled && myReq === reqId.current) {
               // Build ALWAYS when a confirmed cToken holding exists — reserveSnap may be null (enrichment
               // failed), which yields ONE canonical UNRESOLVED row (cToken balance visible, USD null).
-              const usdcPrice = pricedAsOf != null ? merged.find((p) => p.mint === KLEND_DIRECT_IDENTITY.liquidityMint)?.priceUsd ?? null : null;
+              // Feed price first (see `sourcedUsdcPriceUsd`); a loose USDC row in the
+              // wallet is only a fallback, since a fully lent user has none.
+              const usdcPrice = pricedAsOf != null
+                ? sourcedUsdcPriceUsd ?? merged.find((p) => p.mint === KLEND_DIRECT_IDENTITY.liquidityMint)?.priceUsd ?? null
+                : null;
+              // Real supply APY for this reserve, from Kamino's own metrics — the
+              // canonical row replaces the obligation row that carried it, so
+              // without this the APY / Est. Earnings cells would stay "—".
+              const klendApyPct = kaminoSupplyApyPct[KLEND_DIRECT_IDENTITY.reserveAddress] ?? null;
               const record = buildKlendDirectUsdcExistingPosition({
                 accounts: cTokenAccounts,
                 walletAddress: owner.toBase58(),
                 walletSourceSlot: currentSlot,
                 reserve: reserveSnap, // KlendDirectReserveSnapshot | null
                 price: { usdcPriceUsd: usdcPrice, fresh: pricedAsOf != null && typeof usdcPrice === "number" },
-                apy: { valuePct: null, fresh: false, rateKind: "estimated_variable_apy" },
+                apy: { valuePct: klendApyPct, fresh: klendApyPct != null, rateKind: "estimated_variable_apy" },
                 observedAt: nowIso,
                 nowMs: Date.now(),
               });

@@ -33,7 +33,7 @@ function DeploymentSection({ loading }: { loading?: boolean }) {
       <EarningAssetsCard
         title={PORT_STAKED_TITLE}
         caption={PORT_STAKED_CAPTION}
-        valueHeader="USD Value"
+        valueHeader="Value"
         positions={[]}
         loading={loading}
         completeness={null}

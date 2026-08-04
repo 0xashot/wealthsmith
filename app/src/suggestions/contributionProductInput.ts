@@ -26,6 +26,31 @@ import { appendDcaMarketContextReview } from "./contributionPlanReviewDetails";
 
 export const CONTRIBUTION_PRODUCT_INPUT_EXISTS = true;
 
+/**
+ * Top-level allocation guard for the growth (SOL) DCA.
+ *
+ * The contribution growth pipeline measures SOL-FAMILY economic exposure only (native SOL + LSTs),
+ * but its target is the WHOLE crypto/growth bucket target %. A subset measured against the whole-
+ * bucket target can read "underweight" even when the ENTIRE crypto bucket is already at/over target
+ * (e.g. the rest of crypto is memecoins / SOL-lend). Adding more SOL then contradicts the "Current vs
+ * Recommended Allocation" card, which measures the whole crypto bucket (total − stable).
+ *
+ * This returns true when the total crypto bucket is AT or ABOVE its target — i.e. do NOT grow crypto.
+ * The DCA is allowed only when the whole crypto bucket is genuinely under target, so the contribution
+ * respects the top-level crypto/stable target first (buffer/stable/Rebalance/On-Track handle the rest).
+ * Uses the SAME crypto number and target the allocation card uses. Buffer plans are never gated.
+ */
+export function isCryptoBucketAtOrAboveTarget(
+  totalUsd: number,
+  stableUsd: number,
+  target?: CanonicalTargetAllocation | null,
+): boolean {
+  if (!target || typeof target.targetCryptoPct !== "number") return false;
+  if (!(typeof totalUsd === "number" && totalUsd > 0) || !(typeof stableUsd === "number" && stableUsd >= 0)) return false;
+  const cryptoPct = ((totalUsd - stableUsd) / totalUsd) * 100;
+  return cryptoPct >= target.targetCryptoPct;
+}
+
 export interface ContributionProductResult {
   suggestion: ContributionPlanSuggestion | null;
   reviewById: Record<string, ContributionPlanReviewDetails>;
@@ -114,6 +139,16 @@ export function deriveContributionSuggestion(args: {
 
   const suggestion = pipeline.status === "ready" && pipeline.suggestion ? pipeline.suggestion : null;
   if (!suggestion) return { suggestion: null, reviewById: {}, pipeline };
+
+  // Top-level allocation guard — never grow crypto (SOL) when the WHOLE crypto bucket is already at or
+  // above its target. The growth pipeline only measures SOL-family exposure, so it can flag SOL as
+  // "underweight" while total crypto is over target; adding SOL then contradicts the allocation card.
+  // Only the growth DCA is gated (buffer plans are always kept). When suppressed here, the contribution
+  // respects the top-level crypto/stable target and the rail shows no "Build SOL" card.
+  if (suggestion.category === "dca" && isCryptoBucketAtOrAboveTarget(total, deriveStableValue(positions), args.targetAllocation)) {
+    return { suggestion: null, reviewById: {}, pipeline };
+  }
+
   const reviewById = buildContributionReviewDetailsById([suggestion]);
   // Slice 4 — a DCA plan carries an honest market-context Review section (full → 10% + CoinMarketCap; degraded →
   // exclusion + renormalization). Buffer plans + transitional Demo/testing targets add nothing.

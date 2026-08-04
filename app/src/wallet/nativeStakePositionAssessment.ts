@@ -290,7 +290,18 @@ export function groupNativeStakeByValidator(records: NativeStakePositionResult[]
     const lifecycleSummary = states.length === 1 ? states[0] : `mixed:${states.join("+")}`;
     const capStates = [...new Set(accts.map((r) => r.withdrawalCapacityState))];
     const withdrawalCapacitySummary = capStates.length === 1 ? capStates[0] : `mixed:${capStates.join("+")}`;
-    const apys = accts.map((r) => r.apy).filter((a): a is number => typeof a === "number");
+    // Realized APY exists per stake ACCOUNT, and only for accounts that actually
+    // earned an inflation reward in a completed epoch. An account that is still
+    // warming up, deactivating, or undelegated never has one — so requiring EVERY
+    // account in the group to have an APY let a single such account blank out the
+    // APY for the mature stake sitting right beside it. Average over the accounts
+    // that did resolve, weighted by the stake each one actually holds (an unweighted
+    // mean would let a dust account swing the rate), and report null only when NO
+    // account in the group has a realized reward to show.
+    const weighted = accts
+      .map((r) => ({ apy: r.apy, weight: r.activeLamports ?? r.totalLamports ?? 0 }))
+      .filter((x): x is { apy: number; weight: number } => typeof x.apy === "number" && x.weight > 0);
+    const weightTotal = weighted.reduce((s, x) => s + x.weight, 0);
     groups.push({
       voteAccount: voter === "__none__" ? null : voter, accounts: accts,
       totalLamports: sum((r) => r.totalLamports), activeLamports: sum((r) => r.activeLamports),
@@ -301,7 +312,7 @@ export function groupNativeStakeByValidator(records: NativeStakePositionResult[]
       closeOnlyWithdrawableLamports: sum((r) => r.closeOnlyWithdrawableLamports), requiredRemainingLamports: sum((r) => r.requiredRemainingLamports),
       lockedLamports: sum((r) => r.lockedLamports),
       unresolvedLamports: sum((r) => r.unresolvedLamports), lifecycleSummary, withdrawalCapacitySummary, anyUnresolved,
-      apy: apys.length === accts.length && apys.length > 0 ? apys.reduce((a, b) => a + b, 0) / apys.length : null,
+      apy: weightTotal > 0 ? weighted.reduce((s, x) => s + x.apy * x.weight, 0) / weightTotal : null,
     });
   }
   return groups;

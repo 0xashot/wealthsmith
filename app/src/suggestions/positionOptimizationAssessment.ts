@@ -217,12 +217,24 @@ export interface PositionOptimizationInput {
   /** Step 20B.2 — an explicit source-specific freshness-policy set (fixture/test override). Production uses the
    *  canonical `PO_APY_FRESHNESS_POLICIES` (all unapproved); never inject this from a UI component. */
   apyFreshnessPolicies?: readonly PoApyFreshnessPolicy[];
+  /**
+   * Manually added External Holdings (BTC/ETH) as a MEASUREMENT-ONLY value: it
+   * widens the portfolio-share denominator so "makes up X% of your portfolio"
+   * means the portfolio the user actually sees (Total Portfolio Value includes
+   * these holdings). The positions themselves are never passed in — a manually
+   * stated balance can never become a flaggable/reviewable position. Same
+   * "measure everything, act only on what we can touch" rule as Rebalance.
+   * Non-finite/negative input is ignored (fail closed to the wallet-only gross).
+   */
+  externalMeasurementValueUsd?: number | null;
   generatedAt?: number;
   methodologyVersion?: string;
 }
 
 export interface PositionOptimizationAssessment {
   grossAssetValueUsd: number;
+  /** grossAssetValueUsd + external measurement value — the SHARE denominator. */
+  measuredGrossAssetValueUsd: number;
   recognizedLiabilitiesUsd: number;
   netWorthUsd: number;
   deployedPositionValueUsd: number;
@@ -337,6 +349,26 @@ function buildApy(p: WalletPosition, positionType: PoPositionType, side: "asset"
   if (p.source === "ondo") {
     if (v !== null) return sourced("ondo_usdy_feed", "treasury_yield", "net", "no", "yes");
     return { ...base, apyExpectation: "expected", apyState: "missing_expected", apyRetrieval: "fetch_failed", apySource: "ondo_usdy_feed", yieldMethodology: "treasury_yield", apyComparability: "unresolved", warnings: ["apy_source_failed_or_missing"] };
+  }
+
+  /**
+   * Kamino Direct USDC lending → the supply APY comes from Kamino's official
+   * reserve-metrics endpoint, the SAME vetted read that already produces this
+   * position's amount and value, so the rate is sourced rather than un-integrated.
+   * Without this the position carried a real APY that the review modal dropped to
+   * "—", while the Portfolio table showed it — the two disagreed about one number.
+   *
+   * Scoped to the ONE vetted product (candidateId), so an unvetted Kamino market
+   * stays un-integrated. DISPLAY ONLY, deliberately: with no approved freshness
+   * policy in production this resolves to `sourced_freshness_unverified`, which is
+   * shown but is NOT eligible for a low-yield review (that requires `sourced_fresh`).
+   * A MISSING value also keeps the existing un-integrated classification below
+   * rather than becoming `missing_expected`, so no position becomes newly eligible
+   * for a missing-data review. Making absence "expected" is a suggestion-eligibility
+   * decision, not a display one, and is left to the product owner.
+   */
+  if (p.candidateId === "kamino_usdc_lending" && v !== null) {
+    return sourced("kamino_klend_reserve_metrics", "lending_supply_apy", "net", "no", "yes");
   }
 
   // No approved source integration for the remaining families → NOT "missing"; it is un-integrated / unsupported.
@@ -491,7 +523,16 @@ export function derivePositionOptimizationAssessment(input: PositionOptimization
       // Native stake only: carry the detection-time validator page (public vote account); other types use the registry.
       manageUrl: positionType === "native_stake" ? (p.manageUrl ?? null) : null,
       // Deployed lending/vault only: a safe venue/product name so two same-token positions are distinguishable.
-      venueLabel: positionType !== "lst" && positionType !== "native_stake" ? (p.curatedLending?.productName ?? p.name ?? p.protocol ?? null) : null,
+      // Plain direct lending is the exception: its venue IS the protocol ("Kamino") —
+      // the canonical row's name ("Kamino Direct USDC") restates the asset and read
+      // as clutter under a row already labeled USDC. Products with a distinct
+      // product name (Steakhouse, curated vaults) keep it — that is what tells two
+      // same-token positions apart.
+      venueLabel: positionType !== "lst" && positionType !== "native_stake"
+        ? (p.candidateId === "kamino_usdc_lending"
+            ? p.protocol ?? p.name ?? null
+            : p.curatedLending?.productName ?? p.name ?? p.protocol ?? null)
+        : null,
       actionabilityState: "review_only",
       reviewEligibilityState, exclusionReasons, unresolvedReasons, methodologyVersion: posMethodology,
     };
@@ -515,7 +556,12 @@ export function derivePositionOptimizationAssessment(input: PositionOptimization
 
   // --- Triggers. Missing-data / low-yield are per-position (need each position's own authoritative value);
   // concentration / shared-exposure need the authoritative denominator. Duplicate-invalid fails all closed. ---
-  const gross = grossAssetValueUsd;
+  // Share denominator = wallet gross + the measurement-only external holdings, so
+  // concentration is judged against the same total the user sees everywhere else.
+  const externalRaw = input.externalMeasurementValueUsd;
+  const externalUsd = typeof externalRaw === "number" && Number.isFinite(externalRaw) && externalRaw > 0 ? externalRaw : 0;
+  const measuredGrossAssetValueUsd = round2(grossAssetValueUsd + externalUsd);
+  const gross = measuredGrossAssetValueUsd;
   const missingCandidates = canonicalPositions.filter((p) => p.missingDataEligible);
   const lowYieldCandidates = canonicalPositions.filter((p) => p.lowYieldEligible);
   const concentrationCandidates = canonicalPositions.filter((p) => p.concentrationEligible && gross > 0 && (p.recognizedValueUsd as number) / gross >= POSITION_CONCENTRATION_THRESHOLD);
@@ -639,7 +685,7 @@ export function derivePositionOptimizationAssessment(input: PositionOptimization
   const exposureSummary = { resolved: allExposures.filter((e) => e.exposureState === "resolved").length, unresolved: allExposures.filter((e) => e.exposureState === "unresolved").length, unsupported: allExposures.filter((e) => e.exposureState === "unsupported").length };
 
   return {
-    grossAssetValueUsd, recognizedLiabilitiesUsd, netWorthUsd, deployedPositionValueUsd: round2(deployedPositionValueUsd),
+    grossAssetValueUsd, measuredGrossAssetValueUsd, recognizedLiabilitiesUsd, netWorthUsd, deployedPositionValueUsd: round2(deployedPositionValueUsd),
     canonicalPositions, excludedPositions, unresolvedPositions, flaggedPositions,
     totalFlaggedValueUsd, flaggedPortfolioShare, sharedExposureGroups,
     triggerStates, reasonCodes,

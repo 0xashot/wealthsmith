@@ -16,6 +16,11 @@ import {
   GROWTH_TARGET_ALLOCATION_POLICY_VERSION,
 } from "./contributionPlanningPolicyTypes";
 import { getEnabledContributionGrowthTargets } from "./investmentTargetRegistry";
+import {
+  buildGrowthSubAllocation,
+  GROWTH_SUB_ALLOCATION_POLICY_ID,
+  type GrowthSubAllocationTargetId,
+} from "./growthTargetSubAllocationPolicy";
 
 export const GROWTH_TARGET_ALLOCATION_POLICY_EXISTS = true;
 /** Stable-bucket target id (MVP): USDC. Growth bucket maps to the single enabled growth target. */
@@ -68,6 +73,17 @@ export interface GrowthTargetAllocationPolicyResult {
 export interface BuildGrowthAllocationOptions {
   /** Override the enabled growth targets (fixtures only). Defaults to the registry. */
   enabledGrowthTargetIds?: string[];
+  /**
+   * Saved risk tolerance — required ONLY when more than one growth target is
+   * enabled, to drive the versioned sub-allocation policy.
+   */
+  riskLevel?: string | null;
+  /**
+   * Growth targets the user actually holds. With multiple enabled growth targets
+   * the sub-allocation splits across these only, so the policy never introduces
+   * an asset the user has not chosen. Omitted → treated as holding none.
+   */
+  heldGrowthTargetIds?: readonly string[];
 }
 
 function shell(input: ExistingTargetAllocationInput, status: "configured" | "invalid", extra: Partial<GrowthTargetAllocationPolicyResult> = {}): GrowthTargetAllocationPolicyResult {
@@ -126,8 +142,45 @@ export function buildGrowthTargetAllocationPolicyResult(
   if (enabledGrowthTargetIds.length === 0) {
     return shell(input, "invalid", { stableBucketTargetPct: stable, growthBucketTargetPct: growth, enabledGrowthTargetIds, blockers: ["target_not_in_enabled_bucket"] });
   }
-  // More than one enabled growth target → a versioned sub-allocation policy is required; fail closed.
+  // More than one enabled growth target → split the growth bucket with the VERSIONED
+  // sub-allocation policy (growth_target_suballocation_v1). It participates only the
+  // targets the user actually holds and weights them by risk. When it cannot produce a
+  // split (unknown risk, or fewer than two HELD targets) we still fail closed rather
+  // than inventing a division of the growth bucket.
   if (enabledGrowthTargetIds.length > 1) {
+    const held = (options.heldGrowthTargetIds ?? []).filter((id) => enabledGrowthTargetIds.includes(id));
+    const sub = buildGrowthSubAllocation({ growthBucketPct: growth, riskLevel: options.riskLevel ?? null, heldTargetIds: held });
+
+    if (sub.status === "configured") {
+      const map: Record<string, number> = { [STABLE_BUCKET_TARGET_ID]: stable };
+      for (const id of sub.participatingTargetIds) {
+        map[id] = sub.targetPctByInvestmentTargetId[id] as number;
+      }
+      return shell(input, "configured", {
+        stableBucketTargetPct: stable,
+        growthBucketTargetPct: growth,
+        targetPctByInvestmentTargetId: map,
+        enabledGrowthTargetIds,
+        singleEnabledGrowthTargetPolicyApplied: false,
+        futureGrowthSuballocationRequired: false,
+        warnings: [`Growth bucket split across held targets (${sub.participatingTargetIds.join(", ")}) by ${GROWTH_SUB_ALLOCATION_POLICY_ID} at risk level '${sub.riskLevel}'.`],
+      });
+    }
+
+    // Exactly ONE held growth target → no split needed; map the whole growth bucket to it.
+    if (sub.participatingTargetIds.length === 1) {
+      const only = sub.participatingTargetIds[0] as GrowthSubAllocationTargetId;
+      return shell(input, "configured", {
+        stableBucketTargetPct: stable,
+        growthBucketTargetPct: growth,
+        targetPctByInvestmentTargetId: { [STABLE_BUCKET_TARGET_ID]: stable, [only]: growth },
+        enabledGrowthTargetIds,
+        singleEnabledGrowthTargetPolicyApplied: true,
+        futureGrowthSuballocationRequired: false,
+        warnings: [`Growth bucket mapped entirely to '${only}' (the only growth target held).`],
+      });
+    }
+
     return shell(input, "invalid", { stableBucketTargetPct: stable, growthBucketTargetPct: growth, enabledGrowthTargetIds, futureGrowthSuballocationRequired: true, blockers: ["multiple_growth_targets_require_suballocation_policy"] });
   }
 
@@ -162,10 +215,13 @@ export function validateGrowthTargetAllocationPolicyResult(result: unknown): Gro
   if (!flagsFalse) errors.push("capability_flag_enabled");
   if (r.status === "configured") {
     if (Math.abs(r.stableBucketTargetPct + r.growthBucketTargetPct - 100) > ALLOCATION_SUM_TOLERANCE) errors.push("buckets_do_not_sum_100");
-    if (r.enabledGrowthTargetIds.length !== 1 || !r.singleEnabledGrowthTargetPolicyApplied) errors.push("configured_requires_single_growth_target");
-    const gid = r.enabledGrowthTargetIds[0];
     if (r.targetPctByInvestmentTargetId[STABLE_BUCKET_TARGET_ID] !== r.stableBucketTargetPct) errors.push("stable_map_mismatch");
-    if (r.targetPctByInvestmentTargetId[gid] !== r.growthBucketTargetPct) errors.push("growth_map_mismatch");
+    // The growth side is either mapped whole to one target, or split by the
+    // sub-allocation policy — in both cases the growth entries must total the bucket.
+    const growthEntries = Object.entries(r.targetPctByInvestmentTargetId).filter(([id]) => id !== STABLE_BUCKET_TARGET_ID);
+    if (growthEntries.length === 0) errors.push("growth_map_mismatch");
+    else if (Math.abs(growthEntries.reduce((sum, [, pct]) => sum + pct, 0) - r.growthBucketTargetPct) > 1e-6) errors.push("growth_map_mismatch");
+    if (r.singleEnabledGrowthTargetPolicyApplied && growthEntries.length !== 1) errors.push("single_target_flag_with_split");
   } else {
     if (r.blockers.length === 0) errors.push("invalid_without_blocker");
   }

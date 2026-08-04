@@ -16,13 +16,19 @@ import { useEffect, useRef, useState } from "react";
 import type { GlobalNavState, WalletState } from "../types/dashboard";
 import {
   CONNECT_WALLET_LABEL,
+  CONNECT_WALLET_SHORT,
   TRY_DEMO_MODE,
+  TRY_DEMO_MODE_SHORT,
   WALLET_MENU_DISCONNECT,
   NAV_DISABLED_TOOLTIP,
+  NAV_MENU_OPEN,
 } from "../state/approvedCopy";
 import { useWalletDisplay } from "../wallet/useWalletDisplay";
 import ButtonIcon from "./ButtonIcon";
+import NavDrawer, { type NavDrawerItem } from "./NavDrawer";
 import logoUrl from "../../../assets/logo/wealthsmith-full-lockup.svg";
+import symbolUrl from "../../../assets/logo/wealthsmith-symbol.svg";
+import menuUrl from "../../../assets/icons/ui/menu.svg";
 import sparcleUrl from "../../../assets/icons/ui/sparcle.svg";
 import phantomIconUrl from "../../../assets/icons/wallet/phantom.svg";
 import solflareIconUrl from "../../../assets/icons/wallet/solflare.svg";
@@ -94,11 +100,40 @@ export default function GlobalNav({
   const pillIcon =
     WALLET_ICONS[realWallet?.providerId ?? wallet?.provider_id ?? ""] ?? undefined;
   const pillLabel = realWallet?.label ?? nav.right_actions.wallet_pill.label;
+  // Mobile pill drops the provider name and shows only the last-4 address.
+  const pillShortLabel = realWallet?.addressShort ?? pillLabel;
   const pillAccessibleLabel = realWallet
     ? `Connected wallet: ${realWallet.name}, address ending ${realWallet.addressShort}. Open wallet menu.`
     : walletPillLabel;
 
   const [menuOpen, setMenuOpen] = useState(false);
+  // Mobile nav drawer (<1280px). The trigger is CSS-hidden on desktop, so this
+  // never opens there — the desktop bar renders its items inline, unchanged.
+  const [navDrawerOpen, setNavDrawerOpen] = useState(false);
+
+  // Per-item active / disabled / navigable state — shared by the desktop inline
+  // items and the mobile drawer so both read identically.
+  const itemState = (item: { id: string; active: boolean }) => {
+    const isActive = activePage ? item.id === activePage : item.active;
+    const disabled =
+      !!onboardingActive && item.id !== "dashboard" && item.id !== "support" && !isActive;
+    const navigable =
+      !disabled &&
+      !!onNavigate &&
+      (item.id === "dashboard" ||
+        item.id === "portfolio" ||
+        item.id === "goal" ||
+        item.id === "support");
+    return { isActive, disabled, navigable };
+  };
+  // Mobile drawer: unavailable items (Portfolio/Goal during onboarding) are hidden
+  // rather than shown disabled — the desktop bar still greys them (unchanged).
+  const drawerItems: NavDrawerItem[] = nav.nav_items
+    .map((item) => {
+      const { isActive, disabled, navigable } = itemState(item);
+      return { id: item.id, label: item.label, href: item.href, active: isActive, disabled, navigable };
+    })
+    .filter((d) => !d.disabled);
   const pillRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -151,37 +186,47 @@ export default function GlobalNav({
   return (
     <header className="global-nav-wrap">
       <nav className="global-nav" aria-label={navLabel}>
+        {/* Mobile-only hamburger (CSS-hidden on desktop) → opens the nav drawer. */}
+        <button
+          type="button"
+          className="global-nav__menu-btn"
+          aria-label={NAV_MENU_OPEN}
+          aria-haspopup="dialog"
+          aria-expanded={navDrawerOpen}
+          onClick={() => setNavDrawerOpen(true)}
+        >
+          <ButtonIcon src={menuUrl} size={24} />
+        </button>
+
         <a
           className="global-nav__logo"
           href="/dashboard"
           aria-label="Go to WealthSmith dashboard"
         >
+          {/* Full lockup on desktop; symbol only on mobile (toggled in mobile.css). */}
           <img
+            className="global-nav__logo-full"
             src={logoUrl}
             alt={nav.logo.alt}
             width={nav.logo.width_px}
             height={nav.logo.height_px}
           />
+          <img
+            className="global-nav__logo-symbol"
+            src={symbolUrl}
+            alt=""
+            aria-hidden="true"
+            width={32}
+            height={32}
+          />
         </a>
 
         <ul className="global-nav__items">
           {nav.nav_items.map((item) => {
-            const isActive = activePage ? item.id === activePage : item.active;
-            // While onboarding is active, Dashboard and Support stay enabled;
-            // Portfolio/Goal (wallet-specific) are disabled (Variants 1 & 4) —
-            // except the active tab during the end-of-onboarding tour, which
-            // highlights (Open Portfolio / Open Goal) but is still not a navigation
-            // target (no onNavigate here). Support is always reachable (FAQ/contact
-            // need no wallet), including when disconnected.
-            const disabled =
-              !!onboardingActive && item.id !== "dashboard" && item.id !== "support" && !isActive;
-            const navigable =
-              !disabled &&
-              !!onNavigate &&
-              (item.id === "dashboard" ||
-                item.id === "portfolio" ||
-                item.id === "goal" ||
-                item.id === "support");
+            // Shared with the mobile drawer. Onboarding keeps Dashboard + Support
+            // enabled; Portfolio/Goal (wallet-specific) are disabled except the
+            // active tour tab; Support is always reachable.
+            const { isActive, disabled, navigable } = itemState(item);
             return (
               <li key={item.id}>
                 <a
@@ -226,7 +271,9 @@ export default function GlobalNav({
                 {pillIcon && (
                   <img src={pillIcon} alt="" width={20} height={20} aria-hidden="true" />
                 )}
-                <span>{pillLabel}</span>
+                {/* Full "{provider} • {last4}" on desktop; last-4 only on mobile. */}
+                <span className="global-nav__wallet-pill-full">{pillLabel}</span>
+                <span className="global-nav__wallet-pill-short">{pillShortLabel}</span>
               </button>
               {menuOpen && (
                 <div ref={menuRef} className="wallet-menu" role="menu">
@@ -251,7 +298,9 @@ export default function GlobalNav({
               className="global-nav__try-demo"
               onClick={onTryDemo}
             >
-              {TRY_DEMO_MODE}
+              {/* Full label on desktop; short "Demo" on mobile (toggled in mobile.css). */}
+              <span className="global-nav__cta-full">{TRY_DEMO_MODE}</span>
+              <span className="global-nav__cta-short">{TRY_DEMO_MODE_SHORT}</span>
             </button>
           )}
           {showConnectWallet && (
@@ -260,7 +309,8 @@ export default function GlobalNav({
               className="global-nav__connect"
               onClick={onConnectWallet}
             >
-              {CONNECT_WALLET_LABEL}
+              <span className="global-nav__cta-full">{CONNECT_WALLET_LABEL}</span>
+              <span className="global-nav__cta-short">{CONNECT_WALLET_SHORT}</span>
             </button>
           )}
           {showAskSmithAi && (
@@ -276,11 +326,25 @@ export default function GlobalNav({
               onClick={onOpenAskSmithAi}
             >
               <ButtonIcon src={sparcleUrl} size={16} />
-              {nav.right_actions.ask_smith_ai.label}
+              {/* Text label hidden on mobile (icon-only) via mobile.css. */}
+              <span className="global-nav__ask-smith-label">
+                {nav.right_actions.ask_smith_ai.label}
+              </span>
             </button>
           )}
         </div>
       </nav>
+
+      {/* Mobile-only slide-in nav drawer (portaled; opens only when the hamburger,
+          which is CSS-hidden on desktop, is tapped). */}
+      {navDrawerOpen && (
+        <NavDrawer
+          navLabel={navLabel}
+          items={drawerItems}
+          onNavigate={onNavigate}
+          onClose={() => setNavDrawerOpen(false)}
+        />
+      )}
     </header>
   );
 }

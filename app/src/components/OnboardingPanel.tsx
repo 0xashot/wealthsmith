@@ -30,6 +30,8 @@ import SmithInitialLoadingState from "./SmithInitialLoadingState";
 import ButtonIcon from "./ButtonIcon";
 import { sessionFlags } from "../state/sessionFlags";
 import { useReducedMotion } from "./useReducedMotion";
+import { useIsMobileViewport } from "./useIsMobileViewport";
+import { useScrollLock } from "./useScrollLock";
 import { useTypewriter } from "./useTypewriter";
 import arrowUpUrl from "../../../assets/icons/ui/arrow-up.svg";
 import undoUrl from "../../../assets/icons/ui/undo.svg";
@@ -43,6 +45,7 @@ import {
   ONBOARDING_MORE,
   ONBOARDING_RESTART,
   CONNECT_WALLET_LABEL,
+  TRY_DEMO_MODE,
 } from "../state/approvedCopy";
 import {
   SCRIPT_WELCOME,
@@ -73,6 +76,8 @@ import type { SavedGoal } from "../types/goal";
 interface Props {
   mode: "disconnected" | "connected";
   onConnectWallet: () => void;
+  /** Mobile-only Try Demo Mode entry shown inside the disconnected onboarding. */
+  onTryDemo: () => void;
   /** Undo at the first connected question disconnects (reverses Connect Wallet). */
   onDisconnect: () => void;
   onComplete: (savedGoal: SavedGoal) => void;
@@ -201,6 +206,7 @@ function renderBlocksPartial(blocks: MessageBlock[], budget: number) {
 export default function OnboardingPanel({
   mode,
   onConnectWallet,
+  onTryDemo,
   onDisconnect,
   onComplete,
   onTour,
@@ -209,6 +215,13 @@ export default function OnboardingPanel({
   onSetTourStage,
 }: Props) {
   const reduced = useReducedMotion();
+  // Mobile (<1280px): onboarding is a full-screen takeover — it offers Try Demo
+  // Mode inline, trims the plan-summary outro, and ends at Finish (no Portfolio
+  // tour). Desktop keeps the sidebar + tour unchanged.
+  const isMobile = useIsMobileViewport();
+  // Mobile: the full-screen onboarding locks background page scroll — only the
+  // panel's own content scrolls. Desktop (sidebar) leaves the page scrolling.
+  useScrollLock(isMobile);
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<OnboardingAnswers>(initialOnboardingAnswers);
   const [inputValue, setInputValue] = useState("");
@@ -239,8 +252,8 @@ export default function OnboardingPanel({
       : tourStage === "goal"
         ? goalTourMessage(answers)
         : isSummary
-          ? summaryMessage(answers)
-          : stepLeadMessage(stepIndex, answers);
+          ? summaryMessage(answers, isMobile)
+          : stepLeadMessage(stepIndex, answers, isMobile);
 
   // Every current Smith message types out character-by-character — plain strings and structured messages
   // alike (the plan summary and the Portfolio/Goal tour bullets). Reduced motion or an Undo-reached step
@@ -391,6 +404,13 @@ export default function OnboardingPanel({
         </div>
         <div className="onboarding-chat__input">
           <div className="onboarding-panel__actions">
+            {/* Mobile only: the full-screen onboarding hides the nav, so Demo
+                Mode is offered here, above Connect Wallet. */}
+            {isMobile && (
+              <button type="button" className="goal-btn goal-btn--secondary" onClick={onTryDemo}>
+                {TRY_DEMO_MODE}
+              </button>
+            )}
             <button type="button" className="goal-btn goal-btn--primary" onClick={onConnectWallet}>
               {CONNECT_WALLET_LABEL}
             </button>
@@ -472,7 +492,7 @@ export default function OnboardingPanel({
           <div className="chat-turn" key={`turn-${i}`}>
             {/* The first turn directly follows the "wallet connected" opener → group under its avatar. */}
             <OnboardingMessage grouped={i === 0}>
-              <p className="chat-question">{stepLeadMessage(i, answers)}</p>
+              <p className="chat-question">{stepLeadMessage(i, answers, isMobile)}</p>
             </OnboardingMessage>
             <div className="chat-user">
               <div className="chat-user__bubble">{answerDisplay(s, answers)}</div>
@@ -486,7 +506,7 @@ export default function OnboardingPanel({
         {tourStage != null && (
           <div className="chat-turn">
             <OnboardingMessage>
-              <div className="onboarding-rich">{renderBlocks(summaryMessage(answers))}</div>
+              <div className="onboarding-rich">{renderBlocks(summaryMessage(answers, isMobile))}</div>
             </OnboardingMessage>
           </div>
         )}
@@ -550,19 +570,23 @@ export default function OnboardingPanel({
           </div>
         ) : isSummary ? (
           <div className="onboarding-tour-actions">
+            {/* Mobile ends at Finish (no Portfolio tour): Open Portfolio is
+                hidden and Finish becomes the primary action. */}
+            {!isMobile && (
+              <button
+                type="button"
+                className="goal-btn goal-btn--primary"
+                onClick={() => onTour(answers)}
+                disabled={!planValid || !titleDone}
+              >
+                {SCRIPT_OPEN_PORTFOLIO}
+              </button>
+            )}
             <button
               type="button"
-              className="goal-btn goal-btn--primary"
-              onClick={() => onTour(answers)}
-              disabled={!planValid || !titleDone}
-            >
-              {SCRIPT_OPEN_PORTFOLIO}
-            </button>
-            <button
-              type="button"
-              className="goal-btn goal-btn--secondary"
+              className={isMobile ? "goal-btn goal-btn--primary" : "goal-btn goal-btn--secondary"}
               onClick={() => onComplete(buildSavedGoal(answers))}
-              disabled={!planValid}
+              disabled={!planValid || (isMobile && !titleDone)}
             >
               {SCRIPT_FINISH_ONBOARDING}
             </button>

@@ -145,6 +145,15 @@ export interface SuggestionCardState {
   tag?: string;
   /** Step 15H — accessible CTA name for plan-backed cards (e.g. "Review plan: …"). */
   accessibleCtaLabel?: string;
+  /**
+   * Engine-owned signature of the CONDITION behind an informational card, so the
+   * user can acknowledge it ("reviewed, I'm fine with it") without silencing it
+   * forever: the signature changes when the situation materially changes, and the
+   * card returns on its own. Present only on dismissible informational cards —
+   * an actionable suggestion has a real action and is never dismissible.
+   * See state/dismissedSuggestions.ts.
+   */
+  dismissalSignature?: string;
   cta: {
     label: string;
     action: string | null;

@@ -44,7 +44,10 @@ function isEligible(s: EngineSuggestion): boolean {
   return (
     s.is_actionable === true &&
     s.action_kind === "review_only" &&
-    s.category !== "on_track"
+    s.category !== "on_track" &&
+    // An OBSERVATION has no next step to take, so promoting it to Top Pick would
+    // present "notice this" as the single most valuable thing to act on.
+    s.observationOnly !== true
   );
 }
 

@@ -10,6 +10,7 @@
  * The component renders state; it does not decide demo mode, move funds, or
  * request signatures.
  */
+import { DEMO_BANNER_CONNECT_SHORT, DEMO_BANNER_EXIT_SHORT } from "../state/approvedCopy";
 import type { DemoBannerState } from "../types/dashboard";
 
 interface Props {
@@ -38,14 +39,16 @@ export default function DemoBanner({ banner, onExit, onConnect }: Props) {
             className="demo-banner__action demo-banner__action--primary"
             onClick={onExit}
           >
-            {banner.primary_action.label}
+            <span className="demo-banner__action-full">{banner.primary_action.label}</span>
+            <span className="demo-banner__action-short">{DEMO_BANNER_EXIT_SHORT}</span>
           </button>
           <button
             type="button"
             className="demo-banner__action demo-banner__action--secondary"
             onClick={onConnect}
           >
-            {banner.secondary_action.label}
+            <span className="demo-banner__action-full">{banner.secondary_action.label}</span>
+            <span className="demo-banner__action-short">{DEMO_BANNER_CONNECT_SHORT}</span>
           </button>
         </div>
       </div>

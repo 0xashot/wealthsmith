@@ -17,8 +17,9 @@ import { useId } from "react";
 import type { WalletPosition } from "../wallet/walletPosition";
 import type { PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
 import { positionCompletenessNote } from "./portfolioCompletenessUi";
-import { usd0, formatAmount, explorerUrl, manageUrlFor } from "./deployTable";
+import { usd0, formatAmount, formatAmountWhole, explorerUrl, manageUrlFor } from "./deployTable";
 import ManageHandoff from "./ManageHandoff";
+import { useIsMobileViewport } from "./useIsMobileViewport";
 import { resolveTokenIcon } from "../state/iconRegistry";
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
 import SkeletonDeployCard from "./SkeletonDeployCard";
@@ -40,7 +41,7 @@ function estimateYearlyUsd(p: WalletPosition): number | null {
 interface Props {
   title: string;
   caption: string;
-  /** Value column header ("USD Value" for Staked, "Value" for Yield). */
+  /** Value column header ("Value" for both Staked and Yield). */
   valueHeader: string;
   positions: WalletPosition[];
   /** True while prices are still loading — shows a content-shaped skeleton instead of premature "—". */
@@ -67,6 +68,10 @@ export default function EarningAssetsCard({
   completeness,
 }: Props) {
   const headingId = useId();
+  // On mobile (<1280px) this table is simplified: Value/APY/Manage columns are
+  // hidden (mobile.css), amounts are shown whole, and the whole row is the tap
+  // target that opens the protocol page. Desktop is unchanged.
+  const isMobile = useIsMobileViewport();
 
   // While the portfolio is still loading, skeleton the whole card rather than
   // flashing "—" values or a premature "none detected" empty state.
@@ -104,7 +109,10 @@ export default function EarningAssetsCard({
       {/* Empty category: just the $0 total + caption above — no table, no "none detected". */}
       {rows.length === 0 ? null : (
         <div className="portfolio-table__scroll">
-          <table className="portfolio-table" aria-labelledby={headingId}>
+          <table
+            className="portfolio-table portfolio-table--earning"
+            aria-labelledby={headingId}
+          >
             <thead>
               <tr>
                 <th scope="col" className="portfolio-table__cell portfolio-table__header">
@@ -137,8 +145,40 @@ export default function EarningAssetsCard({
                 const estYr = estimateYearlyUsd(p);
                 const primary = primaryLabel(p);
                 const sub = subLabel(p);
+                // Mobile: the row itself opens the protocol page (the Manage
+                // column is hidden). Taps on an inner link/button (e.g. the
+                // asset's explorer link) keep their own behavior.
+                const tappable = isMobile && !!manageUrl;
                 return (
-                  <tr key={p.id}>
+                  <tr
+                    key={p.id}
+                    className={tappable ? "deploy-row--tappable" : undefined}
+                    // Keyboard access: the Manage column is hidden on mobile, so the row itself
+                    // must be reachable and activatable (Enter/Space) — not pointer-only.
+                    tabIndex={tappable ? 0 : undefined}
+                    role={tappable ? "link" : undefined}
+                    aria-label={tappable ? `Manage ${primary}${sub ? ` (${sub})` : ""} in a new tab` : undefined}
+                    onKeyDown={
+                      tappable
+                        ? (e) => {
+                            if (e.key !== "Enter" && e.key !== " ") return;
+                            if ((e.target as HTMLElement).closest("a,button")) return;
+                            e.preventDefault();
+                            window.open(manageUrl, "_blank", "noopener,noreferrer");
+                            onManageOpen?.();
+                          }
+                        : undefined
+                    }
+                    onClick={
+                      tappable
+                        ? (e) => {
+                            if ((e.target as HTMLElement).closest("a,button")) return;
+                            window.open(manageUrl, "_blank", "noopener,noreferrer");
+                            onManageOpen?.();
+                          }
+                        : undefined
+                    }
+                  >
                     <td className="portfolio-table__cell">
                       <span className="asset-identity">
                         <img
@@ -171,7 +211,9 @@ export default function EarningAssetsCard({
                       </span>
                     </td>
                     <td className="portfolio-table__cell portfolio-table__cell--right">
-                      <span className="portfolio-table__value">{formatAmount(p)}</span>
+                      <span className="portfolio-table__value">
+                        {isMobile ? formatAmountWhole(p) : formatAmount(p)}
+                      </span>
                     </td>
                     <td className="portfolio-table__cell portfolio-table__cell--right">
                       <span className="portfolio-table__value">

@@ -56,6 +56,26 @@ const KNOWN_VALIDATORS: Record<string, { name: string; manageUrl: string }> = {
 export const KAMINO_API_BASE = "https://api.kamino.finance";
 /** The reserve account's liquidity mint pubkey sits at byte offset 128. */
 const RESERVE_LIQUIDITY_MINT_OFFSET = 128;
+/** `liquidity.mint_decimals` (u64). */
+const RESERVE_MINT_DECIMALS_OFFSET = 272;
+/**
+ * `collateral.mint_total_supply` (u64) — the total cTokens issued by this reserve.
+ *
+ * A K-Lend obligation stores each deposit in COLLATERAL (cToken) units, not in
+ * underlying tokens, so it must be converted before it can be shown or valued:
+ *
+ *   underlying = depositedAmount × (reserve total liquidity ÷ mint_total_supply)
+ *
+ * That ratio is the collateral exchange rate, and it is exactly where the
+ * supplier's accrued interest lives (USDC's is ~1.19 today, i.e. a cToken is
+ * worth 1.19 USDC). Skipping it would understate every lending position.
+ *
+ * Offset verified against mainnet: for the SOL and USDT reserves this u64 equals
+ * `getTokenSupply(collateral.mint_pubkey)` exactly (the pubkey sits at 2560).
+ */
+const RESERVE_COLLATERAL_MINT_TOTAL_SUPPLY_OFFSET = 2592;
+/** Borrowed amounts are u128 "scaled fractions" — value × 2^60. */
+const SF_SCALE = 2 ** 60;
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 
 /* -------------------------------------------------------------------------- */
@@ -111,6 +131,17 @@ interface StakeEntry {
  * positions disappear. Keep this well under the outer PROTOCOL_TIMEOUT_MS.
  */
 const STAKE_APY_TIMEOUT_MS = 6_000;
+/**
+ * How many completed epochs back to look for a realized reward.
+ *
+ * The last epoch alone is not enough: an account that was delegated recently is
+ * still warming up and was paid nothing at that boundary, a validator that was
+ * delinquent for an epoch pays nothing, and some RPCs have already pruned the
+ * blocks a given epoch's rewards live in. Any of those left the position with no
+ * APY at all. Walking back a few epochs finds the most recent REAL reward instead
+ * — still strictly on-chain realized yield, never an estimate.
+ */
+const STAKE_APY_LOOKBACK_EPOCHS = 3;
 
 /**
  * Realized native-staking APY per stake account, from the last completed epoch's
@@ -123,31 +154,54 @@ async function computeStakeApy(
   entries: StakeEntry[]
 ): Promise<Map<string, number>> {
   const apyByPubkey = new Map<string, number>();
+  let epochInfo;
   try {
-    const epochInfo = await connection.getEpochInfo();
-    const rewards = await Promise.race([
-      connection.getInflationReward(
-        entries.map((e) => new PublicKey(e.pubkey)),
-        epochInfo.epoch - 1
-      ),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`stake APY read timed out after ${STAKE_APY_TIMEOUT_MS}ms`)),
-          STAKE_APY_TIMEOUT_MS
-        )
-      ),
-    ]);
-    // Solana slot time ≈ 0.4s → epoch duration → epochs per year.
-    const epochDays = (epochInfo.slotsInEpoch * 0.4) / 86400;
-    const epochsPerYear = epochDays > 0 ? 365.25 / epochDays : 182;
-    rewards.forEach((reward, i) => {
-      const entry = entries[i];
-      if (reward?.amount && entry.stakeLamports > 0) {
-        apyByPubkey.set(entry.pubkey, (reward.amount / entry.stakeLamports) * epochsPerYear * 100);
-      }
-    });
+    epochInfo = await connection.getEpochInfo();
   } catch {
-    // APY is best-effort.
+    return apyByPubkey; // APY is best-effort.
+  }
+  // Solana slot time ≈ 0.4s → epoch duration → epochs per year.
+  const epochDays = (epochInfo.slotsInEpoch * 0.4) / 86400;
+  const epochsPerYear = epochDays > 0 ? 365.25 / epochDays : 182;
+
+  // One shared deadline across the whole lookback, so adding epochs can never
+  // widen the outer time box this read has to live inside.
+  const deadline = Date.now() + STAKE_APY_TIMEOUT_MS;
+  let pending = entries;
+
+  for (let back = 1; back <= STAKE_APY_LOOKBACK_EPOCHS && pending.length > 0; back++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    try {
+      const batch = pending;
+      const rewards = await Promise.race([
+        connection.getInflationReward(
+          batch.map((e) => new PublicKey(e.pubkey)),
+          epochInfo.epoch - back
+        ),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`stake APY read timed out after ${STAKE_APY_TIMEOUT_MS}ms`)),
+            remaining
+          )
+        ),
+      ]);
+      // Accounts still without a reward drop to the next (older) epoch; the first
+      // reward found for an account wins, so we always report the most recent one.
+      const stillPending: StakeEntry[] = [];
+      rewards.forEach((reward, i) => {
+        const entry = batch[i];
+        if (reward?.amount && entry.stakeLamports > 0) {
+          apyByPubkey.set(entry.pubkey, (reward.amount / entry.stakeLamports) * epochsPerYear * 100);
+        } else {
+          stillPending.push(entry);
+        }
+      });
+      pending = stillPending;
+    } catch {
+      // This epoch is unreadable (pruned on this RPC) or the read timed out —
+      // keep the accounts pending and let the next epoch try.
+    }
   }
   return apyByPubkey;
 }
@@ -258,8 +312,31 @@ export async function fetchNativeStakePositions(
 /* -------------------------------------------------------------------------- */
 
 interface KaminoReserveEntry {
+  /** The lending market the obligation lives in — its metrics endpoint is per market. */
+  market: string;
   reserve: string;
   side: "supplied" | "borrowed";
+  /** Supplied: cToken units. Borrowed: underlying × 2^60 (scaled fraction). */
+  rawAmount: string;
+}
+
+/** Per-reserve market data from Kamino's official reserve-metrics endpoint. */
+interface KaminoReserveMetrics {
+  /** Total liquidity supplied, in whole underlying tokens. */
+  totalSupply: number;
+  /** …and its USD value, which yields the token's sourced price. */
+  totalSupplyUsd: number;
+  /** Supply/borrow APY as fractions (0.0421 = 4.21%). */
+  supplyApy: number;
+  borrowApy: number;
+}
+
+/** Decoded reserve-account fields needed to value an obligation. */
+interface KaminoReserveState {
+  mint?: string;
+  decimals?: number;
+  /** Total cTokens issued — the denominator of the collateral exchange rate. */
+  collateralMintTotalSupply?: number;
 }
 interface KaminoDeposit {
   depositReserve?: string;
@@ -287,15 +364,18 @@ async function fetchKaminoMarkets(): Promise<string[]> {
     .filter((m): m is string => typeof m === "string" && m.length > 0);
 }
 
-async function fetchMarketReserveEntries(
-  market: string,
-  ownerB58: string
-): Promise<KaminoReserveEntry[]> {
-  const r = await fetch(`${KAMINO_API_BASE}/kamino-market/${market}/users/${ownerB58}/obligations`);
-  if (!r.ok) return [];
-  const obligations: unknown = await r.json();
+/**
+ * PURE parser for a Kamino obligations API response — separated from the fetch so
+ * the fixture suite can run the exact production parsing against a RECORDED
+ * response body (the obligation-held deposit path shipped with no end-to-end
+ * coverage, and four separate bugs hid in it). Unknown/malformed input yields no
+ * entries, never a throw.
+ */
+export function parseKaminoObligationEntries(
+  obligations: unknown,
+  market: string
+): KaminoReserveEntry[] {
   if (!Array.isArray(obligations)) return [];
-
   const entries: KaminoReserveEntry[] = [];
   for (const ob of obligations as KaminoObligation[]) {
     const state = ob?.state;
@@ -306,57 +386,178 @@ async function fetchMarketReserveEntries(
         d.depositedAmount &&
         d.depositedAmount !== "0"
       ) {
-        entries.push({ reserve: d.depositReserve, side: "supplied" });
+        entries.push({
+          market,
+          reserve: d.depositReserve,
+          side: "supplied",
+          rawAmount: d.depositedAmount,
+        });
       }
     }
     for (const b of state?.borrows ?? []) {
       const amt = b?.borrowedAmountSf ?? b?.borrowedAmount;
       if (b?.borrowReserve && b.borrowReserve !== SYSTEM_PROGRAM && amt && amt !== "0") {
-        entries.push({ reserve: b.borrowReserve, side: "borrowed" });
+        entries.push({ market, reserve: b.borrowReserve, side: "borrowed", rawAmount: amt });
       }
     }
   }
   return entries;
 }
 
-/** Read each reserve's underlying liquidity mint on-chain (offset 128). */
-async function resolveReserveMints(
+/** PURE: supplied collateral (raw cToken units) per reserve, from parsed entries. */
+export function collateralRawFromEntries(entries: KaminoReserveEntry[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const entry of entries) {
+    if (entry.side === "supplied") out[entry.reserve] = entry.rawAmount;
+  }
+  return out;
+}
+
+async function fetchMarketReserveEntries(
+  market: string,
+  ownerB58: string
+): Promise<KaminoReserveEntry[]> {
+  const r = await fetch(`${KAMINO_API_BASE}/kamino-market/${market}/users/${ownerB58}/obligations`);
+  if (!r.ok) return [];
+  return parseKaminoObligationEntries(await r.json(), market);
+}
+
+/**
+ * Per-reserve market data for one lending market, from Kamino's official
+ * `/reserves/metrics` endpoint. This is the same source the Kamino app shows, so
+ * the APY we display matches theirs. Empty map on any failure (never invented).
+ */
+async function fetchMarketReserveMetrics(
+  market: string
+): Promise<Map<string, KaminoReserveMetrics>> {
+  const out = new Map<string, KaminoReserveMetrics>();
+  const r = await fetch(`${KAMINO_API_BASE}/kamino-market/${market}/reserves/metrics`);
+  if (!r.ok) return out;
+  const j: unknown = await r.json();
+  if (!Array.isArray(j)) return out;
+  for (const row of j as Record<string, unknown>[]) {
+    const reserve = row?.reserve;
+    if (typeof reserve !== "string") continue;
+    out.set(reserve, {
+      totalSupply: Number(row.totalSupply),
+      totalSupplyUsd: Number(row.totalSupplyUsd),
+      supplyApy: Number(row.supplyApy),
+      borrowApy: Number(row.borrowApy),
+    });
+  }
+  return out;
+}
+
+/**
+ * Read each reserve on-chain for the fields an obligation cannot supply itself:
+ * the underlying liquidity mint, its decimals, and the cToken supply that gives
+ * the collateral exchange rate.
+ */
+async function readReserveStates(
   connection: Connection,
   reserves: string[]
-): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
+): Promise<Map<string, KaminoReserveState>> {
+  const out = new Map<string, KaminoReserveState>();
   if (reserves.length === 0) return out;
   const infos = await connection.getMultipleAccountsInfo(reserves.map((r) => new PublicKey(r)));
   infos.forEach((acc, i) => {
     const data = acc?.data;
-    if (data && data.length >= RESERVE_LIQUIDITY_MINT_OFFSET + 32) {
-      const mintBytes = data.subarray(
-        RESERVE_LIQUIDITY_MINT_OFFSET,
-        RESERVE_LIQUIDITY_MINT_OFFSET + 32
-      );
-      out.set(reserves[i], new PublicKey(mintBytes).toBase58());
+    if (!data) return;
+    const state: KaminoReserveState = {};
+    if (data.length >= RESERVE_LIQUIDITY_MINT_OFFSET + 32) {
+      state.mint = new PublicKey(
+        data.subarray(RESERVE_LIQUIDITY_MINT_OFFSET, RESERVE_LIQUIDITY_MINT_OFFSET + 32)
+      ).toBase58();
     }
+    if (data.length >= RESERVE_MINT_DECIMALS_OFFSET + 8) {
+      state.decimals = Number(data.readBigUInt64LE(RESERVE_MINT_DECIMALS_OFFSET));
+    }
+    if (data.length >= RESERVE_COLLATERAL_MINT_TOTAL_SUPPLY_OFFSET + 8) {
+      state.collateralMintTotalSupply = Number(
+        data.readBigUInt64LE(RESERVE_COLLATERAL_MINT_TOTAL_SUPPLY_OFFSET)
+      );
+    }
+    out.set(reserves[i], state);
   });
   return out;
+}
+
+/**
+ * Underlying token amount for one obligation entry, or undefined when any input
+ * is missing or unusable — an unresolvable position shows "—" rather than a
+ * number we cannot stand behind.
+ */
+function kaminoEntryUiAmount(
+  entry: KaminoReserveEntry,
+  state: KaminoReserveState | undefined,
+  metrics: KaminoReserveMetrics | undefined
+): number | undefined {
+  const raw = Number(entry.rawAmount);
+  if (!Number.isFinite(raw) || raw <= 0) return undefined;
+
+  if (entry.side === "borrowed") {
+    // Borrows are already in underlying units, scaled by 2^60.
+    const decimals = state?.decimals;
+    if (decimals === undefined || !Number.isFinite(decimals)) return undefined;
+    const amount = raw / SF_SCALE / 10 ** decimals;
+    return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+  }
+
+  // Supplied: cTokens → underlying, via the collateral exchange rate. Dividing by
+  // the cToken supply FIRST keeps the intermediate well inside float precision.
+  const cSupply = state?.collateralMintTotalSupply;
+  const totalSupply = metrics?.totalSupply;
+  if (!cSupply || !Number.isFinite(cSupply) || !totalSupply || !Number.isFinite(totalSupply)) {
+    return undefined;
+  }
+  const amount = (raw / cSupply) * totalSupply;
+  return Number.isFinite(amount) && amount > 0 ? amount : undefined;
+}
+
+export interface KaminoPositionsResult {
+  positions: WalletPosition[];
+  /**
+   * Raw COLLATERAL (cToken) units supplied per reserve, straight from the
+   * obligation. A K-Lend deposit made through Kamino's own app leaves no cTokens
+   * in the wallet — the obligation holds them — so this is the only place the
+   * user's cToken balance is observable. The Step 17A existing-position adapter
+   * needs exactly this to run its approved redemption + withdrawal math.
+   */
+  collateralRawByReserve: Record<string, string>;
+  /**
+   * Supply APY (percent) per reserve, from Kamino's official reserve-metrics
+   * endpoint — the same number their app shows. The 17A adapter needs it because
+   * the row it produces replaces the raw obligation row that carries it.
+   */
+  supplyApyPctByReserve: Record<string, number>;
 }
 
 export async function fetchKaminoPositions(
   connection: Connection,
   owner: PublicKey
-): Promise<WalletPosition[]> {
+): Promise<KaminoPositionsResult> {
   const ownerB58 = owner.toBase58();
+  const empty: KaminoPositionsResult = { positions: [], collateralRawByReserve: {}, supplyApyPctByReserve: {} };
   const markets = await fetchKaminoMarkets();
-  if (markets.length === 0) return [];
+  if (markets.length === 0) return empty;
 
   // Gather non-zero deposit/borrow reserves across all lending markets.
   const perMarket = await Promise.all(
     markets.map((m) => fetchMarketReserveEntries(m, ownerB58).catch(() => []))
   );
   const entries = perMarket.flat();
-  if (entries.length === 0) return [];
+  if (entries.length === 0) return empty;
 
   const uniqueReserves = [...new Set(entries.map((e) => e.reserve))];
-  const mintByReserve = await resolveReserveMints(connection, uniqueReserves);
+  // Reserve state (on-chain) and market metrics (Kamino API) are independent
+  // reads; either failing only costs the fields it owns, never the position.
+  const activeMarkets = [...new Set(entries.map((e) => e.market))];
+  const [stateByReserve, metricsPerMarket] = await Promise.all([
+    readReserveStates(connection, uniqueReserves),
+    Promise.all(activeMarkets.map((m) => fetchMarketReserveMetrics(m).catch(() => new Map()))),
+  ]);
+  const metricsByReserve = new Map<string, KaminoReserveMetrics>();
+  for (const m of metricsPerMarket) for (const [k, v] of m) metricsByReserve.set(k, v);
 
   const positions: WalletPosition[] = [];
   const seen = new Set<string>();
@@ -364,8 +565,17 @@ export async function fetchKaminoPositions(
     const id = `kamino-${entry.side}-${entry.reserve}`;
     if (seen.has(id)) continue;
     seen.add(id);
-    const mint = mintByReserve.get(entry.reserve);
+    const state = stateByReserve.get(entry.reserve);
+    const metrics = metricsByReserve.get(entry.reserve);
+    const mint = state?.mint;
     const known = mint ? lookupMint(mint) : undefined;
+
+    const uiAmount = kaminoEntryUiAmount(entry, state, metrics);
+    // Supplied earns the supply APY; a borrow costs the borrow APY.
+    const apyFraction = entry.side === "borrowed" ? metrics?.borrowApy : metrics?.supplyApy;
+    const apy =
+      typeof apyFraction === "number" && Number.isFinite(apyFraction) ? apyFraction * 100 : null;
+
     positions.push({
       id,
       source: "kamino",
@@ -375,12 +585,31 @@ export async function fetchKaminoPositions(
       mint,
       icon: known?.icon,
       protocol: "Kamino",
-      amount: "", // On-chain amount is in cToken units; not shown to avoid a wrong figure.
+      amount: uiAmount != null ? String(uiAmount) : "",
+      uiAmount,
       side: entry.side,
       detection: "protocol_api",
+      // `legs` is what the portfolio's pricing pass values a protocol position
+      // by (mint + amount → the same price feed every other holding uses), so a
+      // lent balance now counts toward Total Portfolio Value like the vault does.
+      legs:
+        mint && uiAmount != null
+          ? [{ mint, uiAmount, side: entry.side === "borrowed" ? "debt" : "long" }]
+          : undefined,
       valueUsd: null,
-      apy: null,
+      apy,
     });
   }
-  return positions;
+
+  // Supplied collateral per reserve, in raw cToken units, for the 17A adapter.
+  const collateralRawByReserve = collateralRawFromEntries(entries);
+  const supplyApyPctByReserve: Record<string, number> = {};
+  for (const entry of entries) {
+    if (entry.side !== "supplied") continue;
+    const apyFraction = metricsByReserve.get(entry.reserve)?.supplyApy;
+    if (typeof apyFraction === "number" && Number.isFinite(apyFraction)) {
+      supplyApyPctByReserve[entry.reserve] = apyFraction * 100;
+    }
+  }
+  return { positions, collateralRawByReserve, supplyApyPctByReserve };
 }

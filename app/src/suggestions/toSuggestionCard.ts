@@ -138,11 +138,17 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
     }
   }
 
+  // An OBSERVATION ("Review Yield Positions") is neither a disabled card nor the
+  // CTA-less On Track status card: it keeps its Review CTA, but the rail groups it
+  // apart from suggestions that have a concrete next step, and it can be
+  // acknowledged from its own modal.
   const actionability = disabled
     ? "disabled"
     : informational
       ? "informational"
-      : "actionable";
+      : s.observationOnly === true
+        ? "observation"
+        : "actionable";
 
   const status = disabled ? "disabled" : informational ? "ready" : "active";
 
@@ -215,6 +221,7 @@ export function toSuggestionCard(s: EngineSuggestion): SuggestionCardState {
     is_top_pick: s.is_top_pick, // preserved from engine, never recalculated
     status,
     actionability,
+    ...(s.observationOnly === true && s.dismissalSignature ? { dismissalSignature: s.dismissalSignature } : {}),
     severity,
     description,
     impact_text,

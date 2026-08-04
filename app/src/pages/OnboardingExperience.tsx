@@ -27,6 +27,7 @@ import DashboardBody from "../components/DashboardBody";
 import RealWalletPortfolio from "../components/RealWalletPortfolio";
 import GoalSettings from "../components/GoalSettings";
 import OnboardingPanel from "../components/OnboardingPanel";
+import logoUrl from "../../../assets/logo/wealthsmith-full-lockup.svg";
 import type { SavedGoal } from "../types/goal";
 import type { OnboardingAnswers } from "../state/onboardingState";
 
@@ -35,7 +36,8 @@ export type TourStage = null | "portfolio" | "goal";
 interface Props {
   mode: "disconnected" | "connected";
   onConnectWallet: () => void;
-  /** Global-nav Try Demo Mode entry (not offered inside the onboarding panel). */
+  /** Try Demo Mode entry — the Global Nav (desktop) and, on mobile, inside the
+   *  full-screen onboarding panel. */
   onTryDemo: () => void;
   /** In-app nav switch — only Support is reachable from here (FAQ/contact need no
    *  wallet); Portfolio/Goal stay gated during onboarding. */
@@ -128,16 +130,32 @@ export default function OnboardingExperience({
       <div className="dashboard">
         <main className="dashboard__main">{mainColumn}</main>
 
-        <OnboardingPanel
-          mode={mode}
-          onConnectWallet={onConnectWallet}
-          onDisconnect={onDisconnect}
-          onComplete={onComplete}
-          onTour={onTour}
-          tourStage={tourStage}
-          tourGoal={tourGoal}
-          onSetTourStage={onSetTourStage}
-        />
+        {/* Mobile-only wrapper: on mobile it becomes a full-screen takeover with a
+            branded top bar above the onboarding card, on a slightly darker ground.
+            On desktop it is `display: contents` and the top bar is hidden, so the
+            panel stays the plain grid sidebar (unchanged). */}
+        <div className="onboarding-mobile-shell">
+          <header className="onboarding-mobile-topbar">
+            <img
+              className="onboarding-mobile-topbar__logo"
+              src={logoUrl}
+              alt="WealthSmith"
+              width={221}
+              height={32}
+            />
+          </header>
+          <OnboardingPanel
+            mode={mode}
+            onConnectWallet={onConnectWallet}
+            onTryDemo={onTryDemo}
+            onDisconnect={onDisconnect}
+            onComplete={onComplete}
+            onTour={onTour}
+            tourStage={tourStage}
+            tourGoal={tourGoal}
+            onSetTourStage={onSetTourStage}
+          />
+        </div>
       </div>
     </div>
   );

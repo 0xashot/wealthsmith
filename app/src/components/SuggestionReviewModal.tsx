@@ -16,6 +16,7 @@ import ButtonIcon from "./ButtonIcon";
 import Badge from "./Badge";
 import InfoPopover from "./InfoPopover";
 import { useScrollLock } from "./useScrollLock";
+import { useIsMobileViewport } from "./useIsMobileViewport";
 import SolStakingLeaderExplanation from "./SolStakingLeaderExplanation";
 import closeUrl from "../../../assets/icons/ui/close.svg";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
@@ -62,6 +63,13 @@ interface Props {
   swapQuotePresetLoading?: boolean;
   /** Fixed clock for deterministic gallery rendering. */
   swapQuoteNowMs?: number;
+  /**
+   * Acknowledge an OBSERVATION ("I've reviewed this, I'm fine with it"). Present
+   * only for observation cards; passing it renders the sticky Cancel / Dismiss
+   * footer. It hides the card for THIS situation only — the engine re-raises it
+   * once the underlying condition materially changes.
+   */
+  onDismiss?: () => void;
   onClose: () => void;
 }
 
@@ -74,6 +82,9 @@ const num1 = (n: number) => {
 };
 /** Token amount with thousands separators (portfolio-style), up to 6 decimals. */
 const tokenAmount = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 6 });
+/** Whole-token amount (mobile), e.g. 15,255.4847 → "15,255" — truncated so it
+ *  never rounds up past the real balance. */
+const tokenAmountWhole = (n: number) => Math.trunc(n).toLocaleString("en-US");
 
 /** Format a metric value using its kind/unit — never invents precision. */
 function formatMetric(m: ReviewMetric): string {
@@ -102,8 +113,11 @@ function formatCalcValue(v: number, unit?: string): string {
   return `${num1(v)}${unit ? ` ${unit}` : ""}`;
 }
 
-export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onClose }: Props) {
+export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onDismiss, onClose }: Props) {
   useScrollLock();
+  // Mobile: token amounts in the modal tables are shown whole (no decimals).
+  const isMobile = useIsMobileViewport();
+  const amountFmt = isMobile ? tokenAmountWhole : tokenAmount;
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -447,7 +461,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                       {m.label}
                       {m.tooltip && <InfoPopover label={`${m.label} — more info`} align="right" direction="up">{m.tooltip}</InfoPopover>}
                     </dt>
-                    <dd className="review-modal__metric-value">
+                    <dd className={`review-modal__metric-value${m.emphasis === "primary" ? " review-modal__metric-value--primary" : ""}`}>
                       {formatMetric(m)}
                       {m.subValue && <span className="review-modal__metric-subvalue">{m.subValue}</span>}
                     </dd>
@@ -490,7 +504,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                             </span>
                           </td>
                           <td className="portfolio-table__cell portfolio-table__cell--right">
-                            <span className="portfolio-table__value">{typeof a.amount === "number" ? tokenAmount(a.amount) : "—"}</span>
+                            <span className="portfolio-table__value">{typeof a.amount === "number" ? amountFmt(a.amount) : "—"}</span>
                           </td>
                           <td className="portfolio-table__cell portfolio-table__cell--right">
                             <span className="portfolio-table__value">{typeof a.valueUsd === "number" ? usd(a.valueUsd) : "—"}</span>
@@ -536,7 +550,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                             </span>
                           </td>
                           <td className="portfolio-table__cell portfolio-table__cell--right">
-                            <span className="portfolio-table__value">{typeof a.amount === "number" ? tokenAmount(a.amount) : "—"}</span>
+                            <span className="portfolio-table__value">{typeof a.amount === "number" ? amountFmt(a.amount) : "—"}</span>
                           </td>
                           <td className="portfolio-table__cell portfolio-table__cell--right">
                             <span className="portfolio-table__value">{typeof a.valueUsd === "number" ? usd(a.valueUsd) : "—"}</span>
@@ -827,6 +841,26 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         )}
         {/* 23C.2 — read-only "Swap on <provider>" handoff footer (Rebalance / Trim; DCA uses its own branch). */}
         {swapFooter}
+        {/* Sticky footer for an OBSERVATION. There is no action to hand off here —
+            reviewing IS the action — so the primary control acknowledges it. Dismiss
+            hides only THIS situation; the card returns by itself once the underlying
+            condition materially changes. It records no consent and changes no
+            suggestion, amount, or eligibility. */}
+        {onDismiss && (
+          <div className="review-modal__footer review-modal__footer--actions">
+            <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="review-modal__primary-action"
+              onClick={onDismiss}
+              aria-label="Dismiss this suggestion. It returns if the position changes materially."
+            >
+              <span>Dismiss</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
