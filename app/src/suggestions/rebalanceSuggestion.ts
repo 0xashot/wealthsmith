@@ -27,18 +27,11 @@ const LAMPORTS_PER_SOL = 1_000_000_000;
 const pctText = (n: number): string => (Math.round(n * 10) / 10).toLocaleString("en-US", { maximumFractionDigits: 1 });
 
 /**
- * Step 24J — the market-INCLUDED disclosure ("Current market conditions are included as 10% …" + CoinMarketCap
- * attribution) was removed from the Rebalance review body per product copy. The market factor is still used in the
- * target calculation; only its explanatory paragraph is gone. The DEGRADED-exclusion disclosure is retained: when
- * market data was stale/unavailable it honestly explains the exclusion + renormalization. Never timing/score/band.
+ * Market-data disclosures were removed from the Rebalance review body per product copy (Step 24J dropped the
+ * market-INCLUDED paragraph; the DEGRADED-exclusion note was dropped later). The market factor still drives the
+ * target calculation — the degraded state shows up in the target numbers themselves, never as body text, and
+ * never as timing/score/band language.
  */
-function marketReviewSuffix(a: RebalanceAssessment): string {
-  if (a.targetConfidence === "degraded_market_excluded") {
-    return " Market data was unavailable or outside its approved freshness window. The market component was excluded, and the remaining profile factors were renormalized.";
-  }
-  return "";
-}
-
 /** Stable suggestion ID (IDs must not change across runs/copy updates). */
 export const REBALANCE_SUGGESTION_ID = "rebalance_to_plan";
 
@@ -103,9 +96,17 @@ function buildStablesToCryptoCard(
   // fully funded", which spent a clause restating what "above your buffer"
   // already means. The buffer guarantee is unchanged: the source is still only
   // ever the excess above it (see the buffer_protection guardrail below).
-  const cardBody =
-    `Crypto makes up ${pctText(curCrypto)}% of your portfolio, below your ${pctText(tgtCrypto)}% target. ` +
-    `Swap ${swapUsdText} of USDC above your Safety Buffer into SOL ${goalClause}.`;
+  //
+  // Kamino-sourced variant (product decision): when the USDC sits in the vetted
+  // Kamino lending position, the card states BOTH steps — withdraw, then swap —
+  // and never pretends the funds are already in the wallet.
+  const fromKamino = source.requiresPriorWithdrawal === true;
+  const cardBody = fromKamino
+    ? `Crypto is ${pctText(curCrypto)}% of your portfolio, compared with your ${pctText(tgtCrypto)}% target. ` +
+      `You have ${swapUsdText} of USDC in Kamino above your required Safety Buffer. ` +
+      `Moving this amount into SOL would bring your portfolio closer to its target while keeping your Safety Buffer intact.`
+    : `Crypto makes up ${pctText(curCrypto)}% of your portfolio, below your ${pctText(tgtCrypto)}% target. ` +
+      `Swap ${swapUsdText} of USDC above your Safety Buffer into SOL ${goalClause}.`;
 
   const guardrails: SuggestionGuardrail[] = [
     { code: "pricing_available", status: "passed" },
@@ -122,8 +123,14 @@ function buildStablesToCryptoCard(
     actionKind: "review_only",
     guardrails,
     protocolSelection,
-    // Modal reason is the plain-language card body (+ a degraded-market exclusion note only when applicable).
-    reason: cardBody + marketReviewSuffix(assessment),
+    // Modal reason is exactly the plain-language card body.
+    reason: cardBody,
+    // Kamino-sourced: the primary handoff is STEP ONE (withdraw on Kamino's own
+    // page). The swap-route section is gated not-ready for this source, so the
+    // modal never shows a "Swap on <provider>" footer that skips the withdrawal.
+    ...(fromKamino
+      ? { externalLink: { label: "Kamino", ctaLabel: "Withdraw on Kamino", url: "https://app.kamino.finance", opensInNewTab: true, secondaryLabel: "Cancel" } }
+      : {}),
     hideMetricsHeading: true,
     hideGuardrails: true,
     metrics: [
@@ -153,7 +160,9 @@ function buildStablesToCryptoCard(
     is_top_pick: false,
     amount: { valueUsd: suggestedAmountUsd, label: partial ? "Suggested partial rebalance" : "Suggested rebalance" },
     // 23C.1 — direct, direction-aware card line (source → destination). Read-only: the CTA stays "Review".
-    impactTextOverride: `Swap $${Math.round(suggestedAmountUsd).toLocaleString("en-US")} of USDC to SOL`,
+    impactTextOverride: fromKamino
+      ? `Withdraw ${swapUsdText} from Kamino and swap it to SOL`
+      : `Swap $${Math.round(suggestedAmountUsd).toLocaleString("en-US")} of USDC to SOL`,
     from: { bucket: "stables" },
     to: { bucket: "crypto" },
     delta_percent: delta,
@@ -235,8 +244,8 @@ function buildCryptoToStablesCard(
     actionKind: "review_only",
     guardrails,
     protocolSelection,
-    // Modal reason is the plain-language card body (+ a degraded-market exclusion note only when applicable).
-    reason: cardBody + marketReviewSuffix(assessment),
+    // Modal reason is exactly the plain-language card body.
+    reason: cardBody,
     hideMetricsHeading: true,
     hideGuardrails: true,
     metrics: [

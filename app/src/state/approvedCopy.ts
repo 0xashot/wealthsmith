@@ -12,6 +12,9 @@
 /** content/wallet-copy.md — Wallet Menu Copy, the only menu item. */
 export const WALLET_MENU_DISCONNECT = "Disconnect Wallet";
 
+/** Global Nav icon-only refresh button (connected mode): tooltip + accessible label. */
+export const REFRESH_DASHBOARD_TOOLTIP = "Refresh dashboard";
+
 /* ---------- Disconnected dashboard states ---------- */
 
 /** content/wallet-copy.md — Wallet Disconnected Copy, empty state title */

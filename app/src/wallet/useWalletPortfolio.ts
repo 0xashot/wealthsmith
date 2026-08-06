@@ -19,8 +19,9 @@
  * requests no permissions beyond the existing connection — so Ledger-backed Phantom
  * keeps working with no on-device approval. No USD/APY is invented (valueUsd/apy
  * stay null). Fetches only when connected; a disconnect clears state and cancels
- * any in-flight read; duplicate/stale fetches are guarded. No polling — manual
- * refresh only.
+ * any in-flight read; duplicate/stale fetches are guarded. No timed polling —
+ * re-reads happen on manual refresh and on window focus (throttled), so returning
+ * from an external handoff (e.g. a Kamino withdrawal) picks up the new balances.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PublicKey, type Connection } from "@solana/web3.js";
@@ -555,14 +556,55 @@ export interface WalletPortfolio extends PortfolioState {
   refresh: () => void;
 }
 
+/**
+ * Manual-refresh broadcast: mounted useWalletPortfolio instances subscribe their
+ * own refresh() here so UI that does NOT own the wallet read (the Global Nav's
+ * refresh button) can trigger a re-read. Read-only — a refresh only re-fetches;
+ * it never signs or constructs anything. No-op when no instance is mounted.
+ */
+const refreshListeners = new Set<() => void>();
+export function requestWalletPortfolioRefresh(): void {
+  refreshListeners.forEach((listener) => listener());
+}
+
+/** Minimum gap between focus-triggered re-reads (manual refresh is never throttled). */
+const FOCUS_REFRESH_MIN_INTERVAL_MS = 30_000;
+
 export function useWalletPortfolio(): WalletPortfolio {
   const { connection } = useConnection();
   const { publicKey, connected } = useWallet();
   const [state, setState] = useState<PortfolioState>({ status: "idle", positions: [] });
   const [refreshKey, setRefreshKey] = useState(0);
   const reqId = useRef(0);
+  const lastReadStartedAt = useRef(0);
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
+
+  useEffect(() => {
+    refreshListeners.add(refresh);
+    return () => { refreshListeners.delete(refresh); };
+  }, [refresh]);
+
+  /**
+   * Refresh on window focus (and tab-visibility return), throttled: returning from
+   * an external handoff — a Kamino withdrawal, an exchange tab — re-reads the
+   * wallet without a manual reload. The throttle keeps ordinary tab-switching from
+   * spamming the RPC; the read itself is the same read-only fetch as always.
+   */
+  useEffect(() => {
+    if (!connected || !publicKey) return;
+    const onReturn = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - lastReadStartedAt.current < FOCUS_REFRESH_MIN_INTERVAL_MS) return;
+      refresh();
+    };
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
+    return () => {
+      window.removeEventListener("focus", onReturn);
+      document.removeEventListener("visibilitychange", onReturn);
+    };
+  }, [connected, publicKey, refresh]);
 
   useEffect(() => {
     // Do not fetch on disconnected state — clear any previous live assets.
@@ -573,6 +615,7 @@ export function useWalletPortfolio(): WalletPortfolio {
     }
 
     const myReq = ++reqId.current;
+    lastReadStartedAt.current = Date.now();
     let cancelled = false;
     const owner = new PublicKey(publicKey.toBase58());
     // Retry clears the previous hard error, keeps prior positions visible.

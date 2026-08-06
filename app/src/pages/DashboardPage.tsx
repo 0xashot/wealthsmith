@@ -34,6 +34,7 @@ import PageHeader from "../components/PageHeader";
 import DashboardBody from "../components/DashboardBody";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import type { RailSuggestions } from "../suggestions/useRailSuggestions";
+import { requestWalletPortfolioRefresh } from "../wallet/useWalletPortfolio";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
 import EmptyStateCard from "../components/EmptyStateCard";
 
@@ -99,6 +100,7 @@ export default function DashboardPage({
         activePage={activePage}
         onNavigate={onNavigate}
         onDisconnect={disconnect}
+        onRefreshPortfolio={connected ? requestWalletPortfolioRefresh : undefined}
         onConnectWallet={connectWallet}
         onTryDemo={onTryDemo}
         askActive={railMode === "ask_smith_ai"}

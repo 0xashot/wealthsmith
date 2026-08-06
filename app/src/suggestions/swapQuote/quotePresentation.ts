@@ -155,9 +155,15 @@ export const LOADING_VIEW: Pick<QuoteView, "kind" | "heading" | "body" | "disclo
 
 const EMPTY_VIEW_BASE = { selectedProviderId: null, providerLabel: null, metrics: [] as QuoteMetric[], comparedProviderNames: [] as string[], unavailableProviderNames: [] as string[], alternatives: [] as QuoteAlternative[], liquidityProxyNote: null, incompleteComparison: false, selectedVenues: [] as string[], venueOverlap: false };
 
-/** The not-ready view (exact action identity unavailable). DCA gets the funded-contribution-specific copy. */
-export function notReadyView(isDca = false): QuoteView {
-  return { kind: "not_ready_for_quote", heading: "Route comparison not available yet", body: isDca ? DCA_NOT_READY_BODY : "WealthSmith needs an exact transferable source asset and amount before comparing routes.", disclosure: null, showRefresh: false, ...EMPTY_VIEW_BASE };
+/** Two-step (withdraw-first) not-ready copy — the funds are verified on Kamino but not in the wallet yet. */
+export const WITHDRAW_FIRST_NOT_READY_BODY = "Withdraw the USDC from Kamino first. Once it arrives in your wallet, WealthSmith can compare swap routes for the exact amount.";
+
+/** The not-ready view (exact action identity unavailable). DCA gets the funded-contribution-specific copy;
+ * a Kamino-sourced Rebalance (requiresPriorWithdrawal) gets the withdraw-first copy. */
+export function notReadyView(isDca = false, reasons: string[] = []): QuoteView {
+  const body = reasons.includes("usdc_source_requires_prior_withdrawal") ? WITHDRAW_FIRST_NOT_READY_BODY
+    : isDca ? DCA_NOT_READY_BODY : "WealthSmith needs an exact transferable source asset and amount before comparing routes.";
+  return { kind: "not_ready_for_quote", heading: "Route comparison not available yet", body, disclosure: null, showRefresh: false, ...EMPTY_VIEW_BASE };
 }
 /** The not-required view (no swap needed). */
 export function notRequiredView(): QuoteView {

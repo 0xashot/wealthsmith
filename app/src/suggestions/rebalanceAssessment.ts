@@ -199,8 +199,24 @@ function buildSourceCandidate(p: WalletPosition, bucket: "crypto" | "stable"): R
   // caller can turn one into a sell recommendation.
   if (p.detection === "manual_entry") return exclude("unsupported", "manually stated holding; not verifiable or transferable by WealthSmith");
 
-  // Excluded classes (never a Rebalance source in MVP).
-  if (cls === "kamino_direct") return exclude("existing_position_only", "Kamino Direct is existing-position-only / protocol-held");
+  /**
+   * Kamino Direct USDC — the ONE vetted lending position (candidateId-bound). Its
+   * VERIFIED currently-withdrawable value (17A redemption + reserve-liquidity
+   * math) is an approved stables_to_crypto source, as a TWO-STEP action: withdraw
+   * on Kamino, then swap. `requiresPriorWithdrawal` marks it so the card states
+   * both steps and the swap is never quoted as if the funds were in the wallet.
+   * (Product decision: the previous blanket exclusion could leave a wallet whose
+   * stables all sit in Kamino with a large drift and no Rebalance card at all.)
+   * Anything not fully withdrawable — or any OTHER protocol stable — stays
+   * excluded exactly as before.
+   */
+  if (cls === "kamino_direct") {
+    const liquid = num(p.liquidValueUsd);
+    if (bucket === "stable" && p.candidateId === "kamino_usdc_lending" && p.withdrawalState === "fully_withdrawable" && liquid !== null && liquid > 0) {
+      return { ...base, verifiedWithdrawableValueUsd: liquid, technicallyAvailableValueUsd: liquid, requiresPriorWithdrawal: true, eligibilityState: "eligible", exclusionReasons: [] };
+    }
+    return exclude("existing_position_only", "Kamino Direct is not currently withdrawable-verified (or not a stable-bucket source)");
+  }
   if (cls === "steakhouse") return exclude("existing_position_only", "Steakhouse is existing-position-only / excluded from suggestions");
   if (cls === "jupiter_lend") return exclude("unresolved", "Jupiter Lend value unresolved; never source-eligible");
   if (cls === "lp") return exclude("unavailable", "LP is visibility-only; unwind required");
@@ -395,7 +411,13 @@ export interface RebalanceUsdcSource {
   mint: string;
   tokenProgram: string;
   displaySymbol: string;
-  sourceType: "direct_wallet_usdc";
+  sourceType: "direct_wallet_usdc" | "kamino_direct_usdc";
+  /**
+   * True when the funds must be withdrawn from a protocol before they can be
+   * swapped (kamino_direct_usdc). The card states both steps and the swap quote
+   * is gated not-ready — a quote must never pretend the funds are in the wallet.
+   */
+  requiresPriorWithdrawal: boolean;
   selectedSourcePositionIds: string[];
   verifiedTransferableValueUsd: number;
   reservedForSafetyBufferUsd: number;
@@ -436,9 +458,39 @@ export function selectRebalanceUsdcSource(positions: WalletPosition[], requiredB
   else if (verifiedExcessValueUsd <= 0) selectionState = "no_excess";
   else if (verifiedExcessValueUsd < MIN_SUGGESTION_AMOUNT_USD) selectionState = "below_minimum";
   else selectionState = "selected";
+
+  /**
+   * Kamino Direct fallback — SINGLE-SOURCE, WALLET-FIRST. Direct-wallet USDC is
+   * always preferred (one step beats two); the vetted Kamino Direct position's
+   * VERIFIED withdrawable value funds the Rebalance only when the wallet source
+   * cannot be selected. The Safety Buffer is reserved out of the Kamino value
+   * exactly as it is out of wallet value (the buffer now COUNTS that position,
+   * so the same dollars are never both reserve and source). Mixed wallet+Kamino
+   * funding is deliberately not offered — one source, one honest instruction.
+   */
+  if (selectionState !== "selected") {
+    const kamino = positions.find((p) => p.candidateId === "kamino_usdc_lending" && p.existingPositionOnly === true && p.withdrawalState === "fully_withdrawable" && num(p.liquidValueUsd) !== null && (num(p.liquidValueUsd) as number) > 0);
+    if (kamino) {
+      const kLiquid = num(kamino.liquidValueUsd) as number;
+      const kReserved = round2(Math.min(kLiquid, Math.max(0, requiredBufferUsd)));
+      const kExcess = round2(Math.max(0, kLiquid - Math.max(0, requiredBufferUsd)));
+      const kState: UsdcSourceSelectionState = kExcess <= 0 ? "no_excess" : kExcess < MIN_SUGGESTION_AMOUNT_USD ? "below_minimum" : "selected";
+      if (kState === "selected") {
+        return {
+          assetId: "USDC", mint: CANONICAL_USDC_MINT, tokenProgram: CLASSIC_TOKEN_PROGRAM, displaySymbol: "USDC",
+          sourceType: "kamino_direct_usdc", requiresPriorWithdrawal: true, selectedSourcePositionIds: [kamino.id],
+          verifiedTransferableValueUsd: round2(kLiquid), reservedForSafetyBufferUsd: kReserved,
+          verifiedExcessValueUsd: kExcess, selectionState: kState,
+          exclusionReasons: [...exclusionReasons],
+          observedAt: new Date(generatedAt ?? Date.now()).toISOString(),
+        };
+      }
+    }
+  }
+
   return {
     assetId: "USDC", mint: CANONICAL_USDC_MINT, tokenProgram: CLASSIC_TOKEN_PROGRAM, displaySymbol: "USDC",
-    sourceType: "direct_wallet_usdc", selectedSourcePositionIds: ids, verifiedTransferableValueUsd: round2(transferable),
+    sourceType: "direct_wallet_usdc", requiresPriorWithdrawal: false, selectedSourcePositionIds: ids, verifiedTransferableValueUsd: round2(transferable),
     reservedForSafetyBufferUsd, verifiedExcessValueUsd, selectionState, exclusionReasons: [...exclusionReasons],
     observedAt: new Date(generatedAt ?? Date.now()).toISOString(),
   };

@@ -161,6 +161,54 @@
   margin-left: auto;
 }
 
+/* Icon-only manual portfolio refresh (connected mode), left of the wallet pill.
+   Design-system tertiary treatment (same as the modal Cancel button) — but the
+   color stays text-primary so the masked icon keeps its current color instead of
+   the tertiary blue. Tooltip anchored BELOW (the nav sits at the viewport top,
+   so an above-anchored tooltip would clip). */
+.global-nav__refresh {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-inline-gap-sm);
+  border-radius: var(--radius-control-sm);
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+.global-nav__refresh:hover {
+  background: var(--color-action-tertiary-background-hover);
+}
+.global-nav__refresh:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+.global-nav__refresh[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  padding: var(--spacing-inline-gap-xs) var(--spacing-inline-gap-sm);
+  border-radius: var(--radius-control-sm);
+  background: var(--color-text-primary);
+  color: var(--color-surface-card);
+  font: var(--typography-caption-default-font);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: var(--zIndex-navigation-primary);
+}
+.global-nav__refresh[data-tooltip]:hover::after,
+.global-nav__refresh[data-tooltip]:focus-visible::after {
+  opacity: 1;
+}
+
 .global-nav__wallet-pill {
   display: inline-flex;
   align-items: center;
@@ -4626,6 +4674,9 @@
   display: flex;
   justify-content: flex-end;
   padding-top: var(--spacing-inline-gap-md);
+  /* Match the body's scrollbar-gutter right inset so the right-aligned actions line up
+     with the metric cards' right edge instead of overhanging it. */
+  padding-right: var(--spacing-inline-gap-sm);
 }
 .review-modal__close-action {
   padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-lg);

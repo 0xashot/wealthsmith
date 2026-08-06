@@ -31,6 +31,7 @@ import RealWalletPortfolio from "../components/RealWalletPortfolio";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import type { RailSuggestions } from "../suggestions/useRailSuggestions";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
+import { requestWalletPortfolioRefresh } from "../wallet/useWalletPortfolio";
 
 interface Props {
   pushToast: (message: string, helper?: string) => void;
@@ -72,6 +73,7 @@ export default function PortfolioPage({
         activePage="portfolio"
         onNavigate={onNavigate}
         onDisconnect={onDisconnect}
+        onRefreshPortfolio={requestWalletPortfolioRefresh}
         askActive={smithOpen}
         onOpenAskSmithAi={openAskSmithAi}
       />

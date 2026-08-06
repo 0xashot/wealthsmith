@@ -22,6 +22,7 @@ import {
   WALLET_MENU_DISCONNECT,
   NAV_DISABLED_TOOLTIP,
   NAV_MENU_OPEN,
+  REFRESH_DASHBOARD_TOOLTIP,
 } from "../state/approvedCopy";
 import { useWalletDisplay } from "../wallet/useWalletDisplay";
 import ButtonIcon from "./ButtonIcon";
@@ -30,6 +31,7 @@ import logoUrl from "../../../assets/logo/wealthsmith-full-lockup.svg";
 import symbolUrl from "../../../assets/logo/wealthsmith-symbol.svg";
 import menuUrl from "../../../assets/icons/ui/menu.svg";
 import sparcleUrl from "../../../assets/icons/ui/sparcle.svg";
+import refreshUrl from "../../../assets/icons/ui/refresh.svg";
 import phantomIconUrl from "../../../assets/icons/wallet/phantom.svg";
 import solflareIconUrl from "../../../assets/icons/wallet/solflare.svg";
 import backpackIconUrl from "../../../assets/icons/wallet/backpack.svg";
@@ -65,6 +67,9 @@ interface Props {
    *  items are no-ops. When undefined, no nav item navigates. */
   onNavigate?: (id: string) => void;
   onDisconnect?: () => void;
+  /** connected only: manual portfolio re-read (read-only). Renders an icon-only
+   *  refresh button left of the wallet pill when provided. */
+  onRefreshPortfolio?: () => void;
   onConnectWallet?: () => void;
   onTryDemo?: () => void;
   onOpenAskSmithAi?: () => void;
@@ -84,6 +89,7 @@ export default function GlobalNav({
   onboardingActive,
   onNavigate,
   onDisconnect,
+  onRefreshPortfolio,
   onConnectWallet,
   onTryDemo,
   onOpenAskSmithAi,
@@ -257,6 +263,17 @@ export default function GlobalNav({
         </ul>
 
         <div className="global-nav__actions">
+          {showWalletPill && wallet && onRefreshPortfolio && (
+            <button
+              type="button"
+              className="global-nav__refresh"
+              aria-label={REFRESH_DASHBOARD_TOOLTIP}
+              data-tooltip={REFRESH_DASHBOARD_TOOLTIP}
+              onClick={onRefreshPortfolio}
+            >
+              <ButtonIcon src={refreshUrl} size={20} />
+            </button>
+          )}
           {showWalletPill && wallet && (
             <div className="global-nav__wallet" onKeyDown={onMenuKeyDown}>
               <button

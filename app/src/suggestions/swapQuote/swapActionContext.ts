@@ -69,7 +69,7 @@ export interface RebalanceSwapActionInput {
   generatedAt: string;
   direction: "stables_to_crypto" | "crypto_to_stables" | "within_threshold" | "unresolved";
   /** stables_to_crypto: verified excess wallet USDC (USD) + a fresh USDC unit price for exact raw conversion. */
-  usdcSource?: { verifiedExcessValueUsd: number; selectionState: string; usdcUnitPriceUsd: number | null };
+  usdcSource?: { verifiedExcessValueUsd: number; selectionState: string; usdcUnitPriceUsd: number | null; requiresPriorWithdrawal?: boolean };
   /** crypto_to_stables: exact native-SOL raw lamports available + a fresh SOL price for the USD estimate. */
   nativeSolSource?: { technicallyAvailableLamports: number | null; sourceEligibilityState: string; solUnitPriceUsd: number | null };
 }
@@ -81,6 +81,11 @@ export function buildRebalanceSwapAction(input: RebalanceSwapActionInput): SwapA
   if (input.direction === "stables_to_crypto") {
     const s = input.usdcSource;
     if (!s || s.selectionState !== "selected") return { status: "not_ready_for_quote", reasons: ["usdc_source_not_selected"] };
+    // Kamino-sourced two-step Rebalance: the funds are verified withdrawable but
+    // NOT in the wallet yet. A quote must never pretend they are — the modal's
+    // primary action is the withdrawal handoff; the swap becomes quotable through
+    // the normal direct-wallet path once the USDC arrives.
+    if (s.requiresPriorWithdrawal === true) return { status: "not_ready_for_quote", reasons: ["usdc_source_requires_prior_withdrawal"] };
     if (s.usdcUnitPriceUsd == null) return { status: "not_ready_for_quote", reasons: ["usdc_price_unresolved"] };
     const raw = usdToRaw(s.verifiedExcessValueUsd, s.usdcUnitPriceUsd, SWAP_USDC.decimals);
     if (raw == null || raw === "0") return { status: "not_ready_for_quote", reasons: ["usdc_amount_unresolved"] };

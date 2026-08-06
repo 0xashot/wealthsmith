@@ -36,7 +36,7 @@ export function deriveRailSwapActions(input: RailSwapActionInputs): Record<strin
         suggestionId: card.id,
         generatedAt: input.generatedAt,
         direction: r.assessment.direction,
-        usdcSource: { verifiedExcessValueUsd: r.usdcSource.verifiedExcessValueUsd, selectionState: r.usdcSource.selectionState, usdcUnitPriceUsd: r.usdcUnitPriceUsd },
+        usdcSource: { verifiedExcessValueUsd: r.usdcSource.verifiedExcessValueUsd, selectionState: r.usdcSource.selectionState, usdcUnitPriceUsd: r.usdcUnitPriceUsd, requiresPriorWithdrawal: r.usdcSource.requiresPriorWithdrawal },
         nativeSolSource: { technicallyAvailableLamports: r.nativeSolSource.technicallyAvailableLamports, sourceEligibilityState: r.nativeSolSource.sourceEligibilityState, solUnitPriceUsd: r.solUnitPriceUsd },
       });
     } else if (card.category === "trim" && input.trimHoldings) {

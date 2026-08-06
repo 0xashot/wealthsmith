@@ -351,7 +351,10 @@ export default function TestingPage() {
         <SuggestionReviewModal
           details={selectedRebalance.card.reviewDetails}
           showGuardrails
-          swapAction={GALLERY_MODAL_PRESETS.rebalance.readiness}
+          swapAction={selectedRebalance.source.requiresPriorWithdrawal
+            /* Kamino-sourced two-step: production gates the quote until the USDC is withdrawn — the gallery must not fake an in-wallet route. */
+            ? { status: "not_ready_for_quote", reasons: ["usdc_source_requires_prior_withdrawal"] }
+            : GALLERY_MODAL_PRESETS.rebalance.readiness}
           swapQuotePresetAssessments={GALLERY_MODAL_PRESETS.rebalance.presets}
           swapQuoteNowMs={GALLERY_NOW}
           onClose={() => setSelectedRebalanceId(null)}

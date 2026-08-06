@@ -76,7 +76,7 @@ export default function SwapQuoteComparisonSection(props: SwapQuoteComparisonSec
   }, [handoffKey]);
 
   // ---- render ----
-  if (readiness.status === "not_ready_for_quote") return renderView(notReadyView(isDca));
+  if (readiness.status === "not_ready_for_quote") return renderView(notReadyView(isDca, readiness.reasons));
   if (readiness.status === "not_required") return renderView(notRequiredView());
 
   if (usePreset) {
