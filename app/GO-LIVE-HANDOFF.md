@@ -21,7 +21,7 @@ That stance is enforced by fixture guards and must survive go-live unchanged.
 | Wallet reads (RPC) | `src/wallet/useWalletPortfolio.ts` (fetch) + `src/wallet/portfolioPositionDerivation.ts` (pure derivation) | Browser, direct to RPC |
 | Suggestion engine | `src/suggestions/` — pure, no I/O (`deriveRailSuggestions` is callable headless) | Browser |
 | Swap-quote comparison service | `src/server/swapQuote/` (orchestrator, Jupiter/Orca/Raydium clients, rate limit, cache, sanitizer, health) + `scripts/build-swap-server.mjs` + `nodeServerEntry.ts` | **Built but not deployed** — a complete Node HTTP service |
-| Market-conditions cache | `scripts/refresh-market-conditions.mjs` → `public/generated/market-conditions-cache.json` | Manual, developer laptop |
+| Market-conditions cache | `scripts/refresh-market-conditions.mjs` → `public/generated/market-conditions-cache.json`; scheduled GH Action exists (`.github/workflows/refresh-market-conditions.yml`) | Action is inert until the repo secret is set (§3.3); manual until then |
 | Stable-yield market cache | `scripts/refresh-stable-yield-market-data.mjs` + publish script → `public/generated/stable-yield-market-cache.json` | Manual |
 | SOL-staking market cache | `scripts/refresh-sol-staking-market-data.mjs` + publish script → `public/generated/sol-staking-market-cache.json` | Manual |
 | Goal / onboarding persistence | `src/state/goalState.ts`, `src/state/onboardingState.ts` | Browser localStorage |
@@ -49,20 +49,23 @@ Anything with an API key runs offline/server-side.
 - The RPC URL is public by nature (it ships in the bundle); use a provider that
   supports per-origin restrictions + rate limits rather than trying to hide it.
 
-### 3.3 Scheduled market-cache refresh (medium, required)
-The three refresh scripts must become scheduled jobs; today a human runs them and
-the market cache **expires ~36h**, silently degrading the target allocation
-(market factor excluded, factors renormalized — honest but weaker).
-- Run `market:refresh-conditions` every ~12h; the stable-yield and sol-staking
-  refreshes on their documented cadences (see each script's header).
-- `COINMARKETCAP_API_KEY` lives in the job runner's secret store — never in the
-  frontend env, never `VITE_`-prefixed.
-- Publish step: the scripts write JSON into `public/generated/`. In production,
-  publish to the static host (rebuild or direct object-store write to the same
-  paths) — the frontend reads them relative to its origin.
-- Add an alert when a refresh fails or a cache's `validUntil` is within ~6h of
-  expiry — expiry is currently silent by design (fail-closed), so observability
-  must come from the job, not the app.
+### 3.3 Scheduled market-cache refresh (small — the job already exists)
+The market-conditions job is **already built**:
+`.github/workflows/refresh-market-conditions.yml` runs twice daily (06:00/18:00
+UTC), refreshes + validates the cache, and commits only when the market *reading*
+changed. It is currently inert for one reason: **the repository secret is not
+set**. One-time admin step:
+> GitHub → Settings → Secrets and variables → Actions → New repository secret →
+> `COINMARKETCAP_API_KEY` (never `VITE_`-prefixed).
+
+Remaining work on this workstream:
+- Confirm the deploy pipeline picks up the workflow's cache commits (if hosting
+  builds on push to main, this is automatic).
+- Add the same treatment for the stable-yield and sol-staking refresh scripts on
+  their documented cadences (see each script's header) — same pattern, same
+  secret handling.
+- Add failure alerting (the workflow failing silently recreates today's problem:
+  cache expiry is fail-closed and invisible in the app by design).
 
 ### 3.4 Swap-quote service deployment (medium)
 - `src/server/swapQuote/` is a finished Node service: provider orchestration with
@@ -84,10 +87,11 @@ single-device MVP, lost on device change, no auth needed.
 - Recommendation: A for launch, B when multi-device sync is asked for. Nothing in
   the engine depends on where the goal is stored.
 
-### 3.6 CI (small, high value)
-- Wire `npm test` (8,156 checks, deterministic, offline) + `npx tsc --noEmit` +
-  `npm run build` + `npm run deadcode` into CI on every PR. They are the entire
-  safety net; they run in ~2 min total and need no network or secrets.
+### 3.6 CI (done — `.github/workflows/ci.yml`)
+- Every push/PR runs `npx tsc --noEmit` + `npm test` (8,156 deterministic,
+  offline checks) + `npm run build` + `npm run deadcode`. No network, no secrets.
+- The fixture suite's structure and conventions are documented in
+  `src/suggestions/fixtures/README.md`; the env contract in `.env.example`.
 
 ## 4. Security / product invariants (do not regress)
 
@@ -103,15 +107,19 @@ single-device MVP, lost on device change, no auth needed.
 
 ## 5. Suggested order of execution
 
-1. RPC provider + static hosting + CI (a day; the app is live read-only).
-2. Scheduled cache refresh jobs + expiry alerting (the biggest silent-quality
-   risk today).
-3. Swap-quote service deployment (unlocks live route comparison in modals).
-4. Goal persistence decision (only if multi-device is a launch requirement).
+1. Set the `COINMARKETCAP_API_KEY` repository secret (§3.3 — five minutes, ends
+   the silent cache-expiry problem).
+2. RPC provider + static hosting (a day; the app is live read-only; CI already
+   guards every push).
+3. Stable-yield/sol-staking refresh workflows + failure alerting.
+4. Swap-quote service deployment (unlocks live route comparison in modals).
+5. Goal persistence decision (only if multi-device is a launch requirement).
 
 ## 6. Known intentional deferrals
 
 - BTC/ETH as Rebalance destinations: deliberately out (registry is USDC/SOL
   only); two scoped paths exist if the product decides to expand.
-- Remaining fixtures-monolith split and readSrc→behavioral fixture migration:
-  progressive internal quality work, no runtime impact.
+- Remaining readSrc→behavioral fixture migrations (component-source pins would
+  need React rendering in the suite — a deliberate design decision, not debt).
+  The fixtures monolith itself is fully dissolved (18 domain files + shared
+  harness + a 250-line aggregator — see `src/suggestions/fixtures/README.md`).

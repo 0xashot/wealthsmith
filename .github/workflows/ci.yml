@@ -1,0 +1,48 @@
+name: CI
+
+# The whole safety net on every push/PR: type-check, the 8,000+-check deterministic
+# fixture suite (offline, no secrets), the production build, and dead-file detection.
+# If this is green, the suggestion-engine contracts, copy, and guardrails all hold.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Type-check
+        working-directory: app
+        run: npx tsc --noEmit
+
+      - name: Fixture suite
+        working-directory: app
+        run: npm test
+
+      - name: Production build
+        working-directory: app
+        run: npm run build
+
+      - name: Dead-file detection
+        working-directory: app
+        run: npm run deadcode

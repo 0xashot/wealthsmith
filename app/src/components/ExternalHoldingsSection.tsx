@@ -21,6 +21,7 @@ import { useId, useState } from "react";
 import ButtonIcon from "./ButtonIcon";
 import { TrendIcon } from "./TrendBadge";
 import AddManualAssetModal from "./AddManualAssetModal";
+import SkeletonDeployCard from "./SkeletonDeployCard";
 import AssetIdentity from "./AssetIdentity";
 import { useIsMobileViewport } from "./useIsMobileViewport";
 import { MANUAL_ASSET_CHAINS, isClearingAmount, type ManualAssetChain } from "../state/manualAssets";
@@ -85,9 +86,27 @@ interface Props {
   onClearAmount: (chain: ManualAssetChain) => void;
   /** Approved toast host (confirms an added amount). */
   pushToast?: (message: string, helper?: string) => void;
+  /** True while the page is still loading/pricing — skeleton the card like every
+   *  other Portfolio table instead of flashing "—" values. */
+  loading?: boolean;
 }
 
-export default function ExternalHoldingsSection({ amounts, prices, onSetAmount, onClearAmount, pushToast }: Props) {
+export default function ExternalHoldingsSection({ amounts, prices, onSetAmount, onClearAmount, pushToast, loading }: Props) {
+  // While the portfolio is still loading, skeleton the card (same lifecycle as the
+  // deployment tables) rather than flashing "—" values or a premature $0 total.
+  if (loading) {
+    return (
+      <section className="dash-section" aria-label={EXT_HOLDINGS_SECTION_TITLE} aria-busy="true">
+        <h2 className="dash-section__title">{EXT_HOLDINGS_SECTION_TITLE}</h2>
+        <SkeletonDeployCard
+          title={EXT_MANUAL_TITLE}
+          caption={EXT_MANUAL_CAPTION}
+          headers={["Token", "Amount", "Value", "24h Change", ""]}
+          rows={ASSETS.length}
+        />
+      </section>
+    );
+  }
   const headingId = useId();
   const isMobile = useIsMobileViewport();
   const [modalChain, setModalChain] = useState<ManualAssetChain | null>(null);

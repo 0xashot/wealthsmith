@@ -135,6 +135,7 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
           {/* External Holdings — manually added BTC/ETH (empty state for now).
               Display-only: never part of totals, allocation, or suggestions. */}
           <ExternalHoldingsSection
+            loading={!settled}
             amounts={manual.amounts}
             prices={manual.prices}
             onSetAmount={manual.setAmount}
