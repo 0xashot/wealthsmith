@@ -21,6 +21,8 @@ import { useId, useState } from "react";
 import ButtonIcon from "./ButtonIcon";
 import { TrendIcon } from "./TrendBadge";
 import AddManualAssetModal from "./AddManualAssetModal";
+import AssetIdentity from "./AssetIdentity";
+import { useIsMobileViewport } from "./useIsMobileViewport";
 import { MANUAL_ASSET_CHAINS, isClearingAmount, type ManualAssetChain } from "../state/manualAssets";
 import type { ExternalAssetPrices } from "../wallet/externalAssetPrices";
 import type { ManualAssetAmounts } from "../wallet/manualAssetPositions";
@@ -46,14 +48,18 @@ const ASSETS: { id: ManualAssetChain; icon: string; explorer: string }[] = [
   { id: "eth", icon: ethIconUrl, explorer: MANUAL_ASSET_CHAINS.eth.explorer },
 ];
 
-/** Render a manually entered amount with its symbol, e.g. "0.0952245 BTC". */
-function amountText(raw: string, chain: ManualAssetChain): string {
+/**
+ * Render a manually entered amount, e.g. "0.0952245 BTC". Shows exactly what the
+ * user entered (never re-rounds a stated amount); falls back to the raw string if
+ * it is not finite for any reason. On MOBILE the token suffix is dropped — the
+ * Token column names the asset in the same row, and the duplicate suffix was what
+ * kept the 3-column table scrolling at 320px. The amount itself is never touched.
+ */
+function amountText(raw: string, chain: ManualAssetChain, withSymbol: boolean): string {
   const c = MANUAL_ASSET_CHAINS[chain];
   const n = Number(raw);
-  // Show exactly what the user entered (never re-round a stated amount); fall
-  // back to the raw string if it is not finite for any reason.
   const shown = Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: c.decimals }) : raw;
-  return `${shown} ${c.symbol}`;
+  return withSymbol ? `${shown} ${c.symbol}` : shown;
 }
 
 /** Sourced 24h change → signed percent + trend icon; "—" when not sourced. */
@@ -83,6 +89,7 @@ interface Props {
 
 export default function ExternalHoldingsSection({ amounts, prices, onSetAmount, onClearAmount, pushToast }: Props) {
   const headingId = useId();
+  const isMobile = useIsMobileViewport();
   const [modalChain, setModalChain] = useState<ManualAssetChain | null>(null);
 
   /** Sourced USD value of a stated amount, or null when the price is unavailable. */
@@ -125,7 +132,7 @@ export default function ExternalHoldingsSection({ amounts, prices, onSetAmount, 
         <p className="card__caption">{EXT_MANUAL_CAPTION}</p>
 
         <div className="portfolio-table__scroll">
-          <table className="portfolio-table" aria-labelledby={headingId}>
+          <table className="portfolio-table portfolio-table--manual" aria-labelledby={headingId}>
             <thead>
               <tr>
                 <th scope="col" className="portfolio-table__cell portfolio-table__header">
@@ -153,30 +160,11 @@ export default function ExternalHoldingsSection({ amounts, prices, onSetAmount, 
                 return (
                   <tr key={a.id}>
                     <td className="portfolio-table__cell">
-                      <span className="asset-identity">
-                        <img
-                          className="asset-identity__icon"
-                          src={a.icon}
-                          alt=""
-                          width={24}
-                          height={24}
-                          aria-hidden="true"
-                        />
-                        <span className="asset-identity__text">
-                          <a
-                            className="deploy-table__asset-link"
-                            href={a.explorer}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            {c.symbol}
-                          </a>
-                        </span>
-                      </span>
+                      <AssetIdentity iconUrl={a.icon} label={c.symbol} href={a.explorer} />
                     </td>
                     <td className="portfolio-table__cell portfolio-table__cell--right">
                       {amount ? (
-                        <span className="portfolio-table__value">{amountText(amount, a.id)}</span>
+                        <span className="portfolio-table__value">{amountText(amount, a.id, !isMobile)}</span>
                       ) : (
                         <span className="portfolio-table__unavailable">—</span>
                       )}

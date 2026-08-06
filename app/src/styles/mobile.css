@@ -70,6 +70,33 @@
      Simplify to Asset · Amount · Est. Earnings: hide the Value (3rd), APY (4th),
      and Manage (6th) columns. Scoped to `.portfolio-table--earning` so the Liquid
      Assets table and other portfolio tables are untouched. */
+  /* ---------- Manually Added Assets → mobile ----------
+     Simplify to Token · Amount · Add/Manage: hide the Value (3rd) and 24h Change
+     (4th) columns so the table fits without horizontal scrolling. Both values
+     remain available in the Manage dialog and on desktop. Scoped to
+     `.portfolio-table--manual` so no other table is affected. */
+  .portfolio-table--manual th:nth-child(3),
+  .portfolio-table--manual td:nth-child(3),
+  .portfolio-table--manual th:nth-child(4),
+  .portfolio-table--manual td:nth-child(4) {
+    display: none;
+  }
+
+  /* Tighter cell padding for the 3 remaining columns: with the desktop 16px the
+     row's minimum width still edged past a 320–375px card, leaving a sliver of
+     in-table scrolling with nothing meaningful to scroll to. */
+  .portfolio-table--manual .portfolio-table__cell {
+    padding-left: var(--spacing-inline-gap-sm);
+    padding-right: var(--spacing-inline-gap-sm);
+  }
+
+  /* …and the Add/Manage button itself, whose desktop padding alone was ~a third
+     of a 320px row. Same label, same action, tighter chrome. */
+  .portfolio-table--manual .portfolio-table__manage {
+    padding-left: var(--spacing-inline-gap-sm);
+    padding-right: var(--spacing-inline-gap-sm);
+  }
+
   .portfolio-table--earning th:nth-child(3),
   .portfolio-table--earning td:nth-child(3),
   .portfolio-table--earning th:nth-child(4),

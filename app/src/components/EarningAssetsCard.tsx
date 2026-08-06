@@ -23,6 +23,7 @@ import { useIsMobileViewport } from "./useIsMobileViewport";
 import { resolveTokenIcon } from "../state/iconRegistry";
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
 import SkeletonDeployCard from "./SkeletonDeployCard";
+import AssetIdentity from "./AssetIdentity";
 import { VALUE_EXCLUDES_UNPRICED } from "../state/approvedCopy";
 
 /** Sourced APY (percent) → "5.24%", or "—". */
@@ -180,35 +181,16 @@ export default function EarningAssetsCard({
                     }
                   >
                     <td className="portfolio-table__cell">
-                      <span className="asset-identity">
-                        <img
-                          className="asset-identity__icon"
-                          src={iconUrl}
-                          alt=""
-                          width={24}
-                          height={24}
-                          aria-hidden="true"
-                        />
-                        <span className="asset-identity__text">
-                          {url ? (
-                            <a
-                              className="deploy-table__asset-link"
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              {primary}
-                            </a>
-                          ) : (
-                            <span className="asset-identity__name">{primary}</span>
-                          )}
-                          {sub && <span className="asset-identity__symbol">{sub}</span>}
-                          {(() => {
-                            const note = positionCompletenessNote(completeness, p.id);
-                            return note ? <span className="asset-identity__note" role="note">{note}</span> : null;
-                          })()}
-                        </span>
-                      </span>
+                      <AssetIdentity
+                        iconUrl={iconUrl}
+                        label={primary}
+                        {...(url ? { href: url } : {})}
+                        {...(sub ? { sub } : {})}
+                        {...(() => {
+                          const note = positionCompletenessNote(completeness, p.id);
+                          return note ? { note } : {};
+                        })()}
+                      />
                     </td>
                     <td className="portfolio-table__cell portfolio-table__cell--right">
                       <span className="portfolio-table__value">

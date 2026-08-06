@@ -474,8 +474,16 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
     return ray?.providerName === "Raydium" && /raydium\.io\/swap/.test(ray?.swapUrl ?? "") && jup?.providerName === "Jupiter" && /jup\.ag\/swap/.test(jup?.swapUrl ?? "") && /orca\.so/.test(orc?.swapUrl ?? "") && buildSwapHandoff(null, USDC, WSOL) === null;
   })(), "provider handoff url");
   add("SWC-29: the modal footer is a READ-ONLY external link (Cancel + 'Swap on <provider>', target=_blank rel=noopener, 'No transaction is prepared') — no in-app execution", (() => {
+    // The footer markup is the shared ModalActionsFooter; the modal supplies the
+    // swap handoff as an external-link action. The read-only contract is asserted
+    // across BOTH: the call site (label/href/new-tab/no-transaction aria) and the
+    // shared component (anchor with target=_blank rel=noopener, Cancel default).
     const m = readSrc("src/components/SuggestionReviewModal.tsx");
-    return /Swap on \{swapHandoff\.providerName\}/.test(m) && /href=\{swapHandoff\.swapUrl\}/.test(m) && /target="_blank"/.test(m) && /rel="noopener noreferrer"/.test(m) && /No transaction is prepared/.test(m) && />\s*Cancel\s*</.test(m) && !/signTransaction|sendTransaction|Connect to execute/i.test(stripComments(m));
+    const f = readSrc("src/components/ModalActionsFooter.tsx");
+    return /Swap on \$\{swapHandoff\.providerName\}/.test(m) && /href: swapHandoff\.swapUrl/.test(m) && /newTab: true/.test(m) && /No transaction is prepared/.test(m)
+      && /target: "_blank", rel: "noopener noreferrer"/.test(f) && /secondaryLabel = "Cancel"/.test(f)
+      && !/signTransaction|sendTransaction|Connect to execute/i.test(stripComments(m))
+      && !/signTransaction|sendTransaction|Connect to execute/i.test(stripComments(f));
   })(), "read-only footer");
   add("SWC-30: the handoff appears ONLY for a single-leg eligible selected route (multi-leg + non-eligible report no handoff)", (() => {
     const s = stripComments(readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx"));

@@ -33,6 +33,8 @@ import type { SwapActionReadiness, SwapQuoteComparisonAssessment } from "../sugg
 import type { SwapQuoteFetcher } from "../suggestions/swapQuote/swapQuoteClient";
 import type { SwapHandoff } from "../suggestions/swapQuote/providerSwapLinks";
 import SwapQuoteComparisonSection from "./swapQuote/SwapQuoteComparisonSection";
+import AssetIdentity from "./AssetIdentity";
+import ModalActionsFooter from "./ModalActionsFooter";
 
 interface Props {
   /** The engine review details (existing suggestion families). Optional when `contributionReview` is set. */
@@ -143,36 +145,32 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
 
   // The sticky "Swap on <provider>" footer — READ-ONLY handoff to the provider's own swap page in a new tab.
   const swapFooter = swapHandoff ? (
-    <div className="review-modal__footer review-modal__footer--actions">
-      <button type="button" className="review-modal__tertiary-action" onClick={onClose}>Cancel</button>
-      <a
-        className="review-modal__primary-action"
-        href={swapHandoff.swapUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={`Swap on ${swapHandoff.providerName}. Opens ${swapHandoff.providerName} in a new tab. No transaction is prepared.`}
-      >
-        <span>Swap on {swapHandoff.providerName}</span>
-        <ButtonIcon src={externalLinkUrl} />
-      </a>
-    </div>
+    <ModalActionsFooter
+      onSecondary={onClose}
+      primary={{
+        kind: "external-link",
+        label: `Swap on ${swapHandoff.providerName}`,
+        href: swapHandoff.swapUrl,
+        newTab: true,
+        ariaLabel: `Swap on ${swapHandoff.providerName}. Opens ${swapHandoff.providerName} in a new tab. No transaction is prepared.`,
+      }}
+    />
   ) : null;
 
   // 23C.2 — a read-only external-link footer (Cancel + provider handoff, e.g. "Buy SOL on Moonpay" for a future
   // DCA). Opens the provider's page in a new tab; WealthSmith prepares nothing.
   const externalLinkFooter = (link: { label: string; url: string; ctaLabel?: string; secondaryLabel?: string; opensInNewTab?: boolean } | undefined | null) => link ? (
-    <div className="review-modal__footer review-modal__footer--actions">
-      <button type="button" className="review-modal__tertiary-action" onClick={onClose}>{link.secondaryLabel ?? "Cancel"}</button>
-      <a
-        className="review-modal__primary-action"
-        href={link.url}
-        {...(link.opensInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-        aria-label={`${link.ctaLabel ?? link.label}. Opens the provider page in a new tab. No transaction is prepared.`}
-      >
-        <span>{link.ctaLabel ?? link.label}</span>
-        <ButtonIcon src={externalLinkUrl} />
-      </a>
-    </div>
+    <ModalActionsFooter
+      secondaryLabel={link.secondaryLabel ?? "Cancel"}
+      onSecondary={onClose}
+      primary={{
+        kind: "external-link",
+        label: link.ctaLabel ?? link.label,
+        href: link.url,
+        newTab: link.opensInNewTab,
+        ariaLabel: `${link.ctaLabel ?? link.label}. Opens the provider page in a new tab. No transaction is prepared.`,
+      }}
+    />
   ) : null;
 
   // Focus the close button on open; restore focus + unlock scroll on close.
@@ -276,18 +274,16 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </section>
           </div>
           {ext && (
-            <div className="review-modal__footer review-modal__footer--actions">
-              <button type="button" className="review-modal__tertiary-action" onClick={onClose}>Cancel</button>
-              <a
-                className="review-modal__primary-action"
-                href={ext.url}
-                {...(ext.opensInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-                aria-label={`${ext.ctaLabel}. Opens the protocol page in a new tab. No transaction is created.`}
-              >
-                <span>{ext.ctaLabel}</span>
-                <ButtonIcon src={externalLinkUrl} />
-              </a>
-            </div>
+            <ModalActionsFooter
+              onSecondary={onClose}
+              primary={{
+                kind: "external-link",
+                label: ext.ctaLabel,
+                href: ext.url,
+                newTab: ext.opensInNewTab,
+                ariaLabel: `${ext.ctaLabel}. Opens the protocol page in a new tab. No transaction is created.`,
+              }}
+            />
           )}
         </div>
       </div>
@@ -494,14 +490,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                       return (
                         <tr key={`${a.symbol}-${i}`}>
                           <td className="portfolio-table__cell">
-                            <span className="asset-identity">
-                              <img className="asset-identity__icon" src={iconUrl} alt="" width={24} height={24} aria-hidden="true" />
-                              {url ? (
-                                <a className="deploy-table__asset-link" href={url} target="_blank" rel="noopener noreferrer">{a.symbol}</a>
-                              ) : (
-                                <span className="asset-identity__name">{a.symbol}</span>
-                              )}
-                            </span>
+                            <AssetIdentity iconUrl={iconUrl} label={a.symbol} {...(url ? { href: url } : {})} />
                           </td>
                           <td className="portfolio-table__cell portfolio-table__cell--right">
                             <span className="portfolio-table__value">{typeof a.amount === "number" ? amountFmt(a.amount) : "—"}</span>
@@ -544,10 +533,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                       return (
                         <tr key={`${a.symbol}-${i}`}>
                           <td className="portfolio-table__cell">
-                            <span className="asset-identity">
-                              <img className="asset-identity__icon" src={iconUrl} alt="" width={24} height={24} aria-hidden="true" />
-                              <span className="asset-identity__name">{a.symbol}</span>
-                            </span>
+                            <AssetIdentity iconUrl={iconUrl} label={a.symbol} />
                           </td>
                           <td className="portfolio-table__cell portfolio-table__cell--right">
                             <span className="portfolio-table__value">{typeof a.amount === "number" ? amountFmt(a.amount) : "—"}</span>
@@ -595,17 +581,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                       return (
                         <tr key={`${p.protocol ?? "pos"}-${i}`}>
                           <td className="portfolio-table__cell">
-                            <span className="asset-identity">
-                              {assetIcon && <img className="asset-identity__icon" src={assetIcon} alt="" width={24} height={24} aria-hidden="true" />}
-                              <span className="asset-identity__text">
-                                {assetHref ? (
-                                  <a className="deploy-table__asset-link" href={assetHref} target="_blank" rel="noopener noreferrer">{assetLabel}</a>
-                                ) : (
-                                  <span className="asset-identity__name">{assetLabel}</span>
-                                )}
-                                {p.assetVenue && <span className="asset-identity__symbol">{p.assetVenue}</span>}
-                              </span>
-                            </span>
+                            <AssetIdentity iconUrl={assetIcon ?? null} label={assetLabel} {...(assetHref ? { href: assetHref } : {})} {...(p.assetVenue ? { sub: p.assetVenue } : {})} />
                           </td>
                           <td className="portfolio-table__cell portfolio-table__cell--right">
                             <span className="portfolio-table__value">{typeof p.valueUsd === "number" ? usd(p.valueUsd) : "—"}</span>
@@ -824,20 +800,17 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         {/* Sticky footer — shown only when a read-only protocol link is available. Cancel closes the modal;
             the primary button opens the protocol's own page in a new tab (no in-app transaction/signature). */}
         {details.externalLink && (
-          <div className="review-modal__footer review-modal__footer--actions">
-            <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
-              {details.externalLink.secondaryLabel ?? "Cancel"}
-            </button>
-            <a
-              className="review-modal__primary-action"
-              href={details.externalLink.url}
-              {...(details.externalLink.opensInNewTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-              aria-label={`${details.externalLink.ctaLabel ?? details.externalLink.label}. Opens the protocol page in a new tab. No transaction is created.`}
-            >
-              <span>{details.externalLink.ctaLabel ?? details.externalLink.label}</span>
-              <ButtonIcon src={externalLinkUrl} />
-            </a>
-          </div>
+          <ModalActionsFooter
+            secondaryLabel={details.externalLink.secondaryLabel ?? "Cancel"}
+            onSecondary={onClose}
+            primary={{
+              kind: "external-link",
+              label: details.externalLink.ctaLabel ?? details.externalLink.label,
+              href: details.externalLink.url,
+              newTab: details.externalLink.opensInNewTab,
+              ariaLabel: `${details.externalLink.ctaLabel ?? details.externalLink.label}. Opens the protocol page in a new tab. No transaction is created.`,
+            }}
+          />
         )}
         {/* 23C.2 — read-only "Swap on <provider>" handoff footer (Rebalance / Trim; DCA uses its own branch). */}
         {swapFooter}
@@ -847,19 +820,15 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             condition materially changes. It records no consent and changes no
             suggestion, amount, or eligibility. */}
         {onDismiss && (
-          <div className="review-modal__footer review-modal__footer--actions">
-            <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="review-modal__primary-action"
-              onClick={onDismiss}
-              aria-label="Dismiss this suggestion. It returns if the position changes materially."
-            >
-              <span>Dismiss</span>
-            </button>
-          </div>
+          <ModalActionsFooter
+            onSecondary={onClose}
+            primary={{
+              kind: "button",
+              label: "Dismiss",
+              onClick: onDismiss,
+              ariaLabel: "Dismiss this suggestion. It returns if the position changes materially.",
+            }}
+          />
         )}
       </div>
     </div>

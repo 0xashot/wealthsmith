@@ -645,6 +645,20 @@
 .dash-section {
   display: grid;
   gap: var(--spacing-stack-gap-sm);
+  /* Grid children default to min-width:auto, so a wide child (a chart svg drawn
+     at a stale measured width, a table) props the content-sized track open and
+     the whole page overflows the viewport on narrow/resized windows. min-width:0
+     lets the section shrink with its container; inner scroll containers
+     (.portfolio-table__scroll) then do their job, and the donut's
+     ResizeObserver re-measures at the real width. */
+  min-width: 0;
+}
+
+/* Same guard one level down: the card is itself a grid child of the section, and
+   a wide table inside it would otherwise prop the section's track open (the
+   table's own scroll wrapper can only clip once the card is allowed to shrink). */
+.dash-section > .card {
+  min-width: 0;
 }
 
 .dash-section__head {
@@ -1112,6 +1126,8 @@
 
 .donut {
   position: relative;
+  /* Same grid-blowout guard one level down (card → donut → svg). */
+  min-width: 0;
 }
 
 .donut__plot {
@@ -1246,7 +1262,11 @@
   flex: 0 0 auto;
 }
 
-/* On narrow cards the legend stacks under the donut (callouts are dropped). */
+/* On narrow cards the legend stacks under the donut (callouts are dropped):
+   chart first, then the legend in normal flow, separated by the .donut flex gap
+   (16px). Items WRAP — the previous `grid-auto-flow: column` forced one row, so
+   a 4-item legend overflowed a 320–375px viewport by ~36px. Nothing is hidden;
+   labels, colors, and ordering stay the component's own. */
 @media (max-width: 640px) {
   .donut {
     display: flex;
@@ -1258,8 +1278,10 @@
   .donut__legend {
     position: static;
     transform: none;
-    grid-auto-flow: column;
+    display: flex;
+    flex-wrap: wrap;
     justify-content: center;
+    gap: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
   }
 }
 
@@ -2323,24 +2345,6 @@
 .asset-identity__note {
   font: var(--typography-caption-default-font);
   color: var(--color-feedback-warning-text-tint);
-}
-
-/* protocol identity cell: icon + visible name (no protocol fallback icon —
-   name renders alone if the approved icon is missing) */
-.protocol-identity {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-inline-gap-sm);
-}
-
-.protocol-identity__icon {
-  flex-shrink: 0;
-  border-radius: var(--radius-control-pill);
-}
-
-.protocol-identity__name {
-  font: var(--typography-body-sm-font);
-  color: var(--color-text-primary);
 }
 
 /* Approved estimate/risk disclaimer under the table (aria-describedby target).
@@ -3603,15 +3607,12 @@
 /* Bold FAQ question. */
 .accordion__question {
   font-weight: 700;
+  flex-grow: 1;
 }
 
 .accordion__trigger:focus-visible {
   outline: none;
   box-shadow: var(--shadow-control-focus);
-}
-
-.accordion__question {
-  flex-grow: 1;
 }
 
 .accordion__chevron {

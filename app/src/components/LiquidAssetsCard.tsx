@@ -19,6 +19,7 @@ import { usd0, formatAmount, explorerUrl } from "./deployTable";
 import { resolveTokenIcon } from "../state/iconRegistry";
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
 import SkeletonDeployCard from "./SkeletonDeployCard";
+import AssetIdentity from "./AssetIdentity";
 import {
   PORT_LIQUID_TITLE,
   PORT_LIQUID_CAPTION,
@@ -124,32 +125,15 @@ export default function LiquidAssetsCard({ positions, loading, completeness }: P
                   return (
                     <tr key={p.id}>
                       <td className="portfolio-table__cell">
-                        <span className="asset-identity">
-                          <img
-                            className="asset-identity__icon"
-                            src={iconUrl}
-                            alt=""
-                            width={24}
-                            height={24}
-                            aria-hidden="true"
-                          />
-                          {url ? (
-                            <a
-                              className="deploy-table__asset-link"
-                              href={url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              {p.symbol}
-                            </a>
-                          ) : (
-                            <span className="asset-identity__name">{p.symbol}</span>
-                          )}
-                          {(() => {
+                        <AssetIdentity
+                          iconUrl={iconUrl}
+                          label={p.symbol}
+                          {...(url ? { href: url } : {})}
+                          {...(() => {
                             const note = positionCompletenessNote(completeness, p.id);
-                            return note ? <span className="asset-identity__note" role="note">{note}</span> : null;
+                            return note ? { note } : {};
                           })()}
-                        </span>
+                        />
                       </td>
                       <td className="portfolio-table__cell portfolio-table__cell--right">
                         <span className="portfolio-table__value">{formatAmount(p)}</span>
