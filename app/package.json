@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "tokens": "node scripts/build-tokens.mjs",
+    "test": "node scripts/run-fixtures.mjs --quiet",
+    "test:verbose": "node scripts/run-fixtures.mjs",
+    "deadcode": "knip --include files",
     "predev": "npm run tokens",
     "dev": "vite",
     "prebuild": "npm run tokens",
@@ -51,6 +54,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "knip": "^6.32.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vite-plugin-top-level-await": "^1.6.0",
