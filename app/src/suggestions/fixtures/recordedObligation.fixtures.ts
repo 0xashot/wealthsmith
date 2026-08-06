@@ -7,7 +7,7 @@ import { readFileSync } from "fs";
 import type { FixtureCheck } from "./fixtureCheck";
 import * as REC from "../klendObligationRecordedFixture";
 import { parseKaminoObligationEntries, collateralRawFromEntries } from "../../wallet/protocolPositions";
-import { applyPrice as wpApplyPrice } from "../../wallet/useWalletPortfolio";
+import { applyPrice as wpApplyPrice } from "../../wallet/portfolioPositionDerivation";
 import { computeSafetyBufferCoverage as sbCoverage } from "../../wallet/safetyBufferCoverage";
 import { derivePositionOptimizationAssessment as poDerive } from "../positionOptimizationAssessment";
 import { buildPositionOptimizationCardFromAssessment as poBuildCard } from "../positionOptimizationSuggestion";
