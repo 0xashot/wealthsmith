@@ -11,6 +11,8 @@ import GlobalNav from "./GlobalNav";
 
 interface Props {
   activePage: string;
+  /** Override for pages with no Smith AI content (e.g. Vetting) — no dead trigger. */
+  askAvailable?: boolean;
   askButtonRef?: React.RefObject<HTMLButtonElement>;
   askActive?: boolean;
   onExitDemo: () => void;
@@ -21,6 +23,7 @@ interface Props {
 
 export default function DemoHeader({
   activePage,
+  askAvailable = d.smith_ai.available,
   askButtonRef,
   askActive,
   onExitDemo,
@@ -36,7 +39,7 @@ export default function DemoHeader({
         nav={d.global_nav}
         navLabel={d.accessibility.global_nav_label}
         askSmithAiLabel={d.accessibility.ask_smith_ai_label}
-        askAvailable={d.smith_ai.available}
+        askAvailable={askAvailable}
         askButtonRef={askButtonRef}
         activePage={activePage}
         onNavigate={onNavigate}

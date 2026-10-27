@@ -23,8 +23,39 @@
 
 export const RISK_SCORE_INTERNAL_ONLY_POLICY_EXISTS = true;
 export const RISK_SCORE_USER_FACING_SUPPRESSION_EXISTS = true;
-/** There is no user-facing numeric risk score, and there is no plan for one. */
+/**
+ * There is no numeric risk score on any DECISION surface — suggestion cards, review
+ * modals, dashboards, Smith AI, analytics, APIs. That remains fully suppressed.
+ * ONE scoped exception exists (see VETTING_SECURITY_SCORE_EXCEPTION below): the
+ * Trust → Vetting transparency page presents recorded assessment numbers under the
+ * user-facing label "Security score". A transparency page the user reads is not a
+ * decision surface a suggestion flows through, so this flag stays false.
+ */
 export const USER_FACING_NUMERIC_RISK_SCORE_EXISTS = false;
+
+/**
+ * AMENDMENT — Vetting-page Security scores (product-owner decision, 2026-08-11).
+ *
+ * The authorized human product owner explicitly decided, in conversation, that the
+ * Trust → Vetting transparency page may show the recorded per-dimension assessment
+ * numbers and aggregates for vetted products, presented to users as a "Security
+ * score" (0–10, higher = stronger evidence-supported security posture). The scope
+ * is EXACTLY that one page: every surface in RISK_SCORE_FORBIDDEN_SURFACES remains
+ * forbidden, no contract in RISK_SCORE_FORBIDDEN_FIELDS changes, and the Vetting
+ * page renders static display copy (state/vettingState.ts) — it imports no scoring
+ * module, so the client-side presentation boundary (16H-K.2) is unchanged.
+ */
+export const VETTING_SECURITY_SCORE_EXCEPTION = {
+  exists: true,
+  decidedByRole: "ws_product_owner" as const,
+  decidedAt: "2026-08-11",
+  scope: "trust_vetting_transparency_page_only" as const,
+  userFacingLabel: "Security score" as const,
+  showsPerDimensionNumbers: true,
+  showsAggregateNumbers: true,
+  extendsToDecisionSurfaces: false,
+  sourceOfTruth: "recorded assessments in src/suggestions (mirrored as display copy in state/vettingState.ts)",
+} as const;
 
 /** The internal name for the numeric result. Use this in governance prose; never show it to a user. */
 export const RISK_SUITABILITY_SCORE_LABEL = "Risk Suitability Score (internal)" as const;

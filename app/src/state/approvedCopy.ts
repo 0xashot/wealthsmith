@@ -15,6 +15,14 @@ export const WALLET_MENU_DISCONNECT = "Disconnect Wallet";
 /** Global Nav icon-only refresh button (connected mode): tooltip + accessible label. */
 export const REFRESH_DASHBOARD_TOOLTIP = "Refresh dashboard";
 
+/** Global Nav "Trust" dropdown (between Goal and Support): trigger label + menu items. */
+export const TRUST_NAV_LABEL = "Trust";
+export const TRUST_MENU_OPEN_LABEL = "Open Trust menu";
+export const TRUST_MENU_ITEMS = [
+  { id: "strategy_lab", label: "Strategy Lab" },
+  { id: "vetting", label: "Vetting" },
+] as const;
+
 /* ---------- Disconnected dashboard states ---------- */
 
 /** content/wallet-copy.md — Wallet Disconnected Copy, empty state title */
@@ -105,6 +113,7 @@ export const SMITH_INITIAL_LOADING_LABEL = "Smith AI getting ready";
 export const ASK_SMITH_LABEL_PORTFOLIO = "Ask Smith AI about your portfolio";
 export const ASK_SMITH_LABEL_GOAL = "Ask Smith AI about your goal settings";
 export const ASK_SMITH_LABEL_SUPPORT = "Ask Smith AI about support topics";
+export const ASK_SMITH_LABEL_STRATEGY_LAB = "Ask Smith AI about the Strategy Lab";
 
 /* ---------- Demo Mode (verbatim from demo fixtures / demo-mode-rules.md) ---------- */
 

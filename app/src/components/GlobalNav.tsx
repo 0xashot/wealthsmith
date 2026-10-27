@@ -12,7 +12,7 @@
  * + Disconnect Wallet only. Copying and disconnecting are read-only app-state
  * actions — no funds move, no signature, no transaction.
  */
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { GlobalNavState, WalletState } from "../types/dashboard";
 import {
   CONNECT_WALLET_LABEL,
@@ -23,6 +23,9 @@ import {
   NAV_DISABLED_TOOLTIP,
   NAV_MENU_OPEN,
   REFRESH_DASHBOARD_TOOLTIP,
+  TRUST_NAV_LABEL,
+  TRUST_MENU_OPEN_LABEL,
+  TRUST_MENU_ITEMS,
 } from "../state/approvedCopy";
 import { useWalletDisplay } from "../wallet/useWalletDisplay";
 import ButtonIcon from "./ButtonIcon";
@@ -32,6 +35,9 @@ import symbolUrl from "../../../assets/logo/wealthsmith-symbol.svg";
 import menuUrl from "../../../assets/icons/ui/menu.svg";
 import sparcleUrl from "../../../assets/icons/ui/sparcle.svg";
 import refreshUrl from "../../../assets/icons/ui/refresh.svg";
+import chevronDownUrl from "../../../assets/icons/ui/chevron-down.svg";
+import strategyUrl from "../../../assets/icons/ui/strategy.svg";
+import circleCheckUrl from "../../../assets/icons/ui/circle-check.svg";
 import phantomIconUrl from "../../../assets/icons/wallet/phantom.svg";
 import solflareIconUrl from "../../../assets/icons/wallet/solflare.svg";
 import backpackIconUrl from "../../../assets/icons/wallet/backpack.svg";
@@ -40,6 +46,12 @@ const WALLET_ICONS: Record<string, string> = {
   phantom: phantomIconUrl,
   solflare: solflareIconUrl,
   backpack: backpackIconUrl,
+};
+
+/** Trust menu leading icons (components/menu-item.md — optional leading icon). */
+const TRUST_MENU_ICONS: Record<string, string> = {
+  strategy_lab: strategyUrl,
+  vetting: circleCheckUrl,
 };
 
 export type NavMode = "connected" | "demo" | "disconnected";
@@ -113,6 +125,14 @@ export default function GlobalNav({
     : walletPillLabel;
 
   const [menuOpen, setMenuOpen] = useState(false);
+  // Trust dropdown (between Goal and Support) — same menu-popover behavior as the
+  // wallet menu: outside-click close, Escape refocuses the trigger, arrow keys cycle.
+  const [trustOpen, setTrustOpen] = useState(false);
+  const trustBtnRef = useRef<HTMLButtonElement>(null);
+  const trustMenuRef = useRef<HTMLDivElement>(null);
+  // Trust is informational and ALWAYS available — every mode (connected, demo,
+  // disconnected) and even during onboarding, unlike the wallet-specific
+  // Portfolio/Goal items (product decision: trust content needs no wallet).
   // Mobile nav drawer (<1280px). The trigger is CSS-hidden on desktop, so this
   // never opens there — the desktop bar renders its items inline, unchanged.
   const [navDrawerOpen, setNavDrawerOpen] = useState(false);
@@ -142,6 +162,44 @@ export default function GlobalNav({
     .filter((d) => !d.disabled);
   const pillRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!trustOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!trustMenuRef.current?.contains(e.target as Node) && !trustBtnRef.current?.contains(e.target as Node)) {
+        setTrustOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [trustOpen]);
+
+  useEffect(() => {
+    if (trustOpen) {
+      trustMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    }
+  }, [trustOpen]);
+
+  const closeTrust = (refocusTrigger: boolean) => {
+    setTrustOpen(false);
+    if (refocusTrigger) trustBtnRef.current?.focus();
+  };
+
+  const onTrustKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeTrust(true);
+      return;
+    }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const items = [...(trustMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+      if (items.length === 0) return;
+      const idx = items.indexOf(document.activeElement as HTMLButtonElement);
+      const next = e.key === "ArrowDown" ? items[(idx + 1) % items.length] : items[(idx - 1 + items.length) % items.length];
+      next.focus();
+    }
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -189,6 +247,50 @@ export default function GlobalNav({
     }
   };
 
+  /** Trust — component-level dropdown rendered between Goal and Support (the fixture
+   * nav_items are design-system source data and stay untouched). Informational menu;
+   * items are safe no-ops until their pages exist. */
+  const trustItem = (
+      <li className="global-nav__trust" onKeyDown={onTrustKeyDown}>
+        <button
+          ref={trustBtnRef}
+          type="button"
+          className={
+            "global-nav__item global-nav__item--button" +
+            (activePage === "strategy_lab" || activePage === "vetting" ? " global-nav__item--active" : "")
+          }
+          aria-label={TRUST_MENU_OPEN_LABEL}
+          aria-haspopup="menu"
+          aria-expanded={trustOpen}
+          onClick={() => setTrustOpen((open) => !open)}
+        >
+          {TRUST_NAV_LABEL}
+          <ButtonIcon src={chevronDownUrl} size={16} />
+        </button>
+        {trustOpen && (
+          <div ref={trustMenuRef} className="wallet-menu wallet-menu--left" role="menu" aria-label={TRUST_NAV_LABEL}>
+            {TRUST_MENU_ITEMS.map((mi) => (
+              <button
+                key={mi.id}
+                type="button"
+                role="menuitem"
+                className="wallet-menu__item wallet-menu__item--with-icon"
+                onClick={() => {
+                  closeTrust(false);
+                  // Only ids App recognizes navigate (Strategy Lab today);
+                  // the rest stay safe no-ops until their pages exist.
+                  onNavigate?.(mi.id);
+                }}
+              >
+                <ButtonIcon src={TRUST_MENU_ICONS[mi.id]} size={16} />
+                <span>{mi.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </li>
+  );
+
   return (
     <header className="global-nav-wrap">
       <nav className="global-nav" aria-label={navLabel}>
@@ -234,7 +336,8 @@ export default function GlobalNav({
             // active tour tab; Support is always reachable.
             const { isActive, disabled, navigable } = itemState(item);
             return (
-              <li key={item.id}>
+              <React.Fragment key={item.id}>
+              <li>
                 <a
                   className={
                     "global-nav__item" +
@@ -258,6 +361,8 @@ export default function GlobalNav({
                   {item.label}
                 </a>
               </li>
+              {item.id === "goal" && trustItem}
+              </React.Fragment>
             );
           })}
         </ul>

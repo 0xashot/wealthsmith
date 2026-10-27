@@ -123,6 +123,486 @@
   transition-timing-function: var(--motion-interaction-hover-easing);
 }
 
+/* Button-form nav item (the Trust dropdown trigger) — identical visual treatment
+   to the anchor items; only the element differs. The chevron follows the label and
+   rotates while the menu is open (motion tokens, matching nav hover transitions). */
+.global-nav__item--button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+.global-nav__item--button .btn-icon {
+  transition-property: transform;
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+.global-nav__item--button[aria-expanded="true"] .btn-icon {
+  transform: rotate(180deg);
+}
+
+/* ---------- Strategy Lab (Trust) ---------- */
+
+.strategy-lab__selector {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-sm); /* 8px between the label and the chip row */
+}
+
+/* Strategy Lab scenario chips are compact (40px) — the conversational onboarding
+   chips keep their 44px tap-target height; this scopes the override to the page. */
+.strategy-lab__selector .choice-chip {
+  min-height: 40px;
+  max-height: 40px;
+}
+
+/* Stable-width label: a hidden ghost of the label at the SELECTED (medium) weight
+   sits under the visible text, so the chip is sized for the bold width in both
+   states and selecting never shifts the row. */
+.choice-chip__label {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+.choice-chip__label::after {
+  content: attr(data-label);
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  font: var(--typography-button-md-font);
+}
+
+/* Selector group label — same treatment as form field labels. The paragraph
+   margin is zeroed so the flex gap alone sets the 8px label→chips distance. */
+.strategy-lab__selector-label {
+  margin: 0;
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+/* Y-axis gridlines: lighter than the baseline axis so the plot stays readable. */
+.chart__gridline {
+  stroke: var(--color-border-subtle);
+  opacity: 0.5;
+}
+
+/* Per-line story tooltip (Strategy Lab): legend row + value/delta + note copy.
+   Wider than the base tooltip to fit the approved note paragraphs. */
+/* Double-class specificity: the base .chart-tooltip (declared later in this file)
+   sets width 232px; the story variant must win without relying on order. */
+.chart-tooltip.chart-tooltip--story {
+  width: 340px;
+  text-align: left;
+}
+.chart-tooltip__series {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+.chart-tooltip__value-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+}
+.chart-tooltip__value-row .chart-tooltip__value {
+  font: var(--typography-heading-sm-font);
+}
+/* Positive delta — success tone, matching the trend treatment elsewhere. */
+.chart-tooltip__delta-up {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+  font: var(--typography-body-sm-font);
+  color: var(--color-feedback-success-text-tint);
+  white-space: nowrap; /* "+187% from start" always one line */
+}
+/* Negative delta — danger tone, mirroring the trend treatment elsewhere. */
+.chart-tooltip__delta-down {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+  font: var(--typography-body-sm-font);
+  color: var(--color-feedback-danger-text-tint);
+  white-space: nowrap;
+}
+
+.chart-tooltip__note {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+.chart-tooltip__note strong {
+  color: var(--color-text-primary);
+}
+/* Invisible fat stroke over each hoverable series line — the hover target. */
+.chart__hover-stroke {
+  stroke: transparent;
+  pointer-events: stroke;
+}
+
+/* Token Breakdown — date slider over the allocation table. The slider is a
+   stepped range input styled with control tokens; labels sit under their stops
+   (first left-aligned, last right-aligned, middles centered). */
+.breakdown-slider {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-sm);
+  margin-bottom: var(--spacing-stack-gap-md);
+}
+.breakdown-slider__input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  /* The input box is the THUMB's height so the 28px thumb never overflows it —
+     the flex gap to the labels then really is the visual gap from the thumb. */
+  height: 28px;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+}
+/* Track: travelled portion (start → thumb) fills with the primary color via the
+   --breakdown-progress custom property the component sets per stop. */
+.breakdown-slider__input::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: var(--radius-control-pill);
+  background: linear-gradient(
+    to right,
+    var(--color-action-primary-background-default) 0 var(--breakdown-progress, 0%),
+    var(--color-border-subtle) var(--breakdown-progress, 0%) 100%
+  );
+}
+.breakdown-slider__input::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-control-pill);
+  background: var(--color-border-subtle);
+}
+.breakdown-slider__input::-moz-range-progress {
+  height: 4px;
+  border-radius: var(--radius-control-pill);
+  background: var(--color-action-primary-background-default);
+}
+.breakdown-slider__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -12px; /* centers the 28px thumb on the 4px track */
+  border-radius: 50%;
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-control-default);
+  cursor: grab;
+}
+.breakdown-slider__input::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-surface-card);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-control-default);
+  cursor: grab;
+}
+.breakdown-slider__input:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--shadow-control-focus);
+}
+.breakdown-slider__input:focus-visible::-moz-range-thumb {
+  box-shadow: var(--shadow-control-focus);
+}
+.breakdown-slider__labels {
+  position: relative;
+  height: 20px;
+  font: var(--typography-chart-label-font);
+  color: var(--color-text-secondary);
+}
+/* Absolutely positioned at the stop's x (set inline by the component) and
+   centered on it — every date sits exactly under its detent/thumb. */
+.breakdown-slider__label {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.breakdown-slider__label--active {
+  color: var(--color-text-primary);
+  font: var(--typography-label-md-font);
+}
+
+/* Column widths are fixed by the colgroup (table-layout: fixed), so the grid is
+   identical at every slider date regardless of content length. */
+.breakdown-table {
+  table-layout: fixed;
+}
+.breakdown-table .portfolio-table__cell {
+  overflow-wrap: break-word;
+}
+/* Uniform row height across every slider date: body rows reserve the tallest
+   (two-line decision) height, so switching dates never changes the table's
+   vertical rhythm. td height acts as a MIN-height, so rows can still grow on
+   narrow viewports where more text wraps. */
+.breakdown-table tbody .portfolio-table__cell {
+  height: 66px;
+}
+
+/* Breakdown table: asset cell pairs identity with its approved price label;
+   the Total Value footer row reads as a muted summary band. */
+.breakdown-table__asset {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+}
+.breakdown-table__price {
+  /* Same size as the linked symbol beside it (deploy-table__asset-link). */
+  font: var(--typography-label-md-font);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+.breakdown-table__decision {
+  color: var(--color-text-primary);
+}
+.breakdown-table__total .portfolio-table__cell {
+  background: var(--color-subdued-neutral-background-default);
+  font: var(--typography-label-md-font);
+  border-bottom: none;
+}
+.breakdown-table__total .portfolio-table__cell:first-child {
+  border-radius: var(--radius-surface-sm) 0 0 var(--radius-surface-sm);
+}
+.breakdown-table__total .portfolio-table__cell:last-child {
+  border-radius: 0 var(--radius-surface-sm) var(--radius-surface-sm) 0;
+}
+.breakdown-table__pending {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-secondary);
+}
+
+/* ---------- Vetting (Trust) ---------- */
+
+/* Security scores summary — five fixed columns (Protocol / Product / Score /
+   Date / Status), no horizontal scroll; rows open the detail drawer. */
+.vetting-scores-table {
+  table-layout: fixed;
+  width: 100%;
+}
+.vetting-scores-table__row {
+  cursor: pointer;
+}
+.vetting-scores-table__row:hover .portfolio-table__cell {
+  background: var(--color-subdued-neutral-background-default);
+}
+.vetting-scores-table__row:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus) inset;
+}
+td.vetting-scores-table__product {
+  white-space: nowrap;
+  font: var(--typography-label-md-font);
+  font-weight: 400;
+  color: var(--color-text-primary);
+}
+/* Single-line headers — the table grows wider and scrolls instead of wrapping. */
+/* Score chips carry their own tinted background (components/badge.md); the number
+   stays bold inside the chip and never wraps. */
+.vetting-scores-table .badge {
+  font-weight: 700;
+  white-space: nowrap;
+}
+td.vetting-scores-table__date {
+  white-space: nowrap;
+  font: var(--typography-label-md-font);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+
+/* ---------- Vetting detail drawer ---------- */
+
+.vetting-drawer__backdrop {
+  position: fixed;
+  inset: 0;
+  /* Above the sticky nav (navigation-primary: 200) and every popover — the
+     drawer + scrim own the screen while open. */
+  z-index: var(--zIndex-overlay-drawer);
+  background: var(--color-overlay-scrim);
+  display: flex;
+  justify-content: flex-end;
+}
+.vetting-drawer {
+  width: min(420px, 100vw);
+  height: 100%;
+  overflow-y: auto;
+  background: var(--color-surface-card);
+  box-shadow: var(--shadow-overlay-drawer);
+  padding: var(--spacing-card-padding-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-stack-gap-md);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .vetting-drawer {
+    animation: vetting-drawer-in 200ms ease-out;
+  }
+  @keyframes vetting-drawer-in {
+    from { transform: translateX(24px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+}
+.vetting-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-md);
+}
+.vetting-drawer__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-surface-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.vetting-drawer__close:hover {
+  background: var(--color-subdued-neutral-background-default);
+  color: var(--color-text-primary);
+}
+.vetting-drawer__close:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+.vetting-drawer__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-inline-gap-lg);
+}
+.vetting-drawer__meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.vetting-drawer__meta-label {
+  font: var(--typography-label-md-font);
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}
+.vetting-drawer__meta-value {
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+.vetting-drawer__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-sm);
+}
+.vetting-drawer__section-title {
+  margin: 0;
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+.vetting-drawer__text {
+  margin: 0;
+  font: var(--typography-body-md-font);
+  color: var(--color-text-primary);
+}
+.vetting-drawer__dims {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.vetting-drawer__dim {
+  padding: var(--spacing-inline-gap-sm) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-xs);
+}
+.vetting-drawer__dim-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--spacing-inline-gap-md);
+}
+.vetting-drawer__dim-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+.vetting-drawer__dim-score {
+  font: var(--typography-label-md-font);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+/* Slightly slimmer than the standard bar — twelve rows must scan, not shout. */
+.vetting-drawer__dim-bar {
+  height: 6px;
+}
+
+/* Expandable dimension rows — the header + bar toggle the recorded reasoning. */
+.vetting-drawer__dim--expandable .vetting-drawer__dim-toggle {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-xs);
+  border-radius: var(--radius-surface-sm);
+}
+.vetting-drawer__dim--expandable .vetting-drawer__dim-toggle:hover .vetting-drawer__dim-label {
+  color: var(--color-action-primary-background-default);
+}
+.vetting-drawer__dim--expandable .vetting-drawer__dim-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+.vetting-drawer__dim-score {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-xs);
+}
+.vetting-drawer__dim-chevron {
+  display: inline-flex;
+  color: var(--color-text-secondary);
+  transition: transform 150ms ease;
+}
+.vetting-drawer__dim-chevron--open {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vetting-drawer__dim-chevron {
+    transition: none;
+  }
+}
+.vetting-drawer__dim-detail {
+  margin-top: var(--spacing-inline-gap-sm);
+  padding: var(--spacing-inline-gap-sm) var(--spacing-inline-gap-md);
+  border-radius: var(--radius-surface-sm);
+  background: var(--color-subdued-neutral-background-default);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-sm);
+}
+.vetting-drawer__dim-detail-text {
+  margin: 0;
+  font: var(--typography-label-md-font);
+  font-weight: 400;
+  color: var(--color-text-primary);
+}
+.vetting-drawer__dim-detail-text strong {
+  font-weight: 600;
+}
+
+/* Trust dropdown anchor (the popover modifiers live beside .wallet-menu below). */
+.global-nav__trust {
+  position: relative;
+}
+
 .global-nav__item:hover {
   color: var(--color-text-primary);
   background: var(--color-subdued-neutral-background-default);
@@ -514,6 +994,10 @@
   background: var(--color-feedback-success-background-solid);
 }
 
+.progress__fill--warning {
+  background: var(--color-feedback-warning-background-solid);
+}
+
 /* Safety Buffer bar styled like the Current vs Recommended Allocation bars
    (chart-bar radius) and filled with Chart / Series 04. Scoped to --chart so the
    onboarding progress bar and Demo Safety Buffer keep the pill/blue style. */
@@ -755,6 +1239,10 @@
   top: calc(100% + var(--spacing-inline-gap-xs));
   left: 0;
   z-index: 20;
+  /* Reset inherited layout context: a popover inside a nowrap table header
+     (vetting-scores-table) must still wrap its body text normally. */
+  white-space: normal;
+  text-align: left;
   width: min(320px, calc(100vw - 2 * var(--spacing-card-padding-md)));
   display: grid;
   gap: var(--spacing-stack-gap-xs);
@@ -1581,6 +2069,14 @@
   gap: var(--spacing-inline-gap-sm);
 }
 
+/* Left-aligned popover variant (the Trust dropdown anchors to its trigger's left
+   edge; the wallet menu right-aligns to the pill). Declared after the base so the
+   equal-specificity override resolves here. */
+.wallet-menu--left {
+  left: 0;
+  right: auto;
+}
+
 .wallet-menu__item {
   display: block;
   width: 100%;
@@ -1589,6 +2085,16 @@
   border: none;
   border-radius: var(--radius-control-sm);
   background: transparent;
+}
+
+/* Menu item with an optional leading icon (components/menu-item.md). The icon is a
+   currentColor mask, so it follows the item's text color across states. Declared
+   after the base item so the flex display wins the equal-specificity cascade. */
+.wallet-menu__item--with-icon {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  white-space: nowrap;
   color: var(--color-text-primary);
   font: var(--typography-body-md-font);
   cursor: pointer;

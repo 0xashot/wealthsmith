@@ -6,7 +6,7 @@ import { runBufferPositionReviewFixtureChecks, runOnTrackAssessmentFixtureChecks
 import { runAuthorityResolutionFixtureChecks, runBinaryDateCorrectionFixtureChecks, runBlockerOrderAmendmentFixtureChecks, runDirectAssessmentFixtureChecks, runDirectLendingComponentActivationFixtureChecks, runDirectLendingGovernanceActivationFixtureChecks, runDirectLendingProfileCompatibilityFixtureChecks, runDirectLendingRuntimeFixtureChecks, runDirectReviewBriefFixtureChecks, runDirectUsdcLendingIntegrationFixtureChecks, runIncidentAliasAmendmentFixtureChecks, runJupIdlAmendmentFixtureChecks, runJupProvisionalAssessmentFixtureChecks, runJupiterLendExistingPositionFixtureChecks, runJupiterLendShareAccountingFixtureChecks, runJupiterPackageFixtureChecks, runKaminoSecuritySourcesAmendmentFixtureChecks, runSourceCompletionFixtureChecks, runTeamDisclosureFixtureChecks } from "./fixtures/directLendingGovernance.fixtures";
 import { runKlendAvailabilityFixtureChecks, runKlendConstraintsFixtureChecks, runKlendDirectExistingPositionFixtureChecks, runKlendDirectPositionFailClosedFixtureChecks, runKlendMarketDataFixtureChecks, runKlendPositionFixtureChecks, runKlendReserveCapacityFixtureChecks } from "./fixtures/klendDirect.fixtures";
 import { runStableYieldIdentityResolutionFixtureChecks, runStableYieldPolicyFixtureChecks, runStableYieldProductionAdapterFixtureChecks, runStableYieldSourcePathFixtureChecks, runYieldStrategyComparisonFixtureChecks, runYieldStrategyEligibilityFixtureChecks, runYieldStrategyMarketDataFixtureChecks, runYieldStrategyPlanFixtureChecks, runYieldStrategyPlanPresentationFixtureChecks, runYieldStrategyPositionFixtureChecks, runYieldStrategyProductLaneFixtureChecks, runYieldStrategyRegistryFixtureChecks } from "./fixtures/stableYieldStrategy.fixtures";
-import { runKvaultCapacitySemanticsFixtureChecks, runRiskEvidencePackageFixtureChecks, runRiskGovernanceDecisionFixtureChecks, runRiskGovernanceFixtureChecks, runSteakhouseBlockCtokenFixtureChecks, runSteakhouseCapacityReconciliationFixtureChecks, runSteakhouseEvidenceClosureFixtureChecks, runSteakhouseExistingPositionFixtureChecks, runSteakhouseGateFixtureChecks, runSteakhouseRiskEvidenceFixtureChecks } from "./fixtures/steakhouseRiskGovernance.fixtures";
+import { runKvaultCapacitySemanticsFixtureChecks, runBsolRubricV1AssessmentFixtureChecks, runJitosolRubricV1AssessmentFixtureChecks, runJupsolRubricV1AssessmentFixtureChecks, runMeteoraRubricV1AssessmentFixtureChecks, runOrcaRubricV1AssessmentFixtureChecks, runRaydiumRubricV1AssessmentFixtureChecks, runInfRubricV1AssessmentFixtureChecks, runJupiterLendIncidentAmendmentFixtureChecks, runNativeStakingRubricV1AssessmentFixtureChecks, runMsolRubricV1AssessmentFixtureChecks, runRiskEvidencePackageFixtureChecks, runRiskGovernanceDecisionFixtureChecks, runRiskGovernanceFixtureChecks, runSteakhouseBlockCtokenFixtureChecks, runSteakhouseCapacityReconciliationFixtureChecks, runSteakhouseEvidenceClosureFixtureChecks, runSteakhouseExistingPositionFixtureChecks, runSteakhouseGateFixtureChecks, runSteakhouseRiskEvidenceFixtureChecks } from "./fixtures/steakhouseRiskGovernance.fixtures";
 import { runAllocationMethodologyCopyFixtureChecks, runCanonicalTargetAdapterFixtureChecks, runCoinMarketCapMarketConditionFixtureChecks, runDashboardTargetMountFixtureChecks, runDemoMarketMigrationFixtureChecks, runMarketConditionFixtureChecks, runRailTargetContextFixtureChecks, runTargetAllocationAssessmentFixtureChecks, runTargetAllocationPolicyFixtureChecks } from "./fixtures/targetAllocationMarket.fixtures";
 import { runCompletenessGalleryFixtureChecks, runCompletenessUiFixtureChecks, runLstNormalizationFixtureChecks, runMeasuredSlotDurationApyFixtureChecks, runNativeStakeFixtureChecks, runPortfolioCompletenessFixtureChecks, runSafetyBufferCoverageFixtureChecks, runToken2022FixtureChecks } from "./fixtures/walletPositionAssessment.fixtures";
 import { runRailSwapActionFixtureChecks, runSwapQuoteFixtureChecks, runSwapQuoteUiFixtureChecks } from "./swapQuote/swapQuoteFixtures";
@@ -126,6 +126,16 @@ export async function printFixtureResults(): Promise<void> {
     ...runDirectAssessmentFixtureChecks(),
     ...runAuthorityResolutionFixtureChecks(),
     ...runRiskEvidencePackageFixtureChecks(),
+    ...runBsolRubricV1AssessmentFixtureChecks(),
+    ...runJitosolRubricV1AssessmentFixtureChecks(),
+    ...runJupsolRubricV1AssessmentFixtureChecks(),
+    ...runMsolRubricV1AssessmentFixtureChecks(),
+    ...runMeteoraRubricV1AssessmentFixtureChecks(),
+    ...runOrcaRubricV1AssessmentFixtureChecks(),
+    ...runRaydiumRubricV1AssessmentFixtureChecks(),
+    ...runInfRubricV1AssessmentFixtureChecks(),
+    ...runJupiterLendIncidentAmendmentFixtureChecks(),
+    ...runNativeStakingRubricV1AssessmentFixtureChecks(),
     ...runIncidentAliasAmendmentFixtureChecks(),
     ...runSteakhouseCapacityReconciliationFixtureChecks(),
     ...runKlendConstraintsFixtureChecks(),

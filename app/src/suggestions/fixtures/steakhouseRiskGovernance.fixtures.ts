@@ -17,6 +17,18 @@ import { getDisposition as dlGetDispo } from "../directUsdcLendingDispositions";
 import { DIRECT_USDC_LENDING_CATEGORY_MINIMUM as DL_CATMIN, UNIVERSAL_MINIMUM as DL_UNIMIN } from "../directUsdcLendingEligibilityPolicy";
 import { MIN_PROTOCOL_RISK_SCORE } from "../engineThresholds";
 import type { FixtureCheck } from "./fixtureCheck";
+import { JUP_INCIDENT_HISTORY_RESOLUTION, JUP_INCIDENT_EVIDENCE, JUP_BINARY_AGE_AT_AMENDMENT, JUP_INCIDENT_AMENDMENT_AMENDS, JUP_INCIDENT_AMENDMENT_MUTATES_ORIGINAL, JUP_INCIDENT_AMENDMENT_APPROVES_ANYTHING, completedAggregateIsInsidePriorBand } from "../jupiterLendIncidentHistoryAmendment";
+import { JUP_PROVISIONAL_SCORES } from "../jupiterLendUsdcProvisionalAssessment";
+import { NATIVE_STAKING_V1_DIMENSION_ASSESSMENTS, NATIVE_STAKING_V1_ASSESSMENT_OUTCOME, NATIVE_STAKING_V1_ASSESSMENT_BINDING, NATIVE_STAKING_V1_ONCHAIN_FACTS, NATIVE_STAKING_V1_ASSESSMENT_APPROVES_ANYTHING, NATIVE_STAKING_V1_ASSESSMENT_ENABLES_TRANSACTIONS, NATIVE_STAKING_V1_HUMAN_REVIEW_DECISION, computeNativeStakingV1Aggregate } from "../nativeStakingRubricV1AutomatedAssessment";
+import { JUPITER_NATIVE_STAKE_VOTE_ACCOUNT } from "../nativeValidatorMarketData";
+import { INF_V1_DIMENSION_ASSESSMENTS, INF_V1_ASSESSMENT_OUTCOME, INF_V1_ASSESSMENT_BINDING, INF_V1_ONCHAIN_FACTS, INF_V1_ASSESSMENT_APPROVES_ANYTHING, INF_V1_ASSESSMENT_ENABLES_TRANSACTIONS, INF_V1_HUMAN_REVIEW_DECISION, computeInfV1Aggregate } from "../infRubricV1AutomatedAssessment";
+import { RAYDIUM_DIMENSION_ASSESSMENTS, RAYDIUM_ASSESSMENT_OUTCOME, RAYDIUM_ASSESSMENT_BINDING, RAYDIUM_ONCHAIN_FACTS, RAYDIUM_MARKET_FACTS, RAYDIUM_ASSESSMENT_APPROVES_ANYTHING, RAYDIUM_ASSESSMENT_ENABLES_TRANSACTIONS, RAYDIUM_HUMAN_REVIEW_DECISION, computeRaydiumAggregate } from "../raydiumRubricV1AutomatedAssessment";
+import { ORCA_DIMENSION_ASSESSMENTS, ORCA_ASSESSMENT_OUTCOME, ORCA_ASSESSMENT_BINDING, ORCA_ONCHAIN_FACTS, ORCA_ASSESSMENT_APPROVES_ANYTHING, ORCA_ASSESSMENT_ENABLES_TRANSACTIONS, ORCA_HUMAN_REVIEW_DECISION, computeOrcaAggregate } from "../orcaRubricV1AutomatedAssessment";
+import { METEORA_DIMENSION_ASSESSMENTS, METEORA_ASSESSMENT_OUTCOME, METEORA_ASSESSMENT_BINDING, METEORA_ONCHAIN_FACTS, METEORA_ASSESSMENT_APPROVES_ANYTHING, METEORA_ASSESSMENT_ENABLES_TRANSACTIONS, METEORA_HUMAN_REVIEW_DECISION, computeMeteoraAggregate } from "../meteoraRubricV1AutomatedAssessment";
+import { MSOL_V1_DIMENSION_ASSESSMENTS, MSOL_V1_ASSESSMENT_OUTCOME, MSOL_V1_ASSESSMENT_BINDING, MSOL_V1_ONCHAIN_FACTS, MSOL_V1_ASSESSMENT_APPROVES_ANYTHING, MSOL_V1_ASSESSMENT_ENABLES_TRANSACTIONS, MSOL_V1_HUMAN_REVIEW_DECISION, computeMsolV1Aggregate } from "../msolRubricV1AutomatedAssessment";
+import { JUPSOL_DIMENSION_ASSESSMENTS, JUPSOL_ASSESSMENT_OUTCOME, JUPSOL_ASSESSMENT_BINDING, JUPSOL_ONCHAIN_FACTS, JUPSOL_ASSESSMENT_APPROVES_ANYTHING, JUPSOL_ASSESSMENT_ENABLES_TRANSACTIONS, JUPSOL_HUMAN_REVIEW_DECISION, computeJupsolAggregate } from "../jupsolRubricV1AutomatedAssessment";
+import { JITOSOL_DIMENSION_ASSESSMENTS, JITOSOL_ASSESSMENT_OUTCOME, JITOSOL_ASSESSMENT_BINDING, JITOSOL_ONCHAIN_FACTS, JITOSOL_ASSESSMENT_APPROVES_ANYTHING, JITOSOL_ASSESSMENT_ENABLES_TRANSACTIONS, JITOSOL_HUMAN_REVIEW_DECISION, computeJitosolAggregate } from "../jitosolRubricV1AutomatedAssessment";
+import { BSOL_DIMENSION_ASSESSMENTS, BSOL_ASSESSMENT_OUTCOME, BSOL_ASSESSMENT_BINDING, BSOL_ONCHAIN_FACTS, BSOL_ASSESSMENT_APPROVES_ANYTHING, BSOL_ASSESSMENT_ENABLES_TRANSACTIONS, BSOL_HUMAN_REVIEW_DECISION, computeBsolAggregate } from "../bsolRubricV1AutomatedAssessment";
 import { ALIAS_AMENDMENT_MANIFEST_HASH, MAIN_MARKET_ALIAS, computeAliasAmendmentManifestHash } from "../incidentMarketAliasAmendment";
 import { AUTHORIZED_PRODUCTION_REVIEWER_CONFIGURED, KAMINO_OUTREACH_QUESTIONNAIRE_EXISTS, PROTOCOL_RISK_RUBRIC_APPROVAL_ARTIFACT_EXISTS, PROTOCOL_RISK_RUBRIC_V1_APPROVED, PROTOCOL_RISK_RUBRIC_V1_PROPOSAL_EXISTS, RISK_REVIEWER_REGISTRY_CONTRACT_EXISTS, RISK_REVIEW_PROVENANCE_EXISTS, RISK_REVIEW_STATE_TRANSITION_VALIDATION_EXISTS as RISK_REVIEW_STATE_TRANSITION_VALIDATION_EXISTS_K, RISK_SCORE_INTERNAL_ONLY_POLICY_EXISTS, RISK_SCORE_MIGRATION_REPORT_EXISTS as RISK_SCORE_MIGRATION_REPORT_EXISTS_K, RISK_SCORE_USER_FACING_SUPPRESSION_EXISTS, STABLE_YIELD_EXACT_VAULT_RISK_EVIDENCE_EXISTS, STABLE_YIELD_KVAULT_CAPACITY_SEMANTICS_REVIEWED, STABLE_YIELD_PRODUCTION_CAPACITY_RESOLVED, STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED, STABLE_YIELD_PRODUCTION_DEPOSIT_STATE_RESOLVED_FROM_CAPACITY, STABLE_YIELD_PRODUCTION_PRODUCT_APPROVAL_EXISTS, STABLE_YIELD_RISK_REVIEW_DIAGNOSTICS_EXIST, STABLE_YIELD_RISK_REVIEW_ELIGIBLE_FOR_APPROVAL_REVIEW, STABLE_YIELD_RISK_REVIEW_HUMAN_SIGNOFF_COMPLETE, STABLE_YIELD_RISK_REVIEW_SCORED, STEAKHOUSE_ADMIN_AUTHORITY_EVIDENCE_EXISTS, STEAKHOUSE_ADMIN_CONTROLS_FULLY_VERIFIED, STEAKHOUSE_AUDIT_LINKAGE_ASSESSMENT_EXISTS, STEAKHOUSE_AUDIT_TO_DEPLOYMENT_LINKAGE_VERIFIED, STEAKHOUSE_AUTHORITY_PERMISSION_MATRIX_EXISTS, STEAKHOUSE_DEPOSIT_STATE_ASSESSMENT_EXISTS, STEAKHOUSE_ELIGIBLE_FOR_PRODUCT_APPROVAL, STEAKHOUSE_EVIDENCE_COMPLETE, STEAKHOUSE_HUMAN_REVIEW_COMPLETE, STEAKHOUSE_INCIDENT_REVIEW_ARTIFACT_EXISTS, STEAKHOUSE_INCIDENT_REVIEW_COMPLETE, STEAKHOUSE_READY_FOR_HUMAN_SCORING, STEAKHOUSE_RESERVE_EXPOSURE_SNAPSHOT_EXISTS, STEAKHOUSE_REVIEWER_WORKSHEET_EXISTS as STEAKHOUSE_REVIEWER_WORKSHEET_EXISTS_K, STEAKHOUSE_REVIEW_READINESS_EVALUATOR_EXISTS, STEAKHOUSE_RISK_SCORE_ASSIGNED, STEAKHOUSE_RISK_SIGNOFF_COMPLETE, STEAKHOUSE_WITHDRAWAL_MODEL_COMPLETE, STEAKHOUSE_WITHDRAWAL_SEMANTICS_ARTIFACT_EXISTS, USER_FACING_NUMERIC_RISK_SCORE_EXISTS } from "../investmentTargetRegistry";
 import { KVAULT_CAPACITY_SOURCE, KVAULT_MAINNET_PROGRAM_ID, U64_MAX_STR, resolveKvaultDepositCapacity } from "../kaminoVaultCapacitySemantics";
@@ -1806,3 +1818,348 @@ export function runRiskEvidencePackageFixtureChecks(): FixtureCheck[] {
 /* ------------------------------------------------------------------ *
  * 16H-P.1a — KLend Program and Market Authority Resolution
  * ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ *
+ * BS — BlazeStake bSOL rubric-v1 automated assessment (2026-08-11)
+ * ------------------------------------------------------------------ */
+export function runBsolRubricV1AssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const D = BSOL_DIMENSION_ASSESSMENTS;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+  const BANDS: Record<string, [number, number]> = { unsupported: [0, 2], weak: [3, 4], partial: [5, 6], supported: [7, 8], strongly_supported: [9, 10] };
+
+  add("BSV1-1: the aggregate is computed from the recorded dimensions and pins 6.95 / below the floor",
+    computeBsolAggregate().aggregate === 6.95 && BSOL_ASSESSMENT_OUTCOME.weightedPoints === 695 && BSOL_ASSESSMENT_OUTCOME.aggregate === 6.95 && BSOL_ASSESSMENT_OUTCOME.minimumThreshold === 7 && BSOL_ASSESSMENT_OUTCOME.meetsMinimum === false,
+    "6.95 < 7");
+  add("BSV1-2: all 12 canonical rubric-v1 dimensions are scored exactly once, inside their anchor bands",
+    D.length === 12 && CANON.every((id) => D.filter((d) => d.dimensionId === id).length === 1) && D.every((d) => Number.isInteger(d.score) && d.score >= BANDS[d.anchorBand][0] && d.score <= BANDS[d.anchorBand][1]),
+    "12/12 anchored");
+  add("BSV1-3: every dimension carries a rationale, limiting fact, and confidence",
+    D.every((d) => d.rationale.length > 40 && d.limitingFact.length > 20 && ["low", "medium", "high"].includes(d.confidence)),
+    "evidenced");
+  add("BSV1-4: the assessment approves nothing and was not tuned to the aggregate",
+    BSOL_ASSESSMENT_APPROVES_ANYTHING === false && BSOL_ASSESSMENT_ENABLES_TRANSACTIONS === false && BSOL_ASSESSMENT_OUTCOME.scoresAdjustedAfterSeeingAggregate === false,
+    "score-only");
+  add("BSV1-5: the fee-disclosure contradiction is recorded (docs 0% vs on-chain 5% epoch fee)",
+    BSOL_ONCHAIN_FACTS.epochFee.numerator === 500 && BSOL_ONCHAIN_FACTS.epochFee.denominator === 10_000 && D.find((d) => d.dimensionId === "withdrawal_fee_transparency")!.score === 4 && /Epoch fee: 0%/.test(D.find((d) => d.dimensionId === "withdrawal_fee_transparency")!.limitingFact),
+    "5% vs 0% docs");
+  add("BSV1-7: the human review decision is recorded — not passed, no overrides, reopenable",
+    BSOL_HUMAN_REVIEW_DECISION.outcome === "not_passed" && BSOL_HUMAN_REVIEW_DECISION.decidedByRole === "ws_product_owner" && BSOL_HUMAN_REVIEW_DECISION.overridesApplied === 0 && BSOL_HUMAN_REVIEW_DECISION.reopenOn.length === 3,
+    "recorded");
+  add("BSV1-6: the assessment is bound to the exact pool, program, and mint",
+    BSOL_ASSESSMENT_BINDING.stakePoolProgram === "SPoo1Ku8WFXoNDMHPsrGSTSG1Y47rzgn41SLUNakuHy" && BSOL_ASSESSMENT_BINDING.stakePoolAccount === "stk9ApL5HeVAwPLr3TLhDXdZS8ptVu7zp6ov8HFDuMi" && BSOL_ASSESSMENT_BINDING.bsolMint === "bSo13r4TkiE4KumL71LsHTPpL2euBYLFx6h9HP3piy1",
+    "bound");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * JV — Jito JitoSOL rubric-v1 automated assessment (2026-08-11)
+ * ------------------------------------------------------------------ */
+export function runJitosolRubricV1AssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const D = JITOSOL_DIMENSION_ASSESSMENTS;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+  const BANDS: Record<string, [number, number]> = { unsupported: [0, 2], weak: [3, 4], partial: [5, 6], supported: [7, 8], strongly_supported: [9, 10] };
+
+  add("JSV1-1: the aggregate is computed from the recorded dimensions and pins 7.16 / meets the floor",
+    computeJitosolAggregate().aggregate === 7.16 && JITOSOL_ASSESSMENT_OUTCOME.weightedPoints === 716 && JITOSOL_ASSESSMENT_OUTCOME.aggregate === 7.16 && JITOSOL_ASSESSMENT_OUTCOME.minimumThreshold === 7 && JITOSOL_ASSESSMENT_OUTCOME.meetsMinimum === true,
+    "7.16 >= 7");
+  add("JSV1-2: all 12 canonical rubric-v1 dimensions are scored exactly once, inside their anchor bands",
+    D.length === 12 && CANON.every((id) => D.filter((d) => d.dimensionId === id).length === 1) && D.every((d) => Number.isInteger(d.score) && d.score >= BANDS[d.anchorBand][0] && d.score <= BANDS[d.anchorBand][1]),
+    "12/12 anchored");
+  add("JSV1-3: every dimension carries a rationale, limiting fact, and confidence",
+    D.every((d) => d.rationale.length > 40 && d.limitingFact.length > 20 && ["low", "medium", "high"].includes(d.confidence)),
+    "evidenced");
+  add("JSV1-4: the assessment approves nothing and was not tuned to the aggregate",
+    JITOSOL_ASSESSMENT_APPROVES_ANYTHING === false && JITOSOL_ASSESSMENT_ENABLES_TRANSACTIONS === false && JITOSOL_ASSESSMENT_OUTCOME.scoresAdjustedAfterSeeingAggregate === false,
+    "score-only");
+  add("JSV1-5: the on-chain fee facts match the documented fees (the accuracy bSOL failed)",
+    JITOSOL_ONCHAIN_FACTS.epochFee.numerator === 4 && JITOSOL_ONCHAIN_FACTS.epochFee.denominator === 100 && JITOSOL_ONCHAIN_FACTS.solWithdrawalFee.numerator === 1 && JITOSOL_ONCHAIN_FACTS.solWithdrawalFee.denominator === 1_000,
+    "4% + 0.1% verified");
+  add("JSV1-7: the human review decision is recorded — passed, no overrides, reopenable",
+    JITOSOL_HUMAN_REVIEW_DECISION.outcome === "passed" && JITOSOL_HUMAN_REVIEW_DECISION.decidedByRole === "ws_product_owner" && JITOSOL_HUMAN_REVIEW_DECISION.overridesApplied === 0 && JITOSOL_HUMAN_REVIEW_DECISION.reopenOn.length === 2,
+    "recorded");
+  add("JSV1-6: the assessment is bound to the exact pool, program, and mint (self-validated by decode)",
+    JITOSOL_ASSESSMENT_BINDING.stakePoolProgram === "SPoo1Ku8WFXoNDMHPsrGSTSG1Y47rzgn41SLUNakuHy" && JITOSOL_ASSESSMENT_BINDING.stakePoolAccount === "Jito4APyf642JPZPx3hGc6WWJ8zPKtRbRs4P815Awbb" && JITOSOL_ASSESSMENT_BINDING.jitosolMint === "J1toso1uCk3RLmjorhTtrVwY9HJ7X8V9yYac6Y7kGCPn",
+    "bound");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * JP — Jupiter JupSOL rubric-v1 automated assessment (2026-08-11)
+ * ------------------------------------------------------------------ */
+export function runJupsolRubricV1AssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const D = JUPSOL_DIMENSION_ASSESSMENTS;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+  const BANDS: Record<string, [number, number]> = { unsupported: [0, 2], weak: [3, 4], partial: [5, 6], supported: [7, 8], strongly_supported: [9, 10] };
+
+  add("JPV1-1: the aggregate is computed from the recorded dimensions and pins 6.77 / below the floor",
+    computeJupsolAggregate().aggregate === 6.77 && JUPSOL_ASSESSMENT_OUTCOME.weightedPoints === 677 && JUPSOL_ASSESSMENT_OUTCOME.aggregate === 6.77 && JUPSOL_ASSESSMENT_OUTCOME.minimumThreshold === 7 && JUPSOL_ASSESSMENT_OUTCOME.meetsMinimum === false,
+    "6.77 < 7");
+  add("JPV1-2: all 12 canonical rubric-v1 dimensions are scored exactly once, inside their anchor bands",
+    D.length === 12 && CANON.every((id) => D.filter((d) => d.dimensionId === id).length === 1) && D.every((d) => Number.isInteger(d.score) && d.score >= BANDS[d.anchorBand][0] && d.score <= BANDS[d.anchorBand][1]),
+    "12/12 anchored");
+  add("JPV1-3: every dimension carries a rationale, limiting fact, and confidence",
+    D.every((d) => d.rationale.length > 40 && d.limitingFact.length > 20 && ["low", "medium", "high"].includes(d.confidence)),
+    "evidenced");
+  add("JPV1-4: the assessment approves nothing and was not tuned to the aggregate",
+    JUPSOL_ASSESSMENT_APPROVES_ANYTHING === false && JUPSOL_ASSESSMENT_ENABLES_TRANSACTIONS === false && JUPSOL_ASSESSMENT_OUTCOME.scoresAdjustedAfterSeeingAggregate === false,
+    "score-only");
+  add("JPV1-5: the fork finding is recorded — NOT the verified SPL program, fees match Sanctum's disclosure",
+    JUPSOL_ASSESSMENT_BINDING.stakePoolProgram === "SPMBzsVUuoHA4Jm6KunbsotaahvVikZs1JyTW6iJvbn" && (JUPSOL_ASSESSMENT_BINDING.stakePoolProgram as string) !== BSOL_ASSESSMENT_BINDING.stakePoolProgram && JUPSOL_ONCHAIN_FACTS.epochFee.numerator === 50 && JUPSOL_ONCHAIN_FACTS.epochFee.denominator === 1_000,
+    "fork + 5% disclosed");
+  add("JPV1-7: the human review decision is recorded — not passed, no overrides, reopenable",
+    JUPSOL_HUMAN_REVIEW_DECISION.outcome === "not_passed" && JUPSOL_HUMAN_REVIEW_DECISION.decidedByRole === "ws_product_owner" && JUPSOL_HUMAN_REVIEW_DECISION.overridesApplied === 0 && JUPSOL_HUMAN_REVIEW_DECISION.reopenOn.length === 3,
+    "recorded");
+  add("JPV1-6: the assessment is bound to the exact pool and mint (self-validated by decode)",
+    JUPSOL_ASSESSMENT_BINDING.stakePoolAccount === "8VpRhuxa7sUUepdY3kQiTmX9rS5vx4WgaXiAnXq4KCtr" && JUPSOL_ASSESSMENT_BINDING.jupsolMint === "jupSoLaHXQiZZTSfEWMTRRgpnyFm8f6sZdosWBjx93v",
+    "bound");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * MR — Marinade mSOL rubric-v1 automated assessment (2026-08-11)
+ * ------------------------------------------------------------------ */
+export function runMsolRubricV1AssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const D = MSOL_V1_DIMENSION_ASSESSMENTS;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+  const BANDS: Record<string, [number, number]> = { unsupported: [0, 2], weak: [3, 4], partial: [5, 6], supported: [7, 8], strongly_supported: [9, 10] };
+
+  add("MRV1-1: the aggregate is computed from the recorded dimensions and pins 6.34 / below the floor",
+    computeMsolV1Aggregate().aggregate === 6.34 && MSOL_V1_ASSESSMENT_OUTCOME.weightedPoints === 634 && MSOL_V1_ASSESSMENT_OUTCOME.aggregate === 6.34 && MSOL_V1_ASSESSMENT_OUTCOME.minimumThreshold === 7 && MSOL_V1_ASSESSMENT_OUTCOME.meetsMinimum === false,
+    "6.34 < 7");
+  add("MRV1-2: all 12 canonical rubric-v1 dimensions are scored exactly once, inside their anchor bands",
+    D.length === 12 && CANON.every((id) => D.filter((d) => d.dimensionId === id).length === 1) && D.every((d) => Number.isInteger(d.score) && d.score >= BANDS[d.anchorBand][0] && d.score <= BANDS[d.anchorBand][1]),
+    "12/12 anchored");
+  add("MRV1-3: every dimension carries a rationale, limiting fact, and confidence",
+    D.every((d) => d.rationale.length > 40 && d.limitingFact.length > 20 && ["low", "medium", "high"].includes(d.confidence)),
+    "evidenced");
+  add("MRV1-4: the assessment approves nothing and was not tuned to the aggregate",
+    MSOL_V1_ASSESSMENT_APPROVES_ANYTHING === false && MSOL_V1_ASSESSMENT_ENABLES_TRANSACTIONS === false && MSOL_V1_ASSESSMENT_OUTCOME.scoresAdjustedAfterSeeingAggregate === false,
+    "score-only");
+  add("MRV1-5: the adverse findings are recorded — verified 0% fee, lapsed build verification, SAM incident at weak",
+    MSOL_V1_ONCHAIN_FACTS.rewardFeeBps === 0 && MSOL_V1_ONCHAIN_FACTS.verifiedBuild.currentlyVerified === false && MSOL_V1_ONCHAIN_FACTS.verifiedBuild.registryHasRecord === true && D.find((d) => d.dimensionId === "incident_history")!.score === 4 && D.find((d) => d.dimensionId === "incident_history")!.anchorBand === "weak",
+    "0% fee + lapsed + incident");
+  add("MRV1-7: the human review decision is recorded — not passed, no overrides, reopenable",
+    MSOL_V1_HUMAN_REVIEW_DECISION.outcome === "not_passed" && MSOL_V1_HUMAN_REVIEW_DECISION.decidedByRole === "ws_product_owner" && MSOL_V1_HUMAN_REVIEW_DECISION.overridesApplied === 0 && MSOL_V1_HUMAN_REVIEW_DECISION.reopenOn.length === 4,
+    "recorded");
+  add("MRV1-6: the assessment is bound to the exact program, state, and mint (self-validated by decode)",
+    MSOL_V1_ASSESSMENT_BINDING.liquidStakingProgram === "MarBmsSgKXdrN1egZf5sqe1TMai9K1rChYNDJgjq7aD" && MSOL_V1_ASSESSMENT_BINDING.stateAccount === "8szGkuLTAux9XMgZ2vtY39jVSowEcpBfFfD8hXSEqdGC" && MSOL_V1_ASSESSMENT_BINDING.msolMint === "mSoLzYCxHdYgdzU16g5QSh3i5K3z3KZK7ytfqcJm7So",
+    "bound");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * MT — Meteora liquidity pools rubric-v1 automated assessment (2026-08-11)
+ * ------------------------------------------------------------------ */
+export function runMeteoraRubricV1AssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const D = METEORA_DIMENSION_ASSESSMENTS;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+  const BANDS: Record<string, [number, number]> = { unsupported: [0, 2], weak: [3, 4], partial: [5, 6], supported: [7, 8], strongly_supported: [9, 10] };
+
+  add("MTV1-1: the aggregate is computed from the recorded dimensions and pins 5.83 / below the floor",
+    computeMeteoraAggregate().aggregate === 5.83 && METEORA_ASSESSMENT_OUTCOME.weightedPoints === 583 && METEORA_ASSESSMENT_OUTCOME.aggregate === 5.83 && METEORA_ASSESSMENT_OUTCOME.minimumThreshold === 7 && METEORA_ASSESSMENT_OUTCOME.meetsMinimum === false,
+    "5.83 < 7");
+  add("MTV1-2: all 12 canonical rubric-v1 dimensions are scored exactly once, inside their anchor bands",
+    D.length === 12 && CANON.every((id) => D.filter((d) => d.dimensionId === id).length === 1) && D.every((d) => Number.isInteger(d.score) && d.score >= BANDS[d.anchorBand][0] && d.score <= BANDS[d.anchorBand][1]),
+    "12/12 anchored");
+  add("MTV1-3: every dimension carries a rationale, limiting fact, and confidence",
+    D.every((d) => d.rationale.length > 40 && d.limitingFact.length > 20 && ["low", "medium", "high"].includes(d.confidence)),
+    "evidenced");
+  add("MTV1-4: the assessment approves nothing and was not tuned to the aggregate",
+    METEORA_ASSESSMENT_APPROVES_ANYTHING === false && METEORA_ASSESSMENT_ENABLES_TRANSACTIONS === false && METEORA_ASSESSMENT_OUTCOME.scoresAdjustedAfterSeeingAggregate === false,
+    "score-only");
+  add("MTV1-5: the structural + integrity findings are recorded — IL at partial, incidents at weak, no verified build",
+    D.find((d) => d.dimensionId === "asset_stablecoin_risk")!.score === 5 && D.find((d) => d.dimensionId === "incident_history")!.anchorBand === "weak" && METEORA_ONCHAIN_FACTS.verifiedBuild.registryHasRecord === false,
+    "IL + litigation + unverified");
+  add("MTV1-7: the human review decision is recorded — not passed, no overrides, reopenable",
+    METEORA_HUMAN_REVIEW_DECISION.outcome === "not_passed" && METEORA_HUMAN_REVIEW_DECISION.decidedByRole === "ws_product_owner" && METEORA_HUMAN_REVIEW_DECISION.overridesApplied === 0 && METEORA_HUMAN_REVIEW_DECISION.reopenOn.length === 3,
+    "recorded");
+  add("MTV1-6: the assessment is bound to the flagship DLMM program",
+    METEORA_ASSESSMENT_BINDING.dlmmProgram === "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" && METEORA_ONCHAIN_FACTS.dlmmLastDeploySlot === 423_977_638,
+    "bound");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * OR — Orca liquidity pools rubric-v1 automated assessment (2026-08-11)
+ * ------------------------------------------------------------------ */
+export function runOrcaRubricV1AssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const D = ORCA_DIMENSION_ASSESSMENTS;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+  const BANDS: Record<string, [number, number]> = { unsupported: [0, 2], weak: [3, 4], partial: [5, 6], supported: [7, 8], strongly_supported: [9, 10] };
+
+  add("ORV1-1: the aggregate is computed from the recorded dimensions and pins 6.71 / below the floor",
+    computeOrcaAggregate().aggregate === 6.71 && ORCA_ASSESSMENT_OUTCOME.weightedPoints === 671 && ORCA_ASSESSMENT_OUTCOME.aggregate === 6.71 && ORCA_ASSESSMENT_OUTCOME.minimumThreshold === 7 && ORCA_ASSESSMENT_OUTCOME.meetsMinimum === false,
+    "6.71 < 7");
+  add("ORV1-2: all 12 canonical rubric-v1 dimensions are scored exactly once, inside their anchor bands",
+    D.length === 12 && CANON.every((id) => D.filter((d) => d.dimensionId === id).length === 1) && D.every((d) => Number.isInteger(d.score) && d.score >= BANDS[d.anchorBand][0] && d.score <= BANDS[d.anchorBand][1]),
+    "12/12 anchored");
+  add("ORV1-3: every dimension carries a rationale, limiting fact, and confidence",
+    D.every((d) => d.rationale.length > 40 && d.limitingFact.length > 20 && ["low", "medium", "high"].includes(d.confidence)),
+    "evidenced");
+  add("ORV1-4: the assessment approves nothing and was not tuned to the aggregate",
+    ORCA_ASSESSMENT_APPROVES_ANYTHING === false && ORCA_ASSESSMENT_ENABLES_TRANSACTIONS === false && ORCA_ASSESSMENT_OUTCOME.scoresAdjustedAfterSeeingAggregate === false,
+    "score-only");
+  add("ORV1-5: the distinguishing findings are recorded — active verified build, IL at partial, unattested authority",
+    ORCA_ONCHAIN_FACTS.verifiedBuild.currentlyVerified === true && ORCA_ONCHAIN_FACTS.verifiedBuild.onChainHashEqualsExecutableHash === true && D.find((d) => d.dimensionId === "asset_stablecoin_risk")!.score === 5 && D.find((d) => d.dimensionId === "upgrade_admin_authority")!.score === 6,
+    "verified + IL + authority gap");
+  add("ORV1-7: the human review decision is recorded — not passed, no overrides, reopenable",
+    ORCA_HUMAN_REVIEW_DECISION.outcome === "not_passed" && ORCA_HUMAN_REVIEW_DECISION.decidedByRole === "ws_product_owner" && ORCA_HUMAN_REVIEW_DECISION.overridesApplied === 0 && ORCA_HUMAN_REVIEW_DECISION.reopenOn.length === 3,
+    "recorded");
+  add("ORV1-6: the assessment is bound to the Whirlpools program and verified commit",
+    ORCA_ASSESSMENT_BINDING.whirlpoolsProgram === "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" && ORCA_ASSESSMENT_BINDING.verifiedCommit === "e5f089bc5c49b01f5c8abb43c78457ab6c440568" && ORCA_ONCHAIN_FACTS.lastDeploySlot === 398_059_635,
+    "bound");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * RD — Raydium liquidity pools rubric-v1 automated assessment (2026-08-11)
+ * ------------------------------------------------------------------ */
+export function runRaydiumRubricV1AssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const D = RAYDIUM_DIMENSION_ASSESSMENTS;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+  const BANDS: Record<string, [number, number]> = { unsupported: [0, 2], weak: [3, 4], partial: [5, 6], supported: [7, 8], strongly_supported: [9, 10] };
+
+  add("RDV1-1: the aggregate is computed from the recorded dimensions and pins 6.03 / below the floor",
+    computeRaydiumAggregate().aggregate === 6.03 && RAYDIUM_ASSESSMENT_OUTCOME.weightedPoints === 603 && RAYDIUM_ASSESSMENT_OUTCOME.aggregate === 6.03 && RAYDIUM_ASSESSMENT_OUTCOME.minimumThreshold === 7 && RAYDIUM_ASSESSMENT_OUTCOME.meetsMinimum === false,
+    "6.03 < 7");
+  add("RDV1-2: all 12 canonical rubric-v1 dimensions are scored exactly once, inside their anchor bands",
+    D.length === 12 && CANON.every((id) => D.filter((d) => d.dimensionId === id).length === 1) && D.every((d) => Number.isInteger(d.score) && d.score >= BANDS[d.anchorBand][0] && d.score <= BANDS[d.anchorBand][1]),
+    "12/12 anchored");
+  add("RDV1-3: every dimension carries a rationale, limiting fact, and confidence",
+    D.every((d) => d.rationale.length > 40 && d.limitingFact.length > 20 && ["low", "medium", "high"].includes(d.confidence)),
+    "evidenced");
+  add("RDV1-4: the assessment approves nothing and was not tuned to the aggregate",
+    RAYDIUM_ASSESSMENT_APPROVES_ANYTHING === false && RAYDIUM_ASSESSMENT_ENABLES_TRANSACTIONS === false && RAYDIUM_ASSESSMENT_OUTCOME.scoresAdjustedAfterSeeingAggregate === false,
+    "score-only");
+  add("RDV1-5: the exploit record is recorded — both incidents named, incidents at weak, ops at weak",
+    RAYDIUM_MARKET_FACTS.incidents.dec2022.length > 40 && RAYDIUM_MARKET_FACTS.incidents.jun2026.length > 40 && D.find((d) => d.dimensionId === "incident_history")!.score === 3 && D.find((d) => d.dimensionId === "operational_dependency_risk")!.anchorBand === "weak",
+    "two exploits recorded");
+  add("RDV1-7: the human review decision is recorded — not passed, no overrides, reopenable",
+    RAYDIUM_HUMAN_REVIEW_DECISION.outcome === "not_passed" && RAYDIUM_HUMAN_REVIEW_DECISION.decidedByRole === "ws_product_owner" && RAYDIUM_HUMAN_REVIEW_DECISION.overridesApplied === 0 && RAYDIUM_HUMAN_REVIEW_DECISION.reopenOn.length === 3,
+    "recorded");
+  add("RDV1-6: the assessment is bound to the flagship CLMM program with the fresh-deploy fact",
+    RAYDIUM_ASSESSMENT_BINDING.clmmProgram === "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" && RAYDIUM_ONCHAIN_FACTS.clmmLastDeploySlot === 436_167_935 && RAYDIUM_ONCHAIN_FACTS.verifiedBuild.currentlyVerified === false,
+    "bound");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * SN — Sanctum INF rubric-v1 automated assessment (2026-08-11)
+ * ------------------------------------------------------------------ */
+export function runInfRubricV1AssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const D = INF_V1_DIMENSION_ASSESSMENTS;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+  const BANDS: Record<string, [number, number]> = { unsupported: [0, 2], weak: [3, 4], partial: [5, 6], supported: [7, 8], strongly_supported: [9, 10] };
+
+  add("SNV1-1: the aggregate is computed from the recorded dimensions and pins 6.02 / below the floor",
+    computeInfV1Aggregate().aggregate === 6.02 && INF_V1_ASSESSMENT_OUTCOME.weightedPoints === 602 && INF_V1_ASSESSMENT_OUTCOME.aggregate === 6.02 && INF_V1_ASSESSMENT_OUTCOME.minimumThreshold === 7 && INF_V1_ASSESSMENT_OUTCOME.meetsMinimum === false,
+    "6.02 < 7");
+  add("SNV1-2: all 12 canonical rubric-v1 dimensions are scored exactly once, inside their anchor bands",
+    D.length === 12 && CANON.every((id) => D.filter((d) => d.dimensionId === id).length === 1) && D.every((d) => Number.isInteger(d.score) && d.score >= BANDS[d.anchorBand][0] && d.score <= BANDS[d.anchorBand][1]),
+    "12/12 anchored");
+  add("SNV1-3: every dimension carries a rationale, limiting fact, and confidence",
+    D.every((d) => d.rationale.length > 40 && d.limitingFact.length > 20 && ["low", "medium", "high"].includes(d.confidence)),
+    "evidenced");
+  add("SNV1-4: the assessment approves nothing and was not tuned to the aggregate",
+    INF_V1_ASSESSMENT_APPROVES_ANYTHING === false && INF_V1_ASSESSMENT_ENABLES_TRANSACTIONS === false && INF_V1_ASSESSMENT_OUTCOME.scoresAdjustedAfterSeeingAggregate === false,
+    "score-only");
+  add("SNV1-5: the layering findings are recorded — failed verification attempt, shared committee key, component inheritance",
+    INF_V1_ONCHAIN_FACTS.verifiedBuild.hashMismatchOnAttempt === true && INF_V1_ASSESSMENT_BINDING.upgradeAuthority === JUPSOL_ASSESSMENT_BINDING.forkUpgradeAuthority && D.find((d) => d.dimensionId === "composability_dependency")!.score === 5,
+    "layered");
+  add("SNV1-7: the human review decision is recorded — not passed, no overrides, reopenable",
+    INF_V1_HUMAN_REVIEW_DECISION.outcome === "not_passed" && INF_V1_HUMAN_REVIEW_DECISION.decidedByRole === "ws_product_owner" && INF_V1_HUMAN_REVIEW_DECISION.overridesApplied === 0 && INF_V1_HUMAN_REVIEW_DECISION.reopenOn.length === 3,
+    "recorded");
+  add("SNV1-6: the assessment is bound to the S-controller, mint, and pool authority (self-validated by decode)",
+    INF_V1_ASSESSMENT_BINDING.sControllerProgram === "5ocnV1qiCgaQR8Jb8xWnVbApfaygJ8tNoZfgPwsgx9kx" && INF_V1_ASSESSMENT_BINDING.infMint === "5oVNBeEEQvYi1cX3ir8Dx5n1P7pdxydbGF2X4TxVusJm" && INF_V1_ONCHAIN_FACTS.lastDeploySlot === 411_884_877,
+    "bound");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * NS — Native SOL staking rubric-v1 automated assessment (2026-08-11)
+ * ------------------------------------------------------------------ */
+export function runNativeStakingRubricV1AssessmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const D = NATIVE_STAKING_V1_DIMENSION_ASSESSMENTS;
+  const CANON = ["audit_security","maturity","upgrade_admin_authority","manager_discretion","strategy_complexity","composability_dependency","oracle_risk","liquidity_withdrawal","asset_stablecoin_risk","withdrawal_fee_transparency","operational_dependency_risk","incident_history"];
+  const BANDS: Record<string, [number, number]> = { unsupported: [0, 2], weak: [3, 4], partial: [5, 6], supported: [7, 8], strongly_supported: [9, 10] };
+
+  add("NSV1-1: the aggregate is computed from the recorded dimensions and pins 8.19 / ABOVE the floor",
+    computeNativeStakingV1Aggregate().aggregate === 8.19 && NATIVE_STAKING_V1_ASSESSMENT_OUTCOME.weightedPoints === 819 && NATIVE_STAKING_V1_ASSESSMENT_OUTCOME.aggregate === 8.19 && NATIVE_STAKING_V1_ASSESSMENT_OUTCOME.minimumThreshold === 7 && NATIVE_STAKING_V1_ASSESSMENT_OUTCOME.meetsMinimum === true,
+    "8.19 >= 7");
+  add("NSV1-2: all 12 canonical rubric-v1 dimensions are scored exactly once, inside their anchor bands",
+    D.length === 12 && CANON.every((id) => D.filter((d) => d.dimensionId === id).length === 1) && D.every((d) => Number.isInteger(d.score) && d.score >= BANDS[d.anchorBand][0] && d.score <= BANDS[d.anchorBand][1]),
+    "12/12 anchored");
+  add("NSV1-3: every dimension carries a rationale, limiting fact, and confidence",
+    D.every((d) => d.rationale.length > 40 && d.limitingFact.length > 10 && ["low", "medium", "high"].includes(d.confidence)),
+    "evidenced");
+  add("NSV1-4: the assessment approves nothing and was not tuned to the aggregate",
+    NATIVE_STAKING_V1_ASSESSMENT_APPROVES_ANYTHING === false && NATIVE_STAKING_V1_ASSESSMENT_ENABLES_TRANSACTIONS === false && NATIVE_STAKING_V1_ASSESSMENT_OUTCOME.scoresAdjustedAfterSeeingAggregate === false,
+    "score-only");
+  add("NSV1-5: the structural findings are recorded — native program (no authority), live-verified 5% commission, single-validator ops at partial",
+    NATIVE_STAKING_V1_ONCHAIN_FACTS.stakeProgramIsNative === true && NATIVE_STAKING_V1_ONCHAIN_FACTS.commissionPct === 5 && NATIVE_STAKING_V1_ONCHAIN_FACTS.status === "current" && D.find((d) => d.dimensionId === "upgrade_admin_authority")!.score === 9 && D.find((d) => d.dimensionId === "operational_dependency_risk")!.score === 5,
+    "native + verified + concentrated");
+  add("NSV1-7: the human review decision is recorded — PASSED, no overrides, concentration watch-item",
+    NATIVE_STAKING_V1_HUMAN_REVIEW_DECISION.outcome === "passed" && NATIVE_STAKING_V1_HUMAN_REVIEW_DECISION.decidedByRole === "ws_product_owner" && NATIVE_STAKING_V1_HUMAN_REVIEW_DECISION.overridesApplied === 0 && NATIVE_STAKING_V1_HUMAN_REVIEW_DECISION.watchItem === "single_validator_concentration" && NATIVE_STAKING_V1_HUMAN_REVIEW_DECISION.reopenOn.length === 3,
+    "recorded");
+  add("NSV1-6: the assessment is bound to the native stake program and the exact 14T vote account",
+    NATIVE_STAKING_V1_ASSESSMENT_BINDING.stakeProgram === "Stake11111111111111111111111111111111111111" && NATIVE_STAKING_V1_ASSESSMENT_BINDING.voteAccount === JUPITER_NATIVE_STAKE_VOTE_ACCOUNT,
+    "bound");
+
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * JPI — Jupiter Lend incident-history amendment (2026-08-11)
+ * ------------------------------------------------------------------ */
+export function runJupiterLendIncidentAmendmentFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const R = JUP_INCIDENT_HISTORY_RESOLUTION;
+
+  add("JPI-1: the amendment resolves the hold-out at 5 and completes the aggregate at 4.22",
+    R.dimensionId === "incident_history" && R.priorState === "explicit_unknown" && R.resolvedScore === 5 && R.completedAggregate === 4.22 && R.completedWeightedPoints === 422 && R.totalWeight === 100,
+    "5 → 4.22");
+  add("JPI-2: the completed aggregate lands INSIDE the originally published band — the bound held",
+    completedAggregateIsInsidePriorBand() && R.priorAggregateBand[0] === 4.12 && R.priorAggregateBand[1] === 4.32,
+    "4.12 ≤ 4.22 ≤ 4.32");
+  add("JPI-3: the outcome is unchanged — still below the floor, still not passed",
+    R.minimumThreshold === 7 && R.meetsMinimum === false && R.outcomeChanged === false,
+    "verdict intact");
+  add("JPI-4: the amendment references the original assessment and does NOT mutate it",
+    JUP_INCIDENT_AMENDMENT_AMENDS === "jupiter_lend_usdc_provisional_assessment_v1" && JUP_INCIDENT_AMENDMENT_MUTATES_ORIGINAL === false && JUP_INCIDENT_AMENDMENT_APPROVES_ANYTHING === false && JUP_PROVISIONAL_SCORES.length === 11 && !JUP_PROVISIONAL_SCORES.some((d) => d.dimensionId === "incident_history"),
+    "original immutable");
+  add("JPI-5: both directions of evidence are recorded, and the score was not tuned to the aggregate",
+    JUP_INCIDENT_EVIDENCE.favourable.length === 4 && JUP_INCIDENT_EVIDENCE.adverse.length === 3 && R.scoresAdjustedAfterSeeingAggregate === false && R.anchorBand === "partial" && R.resolvedScore >= 5 && R.resolvedScore <= 6,
+    "evidenced both ways");
+  add("JPI-6: the binary-age blocker is recorded as eased (weeks, not hours)",
+    JUP_BINARY_AGE_AT_AMENDMENT.observedAtSlot > JUP_BINARY_AGE_AT_AMENDMENT.lendProgramDeploySlot && JUP_BINARY_AGE_AT_AMENDMENT.observedAtSlot - JUP_BINARY_AGE_AT_AMENDMENT.lendProgramDeploySlot > 5_000_000,
+    "~27 days");
+
+  return checks;
+}

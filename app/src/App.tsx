@@ -23,6 +23,8 @@ import DashboardPage from "./pages/DashboardPage";
 import PortfolioPage from "./pages/PortfolioPage";
 import GoalPage from "./pages/GoalPage";
 import SupportPage from "./pages/SupportPage";
+import StrategyLabPage from "./pages/StrategyLabPage";
+import VettingPage from "./pages/VettingPage";
 import OnboardingExperience from "./pages/OnboardingExperience";
 import DemoDashboardPage from "./pages/DemoDashboardPage";
 import DemoPortfolioPage from "./pages/DemoPortfolioPage";
@@ -74,7 +76,7 @@ import "./styles/dashboard.css";
 import "./styles/mobile.css";
 
 export type AppMode = "connected" | "demo" | "disconnected";
-export type ConnectedPage = "dashboard" | "portfolio" | "goal" | "support";
+export type ConnectedPage = "dashboard" | "portfolio" | "goal" | "support" | "strategy_lab" | "vetting";
 
 /**
  * DEV-ONLY guarded preview route. Reachable ONLY in a local dev build with
@@ -209,7 +211,7 @@ function MainApp() {
 
   // In-app page switch (connected only).
   const navigate = (id: string) => {
-    if (id !== "dashboard" && id !== "portfolio" && id !== "goal" && id !== "support") return;
+    if (id !== "dashboard" && id !== "portfolio" && id !== "goal" && id !== "support" && id !== "strategy_lab" && id !== "vetting") return;
     // Leaving the Goal page with unsaved edits → confirm discarding first.
     if (activePage === "goal" && id !== "goal" && goalDirty) {
       setPendingNav(id);
@@ -221,7 +223,7 @@ function MainApp() {
   // Demo Mode page switch — Dashboard / Portfolio / Goal / Support are all
   // available in Demo (sample data), matching the connected nav.
   const demoNavigate = (id: string) => {
-    if (id === "dashboard" || id === "portfolio" || id === "goal" || id === "support") {
+    if (id === "dashboard" || id === "portfolio" || id === "goal" || id === "support" || id === "strategy_lab" || id === "vetting") {
       setActivePage(id);
     }
   };
@@ -292,6 +294,23 @@ function MainApp() {
           savedGoal={demoGoal}
           onSaveGoal={setDemoGoal}
         />
+      ) : activePage === "strategy_lab" ? (
+        <StrategyLabPage
+          mode="demo"
+          pushToast={pushToast}
+          onNavigate={demoNavigate}
+          onDisconnect={disconnectWallet}
+          onExitDemo={exitDemo}
+          onConnectWallet={openConnectModal}
+        />
+      ) : activePage === "vetting" ? (
+        <VettingPage
+          mode="demo"
+          onNavigate={demoNavigate}
+          onDisconnect={disconnectWallet}
+          onExitDemo={exitDemo}
+          onConnectWallet={openConnectModal}
+        />
       ) : activePage === "support" ? (
         <SupportPage
           mode="demo"
@@ -311,6 +330,34 @@ function MainApp() {
           goal={demoGoal}
         />
       );
+  } else if (activePage === "strategy_lab") {
+    // Strategy Lab (Trust) is available in every non-demo mode, including
+    // disconnected / mid-onboarding — trust content needs no wallet. Same
+    // precedence as Support so it is reachable from the disconnected nav.
+    page = (
+      <StrategyLabPage
+        mode={mode === "connected" ? "connected" : "disconnected"}
+        pushToast={pushToast}
+        onboardingActive={onboardingActive}
+        onNavigate={navigate}
+        onDisconnect={disconnectWallet}
+        onConnectWallet={openConnectModal}
+        onTryDemo={goDemo}
+      />
+    );
+  } else if (activePage === "vetting") {
+    // Vetting (Trust) — same precedence as Strategy Lab: available in every
+    // non-demo mode, including disconnected / mid-onboarding.
+    page = (
+      <VettingPage
+        mode={mode === "connected" ? "connected" : "disconnected"}
+        onboardingActive={onboardingActive}
+        onNavigate={navigate}
+        onDisconnect={disconnectWallet}
+        onConnectWallet={openConnectModal}
+        onTryDemo={goDemo}
+      />
+    );
   } else if (activePage === "support") {
     // Support is available in every non-demo mode, including disconnected /
     // mid-onboarding (FAQ + Contact Us need no wallet). Takes precedence over the
