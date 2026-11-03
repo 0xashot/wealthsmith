@@ -77,6 +77,8 @@ export interface Projection {
   partial: boolean;
   /** Milestone points for the projected-value line chart (deterministic). */
   points: Array<{ months: number; label: string; valueUsd: number }>;
+  /** Every month from 0 to `months` (same formula), for drawing the curve's true shape. */
+  monthlyPoints: Array<{ months: number; label: string; valueUsd: number }>;
 }
 
 export type ProjectionResult =
@@ -133,6 +135,12 @@ export function deriveProjection(inputs: ProjectionInputs): ProjectionResult {
     valueUsd: Math.round(futureValueAt(startingValueUsd, monthlyContribution, monthlyRate, m)),
   }));
 
+  const monthlyPoints = Array.from({ length: months + 1 }, (_, m) => ({
+    months: m,
+    label: monthsLabel(m),
+    valueUsd: Math.round(futureValueAt(startingValueUsd, monthlyContribution, monthlyRate, m)),
+  }));
+
   return {
     status: "ok",
     projection: {
@@ -145,6 +153,7 @@ export function deriveProjection(inputs: ProjectionInputs): ProjectionResult {
       estimatedGrowth,
       partial: anyUnpriced,
       points,
+      monthlyPoints,
     },
   };
 }
