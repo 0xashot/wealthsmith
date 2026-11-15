@@ -14,6 +14,7 @@
  */
 import ButtonIcon from "./ButtonIcon";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
+import { capture } from "../analytics/analytics";
 
 export type ModalPrimaryAction =
   | {
@@ -39,6 +40,21 @@ interface Props {
   primary: ModalPrimaryAction;
 }
 
+/**
+ * The provider a handoff leads to, as a bounded label. Taken from the link's host
+ * rather than a prop so every external footer is counted without each caller having
+ * to remember to. Only the registrable host, never the path or query — a swap URL
+ * carries amounts and token mints in its query string.
+ */
+function providerFromHref(href: string): string {
+  try {
+    const host = new URL(href, location.href).hostname.replace(/^www\./, "");
+    return host.split(".").slice(-2).join(".") || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export default function ModalActionsFooter({ secondaryLabel = "Cancel", onSecondary, primary }: Props) {
   return (
     <div className="review-modal__footer review-modal__footer--actions">
@@ -51,6 +67,9 @@ export default function ModalActionsFooter({ secondaryLabel = "Cancel", onSecond
           href={primary.href}
           {...(primary.newTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
           aria-label={primary.ariaLabel}
+          onClick={() =>
+            capture({ name: "external_handoff_clicked", provider: providerFromHref(primary.href) })
+          }
         >
           <span>{primary.label}</span>
           <ButtonIcon src={externalLinkUrl} />

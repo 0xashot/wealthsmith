@@ -31,6 +31,7 @@ import {
   SUGGESTIONS_UNAVAILABLE,
 } from "../state/approvedCopy";
 import sparcleUrl from "../../../assets/icons/ui/sparcle.svg";
+import { capture } from "../analytics/analytics";
 
 /** The loading animation plays once and reveals nothing itself — the parent
  *  swaps in the ready rail when `loading` flips — so onComplete is a no-op. */
@@ -56,7 +57,12 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
   // for this suggestion (all Step 10A suggestions do).
   const onReviewSuggestion = (card: SuggestionCardState) => {
     // Step 15H / 16H-D — open for engine-detail, plan-backed contribution, OR Stable Yield suggestions.
-    if (rail?.reviewDetailsById[card.id] || rail?.contributionReviewById[card.id] || rail?.stableYieldReviewById[card.id]) setSelectedId(card.id);
+    if (rail?.reviewDetailsById[card.id] || rail?.contributionReviewById[card.id] || rail?.stableYieldReviewById[card.id]) {
+      setSelectedId(card.id);
+      // Which suggestions people actually open. The id and category are engine labels,
+      // never the figures the card displays.
+      capture({ name: "suggestion_reviewed", suggestionId: card.id, category: card.category });
+    }
   };
 
   const selectedDetails = selectedId ? rail?.reviewDetailsById[selectedId] : undefined;
@@ -74,6 +80,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
     ? () => {
         dismiss(selectedCard.dismissalSignature as string);
         setSelectedId(null);
+        capture({ name: "suggestion_dismissed", suggestionId: selectedCard.id });
       }
     : undefined;
 

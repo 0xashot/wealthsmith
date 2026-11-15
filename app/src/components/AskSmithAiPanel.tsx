@@ -56,6 +56,7 @@ import brushCleaningUrl from "../../../assets/icons/ui/brush-cleaning.svg";
 import messageCircleUrl from "../../../assets/icons/ui/message-circle.svg";
 import thumbsUpUrl from "../../../assets/icons/ui/thumbs-up.svg";
 import thumbsDownUrl from "../../../assets/icons/ui/thumbs-down.svg";
+import { capture } from "../analytics/analytics";
 
 interface Entry {
   prompt: string | null;
@@ -71,6 +72,16 @@ interface Props {
 
 export default function AskSmithAiPanel({ content, onClose, pushToast }: Props) {
   const reduced = useReducedMotion();
+  // Mounting the panel IS opening it — every caller renders it conditionally.
+  // Guarded with a ref because StrictMode double-invokes mount effects in dev, and
+  // an inflated "did they open Smith AI" count is exactly the kind of quiet error
+  // that survives into a decision.
+  const openCaptured = useRef(false);
+  useEffect(() => {
+    if (openCaptured.current) return;
+    openCaptured.current = true;
+    capture({ name: "smith_ai_opened" });
+  }, []);
   // On mobile (<1280px) the panel covers the viewport, so lock background scroll
   // while it's open. On desktop it's a side panel — the page scrolls as usual.
   useScrollLock(useIsMobileViewport());
@@ -117,15 +128,23 @@ export default function AskSmithAiPanel({ content, onClose, pushToast }: Props) 
     if (el) el.scrollTop = el.scrollHeight;
   }, [entries, typedResponse]);
 
-  const answer = (prompt: string) => {
-    const response = content.responses[prompt] ?? content.fallback;
+  const answer = (prompt: string, kind: "chip" | "free_text") => {
+    const matched = content.responses[prompt];
+    const response = matched ?? content.fallback;
     setEntries((prev) => [...prev, { prompt, response }]);
+    capture({ name: "smith_ai_message", kind });
+    // A fallback means the product could not answer what was asked. The question
+    // itself is the clearest statement of that gap, so it is the one event allowed
+    // to carry typed text — and only for free text, since a chip always matches.
+    if (!matched && kind === "free_text") {
+      capture({ name: "smith_ai_fallback", question: prompt });
+    }
   };
 
   const send = () => {
     const q = input.trim();
     if (!q || writing) return;
-    answer(q);
+    answer(q, "free_text");
     setInput("");
   };
 
@@ -425,7 +444,7 @@ export default function AskSmithAiPanel({ content, onClose, pushToast }: Props) 
               key={prompt}
               type="button"
               className="choice-chip"
-              onClick={() => answer(prompt)}
+              onClick={() => answer(prompt, "chip")}
               disabled={writing}
             >
               {prompt}
