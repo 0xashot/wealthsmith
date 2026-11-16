@@ -64,15 +64,18 @@ export const DEMO_SMITH_FALLBACK =
   "personalize WealthSmith, or check the Support page for help.";
 
 /**
- * The panel OPENS the conversation rather than answering an unasked question.
- * It previously opened with the verbatim answer to its own first suggested
- * prompt, so Smith began mid-conversation and clicking that chip repeated the
- * identical paragraph. This claims nothing about the portfolio, so it stays
- * true for any demo scenario.
+ * Demo Mode opens with NO first message — the suggested prompts carry the
+ * orientation on their own.
+ *
+ * The panel used to open with the verbatim answer to its own first suggested
+ * prompt, so Smith began mid-conversation, answering a question nobody asked,
+ * and clicking that chip repeated the identical paragraph. A greeting would fix
+ * the sequence but still puts a sentence on screen that has to stay true as the
+ * demo changes. An empty transcript cannot be wrong, and the Demo Mode
+ * disclosure is already carried by the demo banner above the page and repeated
+ * in every answer Smith gives.
  */
-export const DEMO_SMITH_OPENER =
-  "In this demo, you’re looking at a sample portfolio, not your real wallet. " +
-  "Ask about anything on this dashboard and I’ll explain how WealthSmith arrived at it.";
+export const DEMO_SMITH_OPENER = "";
 
 /** End a quoted engine fragment as a sentence without doubling its punctuation. */
 function asSentence(text: string): string {

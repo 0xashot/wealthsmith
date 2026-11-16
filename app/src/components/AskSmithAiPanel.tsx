@@ -92,9 +92,13 @@ export default function AskSmithAiPanel({ content, onClose, pushToast }: Props) 
   const [feedbackMessage, setFeedbackMessage] = useState("");
   // Show the "message required" error only after a submit attempt.
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
-  const [entries, setEntries] = useState<Entry[]>([
-    { prompt: null, response: content.opener },
-  ]);
+  // A surface may open with no message at all (content.opener === ""): the panel
+  // then starts on an empty transcript and the suggested prompts carry the
+  // orientation. Seeding a blank entry instead would render an empty message row
+  // with Smith's avatar and feedback controls attached to nothing.
+  const [entries, setEntries] = useState<Entry[]>(
+    content.opener ? [{ prompt: null, response: content.opener }] : []
+  );
   // First-open Smith AI loading beat (once per session, not on every reopen).
   const [intro, setIntro] = useState(() => !sessionFlags.smithAiIntroShown);
   const finishIntro = () => {
@@ -108,7 +112,7 @@ export default function AskSmithAiPanel({ content, onClose, pushToast }: Props) 
 
   // Only the newest reply types; earlier turns are shown in full.
   const lastIndex = entries.length - 1;
-  const { shown: typedResponse, done } = useTypewriter(entries[lastIndex].response, !reduced);
+  const { shown: typedResponse, done } = useTypewriter(entries[lastIndex]?.response ?? "", !reduced);
   const writing = !done;
 
   // Keep the transcript pinned to the newest message as it types/advances.
@@ -147,7 +151,7 @@ export default function AskSmithAiPanel({ content, onClose, pushToast }: Props) 
     moreRef.current?.focus();
   };
   const confirmClearHistory = () => {
-    setEntries([{ prompt: null, response: content.opener }]);
+    setEntries(content.opener ? [{ prompt: null, response: content.opener }] : []);
     setInput("");
     setConfirmClear(false);
     pushToast?.(SMITH_HISTORY_CLEARED_TOAST);
