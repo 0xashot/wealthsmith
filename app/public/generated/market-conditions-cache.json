@@ -1,0 +1,23 @@
+{
+  "cacheVersion": "market_condition_cache_1.0.0",
+  "generatedAt": "2026-10-27T09:08:33.636Z",
+  "sourceId": "coinmarketcap_crypto_fear_greed",
+  "indexId": "cmc_crypto_fear_greed",
+  "indexName": "CMC Crypto Fear & Greed Index",
+  "methodology": "cmc_crypto_fear_greed_composite",
+  "methodologyVersion": "cmc_fng_methodology_2026_1",
+  "score": 43,
+  "band": "fear",
+  "observedAt": "2026-10-27T08:53:10.028Z",
+  "retrievedAt": "2026-10-27T09:08:33.042Z",
+  "validUntil": "2026-10-28T20:53:10.028Z",
+  "retrievalState": "retrieved_current_refresh",
+  "evidence": [
+    "observation_timestamp=2026-10-27T08:53:10.028Z",
+    "records_considered=1",
+    "provider_classification=Neutral",
+    "canonical_band=fear (Fear)",
+    "provider_classification_mismatch:neutral"
+  ],
+  "rawPayloadVersion": "cmc_v3_fear_and_greed_latest_1"
+}
