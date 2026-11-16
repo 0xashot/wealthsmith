@@ -29,6 +29,7 @@
  *   Demo Mode language using approved demo phrases.
  */
 import type { SmithAiContent, SuggestionCardState } from "../types/dashboard";
+import { topPickRationale, asSentence } from "./smithAiTopPick";
 import { demoDashboardState } from "./demoDashboardState";
 
 /** demo-smith-ai-responses.md — Example 1 ("What is Demo Mode?"), verbatim. */
@@ -87,33 +88,10 @@ export const DEMO_SMITH_FALLBACK =
  */
 export const DEMO_SMITH_OPENER = "How can I help you?";
 
-/** End a quoted engine fragment as a sentence without doubling its punctuation. */
-function asSentence(text: string): string {
-  const t = text.trim();
-  if (!t) return "";
-  return /[.!?]$/.test(t) ? t : `${t}.`;
-}
-
-/**
- * Why the engine put THIS card first, stated from the documented rule rather
- * than from a score. suggestions/topPick.ts ranks by category priority with
- * `buffer` first, and engine.ts applies the Buffer Override: while the buffer
- * is under target the buffer suggestion is returned alone. So a buffer Top Pick
- * means the sample buffer needs funding, and any other Top Pick means it does
- * not. No threshold or score is ever quoted.
- */
-function topPickRationale(card: SuggestionCardState): string {
-  return card.category === "buffer"
-    ? "Safety Buffer is the highest-priority category, and the sample buffer is below its target, " +
-        "so funding it comes before any yield opportunity."
-    : "WealthSmith ranks suggestions by category priority, and Safety Buffer comes first. " +
-        "The sample buffer is already fully funded, so the highest-priority remaining opportunity is selected.";
-}
-
 function topPickResponse(card: SuggestionCardState): string {
   return [
     `In this demo, “${card.title}” is the Top Pick.`,
-    topPickRationale(card),
+    topPickRationale(card, "the sample buffer"),
     asSentence(card.description ?? ""),
     "This is based on sample data, not your real wallet.",
   ]
