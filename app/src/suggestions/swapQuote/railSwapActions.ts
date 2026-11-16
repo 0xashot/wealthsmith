@@ -64,6 +64,14 @@ export function deriveRailSwapActions(input: RailSwapActionInputs): Record<strin
           coreAssetState: h.coreAssetState,
         })),
       });
+    // The id match is deliberate, and it is why SPLIT contribution cards
+    // (contribution_split_sol / _usdc) get no entry: they describe a FUTURE monthly
+    // contribution, the allocation split carries USD amounts and target legs but no
+    // funding source (ContributionAllocationSplit has no sourceAssetId), and the money
+    // is not in the wallet yet. Wiring them in could therefore only ever produce
+    // `not_ready_for_quote` — the state SWR-5 pins for unfunded DCA, where a source is
+    // never assumed. Do NOT "fix" this by inventing a source for a contribution that
+    // has not arrived. Only a funded plan (staged_excess_usdc_dca) has a real one.
     } else if (card.type === "dca_buy" && input.contributionSuggestion && input.contributionSuggestion.id === card.id) {
       const sug = input.contributionSuggestion;
       const p = sug.contributionPlan;

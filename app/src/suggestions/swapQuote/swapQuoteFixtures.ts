@@ -549,6 +549,19 @@ export function runRailSwapActionFixtureChecks(): SwapFixtureCheck[] {
     // (its category is "contribution_plan"), so the test enforced the dead check.
     && !/selectedCard\?\.category === "(dca|rebalance|trim|buffer|stable_yield|staking)"/.test(rail), "rail wiring");
   add("SWR-10: no quote request occurs before Review opens — the section renders only inside the modal, and the hook loads only when enabled", (() => { const hook = readSrc("src/components/swapQuote/useSwapQuoteComparison.ts"); const modal = readSrc("src/components/SuggestionReviewModal.tsx"); return /if \(!enabled\b/.test(hook) && /swapAction &&[^\n]*\? \(/.test(modal); })(), "no prefetch");
+  // SWR-14 — pin the id match, so a later change cannot quietly start quoting a
+  // contribution that has not arrived. A split contribution renders TWO dca_buy cards
+  // whose ids cannot both equal the single suggestion's; those legs carry no funding
+  // source, so they must produce no action rather than a guessed one.
+  add("SWR-14: a dca_buy card whose id does NOT match the contribution suggestion gets NO swap action (split legs are unfunded; source never assumed)", (() => {
+    const out = deriveRailSwapActions({
+      cards: [card("contribution_split_sol", "dca"), card("contribution_split_usdc", "dca")],
+      generatedAt: gen,
+      contributionSuggestion: dcaSug("staged_excess_usdc_dca", "usdc", WSOL, "SOL"),
+    });
+    return Object.keys(out).length === 0;
+  })(), "split legs unquoted");
+
   // SWR-12/13 — the vocabulary guard. Every check above builds its own stub card, so
   // none of them can catch deriveRailSwapActions matching a value the MAPPER never
   // emits. These two assert against the mapper's real output instead: that is the only
