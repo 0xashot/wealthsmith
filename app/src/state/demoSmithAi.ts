@@ -29,6 +29,7 @@
  *   Demo Mode language using approved demo phrases.
  */
 import type { SmithAiContent, SuggestionCardState } from "../types/dashboard";
+import { SMITH_INTRO_OPENER } from "./approvedCopy";
 import { topPickRationale, asSentence } from "./smithAiTopPick";
 import { demoDashboardState } from "./demoDashboardState";
 
@@ -77,16 +78,19 @@ export const DEMO_SMITH_FALLBACK =
   "personalize WealthSmith, or check the Support page for help.";
 
 /**
- * Demo Mode opens by inviting a question, not by answering one.
+ * Demo Mode opens with the SAME introduction a connected wallet gets
+ * (approvedCopy.SMITH_INTRO_OPENER), so the product introduces itself once
+ * rather than differently per surface.
  *
  * The panel used to open with the verbatim answer to its own first suggested
  * prompt, so Smith began mid-conversation, answering a question nobody asked,
- * and clicking that chip repeated the identical paragraph. This greeting states
- * nothing about the portfolio, so there is no claim here that can fall out of
- * step with the rail. The Demo Mode disclosure is carried by the demo banner
- * above the page and repeated in every answer Smith gives.
+ * and clicking that chip repeated the identical paragraph. The introduction
+ * states nothing about the portfolio, so no claim here can fall out of step
+ * with the rail. It carries no Demo Mode wording either, because it describes
+ * Smith rather than the data: the disclosure is on the demo banner above the
+ * page and in every answer Smith gives.
  */
-export const DEMO_SMITH_OPENER = "How can I help you?";
+export const DEMO_SMITH_OPENER = SMITH_INTRO_OPENER;
 
 function topPickResponse(card: SuggestionCardState): string {
   return [

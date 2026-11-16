@@ -19,6 +19,7 @@
  */
 import {
   SMITH_FALLBACK,
+  SMITH_INTRO_OPENER,
   REAL_WALLET_NO_FUNDS_NOTE,
   REAL_WALLET_VALUE_DESC,
   REAL_WALLET_SUGGESTIONS_DESC,
@@ -27,16 +28,13 @@ import { topPickRationale, asSentence } from "./smithAiTopPick";
 import type { SmithAiContent, SuggestionCardState } from "../types/dashboard";
 
 /**
- * Smith introduces itself and says what it is actually useful for. It claims
- * nothing about this particular wallet, so it stays true in every connected
- * state. The read-only / no-funds assurance is NOT repeated here: it is already
- * on the wallet surface itself and in the answers where it is the actual point
- * (what Smith can read, what Review does).
+ * Smith opens with the shared introduction (approvedCopy.SMITH_INTRO_OPENER) —
+ * the same words Demo Mode uses, so the product introduces itself once rather
+ * than differently per surface. The read-only / no-funds assurance is NOT
+ * repeated here: it is already on the wallet surface itself and in the answers
+ * where it is the actual point (what Smith can read, what Review does).
  */
-export const REAL_WALLET_SMITH_OPENER =
-  "Hi, I’m Smith. I can explain anything on your dashboard — how your Safety Buffer target is " +
-  "set, why a suggestion came out on top, what a protocol handoff does, and what WealthSmith " +
-  "can and cannot see.";
+export const REAL_WALLET_SMITH_OPENER = SMITH_INTRO_OPENER;
 
 const WALLET_READ_PROMPT = "What can you read from my wallet?";
 const WALLET_READ_RESPONSE =
