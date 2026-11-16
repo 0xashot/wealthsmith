@@ -12,7 +12,7 @@
  */
 import { useMemo, useRef, useState } from "react";
 import { demoDashboardState as d } from "../state/demoDashboardState";
-import { demoSmithAiContent } from "../state/demoSmithAi";
+import { buildDemoSmithAiContent } from "../state/demoSmithAi";
 import { demoWalletPositions } from "../state/demoWalletPositions";
 import { portfolioState as p } from "../state/portfolioState";
 import {
@@ -75,6 +75,9 @@ export default function DemoPortfolioPage({
   // allocation MEASUREMENT fed to the demo rail (never positions, never a source).
   const manual = useManualAssets();
   const demoContributionRail = useMemo(() => buildDemoContributionRail(goal, demoWalletPositions, manual.positions), [goal, manual.positions]);
+  // Ask Smith AI explains the SAME engine output the rail renders, so the panel can
+  // never describe a Top Pick (or a locked card) that is not on screen.
+  const smithAiContent = useMemo(() => buildDemoSmithAiContent(demoContributionRail.cards), [demoContributionRail]);
 
   // Demo positions are available synchronously, but a manually added BTC/ETH
   // amount is not priced until the external feed answers — so hold the merged
@@ -147,7 +150,7 @@ export default function DemoPortfolioPage({
 
         {railMode === "ask_smith_ai" ? (
           <AskSmithAiPanel
-            content={demoSmithAiContent}
+            content={smithAiContent}
             onClose={closeAskSmithAi}
             pushToast={pushToast}
           />

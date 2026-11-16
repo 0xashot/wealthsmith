@@ -17,7 +17,7 @@
  */
 import { useMemo, useRef, useState } from "react";
 import { demoDashboardState as d } from "../state/demoDashboardState";
-import { demoSmithAiContent } from "../state/demoSmithAi";
+import { buildDemoSmithAiContent } from "../state/demoSmithAi";
 import { demoWalletPositions, DEMO_NET_CONTRIBUTIONS_USD } from "../state/demoWalletPositions";
 import GlobalNav from "../components/GlobalNav";
 import DemoBanner from "../components/DemoBanner";
@@ -64,6 +64,9 @@ export default function DemoDashboardPage({
   // allocation card and its Rebalance suggestion always agree.
   const manual = useManualAssets();
   const demoContributionRail = useMemo(() => buildDemoContributionRail(goal, demoWalletPositions, manual.positions), [goal, manual.positions]);
+  // Ask Smith AI explains the SAME engine output the rail renders, so the panel can
+  // never describe a Top Pick (or a locked card) that is not on screen.
+  const smithAiContent = useMemo(() => buildDemoSmithAiContent(demoContributionRail.cards), [demoContributionRail]);
 
   const openAskSmithAi = () => setRailMode("ask_smith_ai");
   const closeAskSmithAi = () => {
@@ -107,7 +110,7 @@ export default function DemoDashboardPage({
 
         {railMode === "ask_smith_ai" ? (
           <AskSmithAiPanel
-            content={demoSmithAiContent}
+            content={smithAiContent}
             onClose={closeAskSmithAi}
             pushToast={pushToast}
           />

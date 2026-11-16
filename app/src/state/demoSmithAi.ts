@@ -1,37 +1,54 @@
 /**
- * Demo Mode Ask Smith AI content — static, demo-aware, approved only.
+ * Demo Mode Ask Smith AI content — DERIVED from the engine output the rail renders.
  *
- * There is NO live generation. Suggested prompts map to verbatim approved
- * responses; any other input returns the demo-aware fallback. Sources:
- * - Card explanations: examples/demo-mode/demo-suggestions.json
- *   (each suggestion's smith_ai_explanation.approved_short_response).
- * - Demo-Mode / handoff answers: examples/demo-mode/demo-smith-ai-responses.md
- *   (Examples 1 and 9), quoted verbatim.
+ * There is NO live generation. The panel still only ever shows approved copy; what
+ * changed is where the Top Pick sentence comes from. It is now composed from the
+ * SAME `SuggestionCardState` the rail renders (title, category, description —
+ * engine-owned, quoted verbatim) and wrapped in the approved Demo Mode framing.
+ *
+ * WHY THIS IS DERIVED AND NOT A FIXTURE: the demo rail runs the real engine over
+ * the canonical demo profile (DemoDashboardPage → buildDemoContributionRail →
+ * deriveRailSuggestions). The previous version of this file read a hand-written
+ * snapshot (examples/demo-mode/demo-suggestions.json) describing an older demo
+ * scenario — buffer below target, buffer as Top Pick, a locked yield card. The
+ * demo portfolio has since changed (the sample buffer is fully funded and the
+ * Top Pick is a yield suggestion), so Smith AI asserted three things the screen
+ * contradicted. Deriving from the rail makes that class of drift impossible:
+ * if the engine's answer changes, Smith's answer changes with it.
+ *
+ * Boundary unchanged (rules/financial-logic-boundaries.md): Smith AI EXPLAINS.
+ * Nothing here selects a Top Pick, ranks, scores, or invents a value — it reads
+ * what the engine already decided.
+ *
+ * Sources:
+ * - Top Pick sentence: the engine card + the documented selection rule
+ *   (suggestions/topPick.ts — category priority, Safety Buffer first).
+ * - Demo-Mode answer: examples/demo-mode/demo-smith-ai-responses.md (Example 1),
+ *   quoted verbatim.
  * - Fallback: adapted from content/smith-ai-copy.md uncertainty response into
- *   Demo Mode language using approved demo phrases (per approval decision 2).
+ *   Demo Mode language using approved demo phrases.
  */
-import type { SmithAiContent } from "../types/dashboard";
+import type { SmithAiContent, SuggestionCardState } from "../types/dashboard";
 import { demoDashboardState } from "./demoDashboardState";
-import demoSuggestions from "../../../examples/demo-mode/demo-suggestions.json";
-
-const suggestions = (demoSuggestions as any).suggestions as any[];
-const explain = (id: string): string =>
-  suggestions.find((s) => s.id === id)?.smith_ai_explanation?.approved_short_response ?? "";
-
-const TOP_PICK_RESPONSE = explain("demo_top_up_safety_buffer");
-const LOCKED_RESPONSE = explain("demo_locked_usdc_yield");
 
 /** demo-smith-ai-responses.md — Example 1 ("What is Demo Mode?"), verbatim. */
+const DEMO_MODE_PROMPT = "What does Demo Mode mean?";
 const DEMO_MODE_RESPONSE =
   "Demo Mode lets you explore WealthSmith with sample data before connecting a wallet. " +
   "In this demo, the dashboard, portfolio, Safety Buffer, and suggestions are based on a sample portfolio, not your real wallet. " +
   "Connect your wallet to personalize WealthSmith with your real portfolio. Your funds stay in your wallet.";
 
-/** demo-smith-ai-responses.md — Example 9 ("Review on Jupiter"), verbatim. */
-const JUPITER_HANDOFF_RESPONSE =
-  "In this demo, Review on Jupiter opens Jupiter in a new tab so you can see how an external protocol handoff works. " +
-  "WealthSmith does not execute a swap, move funds, or mark the suggestion complete when you open the protocol. " +
-  "This demo suggestion is based on sample data.";
+/**
+ * What Review actually does in Demo Mode: it opens the read-only details modal
+ * (RealWalletSuggestionsRail → SuggestionReviewModal). The protocol link inside
+ * that modal is a handoff — it never executes, signs, or completes anything.
+ */
+const REVIEW_PROMPT = "What happens when I click Review?";
+const REVIEW_RESPONSE =
+  "In this demo, Review opens a read-only breakdown of how the suggestion was calculated — " +
+  "the amount, the current APY, and the estimated yearly rewards. Opening the protocol from " +
+  "there hands you off in a new tab; WealthSmith does not execute a swap, move funds, or mark " +
+  "the suggestion complete. This is based on sample data, not your real wallet.";
 
 /**
  * Demo-aware fallback for non-fixture input. Built only from approved
@@ -46,24 +63,95 @@ export const DEMO_SMITH_FALLBACK =
   "I don’t have enough product information to answer that confidently — connect your wallet to " +
   "personalize WealthSmith, or check the Support page for help.";
 
-/** The panel opens with the demo Top Pick explanation (mirrors connected). */
-export const DEMO_SMITH_OPENER = TOP_PICK_RESPONSE;
+/**
+ * The panel OPENS the conversation rather than answering an unasked question.
+ * It previously opened with the verbatim answer to its own first suggested
+ * prompt, so Smith began mid-conversation and clicking that chip repeated the
+ * identical paragraph. This claims nothing about the portfolio, so it stays
+ * true for any demo scenario.
+ */
+export const DEMO_SMITH_OPENER =
+  "In this demo, you’re looking at a sample portfolio, not your real wallet. " +
+  "Ask about anything on this dashboard and I’ll explain how WealthSmith arrived at it.";
 
-/** Exact suggested-prompt → approved response map (demo-aware, verbatim). */
-export const DEMO_SMITH_RESPONSES: Record<string, string> = {
-  "Why is Safety Buffer the Top Pick?": TOP_PICK_RESPONSE,
-  "What does Demo Mode mean?": DEMO_MODE_RESPONSE,
-  "Why is the yield suggestion locked?": LOCKED_RESPONSE,
-  // Not a suggested prompt, but approved if the user types it:
-  "What happens if I click Review on Jupiter?": JUPITER_HANDOFF_RESPONSE,
-};
+/** End a quoted engine fragment as a sentence without doubling its punctuation. */
+function asSentence(text: string): string {
+  const t = text.trim();
+  if (!t) return "";
+  return /[.!?]$/.test(t) ? t : `${t}.`;
+}
 
-/** Content object for the mode-agnostic Ask Smith AI panel (demo-aware). */
-export const demoSmithAiContent: SmithAiContent = {
-  panelLabel: "Smith AI panel",
-  entryLabel: demoDashboardState.smith_ai.entry_label,
-  opener: DEMO_SMITH_OPENER,
-  prompts: demoDashboardState.smith_ai.suggested_prompts,
-  responses: DEMO_SMITH_RESPONSES,
-  fallback: DEMO_SMITH_FALLBACK,
-};
+/**
+ * Why the engine put THIS card first, stated from the documented rule rather
+ * than from a score. suggestions/topPick.ts ranks by category priority with
+ * `buffer` first, and engine.ts applies the Buffer Override: while the buffer
+ * is under target the buffer suggestion is returned alone. So a buffer Top Pick
+ * means the sample buffer needs funding, and any other Top Pick means it does
+ * not. No threshold or score is ever quoted.
+ */
+function topPickRationale(card: SuggestionCardState): string {
+  return card.category === "buffer"
+    ? "Safety Buffer is the highest-priority category, and the sample buffer is below its target, " +
+        "so funding it comes before any yield opportunity."
+    : "WealthSmith ranks suggestions by category priority, and Safety Buffer comes first. " +
+        "The sample buffer is already fully funded, so the highest-priority remaining opportunity is selected.";
+}
+
+function topPickResponse(card: SuggestionCardState): string {
+  return [
+    `In this demo, “${card.title}” is the Top Pick.`,
+    topPickRationale(card),
+    asSentence(card.description ?? ""),
+    "This is based on sample data, not your real wallet.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function lockedResponse(card: SuggestionCardState): string {
+  return [
+    `In this demo, “${card.title}” is shown but is not available to act on yet.`,
+    asSentence(card.disabled_reason_text ?? ""),
+    "This is based on sample data, not your real wallet.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * Build the Ask Smith AI content for Demo Mode from the rail the page is
+ * rendering. Pass `rail.cards`; with no cards the panel still opens and can
+ * explain Demo Mode itself.
+ */
+export function buildDemoSmithAiContent(
+  cards: readonly SuggestionCardState[] | null | undefined
+): SmithAiContent {
+  const list = cards ?? [];
+  const topPick = list.find((c) => c.is_top_pick);
+  const locked = list.find((c) => c.disabled_reason_text != null && !c.is_top_pick);
+
+  const prompts: string[] = [];
+  const responses: Record<string, string> = {};
+  const add = (prompt: string, response: string) => {
+    prompts.push(prompt);
+    responses[prompt] = response;
+  };
+
+  // Top Pick first — it is the single thing the rail is pointing at.
+  if (topPick) add(`Why is “${topPick.title}” the Top Pick?`, topPickResponse(topPick));
+
+  add(DEMO_MODE_PROMPT, DEMO_MODE_RESPONSE);
+
+  // Only offer the locked question when something on screen is actually locked.
+  if (locked) add(`Why is “${locked.title}” locked?`, lockedResponse(locked));
+  else add(REVIEW_PROMPT, REVIEW_RESPONSE);
+
+  return {
+    panelLabel: "Smith AI panel",
+    entryLabel: demoDashboardState.smith_ai.entry_label,
+    opener: DEMO_SMITH_OPENER,
+    prompts,
+    responses,
+    fallback: DEMO_SMITH_FALLBACK,
+  };
+}
