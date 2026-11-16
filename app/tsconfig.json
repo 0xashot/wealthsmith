@@ -13,7 +13,16 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "useDefineForClassFields": true,
-    "noEmit": true
+    "noEmit": true,
+    // The wallet-adapter packages declare an optional peer on @types/react and npm
+    // sometimes nests a React 19 copy under them. Two copies of the React types make
+    // every adapter component fail as a JSX element (TS2786), so pin type resolution
+    // to the single root copy that matches the React 18 runtime we actually ship.
+    "baseUrl": ".",
+    "paths": {
+      "react": ["./node_modules/@types/react"],
+      "react-dom": ["./node_modules/@types/react-dom"]
+    }
   },
   "include": ["src"]
 }
