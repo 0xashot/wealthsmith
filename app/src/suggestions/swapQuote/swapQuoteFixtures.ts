@@ -28,6 +28,8 @@ import type { SwapQuoteComparisonAssessment, SwapComparisonStatus } from "./swap
 import { presentSwapQuote, notReadyView, notRequiredView, unavailableView, EXCLUSION_REASON_COPY, LOADING_VIEW } from "./quotePresentation";
 import { validateSanitizedAssessment, swapQuoteRequestKey } from "./swapQuoteClient";
 import { deriveRailSwapActions } from "./railSwapActions";
+import { CARD_TYPE, CARD_CATEGORY } from "../toSuggestionCard";
+import type { SuggestionCategory } from "../engineTypes";
 import type { SuggestionCardState } from "../../types/dashboard";
 import { buildProviderSwapUrl, buildSwapHandoff } from "./providerSwapLinks";
 
@@ -503,7 +505,13 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
 export function runRailSwapActionFixtureChecks(): SwapFixtureCheck[] {
   const checks: SwapFixtureCheck[] = [];
   const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
-  const card = (id: string, category: string) => ({ id, category } as unknown as SuggestionCardState);
+  // Build the stub card with the REAL card vocabulary, taken from the mapper itself
+  // rather than written out again here. These stubs used to carry only the ENGINE
+  // category and no `type` at all, so they agreed with the bug in deriveRailSwapActions
+  // (which compared engine category names a card never carries) and every check below
+  // passed while the feature produced nothing in the app.
+  const card = (id: string, engineCategory: SuggestionCategory) =>
+    ({ id, type: CARD_TYPE[engineCategory], category: CARD_CATEGORY[engineCategory] } as unknown as SuggestionCardState);
   const gen = QUOTED_AT;
 
   // Rebalance stables_to_crypto → ready USDC→SOL.
@@ -535,8 +543,26 @@ export function runRailSwapActionFixtureChecks(): SwapFixtureCheck[] {
   // Wiring guards (source scans).
   const readSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
   const rail = readSrc("src/components/RealWalletSuggestionsRail.tsx");
-  add("SWR-9: the shared rail passes swapAction + isDca + fetcher to BOTH the contribution (DCA) and details (Rebalance/Trim) modals", (rail.match(/swapAction=\{selectedId \? rail\?\.swapActionById/g) ?? []).length >= 2 && /swapQuoteIsDca=\{selectedCard\?\.category === "dca"\}/.test(rail), "rail wiring");
+  add("SWR-9: the shared rail passes swapAction + isDca + fetcher to BOTH the contribution (DCA) and details (Rebalance/Trim) modals", (rail.match(/swapAction=\{selectedId \? rail\?\.swapActionById/g) ?? []).length >= 2 && /swapQuoteIsDca=\{selectedCard\?\.type === "dca_buy"\}/.test(rail)
+    // Pin the DISCRIMINATOR, not just the prop: this assertion used to require the
+    // expression `selectedCard?.category === "dca"`, which a card never satisfies
+    // (its category is "contribution_plan"), so the test enforced the dead check.
+    && !/selectedCard\?\.category === "(dca|rebalance|trim|buffer|stable_yield|staking)"/.test(rail), "rail wiring");
   add("SWR-10: no quote request occurs before Review opens — the section renders only inside the modal, and the hook loads only when enabled", (() => { const hook = readSrc("src/components/swapQuote/useSwapQuoteComparison.ts"); const modal = readSrc("src/components/SuggestionReviewModal.tsx"); return /if \(!enabled\b/.test(hook) && /swapAction &&[^\n]*\? \(/.test(modal); })(), "no prefetch");
+  // SWR-12/13 — the vocabulary guard. Every check above builds its own stub card, so
+  // none of them can catch deriveRailSwapActions matching a value the MAPPER never
+  // emits. These two assert against the mapper's real output instead: that is the only
+  // thing that would have caught the original bug, where the function returned {} for
+  // every real rail while all of SWR-1..7 passed.
+  add("SWR-12: the card vocabulary the mapper emits is DISJOINT from the engine's for the swap families", (() => {
+    const engineNames = ["rebalance", "trim", "dca"] as const;
+    return engineNames.every((c) => CARD_CATEGORY[c] !== (c as string) && CARD_TYPE[c] !== (c as string));
+  })(), "disjoint");
+  add("SWR-13: a card carrying the MAPPER's own type/category still derives a swap action (guards against matching engine names)", (() => {
+    const real = { id: "x", type: CARD_TYPE.rebalance, category: CARD_CATEGORY.rebalance } as unknown as SuggestionCardState;
+    const out = deriveRailSwapActions({ cards: [real], generatedAt: gen, rebalance: { assessment: { direction: "stables_to_crypto" } as never, usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected" } as never, nativeSolSource: { technicallyAvailableLamports: null, sourceEligibilityState: "unavailable" } as never, usdcUnitPriceUsd: 1, solUnitPriceUsd: 150 } });
+    return out["x"]?.status === "ready";
+  })(), "mapper vocabulary matches");
   add("SWR-11: Demo rails carry a DETERMINISTIC fetcher (offline) — never the live client", /swapQuoteFetcher: demoSwapQuoteFetcher/.test(readSrc("src/pages/DemoDashboardPage.tsx")) && /Never calls a provider or the WealthSmith service/.test(readSrc("src/suggestions/swapQuote/demoSwapQuote.ts")), "demo offline");
 
   return checks;

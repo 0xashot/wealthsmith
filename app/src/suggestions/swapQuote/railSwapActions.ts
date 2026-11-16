@@ -29,7 +29,14 @@ export interface RailSwapActionInputs {
 export function deriveRailSwapActions(input: RailSwapActionInputs): Record<string, SwapActionReadiness> {
   const out: Record<string, SwapActionReadiness> = {};
   for (const card of input.cards) {
-    if (card.category === "rebalance" && input.rebalance) {
+    // Match on the card TYPE, not its category. `category` is the card vocabulary
+    // ("allocation" / "portfolio_health" / "contribution_plan") and it is LOSSY —
+    // trim, position_optimization and on_track all collapse to "portfolio_health",
+    // so a category match would fire the Trim branch for unrelated cards. `type` is
+    // one stable id per family. These previously compared against the ENGINE
+    // category names, which a card never carries, so no branch ever matched and
+    // this function always returned {}.
+    if (card.type === "rebalance_to_plan" && input.rebalance) {
       const r = input.rebalance;
       out[card.id] = buildRebalanceSwapAction({
         actionId: card.id,
@@ -39,7 +46,7 @@ export function deriveRailSwapActions(input: RailSwapActionInputs): Record<strin
         usdcSource: { verifiedExcessValueUsd: r.usdcSource.verifiedExcessValueUsd, selectionState: r.usdcSource.selectionState, usdcUnitPriceUsd: r.usdcUnitPriceUsd, requiresPriorWithdrawal: r.usdcSource.requiresPriorWithdrawal },
         nativeSolSource: { technicallyAvailableLamports: r.nativeSolSource.technicallyAvailableLamports, sourceEligibilityState: r.nativeSolSource.sourceEligibilityState, solUnitPriceUsd: r.solUnitPriceUsd },
       });
-    } else if (card.category === "trim" && input.trimHoldings) {
+    } else if (card.type === "trim_long_tail" && input.trimHoldings) {
       out[card.id] = buildTrimSwapAction({
         actionId: card.id,
         suggestionId: card.id,
@@ -57,7 +64,7 @@ export function deriveRailSwapActions(input: RailSwapActionInputs): Record<strin
           coreAssetState: h.coreAssetState,
         })),
       });
-    } else if (card.category === "dca" && input.contributionSuggestion && input.contributionSuggestion.id === card.id) {
+    } else if (card.type === "dca_buy" && input.contributionSuggestion && input.contributionSuggestion.id === card.id) {
       const sug = input.contributionSuggestion;
       const p = sug.contributionPlan;
       const amountUsd = typeof sug.amount?.valueUsd === "number" ? sug.amount.valueUsd : (p.amountKind === "exact" ? p.exactAmountUsd : p.maximumAmountUsd) ?? 0;

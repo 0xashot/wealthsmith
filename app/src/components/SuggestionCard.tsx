@@ -141,7 +141,7 @@ interface Props {
 
 /** The SOL idle-staking suggestion card (Demo uses category/type "staking"; connected uses "stake_idle_sol"/"staked_assets"). */
 function isSolStakingCard(card: SuggestionCardState): boolean {
-  return card.type === "stake_idle_sol" || card.type === "staking" || card.category === "staked_assets" || card.category === "staking";
+  return card.type === "stake_idle_sol" || card.category === "staked_assets";
 }
 
 export default function SuggestionCard({ card, onExternalHandoff, onReview, stakingPresentation }: Props) {

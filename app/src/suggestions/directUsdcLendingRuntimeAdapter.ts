@@ -130,7 +130,8 @@ export function buildDirectLendingCardState(opts: { idSuffix: string; measuredAp
     id: `direct-lending-${opts.idSuffix}`,
     title: DIRECT_USDC_LENDING_CARD_COPY.title,
     type: "stable_yield",
-    category: "stable_yield",
+    // Card vocabulary: the engine category `stable_yield` maps to "yield_opportunity".
+    category: "yield_opportunity",
     badge: DIRECT_USDC_LENDING_CARD_COPY.eyebrow,
     is_top_pick: false, // never auto Top Pick
     status: "review_only",

@@ -13,7 +13,7 @@
  * This module is TYPE-ONLY at the boundary (no engine/live imports), so the Node
  * fixtures runner can import it safely and it can never pull live behavior in.
  */
-import type { SuggestionCardState } from "../types/dashboard";
+import type { SuggestionCardState, CardCategory } from "../types/dashboard";
 import type {
   ReviewSafetyNote,
   SuggestionReviewDetails,
@@ -143,7 +143,7 @@ interface CardArgs {
   id: string;
   title: string;
   type: string;
-  category: string;
+  category: CardCategory;
   description: string;
   impact_text: string;
   severity: string;
