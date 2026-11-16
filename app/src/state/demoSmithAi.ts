@@ -43,6 +43,18 @@ const DEMO_MODE_RESPONSE =
  * (RealWalletSuggestionsRail → SuggestionReviewModal). The protocol link inside
  * that modal is a handoff — it never executes, signs, or completes anything.
  */
+/**
+ * Both chips must stand ALONE. Opening the panel replaces the suggestions rail,
+ * so while these are on screen the cards are not — the user may not have read
+ * them at all. "Why is this the Top Pick?" therefore points at something
+ * invisible, and interpolating the card title instead ("Why is “Earn Yield on
+ * Excess USDC” the Top Pick?") wraps to three lines and crowds the other chips.
+ * Asking about the Top Pick as a CONCEPT needs neither: it is short, it is
+ * answerable without looking at anything, and the answer names the card.
+ */
+const TOP_PICK_PROMPT = "What is the Top Pick?";
+const LOCKED_PROMPT = "Why is a suggestion locked?";
+
 const REVIEW_PROMPT = "What happens when I click Review?";
 const REVIEW_RESPONSE =
   "In this demo, Review opens a read-only breakdown of how the suggestion was calculated — " +
@@ -64,18 +76,16 @@ export const DEMO_SMITH_FALLBACK =
   "personalize WealthSmith, or check the Support page for help.";
 
 /**
- * Demo Mode opens with NO first message — the suggested prompts carry the
- * orientation on their own.
+ * Demo Mode opens by inviting a question, not by answering one.
  *
  * The panel used to open with the verbatim answer to its own first suggested
  * prompt, so Smith began mid-conversation, answering a question nobody asked,
- * and clicking that chip repeated the identical paragraph. A greeting would fix
- * the sequence but still puts a sentence on screen that has to stay true as the
- * demo changes. An empty transcript cannot be wrong, and the Demo Mode
- * disclosure is already carried by the demo banner above the page and repeated
- * in every answer Smith gives.
+ * and clicking that chip repeated the identical paragraph. This greeting states
+ * nothing about the portfolio, so there is no claim here that can fall out of
+ * step with the rail. The Demo Mode disclosure is carried by the demo banner
+ * above the page and repeated in every answer Smith gives.
  */
-export const DEMO_SMITH_OPENER = "";
+export const DEMO_SMITH_OPENER = "How can I help you?";
 
 /** End a quoted engine fragment as a sentence without doubling its punctuation. */
 function asSentence(text: string): string {
@@ -141,12 +151,12 @@ export function buildDemoSmithAiContent(
   };
 
   // Top Pick first — it is the single thing the rail is pointing at.
-  if (topPick) add(`Why is “${topPick.title}” the Top Pick?`, topPickResponse(topPick));
+  if (topPick) add(TOP_PICK_PROMPT, topPickResponse(topPick));
 
   add(DEMO_MODE_PROMPT, DEMO_MODE_RESPONSE);
 
   // Only offer the locked question when something on screen is actually locked.
-  if (locked) add(`Why is “${locked.title}” locked?`, lockedResponse(locked));
+  if (locked) add(LOCKED_PROMPT, lockedResponse(locked));
   else add(REVIEW_PROMPT, REVIEW_RESPONSE);
 
   return {
