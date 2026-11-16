@@ -391,9 +391,11 @@ export default function AskSmithAiPanel({ content, onClose, pushToast }: Props) 
                   {isLast && writing && <span className="chat-caret" aria-hidden="true" />}
                 </p>
                 {isLast && writing && <SmithTypingIndicator />}
-                {/* Like / dislike appear under the reply once it has finished;
-                    selecting one opens the Send Feedback sub-page, pre-rated. */}
-                {(!isLast || done) && (
+                {/* Like / dislike appear under a REPLY once it has finished;
+                    selecting one opens the Send Feedback sub-page, pre-rated.
+                    The opener (the only entry with no prompt) is a greeting, not
+                    an answer to anything, so there is nothing to rate about it. */}
+                {entry.prompt !== null && (!isLast || done) && (
                   <div className="smith-panel__feedback">
                     <button
                       type="button"
