@@ -130,7 +130,7 @@ export default function DashboardPage({
         ) : connected ? (
           // Deterministic engine output via the SAME shared rail the Portfolio
           // uses (loading / available / unavailable). Never demo fixtures.
-          <RealWalletSuggestionsRail rail={rail} railLabel={s.accessibility.right_rail_label} />
+          <RealWalletSuggestionsRail rail={rail} railLabel={s.accessibility.right_rail_label} onNavigate={onNavigate} />
         ) : (
           <aside className="suggestion-rail" aria-label={s.accessibility.right_rail_label}>
             <EmptyStateCard

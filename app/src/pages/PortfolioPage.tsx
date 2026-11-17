@@ -107,7 +107,7 @@ export default function PortfolioPage({
           />
         ) : (
           // Same shared real-wallet Suggestion Engine rail as the Dashboard.
-          <RealWalletSuggestionsRail rail={rail} railLabel={connected.accessibility.right_rail_label} />
+          <RealWalletSuggestionsRail rail={rail} railLabel={connected.accessibility.right_rail_label} onNavigate={onNavigate} />
         )}
       </div>
     </div>

@@ -118,6 +118,7 @@ export default function DemoDashboardPage({
           <RealWalletSuggestionsRail
             rail={{ ...demoContributionRail, swapQuoteFetcher: demoSwapQuoteFetcher }}
             railLabel={d.accessibility.right_rail_label}
+            onNavigate={onNavigate}
           />
         )}
       </div>

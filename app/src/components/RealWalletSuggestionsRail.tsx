@@ -39,9 +39,24 @@ const noop = () => {};
 interface Props {
   rail: RailSuggestions | null;
   railLabel: string;
+  /**
+   * Page navigation, for the On Track cards whose CTA is a prompt rather than a review.
+   * Optional because the /testing gallery mounts this rail with nowhere to navigate to.
+   */
+  onNavigate?: (id: string) => void;
 }
 
-export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
+/**
+ * On Track card types whose "Review Goal" button opens the Goal page.
+ *
+ * Both are informational (`action_kind: "informational"`, `cta.action: null`) and the engine
+ * produces no review details for them, so the modal branch in `onReviewSuggestion` can never
+ * fire. Before this they rendered a button that did nothing at all. The expense benchmark
+ * goes to the same page because monthly expenses are edited there.
+ */
+const GOAL_PAGE_CARD_TYPES = new Set(["on_track_goal_check", "on_track_expense_benchmark"]);
+
+export default function RealWalletSuggestionsRail({ rail, railLabel, onNavigate}: Props) {
   // Which suggestion's Review modal is open (by stable engine id). Read-only —
   // opening the modal never transacts, signs, or hands off to a protocol.
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -55,6 +70,12 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
   // Read-only "Review": open the details modal when the engine produced details
   // for this suggestion (all Step 10A suggestions do).
   const onReviewSuggestion = (card: SuggestionCardState) => {
+    // On Track goal/expense cards carry a label-only "Review Goal" prompt and no review
+    // details, so the modal branch below can never fire for them. Send them to the Goal page.
+    if (GOAL_PAGE_CARD_TYPES.has(card.type)) {
+      onNavigate?.("goal");
+      return;
+    }
     // Step 15H / 16H-D — open for engine-detail, plan-backed contribution, OR Stable Yield suggestions.
     if (rail?.reviewDetailsById[card.id] || rail?.contributionReviewById[card.id] || rail?.stableYieldReviewById[card.id]) setSelectedId(card.id);
   };
