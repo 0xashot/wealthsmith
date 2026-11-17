@@ -72,9 +72,30 @@ export function getStablecoinPositions(positions: WalletPosition[]): WalletPosit
   return positions.filter(isStablecoin);
 }
 
-/** Liquid, wallet-held assets: native SOL + plain SPL tokens (incl. stables). */
+/**
+ * An SPL token that is almost certainly a non-fungible token: zero decimals, a balance of
+ * exactly one, and no sourced price. That is the NFT signature on Solana — supply 1, not
+ * divisible — and the three conditions are required together so a priced collectible or a
+ * 0-decimal fungible token the wallet holds several of is left alone.
+ *
+ * Only ever applied to `type: "token"`. Orca and Raydium represent concentrated-liquidity
+ * positions AS NFTs (see the 0-decimal mint scan in `useWalletPortfolio`), but those arrive
+ * as `type: "protocol"` once their adapter has claimed them, so they never reach this test.
+ * Do not widen it to run before that enrichment, or real LP positions disappear.
+ */
+function isLikelyNft(p: WalletPosition): boolean {
+  return p.type === "token" && p.decimals === 0 && p.uiAmount === 1 && p.priceUsd == null;
+}
+
+/**
+ * Liquid, wallet-held assets: native SOL + plain SPL tokens (incl. stables).
+ *
+ * NFTs are excluded. An NFT is not a liquid asset, and leaving one here produced a row
+ * reading "Current value could not be verified" — which says WealthSmith tried to price
+ * something and failed, when it had correctly declined to price a non-fungible token.
+ */
 export function getLiquidPositions(positions: WalletPosition[]): WalletPosition[] {
-  return positions.filter((p) => p.type === "native" || p.type === "token");
+  return positions.filter((p) => (p.type === "native" || p.type === "token") && !isLikelyNft(p));
 }
 
 /** Staked assets: recognized LSTs + native stake accounts. */

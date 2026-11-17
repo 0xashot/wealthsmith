@@ -18,7 +18,7 @@ import { classifyPositionCoverage as sbClassify, computeSafetyBufferCoverage as 
 import { EXT as T22_EXT, EXTENSION_IMPACT_MATRIX as T22_MATRIX, TOKEN_2022_PROGRAM_ID as T22_PROGRAM, applyToken2022Assessment as t22Apply, assessToken2022Account as t22AssessAcct, assessToken2022Position as t22AssessPos, calculateTransferFeeRaw as t22Fee, classifyExtension as t22Classify, transferabilityToWithdrawalState as t22ToWs } from "../../wallet/token2022PositionAssessment";
 import type { Token2022AccountFacts as T22Acct, Token2022MintFacts as T22Mint } from "../../wallet/token2022PositionAssessment";
 import type { WalletPosition as JLWalletPos, WalletPosition as SBPos } from "../../wallet/walletPosition";
-import { deriveSafetyBuffer as sbDerive } from "../../wallet/walletSummary";
+import { deriveSafetyBuffer as sbDerive, getLiquidPositions } from "../../wallet/walletSummary";
 import { getDisposition as dlGetDispo } from "../directUsdcLendingDispositions";
 import { DIRECT_USDC_LENDING_CATEGORY_MINIMUM as DL_CATMIN, UNIVERSAL_MINIMUM as DL_UNIMIN } from "../directUsdcLendingEligibilityPolicy";
 import { getUnderlyingExposureGroup as nsExposure } from "../duplicateExposure";
@@ -535,6 +535,42 @@ export function runSafetyBufferCoverageFixtureChecks(): FixtureCheck[] {
   // --- Immutability ---
   add("SB-26: no target-formula change; assessment/governance/policy immutable; Steakhouse/Jupiter unchanged", (() => { const b = sbDerive([usdc(3000)], 1000, 5); return b?.targetUsd === 5000 && DA_OUTCOME.unroundedAggregate === 5.93 && DL_CATMIN === 5.5 && DL_UNIMIN === 7 && dlGetDispo("kamino_steakhouse_usdc")?.disposition === "existing_position_only" && dlGetDispo("jupiter_lend_usdc")?.disposition === "excluded_from_suggestions"; })(), "immutable");
 
+  return checks;
+}
+
+/* ------------------------------------------------------------------ *
+ * NFTs are not liquid assets. An NFT left in the Liquid Assets table rendered as
+ * "Current value could not be verified", which claims WealthSmith tried to price
+ * something and failed — it had correctly declined to price a non-fungible token.
+ *
+ * The regression that matters is NF-3: Orca and Raydium represent concentrated-
+ * liquidity positions AS NFTs, and the wallet read finds them by scanning for
+ * 0-decimal mints. If the NFT test ever widens to run before those adapters claim
+ * their mints, real LP money silently vanishes from the portfolio.
+ * ------------------------------------------------------------------ */
+
+export function runNftExclusionFixtureChecks(): FixtureCheck[] {
+  const checks: FixtureCheck[] = [];
+  const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
+  const base = { source: "wallet" as const, detection: "direct_wallet_balance" as const, amount: "1" };
+  const nft = (over: Partial<SBPos> = {}): SBPos =>
+    ({ ...base, id: "nft-1", type: "token", symbol: "72Ue...EPZS", mint: "72Ue", uiAmount: 1, decimals: 0, priceUsd: null, valueUsd: null, ...over } as SBPos);
+  const sol = (): SBPos =>
+    ({ ...base, id: "sol", type: "native", symbol: "SOL", uiAmount: 4.53, decimals: 9, priceUsd: 73.5, valueUsd: 333 } as SBPos);
+  const usdc = (): SBPos =>
+    ({ ...base, id: "usdc", type: "token", symbol: "USDC", mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", uiAmount: 500, decimals: 6, priceUsd: 1, valueUsd: 500 } as SBPos);
+  /** An Orca CLMM position: discovered FROM a 0-decimal NFT mint, but surfaced as a protocol position. */
+  const orcaLp = (): SBPos =>
+    ({ id: "orca-1", source: "orca", type: "protocol", symbol: "SOL/USDC", mint: "Whirl", amount: "1", uiAmount: 1, decimals: 0, detection: "protocol_api", protocol: "Orca", priceUsd: null, valueUsd: 4200 } as SBPos);
+  const ids = (ps: SBPos[]) => getLiquidPositions(ps).map((p) => p.id);
+
+  add("NF-1: a 0-decimal, single-unit, unpriced token is dropped from Liquid Assets", !ids([sol(), usdc(), nft()]).includes("nft-1"), "nft excluded");
+  add("NF-2: real liquid rows are untouched", JSON.stringify(ids([sol(), usdc(), nft()])) === JSON.stringify(["sol", "usdc"]), "sol + usdc kept");
+  // The regression guard. Orca/Raydium LP positions ARE NFTs on-chain.
+  add("NF-3: an Orca LP position (0-decimal, qty 1) is NOT dropped — it is type 'protocol'", getLiquidPositions([orcaLp()]).length === 0 && orcaLp().valueUsd === 4200, "protocol rows never reach the NFT test");
+  add("NF-4: a PRICED 0-decimal single unit is kept — the price is what makes it an asset", ids([nft({ id: "priced", priceUsd: 25, valueUsd: 25 })]).includes("priced"), "priced kept");
+  add("NF-5: several units of a 0-decimal token are kept — supply 1 is the NFT signature", ids([nft({ id: "multi", uiAmount: 5 })]).includes("multi"), "qty>1 kept");
+  add("NF-6: a divisible unpriced token is kept — it is a pricing gap, not an NFT", ids([nft({ id: "divisible", decimals: 6 })]).includes("divisible"), "decimals>0 kept");
   return checks;
 }
 
