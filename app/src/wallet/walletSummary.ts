@@ -83,8 +83,25 @@ export function getStablecoinPositions(positions: WalletPosition[]): WalletPosit
  * as `type: "protocol"` once their adapter has claimed them, so they never reach this test.
  * Do not widen it to run before that enrichment, or real LP positions disappear.
  */
-function isLikelyNft(p: WalletPosition): boolean {
+export function isLikelyNft(p: WalletPosition): boolean {
   return p.type === "token" && p.decimals === 0 && p.uiAmount === 1 && p.priceUsd == null;
+}
+
+/**
+ * Drop NFTs from a position set.
+ *
+ * Applied by the wallet read itself, so an NFT never reaches the portfolio at all. That
+ * matters because "unpriced position present" is a GATE, not just a row: it sets
+ * `anyUnpriced`, which prints "Some assets are not priced yet, so suggestions may be
+ * incomplete", replaces the Balance Overview total with an em dash, and adds "Excludes
+ * positions without a sourced price" under the donuts. Filtering only the Liquid Assets
+ * table hid the row and left all three.
+ *
+ * Safe at this point because the Orca/Raydium CLMM scan reads raw `tokenAccounts`, not
+ * positions — it never consults this list to find its 0-decimal mints.
+ */
+export function excludeLikelyNfts(positions: WalletPosition[]): WalletPosition[] {
+  return positions.filter((p) => !isLikelyNft(p));
 }
 
 /**

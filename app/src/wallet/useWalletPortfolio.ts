@@ -31,6 +31,7 @@ import {
   TOKEN_2022_PROGRAM_ID,
   type WalletPosition,
 } from "./walletPosition";
+import { excludeLikelyNfts } from "./walletSummary";
 import { fetchNativeStakePositions, fetchKaminoPositions } from "./protocolPositions";
 import {
   buildKlendDirectUsdcExistingPosition,
@@ -483,7 +484,9 @@ export function useWalletPortfolio(): WalletPortfolio {
         warning = LIVE_WALLET_WARNING_TOKEN2022;
       }
 
-      setState({ status: "ready", positions, warning, loading: true });
+      // NFTs never enter the portfolio: an unpriced position is a GATE (anyUnpriced),
+      // not merely a row. See excludeLikelyNfts.
+      setState({ status: "ready", positions: excludeLikelyNfts(positions), warning, loading: true });
 
       // PHASE 3 — two best-effort enrichments in parallel, then one merged update:
       //   (a) APY for yield-bearing rows (LSTs + Ondo USDY).
@@ -788,7 +791,7 @@ export function useWalletPortfolio(): WalletPortfolio {
 
       // Final update of the read: apply any APY/LP/price changes and clear the
       // loading flag (always runs, even if nothing changed, so skeletons resolve).
-      setState({ status: "ready", positions: merged, warning, pricedAsOf, loading: false });
+      setState({ status: "ready", positions: excludeLikelyNfts(merged), warning, pricedAsOf, loading: false });
     })().catch(() => {
       // Defensive: never leave a stuck loading state.
       if (cancelled || myReq !== reqId.current) return;
