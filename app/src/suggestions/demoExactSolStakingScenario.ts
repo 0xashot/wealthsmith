@@ -122,8 +122,11 @@ export function getDemoExactSolStakingCard(): SuggestionCardState {
   return {
     id: DEMO_EXACT_SOL_STAKING_SCENARIO_ID,
     title: s.title,
-    type: "staking",
-    category: "staking",
+    // The engine's own staking cards carry these exact values (toSuggestionCard:
+    // staking -> type "stake_idle_sol", category "staked_assets"). This card used
+    // the ENGINE category names, so UI checks had to test both spellings.
+    type: "stake_idle_sol",
+    category: "staked_assets",
     badge: "Top Pick",
     is_top_pick: true,
     status: "actionable",

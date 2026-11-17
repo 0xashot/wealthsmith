@@ -799,7 +799,9 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         </div>
         {/* Sticky footer — shown only when a read-only protocol link is available. Cancel closes the modal;
             the primary button opens the protocol's own page in a new tab (no in-app transaction/signature). */}
-        {details.externalLink && (
+        {/* A live swap route supersedes a static provider link: when `swapFooter` is present it names the
+            actually selected provider and carries the quoted amount, so the two must never both render. */}
+        {details.externalLink && !swapHandoff && (
           <ModalActionsFooter
             secondaryLabel={details.externalLink.secondaryLabel ?? "Cancel"}
             onSecondary={onClose}

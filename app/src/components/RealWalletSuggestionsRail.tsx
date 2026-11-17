@@ -70,7 +70,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
   const selectedStableYieldReview = selectedId ? rail?.stableYieldReviewById[selectedId] : undefined;
   const selectedCard = selectedId ? rail?.cards.find((c) => c.id === selectedId) : undefined;
   // Inject the current comparison into the SOL staking suggestion's modal details (read-only).
-  const isStakingSelected = selectedCard != null && (selectedCard.type === "stake_idle_sol" || selectedCard.type === "staking" || selectedCard.category === "staked_assets" || selectedCard.category === "staking");
+  const isStakingSelected = selectedCard != null && (selectedCard.type === "stake_idle_sol" || selectedCard.category === "staked_assets");
   const detailsForModal = selectedDetails && isStakingSelected && stakingPresentation
     ? { ...selectedDetails, selectorPresentation: stakingPresentation }
     : selectedDetails;
@@ -93,7 +93,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
     <SuggestionReviewModal
       contributionReview={selectedContribReview}
       swapAction={selectedId ? rail?.swapActionById?.[selectedId] : undefined}
-      swapQuoteIsDca={selectedCard?.category === "dca"}
+      swapQuoteIsDca={selectedCard?.type === "dca_buy"}
       swapQuoteFetcher={rail?.swapQuoteFetcher}
       onClose={() => setSelectedId(null)}
     />
@@ -101,7 +101,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
     <SuggestionReviewModal
       details={detailsForModal}
       swapAction={selectedId ? rail?.swapActionById?.[selectedId] : undefined}
-      swapQuoteIsDca={selectedCard?.category === "dca"}
+      swapQuoteIsDca={selectedCard?.type === "dca_buy"}
       swapQuoteFetcher={rail?.swapQuoteFetcher}
       onDismiss={onDismissSelected}
       onClose={() => setSelectedId(null)}

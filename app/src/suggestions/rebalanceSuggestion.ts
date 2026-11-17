@@ -20,6 +20,7 @@ import { notApplicableProtocolSelection } from "./protocolSelection";
 import { buildReviewDetails, pctMetric, metric } from "./suggestionReviewDetails";
 import type { RebalanceAssessment, RebalanceUsdcSource, NativeSolRebalanceSourceAssessment } from "./rebalanceAssessment";
 import { cryptoToStablesSourceGate } from "./rebalanceAssessment";
+import { jupiterRebalanceFallbackLink } from "./swapQuote/providerSwapLinks";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
@@ -128,9 +129,16 @@ function buildStablesToCryptoCard(
     // Kamino-sourced: the primary handoff is STEP ONE (withdraw on Kamino's own
     // page). The swap-route section is gated not-ready for this source, so the
     // modal never shows a "Swap on <provider>" footer that skips the withdrawal.
+    // Kamino-sourced: the primary handoff is STEP ONE (withdraw on Kamino's own page). The swap-route
+    // section is gated not-ready for this source, so the modal never shows a "Swap on <provider>"
+    // footer that skips the withdrawal.
+    // Wallet-sourced: a static Jupiter handoff, so the sheet always offers the action even when the
+    // route comparison produced no selected provider (Demo Mode, or a degraded quote service). It is a
+    // direct link, NOT a recommendation — when a live route does resolve the modal shows that instead,
+    // naming the provider the comparison actually chose. See fixture RC-32.
     ...(fromKamino
       ? { externalLink: { label: "Kamino", ctaLabel: "Withdraw on Kamino", url: "https://app.kamino.finance", opensInNewTab: true, secondaryLabel: "Cancel" } }
-      : {}),
+      : { externalLink: jupiterRebalanceFallbackLink("usdc_to_sol") }),
     hideMetricsHeading: true,
     hideGuardrails: true,
     metrics: [
@@ -246,6 +254,9 @@ function buildCryptoToStablesCard(
     protocolSelection,
     // Modal reason is exactly the plain-language card body.
     reason: cardBody,
+    // A static Jupiter handoff so the modal always offers the action even when no live route
+    // resolved (Demo Mode, degraded quotes). A live route supersedes it in the modal.
+    externalLink: jupiterRebalanceFallbackLink("sol_to_usdc"),
     hideMetricsHeading: true,
     hideGuardrails: true,
     metrics: [

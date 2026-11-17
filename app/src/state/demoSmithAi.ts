@@ -1,37 +1,68 @@
 /**
- * Demo Mode Ask Smith AI content — static, demo-aware, approved only.
+ * Demo Mode Ask Smith AI content — DERIVED from the engine output the rail renders.
  *
- * There is NO live generation. Suggested prompts map to verbatim approved
- * responses; any other input returns the demo-aware fallback. Sources:
- * - Card explanations: examples/demo-mode/demo-suggestions.json
- *   (each suggestion's smith_ai_explanation.approved_short_response).
- * - Demo-Mode / handoff answers: examples/demo-mode/demo-smith-ai-responses.md
- *   (Examples 1 and 9), quoted verbatim.
+ * There is NO live generation. The panel still only ever shows approved copy; what
+ * changed is where the Top Pick sentence comes from. It is now composed from the
+ * SAME `SuggestionCardState` the rail renders (title, category, description —
+ * engine-owned, quoted verbatim) and wrapped in the approved Demo Mode framing.
+ *
+ * WHY THIS IS DERIVED AND NOT A FIXTURE: the demo rail runs the real engine over
+ * the canonical demo profile (DemoDashboardPage → buildDemoContributionRail →
+ * deriveRailSuggestions). The previous version of this file read a hand-written
+ * snapshot (examples/demo-mode/demo-suggestions.json) describing an older demo
+ * scenario — buffer below target, buffer as Top Pick, a locked yield card. The
+ * demo portfolio has since changed (the sample buffer is fully funded and the
+ * Top Pick is a yield suggestion), so Smith AI asserted three things the screen
+ * contradicted. Deriving from the rail makes that class of drift impossible:
+ * if the engine's answer changes, Smith's answer changes with it.
+ *
+ * Boundary unchanged (rules/financial-logic-boundaries.md): Smith AI EXPLAINS.
+ * Nothing here selects a Top Pick, ranks, scores, or invents a value — it reads
+ * what the engine already decided.
+ *
+ * Sources:
+ * - Top Pick sentence: the engine card + the documented selection rule
+ *   (suggestions/topPick.ts — category priority, Safety Buffer first).
+ * - Demo-Mode answer: examples/demo-mode/demo-smith-ai-responses.md (Example 1),
+ *   quoted verbatim.
  * - Fallback: adapted from content/smith-ai-copy.md uncertainty response into
- *   Demo Mode language using approved demo phrases (per approval decision 2).
+ *   Demo Mode language using approved demo phrases.
  */
-import type { SmithAiContent } from "../types/dashboard";
+import type { SmithAiContent, SuggestionCardState } from "../types/dashboard";
+import { SMITH_INTRO_OPENER } from "./approvedCopy";
+import { topPickRationale, asSentence } from "./smithAiTopPick";
 import { demoDashboardState } from "./demoDashboardState";
-import demoSuggestions from "../../../examples/demo-mode/demo-suggestions.json";
-
-const suggestions = (demoSuggestions as any).suggestions as any[];
-const explain = (id: string): string =>
-  suggestions.find((s) => s.id === id)?.smith_ai_explanation?.approved_short_response ?? "";
-
-const TOP_PICK_RESPONSE = explain("demo_top_up_safety_buffer");
-const LOCKED_RESPONSE = explain("demo_locked_usdc_yield");
 
 /** demo-smith-ai-responses.md — Example 1 ("What is Demo Mode?"), verbatim. */
+const DEMO_MODE_PROMPT = "What does Demo Mode mean?";
 const DEMO_MODE_RESPONSE =
   "Demo Mode lets you explore WealthSmith with sample data before connecting a wallet. " +
   "In this demo, the dashboard, portfolio, Safety Buffer, and suggestions are based on a sample portfolio, not your real wallet. " +
   "Connect your wallet to personalize WealthSmith with your real portfolio. Your funds stay in your wallet.";
 
-/** demo-smith-ai-responses.md — Example 9 ("Review on Jupiter"), verbatim. */
-const JUPITER_HANDOFF_RESPONSE =
-  "In this demo, Review on Jupiter opens Jupiter in a new tab so you can see how an external protocol handoff works. " +
-  "WealthSmith does not execute a swap, move funds, or mark the suggestion complete when you open the protocol. " +
-  "This demo suggestion is based on sample data.";
+/**
+ * What Review actually does in Demo Mode: it opens the read-only details modal
+ * (RealWalletSuggestionsRail → SuggestionReviewModal). The protocol link inside
+ * that modal is a handoff — it never executes, signs, or completes anything.
+ */
+/**
+ * Both chips must stand ALONE. Opening the panel replaces the suggestions rail,
+ * so while these are on screen the cards are not — the user may not have read
+ * them at all. "Why is this the Top Pick?" therefore points at something
+ * invisible, and interpolating the card title instead ("Why is “Earn Yield on
+ * Excess USDC” the Top Pick?") wraps to three lines and crowds the other chips.
+ * Asking about the Top Pick as a CONCEPT needs neither: it is short, it is
+ * answerable without looking at anything, and the answer names the card.
+ */
+const TOP_PICK_PROMPT = "What is the Top Pick?";
+const LOCKED_PROMPT = "Why is a suggestion locked?";
+
+const REVIEW_PROMPT = "What happens when I click Review?";
+const REVIEW_RESPONSE =
+  "In this demo, Review opens a read-only breakdown of how the suggestion was calculated — " +
+  "the amount, the current APY, and the estimated yearly rewards. Opening the protocol from " +
+  "there hands you off in a new tab; WealthSmith does not execute a swap, move funds, or mark " +
+  "the suggestion complete. This is based on sample data, not your real wallet.";
 
 /**
  * Demo-aware fallback for non-fixture input. Built only from approved
@@ -46,24 +77,76 @@ export const DEMO_SMITH_FALLBACK =
   "I don’t have enough product information to answer that confidently — connect your wallet to " +
   "personalize WealthSmith, or check the Support page for help.";
 
-/** The panel opens with the demo Top Pick explanation (mirrors connected). */
-export const DEMO_SMITH_OPENER = TOP_PICK_RESPONSE;
+/**
+ * Demo Mode opens with the SAME introduction a connected wallet gets
+ * (approvedCopy.SMITH_INTRO_OPENER), so the product introduces itself once
+ * rather than differently per surface.
+ *
+ * The panel used to open with the verbatim answer to its own first suggested
+ * prompt, so Smith began mid-conversation, answering a question nobody asked,
+ * and clicking that chip repeated the identical paragraph. The introduction
+ * states nothing about the portfolio, so no claim here can fall out of step
+ * with the rail. It carries no Demo Mode wording either, because it describes
+ * Smith rather than the data: the disclosure is on the demo banner above the
+ * page and in every answer Smith gives.
+ */
+export const DEMO_SMITH_OPENER = SMITH_INTRO_OPENER;
 
-/** Exact suggested-prompt → approved response map (demo-aware, verbatim). */
-export const DEMO_SMITH_RESPONSES: Record<string, string> = {
-  "Why is Safety Buffer the Top Pick?": TOP_PICK_RESPONSE,
-  "What does Demo Mode mean?": DEMO_MODE_RESPONSE,
-  "Why is the yield suggestion locked?": LOCKED_RESPONSE,
-  // Not a suggested prompt, but approved if the user types it:
-  "What happens if I click Review on Jupiter?": JUPITER_HANDOFF_RESPONSE,
-};
+function topPickResponse(card: SuggestionCardState): string {
+  return [
+    `In this demo, “${card.title}” is the Top Pick.`,
+    topPickRationale(card, "the sample buffer"),
+    asSentence(card.description ?? ""),
+    "This is based on sample data, not your real wallet.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 
-/** Content object for the mode-agnostic Ask Smith AI panel (demo-aware). */
-export const demoSmithAiContent: SmithAiContent = {
-  panelLabel: "Smith AI panel",
-  entryLabel: demoDashboardState.smith_ai.entry_label,
-  opener: DEMO_SMITH_OPENER,
-  prompts: demoDashboardState.smith_ai.suggested_prompts,
-  responses: DEMO_SMITH_RESPONSES,
-  fallback: DEMO_SMITH_FALLBACK,
-};
+function lockedResponse(card: SuggestionCardState): string {
+  return [
+    `In this demo, “${card.title}” is shown but is not available to act on yet.`,
+    asSentence(card.disabled_reason_text ?? ""),
+    "This is based on sample data, not your real wallet.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/**
+ * Build the Ask Smith AI content for Demo Mode from the rail the page is
+ * rendering. Pass `rail.cards`; with no cards the panel still opens and can
+ * explain Demo Mode itself.
+ */
+export function buildDemoSmithAiContent(
+  cards: readonly SuggestionCardState[] | null | undefined
+): SmithAiContent {
+  const list = cards ?? [];
+  const topPick = list.find((c) => c.is_top_pick);
+  const locked = list.find((c) => c.disabled_reason_text != null && !c.is_top_pick);
+
+  const prompts: string[] = [];
+  const responses: Record<string, string> = {};
+  const add = (prompt: string, response: string) => {
+    prompts.push(prompt);
+    responses[prompt] = response;
+  };
+
+  // Top Pick first — it is the single thing the rail is pointing at.
+  if (topPick) add(TOP_PICK_PROMPT, topPickResponse(topPick));
+
+  add(DEMO_MODE_PROMPT, DEMO_MODE_RESPONSE);
+
+  // Only offer the locked question when something on screen is actually locked.
+  if (locked) add(LOCKED_PROMPT, lockedResponse(locked));
+  else add(REVIEW_PROMPT, REVIEW_RESPONSE);
+
+  return {
+    panelLabel: "Smith AI panel",
+    entryLabel: demoDashboardState.smith_ai.entry_label,
+    opener: DEMO_SMITH_OPENER,
+    prompts,
+    responses,
+    fallback: DEMO_SMITH_FALLBACK,
+  };
+}

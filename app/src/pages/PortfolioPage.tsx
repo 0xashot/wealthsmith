@@ -19,9 +19,9 @@
  *
  * Read-only, non-custodial: no signatures, no transactions, no fund movement.
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { portfolioState as p } from "../state/portfolioState";
-import { realWalletSmithAiContent } from "../state/realWalletSmithAi";
+import { buildRealWalletSmithAiContent } from "../state/realWalletSmithAi";
 import { ASK_SMITH_LABEL_PORTFOLIO } from "../state/approvedCopy";
 import { dashboardState as connected } from "../state/dashboardState";
 import type { SavedGoal } from "../types/goal";
@@ -51,6 +51,10 @@ export default function PortfolioPage({
   // Engine suggestions lifted from RealWalletPortfolio (which owns the single
   // Portfolio wallet read) — same shared rail the Dashboard uses.
   const [rail, setRail] = useState<RailSuggestions | null>(null);
+  // Ask Smith AI explains the SAME engine output the rail renders, so the panel can
+  // never describe a Top Pick that is not there, nor offer "why is there nothing yet"
+  // questions once there is.
+  const smithAiContent = useMemo(() => buildRealWalletSmithAiContent(rail?.cards), [rail]);
   const askButtonRef = useRef<HTMLButtonElement>(null);
 
   const openAskSmithAi = () => setSmithOpen(true);
@@ -97,7 +101,7 @@ export default function PortfolioPage({
 
         {smithOpen ? (
           <AskSmithAiPanel
-            content={realWalletSmithAiContent}
+            content={smithAiContent}
             onClose={closeAskSmithAi}
             pushToast={pushToast}
           />

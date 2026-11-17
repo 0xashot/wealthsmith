@@ -20,9 +20,9 @@
  *   rules/wallet-and-custody-rules.md (goal-settings values persist; no copy
  *   implies funds moved).
  */
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { dashboardState as s } from "../state/dashboardState";
-import { realWalletSmithAiContent } from "../state/realWalletSmithAi";
+import { buildRealWalletSmithAiContent } from "../state/realWalletSmithAi";
 import {
   CONNECT_WALLET_LABEL,
   SUGGESTIONS_EMPTY_DESCRIPTION,
@@ -68,6 +68,10 @@ export default function DashboardPage({
   // Real-wallet Suggestion Engine output, lifted from DashboardBody (which owns
   // the single wallet read). The rail RENDERS this; it never runs the engine.
   const [rail, setRail] = useState<RailSuggestions | null>(null);
+  // Ask Smith AI explains the SAME engine output the rail renders, so the panel can
+  // never describe a Top Pick that is not there, nor offer "why is there nothing yet"
+  // questions once there is.
+  const smithAiContent = useMemo(() => buildRealWalletSmithAiContent(rail?.cards), [rail]);
   const askButtonRef = useRef<HTMLButtonElement>(null);
 
   const openAskSmithAi = () => setRailMode("ask_smith_ai");
@@ -119,7 +123,7 @@ export default function DashboardPage({
 
         {connected && railMode === "ask_smith_ai" ? (
           <AskSmithAiPanel
-            content={realWalletSmithAiContent}
+            content={smithAiContent}
             onClose={closeAskSmithAi}
             pushToast={pushToast}
           />

@@ -15,7 +15,7 @@
  * It may import the UI card TYPE (allowed) but no UI components, and it never
  * imports demo fixtures — demo suggestions stay separate.
  */
-import type { SuggestionCardState } from "../types/dashboard";
+import type { SuggestionCardState, CardCategory } from "../types/dashboard";
 import type { EngineSuggestion, SuggestionCategory } from "./engineTypes";
 import { SUGGESTION_COPY, SUGGESTIONS_PARTIAL_PRICING, SUGGESTION_STAKING_SELECTED_TITLE, SUGGESTION_STAKING_SELECTED_DESCRIPTION } from "../state/approvedCopy";
 import type { SuggestionReasonCode } from "./engineTypes";
@@ -48,7 +48,7 @@ function copy(key: string): string {
  * Engine category → the card's `category` string (drives the generic icon).
  * Total over every emitted category.
  */
-const CARD_CATEGORY: Record<SuggestionCategory, string> = {
+export const CARD_CATEGORY: Record<SuggestionCategory, CardCategory> = {
   buffer: "safety_buffer",
   rebalance: "allocation",
   capital_efficiency: "capital_efficiency",
@@ -61,7 +61,7 @@ const CARD_CATEGORY: Record<SuggestionCategory, string> = {
 };
 
 /** Engine category → the card's `type` string (stable engine type IDs). */
-const CARD_TYPE: Record<SuggestionCategory, string> = {
+export const CARD_TYPE: Record<SuggestionCategory, string> = {
   buffer: "fund_safety_buffer",
   rebalance: "rebalance_to_plan",
   capital_efficiency: "review_idle_assets",

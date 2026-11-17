@@ -881,7 +881,7 @@ export function runContractFixtureChecks(): FixtureCheck[] {
   {
     const ok = CONTRACT_CATEGORIES.every((c) => {
       const card = toSuggestionCard(catCandidate(c));
-      return card.id === c && card.type !== "" && card.category !== "";
+      return card.id === c && card.type !== "";
     });
     add("9A-F: mapper maps every new category to a valid card", ok, `categories=${CONTRACT_CATEGORIES.join(",")}`);
   }

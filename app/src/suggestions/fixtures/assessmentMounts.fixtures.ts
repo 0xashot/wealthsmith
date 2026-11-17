@@ -534,7 +534,7 @@ export function runContributionFinalizationFixtureChecks(): FixtureCheck[] {
   add("15H-FINAL-F: the Demo dashboard receives pre-sorted suggestions", rail.cards.filter((c) => c.is_top_pick).length === 1, "pre-sorted");
   add("15H-FINAL-G: the Demo dashboard contains exactly one Safety Buffer suggestion", bufferCards.length === 1, `${bufferCards.length}`);
   add("15H-FINAL-H: the Demo Safety Buffer suggestion is Top Pick", bufferCards[0]?.is_top_pick === true && bufferCards[0]?.title === "Top Up Your Safety Buffer", "top pick");
-  add("15H-FINAL-I: the Demo dashboard contains no SOL DCA while the buffer is incomplete", rail.cards.every((c) => c.tag !== "DCA" && c.category !== "dca" && !/dca/i.test(c.id)), "no dca");
+  add("15H-FINAL-I: the Demo dashboard contains no SOL DCA while the buffer is incomplete", rail.cards.every((c) => c.tag !== "DCA" && c.type !== "dca_buy" && !/dca/i.test(c.id)), "no dca");
   add("15H-FINAL-J: the Demo dashboard contains no duplicate contribution suggestion", rail.cards.length === 1 && Object.keys(rail.contributionReviewById).length === 1, "one card");
   add("15H-FINAL-K: unrelated Demo suggestions remain unchanged when not suppressed by the buffer override", buildDemoStakingRail15H().cards.length >= 1 && buildDemoStakingRail15H().cards[0].title.includes("Put Idle SOL"), "staking demo intact");
   add("15H-FINAL-L: Demo fixture data cannot enter real_wallet mode", buildContributionPortfolioSnapshot({ dataMode: "real_wallet", snapshotId: "s", sourcePortfolioVersion: "v", calculatedAt: T, checkedAt: T, totalPortfolioValueUsd: 100, solExposureUsd: 60, usdcExposureUsd: 40, isFixtureData: true }).ok === false, "guarded");

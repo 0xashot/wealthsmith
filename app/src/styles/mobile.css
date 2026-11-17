@@ -143,25 +143,32 @@
     display: inline;
   }
 
-  /* ---------- Ask Smith AI → mobile (icon-only, 24×24 icon) ---------- */
+  /* ---------- Ask Smith AI → mobile (icon + label, as on desktop) ---------- */
 
-  /* Drop the text label; the button collapses to a square icon control. The
-     aria-label keeps it accessible. */
-  .global-nav__ask-smith-label {
-    display: none;
-  }
+  /* The label stays at phone width. It used to be dropped for a 40×40 icon-only
+     control, but a bare sparkle does not say what the control does — and this is
+     the entry point to the product's headline feature, so it should name itself.
+     Only the touch target is mobile-specific: the button keeps the desktop
+     padding and 16px icon, with a 40px minimum height so it stays comfortable to
+     tap. */
   .global-nav__ask-smith {
-    gap: 0;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    justify-content: center;
+    min-height: 40px;
   }
-  /* ButtonIcon sets the size inline (16px); override to 24px for mobile only
-     (button stays 40×40). !important is required to beat the inline style. */
-  .global-nav__ask-smith .btn-icon {
-    width: 24px !important;
-    height: 24px !important;
+
+  /* The design system supports from 320px (patterns/README.md: mobile 320–767).
+     At that end the labelled button, the logo, the menu button and three 16px
+     row gaps no longer fit on one line and the nav wraps, dropping the menu
+     button to a second row. Tighten the row gap and the button's side padding
+     just there; the 40px touch target and the label are untouched, and 390px
+     and up keep the roomier spacing. */
+  @media (max-width: 389px) {
+    .global-nav {
+      gap: var(--spacing-inline-gap-sm);
+    }
+    .global-nav__ask-smith {
+      padding-left: var(--spacing-inline-gap-sm);
+      padding-right: var(--spacing-inline-gap-sm);
+    }
   }
 
   /* ---------- Global Nav → mobile (symbol logo + hamburger + drawer) ---------- */

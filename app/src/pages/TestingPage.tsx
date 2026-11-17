@@ -23,6 +23,8 @@ import SuggestionCard from "../components/SuggestionCard";
 import SuggestionReviewModal from "../components/SuggestionReviewModal";
 import { runAllContributionSplitTestingCases } from "./contributionSplitTestingFixtures";
 import { GALLERY_MODAL_PRESETS, GALLERY_NOW } from "./swapQuoteTestingFixtures";
+import { END_TO_END_SCENARIOS } from "./endToEndTestingFixtures";
+import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import type { SuggestionCardState } from "../types/dashboard";
 import { TESTING_PREVIEW_NOT_LIVE } from "./testingPageFixtures";
 import { runAllContributionTestingScenarios } from "../suggestions/contributionTestingScenarios";
@@ -48,6 +50,8 @@ const TABS = [
   { id: "dca", label: "DCA" },
   { id: "position_optimization", label: "Position Optimization" },
   { id: "on_track", label: "On Track" },
+  // Runs the REAL pipeline rather than a preset — see endToEndTestingFixtures.
+  { id: "end_to_end", label: "End-to-End" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -247,6 +251,8 @@ export default function TestingPage() {
   );
 
   const entriesByTab: Record<TabId, GalleryEntry[]> = {
+    // End-to-End renders rails, not gallery cards, so it contributes no entries.
+    end_to_end: [],
     safety_buffer: safetyBufferEntries,
     rebalance: rebalanceEntries,
     trim: trimEntries,
@@ -327,7 +333,21 @@ export default function TestingPage() {
         tabIndex={0}
         className="testing-page__grid testing-page__tabpanel"
       >
-        {entries.map((e) => (
+        {active === "end_to_end" ? (
+          // The production rail component, fed by a rail the real pipeline built. Review
+          // therefore opens with `rail.swapActionById[card.id]` — the readiness the app
+          // derived — not a preset. An empty rail here means the derivation is broken.
+          END_TO_END_SCENARIOS.map((sc) => (
+            <div key={sc.key} className="testing-page__cell">
+              <p className="testing-page__cell-label">{sc.label}</p>
+              <p className="testing-page__cell-label">
+                Expected: {sc.expectation} — cards {sc.rail.cards.length}, swap actions{" "}
+                {Object.keys(sc.rail.swapActionById ?? {}).length}
+              </p>
+              <RealWalletSuggestionsRail rail={sc.rail} railLabel={sc.label} />
+            </div>
+          ))
+        ) : entries.map((e) => (
           <div key={e.key} className="testing-page__cell">
             <p className="testing-page__cell-label">{e.stateLabel}</p>
             {/* SuggestionCard derives its DOM element id from `card.id`; several states of one category share a

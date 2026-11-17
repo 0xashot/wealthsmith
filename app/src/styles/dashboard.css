@@ -4587,6 +4587,19 @@ td.vetting-scores-table__date {
   display: flex;
   align-items: flex-start;
   gap: var(--spacing-inline-gap-sm);
+  /* The avatar box (28px) is taller than one line of message text (24px), so
+     aligning both to the row's TOP edge leaves the sparkle sitting ~2px below
+     the first line's optical centre. These two drive the correction below;
+     a context with different message type can override the line height. */
+  --smith-avatar-size: 28px;
+  --smith-msg-line-height: 24px;
+}
+
+/* Centre the avatar on the FIRST LINE of the message rather than on the top of
+   the row. Resolves to -2px at the sizes above, and self-corrects if either
+   changes. */
+.onboarding-msg > .smith-avatar {
+  margin-top: calc((var(--smith-msg-line-height) - var(--smith-avatar-size)) / 2);
 }
 
 /* Smith AI avatar — the sparkle icon painted in the primary/action color
@@ -4596,8 +4609,8 @@ td.vetting-scores-table__date {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: var(--smith-avatar-size, 28px);
+  height: var(--smith-avatar-size, 28px);
   color: var(--color-action-primary-background-default);
 }
 
@@ -4606,7 +4619,7 @@ td.vetting-scores-table__date {
 /* Grouped consecutive message: no avatar, but keep the avatar's width so text stays aligned. */
 .onboarding-msg__avatar-spacer {
   flex-shrink: 0;
-  width: 28px;
+  width: var(--smith-avatar-size, 28px);
 }
 .onboarding-msg__content {
   min-width: 0;

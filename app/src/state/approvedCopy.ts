@@ -60,6 +60,21 @@ export const ALLOCATION_EMPTY = "Connect a wallet to view allocation.";
 /** content/smith-ai-copy.md — Safety Note, approved */
 export const SMITH_SAFETY_NOTE = "Smith AI can make mistakes. Check important info.";
 
+/**
+ * How Smith opens a panel, on EVERY surface that has a dashboard behind it
+ * (Demo Mode and a connected wallet). It introduces Smith and says what it is
+ * actually useful for, and it claims nothing about the portfolio, so it stays
+ * true in every state and cannot drift as the data changes.
+ *
+ * Shared deliberately: the two surfaces had separate openers that described
+ * different products, and the connected one described a state the app had
+ * grown out of.
+ */
+export const SMITH_INTRO_OPENER =
+  "Hi, I’m Smith. I can explain anything on your dashboard — how your Safety Buffer target is " +
+  "set, why a suggestion came out on top, what a protocol handoff does, and what WealthSmith " +
+  "can and cannot see.";
+
 /** content/smith-ai-copy.md — uncertainty template with its approved example next step */
 export const SMITH_FALLBACK =
   "I don’t have enough product information to answer that confidently. Check the Support page or contact us for help.";

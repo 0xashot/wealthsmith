@@ -123,11 +123,37 @@ export interface ProtocolDecision {
   eligibility_status: string;
 }
 
+/**
+ * The CARD's vocabulary for `category` — deliberately NOT the engine's
+ * `SuggestionCategory`. The two overlap in spelling for some values and differ
+ * for others (engine `buffer` → card "safety_buffer", `dca` →
+ * "contribution_plan", `stable_yield` → "yield_opportunity"), so comparing a
+ * card against an engine value silently never matches and the branch is dead.
+ * Typing it makes that a compile error instead of a quiet wrong answer.
+ *
+ * Note this mapping is LOSSY: engine `trim`, `position_optimization` and
+ * `on_track` all become "portfolio_health". To tell those apart, match on
+ * `CardType`, which is one-to-one with the engine category.
+ *
+ * suggestions/toSuggestionCard.ts owns both mappings and must stay total.
+ */
+export type CardCategory =
+  | "safety_buffer"
+  | "allocation"
+  | "capital_efficiency"
+  | "portfolio_health"
+  | "staked_assets"
+  | "yield_opportunity"
+  | "contribution_plan";
+
 export interface SuggestionCardState {
   id: string;
   title: string;
+  /** Stable engine type id. Open-ended: the engine may supply a cardTypeOverride
+   *  (the On Track multi-card family, buffer_position_review), so this is not a
+   *  closed union. It is still one-to-one per family where CardCategory is lossy. */
   type: string;
-  category: string;
+  category: CardCategory;
   badge: string;
   is_top_pick: boolean;
   status: string;
