@@ -632,11 +632,68 @@ Supported wallet helper:
 Supported wallets: Phantom, Solflare, Backpack.
 ```
 
-Connect modal behavior: a wallet is "detected" only when its extension is actually
-installed (adapter readyState `Installed`). A wallet that is not detected shows the
-"Not detected" row status, and **clicking it opens that wallet's official page in a
-new tab** (`target="_blank"`, `rel="noopener noreferrer"`) — there is no error state
-for the not-detected case, and it never fake-connects.
+Connect modal behavior: a wallet is "detected" when the row can actually start a
+connection. That is true in two cases:
+
+1. adapter readyState `Installed` — a browser extension injected a provider (desktop,
+   and wallet apps' own in-app browsers); or
+2. adapter readyState `Loadable` **on iOS Safari only** — there is no extension to
+   detect, but `connect()` redirects to the wallet's universal link. The iOS-Safari
+   condition deliberately mirrors `isIosAndRedirectable()` in
+   `@solana/wallet-adapter-base`, so a row never invites a tap the adapter refuses.
+
+`Loadable` stays excluded everywhere else: on desktop it is Solflare's web-wallet
+fallback, which must not masquerade as an installed extension.
+
+A wallet that is not detected shows the "Not detected" row status, and **clicking it
+opens that wallet's official page in a new tab** (`target="_blank"`,
+`rel="noopener noreferrer"`) — there is no error state for the not-detected case, and
+it never fake-connects.
+
+History: until 2026-11-18 only `Installed` counted. Because iOS Safari reports
+`Loadable`, every iPhone visitor was told "Wallet not detected" and sent to a marketing
+page, so the deep-link path was never once attempted in production — zero wallet
+connections had ever completed there.
+
+---
+
+### In-App Browser
+
+Shown **instead of** the wallet list when the page is running inside another app's
+embedded webview (X, Instagram, Facebook, TikTok, LinkedIn, …), where a wallet
+connection cannot complete at all: the adapter will not redirect (its iOS check
+requires `safari` in the UA, which these webviews omit), and the host app may tear the
+webview down mid-handoff.
+
+Title:
+
+```text
+Open in your browser to connect
+```
+
+Description (`{app}` is the host app's everyday name, e.g. "X"):
+
+```text
+{app}’s built-in browser can’t open wallet apps. Open this page in Safari or Chrome, then connect your wallet there.
+```
+
+Action + hint:
+
+```text
+Copy Link
+You can also use this app’s menu and choose “Open in browser”.
+```
+
+Rules:
+
+- Never say "not detected" here — the wallet is fine; the browser is the problem.
+- The action is **Copy Link**, not "Open in Safari": a webview cannot reliably escape
+  itself, and a button that silently does nothing is worse than no button.
+- A wallet app's own in-app browser (Phantom, Solflare, Backpack) is **never** treated
+  as a blocked in-app browser — it injects a provider and connects normally.
+- Android is out of scope for this state: it is a real browser, so it shows the normal
+  wallet list. Connecting there is still unsupported (the Mobile Wallet Adapter is
+  auto-registered by `WalletProvider` but never surfaced by the modal).
 
 Approved Wallet Sites (official pages, the only approved wallet URLs):
 

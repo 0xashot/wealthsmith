@@ -3138,6 +3138,58 @@ td.vetting-scores-table__date {
   color: var(--color-text-disabled);
 }
 
+/* In-App Browser state — replaces the wallet list inside another app's embedded
+   webview (X, Instagram, …), where no wallet connection can complete. Mirrors the
+   .modal__wallet-error notice so the two read as one family. */
+.wallet-in-app-browser {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-inline-gap-xs);
+  padding: var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-sm);
+  background: var(--color-subdued-neutral-background-default);
+}
+
+.wallet-in-app-browser__title {
+  margin: 0;
+  font: var(--typography-label-md-font);
+  color: var(--color-text-primary);
+}
+
+.wallet-in-app-browser__desc {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+}
+
+.wallet-in-app-browser__hint {
+  margin: 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-disabled);
+}
+
+.wallet-in-app-browser__action {
+  align-self: flex-start;
+  margin-top: var(--spacing-inline-gap-xs);
+  /* 44px is the iOS minimum touch target; this state only ever renders on mobile. */
+  min-height: 44px;
+  padding: var(--spacing-inline-gap-xs) var(--spacing-inline-gap-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control-md);
+  background: var(--color-surface-card);
+  color: var(--color-text-primary);
+  font: var(--typography-body-sm-font);
+  cursor: pointer;
+  transition-property: var(--motion-interaction-hover-property);
+  transition-duration: var(--motion-interaction-hover-duration);
+  transition-timing-function: var(--motion-interaction-hover-easing);
+}
+
+.wallet-in-app-browser__action:hover {
+  border-color: var(--color-border-strong);
+}
+
 /* Connection error / not-detected notice above the wallet list. */
 .modal__wallet-error {
   display: flex;
