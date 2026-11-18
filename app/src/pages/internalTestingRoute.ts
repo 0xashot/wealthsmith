@@ -45,10 +45,15 @@ export const INTERNAL_TESTING_FLAG = "VITE_ENABLE_TESTING_PAGE" as const;
  */
 export function isTestingPageEnabled(): boolean {
   try {
-    // Accessed as a literal so Vite statically replaces it at build time; in a public production build
-    // both sides are compile-time false.
-    const env = import.meta.env as unknown as { DEV?: boolean; VITE_ENABLE_TESTING_PAGE?: string };
-    return env.DEV === true || env.VITE_ENABLE_TESTING_PAGE === "true";
+    // SECURITY — read each KEY literally so Vite substitutes one value per key. A bare
+    // `import.meta.env` (assigned, or cast as the previous version did) is replaced with
+    // the ENTIRE env object literal, shipping every VITE_* variable in the build env. That
+    // dump survives minification when the key read is unset, as VITE_ENABLE_TESTING_PAGE is.
+    // In a public production build both sides are still compile-time false.
+    // In non-Vite runtimes (e.g. the Node fixtures runner) the access throws → false.
+    const dev = import.meta.env.DEV;
+    const flag = import.meta.env.VITE_ENABLE_TESTING_PAGE;
+    return dev === true || flag === "true";
   } catch {
     return false;
   }
