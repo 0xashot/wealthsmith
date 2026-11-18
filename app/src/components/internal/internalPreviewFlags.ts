@@ -22,11 +22,16 @@ export const INTERNAL_SOL_LST_PREVIEW_ENABLES_TRANSACTIONS = false;
  */
 export function isInternalSolLstPreviewRouteEnabled(): boolean {
   try {
-    // Access `import.meta.env` as a literal so Vite injects it (aliasing
-    // `import.meta` first would leave `.env` undefined). In non-Vite runtimes
-    // (e.g. the Node fixtures runner) `import.meta.env` is undefined → caught → false.
-    const env = import.meta.env as unknown as { DEV?: boolean; VITE_INTERNAL_SOL_LST_PREVIEW?: string };
-    return env.DEV === true && env.VITE_INTERNAL_SOL_LST_PREVIEW === "true";
+    // SECURITY — read each KEY literally. Vite substitutes `import.meta.env.SOME_KEY`
+    // per key, but a bare `import.meta.env` (assigned to a variable, or cast like the
+    // previous `import.meta.env as unknown as {…}`) is replaced with the ENTIRE env
+    // object literal, publishing every VITE_* variable present at build time. The dump
+    // survives minification whenever the key being read is unset, because the property
+    // access then cannot be constant-folded away — which is exactly the case here.
+    // In non-Vite runtimes (e.g. the Node fixtures runner) the access throws → false.
+    const dev = import.meta.env.DEV;
+    const flag = import.meta.env.VITE_INTERNAL_SOL_LST_PREVIEW;
+    return dev === true && flag === "true";
   } catch {
     return false;
   }

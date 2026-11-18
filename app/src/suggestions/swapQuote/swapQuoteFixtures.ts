@@ -23,7 +23,7 @@ import { usdToRaw, tokensToRaw, rawToTokens } from "./swapAmountMath";
 import { SWAP_PROVIDER_PRIORITY_ORDER } from "./swapQuotePolicy";
 import type { WalletPosition } from "../../wallet/walletPosition";
 import { deriveNativeSolRebalanceSource, REBALANCE_NATIVE_SOL_RESERVE_POLICY } from "../rebalanceAssessment";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import type { SwapQuoteComparisonAssessment, SwapComparisonStatus } from "./swapQuoteContracts";
 import { presentSwapQuote, notReadyView, notRequiredView, unavailableView, EXCLUSION_REASON_COPY, LOADING_VIEW } from "./quotePresentation";
 import { validateSanitizedAssessment, swapQuoteRequestKey } from "./swapQuoteClient";
@@ -494,6 +494,50 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
     return /singleLeg && singleView && isEligibleResultKind\(singleView\.kind\) && singleView\.selectedProviderId/.test(s) && /onHandoff\?\.\(null\)/.test(s);
   })(), "handoff single-leg eligible");
   add("SWC-31: buildProviderSwapUrl maps native SOL to the wrapped-SOL alias for Raydium and includes the amount when supported", (() => { const u = buildProviderSwapUrl("raydium", WSOL, USDC, "5"); return /inputMint=sol/.test(u) && /inputAmount=5/.test(u); })(), "sol alias + amount");
+
+  // --- Build-env leak guards (SWC-32..34) ---------------------------------
+  // Vite substitutes ONLY the exact textual pattern `import.meta.env.SOME_KEY`. Aliasing
+  // `import.meta` first makes it inline the ENTIRE env object literal at that call site,
+  // publishing every VITE_* variable present at build time. resolveApiBase did exactly that
+  // and shipped VITE_SERVICE_PASSWORD — the backend's POST /token/create credential — in the
+  // production bundle. The leak survived minification because VITE_SWAP_QUOTE_API_BASE is
+  // unset, so the property access could not be folded and the whole object had to be emitted.
+  add("SWC-32: resolveApiBase reads the env KEY literally (import.meta.env.VITE_SWAP_QUOTE_API_BASE) so Vite substitutes one value, not the whole env object", (() => {
+    const s = stripComments(readSrc("src/suggestions/swapQuote/swapQuoteClient.ts"));
+    return /import\.meta\.env\.VITE_SWAP_QUOTE_API_BASE/.test(s);
+  })(), "literal key access");
+  add("SWC-33: swapQuoteClient never aliases `import.meta` before reading .env — the idiom that inlines every VITE_* var", (() => {
+    const s = stripComments(readSrc("src/suggestions/swapQuote/swapQuoteClient.ts"));
+    return !/import\.meta\s+as\b/.test(s) && !/\(\s*import\.meta\s*\)/.test(s);
+  })(), "no import.meta alias");
+  // SWC-34 scans ALL app source, not just this module: the same idiom leaked the same secret
+  // from internalPreviewFlags.ts and internalTestingRoute.ts, which a swapQuoteClient-only check
+  // would have missed. `import.meta.env.KEY` and `import.meta.env?.KEY` are both fine — Vite
+  // substitutes the first per key, and the second constant-folds for keys it knows (DEV/PROD/MODE).
+  // Anything else — a cast, an assignment, a parenthesised read — emits the whole env object.
+  add("SWC-34: NO app source reads a bare `import.meta.env` (repo-wide) — only `import.meta.env.KEY`, so Vite never inlines the whole env object", (() => {
+    const roots = ["src/suggestions", "src/components", "src/wallet", "src/pages", "src/state", "src/hooks", "src/server"];
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      let entries: Array<{ name: string; isDirectory(): boolean }>;
+      try { entries = readdirSync(`${process.cwd()}/${dir}`, { withFileTypes: true }); } catch { return; }
+      for (const e of entries) {
+        const rel = `${dir}/${e.name}`;
+        if (e.isDirectory()) { walk(rel); continue; }
+        if (!/\.tsx?$/.test(e.name)) continue;
+        // Fixture modules are never bundled into the app, and they quote the very pattern
+        // they police (in regexes and check names), so scanning them flags this check itself.
+        if (/[Ff]ixtures?\.tsx?$/.test(e.name)) continue;
+        const src = stripComments(readSrc(rel));
+        // Bare read: `import.meta.env` NOT immediately followed by `.KEY` or `?.KEY`.
+        if (/import\.meta\.env(?!\s*\??\.\s*[A-Za-z_$])/.test(src)) offenders.push(rel);
+        // Aliasing `import.meta` itself, which also defeats per-key substitution.
+        if (/import\.meta\s+as\b/.test(src) || /\(\s*import\.meta\s*\)/.test(src)) offenders.push(rel);
+      }
+    };
+    roots.forEach(walk);
+    return offenders.length === 0;
+  })(), "no bare import.meta.env in app source");
 
   return checks;
 }

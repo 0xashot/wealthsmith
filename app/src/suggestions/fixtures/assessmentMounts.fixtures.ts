@@ -218,7 +218,16 @@ export function runInternalTestingRouteFixtureChecks(): FixtureCheck[] {
   add("16H-K2-A: the route path is /testing and lives in a dependency-free gate module", TESTING_PAGE_ROUTE === "/testing" && gate.length > 0 && !/testingPageFixtures|STABLE_YIELD_TESTING|riskScore/.test(gate), "isolated gate");
   add("16H-K2-B: the gate is a BUILD-TIME env flag, not a query param or URL password", /import\.meta\.env/.test(gate) && INTERNAL_TESTING_FLAG === "VITE_ENABLE_TESTING_PAGE" && !/location\.search|URLSearchParams|password|token=/i.test(gate), "build-time");
   add("16H-K2-C: the gate defaults to FALSE in a non-Vite runtime (fails closed)", isTestingPageEnabled() === false, "false in node");
-  add("16H-K2-D: enabling requires DEV or an explicit VITE_ENABLE_TESTING_PAGE=true", /env\.DEV === true \|\| env\.VITE_ENABLE_TESTING_PAGE === "true"/.test(gate), "explicit");
+  // The gate reads each env KEY literally (`import.meta.env.KEY`) rather than aliasing
+  // `import.meta.env`, which would inline the whole env object into the bundle — see
+  // SWC-32..34 in swapQuoteFixtures. So assert the two literal key reads AND the gate
+  // expression over them, which is strictly stronger than matching the old aliased form.
+  add("16H-K2-D: enabling requires DEV or an explicit VITE_ENABLE_TESTING_PAGE=true, read as literal env keys", (() => {
+    const g = stripComments(gate);
+    return /import\.meta\.env\.DEV/.test(g)
+      && /import\.meta\.env\.VITE_ENABLE_TESTING_PAGE/.test(g)
+      && /dev === true \|\| flag === "true"/.test(g);
+  })(), "explicit");
   add("16H-K2-E: Demo Mode is NOT the gate (a product state can never unlock internal tooling)", !/demo/i.test(gate) && !/demoActive/.test(stripComments(app.split("function MainApp")[0] ?? "")), "not demo");
 
   // ---- App wiring ----

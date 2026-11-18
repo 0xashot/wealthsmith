@@ -14,10 +14,25 @@ export type SwapQuoteClientResult =
 
 const VALID_STATUSES: readonly SwapComparisonStatus[] = ["selected", "partial_comparison", "only_route_available", "no_valid_route", "not_ready_for_quote", "not_required", "unresolved"];
 
-/** Resolve the WealthSmith API base. Empty (same-origin) in dev → the Vite proxy forwards /api/swap-quote. */
+/**
+ * Resolve the WealthSmith API base. Empty (same-origin) in dev → the Vite proxy forwards /api/swap-quote.
+ *
+ * SECURITY — read the KEY literally (`import.meta.env.VITE_…`), never alias `import.meta` first.
+ * Vite only substitutes the exact textual pattern `import.meta.env.SOME_KEY`. Any other shape —
+ * `(import.meta as …).env?.KEY` included — makes it fall back to inlining the ENTIRE env object
+ * literal at that call site, which ships every VITE_* variable present at build time.
+ *
+ * That is not hypothetical: the previous form here published `VITE_SERVICE_PASSWORD` — the
+ * credential gating POST /token/create on the backend — in plaintext in the production bundle.
+ * It survived minification precisely because VITE_SWAP_QUOTE_API_BASE is unset, so the property
+ * access could not be constant-folded away and the whole object had to be emitted.
+ *
+ * In the Node fixtures runner there is no `import.meta.env`, so this throws and the catch
+ * returns "" — same behaviour as before.
+ */
 export function resolveApiBase(): string {
   try {
-    const base = (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_SWAP_QUOTE_API_BASE;
+    const base = import.meta.env.VITE_SWAP_QUOTE_API_BASE as string | undefined;
     return typeof base === "string" ? base.replace(/\/$/, "") : "";
   } catch {
     return "";
