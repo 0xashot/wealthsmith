@@ -40,6 +40,9 @@ import closeUrl from "../../../assets/icons/ui/close.svg";
 import phantomUrl from "../../../assets/icons/wallet/phantom.svg";
 import solflareUrl from "../../../assets/icons/wallet/solflare.svg";
 import backpackUrl from "../../../assets/icons/wallet/backpack.svg";
+/* No wallet-agnostic mark exists in the approved set; coins is the nearest approved icon
+   and the row names the action rather than any one wallet. */
+import coinsUrl from "../../../assets/icons/ui/coins.svg";
 import {
   WALLET_CONNECT_MODAL_TITLE,
   WALLET_CONNECTING,
@@ -59,12 +62,16 @@ import {
   WALLET_IN_APP_BROWSER_HINT,
   WALLET_IN_APP_COPY_LINK,
   WALLET_IN_APP_COPY_LINK_DONE,
+  WALLET_MOBILE_ADAPTER_LABEL,
+  WALLET_MOBILE_ADAPTER_HINT,
   walletInAppBrowserDesc,
 } from "../state/approvedCopy";
 import {
+  MOBILE_WALLET_ADAPTER_NAME,
   currentUserAgent,
   detectInAppBrowser,
   isIosSafariRedirectable,
+  resolveConnectContext,
 } from "../wallet/walletEnvironment";
 
 /** Approved MVP wallets + their official pages (content/wallet-copy.md — Approved
@@ -74,6 +81,13 @@ const WALLET_OPTIONS = [
   { key: "solflare", label: "Solflare", icon: solflareUrl, url: "https://solflare.com/" },
   { key: "backpack", label: "Backpack", icon: backpackUrl, url: "https://backpack.app/" },
 ] as const;
+
+/**
+ * How long a pending connect() may hang before the modal gives up. Long enough to read a
+ * wallet approval prompt and unlock a locked wallet; short enough that a hand-off which is
+ * never returning does not look like a hang forever.
+ */
+const CONNECT_TIMEOUT_MS = 60_000;
 
 interface ErrState {
   title: string;
@@ -125,6 +139,14 @@ export default function ConnectWalletModal({ onClose }: Props) {
   // which these webviews omit), and the host app may tear the webview down mid-handoff.
   // The modal shows the one step that does work instead of rows that would fail.
   const inAppBrowser = detectInAppBrowser(currentUserAgent());
+
+  // Android, real browser: WalletProvider auto-registers the Solana Mobile Wallet Adapter.
+  // Its presence is the authoritative Android signal — the library has already excluded
+  // WebViews and any environment with an injected provider. Tapping it hands off to the
+  // OS wallet chooser, which IS the wallet picker on Android, so the three fixed rows are
+  // replaced rather than supplemented; they could only ever read "Not detected" there.
+  const mwaAdapter = wallets.find((w) => w.adapter.name === MOBILE_WALLET_ADAPTER_NAME);
+
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstOptionRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -159,6 +181,34 @@ export default function ConnectWalletModal({ onClose }: Props) {
     return iosRedirectable && readyState === WalletReadyState.Loadable;
   };
 
+  // How (and whether) a connection can happen here. Attached to every funnel event so a
+  // failure is readable afterwards: "no extension on desktop", "iPhone", "inside X's
+  // webview" and "Android" all produced an identical wallet_not_ready before this.
+  const connectContext = resolveConnectContext({
+    userAgent: currentUserAgent(),
+    hasInstalledWallet: WALLET_OPTIONS.some(
+      (w) => adapterFor(w.key)?.readyState === WalletReadyState.Installed,
+    ),
+    hasMobileWalletAdapter: mwaAdapter != null,
+  });
+
+  // Emitted HERE rather than by whatever opened the modal, because only this component
+  // knows which adapters registered and therefore what was actually possible.
+  //
+  // The ref is not ceremony: moving this from a click handler into an effect means
+  // StrictMode double-invokes it, and dev events land in the SAME PostHog project as
+  // production ones. Production is unaffected (StrictMode checks are development-only),
+  // but a silently doubled funnel entry in dev is exactly the kind of thing that gets
+  // mistaken for real traffic later.
+  const openReported = useRef(false);
+  useEffect(() => {
+    if (openReported.current) return;
+    openReported.current = true;
+    capture({ name: "wallet_modal_opened", context: connectContext });
+    // Once per mount: the context cannot change while the modal is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // After a wallet is selected, connect it (no signature). Guarded so we only
   // connect the wallet we just picked.
   useEffect(() => {
@@ -172,11 +222,40 @@ export default function ConnectWalletModal({ onClose }: Props) {
           name: "wallet_connect_failed",
           wallet: walletKind(wallet?.adapter.name),
           reason: mapped.reason,
+          context: connectContext,
         });
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingName, wallet, connected, connecting]);
+
+  // A connect() that never settles used to strand the modal forever: `busy` stayed true,
+  // and `busy` disables Escape, the close button AND the scrim, so the only way out was a
+  // page reload. It also made `reason: "timeout"` unreachable, so the failure was invisible
+  // in analytics as well as unrecoverable for the user.
+  //
+  // Generous on purpose — this must never cut short someone reading an approval prompt or
+  // unlocking their wallet. It is a backstop for a hand-off that is never coming back, not
+  // a latency budget; closing the modal is the fast path out.
+  useEffect(() => {
+    if (!pendingName) return;
+    const id = setTimeout(() => {
+      setError({
+        title: WALLET_CONNECT_FAILED_TITLE,
+        desc: WALLET_CONNECT_FAILED_DESC,
+        reason: "timeout",
+      });
+      setPendingName(null);
+      capture({
+        name: "wallet_connect_failed",
+        wallet: walletKind(pendingName),
+        reason: "timeout",
+        context: connectContext,
+      });
+    }, CONNECT_TIMEOUT_MS);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingName]);
 
   const pick = (key: string, url: string) => {
     if (busy) return;
@@ -185,23 +264,48 @@ export default function ConnectWalletModal({ onClose }: Props) {
       // Not installed → open the wallet's official page in a new tab so the user
       // can install/open it. No error state, and never a fake connection.
       // Still a funnel exit, and a common one, so it is counted as a failure.
-      capture({ name: "wallet_connect_failed", wallet: walletKind(key), reason: "wallet_not_ready" });
+      capture({
+        name: "wallet_connect_failed",
+        wallet: walletKind(key),
+        reason: "wallet_not_ready",
+        context: connectContext,
+      });
       window.open(url, "_blank", "noopener,noreferrer");
       return;
     }
     setError(null);
     setPendingName(adapter.adapter.name);
-    capture({ name: "wallet_selected", wallet: walletKind(adapter.adapter.name) });
+    capture({ name: "wallet_selected", wallet: walletKind(adapter.adapter.name), context: connectContext });
     select(adapter.adapter.name as WalletName);
   };
 
-  // Focus trap + Escape (Escape only when idle).
+  /**
+   * Leave the modal, including mid-connect.
+   *
+   * All three exits (Escape, the close button, the scrim) used to be disabled while
+   * `busy`, so a connect() that never settled left no way out but a page reload. A
+   * pending connection is not a reason to trap someone: the wallet hand-off lives in the
+   * wallet app, and abandoning it here costs nothing. If it does land afterwards,
+   * `connected` flips and the app proceeds as normal — a good outcome either way.
+   */
+  const cancelAndClose = () => {
+    if (pendingName) {
+      capture({
+        name: "wallet_connect_failed",
+        wallet: walletKind(pendingName),
+        reason: "cancelled",
+        context: connectContext,
+      });
+      setPendingName(null);
+    }
+    onClose();
+  };
+
+  // Focus trap + Escape (Escape closes even mid-connect — see cancelAndClose).
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
-      if (!busy) {
-        e.preventDefault();
-        onClose();
-      }
+      e.preventDefault();
+      cancelAndClose();
       return;
     }
     if (e.key !== "Tab") return;
@@ -224,7 +328,7 @@ export default function ConnectWalletModal({ onClose }: Props) {
     <div
       className="modal-scrim"
       onMouseDown={(e) => {
-        if (!busy && e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) cancelAndClose();
       }}
     >
       <div
@@ -245,8 +349,7 @@ export default function ConnectWalletModal({ onClose }: Props) {
             type="button"
             className="modal__close"
             aria-label={WALLET_CONNECT_CLOSE_LABEL}
-            onClick={onClose}
-            disabled={busy}
+            onClick={cancelAndClose}
           >
             <ButtonIcon src={closeUrl} size={18} />
           </button>
@@ -259,7 +362,44 @@ export default function ConnectWalletModal({ onClose }: Props) {
           </div>
         )}
 
-        {inAppBrowser ? (
+        {mwaAdapter ? (
+          <ul className="wallet-option-list">
+            <li>
+              <button
+                ref={firstOptionRef}
+                type="button"
+                className="wallet-option"
+                aria-label={WALLET_MOBILE_ADAPTER_LABEL}
+                aria-disabled={busy || undefined}
+                onClick={() => {
+                  if (busy) return;
+                  setError(null);
+                  setPendingName(mwaAdapter.adapter.name);
+                  capture({
+                    name: "wallet_selected",
+                    wallet: walletKind(mwaAdapter.adapter.name),
+                    context: connectContext,
+                  });
+                  select(mwaAdapter.adapter.name as WalletName);
+                }}
+              >
+                <img
+                  className="wallet-option__icon"
+                  src={coinsUrl}
+                  alt=""
+                  width={28}
+                  height={28}
+                  aria-hidden="true"
+                />
+                <span className="wallet-option__label">{WALLET_MOBILE_ADAPTER_LABEL}</span>
+                {pendingName === mwaAdapter.adapter.name && busy ? (
+                  <span className="wallet-option__status">{WALLET_CONNECTING}</span>
+                ) : null}
+              </button>
+            </li>
+            <li className="wallet-option-list__hint">{WALLET_MOBILE_ADAPTER_HINT}</li>
+          </ul>
+        ) : inAppBrowser ? (
           <div className="wallet-in-app-browser">
             <p className="wallet-in-app-browser__title">{WALLET_IN_APP_BROWSER_TITLE}</p>
             <p className="wallet-in-app-browser__desc">{walletInAppBrowserDesc(inAppBrowser)}</p>
@@ -272,7 +412,10 @@ export default function ConnectWalletModal({ onClose }: Props) {
                 // webview. navigator.clipboard is unavailable in some of them, so fall
                 // back to the legacy path and never leave the button in a lying state.
                 const url = window.location.href;
-                const done = () => setLinkCopied(true);
+                const done = () => {
+                  setLinkCopied(true);
+                  capture({ name: "wallet_in_app_link_copied" });
+                };
                 void (async () => {
                   try {
                     await navigator.clipboard.writeText(url);

@@ -291,7 +291,9 @@ function MainApp() {
   const openConnectModal = () => {
     connectTriggerRef.current = document.activeElement as HTMLElement | null;
     setConnectModalOpen(true);
-    capture({ name: "wallet_modal_opened" });
+    // `wallet_modal_opened` is emitted by ConnectWalletModal itself, which is the only
+    // place that knows the connect context (extension / iOS deep link / Mobile Wallet
+    // Adapter / in-app browser). Emitting it here too would double-count every open.
   };
   const closeConnectModal = () => setConnectModalOpen(false);
 

@@ -88,3 +88,57 @@ export function currentUserAgent(): string {
     ? navigator.userAgent
     : "";
 }
+
+/**
+ * The display name `@solana/wallet-adapter-react` gives the auto-registered Solana Mobile
+ * Wallet Adapter. Matched by exact name because that is the only handle the hook exposes.
+ *
+ * `WalletProvider` injects it only when `getEnvironment()` returns MOBILE_WEB: an Android
+ * UA, not a WebView, and no extension adapter already `Installed`. So its mere presence in
+ * `wallets` is the authoritative "this is Android, in a real browser" signal — better than
+ * sniffing the UA ourselves, because it also accounts for the cases the library excludes.
+ *
+ * Note it reports readyState `Loadable`, never `Installed`, so the iOS-Safari gate in
+ * ConnectWalletModal deliberately does not pick it up. Android needs its own branch.
+ */
+export const MOBILE_WALLET_ADAPTER_NAME = "Mobile Wallet Adapter";
+
+/**
+ * Whether a connection is possible here at all, and by what mechanism.
+ *
+ * Attached to the wallet funnel events. Without it a `wallet_not_ready` failure is
+ * unreadable: it cannot distinguish "desktop visitor with no extension installed" from
+ * "iPhone visitor we were refusing to deep-link" from "inside X's webview, where nothing
+ * can work". Those are three different product problems and they looked identical in the
+ * data — which is why zero production connections went undiagnosed for as long as it did.
+ */
+export type ConnectContext =
+  /** A provider is injected: desktop extension, or a wallet app's own in-app browser. */
+  | "extension"
+  /** iOS Safari: no provider, but connect() redirects to the wallet's universal link. */
+  | "ios_deep_link"
+  /** Android, real browser: the Solana Mobile Wallet Adapter is available. */
+  | "mobile_wallet_adapter"
+  /** Inside another app's webview (X, Instagram, …). Nothing can complete here. */
+  | "in_app_browser"
+  /** None of the above — e.g. a desktop browser with no extension, or iOS in a non-Safari shell. */
+  | "unsupported";
+
+/**
+ * Resolve the context from facts the modal already holds. Order is deliberate:
+ * an injected provider wins over everything (it is what a wallet's own in-app browser
+ * looks like), then a blocked webview, then the two mobile mechanisms.
+ */
+export function resolveConnectContext(input: {
+  userAgent: string;
+  /** Any approved wallet reporting readyState `Installed`. */
+  hasInstalledWallet: boolean;
+  /** The Mobile Wallet Adapter is present in `wallets` (Android, real browser). */
+  hasMobileWalletAdapter: boolean;
+}): ConnectContext {
+  if (input.hasInstalledWallet) return "extension";
+  if (detectInAppBrowser(input.userAgent) !== null) return "in_app_browser";
+  if (input.hasMobileWalletAdapter) return "mobile_wallet_adapter";
+  if (isIosSafariRedirectable(input.userAgent)) return "ios_deep_link";
+  return "unsupported";
+}

@@ -21,6 +21,14 @@
  * to a wallet.
  */
 
+import type { ConnectContext } from "../wallet/walletEnvironment";
+
+/**
+ * Re-exported so the analytics vocabulary is importable from one place, while the single
+ * definition stays next to the detection that produces it.
+ */
+export type { ConnectContext };
+
 /** Which wallet a visitor chose in the connect modal. */
 export type WalletKind = "phantom" | "solflare" | "backpack" | "other";
 
@@ -29,6 +37,11 @@ export type WalletKind = "phantom" | "solflare" | "backpack" | "other";
  * collapses to "other" rather than leaking an unbounded string into a property.
  * Note a Ledger connected THROUGH Phantom reports as "phantom" — the hardware
  * device is not visible to the adapter, so Ledger has no kind of its own.
+ *
+ * On Android the adapter is always named "Mobile Wallet Adapter" and collapses to
+ * "other": the actual wallet is chosen in the OS chooser, which never tells the page
+ * which one won. That is a real limit, not a gap — read it with
+ * `context === "mobile_wallet_adapter"`, which identifies the path unambiguously.
  */
 export function walletKind(adapterName: string | undefined | null): WalletKind {
   switch ((adapterName ?? "").toLowerCase()) {
@@ -51,6 +64,8 @@ export type ConnectFailure =
   | "invalid_formatting"
   | "user_rejected"
   | "wallet_not_ready"
+  /** The visitor closed the modal while a connection was still pending. */
+  | "cancelled"
   | "timeout"
   | "network"
   | "unknown";
@@ -92,13 +107,20 @@ export type AnalyticsEvent =
   | { name: "smith_ai_message"; kind: MessageKind }
 
   // ── Wallet funnel ───────────────────────────────────────────────────────────
-  | { name: "wallet_modal_opened" }
-  | { name: "wallet_selected"; wallet: WalletKind }
+  /**
+   * `context` says whether connecting was POSSIBLE here, not just whether it happened.
+   * Emitted by the modal itself rather than its opener, because only the modal knows
+   * which adapters registered.
+   */
+  | { name: "wallet_modal_opened"; context: ConnectContext }
+  | { name: "wallet_selected"; wallet: WalletKind; context: ConnectContext }
+  /** The visitor tapped Copy Link in the in-app-browser state — i.e. accepted the detour. */
+  | { name: "wallet_in_app_link_copied" }
   /** Live app only — the prototype connects read-only and asks for no signature. */
   | { name: "wallet_signature_requested"; wallet: WalletKind }
   /** `isNewAccount` is only knowable where sign-in runs, so the prototype omits it. */
   | { name: "wallet_connected"; wallet: WalletKind; isNewAccount?: boolean }
-  | { name: "wallet_connect_failed"; wallet: WalletKind; reason: ConnectFailure }
+  | { name: "wallet_connect_failed"; wallet: WalletKind; reason: ConnectFailure; context: ConnectContext }
   | { name: "wallet_disconnected" }
 
   // ── Failures the user can see ───────────────────────────────────────────────

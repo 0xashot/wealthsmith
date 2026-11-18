@@ -228,6 +228,15 @@ export const walletInAppBrowserDesc = (app: string) =>
  *  and a button that silently does nothing is worse than none. */
 export const WALLET_IN_APP_COPY_LINK = "Copy Link";
 export const WALLET_IN_APP_COPY_LINK_DONE = "Link copied";
+/* content/wallet-copy.md — Android / Mobile Wallet Adapter. Shown INSTEAD of the three
+ * fixed wallet rows when the Solana Mobile Wallet Adapter is registered (Android, real
+ * browser). Tapping it hands off to the OS wallet chooser, which is itself the wallet
+ * picker — so listing Phantom/Solflare/Backpack alongside would be both redundant and
+ * wrong, since each could only report "Not detected" there. */
+export const WALLET_MOBILE_ADAPTER_LABEL = "Connect a wallet app";
+export const WALLET_MOBILE_ADAPTER_HINT =
+  "Choose from the wallet apps installed on your phone.";
+
 export const WALLET_IN_APP_BROWSER_HINT =
   "You can also use this app’s menu and choose “Open in browser”.";
 
