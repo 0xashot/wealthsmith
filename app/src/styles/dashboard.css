@@ -3138,6 +3138,15 @@ td.vetting-scores-table__date {
   color: var(--color-text-disabled);
 }
 
+/* Explanatory line under the single Android (Mobile Wallet Adapter) row. */
+.wallet-option-list__hint {
+  margin: 0;
+  padding: 0 var(--spacing-inline-gap-md);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+  list-style: none;
+}
+
 /* In-App Browser state — replaces the wallet list inside another app's embedded
    webview (X, Instagram, …), where no wallet connection can complete. Mirrors the
    .modal__wallet-error notice so the two read as one family. */

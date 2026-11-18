@@ -657,6 +657,35 @@ connections had ever completed there.
 
 ---
 
+### Mobile Wallet Adapter (Android)
+
+Shown **instead of** the three fixed wallet rows when `@solana/wallet-adapter-react`
+has auto-registered the Solana Mobile Wallet Adapter — which it does only on Android,
+in a real browser, with no provider already injected.
+
+The three named rows are replaced rather than joined, for two reasons: on Android each
+could only ever report "Not detected", and the OS wallet chooser that MWA opens *is*
+the wallet picker, so listing wallets first would ask the same question twice.
+
+Label + hint:
+
+```text
+Connect a wallet app
+Choose from the wallet apps installed on your phone.
+```
+
+Rules:
+
+- The row names the action, not a wallet — WealthSmith cannot know which wallet the
+  chooser will offer, and must not appear to favour one.
+- Analytics record this as `wallet: "other"`: the adapter is always named "Mobile
+  Wallet Adapter" and the OS never tells the page which wallet won. Read it with
+  `context === "mobile_wallet_adapter"`.
+- It does not go through the `Installed` / `Loadable` detection above. MWA reports
+  `Loadable`, which the iOS-Safari gate would reject.
+
+---
+
 ### In-App Browser
 
 Shown **instead of** the wallet list when the page is running inside another app's
@@ -691,9 +720,9 @@ Rules:
   itself, and a button that silently does nothing is worse than no button.
 - A wallet app's own in-app browser (Phantom, Solflare, Backpack) is **never** treated
   as a blocked in-app browser — it injects a provider and connects normally.
-- Android is out of scope for this state: it is a real browser, so it shows the normal
-  wallet list. Connecting there is still unsupported (the Mobile Wallet Adapter is
-  auto-registered by `WalletProvider` but never surfaced by the modal).
+- Android is out of scope for this state: it is a real browser, and gets the Mobile
+  Wallet Adapter row below. (An Android *webview* does reach this state — the library
+  excludes webviews from MWA, so it falls through to here.)
 
 Approved Wallet Sites (official pages, the only approved wallet URLs):
 
