@@ -32,6 +32,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState, type WalletName } from "@solana/wallet-adapter-base";
+import { capture } from "../analytics/analytics";
+import { walletKind, type ConnectFailure } from "../analytics/events";
 import ButtonIcon from "./ButtonIcon";
 import { useScrollLock } from "./useScrollLock";
 import closeUrl from "../../../assets/icons/ui/close.svg";
@@ -76,6 +78,8 @@ const WALLET_OPTIONS = [
 interface ErrState {
   title: string;
   desc: string;
+  /** The same failure, as an analytics label. Never shown to the user. */
+  reason: ConnectFailure;
 }
 
 interface Props {
@@ -90,12 +94,22 @@ function mapError(e: unknown): ErrState {
   const msg = (err?.message ?? "").toLowerCase();
   const code = err?.error?.code;
   if (name === "WalletNotReadyError") {
-    return { title: WALLET_NOT_DETECTED_TITLE, desc: WALLET_NOT_DETECTED_DESC };
+    return {
+      title: WALLET_NOT_DETECTED_TITLE,
+      desc: WALLET_NOT_DETECTED_DESC,
+      reason: "wallet_not_ready",
+    };
   }
   if (code === 4001 || /reject|declin|denied|cancel/.test(msg)) {
-    return { title: WALLET_REJECTED_TITLE, desc: WALLET_REJECTED_DESC };
+    return { title: WALLET_REJECTED_TITLE, desc: WALLET_REJECTED_DESC, reason: "user_rejected" };
   }
-  return { title: WALLET_CONNECT_FAILED_TITLE, desc: WALLET_CONNECT_FAILED_DESC };
+  if (/timeout|timed out/.test(msg)) {
+    return { title: WALLET_CONNECT_FAILED_TITLE, desc: WALLET_CONNECT_FAILED_DESC, reason: "timeout" };
+  }
+  if (/network|fetch|offline/.test(msg)) {
+    return { title: WALLET_CONNECT_FAILED_TITLE, desc: WALLET_CONNECT_FAILED_DESC, reason: "network" };
+  }
+  return { title: WALLET_CONNECT_FAILED_TITLE, desc: WALLET_CONNECT_FAILED_DESC, reason: "unknown" };
 }
 
 export default function ConnectWalletModal({ onClose }: Props) {
@@ -151,8 +165,14 @@ export default function ConnectWalletModal({ onClose }: Props) {
     if (!pendingName) return;
     if (wallet?.adapter.name === pendingName && !connected && !connecting) {
       connect().catch((e) => {
-        setError(mapError(e));
+        const mapped = mapError(e);
+        setError(mapped);
         setPendingName(null);
+        capture({
+          name: "wallet_connect_failed",
+          wallet: walletKind(wallet?.adapter.name),
+          reason: mapped.reason,
+        });
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -164,11 +184,14 @@ export default function ConnectWalletModal({ onClose }: Props) {
     if (!adapter || !isDetected(key)) {
       // Not installed → open the wallet's official page in a new tab so the user
       // can install/open it. No error state, and never a fake connection.
+      // Still a funnel exit, and a common one, so it is counted as a failure.
+      capture({ name: "wallet_connect_failed", wallet: walletKind(key), reason: "wallet_not_ready" });
       window.open(url, "_blank", "noopener,noreferrer");
       return;
     }
     setError(null);
     setPendingName(adapter.adapter.name);
+    capture({ name: "wallet_selected", wallet: walletKind(adapter.adapter.name) });
     select(adapter.adapter.name as WalletName);
   };
 

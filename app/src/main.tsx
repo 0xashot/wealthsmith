@@ -16,7 +16,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import SolanaWalletProvider from "./wallet/SolanaWalletProvider";
+import { initAnalytics } from "./analytics/analytics";
 import "./styles/base.css";
+
+// Analytics: a no-op without VITE_POSTHOG_KEY, so the app runs identically without it.
+void initAnalytics();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
