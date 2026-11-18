@@ -215,6 +215,22 @@ export const WALLET_REJECTED_TITLE = "Connection not approved";
 export const WALLET_REJECTED_DESC = "You did not approve the connection in your wallet.";
 export const WALLET_TRY_AGAIN = "Try Again";
 
+/* content/wallet-copy.md — In-App Browser state. Shown INSTEAD of the wallet list when the
+ * page is running inside another app's embedded webview (X, Instagram, …), where a wallet
+ * connection cannot complete at all. Explains the one real next step rather than offering
+ * rows that would fail. Never says "not detected" — the wallet is fine; the browser is not. */
+export const WALLET_IN_APP_BROWSER_TITLE = "Open in your browser to connect";
+/** `app` is the host app's everyday name, e.g. "X". */
+export const walletInAppBrowserDesc = (app: string) =>
+  `${app}’s built-in browser can’t open wallet apps. Open this page in Safari or Chrome, then connect your wallet there.`;
+/** Copy-the-link action: the only step that works from inside every embedded webview.
+ *  Deliberately not an "Open in Safari" button — no reliable way to do that from a webview,
+ *  and a button that silently does nothing is worse than none. */
+export const WALLET_IN_APP_COPY_LINK = "Copy Link";
+export const WALLET_IN_APP_COPY_LINK_DONE = "Link copied";
+export const WALLET_IN_APP_BROWSER_HINT =
+  "You can also use this app’s menu and choose “Open in browser”.";
+
 /* Live Wallet Assets — read-only wallet portfolio discovery (patterns/portfolio-overview.md,
  * rules/wallet-and-custody-rules.md). Read-only; no values/APY invented. */
 export const LIVE_WALLET_TITLE = "Live Wallet Assets";

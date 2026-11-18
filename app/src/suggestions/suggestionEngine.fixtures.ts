@@ -1,5 +1,6 @@
 import { runRecordedObligationFixtureChecks } from "./fixtures/recordedObligation.fixtures";
 import { runObservationDismissalFixtureChecks } from "./fixtures/observationDismissal.fixtures";
+import { runMobileWalletConnectFixtureChecks } from "./fixtures/mobileWalletConnect.fixtures";
 import { runSwapQuoteServerFixtureChecks, runSwapQuoteServerGuardChecks } from "../server/swapQuote/swapQuoteServerFixtures";
 import { runContributionFinalizationFixtureChecks, runDcaCopy23CFixtureChecks, runInternalTestingRouteFixtureChecks, runPositionOptimizationAssessmentFixtureChecks, runRebalanceCanonicalMountFixtureChecks, runSlice7BRebalanceMigrationFixtureChecks, runStep22GCloseoutFixtureChecks, runTrimAssessmentFixtureChecks } from "./fixtures/assessmentMounts.fixtures";
 import { runBufferPositionReviewFixtureChecks, runOnTrackAssessmentFixtureChecks, runSafetyBufferAssessmentFixtureChecks } from "./fixtures/bufferOnTrack.fixtures";
@@ -99,6 +100,7 @@ export async function printFixtureResults(): Promise<void> {
     ...runPositionOptimizationProductionFixtureChecks(),
     ...runSteakhouseExistingPositionFixtureChecks(),
     ...runSafetyBufferCoverageFixtureChecks(),
+    ...runMobileWalletConnectFixtureChecks(),
     ...runSafetyBufferPhase0GuardFixtureChecks(),
     ...runSafetyBufferAssessmentFixtureChecks(),
     ...runSafetyBufferProductionFixtureChecks(),

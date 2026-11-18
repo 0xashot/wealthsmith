@@ -12,11 +12,22 @@
  *  - No balance/token fetch, no portfolio scan, no transaction, no fund movement.
  *  - Never asks for a seed phrase, private key, password, recovery phrase, or backup.
  *
- * The approved three wallets are always listed. Installed ones connect via the
- * adapter; a not-installed one shows the approved "Wallet not detected" state
- * (no invented install URL). Connection failures show approved, non-blaming copy;
+ * The approved three wallets are always listed. A wallet that can start a connection
+ * connects via the adapter; one that cannot shows the approved "Wallet not detected"
+ * state (no invented install URL). Connection failures show approved, non-blaming copy;
  * a real failure never fake-connects. On success, App detects useWallet().connected
  * and closes the modal.
+ *
+ * MOBILE (see wallet/walletEnvironment.ts for the full reasoning):
+ *  - iOS Safari — adapters report `Loadable`, not `Installed`, because there is no
+ *    extension to detect; connect() then redirects to the wallet's universal link. The
+ *    row is live. Before this, only `Installed` counted, so every iOS Safari visitor was
+ *    told "Wallet not detected" and sent to the wallet's marketing page — the deep-link
+ *    path was never once attempted in production.
+ *  - In-app browsers (X, Instagram, …) — no wallet row can succeed, so the list is
+ *    replaced by the In-App Browser state, which offers the only step that works.
+ *  - Android — still unsupported here. WalletProvider auto-registers the Solana Mobile
+ *    Wallet Adapter, but this modal renders a fixed list and never surfaces it.
  */
 import { useEffect, useId, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -42,7 +53,17 @@ import {
   WALLET_CONNECT_FAILED_DESC,
   WALLET_REJECTED_TITLE,
   WALLET_REJECTED_DESC,
+  WALLET_IN_APP_BROWSER_TITLE,
+  WALLET_IN_APP_BROWSER_HINT,
+  WALLET_IN_APP_COPY_LINK,
+  WALLET_IN_APP_COPY_LINK_DONE,
+  walletInAppBrowserDesc,
 } from "../state/approvedCopy";
+import {
+  currentUserAgent,
+  detectInAppBrowser,
+  isIosSafariRedirectable,
+} from "../wallet/walletEnvironment";
 
 /** Approved MVP wallets + their official pages (content/wallet-copy.md — Approved
  *  Wallet Sites). A not-installed wallet opens its official page in a new tab. */
@@ -83,6 +104,13 @@ export default function ConnectWalletModal({ onClose }: Props) {
 
   const [pendingName, setPendingName] = useState<string | null>(null);
   const [error, setError] = useState<ErrState | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Running inside another app's embedded webview (X, Instagram, …)? Then no wallet row
+  // can succeed: the adapter will not redirect (its iOS check requires "safari" in the UA,
+  // which these webviews omit), and the host app may tear the webview down mid-handoff.
+  // The modal shows the one step that does work instead of rows that would fail.
+  const inAppBrowser = detectInAppBrowser(currentUserAgent());
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstOptionRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
@@ -93,14 +121,29 @@ export default function ConnectWalletModal({ onClose }: Props) {
 
   const busy = connecting || pendingName !== null;
 
-  // Find the registered adapter for an approved wallet, by name. "Detected" means
-  // the extension is actually installed (Installed) — a merely "Loadable" wallet
-  // (e.g. Solflare's web fallback when the extension is absent) is shown as not
-  // detected and opens the wallet's official page instead of connecting.
+  // Find the registered adapter for an approved wallet, by name.
   const adapterFor = (key: string) =>
     wallets.find((w) => w.adapter.name.toLowerCase().includes(key));
-  const isDetected = (key: string) =>
-    adapterFor(key)?.readyState === WalletReadyState.Installed;
+
+  // "Detected" means the row can actually start a connection:
+  //
+  //  - Installed  → a browser extension injected a provider. Desktop, and wallet apps'
+  //                 own in-app browsers.
+  //  - Loadable + iOS Safari → there is no extension to detect, but the adapter will
+  //                 redirect to the wallet's universal link from connect(). Allowed ONLY
+  //                 on iOS Safari, matching the adapter's own isIosAndRedirectable()
+  //                 check, so a row never invites a tap the adapter would refuse.
+  //
+  // Loadable stays excluded everywhere else on purpose: on desktop it is Solflare's web
+  // wallet fallback, which must not masquerade as an installed extension. Scoping that
+  // rule to desktop is the fix — the unscoped version also rejected every iOS Safari
+  // visitor, so the deep-link path was never once attempted in production.
+  const iosRedirectable = isIosSafariRedirectable(currentUserAgent());
+  const isDetected = (key: string) => {
+    const readyState = adapterFor(key)?.readyState;
+    if (readyState === WalletReadyState.Installed) return true;
+    return iosRedirectable && readyState === WalletReadyState.Loadable;
+  };
 
   // After a wallet is selected, connect it (no signature). Guarded so we only
   // connect the wallet we just picked.
@@ -193,6 +236,51 @@ export default function ConnectWalletModal({ onClose }: Props) {
           </div>
         )}
 
+        {inAppBrowser ? (
+          <div className="wallet-in-app-browser">
+            <p className="wallet-in-app-browser__title">{WALLET_IN_APP_BROWSER_TITLE}</p>
+            <p className="wallet-in-app-browser__desc">{walletInAppBrowserDesc(inAppBrowser)}</p>
+            <button
+              ref={firstOptionRef}
+              type="button"
+              className="wallet-in-app-browser__action"
+              onClick={() => {
+                // Clipboard is the only hand-off available from inside an embedded
+                // webview. navigator.clipboard is unavailable in some of them, so fall
+                // back to the legacy path and never leave the button in a lying state.
+                const url = window.location.href;
+                const done = () => setLinkCopied(true);
+                void (async () => {
+                  try {
+                    await navigator.clipboard.writeText(url);
+                    done();
+                  } catch {
+                    try {
+                      const el = document.createElement("textarea");
+                      el.value = url;
+                      el.setAttribute("readonly", "");
+                      el.style.position = "fixed";
+                      el.style.opacity = "0";
+                      document.body.appendChild(el);
+                      el.select();
+                      const ok = document.execCommand("copy");
+                      document.body.removeChild(el);
+                      if (ok) done();
+                    } catch {
+                      /* Copy unavailable — the menu hint below still applies. */
+                    }
+                  }
+                })();
+              }}
+            >
+              {linkCopied ? WALLET_IN_APP_COPY_LINK_DONE : WALLET_IN_APP_COPY_LINK}
+            </button>
+            <p className="wallet-in-app-browser__hint">{WALLET_IN_APP_BROWSER_HINT}</p>
+            <span className="sr-only" role="status">
+              {linkCopied ? WALLET_IN_APP_COPY_LINK_DONE : ""}
+            </span>
+          </div>
+        ) : (
         <ul className="wallet-option-list">
           {WALLET_OPTIONS.map((w, i) => {
             const detected = isDetected(w.key);
@@ -230,6 +318,7 @@ export default function ConnectWalletModal({ onClose }: Props) {
             );
           })}
         </ul>
+        )}
 
         {/* Legal note: connecting agrees to Terms + acknowledges Privacy (links open in a new tab). */}
         <p className="wallet-connect__legal">
