@@ -30,6 +30,7 @@ import {
   normalizeManualAmount,
   type ManualAssetChain,
 } from "../state/manualAssets";
+import { capture } from "../analytics/analytics";
 
 interface Props {
   chain: ManualAssetChain;
@@ -70,6 +71,8 @@ export default function AddManualAssetModal({ chain, initialAmount, onConfirm, o
       inputRef.current?.focus();
       return;
     }
+    // Only which chain, and only on a first add — never the amount the user typed.
+    if (!managing) capture({ name: "manual_asset_added", chain });
     onConfirm(normalizeManualAmount(value));
   };
 
