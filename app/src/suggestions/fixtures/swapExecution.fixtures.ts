@@ -35,6 +35,7 @@ import {
   scanForForbiddenExecutionFields,
   scanTermsCompleteness,
 } from "../swapExecution/executionGuard";
+import { validateExecutionPlan } from "../swapExecution/swapExecutionClient";
 import { scanForTransactionFields } from "../swapQuote/swapQuoteSecurityGuard";
 
 const NOW = Date.parse("2026-11-23T12:00:00.000Z");
@@ -388,6 +389,63 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
   })(), "unsigned only");
   add("SWH-14: a plan response is never cacheable — it is bound to one blockhash, wallet and window",
     /cache-control.*no-store/.test(readSrc("src/server/swapExecution/executionServer.ts")), "no-store");
+
+  /* ---- Phase 4: the browser client for the execution lane (SWXC) ----
+   *
+   * The client's job is NOT to decide anything. It fetches, checks the shape, and hands the plan
+   * to verification. These pin that boundary — especially that a well-shaped plan is not a
+   * verified one, which is the single easiest thing to get wrong here.
+   */
+  add("SWXC-1: the client talks ONLY to /api/swap-execute — no provider host, no RPC, no server import", (() => {
+    const c = readSrc("src/suggestions/swapExecution/swapExecutionClient.ts");
+    return /\/api\/swap-execute/.test(c) &&
+      !/api\.jup\.ag|raydium\.io|solana-rpc|SOLANA_RPC|server\/swapExecution/.test(c);
+  })(), "client boundary");
+  add("SWXC-2: the api base is read in the EXACT import.meta.env.KEY form — a cast inlines the whole build env", (() => {
+    const c = readSrc("src/suggestions/swapExecution/swapExecutionClient.ts");
+    // The leak that reached production was `(import.meta as ...).env?.KEY`. Pin the safe shape and
+    // forbid the one that dumps every variable, this key included, into the public bundle.
+    return /import\.meta\.env\.VITE_SWAP_EXECUTE_API_BASE/.test(c) &&
+      !/import\.meta\s+as/.test(c) && !/\(import\.meta\)/.test(c);
+  })(), "no env dump");
+  add("SWXC-3: the request carries the taker's PUBLIC key and nothing private", (() => {
+    const c = readSrc("src/suggestions/swapExecution/swapExecutionClient.ts");
+    return /takerPublicKey/.test(c) &&
+      !/secretKey|privateKey|keypair|signTransaction|sendTransaction/.test(c);
+  })(), "public key only");
+  add("SWXC-4: a plan bearing a signature or a second transaction is refused by the client, not stripped", (() => {
+    const p = plan();
+    return validateExecutionPlan({ ...p, signature: "abc" }) === "forbidden_field_in_plan" &&
+      validateExecutionPlan({ ...p, signedTransaction: "AQAB" }) === "forbidden_field_in_plan" &&
+      validateExecutionPlan({ ...p, transactions: ["AQAB"] }) === "forbidden_field_in_plan";
+  })(), "refuse, never repair");
+  add("SWXC-5: a plan with no transaction, incomplete terms, or a minimum above the expectation is invalid", (() => {
+    const p = plan();
+    return validateExecutionPlan({ ...p, unsignedTransaction: "" }) === "invalid_plan" &&
+      validateExecutionPlan({ ...p, terms: terms({ minimumOutputTokens: "" }) }) === "invalid_plan" &&
+      validateExecutionPlan({ ...p, terms: terms({ minimumOutputTokens: "9999", expectedOutputTokens: "1" }) }) === "invalid_plan";
+  })(), "shape");
+  add("SWXC-6: an unparseable expiry is invalid — a plan whose life we cannot read is not a plan",
+    validateExecutionPlan({ ...plan(), expiresAt: "soon" }) === "invalid_plan" &&
+      validateExecutionPlan({ ...plan(), expiresAt: "" }) === "invalid_plan", "expiry parses");
+  add("SWXC-7: a well-formed plan validates — the checks reject bad shapes, not all shapes",
+    validateExecutionPlan(plan()) === null, "accepts good");
+  add("SWXC-8: non-objects are invalid rather than throwing", (() => {
+    return ([null, undefined, "x", 7, []] as unknown[]).every((v) => validateExecutionPlan(v) !== null);
+  })(), "total");
+  add("SWXC-9: `disabled` and `unavailable` are DISTINCT errors — a kill switch is not an outage", (() => {
+    const c = readSrc("src/suggestions/swapExecution/swapExecutionClient.ts");
+    return /"disabled"/.test(c) && /execution_disabled/.test(c) && /"unavailable"/.test(c);
+  })(), "operational vs failure");
+  add("SWXC-10: the client NEVER verifies — no simulation, no chain read, no claim of safety", (() => {
+    const c = readSrc("src/suggestions/swapExecution/swapExecutionClient.ts");
+    return !/simulateTransaction|simulateAndVerifyValue|verifyTransactionStructure|Connection/.test(c);
+  })(), "validation != verification");
+  add("SWXC-11: the dev proxy routes the two lanes to two DIFFERENT local processes", (() => {
+    const v = readSrc("vite.config.ts");
+    return /\/api\/swap-quote/.test(v) && /\/api\/swap-execute/.test(v) &&
+      /8787/.test(v) && /8788/.test(v);
+  })(), "two services");
 
   return checks;
 }

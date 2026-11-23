@@ -35,8 +35,13 @@ export default defineConfig({
     // Step 23B.1 — DEV-ONLY proxy so the SPA can reach the server-only swap-quote service (run `npm run swap:serve`)
     // without the browser ever calling providers directly. Not used in production (SPA talks to the deployed
     // service via VITE_SWAP_QUOTE_API_BASE). The quote layer stays unmounted until Step 23C.
+    // Phase 4 — the execution lane gets its own DEV-ONLY proxy entry, pointing at a DIFFERENT local
+    // process (`npm run swap:serve-execute`, port 8788). Two targets rather than one because the two
+    // lanes are two services: the quote service constructs nothing, and that stays true only while it
+    // is a separate process. In production each has its own base URL.
     proxy: {
       "/api/swap-quote": { target: process.env.SWAP_QUOTE_DEV_TARGET ?? "http://localhost:8787", changeOrigin: true },
+      "/api/swap-execute": { target: process.env.SWAP_EXECUTE_DEV_TARGET ?? "http://localhost:8788", changeOrigin: true },
     },
   },
 });

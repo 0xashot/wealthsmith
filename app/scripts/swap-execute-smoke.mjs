@@ -35,6 +35,7 @@ async function loadServer() {
     `export { verifyTransactionStructure, lookupTableAddresses, tokensToRaw } from ${JSON.stringify(p("../src/suggestions/swapExecution/executionVerification.ts"))};`,
     `export { resolveSwapHandoffType } from ${JSON.stringify(p("../src/suggestions/swapExecution/swapHandoffType.ts"))};`,
     `export { FORBIDDEN_EXECUTION_FIELDS } from ${JSON.stringify(p("../src/suggestions/swapExecution/executionGuard.ts"))};`,
+    `export { validateExecutionPlan } from ${JSON.stringify(p("../src/suggestions/swapExecution/swapExecutionClient.ts"))};`,
   ].join("\n"));
   await build({
     entryPoints: [shim], bundle: true, platform: "node", format: "esm", outfile: out,
@@ -87,7 +88,7 @@ const check = (label, ok, detail = "") => {
 };
 
 const mod = await loadServer();
-const { createExecutionRequestListener, verifyTransactionStructure, lookupTableAddresses, tokensToRaw, resolveSwapHandoffType, FORBIDDEN_EXECUTION_FIELDS } = mod;
+const { createExecutionRequestListener, verifyTransactionStructure, lookupTableAddresses, tokensToRaw, resolveSwapHandoffType, FORBIDDEN_EXECUTION_FIELDS, validateExecutionPlan } = mod;
 
 console.log("swap-execute live smoke — unsigned plans only, nothing is signed or submitted\n");
 
@@ -179,6 +180,21 @@ console.log("\n--- sanitizer ---");
 const flat = JSON.stringify(plan);
 const leaked = (FORBIDDEN_EXECUTION_FIELDS ?? []).filter((f) => f !== "unsignedTransaction" && flat.includes(`"${f}"`));
 check("no forbidden field on the wire", leaked.length === 0, leaked.join(","));
+
+// --- 4b. The browser client's own validation, run on what actually arrived. ---------------------
+console.log("\n--- client validation ---");
+check("the live plan passes validateExecutionPlan", validateExecutionPlan(plan) === null,
+  String(validateExecutionPlan(plan)));
+check("a plan carrying a signature is refused",
+  validateExecutionPlan({ ...plan, signature: "abc" }) === "forbidden_field_in_plan");
+check("a plan with a second transaction is refused",
+  validateExecutionPlan({ ...plan, setupTransaction: "AQAB" }) === "forbidden_field_in_plan");
+check("a minimum above the expected output is refused",
+  validateExecutionPlan({ ...plan, terms: { ...plan.terms, minimumOutputTokens: "999999" } }) === "invalid_plan");
+check("an unparseable expiry is refused",
+  validateExecutionPlan({ ...plan, expiresAt: "soon" }) === "invalid_plan");
+check("an empty transaction is refused",
+  validateExecutionPlan({ ...plan, unsignedTransaction: "" }) === "invalid_plan");
 
 // --- 5. Structural verification — the check the confirm step runs before signing. --------------
 console.log("\n--- structural verification ---");
