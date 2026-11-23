@@ -90,7 +90,7 @@ function demoAssessment(action: SwapActionContext, nowMs: number): SwapQuoteComp
 
   return {
     status: "selected", actionId: action.actionId, legId: action.legId, pairClass: "major", comparedAt: quotedAt, expiresAt,
-    selectedProviderId: "raydium", selectionBasis: "lowest_estimated_total_cost",
+    selectedProviderId: "raydium", selectionBasis: "lowest_estimated_total_cost", decidedBy: "net_output",
     candidates: [selected, c("jupiter", ["Orca Whirlpool"], true), c("orca", ["Orca Whirlpool"], true)],
     comparedProviders: ["jupiter", "raydium", "orca"], unavailableProviders: [],
     estimatedTotalCostUsd: cost.estimatedTotalCostUsd, estimatedTotalCostPct: cost.estimatedTotalCostPct,
