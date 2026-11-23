@@ -12,7 +12,7 @@
  *      for adding execution without weakening anything: not "we were careful", but "a payload
  *      that satisfies one lane provably cannot pass the other".
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import type { FixtureCheck } from "./fixtureCheck";
 import type {
   SwapQuoteComparisonAssessment,
@@ -24,6 +24,12 @@ import {
   MIN_QUOTE_LIFE_MS,
   deriveExecutionEligibility,
 } from "../swapExecution/executionEligibility";
+import {
+  DEFAULT_SWAP_HANDOFF_TYPE,
+  IN_APP_CONFIRM_CATEGORIES,
+  permitsInAppConfirm,
+  resolveSwapHandoffType,
+} from "../swapExecution/swapHandoffType";
 import {
   assertExecutablePlan,
   scanForForbiddenExecutionFields,
@@ -144,6 +150,29 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
   const checks: FixtureCheck[] = [];
   const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
   const readSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
+  /**
+   * Every .ts/.tsx file under the given roots, recursively.
+   *
+   * SWH-9 needs this rather than a handful of named files: the rule it pins is that NO UI file
+   * anywhere produces a confirm permission, and a check that only looks at the files someone
+   * remembered to list is exactly the check a new file slips past.
+   */
+  const tsFilesUnder = (roots: string[]): string[] => {
+    const out: string[] = [];
+    const walk = (rel: string) => {
+      let entries: string[];
+      try { entries = readdirSync(`${process.cwd()}/${rel}`); } catch { return; }
+      for (const name of entries) {
+        const child = `${rel}/${name}`;
+        let isDir = false;
+        try { isDir = statSync(`${process.cwd()}/${child}`).isDirectory(); } catch { continue; }
+        if (isDir) walk(child);
+        else if (/\.tsx?$/.test(name)) out.push(child);
+      }
+    };
+    for (const r of roots) walk(r);
+    return out;
+  };
 
   /* ---- The Boundary, from the inside ---- */
   add("SWX-1: a single selected Jupiter route with verified liquidity, complete terms and life left IS executable",
@@ -275,6 +304,90 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const guard = readSrc("src/suggestions/swapExecution/executionGuard.ts");
     return /in_app_confirm/.test(elig) && !/in_app_confirm/.test(guard);
   })(), "single source");
+
+  /* ---- Phase 4: Protocol Logic's handoff_type assignment (SWH) ----
+   *
+   * Before this existed, `handoff_type` was a field nothing ever set to `in_app_confirm`, so the
+   * Boundary's first gate could never open. These pin the assignment table AND the rule that the
+   * UI may not reach a confirm step any other way — the second is enforced by scanning source,
+   * because "the UI never upgrades it" is otherwise a convention people remember differently.
+   */
+  add("SWH-1: jupiter + every approved swap category → in_app_confirm",
+    IN_APP_CONFIRM_CATEGORIES.every((c) => resolveSwapHandoffType({ providerId: "jupiter", suggestionCategory: c }) === "in_app_confirm"),
+    `categories=${IN_APP_CONFIRM_CATEGORIES.join(",")}`);
+  add("SWH-2: a provider outside the allowlist is a handoff, even on a category that permits confirm",
+    (["raydium", "orca"] as const).every((p) => resolveSwapHandoffType({ providerId: p, suggestionCategory: "rebalance" }) === "external_new_tab"),
+    "non-jupiter = handoff");
+  add("SWH-3: jupiter does NOT carry its permission to a non-swap category — 'token swaps only' is a restriction",
+    (["stable_yield", "buffer", "position_optimization", "staking"]).every((c) => resolveSwapHandoffType({ providerId: "jupiter", suggestionCategory: c }) === "external_new_tab"),
+    "category-scoped");
+  add("SWH-4: absent / null / non-string input is a handoff — deny by default", (() => {
+    const inputs = [
+      { providerId: undefined, suggestionCategory: "rebalance" },
+      { providerId: "jupiter", suggestionCategory: undefined },
+      { providerId: null, suggestionCategory: null },
+      { providerId: 1 as unknown as string, suggestionCategory: "rebalance" },
+    ];
+    return inputs.every((i) => resolveSwapHandoffType(i) === "external_new_tab");
+  })(), "absent = deny");
+  add("SWH-5: the provider check is an ALLOWLIST — a plausible unknown id does not pass",
+    resolveSwapHandoffType({ providerId: "jupiter-v7", suggestionCategory: "rebalance" }) === "external_new_tab", "allowlist");
+  add("SWH-6: permitsInAppConfirm is true for the exact literal and nothing else",
+    permitsInAppConfirm("in_app_confirm") &&
+      !permitsInAppConfirm("external_new_tab") && !permitsInAppConfirm("IN_APP_CONFIRM") &&
+      !permitsInAppConfirm(null) && !permitsInAppConfirm(undefined) && !permitsInAppConfirm(""),
+    "exact match");
+  add("SWH-7: the DEFAULT is external_new_tab — the constant and the function agree",
+    DEFAULT_SWAP_HANDOFF_TYPE === "external_new_tab" &&
+      resolveSwapHandoffType({ providerId: "nope", suggestionCategory: "nope" }) === DEFAULT_SWAP_HANDOFF_TYPE,
+    "default");
+  add("SWH-8: permission and the Boundary are SEPARATE — a permitted rail still blocks on a bad quote", (() => {
+    const permitted = resolveSwapHandoffType({ providerId: "jupiter", suggestionCategory: "rebalance" });
+    const r = deriveExecutionEligibility({
+      assessment: assessment({ expiresAt: new Date(NOW - 1).toISOString() }),
+      handoffType: permitted,
+      totalLegs: 1,
+      nowMs: NOW,
+    });
+    return permitted === "in_app_confirm" && !r.executable && r.blockReasons.includes("quote_expired");
+  })(), "two layers");
+  add("SWH-9: NO component, page, hook or state file contains the literal in_app_confirm — the UI cannot upgrade a handoff", (() => {
+    const hits = tsFilesUnder(["src/components", "src/pages", "src/hooks", "src/state"])
+      .filter((f) => /in_app_confirm/.test(readSrc(f)));
+    return hits.length === 0;
+  })(), "UI never upgrades");
+  add("SWH-10: swapHandoffType is the only module that RETURNS the literal; eligibility only compares against it", (() => {
+    const assign = readSrc("src/suggestions/swapExecution/swapHandoffType.ts");
+    const elig = readSrc("src/suggestions/swapExecution/executionEligibility.ts");
+    return /return providerPermitted && categoryPermitted \? "in_app_confirm"/.test(assign) &&
+      /handoffType !== "in_app_confirm"/.test(elig) && !/return "in_app_confirm"/.test(elig);
+  })(), "one producer");
+  add("SWH-11: the two provider allowlists stay SEPARATE declarations — a product permission is not an engineering capability", (() => {
+    const assign = readSrc("src/suggestions/swapExecution/swapHandoffType.ts");
+    const elig = readSrc("src/suggestions/swapExecution/executionEligibility.ts");
+    // Each DECLARES its own list and neither IMPORTS the other's. Referring to the other in a
+    // comment is fine — and is in fact how the distinction is documented — so this matches on
+    // import statements, not on the mere appearance of the name.
+    const importsFrom = (src: string, mod: string) =>
+      new RegExp(`from "[^"]*${mod}"`).test(src);
+    return /export const IN_APP_CONFIRM_PROVIDER_IDS/.test(assign) &&
+      !importsFrom(assign, "executionEligibility") &&
+      /export const EXECUTABLE_PROVIDER_IDS/.test(elig) &&
+      !importsFrom(elig, "swapHandoffType");
+  })(), "not merged");
+
+  /* ---- Phase 4: the transport keeps the lanes apart ---- */
+  add("SWH-12: the QUOTE server serves only /api/swap-quote and references nothing in the execution lane", (() => {
+    const q = readSrc("src/server/swapQuote/httpServer.ts");
+    return /\/api\/swap-quote/.test(q) && !/swapExecution|swap-execute/.test(q);
+  })(), "quote lane untouched");
+  add("SWH-13: the EXECUTION server checks the kill switch and never signs or submits", (() => {
+    const e = readSrc("src/server/swapExecution/executionServer.ts");
+    return /isExecutionEnabled/.test(e) &&
+      !/sendTransaction|signTransaction|signAllTransactions|Keypair|secretKey/.test(e);
+  })(), "unsigned only");
+  add("SWH-14: a plan response is never cacheable — it is bound to one blockhash, wallet and window",
+    /cache-control.*no-store/.test(readSrc("src/server/swapExecution/executionServer.ts")), "no-store");
 
   return checks;
 }
