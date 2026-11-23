@@ -423,12 +423,12 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
   const QUOTED = "2026-07-24T00:00:08.000Z";
   const EXPIRES = "2026-07-24T00:00:50.000Z";
   const cand = (providerId: "jupiter" | "raydium" | "orca", o: Partial<SwapQuoteCandidate>): SwapQuoteCandidate => ({ providerId, providerName: providerId === "jupiter" ? "Jupiter" : providerId === "raydium" ? "Raydium" : "Orca", executionSurface: providerId, underlyingVenues: ["Raydium CLMM"], inputMint: USDC, outputMint: WSOL, inputAmountRaw: "15000000", expectedOutputRaw: "197901045", minimumOutputRaw: "196911540", expectedOutputTokens: "0.197901", expectedOutputUsd: 14.98, quotedAt: QUOTED, expiresAt: EXPIRES, quoteLatencyMs: 780, priceImpactPct: 0.02, includedSwapFeeUsd: null, explicitPlatformFeeUsd: null, estimatedNetworkFeeUsd: 0.01, estimatedRentFeeUsd: 0, liquidityAssessment: { status: "verified", minimumRouteLegLiquidityUsd: 331643, legs: [] }, freshness: "fresh", eligible: true, exclusionReasons: [], ...o });
-  const mk = (status: SwapComparisonStatus, o: Partial<SwapQuoteComparisonAssessment>): SwapQuoteComparisonAssessment => ({ status, actionId: "a", legId: "a:0", pairClass: "major", comparedAt: QUOTED, expiresAt: EXPIRES, selectedProviderId: null, selectionBasis: null, candidates: [], comparedProviders: [], unavailableProviders: [], estimatedTotalCostUsd: null, estimatedTotalCostPct: null, expectedOutputTokens: null, minimumOutputTokens: null, economicallyEquivalent: false, warnings: [], blockingReasons: [], methodologyVersion: "swap_quote_methodology_1.0.0", ...o });
+  const mk = (status: SwapComparisonStatus, o: Partial<SwapQuoteComparisonAssessment>): SwapQuoteComparisonAssessment => ({ status, actionId: "a", legId: "a:0", pairClass: "major", comparedAt: QUOTED, expiresAt: EXPIRES, selectedProviderId: null, selectionBasis: null, decidedBy: null, candidates: [], comparedProviders: [], unavailableProviders: [], estimatedTotalCostUsd: null, estimatedTotalCostPct: null, expectedOutputTokens: null, minimumOutputTokens: null, economicallyEquivalent: false, warnings: [], blockingReasons: [], methodologyVersion: "swap_quote_methodology_1.0.0", ...o });
 
   const selected = mk("selected", { selectedProviderId: "raydium", selectionBasis: "lowest_estimated_total_cost", comparedProviders: ["jupiter", "raydium", "orca"], estimatedTotalCostUsd: 0.03, estimatedTotalCostPct: 0.09, expectedOutputTokens: "0.197901", candidates: [cand("raydium", {}), cand("jupiter", {}), cand("orca", {})] });
   const partial = mk("partial_comparison", { selectedProviderId: "raydium", selectionBasis: "only_eligible_route", comparedProviders: ["jupiter", "raydium"], unavailableProviders: ["orca"], estimatedTotalCostPct: 0.09, expectedOutputTokens: "0.197901", candidates: [cand("raydium", {}), cand("jupiter", { eligible: false, exclusionReasons: ["liquidity_unresolved"] }), cand("orca", { eligible: false, exclusionReasons: ["provider_unavailable"] })] });
   const onlyRoute = mk("only_route_available", { selectedProviderId: "raydium", selectionBasis: "only_eligible_route", comparedProviders: ["jupiter", "raydium", "orca"], estimatedTotalCostPct: 0.09, expectedOutputTokens: "0.197901", candidates: [cand("raydium", {})] });
-  const equivalent = mk("selected", { selectedProviderId: "jupiter", selectionBasis: "economically_equivalent_tiebreak", economicallyEquivalent: true, comparedProviders: ["jupiter", "raydium", "orca"], estimatedTotalCostPct: 0.09, expectedOutputTokens: "0.197901", candidates: [cand("jupiter", {}), cand("raydium", {})] });
+  const equivalent = mk("selected", { selectedProviderId: "jupiter", selectionBasis: "narrow_margin", economicallyEquivalent: true, comparedProviders: ["jupiter", "raydium", "orca"], estimatedTotalCostPct: 0.09, expectedOutputTokens: "0.197901", candidates: [cand("jupiter", {}), cand("raydium", {})] });
   const noRoute = mk("no_valid_route", { comparedProviders: ["jupiter", "raydium"], unavailableProviders: ["orca"], blockingReasons: ["estimated_cost_high"], candidates: [cand("raydium", { eligible: false, exclusionReasons: ["estimated_cost_high"] })] });
 
   // ---- Status → view kind + honest copy ----
@@ -493,6 +493,45 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
     const s = stripComments(readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx"));
     return /singleLeg && singleView && isEligibleResultKind\(singleView\.kind\) && singleView\.selectedProviderId/.test(s) && /onHandoff\?\.\(null\)/.test(s);
   })(), "handoff single-leg eligible");
+  // --- decidedBy: the MECHANISM, not the margin (SWC-35..39) -----------------
+  // selectionBasis describes how close the win was; it was previously named
+  // "economically_equivalent_tiebreak", which read as "the provider tie-break chose this" and is not what
+  // it means. These pin the distinction so the two can never be confused again from the data alone.
+  add("SWC-35: a clear win on net output reports decidedBy=net_output, NOT a tie-break", (() => {
+    const a = rankEligibleCandidates([
+      { candidate: cand("jupiter", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("raydium", {}), cost: { netOutputUsd: 90, estimatedTotalCostPct: 0.1 } as never },
+    ]);
+    return a.decidedBy === "net_output" && a.ranked[0].candidate.providerId === "jupiter" && !a.economicallyEquivalent;
+  })(), "net output decides");
+  add("SWC-36: a NARROW win still reports decidedBy=net_output — a small margin is not a tie-break", (() => {
+    const a = rankEligibleCandidates([
+      { candidate: cand("jupiter", {}), cost: { netOutputUsd: 100.0, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("raydium", {}), cost: { netOutputUsd: 99.99, estimatedTotalCostPct: 0.1 } as never },
+    ]);
+    // economicallyEquivalent flags the margin; decidedBy still names the mechanism.
+    return a.decidedBy === "net_output" && a.economicallyEquivalent === true;
+  })(), "margin vs mechanism");
+  add("SWC-37: provider_priority decides ONLY when every economic value is exactly equal — and then it does", (() => {
+    const same = { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never;
+    const a = rankEligibleCandidates([
+      { candidate: cand("raydium", {}), cost: same },
+      { candidate: cand("jupiter", {}), cost: same },
+    ]);
+    return a.decidedBy === "provider_priority" && a.ranked[0].candidate.providerId === "jupiter";
+  })(), "exact tie only");
+  add("SWC-38: ANY economic difference pre-empts provider priority, even one that favours the lower-priority provider", (() => {
+    const a = rankEligibleCandidates([
+      { candidate: cand("jupiter", {}), cost: { netOutputUsd: 99.999999, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("raydium", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
+    ]);
+    return a.ranked[0].candidate.providerId === "raydium" && a.decidedBy === "net_output";
+  })(), "economics win");
+  add("SWC-39: decidedBy is null with fewer than two eligible candidates — nothing was decided", (() => {
+    const a = rankEligibleCandidates([{ candidate: cand("jupiter", {}), cost: { netOutputUsd: 100 } as never }]);
+    return a.decidedBy === null;
+  })(), "nothing to decide");
+
   add("SWC-31: buildProviderSwapUrl maps native SOL to the wrapped-SOL alias for Raydium and includes the amount when supported", (() => { const u = buildProviderSwapUrl("raydium", WSOL, USDC, "5"); return /inputMint=sol/.test(u) && /inputAmount=5/.test(u); })(), "sol alias + amount");
 
   return checks;

@@ -61,6 +61,7 @@ export function notReadyComparison(actionId: string, legId: string, status: "not
     pairClass: "unresolved",
     comparedAt: new Date(comparedAtMs).toISOString(),
     expiresAt: null,
+    decidedBy: null,
     selectedProviderId: null,
     selectionBasis: null,
     candidates: [],
@@ -109,7 +110,7 @@ export function compareSwapQuotes(input: SwapQuoteComparisonInput): SwapQuoteCom
   }
   const hardFailure = unavailableProviders.length > 0;
 
-  const { ranked, economicallyEquivalent } = rankEligibleCandidates(evaluated);
+  const { ranked, economicallyEquivalent, decidedBy } = rankEligibleCandidates(evaluated);
   const orderedCandidates: SwapQuoteCandidate[] = [
     ...ranked.map((r) => r.candidate),
     ...evaluated.filter((e) => !e.candidate.eligible).map((e) => e.candidate),
@@ -133,7 +134,7 @@ export function compareSwapQuotes(input: SwapQuoteComparisonInput): SwapQuoteCom
     blockingReasons.push(...[...seen]);
   } else if (hardFailure) {
     status = "partial_comparison";
-    selectionBasis = ranked.length >= 2 ? (economicallyEquivalent ? "economically_equivalent_tiebreak" : "lowest_estimated_total_cost") : "only_eligible_route";
+    selectionBasis = ranked.length >= 2 ? (economicallyEquivalent ? "narrow_margin" : "lowest_estimated_total_cost") : "only_eligible_route";
     warnings.push(`Only ${comparedProviders.map((p) => p).join(", ") || "some providers"} returned a valid quote; ${unavailableProviders.join(", ")} did not.`);
   } else if (ranked.length === 1) {
     status = "only_route_available";
@@ -141,7 +142,7 @@ export function compareSwapQuotes(input: SwapQuoteComparisonInput): SwapQuoteCom
     warnings.push("Only one eligible route was available; the lowest-cost option could not be verified against alternatives.");
   } else {
     status = "selected";
-    selectionBasis = economicallyEquivalent ? "economically_equivalent_tiebreak" : "lowest_estimated_total_cost";
+    selectionBasis = economicallyEquivalent ? "narrow_margin" : "lowest_estimated_total_cost";
   }
 
   const winner = ranked[0];
@@ -171,6 +172,7 @@ export function compareSwapQuotes(input: SwapQuoteComparisonInput): SwapQuoteCom
     pairClass,
     comparedAt,
     expiresAt,
+    decidedBy,
     selectedProviderId: winner ? winner.candidate.providerId : null,
     selectionBasis,
     candidates: orderedCandidates,

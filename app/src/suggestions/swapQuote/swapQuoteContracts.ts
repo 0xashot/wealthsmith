@@ -18,6 +18,8 @@
  */
 
 /** Bumped whenever the cost/ranking/eligibility methodology changes. Stamped on every comparison result. */
+import type { SwapDecidingFactor } from "./swapQuoteRanking";
+
 export const SWAP_QUOTE_METHODOLOGY_VERSION = "swap_quote_methodology_1.0.0" as const;
 export const SWAP_QUOTE_CONTRACTS_VERSION = "1.0.0" as const;
 
@@ -195,10 +197,19 @@ export type SwapComparisonStatus =
   | "not_required"
   | "unresolved";
 
+/**
+ * WHY the winner was selected, in terms of the margin.
+ *
+ * `narrow_margin` replaced `economically_equivalent_tiebreak`, which was actively misleading: it named a
+ * tie-break, but it is set purely from the epsilon comparison of the top two net outputs and says nothing
+ * about which comparison chose the winner. The winner still won on net output. For the MECHANISM, read
+ * `decidedBy`.
+ */
 export type SwapSelectionBasis =
   | "lowest_estimated_total_cost"
   | "only_eligible_route"
-  | "economically_equivalent_tiebreak"
+  /** The winner beat the runner-up, but by less than the approved epsilon. A margin, not a mechanism. */
+  | "narrow_margin"
   | null;
 
 export type SwapPairClass = "major" | "minor" | "unresolved";
@@ -232,8 +243,19 @@ export interface SwapQuoteComparisonAssessment {
   expectedOutputTokens: string | null;
   minimumOutputTokens: string | null;
 
-  /** True when eligible providers were within the approved epsilon and the deterministic tie-break decided. */
+  /** True when the top two eligible net outputs were within the approved epsilon. A statement about the MARGIN. */
   economicallyEquivalent: boolean;
+
+  /**
+   * Which comparison actually separated the winner from the runner-up: net_output, total_cost,
+   * price_impact, minimum_output, freshness, latency, or provider_priority. Null when fewer than two
+   * eligible candidates.
+   *
+   * Recorded so "did the provider tie-break ever choose the winner?" is answerable from data. It is
+   * step 7 of 7 and reached only on exact equality of every economic value, so the expected answer is
+   * never — but expected is not the same as verified.
+   */
+  decidedBy: SwapDecidingFactor;
 
   warnings: string[];
   blockingReasons: string[];
