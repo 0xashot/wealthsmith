@@ -126,6 +126,9 @@ export async function runSwapExecutionServerFixtureChecks(): Promise<FixtureChec
     down.status === 503, `status=${down.status}`);
   add("SWXS-12: the provider's reason is NOT echoed to the client — it is provider detail with one correct response",
     down.status === 503 && (down.body as { error: string }).error === "unavailable", "opaque failure");
+  const simFailed = await handler({ fetchImpl: stubJupiter({ swap: { swapTransaction: "AQABAgMEBQZzd2Fw", lastValidBlockHeight: 1, simulationError: { errorCode: "TRANSACTION_ERROR", error: "Error processing Instruction 2: custom program error: 0x1788" } } }) })({ method: "POST", body: body() });
+  add("SWXS-13A: a transaction Jupiter ALREADY SIMULATED AS FAILING is refused — observed live, where a swap from a wallet holding none of the input token still came back fully formed", simFailed.status === 503, `status=${simFailed.status}`);
+
   const txInQuote = await handler({ fetchImpl: stubJupiter({ quote: { outAmount: "1", otherAmountThreshold: "1", swapTransaction: "AQAB" } }) })({ method: "POST", body: body() });
   add("SWXS-13: a QUOTE that returns a transaction is refused — it means the wrong endpoint was called",
     txInQuote.status === 503, `status=${txInQuote.status}`);

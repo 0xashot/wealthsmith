@@ -152,6 +152,19 @@ export async function buildJupiterSwapTransaction(
     return { kind: "unavailable", reason: "swap_unreachable" };
   }
 
+  // Jupiter simulates before returning, and reports the result in `simulationError`. It still hands
+  // back a fully-formed transaction when that simulation failed — observed 2026-11-23, where a swap
+  // from a wallet holding none of the input token came back with a valid transaction and
+  // `{"errorCode":"TRANSACTION_ERROR","error":"...custom program error: 0x1788"}`.
+  //
+  // Presenting a confirm screen over a transaction the provider already knows will fail would spend
+  // the user's attention and then their network fee for nothing. If the provider ran a simulation and
+  // it failed, we refuse. (A null/absent field means no simulation was reported, not a passing one —
+  // the value check in executionVerification is what covers that case.)
+  if (swapBody.simulationError != null) {
+    return { kind: "unavailable", reason: "provider_simulation_failed" };
+  }
+
   const unsigned = swapBody.swapTransaction;
   if (typeof unsigned !== "string" || unsigned.length === 0) {
     return { kind: "unavailable", reason: "no_transaction_returned" };
