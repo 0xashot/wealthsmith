@@ -24,6 +24,7 @@ import SuggestionReviewModal from "../components/SuggestionReviewModal";
 import { runAllContributionSplitTestingCases } from "./contributionSplitTestingFixtures";
 import { GALLERY_MODAL_PRESETS, GALLERY_NOW } from "./swapQuoteTestingFixtures";
 import { END_TO_END_SCENARIOS } from "./endToEndTestingFixtures";
+import { SWAP_CONFIRM_GALLERY_CASES } from "./swapConfirmTestingFixtures";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import type { SuggestionCardState } from "../types/dashboard";
 import { TESTING_PREVIEW_NOT_LIVE } from "./testingPageFixtures";
@@ -52,6 +53,8 @@ const TABS = [
   { id: "on_track", label: "On Track" },
   // Runs the REAL pipeline rather than a preset — see endToEndTestingFixtures.
   { id: "end_to_end", label: "End-to-End" },
+  // Phase 4: every state of the in-app confirm sheet, rendered directly from props.
+  { id: "swap_confirm", label: "Swap Confirm" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
@@ -253,6 +256,8 @@ export default function TestingPage() {
   const entriesByTab: Record<TabId, GalleryEntry[]> = {
     // End-to-End renders rails, not gallery cards, so it contributes no entries.
     end_to_end: [],
+    // Swap Confirm renders the sheet directly, likewise no suggestion cards.
+    swap_confirm: [],
     safety_buffer: safetyBufferEntries,
     rebalance: rebalanceEntries,
     trim: trimEntries,
@@ -333,7 +338,16 @@ export default function TestingPage() {
         tabIndex={0}
         className="testing-page__grid testing-page__tabpanel"
       >
-        {active === "end_to_end" ? (
+        {active === "swap_confirm" ? (
+          // Rendered from props rather than driven by the machine: states like `confirm_timeout`
+          // only occur after a real submission, and waiting for one is how they go unreviewed.
+          SWAP_CONFIRM_GALLERY_CASES.map((c) => (
+            <div key={c.key} className="testing-page__cell">
+              <p className="testing-page__cell-label">{c.label}</p>
+              {c.node}
+            </div>
+          ))
+        ) : active === "end_to_end" ? (
           // The production rail component, fed by a rail the real pipeline built. Review
           // therefore opens with `rail.swapActionById[card.id]` — the readiness the app
           // derived — not a preset. An empty rail here means the derivation is broken.

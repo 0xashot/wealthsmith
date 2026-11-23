@@ -5316,3 +5316,37 @@ td.vetting-scores-table__date {
   align-items: center;
   gap: var(--spacing-inline-gap-sm);
 }
+
+/* ---------------------------------------------------------------------------
+   Swap confirm sheet (Phase 4). The in-app confirm step for an approved
+   `in_app_confirm` swap. Reuses the review-modal section/metric furniture so
+   it reads as part of the same sheet rather than as a new surface.
+   --------------------------------------------------------------------------- */
+
+/* The minimum is the only figure the user is guaranteed, so it is the one that
+   carries emphasis. Everything else is an expectation and stays neutral —
+   emphasising the larger estimated number would be the opposite of honest. */
+.swap-confirm__metric--minimum .swap-confirm__minimum-value {
+  font: var(--typography-heading-md-font, var(--typography-heading-sm-font));
+  color: var(--color-text-primary);
+}
+.swap-confirm__metric--minimum .review-modal__metric-label {
+  color: var(--color-text-primary);
+}
+
+/* The check's state. Quiet by default: it is a precondition the user is waiting
+   on, not an achievement to celebrate, and a loud "Success" on a financial
+   confirmation reads as an endorsement of the trade itself. */
+.swap-confirm__check {
+  margin: var(--spacing-stack-gap-sm) 0 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+  min-height: 1.25em; /* reserve the line so the footer does not jump when it fills */
+}
+
+.swap-confirm__expiry {
+  margin: var(--spacing-stack-gap-xs, 4px) 0 0;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums; /* a countdown must not reflow as digits change */
+}

@@ -63,8 +63,16 @@ const BASE_DISCLOSURE = "WealthSmith compared current read-only quotes using the
 const PARTIAL_DISCLOSURE = "WealthSmith could not verify every supported platform for this comparison.";
 
 const names = (ids: readonly SwapProviderId[]) => ids.map((p) => SWAP_PROVIDER_NAME[p]);
-const usd = (n: number | null) => (n == null ? null : `$${(Math.round(n * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-const pct = (n: number | null) => (n == null ? null : `${(Math.round(n * 1000) / 1000).toLocaleString("en-US", { maximumFractionDigits: 3 })}%`);
+/**
+ * Exported so the confirm sheet uses the SAME formatters rather than its own.
+ *
+ * Both surfaces appear in one modal — the route section and the confirm step — and two
+ * formatters meant the same price impact rendered "0.008%" in one and "0.01%" in the other.
+ * Three decimals is not decoration: a swap's impact is routinely well under 0.01%, so two
+ * decimals rounds every such figure to the same misleading value.
+ */
+export const usd = (n: number | null) => (n == null ? null : `$${(Math.round(n * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+export const pct = (n: number | null) => (n == null ? null : `${(Math.round(n * 1000) / 1000).toLocaleString("en-US", { maximumFractionDigits: 3 })}%`);
 
 /** "12 seconds ago" style relative time. */
 function relativeTime(fromMs: number, nowMs: number): string {

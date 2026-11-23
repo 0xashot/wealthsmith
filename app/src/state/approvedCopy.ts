@@ -1065,6 +1065,13 @@ export const SWAP_CONFIRM_CANCEL_LABEL = "Cancel";
 
 /** Expiry. Declining or letting terms lapse costs nothing, and the copy says so. */
 export const swapConfirmExpiresIn = (mmss: string) => `Terms expire in ${mmss}`;
+/**
+ * Expiry has its own title. It is NOT an outage: the terms were fine and ran out of time, and
+ * showing it under "Couldn't prepare this swap" told the reader the wrong thing about why.
+ */
+export const SWAP_CONFIRM_EXPIRED_TITLE = "These terms expired";
+export const SWAP_CONFIRM_EXPIRED_DESC = "Nothing was sent. Refresh to get current terms.";
+/** The single-line form, for an inline notice rather than a titled state. */
 export const SWAP_CONFIRM_EXPIRED = "These terms expired. Nothing was sent.";
 export const SWAP_CONFIRM_REFRESH_LABEL = "Refresh terms";
 

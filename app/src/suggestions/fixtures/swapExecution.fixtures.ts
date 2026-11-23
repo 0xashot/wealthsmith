@@ -37,6 +37,15 @@ import {
 } from "../swapExecution/executionGuard";
 import { validateExecutionPlan } from "../swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../swapExecution/planResolution";
+import {
+  failureCopy,
+  formatCountdown,
+  formatPercent,
+  formatUsd,
+} from "../../components/swapExecution/swapConfirmPresentation";
+import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
+import { SWAP_CONFIRM_EXPIRED_TITLE } from "../../state/approvedCopy";
+import type { ExecutionFailureKey } from "../swapExecution/executionLifecycle";
 import { executionReducer, initialExecutionState } from "../swapExecution/executionLifecycle";
 import { REAL_SWAP_TAKER, REAL_SWAP_TX } from "./realSwapTransactions";
 import {
@@ -682,6 +691,61 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return /if \(signer == null\) return undefined;/.test(h) &&
       /state\.phase !== "ready"/.test(h);
   })(), "no dead button");
+
+  /* ---- Phase 4: the confirm sheet (SWCS) ----
+   *
+   * The sheet is reviewed by eye in the /testing gallery, which is where copy and emphasis are
+   * judged. What belongs here is the part eyes miss: the absent rule, the failure mapping, and
+   * that the sheet decides nothing.
+   */
+  add("SWCS-1: the countdown is mm:ss and never negative — a plan past its expiry shows 0:00, not -0:03", (() => {
+    return formatCountdown(18_000) === "0:18" && formatCountdown(65_000) === "1:05" &&
+      formatCountdown(0) === "0:00" && formatCountdown(-5_000) === "0:00" &&
+      formatCountdown(9_500) === "0:10";
+  })(), "mm:ss clamped");
+  add("SWCS-2: a figure we do not have renders as the absent mark, never as 0", (() => {
+    const absent = "\u2014";
+    return formatPercent(null) === absent && formatPercent(undefined) === absent &&
+      formatPercent(Number.NaN) === absent && formatPercent(Number.POSITIVE_INFINITY) === absent &&
+      formatUsd(null) === absent && formatUsd(Number.NaN) === absent;
+  })(), "absent is absent");
+  add("SWCS-3: the sheet and the route section format the SAME figure identically", (() => {
+    // Two formatters in one modal rendered the same price impact as "0.008%" and "0.01%".
+    // Pinned by equality rather than by matching implementations, which drift.
+    const samples = [0.0077, 0.5, 1.25, 0, 12.3456];
+    return samples.every((n) => formatPercent(n) === quotePct(n)) &&
+      [0.01, 1, 1234.5].every((n) => formatUsd(n) === quoteUsd(n));
+  })(), "one formatter");
+  add("SWCS-4: a real swap's sub-0.01% impact survives formatting — two decimals would erase it",
+    formatPercent(0.0077) === "0.008%" && formatPercent(0.0077) !== "0.01%", "precision kept");
+  add("SWCS-5: EVERY failure key has copy except `cancelled`, which closes silently", (() => {
+    const keys: ExecutionFailureKey[] = [
+      "plan_unavailable", "verification_failed", "declined", "expired", "submit_failed", "confirm_timeout", "cancelled",
+    ];
+    return keys.every((k) => (k === "cancelled" ? failureCopy(k) === null : failureCopy(k) != null));
+  })(), "exhaustive mapping");
+  add("SWCS-6: expiry has its OWN title — it is not an outage, and must not be filed under one", (() => {
+    const exp = failureCopy("expired");
+    const out = failureCopy("plan_unavailable");
+    return exp != null && out != null && exp.title !== out.title &&
+      exp.title === SWAP_CONFIRM_EXPIRED_TITLE;
+  })(), "expired is not an outage");
+  add("SWCS-7: the sheet DECIDES nothing — no eligibility, no verification, no handoff type", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx") +
+      readSrc("src/components/swapExecution/swapConfirmPresentation.ts");
+    return !/deriveExecutionEligibility|verifyTransactionStructure|assertPlanWasVerified|resolveSwapHandoffType/.test(c);
+  })(), "presentation only");
+  add("SWCS-8: Approve is rendered ONLY when the terms are checked AND a signer exists", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // Rendered conditionally rather than disabled: a greyed-out approve button on a financial
+    // confirmation reads as "almost" and explains nothing.
+    return /\{ready && onApprove && \(/.test(c) && !/disabled=/.test(c);
+  })(), "no dead button");
+  add("SWCS-9: Refresh is offered ONLY on expiry — never after a verification refusal", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // Otherwise the sheet invites someone to retry until a check happens to pass.
+    return /onRefresh && failure === "expired"/.test(c);
+  })(), "no retry-until-pass");
 
   return checks;
 }
