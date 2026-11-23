@@ -5350,3 +5350,19 @@ td.vetting-scores-table__date {
   color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums; /* a countdown must not reflow as digits change */
 }
+
+/* Success, and the transaction link. Quiet: the swap landing is the outcome the user asked
+   for, not an achievement, and a celebratory treatment on money moving reads as a sales
+   moment rather than a receipt. */
+.swap-confirm__complete {
+  margin: var(--spacing-stack-gap-sm) 0 0;
+  font: var(--typography-heading-sm-font);
+  color: var(--color-text-primary);
+}
+.swap-confirm__transaction {
+  margin: var(--spacing-stack-gap-xs, 4px) 0 0;
+  font: var(--typography-body-sm-font);
+}
+.swap-confirm__transaction a {
+  color: var(--color-action-primary-background-default);
+}

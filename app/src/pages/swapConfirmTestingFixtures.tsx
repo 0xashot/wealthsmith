@@ -18,6 +18,7 @@ import { useSwapExecutionPlan } from "../components/swapExecution/useSwapExecuti
 import { REAL_SWAP_TAKER, REAL_SWAP_TX_SOL_INPUT } from "../suggestions/fixtures/realSwapTransactions";
 import type { SwapActionContext } from "../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapExecutionPlan } from "../suggestions/swapExecution/executionContracts";
+import type { SwapPlanSubmitter } from "../components/swapExecution/useSwapExecutionPlan";
 import { useEffect } from "react";
 import type { SwapExecutionTerms } from "../suggestions/swapExecution/executionContracts";
 import type { ExecutionFailureKey, ExecutionPhase } from "../suggestions/swapExecution/executionLifecycle";
@@ -94,13 +95,22 @@ const GALLERY_ACTION: SwapActionContext = {
  * Drives the real hook with a stubbed fetcher. `tamper` lets a case return a plan the checks
  * must refuse, so the refusal path is shown to have been REACHED rather than merely rendered.
  */
-function HookDrivenCase({ tamper }: { tamper?: (p: SwapExecutionPlan) => SwapExecutionPlan }) {
+function HookDrivenCase({
+  tamper,
+  submit,
+}: {
+  tamper?: (p: SwapExecutionPlan) => SwapExecutionPlan;
+  submit?: SwapPlanSubmitter;
+}) {
   const state = useSwapExecutionPlan({
     action: GALLERY_ACTION,
     takerPublicKey: REAL_SWAP_TAKER,
     slippageBps: 50,
     enabled: true,
     fetcher: async () => ({ ok: true, plan: tamper ? tamper(LIVE_SHAPED_PLAN) : LIVE_SHAPED_PLAN }),
+    // A STUB, never the real wallet submitter. A gallery that could submit a real mainnet swap
+    // on a real transaction is not a gallery, and one stray click would cost actual money.
+    submit,
   });
 
   // The gallery has no user to press anything, so the flow is started on mount.
@@ -112,6 +122,7 @@ function HookDrivenCase({ tamper }: { tamper?: (p: SwapExecutionPlan) => SwapExe
       terms={state.plan?.terms ?? null}
       failure={state.failure}
       msUntilExpiry={state.msUntilExpiry}
+      signature={state.signature}
       onCancel={state.cancel}
       onApprove={state.approve}
     />
@@ -130,6 +141,24 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     label:
       "REAL HOOK — a genuine mainnet transaction through the real reducer and the real structural check. Reaches Ready; no Approve, because no signer exists until Phase 5.",
     node: <HookDrivenCase />,
+  },
+  {
+    key: "hook_approve_submitted",
+    label:
+      "REAL HOOK + stubbed wallet — press Approve. Signing and submission are one wallet call, so the flow goes straight to confirming with a signature.",
+    node: <HookDrivenCase submit={async () => ({ kind: "submitted", signature: "5xGALLERYsignature" })} />,
+  },
+  {
+    key: "hook_approve_declined",
+    label:
+      "REAL HOOK + stubbed wallet that DECLINES — press Approve. A decline is a normal outcome and nothing is sent.",
+    node: <HookDrivenCase submit={async () => ({ kind: "declined" })} />,
+  },
+  {
+    key: "hook_approve_wallet_error",
+    label:
+      "REAL HOOK + stubbed wallet that ERRORS — press Approve. This used to hang in `signing` with no way out.",
+    node: <HookDrivenCase submit={async () => ({ kind: "failed", detail: "WalletSendTransactionError" })} />,
   },
   {
     key: "hook_wrong_minimum",

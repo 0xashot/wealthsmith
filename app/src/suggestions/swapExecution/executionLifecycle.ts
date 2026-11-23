@@ -144,6 +144,14 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
       if (event.type === "signed") return { ...state, phase: "submitting" };
       // Declining in the wallet is a normal outcome, not an error: the user said no.
       if (event.type === "declined") return fail(state, "declined");
+      // A wallet that errors rather than declines fails HERE, not in `submitting`. With
+      // `signAndSendTransaction` the signature and the submission are one call, so a failure
+      // leaves the flow in `signing` with nothing signed and nothing sent. Without this the
+      // event was dropped and the flow hung in `signing` — no error, no way out.
+      //
+      // Dispatching `signed` first to reach `submitting` would be the alternative, and it would
+      // be a lie: it records a signature that does not exist.
+      if (event.type === "submit_failed") return fail(state, "submit_failed", event.detail ?? null);
       return state;
 
     case "submitting":

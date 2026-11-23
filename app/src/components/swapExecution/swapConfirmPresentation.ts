@@ -11,10 +11,14 @@
  * running them.
  */
 import {
+  SWAP_CONFIRM_AWAITING_WALLET,
+  SWAP_CONFIRM_CHECKING,
+  SWAP_CONFIRM_CHECK_PASSED,
   SWAP_CONFIRM_DECLINED_DESC,
   SWAP_CONFIRM_DECLINED_TITLE,
   SWAP_CONFIRM_EXPIRED_DESC,
   SWAP_CONFIRM_EXPIRED_TITLE,
+  SWAP_CONFIRM_SUBMITTING,
   SWAP_CONFIRM_SUBMIT_FAILED_DESC,
   SWAP_CONFIRM_SUBMIT_FAILED_TITLE,
   SWAP_CONFIRM_TIMEOUT_DESC,
@@ -24,7 +28,7 @@ import {
   SWAP_CONFIRM_VERIFICATION_FAILED_DESC,
   SWAP_CONFIRM_VERIFICATION_FAILED_TITLE,
 } from "../../state/approvedCopy";
-import type { ExecutionFailureKey } from "../../suggestions/swapExecution/executionLifecycle";
+import type { ExecutionFailureKey, ExecutionPhase } from "../../suggestions/swapExecution/executionLifecycle";
 import { pct, usd } from "../../suggestions/swapQuote/quotePresentation";
 
 /** The placeholder for a figure we do not have. Never a zero, never a guess. */
@@ -58,6 +62,43 @@ export function formatUsd(value: number | null | undefined): string {
   return usd(value) ?? ABSENT;
 }
 
+/**
+ * The one line of status under the terms, for every phase.
+ *
+ * Written as a total function over the phase rather than a chain of ternaries in the component,
+ * because the gallery found the gap this closes: after Approve the sheet rendered a blank line.
+ * The states existed in the machine and nowhere on screen, and a person who had just authorised
+ * a transaction was shown nothing. A total function cannot have that hole.
+ *
+ * `confirmed` returns null because success is its own block, not a status line.
+ */
+export function statusLineFor(phase: ExecutionPhase): string | null {
+  switch (phase) {
+    case "preparing":
+    case "verifying":
+      return SWAP_CONFIRM_CHECKING;
+    case "ready":
+      return SWAP_CONFIRM_CHECK_PASSED;
+    case "signing":
+      return SWAP_CONFIRM_AWAITING_WALLET;
+    case "submitting":
+    case "confirming":
+      // Deliberately the same line for both. The difference between "sent" and "being
+      // confirmed" is ours, not the user's, and narrating it would imply a precision about
+      // where their transaction is that we do not have.
+      return SWAP_CONFIRM_SUBMITTING;
+    case "idle":
+    case "confirmed":
+    case "failed":
+      return null;
+  }
+}
+
+/** Whether the flow has passed the point where cancelling is possible or meaningful. */
+export function isAfterApproval(phase: ExecutionPhase): boolean {
+  return phase === "signing" || phase === "submitting" || phase === "confirming" || phase === "confirmed";
+}
+
 /** Title and body for a terminal failure. `cancelled` has none — the sheet simply closes. */
 export function failureCopy(failure: ExecutionFailureKey | null): { title: string; desc: string } | null {
   switch (failure) {
@@ -80,4 +121,16 @@ export function failureCopy(failure: ExecutionFailureKey | null): { title: strin
     default:
       return null;
   }
+}
+
+/**
+ * A public explorer link for a submitted transaction.
+ *
+ * Offered on a completed or still-pending swap because the signature is the user's only record
+ * of it, and on a timeout it is the only way they can find out what happened. Solscan is a
+ * third-party explorer and the link says where it goes.
+ */
+export function solscanTransactionUrl(signature: string): string | null {
+  if (typeof signature !== "string" || signature.length === 0) return null;
+  return `https://solscan.io/tx/${encodeURIComponent(signature)}`;
 }

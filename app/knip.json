@@ -13,6 +13,7 @@
   "ignore": [
     "src/suggestions/protocolDataAdapters.kamino.ts",
     "src/components/swapQuote/SwapQuoteAlternatives.tsx",
-    "src/components/MarketConditionsSurface.tsx"
+    "src/components/MarketConditionsSurface.tsx",
+    "src/components/swapExecution/useWalletSwapSubmitter.ts"
   ]
 }

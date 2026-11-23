@@ -38,15 +38,23 @@ import {
 import { validateExecutionPlan } from "../swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../swapExecution/planResolution";
 import {
+  classifyWalletError,
+  eventsForSubmitOutcome,
+  isUsableSignature,
+} from "../swapExecution/submitResolution";
+import {
   failureCopy,
   formatCountdown,
   formatPercent,
   formatUsd,
+  isAfterApproval,
+  solscanTransactionUrl,
+  statusLineFor,
 } from "../../components/swapExecution/swapConfirmPresentation";
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
 import { SWAP_CONFIRM_EXPIRED_TITLE } from "../../state/approvedCopy";
-import type { ExecutionFailureKey } from "../swapExecution/executionLifecycle";
-import { executionReducer, initialExecutionState } from "../swapExecution/executionLifecycle";
+import type { ExecutionFailureKey, ExecutionPhase } from "../swapExecution/executionLifecycle";
+import { executionReducer, initialExecutionState, isExecutionTerminal, type ExecutionEvent } from "../swapExecution/executionLifecycle";
 import { REAL_SWAP_TAKER, REAL_SWAP_TX } from "./realSwapTransactions";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
@@ -204,6 +212,9 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
    * anywhere produces a confirm permission, and a check that only looks at the files someone
    * remembered to list is exactly the check a new file slips past.
    */
+  /** Source with comments removed, for scans that must not trip on prose describing the rule. */
+  const stripComments = (src: string) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const tsFilesUnder = (roots: string[]): string[] => {
     const out: string[] = [];
     const walk = (rel: string) => {
@@ -686,9 +697,9 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return /eventsForPlanResult/.test(h) &&
       !/verifyTransactionStructure|assertPlanWasVerified/.test(h);
   })(), "hook is wiring");
-  add("SWXR-9: `approve` is undefined without a signer — a confirm button is never a no-op", (() => {
+  add("SWXR-9: `approve` is undefined without a submitter — a confirm button is never a no-op", (() => {
     const h = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
-    return /if \(signer == null\) return undefined;/.test(h) &&
+    return /if \(submit == null\) return undefined;/.test(h) &&
       /state\.phase !== "ready"/.test(h);
   })(), "no dead button");
 
@@ -746,6 +757,110 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // Otherwise the sheet invites someone to retry until a check happens to pass.
     return /onRefresh && failure === "expired"/.test(c);
   })(), "no retry-until-pass");
+
+  /* ---- Phase 5: signing and submission (SWXS5) ----
+   *
+   * The only code in the product that can move money. Every outcome the wallet can produce is
+   * driven through the real machine here, because the failure mode that matters is not a wrong
+   * message — it is a flow that stops responding while someone waits.
+   */
+  const afterSign = (outcome: Parameters<typeof eventsForSubmitOutcome>[0]) =>
+    eventsForSubmitOutcome(outcome).reduce(
+      executionReducer,
+      ([{ type: "prepare" }, { type: "plan_received", plan: plan() }, { type: "verified" }, { type: "sign" }] as ExecutionEvent[])
+        .reduce(executionReducer, initialExecutionState),
+    );
+
+  add("SWXS5-1: a submitted swap records the signature and waits for confirmation", (() => {
+    const s2 = afterSign({ kind: "submitted", signature: "5xSig" });
+    return s2.phase === "confirming" && s2.signature === "5xSig";
+  })(), "submitted");
+  add("SWXS5-2: a wallet ERROR ends the flow — it does not hang in `signing`", (() => {
+    // The reducer dropped submit_failed from `signing`, so a wallet error left the flow stuck
+    // with a spinner and no way out. The wallet signs and sends in ONE call, so a failure
+    // genuinely happens in `signing` with nothing signed and nothing sent.
+    const s2 = afterSign({ kind: "failed", detail: "WalletSendTransactionError" });
+    return s2.phase === "failed" && s2.failure === "submit_failed" &&
+      s2.failureDetail === "WalletSendTransactionError";
+  })(), "no hang on wallet error");
+  add("SWXS5-3: declining ends the flow as declined, with no signature", (() => {
+    const s2 = afterSign({ kind: "declined" });
+    return s2.phase === "failed" && s2.failure === "declined" && s2.signature == null;
+  })(), "declined");
+  add("SWXS5-4: EVERY wallet outcome reaches a terminal or `confirming` — none leaves the user waiting", (() => {
+    const outcomes = [
+      { kind: "submitted", signature: "s" }, { kind: "declined" }, { kind: "failed", detail: "x" },
+    ] as const;
+    return outcomes.every((o) => {
+      const s2 = afterSign(o);
+      return s2.phase === "confirming" || isExecutionTerminal(s2.phase);
+    });
+  })(), "no dead ends");
+  add("SWXS5-5: a failure is NEVER reported as a decline unless the wallet said so explicitly", (() => {
+    // Telling someone they declined when they did not is a false statement about what they just
+    // did, and it stops them retrying. Only an explicit rejection signal counts.
+    const declines = [
+      { code: 4001 }, { name: "WalletUserRejectedError" },
+      { message: "User rejected the request." }, { message: "user declined" },
+    ];
+    const failures = [
+      new Error("Blockhash not found"), { name: "WalletSendTransactionError", message: "network error" },
+      {}, null, undefined, "boom", { code: 4900 },
+    ];
+    return declines.every((e) => classifyWalletError(e).kind === "declined") &&
+      failures.every((e) => classifyWalletError(e).kind === "failed");
+  })(), "declines are explicit");
+  add("SWXS5-6: an error detail is bounded and is never the raw message — it reaches analytics", (() => {
+    const out = classifyWalletError({ name: "X".repeat(500), message: "secret-ish provider detail" });
+    return out.kind === "failed" && out.detail.length === 64 && !out.detail.includes("secret-ish");
+  })(), "bounded label");
+  add("SWXS5-7: an empty or non-string signature is NOT success — a completed swap needs a transaction", (() => {
+    return !isUsableSignature("") && !isUsableSignature(null) && !isUsableSignature(undefined) &&
+      !isUsableSignature(123) && isUsableSignature("5xSig");
+  })(), "signature required");
+  add("SWXS5-8: the bytes submitted are the bytes verified — the submitter never rebuilds the transaction", (() => {
+    // Comments are stripped first: the file's doc block NAMES the things it must not do, and a
+    // scan that cannot tell an explanation from a call would forbid explaining the rule.
+    const w = stripComments(readSrc("src/components/swapExecution/useWalletSwapSubmitter.ts"));
+    // A blockhash refresh would change the bytes and silently void the verification. A stale
+    // blockhash simply fails to submit, which is the correct way for this to go wrong.
+    return /VersionedTransaction\.deserialize/.test(w) &&
+      !/getLatestBlockhash|recentBlockhash\s*=|prepareTransaction/.test(w);
+  })(), "verified bytes only");
+  add("SWXS5-9: WealthSmith never holds a signed transaction — the wallet signs AND sends", (() => {
+    const w = stripComments(readSrc("src/components/swapExecution/useWalletSwapSubmitter.ts"));
+    return /sendTransaction\(/.test(w) &&
+      !/signTransaction|signAllTransactions|sendRawTransaction/.test(w);
+  })(), "no signed bytes held");
+  add("SWXS5-10: a submitted transaction survives a stale generation — the signature is the user's only record", (() => {
+    const h = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
+    return /outcome\.kind !== "submitted"/.test(h);
+  })(), "never drop a signature");
+
+  add("SWXS5-11: the status line is TOTAL over phases — approving produced a blank sheet before this", (() => {
+    // The gallery found it: after Approve the machine was in `submitting`/`confirming` and the
+    // sheet rendered an empty line. A person who had just authorised a transaction saw nothing.
+    const inFlight: ExecutionPhase[] = ["preparing", "verifying", "ready", "signing", "submitting", "confirming"];
+    const silent: ExecutionPhase[] = ["idle", "confirmed", "failed"];
+    return inFlight.every((p2) => (statusLineFor(p2) ?? "").length > 0) &&
+      silent.every((p2) => statusLineFor(p2) === null);
+  })(), "no blank states");
+  add("SWXS5-12: `submitting` and `confirming` read the SAME — the difference is ours, not the user's",
+    statusLineFor("submitting") === statusLineFor("confirming"), "no false precision");
+  add("SWXS5-13: Cancel is offered before approval and withdrawn after — nothing left to cancel", (() => {
+    const before: ExecutionPhase[] = ["preparing", "verifying", "ready"];
+    const after: ExecutionPhase[] = ["signing", "submitting", "confirming", "confirmed"];
+    return before.every((p2) => !isAfterApproval(p2)) && after.every((p2) => isAfterApproval(p2));
+  })(), "cancel window");
+  add("SWXS5-14: the explorer link is built only from a real signature, and is URL-safe", (() => {
+    return solscanTransactionUrl("") === null && solscanTransactionUrl("5xSig") === "https://solscan.io/tx/5xSig" &&
+      (solscanTransactionUrl("a/b?c") ?? "").endsWith("a%2Fb%3Fc");
+  })(), "explorer link");
+  add("SWXS5-15: success shows NO amount — the browser cannot read what arrived, and the estimate is not it", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // The rule permits omitting the figure; it forbids relabelling the estimate as the result.
+    return /SWAP_CONFIRM_COMPLETE_TITLE/.test(c) && !/swapConfirmReceived/.test(c);
+  })(), "no relabelled estimate");
 
   return checks;
 }

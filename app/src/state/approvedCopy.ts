@@ -1109,3 +1109,13 @@ export const SWAP_CONFIRM_SUBMIT_FAILED_DESC =
 export const SWAP_CONFIRM_TIMEOUT_TITLE = "Still confirming";
 export const SWAP_CONFIRM_TIMEOUT_DESC =
   "We stopped waiting, but the swap may still complete. Check your wallet.";
+
+/**
+ * In-flight states, after Approve and before an outcome.
+ *
+ * Added when the gallery showed that approving produced a blank sheet: the states existed in the
+ * machine and nowhere on screen. Both are progress, not reassurance, and neither claims the swap
+ * has happened — `confirmed` is the only state allowed to say that.
+ */
+export const SWAP_CONFIRM_AWAITING_WALLET = "Waiting for your wallet…";
+export const SWAP_CONFIRM_SUBMITTING = "Confirming on the network…";

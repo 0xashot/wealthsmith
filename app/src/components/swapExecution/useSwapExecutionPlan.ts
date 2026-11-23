@@ -25,9 +25,10 @@
  * no DOM, so logic kept inside a hook could only ever be source-scanned; lifted out, the whole
  * confirm flow is driven end to end in fixtures and this file is wiring.
  *
- * PHASE BOUNDARY. This hook stops at `ready`. Signing and submission are Phase 5: `approve` is
- * exposed only when a signer is supplied, so a sheet mounted without one cannot stall in
- * `signing` waiting for a wallet that was never wired.
+ * SUBMISSION. `approve` exists only when a submitter does, so a sheet mounted without a wallet
+ * cannot stall in `signing` waiting for one that was never wired. The submitter signs AND sends
+ * through the wallet's own infrastructure — see `submitResolution` for why that falls out of how
+ * the adapters already work, and what it means for custody.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { SwapActionContext } from "../../suggestions/swapQuote/swapQuoteContracts";
@@ -45,9 +46,13 @@ import {
   type FetchSwapExecutionPlanOptions,
 } from "../../suggestions/swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../../suggestions/swapExecution/planResolution";
+import { eventsForSubmitOutcome, type SubmitOutcome } from "../../suggestions/swapExecution/submitResolution";
 
-/** Injected by Phase 5. Absent in Phase 4, which is why `approve` is then undefined. */
-export type SwapPlanSigner = (plan: SwapExecutionPlan) => void;
+/**
+ * Submits a plan through the user's wallet. Null when no wallet can — `approve` is then
+ * undefined and the sheet renders no button, rather than one that fails when pressed.
+ */
+export type SwapPlanSubmitter = (plan: SwapExecutionPlan) => Promise<SubmitOutcome>;
 
 export interface UseSwapExecutionPlanOptions {
   action: SwapActionContext;
@@ -56,8 +61,8 @@ export interface UseSwapExecutionPlanOptions {
   slippageBps: number;
   /** True while the confirm step is open. Going false cancels anything in flight. */
   enabled: boolean;
-  /** Phase 5. When absent, `approve` is undefined and the flow cannot leave `ready`. */
-  signer?: SwapPlanSigner;
+  /** When absent, `approve` is undefined and the flow cannot leave `ready`. */
+  submit?: SwapPlanSubmitter | null;
   fetcher?: typeof fetchSwapExecutionPlan;
   fetchOptions?: FetchSwapExecutionPlanOptions;
   /** Injectable clock, for the gallery and for fixtures. */
@@ -67,6 +72,8 @@ export interface UseSwapExecutionPlanOptions {
 export interface UseSwapExecutionPlanState {
   phase: ExecutionPhase;
   plan: SwapExecutionPlan | null;
+  /** Present once the wallet has submitted. Kept through a timeout — it is the user's only record. */
+  signature: string | null;
   failure: ExecutionFailureKey | null;
   busy: boolean;
   terminal: boolean;
@@ -76,12 +83,12 @@ export interface UseSwapExecutionPlanState {
   prepare: () => void;
   /** Abandon before submission. Always available, always free. */
   cancel: () => void;
-  /** Phase 5 only. Undefined until a signer is wired — never a no-op button. */
+  /** Undefined unless a wallet can submit — never a no-op button. */
   approve: (() => void) | undefined;
 }
 
 export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwapExecutionPlanState {
-  const { action, takerPublicKey, slippageBps, enabled, signer } = opts;
+  const { action, takerPublicKey, slippageBps, enabled, submit } = opts;
   const [state, dispatch] = useReducer(executionReducer, initialExecutionState);
   const now = opts.nowMs ?? (() => Date.now());
   const fetcher = opts.fetcher ?? fetchSwapExecutionPlan;
@@ -159,19 +166,31 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   const approve = useMemo(() => {
-    if (signer == null) return undefined;
+    if (submit == null) return undefined;
     return () => {
       // `sign` is accepted only from `ready`; the reducer drops it everywhere else, so this
       // cannot start a signature early however it is called.
       if (state.phase !== "ready" || state.plan == null) return;
+      const plan = state.plan;
+      const generation = generationRef.current;
       dispatch({ type: "sign" });
-      signer(state.plan);
+
+      void (async () => {
+        const outcome = await submit(plan);
+        // A submitted transaction is NOT discarded on a stale generation. Everything before
+        // this point can be abandoned freely; once the wallet has sent it, the signature is the
+        // only record the user has, and dropping it because they clicked elsewhere would lose
+        // the one thing we owe them.
+        if (generation !== generationRef.current && outcome.kind !== "submitted") return;
+        for (const event of eventsForSubmitOutcome(outcome)) dispatch(event);
+      })();
     };
-  }, [signer, state.phase, state.plan]);
+  }, [submit, state.phase, state.plan]);
 
   return {
     phase: state.phase,
     plan: state.plan,
+    signature: state.signature,
     failure: state.failure,
     busy: isExecutionBusy(state.phase),
     terminal: isExecutionTerminal(state.phase),

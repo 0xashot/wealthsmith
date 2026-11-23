@@ -24,8 +24,7 @@ import InfoPopover from "../InfoPopover";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
   SWAP_CONFIRM_CANCEL_LABEL,
-  SWAP_CONFIRM_CHECKING,
-  SWAP_CONFIRM_CHECK_PASSED,
+  SWAP_CONFIRM_COMPLETE_TITLE,
   SWAP_CONFIRM_MINIMUM_INFO,
   SWAP_CONFIRM_MINIMUM_INFO_LABEL,
   SWAP_CONFIRM_MINIMUM_LABEL,
@@ -36,6 +35,7 @@ import {
   SWAP_CONFIRM_ROUTE_LABEL,
   SWAP_CONFIRM_SELL_LABEL,
   SWAP_CONFIRM_TITLE,
+  SWAP_CONFIRM_VIEW_TRANSACTION,
   swapConfirmExpiresIn,
 } from "../../state/approvedCopy";
 import type { SwapExecutionTerms } from "../../suggestions/swapExecution/executionContracts";
@@ -46,6 +46,9 @@ import {
   formatCountdown,
   formatPercent,
   formatUsd,
+  isAfterApproval,
+  solscanTransactionUrl,
+  statusLineFor,
 } from "./swapConfirmPresentation";
 
 export interface SwapConfirmSheetProps {
@@ -54,6 +57,8 @@ export interface SwapConfirmSheetProps {
   failure: ExecutionFailureKey | null;
   /** Milliseconds of life left in the terms; null while there is no plan. */
   msUntilExpiry: number | null;
+  /** Present once the transaction is on-chain. The user's only record of it. */
+  signature?: string | null;
   onCancel: () => void;
   /** Re-quote. Offered only where new terms would help. */
   onRefresh?: () => void;
@@ -62,7 +67,7 @@ export interface SwapConfirmSheetProps {
 }
 
 export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
-  const { phase, terms, failure, msUntilExpiry, onCancel, onRefresh, onApprove } = props;
+  const { phase, terms, failure, msUntilExpiry, signature, onCancel, onRefresh, onApprove } = props;
 
   const failed = failureCopy(failure);
   if (phase === "failed" && failed) {
@@ -87,8 +92,11 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
   }
 
   const providerIconUrl = terms ? resolveProtocolIcon(`${terms.providerId}.svg`) : null;
-  const checking = phase === "preparing" || phase === "verifying";
   const ready = phase === "ready";
+  const confirmed = phase === "confirmed";
+  const statusLine = statusLineFor(phase);
+  const afterApproval = isAfterApproval(phase);
+  const explorerUrl = signature ? solscanTransactionUrl(signature) : null;
 
   return (
     <section className="review-modal__section swap-confirm" aria-label={SWAP_CONFIRM_TITLE}>
@@ -138,24 +146,42 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
         </dl>
       )}
 
-      {/* The check's state. `aria-live` because it changes without the user acting, and because
-          whether it has passed is the thing a person is waiting on before approving. */}
-      <p className="swap-confirm__check" role="status" aria-live="polite">
-        {checking ? SWAP_CONFIRM_CHECKING : ready ? SWAP_CONFIRM_CHECK_PASSED : ""}
-      </p>
+      {/* One status line, for every phase. `aria-live` because it changes without the user
+          acting, and because what it says is the thing they are waiting on. */}
+      {statusLine && (
+        <p className="swap-confirm__check" role="status" aria-live="polite">{statusLine}</p>
+      )}
+
+      {/* Success. No figure: reading what actually arrived needs a chain read the browser
+          cannot make, and the rule is explicit that an unreadable amount is omitted rather than
+          replaced with the estimate shown beforehand. */}
+      {confirmed && (
+        <p className="swap-confirm__complete">{SWAP_CONFIRM_COMPLETE_TITLE}</p>
+      )}
+
+      {signature && explorerUrl && (
+        <p className="swap-confirm__transaction">
+          <a href={explorerUrl} target="_blank" rel="noopener noreferrer">{SWAP_CONFIRM_VIEW_TRANSACTION}</a>
+        </p>
+      )}
 
       {ready && msUntilExpiry != null && (
         <p className="swap-confirm__expiry" role="note">{swapConfirmExpiresIn(formatCountdown(msUntilExpiry))}</p>
       )}
 
       <div className="review-modal__footer review-modal__footer--actions">
-        {/* Cancelling is available at every point before submission, and costs nothing. */}
-        <button type="button" className="review-modal__tertiary-action" onClick={onCancel}>
-          {SWAP_CONFIRM_CANCEL_LABEL}
-        </button>
-        {/* Rendered only when it can actually do something: the terms are checked AND a signer
-            exists. A disabled approve button on a financial confirmation is worse than none —
-            it reads as "almost" and explains nothing. */}
+        {/* Cancel disappears once the transaction is with the wallet. Before that it is always
+            available and always free; after it, there is nothing left to cancel — the
+            transaction is the wallet's and then the chain's, and a Cancel button there would
+            promise something we cannot do. */}
+        {!afterApproval && (
+          <button type="button" className="review-modal__tertiary-action" onClick={onCancel}>
+            {SWAP_CONFIRM_CANCEL_LABEL}
+          </button>
+        )}
+        {/* Rendered only when it can actually do something: the terms are checked AND a wallet
+            can submit. A disabled approve button on a financial confirmation is worse than none
+            — it reads as "almost" and explains nothing. */}
         {ready && onApprove && (
           <button type="button" className="review-modal__primary-action" onClick={onApprove}>
             <span>{SWAP_CONFIRM_APPROVE_LABEL}</span>
