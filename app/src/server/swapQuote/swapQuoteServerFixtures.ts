@@ -94,8 +94,24 @@ export async function runSwapQuoteServerFixtureChecks(): Promise<SwapFixtureChec
   // ---- Liquidity / RFQ / freshness exclusion ----
   const lowLiq = await run({ jupiter: succeed("jupiter", { expectedOutputUsd: 998.5 }, [{ poolId: "low", venue: "Raydium", legKind: "amm_pool" }]), raydium: succeed("raydium", { expectedOutputUsd: 997.6 }), orca: succeed("orca", { expectedOutputUsd: 997.4 }) });
   add("SWS-11: one route below the $100k liquidity minimum → excluded (liquidity_low), not selected", lowLiq.selectedProviderId !== "jupiter" && lowLiq.candidates.find((c) => c.providerId === "jupiter")!.exclusionReasons.includes("liquidity_low"), `sel=${lowLiq.selectedProviderId}`);
-  const unresLiq = await run({ jupiter: succeed("jupiter", { expectedOutputUsd: 998.5 }, [{ poolId: "unknown", venue: "X", legKind: "amm_pool" }]), raydium: succeed("raydium", { expectedOutputUsd: 997.6 }), orca: succeed("orca", { expectedOutputUsd: 997.4 }) });
-  add("SWS-12: one route with unresolved liquidity → excluded (liquidity_unresolved)", unresLiq.candidates.find((c) => c.providerId === "jupiter")!.exclusionReasons.includes("liquidity_unresolved"), "unresolved liq excluded");
+  // SWS-12 now points at Raydium rather than Jupiter. The guarantee is unchanged — a leg we SHOULD be able to
+  // read and cannot is still a hard exclusion — but it only applies to a provider quoting its own pools. For an
+  // aggregator the same unreadable leg means something different; see SWS-12A.
+  const unresLiq = await run({ jupiter: succeed("jupiter", { expectedOutputUsd: 997.4 }), raydium: succeed("raydium", { expectedOutputUsd: 998.5 }, [{ poolId: "unknown", venue: "X", legKind: "amm_pool" }]), orca: succeed("orca", { expectedOutputUsd: 997.6 }) });
+  add("SWS-12: a DIRECT provider's unreadable pool leg → excluded (liquidity_unresolved) — failing to read its own pool is a failure", unresLiq.candidates.find((c) => c.providerId === "raydium")!.exclusionReasons.includes("liquidity_unresolved"), "unresolved liq excluded");
+  const aggLiq = await run({ jupiter: succeed("jupiter", { expectedOutputUsd: 998.5 }, [{ poolId: "unknown", venue: "Deriverse", legKind: "amm_pool" }]), raydium: succeed("raydium", { expectedOutputUsd: 997.6 }), orca: succeed("orca", { expectedOutputUsd: 997.4 }) });
+  add("SWS-12A: an AGGREGATOR's unreadable leg is classified `aggregator`, not `unresolved` — a limit of the source set, not a failure", (() => {
+    const jup = aggLiq.candidates.find((c) => c.providerId === "jupiter")!;
+    return jup.liquidityAssessment.legs.every((l) => l.legKind === "aggregator");
+  })(), "classified aggregator");
+  add("SWS-12B: that route is NOT excluded for liquidity — it is governed by the price-impact ceiling and the on-chain minimum instead (SWAP_AGGREGATOR_POLICY)", (() => {
+    const jup = aggLiq.candidates.find((c) => c.providerId === "jupiter")!;
+    return !jup.exclusionReasons.includes("liquidity_unresolved") && !jup.exclusionReasons.includes("liquidity_low");
+  })(), "aggregator eligible");
+  add("SWS-12C: an aggregator leg contributes NO depth, so the route's reported minimum stays a statement about legs actually read", (() => {
+    const jup = aggLiq.candidates.find((c) => c.providerId === "jupiter")!;
+    return jup.liquidityAssessment.minimumRouteLegLiquidityUsd === null;
+  })(), "no invented depth");
   const rfq = await run({ jupiter: succeed("jupiter", { expectedOutputUsd: 998.5 }, [{ poolId: "rfq", venue: "RFQ", legKind: "rfq" }]), raydium: succeed("raydium", { expectedOutputUsd: 997.6 }), orca: succeed("orca", { expectedOutputUsd: 997.4 }) });
   add("SWS-13: RFQ route excluded until approved (rfq_not_approved)", rfq.candidates.find((c) => c.providerId === "jupiter")!.exclusionReasons.includes("rfq_not_approved"), "rfq excluded");
   const stale = await run({ jupiter: succeed("jupiter", { expectedOutputUsd: 998.5, freshness: "stale" }), raydium: succeed("raydium", { expectedOutputUsd: 997.6 }), orca: succeed("orca", { expectedOutputUsd: 997.4 }) });

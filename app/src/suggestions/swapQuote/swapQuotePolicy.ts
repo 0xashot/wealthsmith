@@ -85,6 +85,32 @@ export const SWAP_RFQ_POLICY = {
   methodologyVersion: "swap_rfq_1.0.0",
 } as const;
 
+/* ------------------------------------------------------------------ *
+ * Aggregator disposition. An aggregator (Jupiter) routes across dozens of venues; the approved pool-liquidity
+ * sources read only a few of them, so most aggregator legs cannot be scored against the $100k pool-depth rule —
+ * not because the depth is absent, but because we cannot see it. Failing those closed excluded Jupiter from
+ * essentially every live comparison, which made the rule's effect "never compare the aggregator" rather than
+ * "verify depth".
+ *
+ * These routes are therefore governed by the controls that do NOT require reading a pool:
+ *   • the price-impact ceiling in swapQuoteEligibility (strictly below 0.50%), computed by the provider over
+ *     the whole route — the direct observable the depth rule was a proxy for; and
+ *   • the guaranteed minimum output, which for a swap is enforced ON-CHAIN: the transaction reverts rather
+ *     than filling below it.
+ *
+ * The honest limit: a route can still revert if depth moves between quote and execution. That costs a network
+ * fee, not value — the user cannot receive less than the minimum either way.
+ *
+ * This applies to legs we cannot read, never to legs we can: a leg an approved source DOES price is still held
+ * to the $100k rule, and a route mixing both is only as strong as its weakest readable leg.
+ * ------------------------------------------------------------------ */
+export const SWAP_AGGREGATOR_POLICY = {
+  aggregatorRoutesApproved: true,
+  reason:
+    "Aggregator legs route through venues the approved pool sources cannot read. Governed by the price-impact ceiling and the on-chain-enforced minimum output instead of pool depth.",
+  methodologyVersion: "swap_aggregator_1.0.0",
+} as const;
+
 /**
  * Blocked intermediate assets / underlying venues (deny-list, versioned). An eligible route may not hop through
  * a blocked intermediate mint or draw liquidity from a blocked venue. Empty by default; entries require review.

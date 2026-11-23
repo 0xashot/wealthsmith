@@ -5,11 +5,14 @@
  *   • unresolved / stale liquidity is NOT eligible (fail closed);
  *   • liquidity is never inferred from trade size;
  *   • RFQ legs have no pool TVL — they are handled by a separate approved RFQ policy (excluded for the first
- *     implementation), never scored against the pool-depth rule.
+ *     implementation), never scored against the pool-depth rule;
+ *   • aggregator legs route through venues no approved source can read — handled by SWAP_AGGREGATOR_POLICY
+ *     (price-impact ceiling + on-chain-enforced minimum output), never scored against the pool-depth rule, and
+ *     never counted toward the route's reported minimum depth.
  * This module only ASSESSES already-fetched pool-liquidity inputs; it performs no fetching.
  */
 import type { SwapRouteLegLiquidity, SwapRouteLiquidityAssessment, SwapLiquidityStatus } from "./swapQuoteContracts";
-import { SWAP_COST_THRESHOLDS, SWAP_RFQ_POLICY } from "./swapQuotePolicy";
+import { SWAP_AGGREGATOR_POLICY, SWAP_COST_THRESHOLDS, SWAP_RFQ_POLICY } from "./swapQuotePolicy";
 
 export const SWAP_LIQUIDITY_VERSION = "swap_liquidity_1.0.0" as const;
 
@@ -49,6 +52,16 @@ export function assessRouteLiquidity(legs: readonly RouteLegLiquidityInput[], mi
     if (l.legKind === "rfq") {
       // RFQ has no pool TVL: excluded until an explicit RFQ-liquidity policy is approved → unresolved (fail closed).
       if (!SWAP_RFQ_POLICY.rfqRoutesApproved) return { status: "unresolved", minimumRouteLegLiquidityUsd: minPool, legs: outLegs };
+      continue;
+    }
+    if (l.legKind === "aggregator") {
+      // An aggregator leg through a venue no approved source can read. Governed by SWAP_AGGREGATOR_POLICY —
+      // the price-impact ceiling and the on-chain-enforced minimum output — not by pool depth. It contributes
+      // NO depth to minimumRouteLegLiquidityUsd, so a route's reported minimum stays a statement about legs we
+      // actually read. If the policy is ever withdrawn this falls closed, exactly like RFQ.
+      if (!SWAP_AGGREGATOR_POLICY.aggregatorRoutesApproved) {
+        return { status: "unresolved", minimumRouteLegLiquidityUsd: minPool, legs: outLegs };
+      }
       continue;
     }
     if (l.legKind === "unresolved" || l.liquidityUsd == null || !Number.isFinite(l.liquidityUsd) || !l.fresh) {

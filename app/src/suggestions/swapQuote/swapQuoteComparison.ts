@@ -26,7 +26,7 @@ import { classifySwapPair } from "./swapPairRegistry";
 import { evaluateCandidateEligibility } from "./swapQuoteEligibility";
 import { rankEligibleCandidates, type RankableCandidate } from "./swapQuoteRanking";
 import { rawToTokens } from "./swapAmountMath";
-import { DEFAULT_SWAP_QUOTE_POLICY, type SwapQuotePolicy } from "./swapQuotePolicy";
+import { DEFAULT_SWAP_QUOTE_POLICY, type SwapQuotePolicy, SWAP_QUOTE_OPERATIONAL_POLICY } from "./swapQuotePolicy";
 
 export interface SwapQuoteComparisonInput {
   actionId: string;
@@ -145,9 +145,24 @@ export function compareSwapQuotes(input: SwapQuoteComparisonInput): SwapQuoteCom
   }
 
   const winner = ranked[0];
-  // Comparison expiry = earliest expiry among ELIGIBLE candidates (null when none carry an expiry).
-  const expiries = ranked.map((r) => toMsOrNull(r.candidate.expiresAt)).filter((t): t is number => t != null);
-  const expiresAt = expiries.length > 0 ? new Date(Math.min(...expiries)).toISOString() : null;
+  /**
+   * When this comparison stops being usable — the earliest of:
+   *   • any provider-supplied expiry among the ELIGIBLE candidates, and
+   *   • the policy freshness window from `comparedAt`.
+   *
+   * The window is not a fallback invented here: `computeFreshness` already judges a quote with no provider
+   * expiry as stale past exactly this point, so the comparison was already dead then. Previously that fact
+   * was implicit and `expiresAt` stayed null, which read as "never expires" to anything downstream — including
+   * a caller trying to decide whether there is time to sign against it.
+   *
+   * Candidates keep `expiresAt: null` when their provider supplied none; that stays literally true. This field
+   * is the comparison's own lifetime, which is ours to state.
+   */
+  const providerExpiries = ranked.map((r) => toMsOrNull(r.candidate.expiresAt)).filter((t): t is number => t != null);
+  const windowExpiry = input.comparedAtMs + SWAP_QUOTE_OPERATIONAL_POLICY.freshnessWindowMs;
+  const expiresAt = ranked.length === 0
+    ? null
+    : new Date(Math.min(windowExpiry, ...providerExpiries)).toISOString();
 
   return {
     status,

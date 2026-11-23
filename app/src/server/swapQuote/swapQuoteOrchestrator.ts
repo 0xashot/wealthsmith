@@ -142,7 +142,9 @@ export async function collectSwapQuoteSnapshot(action: SwapActionContext, option
         const result = await runProvider(provider, request, makeContext, policy.operational.providerTimeoutMs, policy.operational.maxRetriesPerProvider, overall.signal, now);
         if (result.kind === "success") {
           // 5. Resolve fresh per-leg liquidity and attach it to the candidate.
-          const liquidityAssessment = await resolveRouteLiquidity(result.routeLegs, options.liquiditySource, overall.signal, comparedAtMs, policy.operational.freshnessWindowMs);
+          // Jupiter aggregates across venues; Raydium and Orca quote their own pools, so an unreadable leg
+          // there is a real failure rather than a source-coverage gap. See SWAP_AGGREGATOR_POLICY.
+          const liquidityAssessment = await resolveRouteLiquidity(result.routeLegs, options.liquiditySource, overall.signal, comparedAtMs, policy.operational.freshnessWindowMs, { aggregatorRoute: pid === "jupiter" });
           const candidate: SwapQuoteCandidate = { ...result.candidate, liquidityAssessment };
           telemetry.push({ providerId: pid, outcome: "success", latencyMs: result.latencyMs, eligible: false, exclusionReasons: [] });
           return candidate;
