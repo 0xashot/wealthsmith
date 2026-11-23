@@ -75,7 +75,9 @@ function assessment(o: Partial<SwapQuoteComparisonAssessment> = {}): SwapQuoteCo
     expiresAt: SOON,
     selectedProviderId: "jupiter",
     selectionBasis: "lowest_estimated_total_cost",
-    candidates: [candidate()],
+    // Two eligible candidates: what a real `selected` looks like. The comparison emits
+    // `only_route_available` when a single route ranks, so a one-candidate `selected` cannot occur.
+    candidates: [candidate(), candidate({ providerId: "raydium", providerName: "Raydium", executionSurface: "raydium" })],
     comparedProviders: ["jupiter", "raydium", "orca"],
     unavailableProviders: [],
     estimatedTotalCostUsd: 0.03,
@@ -160,16 +162,41 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     !eligible({ handoffType: "in_app_confirm_v2" }).executable, "allowlist");
   add("SWX-6: multi-leg blocks — one transaction doing one thing",
     eligible({ totalLegs: 2 }).blockReasons.includes("multi_leg"), "single leg only");
-  add("SWX-7: partial_comparison blocks — a degraded quote falls back to handoff rather than guessing in a confirm step",
-    eligible({ assessment: assessment({ status: "partial_comparison" }) }).blockReasons.includes("no_selected_route"), "no partial exec");
-  add("SWX-8: only_route_available blocks too — one surviving route is not the same as a comparison that resolved",
-    eligible({ assessment: assessment({ status: "only_route_available" }) }).blockReasons.includes("no_selected_route"), "no single-route exec");
-  add("SWX-9: unverified liquidity blocks — 'unresolved' is the absence of a check, not a soft pass", (() => {
-    const a = assessment({ candidates: [candidate({ liquidityAssessment: { status: "unresolved", minimumRouteLegLiquidityUsd: null, legs: [] } })] });
+  // A two-provider comparison where Jupiter won is a real comparison. Requiring all three would
+  // gate execution on every provider being up, and Orca is routinely unavailable.
+  const twoWay = assessment({
+    status: "partial_comparison",
+    unavailableProviders: ["orca"],
+    comparedProviders: ["jupiter", "raydium"],
+    candidates: [candidate(), candidate({ providerId: "raydium", providerName: "Raydium", executionSurface: "raydium" })],
+  });
+  add("SWX-7: partial_comparison with TWO eligible candidates and a winner IS executable — a third provider being down does not make the winner's terms less true",
+    eligible({ assessment: twoWay }).executable, "two-way counts");
+  add("SWX-8: only_route_available blocks — one surviving route is not a comparison, so 'best route' would be unverified",
+    eligible({ assessment: assessment({ status: "only_route_available", candidates: [candidate()] }) }).blockReasons.includes("no_selected_route"), "no single-route exec");
+  add("SWX-8A: partial_comparison with only ONE eligible candidate blocks — the status covers both 'a provider was down' and 'only one route survived', and only the first is a comparison", (() => {
+    const onlyOne = assessment({
+      status: "partial_comparison",
+      candidates: [candidate(), candidate({ providerId: "raydium", providerName: "Raydium", executionSurface: "raydium", eligible: false, exclusionReasons: ["liquidity_low"] })],
+    });
+    return eligible({ assessment: onlyOne }).blockReasons.includes("no_selected_route");
+  })(), "one eligible is not a comparison");
+  add("SWX-8B: a status outside the allowlist blocks, whatever its candidates look like", (() => {
+    return (["no_valid_route", "not_ready_for_quote", "not_required", "unresolved"] as const).every((st) =>
+      !eligible({ assessment: assessment({ status: st }) }).executable);
+  })(), "allowlist enforced");
+  add("SWX-9: unverified liquidity on the WINNER blocks — 'unresolved' is the absence of a check, not a soft pass", (() => {
+    const a = assessment({ candidates: [
+      candidate({ liquidityAssessment: { status: "unresolved", minimumRouteLegLiquidityUsd: null, legs: [] } }),
+      candidate({ providerId: "raydium", providerName: "Raydium", executionSurface: "raydium" }),
+    ] });
     return eligible({ assessment: a }).blockReasons.includes("liquidity_unverified");
   })(), "liquidity required");
-  add("SWX-10: a non-Jupiter winner blocks — being the better route does not make it buildable", (() => {
-    const a = assessment({ selectedProviderId: "raydium", candidates: [candidate({ providerId: "raydium", providerName: "Raydium", executionSurface: "raydium" })] });
+  add("SWX-10: a non-Jupiter winner blocks — Raydium being the better route does not make it buildable, and the user gets the handoff", (() => {
+    const a = assessment({
+      selectedProviderId: "raydium",
+      candidates: [candidate({ providerId: "raydium", providerName: "Raydium", executionSurface: "raydium" }), candidate()],
+    });
     return eligible({ assessment: a }).blockReasons.includes("provider_not_executable");
   })(), "jupiter only");
   add("SWX-11: a missing minimumOutputTokens blocks — it is the only number the user is guaranteed",
@@ -183,9 +210,17 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
   add("SWX-14: a null expiry blocks — unknown expiry is not treated as generous",
     eligible({ assessment: assessment({ expiresAt: null }) }).blockReasons.includes("quote_expired"), "null expiry denies");
   add("SWX-15: multiple failures are ALL reported, so a caller can say why rather than just that", (() => {
-    const a = assessment({ status: "partial_comparison", expiresAt: null });
+    // Three independent faults: more than one leg, no comparison (single eligible route), no expiry.
+    const a = assessment({
+      status: "only_route_available",
+      expiresAt: null,
+      candidates: [candidate()],
+    });
     const r = eligible({ assessment: a, totalLegs: 3 });
-    return r.blockReasons.length >= 3;
+    return r.blockReasons.length >= 3
+      && r.blockReasons.includes("multi_leg")
+      && r.blockReasons.includes("no_selected_route")
+      && r.blockReasons.includes("quote_expired");
   })(), "reasons accumulate");
 
   /* ---- The plan guard ---- */

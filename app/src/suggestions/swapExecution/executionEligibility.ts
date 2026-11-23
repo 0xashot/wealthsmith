@@ -37,6 +37,25 @@ export const EXECUTABLE_PROVIDER_IDS: readonly string[] = ["jupiter"] as const;
  */
 export const MIN_QUOTE_LIFE_MS = 10_000;
 
+/**
+ * Comparison outcomes that may carry a confirm step.
+ *
+ * `only_route_available` is deliberately absent: one surviving route is not a comparison, so
+ * nothing verified that it is the best one. `no_valid_route`, `not_ready_for_quote`,
+ * `not_required` and `unresolved` are absent for the same reason — there is nothing to approve.
+ */
+export const COMPARISON_STATUSES_ALLOWING_EXECUTION: ReadonlySet<string> = new Set([
+  "selected",
+  "partial_comparison",
+]);
+
+/**
+ * How many eligible candidates make a comparison. Two is the minimum at which "this one won"
+ * means anything; it is also what keeps `partial_comparison` honest, since that status covers
+ * both "one provider was down" and "only one route survived at all".
+ */
+export const MIN_ELIGIBLE_FOR_COMPARISON = 2;
+
 export interface ExecutionEligibilityInput {
   assessment: SwapQuoteComparisonAssessment;
   /** From Protocol Logic. Anything other than `in_app_confirm` is a handoff — including absent. */
@@ -83,13 +102,27 @@ export function deriveExecutionEligibility(input: ExecutionEligibilityInput): Ex
     reasons.push("multi_leg");
   }
 
-  // 3. A single resolved route. "selected" is the only status that means one route won outright;
-  //    partial_comparison and only_route_available are real outcomes, but they describe a
-  //    comparison we could not complete, and a degraded quote falls back to handoff.
-  const selected =
-    assessment.status === "selected" && assessment.selectedProviderId != null
-      ? assessment.candidates.find((c) => c.providerId === assessment.selectedProviderId) ?? null
-      : null;
+  // 3. A real comparison with a winner.
+  //
+  //    `selected` means all three providers were compared. `partial_comparison` means some were
+  //    unavailable — but if at least two were eligible and one won, a genuine comparison still
+  //    happened, and the winner's terms are no less true because a third provider was down.
+  //    Requiring all three would gate execution on every provider being up, every time.
+  //
+  //    `only_route_available` stays blocked, and the MIN_ELIGIBLE_FOR_COMPARISON check below is
+  //    what enforces it: one surviving route is not a comparison, so "this is the best route"
+  //    would be a claim nothing verified.
+  //
+  //    What this does concede: with a provider unavailable we cannot know whether IT would have
+  //    been cheaper. That is true of any absent provider, and the user is shown which ones were
+  //    actually compared.
+  const comparedWithWinner =
+    COMPARISON_STATUSES_ALLOWING_EXECUTION.has(assessment.status) &&
+    assessment.selectedProviderId != null &&
+    assessment.candidates.filter((c) => c.eligible).length >= MIN_ELIGIBLE_FOR_COMPARISON;
+  const selected = comparedWithWinner
+    ? assessment.candidates.find((c) => c.providerId === assessment.selectedProviderId) ?? null
+    : null;
   if (selected == null) {
     reasons.push("no_selected_route");
   }
