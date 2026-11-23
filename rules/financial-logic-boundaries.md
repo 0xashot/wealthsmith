@@ -1248,8 +1248,10 @@ Manage link opens an approved protocol page in a new tab.
 Hard Rule:
 
 ```text
-MVP handoff does not execute transactions.
-MVP handoff does not request signatures.
+A handoff does not execute transactions.
+A handoff does not request signatures.
+A confirm step is not a handoff: see the Execution Boundary in
+rules/wallet-and-custody-rules.md.
 ```
 
 Allowed:

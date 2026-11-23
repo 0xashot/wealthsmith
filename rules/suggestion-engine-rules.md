@@ -199,9 +199,12 @@ Rules:
 - Must have clear action type.
 - May have protocol destination if protocol-backed.
 - May be eligible for Top Pick.
-- MVP action opens protocol page in a new tab.
-- MVP action does not execute a transaction.
-- MVP action does not request a wallet signature.
+- An action opens a REVIEW, never an action. The review either hands off to an
+  approved protocol page in a new tab, or — only where
+  `rules/wallet-and-custody-rules.md` → Execution Boundary allows it — offers an
+  explicit confirm step.
+- A card click never executes a transaction and never requests a signature.
+  Only a confirm step inside a review may request one, for one transaction.
 
 ### Informational
 
@@ -435,14 +438,26 @@ Example:
 }
 ```
 
+`handoff_type` is the single switch that decides whether a suggestion can be
+executed in-app. It is produced by Protocol Logic, never by the UI, and never
+inferred from the protocol id — "it's Jupiter" is not a reason to execute.
+
+```text
+external_new_tab   → review links out. The default, and the fallback whenever
+                     anything about the route is unresolved.
+in_app_confirm     → review may offer a confirm step, subject to the Execution
+                     Boundary being satisfied for THIS suggestion, at THIS moment.
+```
+
 Rules:
 
-- Protocol Logic provides destination protocol.
+- Protocol Logic provides destination protocol and `handoff_type`.
 - UI does not choose protocol.
 - UI does not guess protocol URLs.
-- MVP opens approved protocol URL in a new tab.
-- MVP does not execute transactions.
-- MVP does not request signatures from suggestion card clicks.
+- UI does not upgrade `external_new_tab` to `in_app_confirm` under any condition.
+- An unknown or missing `handoff_type` is treated as `external_new_tab`.
+- A card click never executes transactions.
+- A card click never requests signatures.
 
 See:
 
@@ -638,8 +653,9 @@ Rules:
 - Card layout comes from `components/suggestion-card.md`.
 - Card content comes from structured suggestion data.
 - Card click behavior follows protocol handoff rules.
-- Card must not execute transactions in MVP.
-- Card must not request wallet signature in MVP.
+- Card must not execute transactions.
+- Card must not request a wallet signature.
+- Card must not render a confirm step. Confirmation belongs to the review.
 - Card must not invent missing values.
 - Card must not hide critical warnings.
 
@@ -995,7 +1011,7 @@ Are stale/expired suggestions handled?
 Are APY/earnings sourced?
 Are demo and real suggestions separate?
 Is card copy based on approved templates or structured data?
-Does clicking the card avoid execution/signature in MVP?
+Does clicking the card open a review rather than act — no execution, no signature?
 ```
 
 ---
@@ -1014,7 +1030,7 @@ Claude Code should:
 - Use safe empty/loading/error states.
 - Keep demo suggestions separate from real suggestions.
 - Mark stale suggestions when product state says stale.
-- Open approved protocol pages in new tabs for MVP.
+- Open approved protocol pages in new tabs for `external_new_tab` handoffs.
 - Keep Smith AI explanation grounded in suggestion data.
 
 Claude Code must not:
@@ -1029,8 +1045,9 @@ Claude Code must not:
 - Sort suggestions using financial assumptions.
 - Promote yield over Safety Buffer.
 - Treat card click as completion.
-- Execute transactions from suggestions.
-- Request wallet signatures from suggestion clicks.
+- Execute a transaction from a card click.
+- Request a wallet signature from a card click.
+- Build a confirm step for a suggestion whose `handoff_type` is `external_new_tab`.
 - Turn Smith AI freeform text into suggestion data.
 - Carry demo suggestions into real wallet mode.
 
@@ -1044,7 +1061,7 @@ Claude Code must not:
 - Show exactly one Top Pick when applicable.
 - Explain locked suggestions.
 - Prioritize Safety Buffer when underfunded.
-- Keep suggestion click as protocol handoff for MVP.
+- Keep the suggestion click as a review — handoff or confirm is the review's decision, not the card's.
 - Use calm copy.
 - Show empty/error states instead of fake suggestions.
 - Let Smith AI explain, not decide.
@@ -1078,7 +1095,7 @@ This rule is followed when:
 - Locked suggestions clearly explain lock reason and unlock condition.
 - Safety Buffer priority is respected.
 - Protocol destinations come from Protocol Logic.
-- Suggestion clicks open approved protocol pages in new tabs for MVP.
+- Suggestion clicks open a review; `external_new_tab` reviews link out in a new tab.
 - Suggestion clicks do not execute transactions.
 - Suggestion clicks do not request wallet signatures.
 - APY/earnings values are sourced.

@@ -48,10 +48,16 @@ Claude Code must not choose protocols outside approved deterministic Protocol Lo
 Hard Rule:
 
 ```text
-MVP protocol interactions are external handoffs.
+Protocol interactions are external handoffs by default.
 They do not execute transactions inside WealthSmith.
 They do not request wallet signatures from WealthSmith suggestion cards.
 ```
+
+The default is not a formality. A protocol becomes executable in-app only by
+passing the Execution Boundary in `rules/wallet-and-custody-rules.md`, protocol
+by protocol, and Protocol Logic says so explicitly via `handoff_type`. Absent
+that, every protocol is a handoff — including protocols that are executable
+elsewhere in the product.
 
 ---
 
@@ -315,23 +321,40 @@ Rules:
 
 ## Handoff Type
 
-MVP handoff type:
+Handoff types:
 
 ```text
-external_new_tab
+external_new_tab    (default)
+in_app_confirm      (only where the Execution Boundary is satisfied)
 ```
 
 Meaning:
 
 ```text
-The user opens the approved protocol/platform page in a new browser tab.
+external_new_tab  The user opens the approved protocol/platform page in a new
+                  browser tab. WealthSmith builds nothing.
+
+in_app_confirm    The review may offer an explicit confirm step for ONE
+                  transaction whose exact terms are shown first. The user
+                  approves it in their own wallet. Still non-custodial; still
+                  one approval per transaction.
 ```
 
 Hard Rule:
 
 ```text
-MVP protocol handoff is not execution.
+A protocol handoff is not execution.
+`in_app_confirm` is not a handoff, and must never be described as one.
+Protocol Logic assigns the type. The UI never upgrades it.
 ```
+
+Currently assigned `in_app_confirm`:
+
+```text
+jupiter   — token swaps only
+```
+
+Everything else is `external_new_tab`.
 
 Allowed:
 
@@ -392,7 +415,7 @@ Rules:
 - Do not use unverified URLs from Smith AI.
 - Do not use user-supplied URLs.
 - Do not open unsupported or unknown domains.
-- Open in a new tab for MVP.
+- Open in a new tab (`external_new_tab`).
 - Use safe external-link behavior.
 - Indicate when the user is leaving WealthSmith.
 - Use `rel="noopener noreferrer"` for external links.
@@ -535,7 +558,11 @@ Rules:
 
 - Must pass route/liquidity/slippage checks.
 - Must use approved Jupiter metadata.
-- Must not execute swap from WealthSmith in MVP.
+- May be assigned `in_app_confirm` when, and only when, the route resolves to a
+  single transaction whose exact terms can be shown: sold, received, minimum
+  received after slippage, price impact and fees.
+- Falls back to `external_new_tab` whenever any of those is unresolved — a
+  degraded quote is a handoff, never a confirm step with a guess in it.
 
 ---
 
@@ -665,7 +692,7 @@ RWA-related informational or future-stage suggestions when supported
 
 Rules:
 
-- Not assumed as MVP execution.
+- Never assumed executable. Executability is assigned, never inferred.
 - Must not claim stock/RWA purchasing support unless product supports it.
 - Must not invent availability by region or user eligibility.
 - Must use canonical product/roadmap support.
@@ -694,7 +721,7 @@ Rules:
 - If user has an existing position, manage link should go to that protocol.
 - Position detection must come from portfolio/protocol logic.
 - UI must not infer protocol from token symbol alone.
-- Manage link opens protocol page in new tab for MVP.
+- Manage link opens protocol page in new tab. A Manage link is never a confirm step.
 - Manage link does not execute transaction.
 
 ---
@@ -729,7 +756,7 @@ Rules:
 - Existing position does not automatically mean new capital should be added there.
 - New opportunity does not automatically mean user already has position there.
 - Manage links should not be treated as Top Pick by default.
-- Portfolio table Manage links are read-only handoffs for MVP.
+- Portfolio table Manage links are read-only handoffs, always.
 
 ---
 
@@ -819,7 +846,7 @@ Rules:
 
 - Disabled protocols should not be shown as active destinations.
 - Degraded protocols may be shown only if product logic allows it and copy is clear.
-- Unsupported protocols should not appear in MVP protocol handoffs.
+- Unsupported protocols should not appear in protocol handoffs.
 - Coming-later protocols should not be shown as actionable.
 - Protocol status must come from metadata/config.
 
@@ -885,7 +912,7 @@ Rules:
 
 ## New Tab Behavior
 
-MVP protocol handoffs open in a new tab.
+Protocol handoffs open in a new tab. Confirm steps are not handoffs.
 
 Rules:
 
@@ -1131,8 +1158,8 @@ Does every protocol have an approved URL?
 Does every protocol have an approved icon?
 Does every handoff open in a new tab?
 Does every external link use safe rel attributes?
-Does no card execute transactions in MVP?
-Does no card request signatures in MVP?
+Does no card execute a transaction, or request a signature, on click?
+Is every confirm step gated on `handoff_type: in_app_confirm` from Protocol Logic?
 Does no UI choose protocol locally?
 Does Smith AI avoid inventing protocol support?
 Does Demo Mode avoid persisting protocol state into real mode?
@@ -1190,7 +1217,7 @@ Claude Code should:
 - Use approved protocol metadata for URLs and icons.
 - Use protocol IDs, not display names, as source of truth.
 - Render protocol name and icon together.
-- Open protocol pages in new tabs for MVP.
+- Open protocol pages in new tabs for `external_new_tab` protocols.
 - Use `rel="noopener noreferrer"` for external links.
 - Disable CTA when protocol destination is missing or unsupported.
 - Keep protocol handoff separate from transaction execution.
@@ -1220,7 +1247,7 @@ Claude Code must not:
 - Keep protocol selection deterministic.
 - Use approved protocol metadata.
 - Use approved protocol icons.
-- Open external protocols in new tabs for MVP.
+- Open external protocols in new tabs.
 - Explain that users review actions externally.
 - Keep Safety Buffer priority above yield.
 - Disable unsupported destinations safely.
@@ -1236,7 +1263,7 @@ Claude Code must not:
 - Do not let Smith AI choose protocols.
 - Do not route to unknown URLs.
 - Do not show broken protocol icons.
-- Do not execute transactions in MVP.
+- Do not execute a transaction anywhere except an approved `in_app_confirm` step.
 - Do not request signatures from suggestion card clicks.
 - Do not treat opening a protocol as completing the suggestion.
 - Do not choose highest APY automatically.
@@ -1255,7 +1282,7 @@ This rule is followed when:
 - Protocol icon comes from approved assets.
 - UI renders protocol destination but does not choose it.
 - Smith AI explains protocol selection but does not choose it.
-- MVP protocol handoffs open in new tabs.
+- Protocol handoffs open in new tabs.
 - Suggestion cards do not execute transactions.
 - Suggestion cards do not request signatures.
 - Opening a protocol does not mark suggestion complete.

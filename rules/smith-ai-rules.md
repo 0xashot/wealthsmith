@@ -416,7 +416,9 @@ Allowed:
 Explain that WealthSmith is non-custodial.
 Explain that funds stay in the user’s wallet.
 Explain that wallet connection is used to read balances and positions.
-Explain that suggestion clicks do not execute transactions in MVP.
+Explain that a suggestion click opens a review, never an action.
+Explain that any transaction is approved by the user in their own wallet, one at a time.
+Explain that WealthSmith never acts on its own and never holds an approval for later.
 Explain that message signing is different from transaction signing if product requires explanation.
 ```
 

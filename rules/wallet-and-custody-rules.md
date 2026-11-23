@@ -50,7 +50,7 @@ Non-custodial
 Read-first
 User-controlled
 Suggestion-based
-Protocol handoff-based for MVP
+Handoff by default, execution-assisting where the full transaction can be shown
 ```
 
 WealthSmith is not:
@@ -61,8 +61,18 @@ A wallet recovery service
 A broker
 An exchange
 A portfolio manager with execution authority
-A transaction executor in MVP
+An executor of anything the user has not approved transaction-by-transaction
 ```
+
+The last two lines are different rules and must not be collapsed.
+
+**Execution authority** — deciding and acting for the user — is permanently out of
+scope. It is what makes something a manager, and WealthSmith never acquires it.
+
+**Transaction execution** — constructing a transaction the user then approves in
+their own wallet — was out of scope *for MVP only*. MSP allows it, bounded by the
+Execution Boundary below. Custody is unaffected either way: the key never leaves
+the user's wallet and nothing moves without their per-transaction signature.
 
 ---
 
@@ -205,17 +215,21 @@ Rules:
 
 ---
 
-## Read-Only MVP Rule
+## Read-First MSP Rule
 
 Hard Rule:
 
 ```text
-For MVP, wallet connection is read-only.
+Wallet connection is read-only. Execution is a separate, explicitly approved act.
 ```
+
+This is unchanged from MVP in substance — what expired is the idea that read-only
+was a property of the *product*. It is a property of **connection**. Connecting
+reads; it never authorizes. Nothing below weakens that.
 
 Read-only means WealthSmith can use wallet/public/protocol data to display portfolio and suggestions.
 
-Read-only does not mean:
+Connecting a wallet does not, by itself, authorize any of:
 
 ```text
 Move funds
@@ -228,30 +242,39 @@ Sign transactions automatically
 Approve transactions automatically
 ```
 
+The last two are permanent. "Automatically" is the operative word: WealthSmith
+never signs, never pre-approves, and never carries an approval from one
+transaction to the next. Every transaction is approved on its own, in the user's
+own wallet, after its exact terms have been shown.
+
 Rules:
 
-- Portfolio viewing should not require transaction signing.
-- Suggestion viewing should not require transaction signing.
-- Goal editing should not require transaction signing.
-- Support/Contact Us should not require wallet connection.
-- Suggestion clicks open protocol pages for MVP; they do not execute transactions.
-- Manage links open protocol pages for MVP; they do not execute transactions.
+- Portfolio viewing must not require transaction signing.
+- Suggestion viewing must not require transaction signing.
+- Goal editing must not require transaction signing.
+- Support/Contact Us must not require wallet connection.
+- Suggestion clicks open protocol pages, except where the Execution Boundary
+  below explicitly allows an in-app confirm step.
+- Manage links open protocol pages; they never execute.
 - **Wallet connection itself requires no signature.** Connecting must not call
   `signMessage` / `signTransaction` / `sendTransaction`; it uses only the wallet's
   `connect()` and the returned publicKey. Proof-of-ownership via signature is out
-  of scope for MVP connection. Ledger-backed Phantom accounts therefore connect
-  with no on-device approval. Any signature is reserved for a later, explicit,
-  user-approved action — never for connecting.
+  of scope for connection, permanently — not an MVP convenience. Ledger-backed
+  Phantom accounts therefore connect with no on-device approval. Any signature is
+  reserved for an explicit, user-approved action — never for connecting.
 
 ---
 
 ## Signature Boundaries
 
-MVP goal:
+Standing goal:
 
 ```text
-Avoid requiring wallet signatures for basic read-only portfolio viewing if possible.
+Never require a wallet signature to look at anything.
 ```
+
+Viewing and executing are separate acts and stay separate. This did not expire
+with MVP; execution makes the separation more important, not less.
 
 Hard Rule:
 
@@ -269,11 +292,55 @@ Message signing:
 
 Transaction signing:
 
-- Not used for MVP suggestion card clicks.
-- Not used for protocol handoffs.
-- Not used for goal settings.
-- Not used for contact support.
-- Only belongs to future execution flows if WealthSmith later supports in-app actions.
+- Never used for protocol handoffs.
+- Never used for goal settings.
+- Never used for contact support.
+- Never used for a suggestion card click itself. A card click opens a review; only
+  an explicit confirm step inside that review may request a signature.
+- Belongs solely to execution flows that satisfy the Execution Boundary below.
+
+---
+
+## Execution Boundary
+
+This section is what MSP added. It is deliberately narrow.
+
+Hard Rule:
+
+```text
+WealthSmith may construct a transaction only when it can show the user its exact
+terms before they approve it. Everything else is a handoff.
+```
+
+A suggestion may become executable in-app only if ALL of the following hold:
+
+- WealthSmith can construct the complete transaction itself — no step is left to
+  be finished elsewhere.
+- Every term the user is committing to can be shown before signing: what is sold,
+  what is received, the minimum received after slippage, price impact, and fees.
+- The transaction does one thing. No bundling, no batching, no "while we're here".
+- It is approved on its own, in the user's wallet, immediately before submission.
+- The user can decline at every point, and declining costs them nothing.
+
+**Scope at the time of writing: token swaps only.** Deposits, lending, staking,
+unstaking, claiming and withdrawals remain handoffs. They are not excluded because
+they are dangerous — they are excluded because WealthSmith cannot yet show their
+full terms honestly, which is the actual test above.
+
+Expanding this scope is a product decision requiring the same test, protocol by
+protocol. "We already execute swaps" is not an argument for executing anything
+else.
+
+Hard Rule:
+
+```text
+No automatic execution, ever. No scheduled execution. No recurring execution.
+No approval that outlives the transaction it was given for.
+```
+
+This holds regardless of how convenient the alternative would be, and regardless
+of what the user asks for. An approval that covers future actions is execution
+authority, which WealthSmith does not take.
 
 ---
 
@@ -581,35 +648,46 @@ Rules:
 - Do not treat every token account as liquid.
 - Do not treat every stablecoin as Safety Buffer.
 - Do not hide unknown/unsupported assets silently.
-- Manage links open protocol pages in a new tab for MVP.
-- Manage links do not execute transactions.
-- Manage links do not request signatures.
+- Manage links open protocol pages in a new tab.
+- Manage links never execute transactions.
+- Manage links never request signatures.
+- A Manage link is not an execution surface, and does not become one when the
+  underlying protocol becomes executable elsewhere in the product.
 
 ---
 
 ## Suggestion and Handoff Rules
 
-MVP suggestion behavior:
+Default suggestion behavior:
 
 ```text
-Suggestion card click opens an approved protocol page in a new tab.
+Suggestion card click opens a review. The review hands off to an approved
+protocol page, unless the suggestion satisfies the Execution Boundary.
 ```
 
 Hard Rule:
 
 ```text
-Suggestion card clicks do not execute transactions in MVP.
-Suggestion card clicks do not request wallet signatures in MVP.
+A suggestion card click never executes a transaction.
+A suggestion card click never requests a wallet signature.
 ```
+
+That rule did not expire with MVP and is not weakened by execution. What changed
+is what the *review* may offer, not what the card click does. The click opens a
+review; the review may offer a confirm step; the confirm step may request one
+signature. Three deliberate acts, never collapsed into one.
 
 Rules:
 
-- Suggestion card click is a handoff.
-- User reviews and acts on the external protocol.
+- Suggestion card click opens a review, never an action.
+- For a handoff suggestion, the user reviews and acts on the external protocol.
 - Use approved protocol URL from metadata/Protocol Logic.
-- Do not build transaction payloads from suggestion cards.
-- Do not auto-submit swaps, stakes, deposits, withdrawals, or claims.
+- Build a transaction payload only inside a review that satisfies the Execution
+  Boundary, and only for the leg the user is looking at.
+- Never auto-submit anything: no swap, stake, deposit, withdrawal or claim.
 - Do not imply clicking a suggestion completes the action.
+- A failed or declined execution leaves the suggestion exactly as it was. It never
+  half-completes, and it never reports success it did not get.
 
 Good copy:
 
@@ -617,15 +695,24 @@ Good copy:
 Open protocol
 Review on Jupiter
 Manage on Kamino
+Review swap
+Confirm swap
+Approve in your wallet
 ```
 
-Avoid:
+Never:
 
 ```text
-Execute now
-Confirm trade
 We’ll rebalance for you
+We’ll handle it
+Set it and forget it
+Automatic rebalancing
 ```
+
+The distinction is agency, not formality. "Confirm swap" is allowed because the
+user is the one confirming. "We’ll rebalance for you" stays forbidden at every
+stage of the product, because it describes execution authority WealthSmith does
+not have and will not take.
 
 ---
 
@@ -886,7 +973,7 @@ Claude Code should:
 - Use approved wallet list.
 - Use approved wallet icons.
 - Render wallet state from structured props.
-- Keep wallet connection read-only for MVP.
+- Keep wallet connection read-only, and execution separate from connection.
 - Separate wallet connection from message signing.
 - Separate message signing from transaction signing.
 - Avoid signatures for basic portfolio viewing if possible.
@@ -894,7 +981,7 @@ Claude Code should:
 - Show short wallet address, not full address, in Global Nav.
 - Use Demo Mode banner for demo state.
 - Clear or mark stale real wallet data after disconnect.
-- Open protocol pages for MVP handoffs.
+- Open protocol pages for handoffs; execute only within the Execution Boundary.
 - Preserve accessibility for wallet modal, wallet pill, and wallet menu.
 
 Claude Code must not:
@@ -907,7 +994,7 @@ Claude Code must not:
 - Invent protocol execution.
 - Require wallet signatures for display components.
 - Treat wallet connection as custody.
-- Treat suggestion click as transaction.
+- Treat a suggestion click as a transaction, or a review as an approval.
 - Mix demo and real data.
 - Use Smith AI animation for wallet connection.
 - Hide wallet errors without recovery.
@@ -923,7 +1010,7 @@ Claude Code must not:
 - Use approved wallet icons and names.
 - Show wallet provider + short address when connected.
 - Keep Demo Mode separate.
-- Keep suggestion clicks as protocol handoffs for MVP.
+- Keep suggestion clicks as reviews — never as actions.
 - Handle connection failures calmly.
 - Protect users from sharing secrets.
 - Keep Smith AI within safe wallet explanations.
@@ -959,9 +1046,10 @@ This rule is followed when:
 - Wallet pill shows provider and short address.
 - Disconnect does not imply funds moved.
 - Portfolio viewing does not require transaction signing.
-- Suggestion clicks open approved protocol pages in new tabs.
+- Suggestion clicks open a review; handoff reviews link to approved protocol pages in new tabs.
 - Suggestion clicks do not execute transactions.
 - Suggestion clicks do not request signatures.
+- Any signature request comes from an explicit confirm step, never from a card.
 - Demo Mode and real wallet state are separate.
 - Smith AI explains wallet behavior safely.
 - Ledger/hardware-wallet issues are handled without unsafe instructions.
