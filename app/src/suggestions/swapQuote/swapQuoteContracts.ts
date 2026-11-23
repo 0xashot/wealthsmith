@@ -110,7 +110,12 @@ export interface SwapRouteLegLiquidity {
   liquidityUsd: number | null;
   liquidityObservedAt: string | null;
   /** RFQ legs have no pool TVL — they are assessed under a separate approved RFQ policy, never the pool rule. */
-  legKind: "amm_pool" | "clmm_pool" | "rfq" | "unresolved";
+  /**
+   * `aggregator` — a leg an aggregator routed through whose pool depth no approved source can read.
+   * Distinct from `unresolved`, which means a leg we SHOULD have been able to read and could not.
+   * The difference matters: one is a known limit of the source set, the other is a failure.
+   */
+  legKind: "amm_pool" | "clmm_pool" | "rfq" | "aggregator" | "unresolved";
 }
 
 /**

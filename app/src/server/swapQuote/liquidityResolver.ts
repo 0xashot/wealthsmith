@@ -27,7 +27,17 @@ export interface PoolLiquiditySource {
  * Resolve liquidity for a candidate's route legs into a `SwapRouteLiquidityAssessment`. Each leg's freshness is
  * judged against `comparedAtMs` and the window; an unresolved or stale leg makes the whole route `unresolved`.
  */
-export async function resolveRouteLiquidity(legs: readonly ProviderRouteLeg[], source: PoolLiquiditySource, signal: AbortSignal, comparedAtMs: number, freshnessWindowMs: number): Promise<SwapRouteLiquidityAssessment> {
+export interface ResolveRouteLiquidityOptions {
+  /**
+   * True for providers that aggregate across venues (Jupiter). A leg this source cannot price is then
+   * classified `aggregator` — a known limit of the source set — rather than `unresolved`, which means a leg
+   * we should have been able to read and could not. For a direct AMM provider the distinction does not apply:
+   * if we cannot read its own pool, that IS a failure, and it stays `unresolved`.
+   */
+  aggregatorRoute?: boolean;
+}
+
+export async function resolveRouteLiquidity(legs: readonly ProviderRouteLeg[], source: PoolLiquiditySource, signal: AbortSignal, comparedAtMs: number, freshnessWindowMs: number, options: ResolveRouteLiquidityOptions = {}): Promise<SwapRouteLiquidityAssessment> {
   const inputs: RouteLegLiquidityInput[] = await Promise.all(
     legs.map(async (leg): Promise<RouteLegLiquidityInput> => {
       if (leg.legKind === "rfq") {
@@ -40,10 +50,21 @@ export async function resolveRouteLiquidity(legs: readonly ProviderRouteLeg[], s
         reading = null;
       }
       const fresh = reading != null && reading.liquidityUsd != null && reading.observedAtMs != null && comparedAtMs - reading.observedAtMs <= freshnessWindowMs;
+      // A leg on an aggregated route that no approved source could price is a KNOWN gap, not a failure.
+      // RFQ legs never reach here — they return above, under the RFQ policy.
+      // Reclassifying it here (rather than at quote time) keeps the judgement with the component that knows
+      // what its sources can actually read.
+      const unreadable = reading == null || reading.liquidityUsd == null;
+      const legKind: ProviderRouteLeg["legKind"] =
+        options.aggregatorRoute === true && unreadable
+          ? "aggregator"
+          : leg.legKind === "unresolved"
+            ? "unresolved"
+            : leg.legKind;
       return {
         poolId: leg.poolId,
         venue: leg.venue,
-        legKind: leg.legKind === "unresolved" ? "unresolved" : leg.legKind,
+        legKind,
         liquidityUsd: reading?.liquidityUsd ?? null,
         liquidityObservedAt: reading?.observedAtMs != null ? new Date(reading.observedAtMs).toISOString() : null,
         fresh,
