@@ -182,6 +182,64 @@ export function tokensToRaw(tokens: string, decimals: number): bigint | null {
   }
 }
 
+/**
+ * Native SOL is the output whenever the mint is wrapped SOL and the route unwraps — which Jupiter
+ * does by default (`wrapAndUnwrapSol`). The observed USDC→SOL transaction ended with a
+ * Token::closeAccount, returning lamports to the taker rather than leaving a token balance.
+ */
+export const WRAPPED_SOL_MINT = "So11111111111111111111111111111111111111112" as const;
+
+export interface ValueMeasurement {
+  /** True when the output lands as native lamports rather than in a token account. */
+  outputIsNativeSol: boolean;
+  /** The taker's output balance before and after, in base units (lamports for native SOL). */
+  beforeRaw: bigint;
+  afterRaw: bigint;
+  /**
+   * The transaction fee in lamports. Required for a native-SOL output and ignored otherwise.
+   *
+   * This is not a rounding allowance. For a native-SOL output the taker's lamport balance moves by
+   * (output − fee), so comparing the raw delta against the promised minimum would fail every honest
+   * swap by exactly the fee. Adding it back measures what the SWAP delivered, which is what the user
+   * was promised. A token-account output is unaffected: the fee is paid in lamports, not in the token.
+   */
+  feeLamports: bigint | null;
+}
+
+/**
+ * Decide whether a simulated swap delivered what was promised.
+ *
+ * Pure. The simulation, the lookup-table resolution and the balance reads happen in the caller;
+ * the RULE lives here so it can be tested without a chain, which is the half that can be wrong in
+ * a way nobody notices.
+ */
+export function verifyMeasuredValue(
+  measurement: ValueMeasurement,
+  promisedMinimumRaw: bigint,
+): ValueResult {
+  const rawDelta = measurement.afterRaw - measurement.beforeRaw;
+
+  if (measurement.outputIsNativeSol) {
+    if (measurement.feeLamports == null) {
+      // Without the fee we cannot separate "the swap under-delivered" from "the fee was deducted",
+      // and guessing a tolerance would make the check meaningless. Fail closed.
+      return { ok: false, reason: "simulation_failed", detail: "fee_unknown_for_native_output" };
+    }
+    const delivered = rawDelta + measurement.feeLamports;
+    return compareDeliveredAgainstMinimum({ beforeRaw: 0n, afterRaw: delivered }, promisedMinimumRaw);
+  }
+
+  return compareDeliveredAgainstMinimum(
+    { beforeRaw: measurement.beforeRaw, afterRaw: measurement.afterRaw },
+    promisedMinimumRaw,
+  );
+}
+
+/** Whether a swap's output will arrive as native lamports rather than in a token account. */
+export function outputIsNativeSol(outputMint: string): boolean {
+  return outputMint === WRAPPED_SOL_MINT;
+}
+
 /** The address lookup tables a transaction depends on, for the caller to resolve. */
 export function lookupTableAddresses(tx: VersionedTransaction): string[] {
   return tx.message.addressTableLookups.map((l) => l.accountKey.toBase58());

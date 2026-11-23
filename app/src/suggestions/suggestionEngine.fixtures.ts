@@ -58,7 +58,7 @@ export async function printFixtureResults(): Promise<void> {
     ...runSwapQuoteFixtureChecks(),
     ...runSwapExecutionFixtureChecks(),
     ...(await runSwapExecutionServerFixtureChecks()),
-    ...runSwapExecutionVerificationFixtureChecks(),
+    ...(await runSwapExecutionVerificationFixtureChecks()),
     ...runSwapQuoteUiFixtureChecks(),
     ...runRailSwapActionFixtureChecks(),
     ...runDcaCopy23CFixtureChecks(),

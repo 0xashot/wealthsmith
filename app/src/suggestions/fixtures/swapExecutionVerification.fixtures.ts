@@ -16,7 +16,18 @@
  */
 import { MessageV0, PublicKey, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
 import type { FixtureCheck } from "./fixtureCheck";
+import { simulateAndVerifyValue, safeErrorLabel, type SimulationRpc } from "../swapExecution/executionSimulation";
 import {
+  executionReducer,
+  initialExecutionState,
+  isExecutionTerminal,
+  outcomeFor,
+  type ExecutionEvent,
+  type ExecutionState,
+} from "../swapExecution/executionLifecycle";
+import {
+  outputIsNativeSol,
+  verifyMeasuredValue,
   ALLOWED_SWAP_PROGRAM_IDS,
   JUPITER_PROGRAM_ID,
   associatedTokenAddress,
@@ -39,7 +50,7 @@ const REAL_SWAP_TX =
 const TAKER = "GdxxRejTS1VWftHBxecT6nGpNzqfDKHBYk6ddfurCu9L";
 const WSOL = "So11111111111111111111111111111111111111112";
 
-export function runSwapExecutionVerificationFixtureChecks(): FixtureCheck[] {
+export async function runSwapExecutionVerificationFixtureChecks(): Promise<FixtureCheck[]> {
   const checks: FixtureCheck[] = [];
   const add = (name: string, pass: boolean, detail: string) => checks.push({ name, pass, detail });
 
@@ -158,6 +169,127 @@ export function runSwapExecutionVerificationFixtureChecks(): FixtureCheck[] {
   add("SWXV-15: a malformed address yields null rather than throwing",
     associatedTokenAddress("nope", WSOL) === null, "bad input safe");
 
+  /* ---- The fee adjustment, which is the subtle part (SWXV-17..21) ---- */
+  add("SWXV-17: native SOL output adds the fee back — the lamport balance moves by (output − fee), so a raw delta would fail every honest swap by exactly the fee", (() => {
+    // Promised 68964571; swap delivers exactly that; 5000 lamports of fee come out.
+    const r = verifyMeasuredValue(
+      { outputIsNativeSol: true, beforeRaw: 100_000_000n, afterRaw: 100_000_000n + 68964571n - 5000n, feeLamports: 5000n },
+      68964571n,
+    );
+    return r.ok;
+  })(), "fee added back");
+  add("SWXV-18: the fee adjustment is NOT a tolerance — one base unit short still fails after adding the fee", (() => {
+    const r = verifyMeasuredValue(
+      { outputIsNativeSol: true, beforeRaw: 0n, afterRaw: 68964570n - 5000n, feeLamports: 5000n },
+      68964571n,
+    );
+    return !r.ok && r.reason === "below_promised_minimum";
+  })(), "not a tolerance");
+  add("SWXV-19: a native output with an UNKNOWN fee fails closed — we cannot tell under-delivery from the fee, and a guessed tolerance would make the check meaningless", (() => {
+    const r = verifyMeasuredValue(
+      { outputIsNativeSol: true, beforeRaw: 0n, afterRaw: 68964571n, feeLamports: null },
+      68964571n,
+    );
+    return !r.ok && r.reason === "simulation_failed" && r.detail === "fee_unknown_for_native_output";
+  })(), "no fee, no pass");
+  add("SWXV-20: a TOKEN output ignores the fee entirely — it is paid in lamports, not in the token", (() => {
+    const r = verifyMeasuredValue(
+      { outputIsNativeSol: false, beforeRaw: 0n, afterRaw: 15_000_000n, feeLamports: null },
+      15_000_000n,
+    );
+    return r.ok;
+  })(), "token unaffected");
+  add("SWXV-21: wrapped SOL is recognised as a native output; any other mint is not",
+    outputIsNativeSol("So11111111111111111111111111111111111111112")
+      && !outputIsNativeSol("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"), "native detection");
+
+  /* ---- Simulation orchestration (stubbed RPC, offline) (SWXV-22..26) ---- */
+  const rpc = (o: Partial<SimulationRpc> = {}): SimulationRpc => ({
+    getLookupTable: async () => ({ addresses: [] }),
+    getOutputBalanceRaw: async () => 0n,
+    simulateOutputBalanceRaw: async () => ({ err: null, afterRaw: 68964571n }),
+    getFeeLamports: async () => 5000n,
+    ...o,
+  });
+  const simParams = {
+    transaction: null as never,
+    takerPublicKey: TAKER,
+    outputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    promisedMinimumRaw: 68964571n,
+    lookupTableAddresses: ["9AsimPML6N36BAe8keQRAHpLuKgCKv9QJV9912TXZhBD"],
+  };
+  const simChecks: Array<Promise<void>> = [];
+  const addAsync = (name: string, run: () => Promise<boolean>, detail: string) => {
+    simChecks.push(run().then((pass) => { add(name, pass, detail); }).catch(() => { add(name, false, "threw"); }));
+  };
+  addAsync("SWXV-22: a clean simulation delivering the minimum passes",
+    async () => (await simulateAndVerifyValue(simParams, rpc())).ok, "clean sim");
+  addAsync("SWXV-23: an UNRESOLVED lookup table stops everything — a transaction whose accounts we cannot fully see is one we cannot claim to have checked",
+    async () => {
+      const r = await simulateAndVerifyValue(simParams, rpc({ getLookupTable: async () => null }));
+      return !r.ok && r.reason === "lookup_table_unresolved";
+    }, "opaque is refused");
+  addAsync("SWXV-24: a simulation ERROR is surfaced, never treated as a zero balance",
+    async () => {
+      const r = await simulateAndVerifyValue(simParams, rpc({ simulateOutputBalanceRaw: async () => ({ err: { InstructionError: [3, { Custom: 6024 }] }, afterRaw: null }) }));
+      return !r.ok && r.reason === "simulation_failed";
+    }, "sim error surfaced");
+  addAsync("SWXV-25: a missing output account after a clean simulation is refused rather than read as zero",
+    async () => {
+      const r = await simulateAndVerifyValue(simParams, rpc({ simulateOutputBalanceRaw: async () => ({ err: null, afterRaw: null }) }));
+      return !r.ok && r.reason === "output_account_not_found";
+    }, "missing account");
+  addAsync("SWXV-26: an output account that does not exist YET reads as zero before — the swap may be creating it, as the real transaction's ATA instruction does",
+    async () => {
+      const r = await simulateAndVerifyValue(simParams, rpc({ getOutputBalanceRaw: async () => null }));
+      return r.ok;
+    }, "absent before is zero");
+  add("SWXV-27: a raw provider error is never carried into analytics — only a short bounded label",
+    safeErrorLabel({ InstructionError: [3, { Custom: 6024 }] }) === "InstructionError"
+      && safeErrorLabel(null) === "unknown"
+      && safeErrorLabel("x".repeat(500)).length === 64, "bounded label");
+
+  /* ---- Lifecycle: the machine enforces the order, not the UI (SWXV-28..35) ---- */
+  const run = (events: ExecutionEvent[], from: ExecutionState = initialExecutionState): ExecutionState =>
+    events.reduce(executionReducer, from);
+  const PLAN = { planId: "p" } as never;
+  const happy: ExecutionEvent[] = [
+    { type: "prepare" }, { type: "plan_received", plan: PLAN }, { type: "verified" },
+    { type: "sign" }, { type: "signed" }, { type: "submitted", signature: "sig" }, { type: "confirmed" },
+  ];
+  add("SWXV-28: the happy path reaches confirmed and keeps the signature",
+    (() => { const s = run(happy); return s.phase === "confirmed" && s.signature === "sig"; })(), "happy path");
+  add("SWXV-29: signing CANNOT be reached without verifying — there is no transition into `signing` except from `ready`", (() => {
+    const skipped = run([{ type: "prepare" }, { type: "plan_received", plan: PLAN }, { type: "sign" }]);
+    return skipped.phase === "verifying";
+  })(), "verification unskippable");
+  add("SWXV-30: failed verification is terminal and names itself", (() => {
+    const s = run([{ type: "prepare" }, { type: "plan_received", plan: PLAN }, { type: "verification_failed", detail: "below_promised_minimum" }]);
+    return s.phase === "failed" && s.failure === "verification_failed" && s.failureDetail === "below_promised_minimum" && isExecutionTerminal(s.phase);
+  })(), "verification failure terminal");
+  add("SWXV-31: declining in the wallet is a normal outcome, not an error", (() => {
+    const s = run([...happy.slice(0, 4), { type: "declined" }]);
+    return s.phase === "failed" && s.failure === "declined" && outcomeFor(s) === "declined";
+  })(), "declining is fine");
+  add("SWXV-32: expiry applies BEFORE submission", (() => {
+    const s = run([{ type: "prepare" }, { type: "plan_received", plan: PLAN }, { type: "verified" }, { type: "expire" }]);
+    return s.phase === "failed" && s.failure === "expired";
+  })(), "pre-submission expiry");
+  add("SWXV-33: expiry is IGNORED after submission — once a transaction is on-chain a local timer must not claim it failed", (() => {
+    const submitted = run(happy.slice(0, 6));
+    const s = executionReducer(submitted, { type: "expire" });
+    return submitted.phase === "confirming" && s.phase === "confirming";
+  })(), "no false failure");
+  add("SWXV-34: a confirm timeout keeps the signature — we stopped watching, the transaction did not fail", (() => {
+    const s = run([...happy.slice(0, 6), { type: "confirm_timeout" }]);
+    return s.phase === "failed" && s.failure === "confirm_timeout" && s.signature === "sig" && outcomeFor(s) === "confirm_timeout";
+  })(), "timeout keeps signature");
+  add("SWXV-35: a late reply cannot resurrect a finished flow", (() => {
+    const done = run(happy);
+    const s = executionReducer(done, { type: "submit_failed" });
+    return s.phase === "confirmed" && s === done;
+  })(), "terminal is terminal");
+
   /* ---- Source guarantees ---- */
   add("SWXV-16: verification runs BEFORE signing — the module imports no signer and no wallet", (() => {
     // Structural proof: a verifier that could sign would eventually be asked to.
@@ -166,5 +298,7 @@ export function runSwapExecutionVerificationFixtureChecks(): FixtureCheck[] {
       && typeof lookupTableAddresses === "function";
   })(), "no signing surface");
 
+  // The stubbed-RPC checks resolve immediately (no network); awaiting keeps them in the suite.
+  await Promise.all(simChecks);
   return checks;
 }
