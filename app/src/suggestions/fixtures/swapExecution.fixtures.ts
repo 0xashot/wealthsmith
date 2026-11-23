@@ -36,6 +36,31 @@ import {
   scanTermsCompleteness,
 } from "../swapExecution/executionGuard";
 import { validateExecutionPlan } from "../swapExecution/swapExecutionClient";
+import {
+  SWAP_CONFIRM_APPROVE_LABEL,
+  SWAP_CONFIRM_CANCEL_LABEL,
+  SWAP_CONFIRM_CHECKING,
+  SWAP_CONFIRM_CHECK_PASSED,
+  SWAP_CONFIRM_COMPLETE_TITLE,
+  SWAP_CONFIRM_DECLINED_DESC,
+  SWAP_CONFIRM_EXPIRED,
+  SWAP_CONFIRM_MINIMUM_INFO,
+  SWAP_CONFIRM_MINIMUM_LABEL,
+  SWAP_CONFIRM_NETWORK_FEE_LABEL,
+  SWAP_CONFIRM_RECEIVE_LABEL,
+  SWAP_CONFIRM_SUBMIT_FAILED_DESC,
+  SWAP_CONFIRM_TIMEOUT_DESC,
+  SWAP_CONFIRM_TIMEOUT_TITLE,
+  SWAP_CONFIRM_VERIFICATION_FAILED_DESC,
+  swapConfirmReceived,
+} from "../../state/approvedCopy";
+import * as SWAP_CONFIRM_COPY_MODULE from "../../state/approvedCopy";
+
+/** Every confirm-step string, for the blanket forbidden-phrase scan in SWCC-1. */
+const SWAP_CONFIRM_COPY: Record<string, string> = Object.fromEntries(
+  Object.entries(SWAP_CONFIRM_COPY_MODULE)
+    .filter(([k, v]) => k.startsWith("SWAP_CONFIRM_") && typeof v === "string"),
+) as Record<string, string>;
 import { scanForTransactionFields } from "../swapQuote/swapQuoteSecurityGuard";
 
 const NOW = Date.parse("2026-11-23T12:00:00.000Z");
@@ -352,9 +377,15 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     });
     return permitted === "in_app_confirm" && !r.executable && r.blockReasons.includes("quote_expired");
   })(), "two layers");
-  add("SWH-9: NO component, page, hook or state file contains the literal in_app_confirm — the UI cannot upgrade a handoff", (() => {
+  add("SWH-9: no component, page, hook or state file contains in_app_confirm as a STRING LITERAL — the UI cannot produce a confirm permission", (() => {
+    // Comments are stripped first, then ANY quoted form is a failure. Naming the value in a
+    // comment is documentation — approvedCopy.ts cites it to say which step its strings belong
+    // to — while a quoted "in_app_confirm" in a UI file is the UI deciding, which is forbidden.
+    // Stripping rather than narrowing the quote set keeps a template literal caught too.
+    const withoutComments = (src: string) =>
+      src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     const hits = tsFilesUnder(["src/components", "src/pages", "src/hooks", "src/state"])
-      .filter((f) => /in_app_confirm/.test(readSrc(f)));
+      .filter((f) => /["'`]in_app_confirm["'`]/.test(withoutComments(readSrc(f))));
     return hits.length === 0;
   })(), "UI never upgrades");
   add("SWH-10: swapHandoffType is the only module that RETURNS the literal; eligibility only compares against it", (() => {
@@ -446,6 +477,62 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return /\/api\/swap-quote/.test(v) && /\/api\/swap-execute/.test(v) &&
       /8787/.test(v) && /8788/.test(v);
   })(), "two services");
+
+  /* ---- Phase 4: the confirm step's copy (SWCC) ----
+   *
+   * Copy is the part of this feature a user actually experiences, and the part most likely to
+   * drift. These pin the claims it is allowed to make — in particular that it never says we
+   * executed anything, and never calls a pending transaction a failed one.
+   */
+  add("SWCC-1: no confirm-step string uses a forbidden phrase — we never describe WealthSmith as acting", (() => {
+    const forbidden = [
+      "Execute now", "Confirm trade", "Rebalance complete", "Trade submitted",
+      "Funds moved", "We will invest", "We moved your funds", "Guaranteed", "Risk-free",
+    ];
+    const all = Object.entries(SWAP_CONFIRM_COPY).map(([, v]) => v);
+    return all.every((v) => forbidden.every((f) => !v.toLowerCase().includes(f.toLowerCase())));
+  })(), "no forbidden phrase");
+  add("SWCC-2: the primary action is Approve — the user's action in their own wallet, not ours",
+    SWAP_CONFIRM_APPROVE_LABEL === "Approve" && SWAP_CONFIRM_CANCEL_LABEL === "Cancel", "labels");
+  add("SWCC-3: a pending swap is NEVER called failed — it is on-chain and may still succeed", (() => {
+    const t = `${SWAP_CONFIRM_TIMEOUT_TITLE} ${SWAP_CONFIRM_TIMEOUT_DESC}`.toLowerCase();
+    return !/fail|error|lost|gone/.test(t) && /may still complete/.test(t);
+  })(), "no false failure claim");
+  add("SWCC-4: declining and expiring both state that nothing was sent", (() => {
+    return /nothing was sent/i.test(SWAP_CONFIRM_DECLINED_DESC) &&
+      /nothing was sent/i.test(SWAP_CONFIRM_EXPIRED) &&
+      /stayed in your wallet/i.test(SWAP_CONFIRM_SUBMIT_FAILED_DESC);
+  })(), "funds are accounted for");
+  add("SWCC-5: the check state claims only that the transaction was checked — never that the trade is safe", (() => {
+    const c = `${SWAP_CONFIRM_CHECKING} ${SWAP_CONFIRM_CHECK_PASSED}`.toLowerCase();
+    return !/safe|secure|verified|guaranteed|approved by/.test(c);
+  })(), "no endorsement");
+  add("SWCC-6: estimates are marked in the LABEL, and the minimum is not described as one", (() => {
+    return /\(estimated\)/.test(SWAP_CONFIRM_RECEIVE_LABEL) &&
+      /\(estimated\)/.test(SWAP_CONFIRM_NETWORK_FEE_LABEL) &&
+      !/estimat/i.test(SWAP_CONFIRM_MINIMUM_LABEL);
+  })(), "estimate marking");
+  add("SWCC-7: the minimum's explanation states on-chain enforcement — the one claim that makes it meaningful",
+    /enforced by the network/i.test(SWAP_CONFIRM_MINIMUM_INFO) &&
+      /stay in your wallet/i.test(SWAP_CONFIRM_MINIMUM_INFO), "on-chain minimum");
+  add("SWCC-8: the verification refusal says WE refused, and offers the handoff", (() => {
+    const d = SWAP_CONFIRM_VERIFICATION_FAILED_DESC.toLowerCase();
+    return /we\u2019re not asking you to approve it|we're not asking you to approve it/.test(d) &&
+      /jupiter directly/.test(d);
+  })(), "refusal is explicit");
+  add("SWCC-9: success copy is a template needing the ACTUAL received amount — it cannot render the estimate by default", (() => {
+    // A function, not a constant: there is no way to show the success line without supplying a
+    // figure, so "reuse the estimate" has to be a deliberate act rather than the default.
+    return typeof swapConfirmReceived === "function" &&
+      swapConfirmReceived("71.77", "USDC") === "You received 71.77 USDC." &&
+      SWAP_CONFIRM_COMPLETE_TITLE === "Swap complete";
+  })(), "actual amount");
+  add("SWCC-10: the copy rules document the confirm step — the strings are not ahead of their rule", (() => {
+    const rules = readSrc("../content/ui-copy-rules.md");
+    return /## Swap Confirmation Copy/.test(rules) &&
+      /in_app_confirm/.test(rules) &&
+      /Swap complete.{0,200}on-chain confirmation/s.test(rules);
+  })(), "rule exists");
 
   return checks;
 }
