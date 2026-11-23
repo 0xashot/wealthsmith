@@ -20,6 +20,7 @@ import type { FixtureCheck } from "./fixtureCheck";
 import { simulateAndVerifyValue, safeErrorLabel, type SimulationRpc } from "../swapExecution/executionSimulation";
 import {
   executionReducer,
+  type ExecutionPhase,
   initialExecutionState,
   isExecutionTerminal,
   outcomeFor,
@@ -276,6 +277,39 @@ export async function runSwapExecutionVerificationFixtureChecks(): Promise<Fixtu
     const s = run([...happy.slice(0, 6), { type: "confirm_timeout" }]);
     return s.phase === "failed" && s.failure === "confirm_timeout" && s.signature === "sig" && outcomeFor(s) === "confirm_timeout";
   })(), "timeout keeps signature");
+  add("SWXV-42: `ready` is reachable from EXACTLY ONE state via EXACTLY ONE event", (() => {
+    // Exhaustive rather than illustrative: every phase, every event, and `ready` may appear only
+    // as the result of `verified` applied to `verifying`. Adding a failure edge into `preparing`
+    // (a client-side validation refusal) must not have opened another door, and this is what
+    // says so without anyone having to reason about the switch by eye.
+    const phases: ExecutionPhase[] = ["idle", "preparing", "verifying", "ready", "signing", "submitting", "confirming", "confirmed", "failed"];
+    const events: ExecutionEvent[] = [
+      { type: "prepare" }, { type: "plan_received", plan: PLAN }, { type: "plan_failed" },
+      { type: "verified" }, { type: "verification_failed" }, { type: "sign" }, { type: "signed" },
+      { type: "declined" }, { type: "submitted", signature: "s" }, { type: "submit_failed" },
+      { type: "confirmed" }, { type: "confirm_timeout" }, { type: "expire" }, { type: "cancel" },
+    ];
+    for (const phase of phases) {
+      for (const event of events) {
+        const from: ExecutionState = { ...initialExecutionState, phase, plan: PLAN };
+        const to = executionReducer(from, event);
+        if (to.phase !== "ready") continue;
+        // The only legitimate arrival. Anything else — including staying in `ready` — is checked:
+        // staying is fine, arriving from elsewhere is not.
+        if (phase === "ready") continue;
+        if (!(phase === "verifying" && event.type === "verified")) return false;
+      }
+    }
+    return true;
+  })(), "one door to ready");
+  add("SWXV-43: a validation refusal during `preparing` is a VERIFICATION failure, not an outage", (() => {
+    // The client rejects a malformed or signature-bearing payload before it becomes a plan, so
+    // the refusal arrives while still preparing. It must carry the refusal's identity, because
+    // the copy for the two differs in exactly the way that matters to the reader.
+    const s = run([{ type: "prepare" }, { type: "verification_failed", detail: "forbidden_field_in_plan" }]);
+    return s.phase === "failed" && s.failure === "verification_failed" &&
+      s.failureDetail === "forbidden_field_in_plan";
+  })(), "refusal keeps its name");
   add("SWXV-35: a late reply cannot resurrect a finished flow", (() => {
     const done = run(happy);
     const s = executionReducer(done, { type: "submit_failed" });

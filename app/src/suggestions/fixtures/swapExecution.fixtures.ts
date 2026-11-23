@@ -36,6 +36,9 @@ import {
   scanTermsCompleteness,
 } from "../swapExecution/executionGuard";
 import { validateExecutionPlan } from "../swapExecution/swapExecutionClient";
+import { eventsForPlanResult } from "../swapExecution/planResolution";
+import { executionReducer, initialExecutionState } from "../swapExecution/executionLifecycle";
+import { REAL_SWAP_TAKER, REAL_SWAP_TX } from "./realSwapTransactions";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
   SWAP_CONFIRM_CANCEL_LABEL,
@@ -609,6 +612,76 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return /export function verifyTransactionStructure/.test(sv) &&
       !/Connection|simulateTransaction/.test(sv);
   })(), "structural stays local");
+
+  /* ---- Phase 4: the confirm flow, driven end to end without React (SWXR) ----
+   *
+   * The fixture suite has no DOM, so the hook's decisions were lifted into a pure function and
+   * these run the WHOLE flow: a fetch result in, events through the real reducer, a phase out.
+   * What is asserted here is the behaviour the browser gets, not a reading of the hook's source.
+   */
+  const realPlan = (o: Partial<SwapExecutionPlan> = {}): SwapExecutionPlan => plan({
+    unsignedTransaction: REAL_SWAP_TX,
+    terms: terms({ outputMint: WSOL, minimumOutputTokens: "0.196911", expectedOutputTokens: "0.197901" }),
+    verification: {
+      simulatedDeliveredRaw: "197000000",
+      checkedMinimumRaw: "196911000",
+      outputDecimals: 9,
+      simulatedAt: new Date(NOW).toISOString(),
+    },
+    expiresAt: new Date(NOW + 25_000).toISOString(),
+    ...o,
+  });
+  const drive = (result: Parameters<typeof eventsForPlanResult>[0], nowMs = NOW) =>
+    eventsForPlanResult(result, { takerPublicKey: REAL_SWAP_TAKER, nowMs })
+      .reduce(executionReducer, executionReducer(initialExecutionState, { type: "prepare" }));
+
+  add("SWXR-1: a good plan reaches `ready` — and only through `verifying`", (() => {
+    const s = drive({ ok: true, plan: realPlan() });
+    return s.phase === "ready" && s.plan != null;
+  })(), "happy path");
+  add("SWXR-2: a transaction whose fee payer is NOT the connected wallet never reaches ready", (() => {
+    const events = eventsForPlanResult({ ok: true, plan: realPlan() }, { takerPublicKey: WSOL, nowMs: NOW });
+    const s = events.reduce(executionReducer, executionReducer(initialExecutionState, { type: "prepare" }));
+    return s.phase === "failed" && s.failure === "verification_failed" && s.failureDetail === "fee_payer_mismatch";
+  })(), "wrong wallet refused");
+  add("SWXR-3: a proof computed against a DIFFERENT minimum is refused, not displayed as checked", (() => {
+    const s = drive({ ok: true, plan: realPlan({
+      verification: { simulatedDeliveredRaw: "197000000", checkedMinimumRaw: "1", outputDecimals: 9, simulatedAt: new Date(NOW).toISOString() },
+    }) });
+    return s.phase === "failed" && s.failure === "verification_failed" &&
+      (s.failureDetail ?? "").includes("verified_different_minimum");
+  })(), "same number or nothing");
+  add("SWXR-4: a plan that expired while we were checking becomes EXPIRED, never ready", (() => {
+    const s = drive({ ok: true, plan: realPlan() }, NOW + 26_000);
+    return s.phase === "failed" && s.failure === "expired";
+  })(), "expired not ready");
+  add("SWXR-5: an aborted request produces NO events — the user left, there is nothing to report", (() => {
+    const events = eventsForPlanResult({ ok: false, error: "aborted" }, { takerPublicKey: REAL_SWAP_TAKER, nowMs: NOW });
+    return events.length === 0;
+  })(), "silence on abort");
+  add("SWXR-6: an outage is `plan_unavailable`; a malformed payload is a verification REFUSAL", (() => {
+    const outage = drive({ ok: false, error: "unavailable" });
+    const disabled = drive({ ok: false, error: "disabled" });
+    const malformed = drive({ ok: false, error: "forbidden_field_in_plan" });
+    return outage.failure === "plan_unavailable" && disabled.failure === "plan_unavailable" &&
+      malformed.failure === "verification_failed";
+  })(), "different copy, different cause");
+  add("SWXR-7: EVERY non-aborted result ends somewhere terminal or ready — no path leaves a spinner on screen", (() => {
+    const errors = ["disabled", "unavailable", "no_route", "rejected_request", "invalid_plan", "forbidden_field_in_plan", "http_error"] as const;
+    const ends = errors.map((e) => drive({ ok: false, error: e }));
+    const good = drive({ ok: true, plan: realPlan() });
+    return ends.every((s) => s.phase === "failed") && good.phase === "ready";
+  })(), "no dead ends");
+  add("SWXR-8: the hook delegates every decision — it dispatches what the pure function returns and decides nothing itself", (() => {
+    const h = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
+    return /eventsForPlanResult/.test(h) &&
+      !/verifyTransactionStructure|assertPlanWasVerified/.test(h);
+  })(), "hook is wiring");
+  add("SWXR-9: `approve` is undefined without a signer — a confirm button is never a no-op", (() => {
+    const h = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
+    return /if \(signer == null\) return undefined;/.test(h) &&
+      /state\.phase !== "ready"/.test(h);
+  })(), "no dead button");
 
   return checks;
 }

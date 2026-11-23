@@ -115,6 +115,17 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
     case "preparing":
       if (event.type === "plan_received") return { ...state, phase: "verifying", plan: event.plan };
       if (event.type === "plan_failed") return fail(state, "plan_unavailable", event.detail ?? null);
+      // Also accepted here, and only as a FAILURE. The client validates the response before it
+      // becomes a plan object — a payload carrying a signature, or whose proof was computed
+      // against a different minimum, never reaches `verifying` because there is no plan to carry
+      // there. That is still a verification refusal and deserves the refusal's copy, not
+      // "couldn't prepare this swap", which would read as an outage.
+      //
+      // This adds no route to `ready`: the only transition into `ready` remains `verified` from
+      // `verifying`, which SWXV-29 and SWXV-42 both hold.
+      if (event.type === "verification_failed") {
+        return fail(state, "verification_failed", event.detail ?? null);
+      }
       return state;
 
     case "verifying":
