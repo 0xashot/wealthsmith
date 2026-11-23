@@ -15,6 +15,7 @@
  * each one asserts the verifier rejects something that is otherwise byte-for-byte genuine.
  */
 import { MessageV0, PublicKey, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
+import { decodeTokenAccountAmount, outputAccountAddress } from "../swapExecution/connectionSimulationRpc";
 import type { FixtureCheck } from "./fixtureCheck";
 import { simulateAndVerifyValue, safeErrorLabel, type SimulationRpc } from "../swapExecution/executionSimulation";
 import {
@@ -47,6 +48,27 @@ const REAL_SWAP_TX =
   "CEBI572Nvp+Fm0P/on9df2SnTAmx8pWHneSwmrNt/J3VFLMhqns4zl6ObeNI7xDAoQCcJJ3GgpwEU2j4JZnS+X8Vt8baj8okA/BQcABQLAXBUA" +
   "BwAJAwQAAAAAAAAACgYAAwAPBgkBAQgVCQABAwgPCAsIEAkADQMOAQwCBAURJOUXy5d6460qAQAAABEAZAABQEtMAAAAAACWmiEEAAAAADIAAA" +
   "kDAwAAAQkBeWUSc/alLjcLiYWttW7ElnjgwKUHBiufBJJdlBG4VVADbZBpAxIAbA==";
+/**
+ * A SECOND real transaction, captured 2026-11-23: SOL → USDC, 0.01 SOL, 50 bps.
+ *
+ * Kept because it exercises a different shape from the first: SOL as INPUT means the System
+ * program wraps it, and USDC as OUTPUT means the result lands in a token account rather than in
+ * lamports. Seven instructions against the first transaction's five. System was in the allowlist
+ * speculatively before this; it is now there by observation.
+ *
+ * This one simulated cleanly against mainnet and delivered 720673 base units against a promised
+ * minimum of 717707 — below the quoted 721313, above the floor, which is what a minimum is for.
+ */
+const REAL_SWAP_TX_SOL_INPUT =
+  "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQAIC+hXe3MT5v9275mWMq" +
+  "2yky+jWowiU1YM/q7XNKUDiaL7A+lBM11bgIL7G++6dzHZ/8Mk/rN+K9/SKHE07pZhxbRAniUQdrfV8G8etiVpccP1bDJd9YytaJ+5rx9b6gxG" +
+  "BwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwZGb+UhFzL/7K26csOb57yM5bvF9xJrLEObOkAAAAAEedVb8jHAbu50xW7OaBUH/b" +
+  "Gy3qP0jlECsc2iVrwTjwbd9uHXZaGT2cvhRs7reawctIXtX1s3kTqM9YV+/wCpXhxt4oQKZ2BJ9edwWR7rJImKmlaPGRX9WhiYkhoddZ+CRl5O" +
+  "14WI3iAqgtVQXuCVNuD9VqJEjxLu1wDbTc/Kl4yXJY9OJInxuz0QKRSODYMLWhOZ2v8QhASOe9jb6fhZtD/6J/XX9kp0wJsfKVh53ksJqzbfyd" +
+  "1RSzIap7OM5eg8TXXg4Dc5BsOhXRlFEaMnYbBgz61IevPjnZTo7JbPfAcEAAUCTO8BAAQACQO8CAwAAAAAAAkGAAIADgMGAQEDAgACDAIAAACA" +
+  "lpgAAAAAAAYBAgERBRoGAAIBBREFCgUQAAsNDA4RAgEGAwAHBxIPCCTlF8uXeuOtKgEAAADOAWQAAYCWmAAAAAAAoQELAAAAAAAyAAAGAwIAAA" +
+  "EJARP2eHSgLfDYc9RFsZ3gHFWXI0g1IoC70DnrAmB8wlf2A9XXmQUT0NapmA==";
+
 const TAKER = "GdxxRejTS1VWftHBxecT6nGpNzqfDKHBYk6ddfurCu9L";
 const WSOL = "So11111111111111111111111111111111111111112";
 
@@ -289,6 +311,33 @@ export async function runSwapExecutionVerificationFixtureChecks(): Promise<Fixtu
     const s = executionReducer(done, { type: "submit_failed" });
     return s.phase === "confirmed" && s === done;
   })(), "terminal is terminal");
+
+  /* ---- The second real transaction: SOL input, token output (SWXV-36..41) ---- */
+  add("SWXV-36: the SOL-input transaction passes structural verification — 7 instructions, a different shape from the first", (() => {
+    const r = verifyTransactionStructure(REAL_SWAP_TX_SOL_INPUT, TAKER);
+    return r.ok && r.programIds.length === 7;
+  })(), "second shape accepted");
+  add("SWXV-37: it invokes the System program — native SOL as INPUT must be wrapped, which is why System is in the allowlist", (() => {
+    const r = verifyTransactionStructure(REAL_SWAP_TX_SOL_INPUT, TAKER);
+    return r.ok && r.programIds.includes("11111111111111111111111111111111");
+  })(), "system observed");
+  add("SWXV-38: it still invokes Jupiter exactly once, across a longer instruction list", (() => {
+    const r = verifyTransactionStructure(REAL_SWAP_TX_SOL_INPUT, TAKER);
+    return r.ok && r.programIds.filter((p) => p === JUPITER_PROGRAM_ID).length === 1;
+  })(), "one swap");
+  add("SWXV-39: the SPL token amount is read at offset 64 as a little-endian u64", (() => {
+    const buf = Buffer.alloc(165);
+    buf.writeBigUInt64LE(720673n, 64);
+    return decodeTokenAccountAmount(buf) === 720673n;
+  })(), "layout pinned");
+  add("SWXV-40: a buffer too short to be a token account decodes to null, never to zero — zero would be a plausible wrong answer", (() => {
+    return decodeTokenAccountAmount(Buffer.alloc(32)) === null && decodeTokenAccountAmount(Buffer.alloc(0)) === null;
+  })(), "null not zero");
+  add("SWXV-41: a native output measures the TAKER account; a token output measures their ATA", (() => {
+    const native = outputAccountAddress({ takerPublicKey: TAKER, outputMint: WSOL, native: true });
+    const token = outputAccountAddress({ takerPublicKey: TAKER, outputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", native: false });
+    return native === TAKER && token != null && token !== TAKER;
+  })(), "right account measured");
 
   /* ---- Source guarantees ---- */
   add("SWXV-16: verification runs BEFORE signing — the module imports no signer and no wallet", (() => {
