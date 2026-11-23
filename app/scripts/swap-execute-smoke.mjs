@@ -20,6 +20,16 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { writeFileSync } from "node:fs";
 import http from "node:http";
+import { readFileSync } from "node:fs";
+
+/** Read one key from the gitignored local env file. Never printed, never sent anywhere. */
+function readLocalEnv(key) {
+  try {
+    const txt = readFileSync(new URL("../.env.local", import.meta.url).pathname, "utf8");
+    const m = txt.match(new RegExp(`^${key}=(.+)$`, "m"));
+    return m ? m[1].trim() : null;
+  } catch { return null; }
+}
 
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const WSOL = "So11111111111111111111111111111111111111112";
@@ -114,9 +124,30 @@ console.log("\n--- kill switch (SWAP_EXECUTION_ENABLED unset) ---");
   await off.close();
 }
 
+// --- 1b. Enabled but UNVERIFIABLE: no RPC means no plan, not an unchecked plan. ----------------
+console.log("\n--- enabled, no RPC configured ---");
+{
+  const noRpcEnv = (k) => (k === "SWAP_EXECUTION_ENABLED" ? "true" : undefined);
+  const noRpc = await serve(createExecutionRequestListener({ env: noRpcEnv }));
+  const res = await post(noRpc.port, "/api/swap-execute", PLAN_REQUEST);
+  check("no RPC → 503, no plan offered", res.status === 503 && res.json?.unsignedTransaction == null,
+    `status=${res.status}`);
+  check("the refusal does not say WHY — one handoff answers every verification failure",
+    res.json?.error === "unavailable", String(res.json?.error));
+  await noRpc.close();
+}
+
 // --- 2. Enabled: a real plan from live Jupiter. ------------------------------------------------
 console.log("\n--- enabled: live plan construction ---");
-const env = (k) => (k === "SWAP_EXECUTION_ENABLED" ? "true" : undefined);
+// The server now simulates before offering a plan, so it needs the same server-only RPC the
+// quote service uses for Orca. Read from the local .env.local; without it the server correctly
+// refuses to offer anything and the smoke reports NOT RUN rather than claiming a pass.
+const RPC_URL = process.env.SOLANA_RPC_URL ?? readLocalEnv("VITE_SOLANA_RPC_URL");
+if (!RPC_URL) {
+  console.log("\nNOT RUN — no SOLANA_RPC_URL (server-side simulation cannot run; the server would refuse, correctly)");
+  process.exit(0);
+}
+const env = (k) => (k === "SWAP_EXECUTION_ENABLED" ? "true" : k === "SOLANA_RPC_URL" ? RPC_URL : undefined);
 const on = await serve(createExecutionRequestListener({ env }));
 
 // Bad input must be refused before any provider call.
@@ -180,6 +211,20 @@ console.log("\n--- sanitizer ---");
 const flat = JSON.stringify(plan);
 const leaked = (FORBIDDEN_EXECUTION_FIELDS ?? []).filter((f) => f !== "unsignedTransaction" && flat.includes(`"${f}"`));
 check("no forbidden field on the wire", leaked.length === 0, leaked.join(","));
+
+// --- 4a. The server verified before offering. -------------------------------------------------
+console.log("\n--- server-side verification ---");
+const v = plan.verification ?? {};
+line("simulated delivered", String(v.simulatedDeliveredRaw));
+line("checked against min", String(v.checkedMinimumRaw));
+line("simulated at", String(v.simulatedAt));
+check("the plan carries proof it was simulated", v.simulatedDeliveredRaw != null && v.checkedMinimumRaw != null);
+check("delivered >= the minimum it was checked against",
+  (() => { try { return BigInt(v.simulatedDeliveredRaw) >= BigInt(v.checkedMinimumRaw); } catch { return false; } })(),
+  `${v.simulatedDeliveredRaw} vs ${v.checkedMinimumRaw}`);
+check("the checked minimum equals the DISPLAYED minimum",
+  (() => { const shown = tokensToRaw(String(t.minimumOutputTokens), v.outputDecimals); return shown != null && shown === BigInt(v.checkedMinimumRaw); })(),
+  `${t.minimumOutputTokens} @${v.outputDecimals}`);
 
 // --- 4b. The browser client's own validation, run on what actually arrived. ---------------------
 console.log("\n--- client validation ---");

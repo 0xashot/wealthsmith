@@ -160,6 +160,15 @@ function plan(o: Partial<SwapExecutionPlan> = {}): SwapExecutionPlan {
     legId: "a1:0",
     unsignedTransaction: "AQABAgMEBQ==",
     terms: terms(),
+    verification: {
+      // Must agree with terms().minimumOutputTokens exactly: "0.196911" at 9 decimals is
+      // 196911000 base units. The guard rejects a verification run against any other number,
+      // and got this wrong the first time it was written — which is the check earning its place.
+      simulatedDeliveredRaw: "197000000",
+      checkedMinimumRaw: "196911000",
+      outputDecimals: 9,
+      simulatedAt: new Date(NOW).toISOString(),
+    },
     lastValidBlockHeight: 320_000_000,
     expiresAt: SOON,
     quotedAt: new Date(NOW).toISOString(),
@@ -533,6 +542,73 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       /in_app_confirm/.test(rules) &&
       /Swap complete.{0,200}on-chain confirmation/s.test(rules);
   })(), "rule exists");
+
+  /* ---- Phase 4: a plan must carry proof it was simulated (SWXV-P) ----
+   *
+   * The value check moved to the server, because in production the browser has no RPC. These
+   * pin the part that keeps that honest: the proof travels ON the plan, the client refuses a
+   * plan without it, and — the one that matters — the minimum simulated against must equal the
+   * minimum displayed. A check run against a different number is worse than no check, because
+   * it reads as reassurance.
+   */
+  add("SWXVP-1: a plan with NO verification is refused outright, not treated as unverified-but-usable", (() => {
+    const { verification: _omitted, ...withoutProof } = plan();
+    return (threw(() => assertExecutablePlan(withoutProof as SwapExecutionPlan)) ?? "").includes("not_verified");
+  })(), "absent = refuse");
+  add("SWXVP-2: the simulated minimum must EQUAL the displayed minimum — a check against another number is not a check", (() => {
+    const p = plan({ verification: { ...plan().verification, checkedMinimumRaw: "196910000" } });
+    return (threw(() => assertExecutablePlan(p)) ?? "").includes("verified_different_minimum");
+  })(), "same number");
+  add("SWXVP-3: a verification claiming delivery BELOW the minimum it checked is refused — that is a refusal the server forgot to act on", (() => {
+    const p = plan({ verification: { ...plan().verification, simulatedDeliveredRaw: "1" } });
+    return (threw(() => assertExecutablePlan(p)) ?? "").includes("verified_below_minimum");
+  })(), "self-consistent");
+  add("SWXVP-4: delivering MORE than the minimum passes — a minimum is a floor, not a target",
+    threw(() => assertExecutablePlan(plan({ verification: { ...plan().verification, simulatedDeliveredRaw: "999000000" } }))) == null,
+    "floor not target");
+  add("SWXVP-5: exact equality passes — the rule is below-the-minimum, not at-it", (() => {
+    const v = { ...plan().verification, simulatedDeliveredRaw: plan().verification.checkedMinimumRaw };
+    return threw(() => assertExecutablePlan(plan({ verification: v }))) == null;
+  })(), "equality passes");
+  add("SWXVP-6: wrong decimals cannot make the two numbers agree by accident", (() => {
+    // Same displayed minimum, decimals claimed as 6 instead of 9 → a different base-unit value.
+    const p = plan({ verification: { ...plan().verification, outputDecimals: 6 } });
+    return threw(() => assertExecutablePlan(p)) != null;
+  })(), "decimals pinned");
+  add("SWXVP-7: an unreadable, undated or non-integer-decimal proof is refused rather than skipped", (() => {
+    const base = plan().verification;
+    const cases = [
+      { ...base, simulatedDeliveredRaw: "not-a-number" },
+      { ...base, simulatedAt: "whenever" },
+      { ...base, outputDecimals: 1.5 },
+      { ...base, outputDecimals: 99 },
+    ];
+    return cases.every((v) => threw(() => assertExecutablePlan(plan({ verification: v }))) != null);
+  })(), "malformed proof");
+  add("SWXVP-8: the browser client refuses an unverified plan too — the rule is not server-side only", (() => {
+    const { verification: _omitted, ...withoutProof } = plan();
+    return validateExecutionPlan(withoutProof) === "invalid_plan" &&
+      validateExecutionPlan(plan({ verification: { ...plan().verification, checkedMinimumRaw: "1" } })) === "invalid_plan";
+  })(), "client enforces");
+  add("SWXVP-9: the server REFUSES to offer a plan when no RPC is configured — it never offers an unchecked one", (() => {
+    const v = readSrc("src/server/swapExecution/planVerification.ts");
+    const h = readSrc("src/server/swapExecution/executionHandler.ts");
+    return /rpc_not_configured/.test(v) && /verifyPlanBeforeOffering/.test(h) &&
+      /if \(!verified\.ok\)/.test(h);
+  })(), "fail closed");
+  add("SWXVP-10: the verification FAILURE STAGE is never echoed to the client — one handoff answers all of them", (() => {
+    const h = readSrc("src/server/swapExecution/executionHandler.ts");
+    // The refusal returns the same opaque `unavailable` regardless of stage.
+    return /verified\.ok[\s\S]{0,600}?error: "unavailable"/.test(h) &&
+      !/error: verified\.failure|failure\.stage/.test(h);
+  })(), "no internals leaked");
+  add("SWXVP-11: the client still verifies STRUCTURE itself — the split is what it holds vs what it would do", (() => {
+    // Structural verification is pure and needs no RPC, so the browser keeps doing it on the
+    // exact bytes it will sign. Only the simulation is delegated.
+    const sv = readSrc("src/suggestions/swapExecution/executionVerification.ts");
+    return /export function verifyTransactionStructure/.test(sv) &&
+      !/Connection|simulateTransaction/.test(sv);
+  })(), "structural stays local");
 
   return checks;
 }

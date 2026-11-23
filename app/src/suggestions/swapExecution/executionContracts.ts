@@ -67,11 +67,49 @@ export interface SwapExecutionTerms {
 }
 
 /**
+ * Proof that the value check actually ran, carried ON the plan.
+ *
+ * WHY THIS IS HERE AND NOT DONE IN THE BROWSER. Simulating a transaction needs a real Solana
+ * RPC. In production the browser does not have one and should not: every chain read already
+ * happens server-side, and shipping an RPC credential to every visitor to re-do a check the
+ * server can do is a worse trade than making the server state its result.
+ *
+ * WHAT THE CLIENT STILL CHECKS ITSELF. Structural verification is pure — decode the bytes, one
+ * signer, the taker as fee payer, only allowlisted programs, Jupiter invoked exactly once — and
+ * runs in the browser against the exact transaction the user is about to sign. So the split is:
+ * the client independently verifies WHAT it holds, the server verifies what it WOULD DO.
+ *
+ * WHAT THIS IS NOT. It is not a signature and proves nothing cryptographically. A hostile server
+ * could assert it. That is fine for the threat it addresses — a provider returning a transaction
+ * that does not match the terms we display — and it is not pretending to address a compromised
+ * first-party backend, which this field could not solve anyway.
+ *
+ * `checkedMinimumRaw` is the load-bearing field: it records the minimum the simulation was
+ * actually compared against, so the client can confirm the server checked the SAME number it is
+ * about to show the user. A verification against a different minimum is not a verification.
+ */
+export interface SwapPlanVerification {
+  /** Base units the simulation measured as delivered to the taker. */
+  simulatedDeliveredRaw: string;
+  /** The minimum the simulation was compared against, in base units. */
+  checkedMinimumRaw: string;
+  /** Output mint decimals — the plan's terms are token-denominated, so without this the client
+   *  cannot convert `minimumOutputTokens` back to base units to check the two agree. */
+  outputDecimals: number;
+  /** When the simulation ran. Not the same as `quotedAt`. */
+  simulatedAt: string;
+}
+
+/**
  * An unsigned transaction plus the terms it encodes.
  *
  * The transaction is base64 and stays opaque to this layer. It is decoded and VERIFIED against
- * these terms in Phase 3, before signing — showing terms is not the same as having checked them,
- * and only the check makes the confirm screen honest.
+ * these terms before signing — showing terms is not the same as having checked them, and only
+ * the check makes the confirm screen honest.
+ *
+ * A plan with no `verification` is not an unverified plan to be treated cautiously; it is a plan
+ * the guard refuses outright. The server does not build one without simulating, and the client
+ * does not accept one that lacks the proof.
  */
 export interface SwapExecutionPlan {
   planId: string;
@@ -82,6 +120,9 @@ export interface SwapExecutionPlan {
   unsignedTransaction: string;
 
   terms: SwapExecutionTerms;
+
+  /** Proof the value check ran on the server. Never optional — see SwapPlanVerification. */
+  verification: SwapPlanVerification;
 
   /**
    * The blockhash this transaction was built against, and when it dies. A plan that outlives

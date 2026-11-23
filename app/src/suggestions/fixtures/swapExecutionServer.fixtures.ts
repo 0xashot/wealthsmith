@@ -11,6 +11,8 @@
  * to configure execution must do no work at all rather than quietly start executing swaps.
  */
 import type { FixtureCheck } from "./fixtureCheck";
+import { REAL_SWAP_TAKER, REAL_SWAP_TX } from "./realSwapTransactions";
+import type { SimulationRpc } from "../swapExecution/executionSimulation";
 import {
   PLAN_TTL_MS,
   SWAP_EXECUTION_ENABLED_KEY,
@@ -24,7 +26,7 @@ import { SWAP_PROVIDER_ENDPOINTS } from "../../server/swapQuote/providerConfig";
 const NOW = Date.parse("2026-11-23T12:00:00.000Z");
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const WSOL = "So11111111111111111111111111111111111111112";
-const TAKER = "GdxxRejTS1VWftHBxecT6nGpNzqfDKHBYk6ddfurCu9L";
+const TAKER = REAL_SWAP_TAKER;
 // A deliberately unroutable host: these fixtures are offline, and naming a real API host in a
 // fixture is exactly what 16H-G-BJ forbids. The REAL endpoint is asserted in SWXS-23 by reading
 // the provider config at runtime, which tests the shipped value rather than a copy of it.
@@ -54,7 +56,7 @@ function stubJupiter(opts: { quote?: Record<string, unknown> | null; swap?: Reco
     ? { outAmount: "197901045", otherAmountThreshold: "196911540", priceImpactPct: "0.0002", routePlan: [{ swapInfo: { label: "Raydium CLMM" } }] }
     : opts.quote;
   const swap = opts.swap === undefined
-    ? { swapTransaction: "AQABAgMEBQZzd2Fw", lastValidBlockHeight: 320000000 }
+    ? { swapTransaction: REAL_SWAP_TX, lastValidBlockHeight: 320000000 }
     : opts.swap;
   return (async (url: string | URL | Request, init?: RequestInit) => {
     const href = typeof url === "string" ? url : url instanceof URL ? url.toString() : "";
@@ -65,13 +67,36 @@ function stubJupiter(opts: { quote?: Record<string, unknown> | null; swap?: Reco
   }) as unknown as typeof fetch;
 }
 
-const handler = (o: { env?: (k: string) => string | undefined; fetchImpl?: typeof fetch } = {}) =>
+/**
+ * A stubbed simulation RPC. Only the NETWORK is stubbed — structural verification still runs for
+ * real against REAL_SWAP_TX above, which is why the stub transaction had to become a real one.
+ *
+ * The fixture pair is USDC → WSOL, so the output is native SOL: the taker's lamports move by
+ * (output − fee), and `verifyMeasuredValue` adds the fee back. Defaults deliver just above the
+ * stub quote's 196911540 threshold; pass `deliveredRaw` to drive the under-delivery path.
+ */
+const stubRpc = (o: { deliveredRaw?: bigint; err?: unknown; feeLamports?: bigint | null } = {}): SimulationRpc => ({
+  async getLookupTable() { return { addresses: [] }; },
+  async getOutputBalanceRaw() { return 0n; },
+  async simulateOutputBalanceRaw() {
+    return { err: o.err ?? null, afterRaw: o.err != null ? null : (o.deliveredRaw ?? 197_000_000n) };
+  },
+  async getFeeLamports() { return o.feeLamports === undefined ? 5_000n : o.feeLamports; },
+});
+
+const handler = (o: {
+  env?: (k: string) => string | undefined;
+  fetchImpl?: typeof fetch;
+  simulationRpc?: SimulationRpc | null;
+} = {}) =>
   createSwapExecuteHandler({
     quoteEndpoint: QUOTE_ENDPOINT,
     env: o.env ?? envOn,
     fetchImpl: o.fetchImpl ?? stubJupiter(),
     now: () => NOW,
     planId: () => "plan_fixed",
+    // `null` means "no RPC injected", exercising the unconfigured-environment path.
+    simulationRpc: o.simulationRpc === null ? undefined : (o.simulationRpc ?? stubRpc()),
   });
 
 export async function runSwapExecutionServerFixtureChecks(): Promise<FixtureCheck[]> {
@@ -126,7 +151,7 @@ export async function runSwapExecutionServerFixtureChecks(): Promise<FixtureChec
     down.status === 503, `status=${down.status}`);
   add("SWXS-12: the provider's reason is NOT echoed to the client — it is provider detail with one correct response",
     down.status === 503 && (down.body as { error: string }).error === "unavailable", "opaque failure");
-  const simFailed = await handler({ fetchImpl: stubJupiter({ swap: { swapTransaction: "AQABAgMEBQZzd2Fw", lastValidBlockHeight: 1, simulationError: { errorCode: "TRANSACTION_ERROR", error: "Error processing Instruction 2: custom program error: 0x1788" } } }) })({ method: "POST", body: body() });
+  const simFailed = await handler({ fetchImpl: stubJupiter({ swap: { swapTransaction: REAL_SWAP_TX, lastValidBlockHeight: 1, simulationError: { errorCode: "TRANSACTION_ERROR", error: "Error processing Instruction 2: custom program error: 0x1788" } } }) })({ method: "POST", body: body() });
   add("SWXS-13A: a transaction Jupiter ALREADY SIMULATED AS FAILING is refused — observed live, where a swap from a wallet holding none of the input token still came back fully formed", simFailed.status === 503, `status=${simFailed.status}`);
 
   const txInQuote = await handler({ fetchImpl: stubJupiter({ quote: { outAmount: "1", otherAmountThreshold: "1", swapTransaction: "AQAB" } }) })({ method: "POST", body: body() });
@@ -166,10 +191,11 @@ export async function runSwapExecutionServerFixtureChecks(): Promise<FixtureChec
       planId: "p", actionId: "a", legId: "a:0",
       unsignedTransaction: "AQAB",
       terms: ok.body.terms,
+      verification: ok.body.verification,
       lastValidBlockHeight: 1, expiresAt: new Date(NOW + 1000).toISOString(), quotedAt: new Date(NOW).toISOString(),
     });
     return Object.keys(plan).sort().join(",") ===
-      "actionId,contractsVersion,expiresAt,lastValidBlockHeight,legId,planId,quotedAt,terms,unsignedTransaction";
+      "actionId,contractsVersion,expiresAt,lastValidBlockHeight,legId,planId,quotedAt,terms,unsignedTransaction,verification";
   })(), "fixed field set");
   add("SWXS-23: the swap endpoint is derived from the SHIPPED quote endpoint, so the two can never point at different hosts", (() => {
     // Read the real configured value rather than restating it — a literal here would drift.

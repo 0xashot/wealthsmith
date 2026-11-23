@@ -16,6 +16,7 @@
  */
 import { buildJupiterSwapTransaction, type JupiterSwapContext } from "./jupiterSwapClient";
 import { sanitizeExecutionPlan } from "./executionSanitizer";
+import { verifyPlanBeforeOffering, type VerifyPlanDeps } from "./planVerification";
 import type { SwapExecutionPlan } from "../../suggestions/swapExecution/executionContracts";
 import type { EnvReader } from "../swapQuote/providerConfig";
 
@@ -90,6 +91,8 @@ export function createSwapExecuteHandler(deps: {
   fetchImpl?: typeof fetch;
   now?: () => number;
   planId?: () => string;
+  /** Injectable simulation RPC. The real path builds one from SOLANA_RPC_URL. */
+  simulationRpc?: VerifyPlanDeps["rpc"];
 }) {
   return async function handleSwapExecuteRequest(
     req: SwapExecuteHttpRequest,
@@ -135,6 +138,28 @@ export function createSwapExecuteHandler(deps: {
       return { status: 503, body: { error: "unavailable" } };
     }
 
+    // VERIFY BEFORE OFFERING. A plan is not offered until a simulation says it delivers at
+    // least the minimum it promises. An environment with no RPC cannot establish that, so it
+    // offers nothing — "unverified" is not a state a plan is allowed to be in.
+    const verified = await verifyPlanBeforeOffering(
+      {
+        unsignedTransaction: built.unsignedTransaction,
+        takerPublicKey: b.takerPublicKey as string,
+        outputMint: b.outputMint as string,
+        outputDecimals: b.outputDecimals as number,
+        minimumOutputTokens: built.terms.minimumOutputTokens,
+      },
+      { env: deps.env, rpc: deps.simulationRpc, now },
+    );
+
+    if (!verified.ok) {
+      // The stage is NOT echoed to the client. A caller learning that structural verification
+      // failed, versus the simulation, versus no RPC, learns about our internals and about the
+      // provider's output; the one correct client response to all of them is the handoff.
+      // Operators get the detail from logs, not from the response body.
+      return { status: 503, body: { error: "unavailable" } };
+    }
+
     try {
       const plan = sanitizeExecutionPlan({
         planId: (deps.planId ?? (() => `plan_${now()}`))(),
@@ -142,6 +167,7 @@ export function createSwapExecuteHandler(deps: {
         legId: b.legId as string,
         unsignedTransaction: built.unsignedTransaction,
         terms: built.terms,
+        verification: verified.verification,
         lastValidBlockHeight: built.lastValidBlockHeight,
         expiresAt: new Date(now() + PLAN_TTL_MS).toISOString(),
         quotedAt: built.quotedAt,

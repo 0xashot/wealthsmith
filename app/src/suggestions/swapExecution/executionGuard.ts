@@ -154,4 +154,68 @@ export function assertExecutablePlan(plan: SwapExecutionPlan | undefined | null)
   if (Number.isFinite(expected) && Number.isFinite(minimum) && minimum > expected) {
     throw new Error("swap_execution_minimum_exceeds_expected");
   }
+
+  assertPlanWasVerified(plan);
+}
+
+/**
+ * The value check must have run, and must have run against the number the user will be shown.
+ *
+ * Split out because it answers a different question from everything above: the rest of
+ * `assertExecutablePlan` asks "is this plan coherent?", this asks "did anyone check it?". A plan
+ * can be perfectly coherent and still deliver less than it promises — that is the entire reason
+ * the simulation exists, and a missing proof is treated as a failed check, never as a pass.
+ */
+export function assertPlanWasVerified(plan: SwapExecutionPlan): void {
+  const v = plan.verification;
+  if (v == null || typeof v !== "object") {
+    throw new Error("swap_execution_not_verified");
+  }
+  if (!Number.isInteger(v.outputDecimals) || v.outputDecimals < 0 || v.outputDecimals > 18) {
+    throw new Error("swap_execution_verification_decimals");
+  }
+  if (!Number.isFinite(Date.parse(v.simulatedAt))) {
+    throw new Error("swap_execution_verification_undated");
+  }
+
+  let delivered: bigint;
+  let checkedMinimum: bigint;
+  try {
+    delivered = BigInt(v.simulatedDeliveredRaw);
+    checkedMinimum = BigInt(v.checkedMinimumRaw);
+  } catch {
+    throw new Error("swap_execution_verification_unreadable");
+  }
+
+  // The result the server claims must itself satisfy the check it claims to have run. A plan
+  // asserting "simulated, delivered less than the minimum" is a refusal the server forgot to act
+  // on, and it must not become an approval here.
+  if (delivered < checkedMinimum) {
+    throw new Error("swap_execution_verified_below_minimum");
+  }
+
+  // THE one that matters: the minimum simulated against must equal the minimum displayed. A
+  // check run against a different number verifies a different transaction than the one the user
+  // is approving, and would be worse than no check at all because it reads as reassurance.
+  const shown = tokensToRawExact(plan.terms.minimumOutputTokens, v.outputDecimals);
+  if (shown == null) throw new Error("swap_execution_verification_minimum_unparseable");
+  if (shown !== checkedMinimum) throw new Error("swap_execution_verified_different_minimum");
+}
+
+/**
+ * Decimal token string → base units, exactly, without a float.
+ *
+ * A local copy rather than an import from `executionVerification`: that module pulls in
+ * @solana/web3.js, and this guard is imported by the browser client, where decoding a
+ * transaction is not needed to check two numbers agree.
+ */
+function tokensToRawExact(tokens: string, decimals: number): bigint | null {
+  if (typeof tokens !== "string" || !/^[0-9]+(\.[0-9]+)?$/.test(tokens)) return null;
+  const [whole, frac = ""] = tokens.split(".");
+  if (frac.length > decimals) return null;
+  try {
+    return BigInt(whole + frac.padEnd(decimals, "0"));
+  } catch {
+    return null;
+  }
 }

@@ -19,7 +19,7 @@ import {
   assertExecutablePlan,
   scanForForbiddenExecutionFields,
 } from "../../suggestions/swapExecution/executionGuard";
-import type { SwapExecutionPlan } from "../../suggestions/swapExecution/executionContracts";
+import type { SwapExecutionPlan, SwapPlanVerification } from "../../suggestions/swapExecution/executionContracts";
 
 /**
  * Server fields that must never reach the client even in the execution lane.
@@ -42,6 +42,7 @@ export function sanitizeExecutionPlan(input: {
   legId: string;
   unsignedTransaction: string;
   terms: SwapExecutionPlan["terms"];
+  verification: SwapPlanVerification;
   lastValidBlockHeight: number | null;
   expiresAt: string;
   quotedAt: string;
@@ -66,6 +67,14 @@ export function sanitizeExecutionPlan(input: {
       estimatedNetworkFeeUsd: input.terms.estimatedNetworkFeeUsd,
       providerId: input.terms.providerId,
       providerName: input.terms.providerName,
+    },
+    // Named field by field like everything else: the verification is built by us, not echoed
+    // from a provider, and allowlisting it keeps that true if its shape ever grows.
+    verification: {
+      simulatedDeliveredRaw: input.verification.simulatedDeliveredRaw,
+      checkedMinimumRaw: input.verification.checkedMinimumRaw,
+      outputDecimals: input.verification.outputDecimals,
+      simulatedAt: input.verification.simulatedAt,
     },
     lastValidBlockHeight: input.lastValidBlockHeight,
     expiresAt: input.expiresAt,
