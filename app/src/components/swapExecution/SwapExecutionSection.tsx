@@ -22,6 +22,7 @@ import { useSwapExecutionPlan } from "./useSwapExecutionPlan";
 import { useWalletSwapSubmitter } from "./useWalletSwapSubmitter";
 import SwapConfirmSheet from "./SwapConfirmSheet";
 import { SWAP_CONFIRM_CONTINUE_LABEL } from "../../state/approvedCopy";
+import type { SwapExecutionEmitter } from "../../suggestions/swapExecution/swapExecutionEvents";
 
 export interface SwapExecutionSectionProps {
   action: SwapActionContext;
@@ -30,6 +31,8 @@ export interface SwapExecutionSectionProps {
   nowMs?: number;
   /** Closes the whole review. Cancelling the confirm step alone returns here instead. */
   onClose: () => void;
+  /** Receives funnel events. Absent emits none. */
+  emit?: SwapExecutionEmitter;
 }
 
 export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
@@ -48,6 +51,10 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
 
   const execution = useSwapExecutionPlan({
     action,
+    // Only an offered route reaches the hook, and an offer requires a selected provider, so the
+    // fallback is unreachable rather than a default anyone relies on.
+    provider: assessment?.selectedProviderId ?? "jupiter",
+    emit: props.emit,
     takerPublicKey,
     slippageBps: props.slippageBps ?? 50,
     enabled: started,

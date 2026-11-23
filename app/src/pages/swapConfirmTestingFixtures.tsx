@@ -104,6 +104,7 @@ function HookDrivenCase({
 }) {
   const state = useSwapExecutionPlan({
     action: GALLERY_ACTION,
+    provider: "jupiter",
     takerPublicKey: REAL_SWAP_TAKER,
     slippageBps: 50,
     enabled: true,

@@ -38,6 +38,11 @@ import {
 import { validateExecutionPlan } from "../swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../swapExecution/planResolution";
 import { deriveExecutionOffer } from "../swapExecution/executionOffer";
+import {
+  eventPropertyValues,
+  swapEventForTransition,
+  type SwapExecutionEvent,
+} from "../swapExecution/swapExecutionEvents";
 import { outcomeFor } from "../swapExecution/executionLifecycle";
 import type { SwapActionContext } from "../swapQuote/swapQuoteContracts";
 import {
@@ -965,6 +970,71 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return !isSignatureShaped("") && !isSignatureShaped("short") &&
       !isSignatureShaped("0OIl".repeat(22)) && isSignatureShaped("5".repeat(87));
   })(), "shape checked");
+
+  /* ---- Phase 6: the funnel, and what it may carry (SWXE) ---- */
+  const everyEvent = (): SwapExecutionEvent[] => {
+    const phases: ExecutionPhase[] = ["idle", "preparing", "verifying", "ready", "signing", "submitting", "confirming", "confirmed", "failed"];
+    const failures: (ExecutionFailureKey | null)[] = [
+      null, "plan_unavailable", "verification_failed", "declined", "expired", "submit_failed", "confirm_timeout", "cancelled",
+    ];
+    const out: SwapExecutionEvent[] = [];
+    for (const from of phases) for (const to of phases) for (const f of failures) {
+      const e = swapEventForTransition(from, to, {
+        provider: "jupiter", category: "rebalance", failure: f, sinceApprovalMs: 4321,
+      });
+      if (e) out.push(e);
+    }
+    return out;
+  };
+
+  add("SWXE-1: NO event carries an amount, a balance or anything that looks like a wallet address", (() => {
+    // Walked rather than trusted: a type keeps a number out of a string field and nothing more.
+    // It cannot tell a duration from a dollar amount, which is the mistake worth catching.
+    const base58Long = /^[1-9A-HJ-NP-Za-km-z]{32,}$/;
+    return everyEvent().every((e) =>
+      eventPropertyValues(e).every((v) => {
+        if (typeof v === "number") return e.name === "swap_confirmed"; // only a duration
+        if (typeof v !== "string") return false;
+        return !base58Long.test(v) && !/^\$?[0-9]+([.,][0-9]+)?$/.test(v);
+      }),
+    );
+  })(), "no figures, no addresses");
+  add("SWXE-2: a transaction SIGNATURE is never a property — it resolves to the wallet and every amount in it", (() => {
+    const src = readSrc("src/suggestions/swapExecution/swapExecutionEvents.ts");
+    const hook = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
+    // Not in the union, and the hook never puts one in a transition context.
+    return !/signature\s*:/.test(stripComments(src)) &&
+      !/emit\([^)]*signature/.test(stripComments(hook));
+  })(), "signature stays on screen");
+  add("SWXE-3: the only numeric property is a DURATION, and it is never negative", (() => {
+    const confirmed = swapEventForTransition("confirming", "confirmed", {
+      provider: "jupiter", category: "rebalance", failure: null, sinceApprovalMs: -50,
+    });
+    return confirmed?.name === "swap_confirmed" && confirmed.durationMs === 0;
+  })(), "duration only");
+  add("SWXE-4: the funnel is driven by TRANSITIONS, so it cannot drift from the machine", (() => {
+    // Every phase the machine can enter either reports itself or is an internal step. A state
+    // reachable but silent would be a hole in the funnel nobody notices for months.
+    const reported: ExecutionPhase[] = ["preparing", "ready", "signing", "confirming", "confirmed"];
+    return reported.every((to) =>
+      swapEventForTransition("idle", to, { provider: "jupiter", category: "rebalance", failure: null, sinceApprovalMs: 0 }) != null);
+  })(), "transition-driven");
+  add("SWXE-5: a cancellation is NOT its own event — the absence of an approval already counts it",
+    swapEventForTransition("ready", "failed", { provider: "jupiter", category: "rebalance", failure: "cancelled", sinceApprovalMs: null }) === null,
+    "no invented row");
+  add("SWXE-6: a refusal reports OUR failure key, never a provider message", (() => {
+    const e = swapEventForTransition("verifying", "failed", {
+      provider: "jupiter", category: "rebalance", failure: "verification_failed", sinceApprovalMs: null,
+    });
+    return e?.name === "swap_not_offered" && e.reason === "verification_failed";
+  })(), "bounded reasons");
+  add("SWXE-7: the lane imports no analytics transport — the emitter is injected", (() => {
+    // Comments stripped, for the third time in this file: the module explains the boundary by
+    // naming the transport it must not import, and a scan that cannot tell an explanation from
+    // an import would forbid writing the explanation down.
+    const files = ["src/suggestions/swapExecution/swapExecutionEvents.ts", "src/components/swapExecution/useSwapExecutionPlan.ts"];
+    return files.every((f) => !/posthog|analytics\/analytics/i.test(stripComments(readSrc(f))));
+  })(), "no transport coupling");
 
   return checks;
 }

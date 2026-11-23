@@ -31,7 +31,7 @@
  * the adapters already work, and what it means for custody.
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
-import type { SwapActionContext } from "../../suggestions/swapQuote/swapQuoteContracts";
+import type { SwapActionContext, SwapProviderId } from "../../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapExecutionPlan } from "../../suggestions/swapExecution/executionContracts";
 import {
   executionReducer,
@@ -47,6 +47,10 @@ import {
 } from "../../suggestions/swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../../suggestions/swapExecution/planResolution";
 import { eventsForSubmitOutcome, type SubmitOutcome } from "../../suggestions/swapExecution/submitResolution";
+import {
+  swapEventForTransition,
+  type SwapExecutionEmitter,
+} from "../../suggestions/swapExecution/swapExecutionEvents";
 import {
   CONFIRMATION_POLL_INTERVAL_MS,
   decideFromConfirmation,
@@ -73,6 +77,10 @@ export interface UseSwapExecutionPlanOptions {
   submit?: SwapPlanSubmitter | null;
   fetcher?: typeof fetchSwapExecutionPlan;
   fetchOptions?: FetchSwapExecutionPlanOptions;
+  /** The selected provider, for the funnel. Known from the assessment before a plan exists. */
+  provider: SwapProviderId;
+  /** Receives funnel events. Absent means none are emitted — never a reason to misbehave. */
+  emit?: SwapExecutionEmitter;
   /** Injectable confirmation reader, for the gallery and for fixtures. */
   confirmationFetcher?: typeof fetchConfirmationState;
   confirmationOptions?: FetchConfirmationOptions;
@@ -99,7 +107,7 @@ export interface UseSwapExecutionPlanState {
 }
 
 export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwapExecutionPlanState {
-  const { action, takerPublicKey, slippageBps, enabled, submit } = opts;
+  const { action, takerPublicKey, slippageBps, enabled, submit, provider } = opts;
   const [state, dispatch] = useReducer(executionReducer, initialExecutionState);
   const now = opts.nowMs ?? (() => Date.now());
   const fetcher = opts.fetcher ?? fetchSwapExecutionPlan;
@@ -219,6 +227,30 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedSignature]);
+
+  // The funnel, driven by the machine's transitions rather than by calls scattered through the
+  // handlers. A state the flow reaches reports itself, and one it cannot reach reports nothing,
+  // so the funnel cannot drift out of step with the behaviour it claims to measure.
+  const emit = opts.emit;
+  const previousPhaseRef = useRef<ExecutionPhase>(state.phase);
+  const approvedAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    const previous = previousPhaseRef.current;
+    previousPhaseRef.current = state.phase;
+    if (previous === state.phase) return;
+    if (state.phase === "signing") approvedAtRef.current = now();
+    if (emit == null) return;
+    const event = swapEventForTransition(previous, state.phase, {
+      // From the assessment, supplied by the caller: at `preparing` there is no plan yet, so
+      // the plan's own terms cannot answer this.
+      provider,
+      category: action.suggestionCategory,
+      failure: state.failure,
+      sinceApprovalMs: approvedAtRef.current == null ? null : now() - approvedAtRef.current,
+    });
+    if (event) emit(event);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase, state.failure]);
 
   // Abort on unmount. A fetch outliving the component is a plan nobody will ever look at.
   useEffect(() => () => { abortRef.current?.abort(); }, []);
