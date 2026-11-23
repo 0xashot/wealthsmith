@@ -1119,3 +1119,15 @@ export const SWAP_CONFIRM_TIMEOUT_DESC =
  */
 export const SWAP_CONFIRM_AWAITING_WALLET = "Waiting for your wallet…";
 export const SWAP_CONFIRM_SUBMITTING = "Confirming on the network…";
+
+/**
+ * The step INTO the confirm sheet, from the review's footer.
+ *
+ * Two steps exist because a plan lives 25 seconds: preparing one when the review opens would
+ * start that clock while the person is still reading. This label has to say an approval is
+ * coming without claiming the swap happens on this click — "Swap" would claim it, and "Continue"
+ * alone says nothing about what follows.
+ *
+ * NEW COPY, not yet reviewed with the product owner.
+ */
+export const SWAP_CONFIRM_CONTINUE_LABEL = "Continue to approve";

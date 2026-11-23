@@ -37,6 +37,16 @@ import {
 } from "../swapExecution/executionGuard";
 import { validateExecutionPlan } from "../swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../swapExecution/planResolution";
+import { deriveExecutionOffer } from "../swapExecution/executionOffer";
+import { outcomeFor } from "../swapExecution/executionLifecycle";
+import type { SwapActionContext } from "../swapQuote/swapQuoteContracts";
+import {
+  CONFIRMATION_DEADLINE_MS,
+  decideFromConfirmation,
+  hasPassedDeadline,
+  timeoutEvent,
+} from "../swapExecution/confirmationPolling";
+import { isSignatureShaped, stateFromStatus } from "../../server/swapExecution/confirmationStatus";
 import {
   classifyWalletError,
   eventsForSubmitOutcome,
@@ -348,13 +358,27 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
   })(), "secrets forbidden both ways");
 
   /* ---- Still unmounted, and the Boundary has exactly one implementation ---- */
-  add("SWX-26: the execution lane is NOT mounted — no component, page or hook imports it yet", (() => {
-    const roots = ["src/components", "src/pages", "src/hooks", "src/state"];
-    return roots.every((d) => {
-      const out = readSrc(`${d}/index.ts`);
-      return !/swapExecution/.test(out);
-    }) && !/swapExecution/.test(readSrc("src/App.tsx"));
-  })(), "unmounted");
+  /* SWX-26 asserted the lane was unmounted. It is mounted now, and the fixture was weak
+   * besides: it read `index.ts` files that do not exist in this tree, so readSrc returned ""
+   * and it passed without checking anything. Replaced by the invariant that actually matters
+   * once something IS mounted — the confirm step is reachable only through the Boundary. */
+  add("SWX-26: the confirm sheet is reachable from exactly ONE product component, and that one asks the Boundary first", (() => {
+    const renderers = tsFilesUnder(["src/components", "src/pages"])
+      .filter((f) => !/[Ff]ixtures?\.tsx?$/.test(f))
+      .filter((f) => /<SwapConfirmSheet/.test(readSrc(f)));
+    if (renderers.length !== 1) return false;
+    if (!renderers[0].endsWith("SwapExecutionSection.tsx")) return false;
+    const section = readSrc(renderers[0]);
+    // Asks, and returns nothing when the answer is no — including with no wallet to sign with.
+    return /deriveExecutionOffer/.test(section) &&
+      /if \(!offer\.offered \|\| takerPublicKey == null \|\| submit == null\) return null;/.test(section);
+  })(), "one gated entry point");
+  add("SWX-26b: the mounted section renders the sheet only AFTER the user asks for terms", (() => {
+    // A plan lives 25 seconds. Preparing one when the review opens would spend that clock while
+    // someone reads, and they would meet an expiry notice for reading carefully.
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    return /enabled: started/.test(section) && /setStarted\(true\)/.test(section);
+  })(), "clock starts on intent");
   add("SWX-27: Jupiter is the ONLY executable provider, and the list is explicit rather than inferred from the comparison",
     EXECUTABLE_PROVIDER_IDS.length === 1 && EXECUTABLE_PROVIDER_IDS[0] === "jupiter", `providers=${EXECUTABLE_PROVIDER_IDS.join(",")}`);
   add("SWX-28: the Boundary has ONE implementation — no other module re-derives executability", (() => {
@@ -861,6 +885,86 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // The rule permits omitting the figure; it forbids relabelling the estimate as the result.
     return /SWAP_CONFIRM_COMPLETE_TITLE/.test(c) && !/swapConfirmReceived/.test(c);
   })(), "no relabelled estimate");
+
+  /* ---- Phase 6: the offer, and confirmation (SWXO / SWXC6) ---- */
+  const action = (): SwapActionContext => ({
+    actionId: "rebalance:a1",
+    suggestionId: "a1",
+    suggestionCategory: "rebalance",
+    legId: "rebalance:a1:0",
+    legIndex: 0,
+    totalLegs: 1,
+    inputAsset: { symbol: "USDC", mint: USDC, decimals: 6 },
+    outputAsset: { symbol: "SOL", mint: WSOL, decimals: 9 },
+    inputAmountRaw: "15000000",
+    inputAmountTokens: "15",
+    inputAmountUsd: 15,
+    sourceAvailability: "wallet_transferable",
+    generatedAt: new Date(NOW).toISOString(),
+  });
+  add("SWXO-1: an offer requires BOTH a permitted rail and a satisfied Boundary", (() => {
+    const a = assessment();
+    const act = { ...action(), suggestionCategory: "rebalance" as const, totalLegs: 1 };
+    return deriveExecutionOffer({ action: act, assessment: a, nowMs: NOW }).offered;
+  })(), "both layers");
+  add("SWXO-2: a non-jupiter winner is not offered, however good the quote", (() => {
+    const a = assessment({ selectedProviderId: "raydium" });
+    const r = deriveExecutionOffer({ action: { ...action(), totalLegs: 1 }, assessment: a, nowMs: NOW });
+    return !r.offered;
+  })(), "permission first");
+  add("SWXO-3: no assessment is not an offer — absence is never permission",
+    !deriveExecutionOffer({ action: action(), assessment: null, nowMs: NOW }).offered, "deny by default");
+  add("SWXO-4: an expired quote is not offered, and says so", (() => {
+    const r = deriveExecutionOffer({
+      action: { ...action(), totalLegs: 1 },
+      assessment: assessment({ expiresAt: new Date(NOW - 1).toISOString() }),
+      nowMs: NOW,
+    });
+    return !r.offered && r.blockReasons.includes("quote_expired");
+  })(), "reasons survive");
+  add("SWXO-5: a multi-leg action is not offered — there is no single transaction to approve", (() => {
+    const r = deriveExecutionOffer({ action: { ...action(), totalLegs: 2 }, assessment: assessment(), nowMs: NOW });
+    return !r.offered && r.blockReasons.includes("multi_leg");
+  })(), "one transaction");
+
+  add("SWXC6-1: only the CHAIN may report a failed swap; not knowing never becomes failure", (() => {
+    return stateFromStatus(null) === "pending" &&
+      stateFromStatus({ confirmed: false, err: null }) === "pending" &&
+      stateFromStatus({ confirmed: true, err: null }) === "confirmed" &&
+      stateFromStatus({ confirmed: true, err: { InstructionError: [0, "x"] } }) === "failed" &&
+      // An error on a not-yet-confirmed read is still the chain reporting a revert.
+      stateFromStatus({ confirmed: false, err: { x: 1 } }) === "failed";
+  })(), "unknown is not failure");
+  add("SWXC6-2: a failed REQUEST is not an outcome — we keep waiting", (() => {
+    return decideFromConfirmation({ ok: false }).action === "keep_waiting" &&
+      decideFromConfirmation({ ok: true, state: "pending" }).action === "keep_waiting";
+  })(), "blip is not an answer");
+  add("SWXC6-3: a confirmed swap stops the watch and confirms; a reverted one stops and fails", (() => {
+    const good = decideFromConfirmation({ ok: true, state: "confirmed" });
+    const bad = decideFromConfirmation({ ok: true, state: "failed" });
+    return good.action === "stop" && good.events[0].type === "confirmed" &&
+      bad.action === "stop" && bad.events[0].type === "submit_failed";
+  })(), "definite outcomes");
+  add("SWXC6-4: giving up is a DIFFERENT event from failing, and keeps the signature", (() => {
+    const submitted = ([{ type: "prepare" }, { type: "plan_received", plan: plan() }, { type: "verified" },
+      { type: "sign" }, { type: "signed" }, { type: "submitted", signature: "5xSig" }] as ExecutionEvent[])
+      .reduce(executionReducer, initialExecutionState);
+    const gaveUp = executionReducer(submitted, timeoutEvent());
+    return gaveUp.failure === "confirm_timeout" && gaveUp.signature === "5xSig" &&
+      outcomeFor(gaveUp) === "confirm_timeout";
+  })(), "we stopped, it did not");
+  add("SWXC6-5: the deadline is generous — stopping early produces a 'may still complete' for a swap about to land",
+    hasPassedDeadline(0, CONFIRMATION_DEADLINE_MS) && !hasPassedDeadline(0, CONFIRMATION_DEADLINE_MS - 1) &&
+      CONFIRMATION_DEADLINE_MS >= 60_000, `${CONFIRMATION_DEADLINE_MS}ms`);
+  add("SWXC6-6: the status route is a READ and constructs nothing", (() => {
+    const c = stripComments(readSrc("src/server/swapExecution/confirmationStatus.ts"));
+    return /getSignatureStatuses/.test(c) &&
+      !/sendTransaction|sendRawTransaction|VersionedTransaction|signTransaction/.test(c);
+  })(), "read-only");
+  add("SWXC6-7: a malformed signature is refused before any RPC call", (() => {
+    return !isSignatureShaped("") && !isSignatureShaped("short") &&
+      !isSignatureShaped("0OIl".repeat(22)) && isSignatureShaped("5".repeat(87));
+  })(), "shape checked");
 
   return checks;
 }

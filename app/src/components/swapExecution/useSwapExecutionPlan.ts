@@ -47,6 +47,14 @@ import {
 } from "../../suggestions/swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../../suggestions/swapExecution/planResolution";
 import { eventsForSubmitOutcome, type SubmitOutcome } from "../../suggestions/swapExecution/submitResolution";
+import {
+  CONFIRMATION_POLL_INTERVAL_MS,
+  decideFromConfirmation,
+  fetchConfirmationState,
+  hasPassedDeadline,
+  timeoutEvent,
+  type FetchConfirmationOptions,
+} from "../../suggestions/swapExecution/confirmationPolling";
 
 /**
  * Submits a plan through the user's wallet. Null when no wallet can — `approve` is then
@@ -65,6 +73,9 @@ export interface UseSwapExecutionPlanOptions {
   submit?: SwapPlanSubmitter | null;
   fetcher?: typeof fetchSwapExecutionPlan;
   fetchOptions?: FetchSwapExecutionPlanOptions;
+  /** Injectable confirmation reader, for the gallery and for fixtures. */
+  confirmationFetcher?: typeof fetchConfirmationState;
+  confirmationOptions?: FetchConfirmationOptions;
   /** Injectable clock, for the gallery and for fixtures. */
   nowMs?: () => number;
 }
@@ -161,6 +172,53 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expiresAtMs, state.phase]);
+
+  // Watch a submitted transaction until it lands or we give up.
+  //
+  // Driven by the signature rather than by the phase alone, so a re-render cannot restart the
+  // clock: the deadline belongs to the transaction, not to the component. Stopping is NOT a
+  // failure of the transaction — `confirm_timeout` keeps the signature, and the copy says the
+  // swap may still complete.
+  const confirmationFetcher = opts.confirmationFetcher ?? fetchConfirmationState;
+  const watchedSignature = state.phase === "confirming" ? state.signature : null;
+  useEffect(() => {
+    if (watchedSignature == null) return;
+    const startedAt = now();
+    const controller = new AbortController();
+    let stopped = false;
+    let timer: number | undefined;
+
+    const tick = async () => {
+      if (stopped) return;
+      const result = await confirmationFetcher(watchedSignature, {
+        ...opts.confirmationOptions,
+        signal: controller.signal,
+      });
+      if (stopped) return;
+      const decision = decideFromConfirmation(result);
+      if (decision.action === "stop") {
+        stopped = true;
+        for (const event of decision.events) dispatch(event);
+        return;
+      }
+      // Check the deadline AFTER the read, so a transaction that confirmed on the last attempt
+      // is reported as confirmed rather than as a timeout we happened to reach first.
+      if (hasPassedDeadline(startedAt, now())) {
+        stopped = true;
+        dispatch(timeoutEvent());
+        return;
+      }
+      timer = window.setTimeout(() => void tick(), CONFIRMATION_POLL_INTERVAL_MS);
+    };
+    void tick();
+
+    return () => {
+      stopped = true;
+      controller.abort();
+      if (timer != null) window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedSignature]);
 
   // Abort on unmount. A fetch outliving the component is a plan nobody will ever look at.
   useEffect(() => () => { abortRef.current?.abort(); }, []);

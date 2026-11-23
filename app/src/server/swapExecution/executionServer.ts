@@ -21,6 +21,7 @@
  */
 import http from "node:http";
 import { createSwapExecuteHandler, isExecutionEnabled } from "./executionHandler";
+import { createConfirmationChecker } from "./confirmationStatus";
 import { SwapRateLimiter, SWAP_RATE_LIMIT_CONFIG } from "../swapQuote/rateLimit";
 import { nodeEnvReader, detectLeakedSwapEnv, SWAP_PROVIDER_ENDPOINTS, type EnvReader } from "../swapQuote/providerConfig";
 
@@ -72,6 +73,7 @@ export function createExecutionRequestListener(opts: ExecutionServerOptions = {}
     fetchImpl: opts.fetchImpl,
     now: opts.now,
   });
+  const checkConfirmation = createConfirmationChecker({ env });
   const limiter = new SwapRateLimiter();
 
   return (req, res) => {
@@ -88,6 +90,18 @@ export function createExecutionRequestListener(opts: ExecutionServerOptions = {}
       // Reports only whether execution is switched on — never the provider endpoint or any env value.
       const enabled = isExecutionEnabled(env);
       send(enabled ? 200 : 503, { state: enabled ? "enabled" : "disabled", lane: "swap_execution" });
+      return;
+    }
+
+    // Confirmation status: a READ, so GET, and deliberately before the POST-only gate below.
+    // It returns one of three words and nothing about the transaction's contents.
+    if (req.method === "GET" && req.url?.startsWith("/api/swap-execute/status")) {
+      const signature = new URL(req.url, "http://localhost").searchParams.get("signature") ?? "";
+      void (async () => {
+        const result = await checkConfirmation(signature);
+        if (result == null) { send(400, { error: "invalid_signature" }); return; }
+        send(200, result);
+      })();
       return;
     }
 

@@ -29,10 +29,11 @@ import type {
 import type { ContributionPlanReviewDetails } from "../suggestions/contributionPlanReviewDetails";
 import type { StableYieldReviewPresentation } from "../suggestions/yieldStrategyPlanPresentationTypes";
 import { cardProtocolName } from "../suggestions/yieldStrategyPlanPresentation";
-import type { SwapActionReadiness, SwapQuoteComparisonAssessment } from "../suggestions/swapQuote/swapQuoteContracts";
+import type { SwapActionContext, SwapActionReadiness, SwapQuoteComparisonAssessment } from "../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapQuoteFetcher } from "../suggestions/swapQuote/swapQuoteClient";
 import type { SwapHandoff } from "../suggestions/swapQuote/providerSwapLinks";
 import SwapQuoteComparisonSection from "./swapQuote/SwapQuoteComparisonSection";
+import SwapExecutionSection from "./swapExecution/SwapExecutionSection";
 import AssetIdentity from "./AssetIdentity";
 import ModalActionsFooter from "./ModalActionsFooter";
 
@@ -127,6 +128,9 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
   // 23C.2 — the read-only handoff reported by the "Suggested route" section drives the sticky "Swap on <provider>"
   // footer (a link out only; WealthSmith prepares/signs/submits nothing). Null when there is no selected route.
   const [swapHandoff, setSwapHandoff] = useState<SwapHandoff | null>(null);
+  // Phase 6 — the inputs for the Execution Boundary, reported by the route section. Null unless
+  // a single-leg route resolved; the Boundary still has to say yes after that.
+  const [executionCtx, setExecutionCtx] = useState<{ action: SwapActionContext; assessment: SwapQuoteComparisonAssessment } | null>(null);
 
   // The read-only "Swap Route" section (Rebalance / Trim / eligible DCA), reused across modal variants. Suppressed
   // when the suggestion opts out (details.hideSwapRoute) — e.g. a frozen asset that can't be swapped.
@@ -140,6 +144,20 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       presetLoading={swapQuotePresetLoading}
       nowMs={swapQuoteNowMs}
       onHandoff={setSwapHandoff}
+      onExecutionContext={setExecutionCtx}
+    />
+  ) : null;
+
+  // Phase 6 — the in-app confirm step, when the Boundary permits one. It renders null whenever
+  // it does not: no wallet, an unpermitted rail, an expired quote, a provider we cannot build
+  // for. The handoff footer below then stands, which is the fallback working rather than a
+  // degraded state.
+  const executionSection = executionCtx ? (
+    <SwapExecutionSection
+      action={executionCtx.action}
+      assessment={executionCtx.assessment}
+      nowMs={swapQuoteNowMs}
+      onClose={onClose}
     />
   ) : null;
 
@@ -348,7 +366,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
           </div>
           {/* Funded DCA → the live "Swap on <provider>" handoff; a future DCA with no on-chain source → its
               read-only Moonpay handoff ("Buy SOL on Moonpay"). Mutually exclusive by construction. */}
-          {swapFooter ?? externalLinkFooter(contributionReview.externalLink)}
+          {executionSection ?? swapFooter ?? externalLinkFooter(contributionReview.externalLink)}
         </div>
       </div>
     );
@@ -815,7 +833,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
           />
         )}
         {/* 23C.2 — read-only "Swap on <provider>" handoff footer (Rebalance / Trim; DCA uses its own branch). */}
-        {swapFooter}
+        {executionSection ?? swapFooter}
         {/* Sticky footer for an OBSERVATION. There is no action to hand off here —
             reviewing IS the action — so the primary control acknowledges it. Dismiss
             hides only THIS situation; the card returns by itself once the underlying
