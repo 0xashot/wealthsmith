@@ -498,8 +498,14 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"declined" as ExecutionFailureKey} onCancel={noop} />,
   },
   {
+    key: "reverted_on_chain",
+    label:
+      "Reverted on chain — it WAS sent, ran, and failed. Different copy from the wallet-error case below, because it reached the network, charged a fee, and left a signature the link below points at. Telling someone their swap “wasn’t sent” above a link to the transaction that was sent is the one thing this sheet used to get wrong.",
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"submit_failed" as ExecutionFailureKey} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
+  },
+  {
     key: "submit_failed",
-    label: "Not sent — funds stayed in the wallet",
+    label: "Not sent — the WALLET could not send it. No signature, no fee, nothing reached the network, so no explorer link. Compare with the reverted case above.",
     node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"submit_failed" as ExecutionFailureKey} onCancel={noop} />,
   },
 ];

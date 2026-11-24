@@ -18,6 +18,8 @@ import {
   SWAP_CONFIRM_EXPIRED_DESC,
   SWAP_CONFIRM_EXPIRED_TITLE,
   SWAP_CONFIRM_SUBMITTING,
+  SWAP_CONFIRM_REVERTED_DESC,
+  SWAP_CONFIRM_REVERTED_TITLE,
   SWAP_CONFIRM_SUBMIT_FAILED_DESC,
   SWAP_CONFIRM_SUBMIT_FAILED_TITLE,
   SWAP_CONFIRM_TIMEOUT_DESC,
@@ -175,7 +177,22 @@ export function isAfterApproval(phase: ExecutionPhase): boolean {
 }
 
 /** Title and body for a terminal failure. `cancelled` has none — the sheet simply closes. */
-export function failureCopy(failure: ExecutionFailureKey | null): { title: string; desc: string } | null {
+export function failureCopy(
+  failure: ExecutionFailureKey | null,
+  /**
+   * Whether the transaction reached the chain, i.e. whether a signature exists.
+   *
+   * `submit_failed` covers two outcomes that are not the same thing for the user. The wallet
+   * refusing to send means nothing left their machine: no signature, no fee. A revert means it
+   * was sent, ran, and failed: there IS a signature, the explorer link is on screen, and a fee
+   * was charged. Telling someone their swap "wasn't sent" directly above a link to the
+   * transaction that was sent is the one place this sheet said something untrue.
+   *
+   * Taken from the signature rather than from `failureDetail`, which is documented as never
+   * being rendered and must stay that way.
+   */
+  reachedChain = false,
+): { title: string; desc: string } | null {
   switch (failure) {
     case "declined":
       return { title: SWAP_CONFIRM_DECLINED_TITLE, desc: SWAP_CONFIRM_DECLINED_DESC };
@@ -186,7 +203,9 @@ export function failureCopy(failure: ExecutionFailureKey | null): { title: strin
     case "verification_failed":
       return { title: SWAP_CONFIRM_VERIFICATION_FAILED_TITLE, desc: SWAP_CONFIRM_VERIFICATION_FAILED_DESC };
     case "submit_failed":
-      return { title: SWAP_CONFIRM_SUBMIT_FAILED_TITLE, desc: SWAP_CONFIRM_SUBMIT_FAILED_DESC };
+      return reachedChain
+        ? { title: SWAP_CONFIRM_REVERTED_TITLE, desc: SWAP_CONFIRM_REVERTED_DESC }
+        : { title: SWAP_CONFIRM_SUBMIT_FAILED_TITLE, desc: SWAP_CONFIRM_SUBMIT_FAILED_DESC };
     case "confirm_timeout":
       return { title: SWAP_CONFIRM_TIMEOUT_TITLE, desc: SWAP_CONFIRM_TIMEOUT_DESC };
     case "plan_unavailable":

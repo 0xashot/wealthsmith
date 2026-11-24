@@ -209,6 +209,15 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
       // kept so the user can look it up; claiming failure for something still in flight would be
       // the worst lie this flow could tell.
       if (event.type === "confirm_timeout") return fail(state, "confirm_timeout");
+      // THE CHAIN RAN IT AND IT REVERTED. `decideFromConfirmation` calls this "the ONE failure
+      // confirmation may report", and the transition to receive it was never added — so the
+      // event was dropped and a transaction the chain had definitively rejected sat in
+      // `confirming` until the 90s deadline, then told the user it "may still complete".
+      // Worse than saying nothing: a false statement about an outcome we already knew.
+      //
+      // Distinct from `confirm_timeout` precisely because we DO know. The signature survives
+      // (`fail` spreads the state), so the sheet can show what happened and link to it.
+      if (event.type === "submit_failed") return fail(state, "submit_failed", event.detail ?? null);
       return state;
 
     case "confirmed":

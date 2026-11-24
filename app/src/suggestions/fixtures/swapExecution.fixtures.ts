@@ -887,6 +887,28 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     ];
     return keys.every((k) => (k === "cancelled" ? failureCopy(k) === null : failureCopy(k) != null));
   })(), "exhaustive mapping");
+  add("SWCS-5b: a REVERTED swap is not told it was never sent", (() => {
+    // Both outcomes are `submit_failed`, and they are not the same thing. A revert reached the
+    // network, ran, failed, charged a fee and produced a signature the sheet then LINKS TO —
+    // so "the swap wasn't sent" sat directly above a link to the transaction that was sent.
+    const reverted = failureCopy("submit_failed", true);
+    const neverSent = failureCopy("submit_failed", false);
+    return reverted != null && neverSent != null &&
+      reverted.title !== neverSent.title &&
+      !/wasn.t sent/i.test(reverted.title) &&
+      !/stayed in your wallet/i.test(reverted.desc) &&
+      // It must own up to the fee, which a user checking Solscan will see anyway.
+      /network fee/i.test(reverted.desc) &&
+      // The wallet-error case is accurate as it stands and must keep saying so.
+      /wasn.t sent/i.test(neverSent.title) && /stayed in your wallet/i.test(neverSent.desc);
+  })(), "a revert is not a non-send");
+  add("SWCS-5c: the sheet decides that from the SIGNATURE, not from failureDetail", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // `failureDetail` is documented as never rendered; the signature is the honest signal and
+    // already decides whether the explorer link shows.
+    return /failureCopy\(failure, typeof signature === "string" && signature\.length > 0\)/.test(c) &&
+      !/failureDetail/.test(c);
+  })(), "signature is the signal");
   add("SWCS-6: expiry has its OWN title — it is not an outage, and must not be filed under one", (() => {
     const exp = failureCopy("expired");
     const out = failureCopy("plan_unavailable");
@@ -1343,6 +1365,34 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const after: ExecutionPhase[] = ["signing", "submitting", "confirming", "confirmed"];
     return before.every((p2) => !isAfterApproval(p2)) && after.every((p2) => isAfterApproval(p2));
   })(), "cancel window");
+  add("SWXS5-13a: EVERY event the poll can emit is acted on by the machine", (() => {
+    // The fourth dropped-event bug in this lane: `decideFromConfirmation` calls a revert "the
+    // ONE failure confirmation may report", and the transition to receive it was never added.
+    // The event vanished, so a transaction the chain had definitively rejected sat in
+    // `confirming` for the full 90s deadline and then said it "may still complete".
+    //
+    // Checked by walking the PRODUCER rather than a list someone wrote down: every outcome the
+    // poll can decide is fed to the reducer from `confirming`, and each must move it. A new
+    // confirmation state added to `decideFromConfirmation` is then caught here, not in
+    // production.
+    const toConfirming: ExecutionEvent[] = [
+      { type: "prepare" }, { type: "plan_received", plan: plan() }, { type: "verified" },
+      { type: "sign" }, { type: "signed" }, { type: "submitted", signature: "sig" },
+    ];
+    const confirming = toConfirming.reduce(executionReducer, initialExecutionState);
+    if (confirming.phase !== "confirming") return false;
+
+    const results: Parameters<typeof decideFromConfirmation>[0][] = [
+      { ok: true, state: "confirmed" }, { ok: true, state: "failed" },
+      { ok: true, state: "pending" }, { ok: false },
+    ];
+    return results.every((r) => {
+      const decision = decideFromConfirmation(r);
+      if (decision.action === "keep_waiting") return true;
+      // Every event it decides to STOP on must actually move the machine.
+      return decision.events.every((e) => executionReducer(confirming, e).phase !== "confirming");
+    });
+  })(), "no dropped confirmation event");
   add("SWXS5-13b: no explorer link while WE are still watching the chain for them", (() => {
     // A link beside a spinner invites the reader to go do, in another tab, the job the sheet is
     // already doing — and what they find mid-flight is likelier to confuse than to inform.

@@ -77,7 +77,8 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
   const { phase, terms, failure, signature, onCancel, onRefresh, onApprove, demo = false } = props;
   const demoTipId = useId();
 
-  const failed = failureCopy(failure);
+  // A signature means it reached the chain, which changes what a `submit_failed` means.
+  const failed = failureCopy(failure, typeof signature === "string" && signature.length > 0);
   if (phase === "failed" && failed) {
     return (
       <section className="review-modal__section swap-confirm" aria-label={SWAP_CONFIRM_TITLE}>

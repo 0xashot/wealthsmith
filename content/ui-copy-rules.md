@@ -1076,6 +1076,25 @@ confirmation step is for. Wallets that re-quote continuously show no clock
 either. The plan still expires — after a few renewals the sheet falls through to
 the expired state above — the reader is simply not made to watch it.
 
+**A reverted swap is not an unsent one.** Both arrive as `submit_failed`, and
+they are different events for the user:
+
+```text
+Wallet could not send it:  The swap wasn’t sent
+                           Your funds stayed in your wallet. …
+
+Chain ran it and it failed: The swap didn’t go through
+                           It reached the network and failed, so your tokens
+                           weren’t swapped. The network fee was still charged. …
+```
+
+A revert reached the network, cost a fee, and produced a signature the sheet
+links to — so the old shared copy put "wasn't sent" directly above a link to the
+transaction that was sent. Say the fee was taken: it is small, the user will see
+it on the explorer anyway, and finding it unmentioned is what turns a failed
+swap into a reason to distrust us. Which copy applies is decided by whether a
+signature exists, never by `failureDetail`, which is never rendered.
+
 The check is a statement about this transaction, not reassurance in general. Do
 not write “Verified”, “Safe”, “Secure”, or anything implying an endorsement of
 the trade itself. We checked that the transaction matches the terms. We did not

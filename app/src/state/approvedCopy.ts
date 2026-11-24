@@ -1144,9 +1144,30 @@ export const SWAP_CONFIRM_VERIFICATION_FAILED_TITLE = "We couldn’t verify thes
 export const SWAP_CONFIRM_VERIFICATION_FAILED_DESC =
   "The transaction we were given doesn’t match the terms we’d show you, so we’re not asking you to approve it. You can swap on Jupiter directly.";
 
+/**
+ * The wallet could not send it. Nothing reached the network, so there is no signature, no
+ * transaction to look up, and no fee.
+ */
 export const SWAP_CONFIRM_SUBMIT_FAILED_TITLE = "The swap wasn’t sent";
 export const SWAP_CONFIRM_SUBMIT_FAILED_DESC =
   "Your funds stayed in your wallet. You can try again or swap on Jupiter directly.";
+
+/**
+ * The chain RAN it and it reverted — a different outcome, and until now it borrowed the copy
+ * above and said something untrue.
+ *
+ * A revert means the transaction was sent, did reach the network, and failed there. The tokens
+ * were not swapped, but a network fee WAS charged, and the user holds a signature they can
+ * look up. The screen even shows them the explorer link — so "the swap wasn't sent" sat
+ * directly above a link to the transaction that was, demonstrably, sent.
+ *
+ * So: say it reached the network, say the tokens did not move, and say the fee was taken. The
+ * fee is small and admitting it is the whole point — a person who checks Solscan will see it,
+ * and finding it unmentioned is what turns a failed swap into a reason to distrust the app.
+ */
+export const SWAP_CONFIRM_REVERTED_TITLE = "The swap didn’t go through";
+export const SWAP_CONFIRM_REVERTED_DESC =
+  "It reached the network and failed, so your tokens weren’t swapped. The network fee was still charged. You can try again or swap on Jupiter directly.";
 
 /**
  * Submitted but unconfirmed. This must never read as failure: the transaction is
