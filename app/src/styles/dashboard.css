@@ -5426,16 +5426,6 @@ td.vetting-scores-table__date {
   font-variant-numeric: tabular-nums;
 }
 
-/* The check's state. Quiet by default: it is a precondition the user is waiting
-   on, not an achievement to celebrate, and a loud "Success" on a financial
-   confirmation reads as an endorsement of the trade itself. */
-.swap-confirm__check {
-  margin: var(--spacing-stack-gap-sm) 0 0;
-  font: var(--typography-body-sm-font);
-  color: var(--color-text-secondary);
-  min-height: 1.25em; /* reserve the line so the footer does not jump when it fills */
-}
-
 /* Success, and the transaction link. Quiet: the swap landing is the outcome the user asked
    for, not an achievement, and a celebratory treatment on money moving reads as a sales
    moment rather than a receipt. */

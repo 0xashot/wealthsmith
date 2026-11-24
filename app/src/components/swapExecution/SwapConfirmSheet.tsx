@@ -52,7 +52,6 @@ import {
   solscanTransactionUrl,
   busyButtonLabelFor,
   showsExplorerLink,
-  statusLineFor,
 } from "./swapConfirmPresentation";
 
 export interface SwapConfirmSheetProps {
@@ -115,7 +114,6 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
   const providerIconUrl = terms ? resolveProtocolIcon(`${terms.providerId}.svg`) : null;
   const ready = phase === "ready";
   const confirmed = phase === "confirmed";
-  const statusLine = statusLineFor(phase);
   const busyLabel = busyButtonLabelFor(phase);
   const afterApproval = isAfterApproval(phase);
   const explorerUrl = signature ? solscanTransactionUrl(signature) : null;
@@ -181,17 +179,6 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
         </dl>
       )}
 
-      {/* One status line, for every phase. `aria-live` because it changes without the user
-          acting, and because what it says is the thing they are waiting on.
-
-          ALWAYS RENDERED before completion, even when it has nothing to say — which `ready` now
-          does. The element reserves its own height, so removing it when the check finishes
-          would pull the Approve button upward at the exact moment someone is reaching for it.
-          Keeping one live region in place also announces better than one that appears and
-          disappears. */}
-      {!confirmed && (
-        <p className="swap-confirm__check" role="status" aria-live="polite">{statusLine}</p>
-      )}
 
       {/* Success. No figure: reading what actually arrived needs a chain read the browser
           cannot make, and the rule is explicit that an unreadable amount is omitted rather than

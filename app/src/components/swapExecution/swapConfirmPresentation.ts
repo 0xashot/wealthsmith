@@ -104,30 +104,29 @@ export function formatApproxTokens(amount: string | null | undefined, symbol: st
  * `confirmed` returns null because success is its own block, not a status line.
  */
 /**
- * Where the sheet shows that something is happening, and what it says.
+ * What the sheet says while the user is waiting on us, and it always says it IN THE BUTTON.
  *
- * ONE function rather than two, because the guarantee worth keeping is "whenever the user is
- * waiting on us, the sheet says so somewhere" — and that is only checkable if both places are
- * decided together. Splitting it into a status-line rule and a button rule would let a phase
- * fall between them and go silent, which is exactly the bug the gallery found once already.
+ * There used to be a second place — a status line under the terms, for everything before
+ * Approve. Two places meant the reader had to know where to look, and a renewal put a sentence
+ * under the figures while the button underneath said nothing at all. The primary button is the
+ * one thing on this sheet that is always about what happens next, so every waiting state now
+ * lives there: Approve when there is something to approve, and a spinner with a word when
+ * there is not.
  *
- * BEFORE approval it is a line under the terms: nothing else on screen is moving, and the
- * reader is waiting to be told whether they may proceed.
+ * That also removes the layout problem the line created. The button slot is occupied in every
+ * phase before completion, so nothing appears, disappears, or shifts underneath a reader who
+ * is about to press it.
  *
- * AFTER approval it moves INTO the button. The eye is already on the control it just pressed,
- * so that is where the answer belongs; a sentence appearing somewhere else asks it to go
- * looking. The button also keeps its place, so the footer does not empty out at the one moment
- * the user most wants confirmation that their press registered.
+ * `confirmed` and `failed` return null: success has its own block, and a failure replaces the
+ * sheet's whole body with its own title and remedy.
  */
-export type BusyPresentation =
-  | { where: "line"; label: string }
-  | { where: "button"; label: string };
+export type BusyPresentation = { where: "button"; label: string };
 
 export function busyPresentationFor(phase: ExecutionPhase): BusyPresentation | null {
   switch (phase) {
     case "preparing":
     case "verifying":
-      return { where: "line", label: SWAP_CONFIRM_CHECKING };
+      return { where: "button", label: SWAP_CONFIRM_CHECKING };
     case "signing":
       return { where: "button", label: SWAP_CONFIRM_AWAITING_WALLET };
     case "submitting":
@@ -148,11 +147,6 @@ export function busyPresentationFor(phase: ExecutionPhase): BusyPresentation | n
   }
 }
 
-/** The status line only. Null once the state has moved into the button. */
-export function statusLineFor(phase: ExecutionPhase): string | null {
-  const busy = busyPresentationFor(phase);
-  return busy?.where === "line" ? busy.label : null;
-}
 
 /** The button's busy label, or null when the button is not in a busy state. */
 export function busyButtonLabelFor(phase: ExecutionPhase): string | null {

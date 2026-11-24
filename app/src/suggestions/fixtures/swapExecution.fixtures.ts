@@ -72,7 +72,6 @@ import {
   busyButtonLabelFor,
   busyPresentationFor,
   showsExplorerLink,
-  statusLineFor,
 } from "../../components/swapExecution/swapConfirmPresentation";
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
 import { SWAP_CONFIRM_EXPIRED_TITLE, SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER } from "../../state/approvedCopy";
@@ -613,17 +612,23 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       // The states where something IS happening still say so — removing the verdict must not
       // quietly empty the sheet. Checked against the combined rule, because after Approve the
       // answer lives in the button rather than on the line.
-      statusLineFor("preparing") === SWAP_CONFIRM_CHECKING &&
-      statusLineFor("verifying") === SWAP_CONFIRM_CHECKING &&
+      busyButtonLabelFor("preparing") === SWAP_CONFIRM_CHECKING &&
+      busyButtonLabelFor("verifying") === SWAP_CONFIRM_CHECKING &&
       busyButtonLabelFor("signing") === SWAP_CONFIRM_AWAITING_WALLET &&
       busyButtonLabelFor("submitting") === SWAP_CONFIRM_SUBMITTING;
   })(), "no verdict before the act");
-  add("SWCC-5c: the status line keeps its place when it empties, so Approve does not jump", (() => {
+  add("SWCC-5c: the primary button slot is filled in EVERY phase before completion", (() => {
+    // This is what keeps the footer still. The old status line reserved its own height for the
+    // same reason; with the line gone, the guarantee moves to the button always being there —
+    // Approve when there is something to approve, a spinner and a word when there is not.
+    const beforeCompletion: ExecutionPhase[] = ["preparing", "verifying", "signing", "submitting", "confirming"];
+    const everyWaitingPhaseHasAButton = beforeCompletion.every((p2) => busyButtonLabelFor(p2) != null);
+    // `ready` is the exception and is covered by the Approve button itself.
+    const readyUsesApprove = busyButtonLabelFor("ready") === null;
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
-    // Rendered on the phase, not on the text. Dropping the element at `ready` would pull the
-    // footer upward at the exact moment someone is reaching for the button.
-    return /\{!confirmed && \(/.test(c) && !/\{statusLine && \(/.test(c);
-  })(), "no layout jump");
+    // And the line really is gone, rather than merely unused.
+    return everyWaitingPhaseHasAButton && readyUsesApprove && !/swap-confirm__check/.test(c);
+  })(), "footer never empties");
   add("SWCC-6: every estimated FIGURE carries a tilde, the guaranteed one carries none", (() => {
     // The mark moved from the label to the value, so the guarantee is checked where it now
     // lives. What must hold is unchanged: an approximate figure is visibly approximate, and the
@@ -1285,18 +1290,15 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const silent: ExecutionPhase[] = ["idle", "ready", "confirmed", "failed"];
     return busySpeaks && silent.every((p2) => busyPresentationFor(p2) === null);
   })(), "no blank states while waiting on us");
-  add("SWXS5-11b: before Approve it is a line, after Approve it is the button", (() => {
-    // Not cosmetic. Before approval nothing else on screen is moving and the reader is waiting
-    // to be told whether they may proceed; after it, the eye is on the control it just pressed
-    // and the footer must not empty out.
-    const line: ExecutionPhase[] = ["preparing", "verifying"];
-    const button: ExecutionPhase[] = ["signing", "submitting", "confirming"];
-    return line.every((p2) => busyPresentationFor(p2)?.where === "line") &&
-      button.every((p2) => busyPresentationFor(p2)?.where === "button") &&
-      // And the two accessors agree with the one rule, rather than drifting from it.
-      line.every((p2) => statusLineFor(p2) != null && busyButtonLabelFor(p2) === null) &&
-      button.every((p2) => statusLineFor(p2) === null && busyButtonLabelFor(p2) != null);
-  })(), "one rule, two places");
+  add("SWXS5-11b: EVERY waiting state is in the button — there is no second place to look", (() => {
+    // There used to be a status line under the terms for everything before Approve. Two places
+    // meant the reader had to know which to watch, and during a renewal a sentence appeared
+    // under the figures while the button below it said nothing. One slot now, always the
+    // primary button.
+    const waiting: ExecutionPhase[] = ["preparing", "verifying", "signing", "submitting", "confirming"];
+    return waiting.every((p2) => busyPresentationFor(p2)?.where === "button") &&
+      waiting.every((p2) => (busyButtonLabelFor(p2) ?? "").length > 0);
+  })(), "one slot");
   add("SWXS5-11c: the busy button is never pressable and never a real `disabled`", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
     const busyBlock = c.slice(c.indexOf("{busyLabel && ("));

@@ -1064,7 +1064,7 @@ export const SWAP_CONFIRM_MINIMUM_INFO =
   "The least you will receive. This is enforced by the network: if the swap would deliver less, it fails and your funds stay in your wallet.";
 
 /** Verification states. A statement about this transaction, never reassurance in general. */
-export const SWAP_CONFIRM_CHECKING = "Checking transaction…";
+export const SWAP_CONFIRM_CHECKING = "Checking transaction";
 /*
  * There is deliberately NO "checked" line. `ready` is the resting state — terms on screen,
  * Approve available — and a verdict above an unpressed button read as the swap having already
