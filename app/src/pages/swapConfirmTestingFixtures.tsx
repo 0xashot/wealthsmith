@@ -167,7 +167,7 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "hook_real",
     label:
-      "REAL HOOK — a genuine mainnet transaction through the real reducer and the real structural check. Reaches Ready; no Approve, because no signer exists until Phase 5.",
+      "REAL HOOK, NO WALLET — a genuine mainnet transaction through the real reducer and the real structural check. Reaches Ready with no Approve button, because no wallet is attached to this case: the button is rendered only when pressing it would really sign something, never greyed out. This is what a signed-out visitor sees. The next case is the same flow WITH a wallet.",
     node: <HookDrivenCase />,
   },
   {
@@ -238,7 +238,7 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   },
   {
     key: "ready",
-    label: "Ready — checked, signer wired (Phase 5). The only state where Approve exists.",
+    label: "Ready, WITH a wallet — the only state where Approve exists. Compare with the no-wallet case above: same state, button absent rather than disabled.",
     node: <SwapConfirmSheet phase={"ready" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} onApprove={noop} />,
   },
   {
