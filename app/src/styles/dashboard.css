@@ -5349,13 +5349,26 @@ td.vetting-scores-table__date {
   gap: 8px;
 }
 
-/* ONE width for the sheet's primary action, whichever button is occupying the slot.
+/* ONE size for the sheet's primary action, whichever button is occupying the slot.
    Approve, the spinner-only fetch state and the two stated busy states all share it, so the
    footer never resizes between them — a spinner-only button would otherwise collapse to the
-   width of the spinner and shift everything beside it, every renewal. */
+   width of the spinner and shift everything beside it, every renewal.
+
+   `justify-content` is required once a min-width exists: the base class is inline-flex with
+   no justification, so any button wider than its own label renders that label against the
+   left edge. Approve did exactly that the moment the min-width was added. */
 .swap-confirm .review-modal__primary-action,
 .swap-confirm .review-modal__primary-action--busy {
   min-width: 7.5rem;
+  justify-content: center;
+}
+
+/* A zero-width space, so the spinner-only button has a TEXT line box and is therefore exactly
+   as tall as one carrying a label (40px against 42px without it). The height comes from the
+   button's own `--typography-button-md-font` line-height, not from a pixel guess that would
+   drift the moment that token changes. */
+.swap-confirm .review-modal__primary-action--busy::before {
+  content: "\200b";
 }
 
 /* A small ring with one lighter quarter, rotating. Drawn in CSS rather than
