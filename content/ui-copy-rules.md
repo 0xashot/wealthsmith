@@ -999,10 +999,10 @@ tolerance, a target, or a provider’s promise.
 ### States
 
 ```text
-Checking:   Checking transaction…        (a line under the terms)
-Passed:     (nothing)
-Approved:   ⟳ Waiting for wallet            (in the button)
-Sent:       ⟳ Confirming                    (in the button)
+Checking:   ⟳ Checking transaction
+Ready:      Approve
+Approved:   ⟳ Waiting for wallet
+Sent:       ⟳ Confirming
 Expired:    These terms expired. Nothing was sent.
 ```
 
@@ -1013,11 +1013,16 @@ shows the terms and asks for Approve, so a reader who expected an immediate
 swap is corrected before any transaction exists. It stays inside the rule that
 matters: it names what the USER is doing, never WealthSmith.
 
-**Before Approve the state is a line; after Approve it moves into the button.**
-Nothing else on screen is moving beforehand and the reader is waiting to be told
-whether they may proceed. Afterwards the eye is on the control it just pressed,
-so that is where the answer belongs — and the button keeping its place is what
-makes the press look like it registered, at the one moment that matters most.
+**Every waiting state lives in the primary button, and there is no status
+line.** There used to be one under the terms for everything before Approve.
+Two places meant the reader had to know which to watch, and during a quote
+renewal a sentence appeared under the figures while the button below it said
+nothing at all.
+
+The button slot is therefore occupied in every phase before completion —
+Approve when there is something to approve, a spinner and a word when there is
+not. That is also what keeps the footer still: nothing appears, disappears or
+shifts underneath someone who is about to press it.
 
 **No explorer link while the swap is in flight.** During those two states the
 sheet is already polling the chain on the reader's behalf and will say what
