@@ -22,12 +22,22 @@
 import type { ExecutionPhase } from "./executionLifecycle";
 
 /**
- * How many times a plan may renew itself before the sheet gives up and expires.
+ * How many times a plan may renew itself before the review gives up and closes.
  *
- * Three is roughly 75 seconds of reading time. Past that the refreshes are almost certainly
- * being spent on an abandoned tab.
+ * Six is around two and a half minutes of reading with the page in front of someone. The
+ * number is a judgement about ATTENTION, not about cost: it has to outlast a careful reader
+ * checking these figures against another tab, because the countdown is hidden and closing
+ * their review arrives with no warning. Three (~75s) was comfortably inside that, which is
+ * why it moved.
+ *
+ * The cost is linear and modest — one provider round trip plus one simulation each — and a
+ * hidden tab spends none of them, so the ceiling only applies to someone actually reading.
+ *
+ * Worth revisiting once real swaps show how long people sit on this screen; until then it is
+ * deliberately generous, because the failure it guards against (a forgotten tab re-simulating
+ * forever) is cheap, and the one it would cause (closing on someone mid-read) is not.
  */
-export const MAX_AUTO_REFRESHES = 3;
+export const MAX_AUTO_REFRESHES = 6;
 
 export type ExpiryDecision =
   /** Fetch a new plan; the clock restarts and the reader never sees an interruption. */

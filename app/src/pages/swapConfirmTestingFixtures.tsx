@@ -189,12 +189,12 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "hook_auto_refresh",
     label:
-      "REAL HOOK, short-lived quote — watch it renew. After 3 renewals the host is told to close the review and show a toast; here that is reported in the line below instead, because the gallery has no modal. In the app this modal would simply close. It renews itself and the clock restarts, instead of dropping you on “These terms expired”. Each renewal re-fetches and re-checks; after 3 it gives up and expires, so a forgotten tab stops costing simulations.",
+      "REAL HOOK, short-lived quote — watch it renew itself and the clock restart, instead of dropping you on “These terms expired”. Each renewal re-fetches and re-checks. Once the allowance is spent the host is told to close the review and show a toast; the gallery has no modal, so it is reported in the line above instead.",
     node: (
       <>
       <p id="gallery-gave-up" className="modal__intro">(waiting — the host has not been called yet)</p>
       <HookDrivenCase
-        ttlMs={6_000}
+        ttlMs={3_000}
         submit={async () => ({ kind: "submitted", signature: REAL_FINALIZED_SIGNATURE })}
         onGaveUp={() => {
           // Stands in for the host: the real app closes the review and pushes a toast.

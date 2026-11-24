@@ -981,8 +981,8 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       const under = decideOnExpiry(ctx({ autoRefreshCount: MAX_AUTO_REFRESHES - 1 }));
       const at = decideOnExpiry(ctx({ autoRefreshCount: MAX_AUTO_REFRESHES }));
       const over = decideOnExpiry(ctx({ autoRefreshCount: MAX_AUTO_REFRESHES + 99 }));
-      // Having quietly re-quoted three times with no decision, a dead-end card offering a
-      // fourth attempt is an obstacle; the review closes and a toast says what happened.
+      // Having quietly re-quoted its whole allowance with no decision, a dead-end card
+      // offering yet another attempt is an obstacle; the review closes and a toast says so.
       return under === "auto_refresh" && at === "expire_and_close" && over === "expire_and_close";
     })(), "bounded cost");
     add("SWQR-3b: a HIDDEN tab expires in place and never closes the review", (() => {
@@ -993,7 +993,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       return hiddenAtCap === "expire" && hiddenUnder === "expire";
     })(), "never close behind their back");
     add("SWQR-3c: only a spent allowance closes it — no other expiry does", (() => {
-      // Everything that is not "we tried three times while you watched" leaves the card up.
+      // Everything that is not "we spent the allowance while you watched" leaves the card up.
       const notRefreshable = decideOnExpiry(ctx({ phase: "signing", autoRefreshCount: MAX_AUTO_REFRESHES }));
       const cannotPrepare = decideOnExpiry(ctx({ canPrepare: false, autoRefreshCount: MAX_AUTO_REFRESHES }));
       return notRefreshable === "expire" && cannotPrepare === "expire";
