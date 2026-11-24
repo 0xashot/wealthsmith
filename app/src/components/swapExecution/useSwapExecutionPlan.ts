@@ -299,6 +299,9 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
       category: action.suggestionCategory,
       failure: state.failure,
       sinceApprovalMs: approvedAtRef.current == null ? null : now() - approvedAtRef.current,
+      // Incremented before `prepare()` is called, so by the time this transition is observed a
+      // renewal already shows here. Reset with the rest of the flow when the request changes.
+      renewal: autoRefreshCountRef.current > 0,
     });
     if (event) emit(event);
     // eslint-disable-next-line react-hooks/exhaustive-deps

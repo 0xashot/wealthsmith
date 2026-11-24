@@ -14,9 +14,10 @@
  * Fixture-only. Nothing here prepares, signs or submits anything.
  */
 import SwapConfirmSheet from "../components/swapExecution/SwapConfirmSheet";
+import SwapExecutionSection from "../components/swapExecution/SwapExecutionSection";
 import { useSwapExecutionPlan } from "../components/swapExecution/useSwapExecutionPlan";
 import { REAL_SWAP_TAKER, REAL_SWAP_TX_SOL_INPUT } from "../suggestions/fixtures/realSwapTransactions";
-import type { SwapActionContext } from "../suggestions/swapQuote/swapQuoteContracts";
+import type { SwapActionContext, SwapQuoteComparisonAssessment } from "../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapExecutionPlan } from "../suggestions/swapExecution/executionContracts";
 import type { SwapPlanSubmitter } from "../components/swapExecution/useSwapExecutionPlan";
 import type { fetchConfirmationState } from "../suggestions/swapExecution/confirmationPolling";
@@ -86,6 +87,88 @@ const LIVE_SHAPED_PLAN: SwapExecutionPlan = {
   quotedAt: new Date().toISOString(),
   contractsVersion: "1.0.0",
 };
+
+/**
+ * A demo quote for the container case: jupiter selected, a guaranteed floor present.
+ *
+ * Shaped to satisfy both gates the container applies — the Boundary's offer rules and
+ * `demoConfirmTerms`, which refuses to preview a quote with no minimum.
+ */
+const GALLERY_ASSESSMENT = {
+  status: "selected",
+  actionId: "rebalance:gallery",
+  legId: "rebalance:gallery:0",
+  pairClass: "major",
+  comparedAt: new Date().toISOString(),
+  expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+  selectedProviderId: "jupiter",
+  selectionBasis: "lowest_estimated_total_cost",
+  candidates: [
+    {
+      providerId: "jupiter",
+      providerName: "Jupiter",
+      executionSurface: "jupiter",
+      underlyingVenues: ["Raydium CLMM"],
+      inputMint: TERMS.inputMint,
+      outputMint: TERMS.outputMint,
+      inputAmountRaw: "10000000",
+      expectedOutputRaw: "726942",
+      minimumOutputRaw: "723308",
+      expectedOutputTokens: "0.726942",
+      expectedOutputUsd: 0.7268,
+      quotedAt: new Date().toISOString(),
+      expiresAt: null,
+      quoteLatencyMs: 120,
+      priceImpactPct: 0.008,
+      includedSwapFeeUsd: null,
+      explicitPlatformFeeUsd: null,
+      estimatedNetworkFeeUsd: 0.01,
+      estimatedRentFeeUsd: 0,
+      liquidityAssessment: { status: "verified", minimumRouteLegLiquidityUsd: 320000, legs: [] },
+      freshness: "fresh",
+      eligible: true,
+      exclusionReasons: [],
+    },
+    // A SECOND eligible candidate, because the Boundary refuses to call one surviving route a
+    // comparison — MIN_ELIGIBLE_FOR_COMPARISON. The gate caught this fixture when it had only
+    // Jupiter, which is the rule working.
+    {
+      providerId: "raydium",
+      providerName: "Raydium",
+      executionSurface: "raydium",
+      underlyingVenues: ["Raydium AMM"],
+      inputMint: TERMS.inputMint,
+      outputMint: TERMS.outputMint,
+      inputAmountRaw: "10000000",
+      expectedOutputRaw: "726010",
+      minimumOutputRaw: "722380",
+      expectedOutputTokens: "0.726010",
+      expectedOutputUsd: 0.7259,
+      quotedAt: new Date().toISOString(),
+      expiresAt: null,
+      quoteLatencyMs: 310,
+      priceImpactPct: 0.009,
+      includedSwapFeeUsd: null,
+      explicitPlatformFeeUsd: null,
+      estimatedNetworkFeeUsd: 0.01,
+      estimatedRentFeeUsd: 0,
+      liquidityAssessment: { status: "verified", minimumRouteLegLiquidityUsd: 280000, legs: [] },
+      freshness: "fresh",
+      eligible: true,
+      exclusionReasons: [],
+    },
+  ],
+  comparedProviders: ["jupiter", "raydium", "orca"],
+  unavailableProviders: [],
+  estimatedTotalCostUsd: 0.01,
+  estimatedTotalCostPct: 0.01,
+  expectedOutputTokens: "0.726942",
+  minimumOutputTokens: "0.723308",
+  economicallyEquivalent: false,
+  warnings: [],
+  blockingReasons: [],
+  methodologyVersion: "swap_quote_methodology_1.0.0",
+} as unknown as SwapQuoteComparisonAssessment;
 
 const GALLERY_ACTION: SwapActionContext = {
   actionId: "rebalance:gallery",
@@ -213,7 +296,36 @@ export interface SwapConfirmGalleryCase {
   node: JSX.Element;
 }
 
+/**
+ * The real CONTAINER, not just the sheet.
+ *
+ * Every other case here renders `SwapConfirmSheet` directly, which leaves the component that
+ * decides WHEN to show it — the two-step footer, the first-fetch wait, the demo preview,
+ * unmounting on Cancel — with no coverage that runs. Demo Mode is the one path through it that
+ * needs no connected wallet, so it is the only one the gallery can honestly exercise.
+ *
+ * The live path's busy footer stays source-scanned (SWXC-1, SWXC-2): giving the gallery a real
+ * wallet submitter is exactly the thing that must never happen here.
+ */
+function DemoSectionCase() {
+  return (
+    <SwapExecutionSection
+      demo
+      action={GALLERY_ACTION}
+      assessment={GALLERY_ASSESSMENT}
+      nowMs={Date.now()}
+      onClose={() => {}}
+    />
+  );
+}
+
 export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
+  {
+    key: "demo_section_real_container",
+    label:
+      "REAL CONTAINER (Demo Mode) — SwapExecutionSection itself, not just the sheet. Press Continue to approve: the two-step footer, the demo preview built from the demo quote, the unavailable Approve with its reason, and Cancel returning you to the footer. The only path through this component that needs no wallet.",
+    node: <DemoSectionCase />,
+  },
   {
     key: "hook_approve_submitted",
     label:

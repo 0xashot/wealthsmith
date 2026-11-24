@@ -54,6 +54,19 @@ export interface TransitionContext {
   failure: ExecutionFailureKey | null;
   /** Milliseconds since Approve was pressed. Only read for `confirmed`. */
   sinceApprovalMs: number | null;
+  /**
+   * The quote is replacing itself, rather than the reader arriving at a confirm step.
+   *
+   * A renewal runs the same `ready → preparing → verifying → ready` path as the first fetch, so
+   * without this the funnel counted a fresh "opened" and "terms ready" every time — seven of
+   * each for someone who read for three minutes. Since the approve rate is approvals divided by
+   * opens, that pushed the rate toward zero for exactly the most careful readers, which is the
+   * opposite of what the number is for.
+   *
+   * The two events it suppresses are the ones that describe ARRIVING somewhere. Everything
+   * after Approve happens at most once per flow and is unaffected.
+   */
+  renewal: boolean;
 }
 
 /**
@@ -73,9 +86,10 @@ export function swapEventForTransition(
 
   switch (next) {
     case "preparing":
-      return { name: "swap_confirm_opened", provider, category: ctx.category };
+      // Reached a confirm step — once per flow, however many quotes it burns through.
+      return ctx.renewal ? null : { name: "swap_confirm_opened", provider, category: ctx.category };
     case "ready":
-      return { name: "swap_terms_ready", provider };
+      return ctx.renewal ? null : { name: "swap_terms_ready", provider };
     case "signing":
       return { name: "swap_approved", provider };
     case "confirming":

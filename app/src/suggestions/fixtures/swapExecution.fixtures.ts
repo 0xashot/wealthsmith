@@ -1435,7 +1435,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const out: SwapExecutionEvent[] = [];
     for (const from of phases) for (const to of phases) for (const f of failures) {
       const e = swapEventForTransition(from, to, {
-        provider: "jupiter", category: "rebalance", failure: f, sinceApprovalMs: 4321,
+        provider: "jupiter", category: "rebalance", failure: f, sinceApprovalMs: 4321, renewal: false,
       });
       if (e) out.push(e);
     }
@@ -1463,7 +1463,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
   })(), "signature stays on screen");
   add("SWXE-3: the only numeric property is a DURATION, and it is never negative", (() => {
     const confirmed = swapEventForTransition("confirming", "confirmed", {
-      provider: "jupiter", category: "rebalance", failure: null, sinceApprovalMs: -50,
+      provider: "jupiter", category: "rebalance", failure: null, sinceApprovalMs: -50, renewal: false,
     });
     return confirmed?.name === "swap_confirmed" && confirmed.durationMs === 0;
   })(), "duration only");
@@ -1472,14 +1472,47 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // reachable but silent would be a hole in the funnel nobody notices for months.
     const reported: ExecutionPhase[] = ["preparing", "ready", "signing", "confirming", "confirmed"];
     return reported.every((to) =>
-      swapEventForTransition("idle", to, { provider: "jupiter", category: "rebalance", failure: null, sinceApprovalMs: 0 }) != null);
+      swapEventForTransition("idle", to, { provider: "jupiter", category: "rebalance", failure: null, sinceApprovalMs: 0, renewal: false }) != null);
   })(), "transition-driven");
   add("SWXE-5: a cancellation is NOT its own event — the absence of an approval already counts it",
-    swapEventForTransition("ready", "failed", { provider: "jupiter", category: "rebalance", failure: "cancelled", sinceApprovalMs: null }) === null,
+    swapEventForTransition("ready", "failed", { provider: "jupiter", category: "rebalance", failure: "cancelled", sinceApprovalMs: null, renewal: false }) === null,
     "no invented row");
+  add("SWXE-5b: a renewal reports NOTHING — the funnel counts flows, not quotes", (() => {
+    const ctx = (renewal: boolean) => ({
+      provider: "jupiter" as const, category: "rebalance" as const,
+      failure: null, sinceApprovalMs: null, renewal,
+    });
+    // A renewal runs the same ready → preparing → verifying → ready path as the first fetch.
+    // Counted again, someone who read for three minutes produced SEVEN "confirm opened" rows
+    // for one swap — and since approve rate is approvals over opens, the most careful readers
+    // dragged the rate toward zero. The funnel's whole purpose is that number.
+    const openedAgain = swapEventForTransition("ready", "preparing", ctx(true));
+    const readyAgain = swapEventForTransition("verifying", "ready", ctx(true));
+    // The first time through, both still report.
+    const openedFirst = swapEventForTransition("idle", "preparing", ctx(false));
+    const readyFirst = swapEventForTransition("verifying", "ready", ctx(false));
+    return openedAgain === null && readyAgain === null &&
+      openedFirst?.name === "swap_confirm_opened" && readyFirst?.name === "swap_terms_ready";
+  })(), "one open per flow");
+  add("SWXE-5d: the hook actually TELLS the funnel when it is renewing", (() => {
+    const h = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
+    // The rule above is pure and guarded, but it is only as good as what it is handed.
+    // Hardcoding `renewal: false` here restores the duplicate-counting bug and fails nothing
+    // else — so the wiring is pinned to the counter that actually knows.
+    return /renewal: autoRefreshCountRef\.current > 0/.test(h);
+  })(), "wired to the counter");
+  add("SWXE-5c: everything AFTER Approve still reports during a renewed flow", (() => {
+    // Those phases are reached at most once per flow, so suppressing them would lose real
+    // outcomes. `renewal` must gate only the two arrival events.
+    const ctx = { provider: "jupiter" as const, category: "rebalance" as const, failure: null, sinceApprovalMs: 1200, renewal: true };
+    return swapEventForTransition("ready", "signing", ctx)?.name === "swap_approved" &&
+      swapEventForTransition("submitting", "confirming", ctx)?.name === "swap_submitted" &&
+      swapEventForTransition("confirming", "confirmed", ctx)?.name === "swap_confirmed" &&
+      swapEventForTransition("signing", "failed", { ...ctx, failure: "declined" })?.name === "swap_declined";
+  })(), "outcomes survive renewal");
   add("SWXE-6: a refusal reports OUR failure key, never a provider message", (() => {
     const e = swapEventForTransition("verifying", "failed", {
-      provider: "jupiter", category: "rebalance", failure: "verification_failed", sinceApprovalMs: null,
+      provider: "jupiter", category: "rebalance", failure: "verification_failed", sinceApprovalMs: null, renewal: false,
     });
     return e?.name === "swap_not_offered" && e.reason === "verification_failed";
   })(), "bounded reasons");
