@@ -959,6 +959,11 @@ Hard Rule:
 The minimum received is the only figure the user is guaranteed. It must be shown
 with equal or greater prominence than the estimated amount, never below the fold,
 and never described as an estimate.
+
+Prominence comes from its label and from the absence of a tilde, not from a
+larger type size. Every amount in the sheet is set at the same size: a column of
+figures reads as a column, and one amount a step larger looks like a styling
+slip rather than emphasis. The minimum is the one with no “~”.
 ```
 
 Mark an estimate on the **figure**, with a leading `~`, and nowhere else. No

@@ -5323,13 +5323,16 @@ td.vetting-scores-table__date {
    it reads as part of the same sheet rather than as a new surface.
    --------------------------------------------------------------------------- */
 
-/* The minimum is the only figure the user is guaranteed, so it is the one that
-   carries emphasis. Everything else is an expectation and stays neutral —
-   emphasising the larger estimated number would be the opposite of honest. */
-.swap-confirm__metric--minimum .swap-confirm__minimum-value {
-  font: var(--typography-heading-md-font, var(--typography-heading-sm-font));
-  color: var(--color-text-primary);
-}
+/* The minimum is the only figure the user is guaranteed, and it still carries
+   the emphasis — but through its LABEL and the absence of a tilde, not through
+   size. The value used to be set a step larger (18px against 16px), which made
+   the one exact figure in the sheet the only one that did not line up with its
+   neighbours; a column of amounts reads as a column, and an odd size out looks
+   like a styling slip rather than emphasis.
+   The rule that the minimum be shown with equal or greater prominence than the
+   estimate still holds: same size, darker label, and it is the only amount with
+   no "~" in front of it. (No rule for the value itself — it inherits exactly
+   what every other amount gets, which is the point.) */
 .swap-confirm__metric--minimum .review-modal__metric-label {
   color: var(--color-text-primary);
 }
