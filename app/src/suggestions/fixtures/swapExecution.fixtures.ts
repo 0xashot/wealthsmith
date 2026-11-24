@@ -1348,6 +1348,19 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const failBlock = c.slice(0, c.indexOf("const providerIconUrl"));
     return /swap-confirm__transaction/.test(failBlock);
   })(), "recourse on failure");
+  add("SWXS5-13e: a confirm timeout ALWAYS carries a signature — there is no other shape", (() => {
+    const h = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
+    const l = readSrc("src/suggestions/swapExecution/executionLifecycle.ts");
+    // The timeout is dispatched only from the poll, the poll only runs once a signature exists,
+    // the reducer accepts it only from `confirming`, and `fail` spreads the state rather than
+    // clearing it. So "timed out with nothing to look up" is not a state the product has — and
+    // that matters, because the link is the user's only recourse in exactly this case.
+    const onlyFromPoll = /if \(watchedSignature == null\) return;/.test(h) &&
+      /const watchedSignature = state\.phase === "confirming" \? state\.signature : null;/.test(h);
+    const onlyFromConfirming = /if \(event\.type === "confirm_timeout"\) return fail\(state, "confirm_timeout"\);/.test(l);
+    const failKeepsState = /\(\{ \.\.\.state, phase: "failed", failure, failureDetail: detail \}\)/.test(l);
+    return onlyFromPoll && onlyFromConfirming && failKeepsState;
+  })(), "timeout keeps its signature");
   add("SWXS5-14: the explorer link is built only from a real signature, and is URL-safe", (() => {
     return solscanTransactionUrl("") === null && solscanTransactionUrl("5xSig") === "https://solscan.io/tx/5xSig" &&
       (solscanTransactionUrl("a/b?c") ?? "").endsWith("a%2Fb%3Fc");

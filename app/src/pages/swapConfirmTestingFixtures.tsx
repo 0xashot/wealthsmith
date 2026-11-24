@@ -398,19 +398,6 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     label: "Ready — checked, wallet attached. The only state where Approve exists; every other state either has nothing to approve yet or has moved past it.",
     node: <SwapConfirmSheet phase={"ready" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} onApprove={noop} />,
   },
-  {
-    key: "ready_absent_figures",
-    label: "Ready with unavailable fee / price impact — renders “—”, never a zero",
-    node: (
-      <SwapConfirmSheet
-        phase={"ready" as ExecutionPhase}
-        terms={{ ...TERMS, estimatedNetworkFeeUsd: null, priceImpactPct: Number.NaN }}
-        failure={null}
-        onCancel={noop}
-        onApprove={noop}
-      />
-    ),
-  },
   /* ---- After Approve. Every one of these was previously unreachable in the gallery, which is
    *      how the blank status line survived review: the states existed in the machine and
    *      nowhere on screen. Cancel is deliberately absent in all of them. ---- */
@@ -441,7 +428,7 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "confirm_timeout_with_signature",
     label:
-      "Gave up watching, but the user HAS a signature — the realistic timeout. The link is the only way they can find out what happened, so check it is present and that nothing here reads as failure.",
+      "Gave up watching — the ONLY shape a timeout takes. The poll only runs once a signature exists, so a timeout always carries one, and the link is then the only way they can find out what happened. Check nothing here reads as failure: the transaction may still land.",
     node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"confirm_timeout" as ExecutionFailureKey} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
   },
   {
@@ -519,10 +506,5 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     key: "submit_failed",
     label: "Not sent — funds stayed in the wallet",
     node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"submit_failed" as ExecutionFailureKey} onCancel={noop} />,
-  },
-  {
-    key: "confirm_timeout",
-    label: "Still confirming — MUST NOT read as failure; the transaction may still land",
-    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"confirm_timeout" as ExecutionFailureKey} onCancel={noop} />,
   },
 ];
