@@ -854,6 +854,18 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       // A failure has no plan either, and it has something to show.
       /execution\.phase !== "failed"/.test(c);
   })(), "no empty sheet");
+  add("SWXC-1b: the sheet is NEVER mounted without terms unless it has a failure to show", (() => {
+    const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    // The footer returns for every state with no plan except `failed`, so the only sheet that
+    // can open either has terms or has a failure branch that needs none. That is what makes an
+    // empty "Checking transaction…" card unreachable rather than merely unlikely — the loading
+    // state lives in the Swap button instead.
+    const guard = /const awaitingFirstPlan = started && execution\.plan == null && execution\.phase !== "failed";/.test(c);
+    const returnsFooter = /if \(!started \|\| awaitingFirstPlan\) \{/.test(c);
+    // And the sheet reads its terms from the plan, so "has a plan" and "has terms" cannot drift.
+    const termsFromPlan = /terms=\{execution\.plan\?\.terms \?\? null\}/.test(c);
+    return guard && returnsFooter && termsFromPlan;
+  })(), "no empty card is reachable");
   add("SWXC-2: the Continue button spins in place rather than being replaced or removed", (() => {
     const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
     const footer = c.slice(c.indexOf("function ContinueFooter"));

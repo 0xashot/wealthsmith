@@ -389,13 +389,8 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     ),
   },
   {
-    key: "preparing",
-    label: "Preparing — fetching terms from the execute endpoint",
-    node: <SwapConfirmSheet phase={"preparing" as ExecutionPhase} terms={null} failure={null} onCancel={noop} />,
-  },
-  {
     key: "verifying",
-    label: "Verifying — terms are shown, the check has not finished, and there is no Approve button yet",
+    label: "Verifying — the FIRST state the sheet can actually open in. The fetch wait is held by the Swap button in the footer, so the sheet never appears without terms; by the time it opens, the figures are here and only the check is outstanding. No Approve until it passes.",
     node: <SwapConfirmSheet phase={"verifying" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} />,
   },
   {
