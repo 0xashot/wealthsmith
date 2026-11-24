@@ -20,10 +20,12 @@
  * The minimum is the only figure the user is guaranteed, so it carries the emphasis and the
  * explanation. Everything else is an expectation and says so in its own label.
  */
+import { useId } from "react";
 import InfoPopover from "../InfoPopover";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
   SWAP_CONFIRM_CANCEL_LABEL,
+  SWAP_CONFIRM_DEMO_DISABLED,
   SWAP_CONFIRM_COMPLETE_TITLE,
   SWAP_CONFIRM_MINIMUM_INFO,
   SWAP_CONFIRM_MINIMUM_INFO_LABEL,
@@ -63,10 +65,16 @@ export interface SwapConfirmSheetProps {
   onRefresh?: () => void;
   /** Phase 5. Undefined until a signer is wired — the button is then not rendered. */
   onApprove?: () => void;
+  /**
+   * Demo Mode. Approve is shown but unavailable, with the reason on hover and focus — the one
+   * place this sheet renders an action that cannot be taken. See the footer for why.
+   */
+  demo?: boolean;
 }
 
 export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
-  const { phase, terms, failure, signature, onCancel, onRefresh, onApprove } = props;
+  const { phase, terms, failure, signature, onCancel, onRefresh, onApprove, demo = false } = props;
+  const demoTipId = useId();
 
   const failed = failureCopy(failure);
   if (phase === "failed" && failed) {
@@ -213,8 +221,34 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
         )}
         {/* Rendered only when it can actually do something: the terms are checked AND a wallet
             can submit. A disabled approve button on a financial confirmation is worse than none
-            — it reads as "almost" and explains nothing. */}
-        {ready && onApprove && (
+            — it reads as "almost" and explains nothing.
+
+            DEMO MODE IS THE ONE EXCEPTION, and it earns it: Demo Mode exists to show people
+            what the product does before they commit a wallet, so hiding the final step would
+            hide the very thing they came to see. The button stays, visibly unavailable, and
+            says why.
+
+            `aria-disabled` rather than `disabled`, because a truly disabled button is removed
+            from the tab order and fires no pointer events — the explanation would then be
+            unreachable by keyboard and absent on hover, which is the entire point of showing
+            it. The click is a no-op instead. */}
+        {ready && demo && (
+          <span className="swap-confirm__approve-wrap">
+            <button
+              type="button"
+              className="review-modal__primary-action review-modal__primary-action--unavailable"
+              aria-disabled="true"
+              aria-describedby={demoTipId}
+              onClick={(e) => e.preventDefault()}
+            >
+              <span>{SWAP_CONFIRM_APPROVE_LABEL}</span>
+            </button>
+            <span className="swap-confirm__approve-tip" role="tooltip" id={demoTipId}>
+              {SWAP_CONFIRM_DEMO_DISABLED}
+            </span>
+          </span>
+        )}
+        {ready && !demo && onApprove && (
           <button type="button" className="review-modal__primary-action" onClick={onApprove}>
             <span>{SWAP_CONFIRM_APPROVE_LABEL}</span>
           </button>

@@ -1073,6 +1073,20 @@ export const SWAP_CONFIRM_CHECKING = "Checking transaction…";
 
 /** Actions. "Approve" describes what the user does in their wallet — not what we do. */
 export const SWAP_CONFIRM_APPROVE_LABEL = "Approve";
+
+/**
+ * Why Approve cannot be pressed in Demo Mode.
+ *
+ * The ONE place this sheet shows a button that does nothing. Everywhere else an unavailable
+ * action is absent rather than greyed out, because a dead button explains nothing — but Demo
+ * Mode exists precisely to show people what the product does before they commit a wallet, and
+ * hiding the final step would hide the thing they came to understand. So the button stays,
+ * visibly unavailable, and says why on hover and on focus.
+ *
+ * Phrased as a fact about the mode, not a refusal of the person, and it names the way out.
+ */
+export const SWAP_CONFIRM_DEMO_DISABLED =
+  "Demo Mode uses a sample portfolio. Connect your wallet to make a real swap.";
 export const SWAP_CONFIRM_CANCEL_LABEL = "Cancel";
 
 /*

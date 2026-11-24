@@ -299,6 +299,21 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"cancelled" as ExecutionFailureKey} onCancel={noop} />,
   },
   {
+    key: "demo_mode",
+    label:
+      "DEMO MODE — Approve is present but unavailable, with the reason on hover and on keyboard focus. The one place this sheet renders an action that cannot be taken: hiding the last step would hide what a demo exists to show. `aria-disabled`, not `disabled`, so the explanation is reachable without a mouse.",
+    node: (
+      <SwapConfirmSheet
+        demo
+        phase={"ready" as ExecutionPhase}
+        terms={TERMS}
+        failure={null}
+        onCancel={noop}
+        onApprove={noop}
+      />
+    ),
+  },
+  {
     key: "ready_unpriced",
     label:
       "Ready, but the price source failed — the USD sub-lines are OMITTED, not shown as “—”. A dash under a token amount reads as a missing term; missing context should be invisible. The swap is unaffected: pricing never blocks a plan.",

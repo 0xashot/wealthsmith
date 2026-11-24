@@ -5334,6 +5334,48 @@ td.vetting-scores-table__date {
   color: var(--color-text-primary);
 }
 
+/* Approve in Demo Mode: present, visibly unavailable, and explained on hover
+   and on keyboard focus. The one action in this sheet rendered when it cannot
+   be taken — Demo Mode exists to show the whole flow, so hiding the last step
+   would hide what people came to see. `aria-disabled`, not `disabled`, so the
+   button stays focusable and the explanation is reachable without a mouse. */
+.swap-confirm__approve-wrap {
+  position: relative;
+  display: inline-block;
+}
+.review-modal__primary-action--unavailable {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.swap-confirm__approve-tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  z-index: 2;
+  width: max-content;
+  max-width: min(280px, 70vw);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-surface-inverse, #1f2430);
+  color: var(--color-text-inverse, #fff);
+  font: var(--typography-body-sm-font);
+  text-align: left;
+  /* Hidden from sight AND from the pointer, so it cannot swallow a click on the
+     button it describes. Still in the accessibility tree for aria-describedby. */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.swap-confirm__approve-wrap:hover .swap-confirm__approve-tip,
+.swap-confirm__approve-wrap:focus-within .swap-confirm__approve-tip {
+  opacity: 1;
+  visibility: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .swap-confirm__approve-tip { transition: none; }
+}
+
 /* USD under a token amount. Its own line, secondary colour, body size: the swap
    is denominated in tokens and nothing is guaranteed in dollars, so this is
    context for judging size at a glance and must never read as a term. Only the

@@ -1012,6 +1012,22 @@ not write “Verified”, “Safe”, “Secure”, or anything implying an endo
 the trade itself. We checked that the transaction matches the terms. We did not
 check that the swap is a good idea.
 
+**Demo Mode is the one place this sheet shows an action that cannot be taken.**
+Everywhere else an unavailable action is absent rather than greyed out, because
+a dead button reads as “almost” and explains nothing. Demo Mode earns the
+exception: it exists to show people the product before they commit a wallet, so
+hiding the final step would hide the thing they came to see. The button stays,
+visibly unavailable, and gives the reason on hover and on keyboard focus:
+
+```text
+Demo Mode uses a sample portfolio. Connect your wallet to make a real swap.
+```
+
+A fact about the mode, never a refusal of the person, and it names the way out.
+Use `aria-disabled`, not `disabled` — a truly disabled button leaves the tab
+order and fires no pointer events, which would make the explanation unreachable
+by keyboard and absent on hover, defeating the point of showing it.
+
 **The passed state says nothing at all.** It is the resting state — terms on
 screen, Approve available — and that is already the message. The word
 “Success” sat directly above an unpressed Approve button and read as though the

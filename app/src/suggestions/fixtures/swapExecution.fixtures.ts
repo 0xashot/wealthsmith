@@ -53,6 +53,7 @@ import {
 } from "../swapExecution/confirmationPolling";
 import { isSignatureShaped, stateFromStatus } from "../../server/swapExecution/confirmationStatus";
 import { usdTermsFromSnapshot, usdValueOf } from "../../server/swapExecution/termsPricing";
+import { demoConfirmTerms } from "../swapExecution/demoConfirmTerms";
 import { decideOnExpiry, MAX_AUTO_REFRESHES } from "../swapExecution/quoteRefresh";
 import {
   classifyWalletError,
@@ -82,6 +83,7 @@ import {
   SWAP_CONFIRM_CHECKING,
   SWAP_CONFIRM_COMPLETE_TITLE,
   SWAP_CONFIRM_DECLINED_DESC,
+  SWAP_CONFIRM_DEMO_DISABLED,
   SWAP_CONFIRM_EXPIRED,
   SWAP_CONFIRM_MINIMUM_INFO,
   SWAP_CONFIRM_MINIMUM_LABEL,
@@ -163,6 +165,28 @@ function assessment(o: Partial<SwapQuoteComparisonAssessment> = {}): SwapQuoteCo
     ...o,
   } as SwapQuoteComparisonAssessment;
 }
+
+/* Demo Mode preview helpers. The demo sheet is built from the demo QUOTE, so these are the
+   quote fixtures above reused rather than a second set of numbers that could drift from them. */
+const demoAction = (): SwapActionContext => ({
+  actionId: "rebalance:demo",
+  suggestionId: "demo",
+  suggestionCategory: "rebalance",
+  legId: "rebalance:demo:0",
+  legIndex: 0,
+  totalLegs: 1,
+  inputAsset: { symbol: "USDC", mint: USDC, decimals: 6 },
+  outputAsset: { symbol: "SOL", mint: WSOL, decimals: 9 },
+  inputAmountRaw: "15000000",
+  inputAmountTokens: "15",
+  inputAmountUsd: 15,
+  sourceAvailability: "wallet_transferable",
+  generatedAt: new Date(NOW).toISOString(),
+});
+
+/** Overrides apply to the SELECTED candidate, which is what the preview reads. */
+const demoAssessment = (candidateOverrides: Partial<SwapQuoteCandidate> = {}) =>
+  assessment({ selectedProviderId: "jupiter", candidates: [candidate(candidateOverrides)] });
 
 const eligible = (o: Partial<Parameters<typeof deriveExecutionEligibility>[0]> = {}) =>
   deriveExecutionEligibility({
@@ -818,12 +842,59 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       readSrc("src/components/swapExecution/swapConfirmPresentation.ts");
     return !/deriveExecutionEligibility|verifyTransactionStructure|assertPlanWasVerified|resolveSwapHandoffType/.test(c);
   })(), "presentation only");
-  add("SWCS-8: Approve is rendered ONLY when the terms are checked AND a signer exists", (() => {
+  add("SWCS-8: a LIVE Approve is rendered only when checked AND a signer exists, never disabled", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
     // Rendered conditionally rather than disabled: a greyed-out approve button on a financial
     // confirmation reads as "almost" and explains nothing.
-    return /\{ready && onApprove && \(/.test(c) && !/disabled=/.test(c);
+    //
+    // Demo Mode is the single exception and is checked separately below. It uses `aria-disabled`
+    // rather than the `disabled` attribute, so this scan strips that spelling and then insists
+    // no real `disabled=` survives — otherwise the exception would quietly license one anywhere.
+    const withoutAria = c.replace(/aria-disabled=/g, "");
+    return /\{ready && !demo && onApprove && \(/.test(c) && !/disabled=/.test(withoutAria);
   })(), "no dead button");
+  add("SWDM-1: Demo Mode shows Approve unavailable WITH the reason, rather than hiding it", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // Hiding the last step would hide the thing a demo exists to show. Shown, unavailable, and
+    // explained — the explanation is the part that makes it defensible.
+    return /\{ready && demo && \(/.test(c) &&
+      /aria-disabled="true"/.test(c) &&
+      /SWAP_CONFIRM_DEMO_DISABLED/.test(c) &&
+      /role="tooltip"/.test(c) &&
+      // Tied to the button, so it is announced rather than merely adjacent.
+      /aria-describedby=/.test(c);
+  })(), "explained, not hidden");
+  add("SWDM-2: the demo reason names the mode and the way out, and blames nobody", (() => {
+    const t = SWAP_CONFIRM_DEMO_DISABLED.toLowerCase();
+    return /demo mode/.test(t) && /connect your wallet/.test(t) &&
+      !/cannot|can't|not allowed|denied|unauthoriz/.test(t);
+  })(), "a fact, not a refusal");
+  add("SWDM-3: the demo preview NEVER reaches the execution endpoint", (() => {
+    const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx") +
+      readSrc("src/suggestions/swapExecution/demoConfirmTerms.ts");
+    // The demo branch returns before the hook's plan is used and builds its terms from the
+    // quote already on screen. Nothing in that path fetches, signs or submits.
+    return !/fetchSwapExecutionPlan|swap-execute/.test(readSrc("src/suggestions/swapExecution/demoConfirmTerms.ts")) &&
+      /if \(props\.demo\) \{/.test(c);
+  })(), "preview only");
+  add("SWDM-4: a demo quote with no guaranteed minimum is NOT previewed", (() => {
+    // The floor is the one term that may never be faked or omitted. Without it there is no
+    // honest confirmation to show, so the modal keeps its ordinary hand-off footer.
+    const noFloor = demoConfirmTerms(
+      demoAction(),
+      demoAssessment({ minimumOutputRaw: null }),
+      50,
+    );
+    const withFloor = demoConfirmTerms(demoAction(), demoAssessment(), 50);
+    return noFloor === null && withFloor != null && withFloor.minimumOutputTokens.length > 0;
+  })(), "no blank floor");
+  add("SWDM-5: demo terms are the DEMO quote's own figures, never invented", (() => {
+    const t = demoConfirmTerms(demoAction(), demoAssessment(), 50);
+    return t != null &&
+      t.expectedOutputTokens === "0.197901" &&
+      t.providerId === "jupiter" &&
+      t.inputAmountTokens === "15";
+  })(), "figures come from the quote");
   /* ---- Re-preparing (SWXR) ----
    *
    * Asking for a new plan. Both the Refresh button and the countdown's auto-renewal go through

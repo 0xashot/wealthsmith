@@ -22,6 +22,7 @@ import { useSwapExecutionPlan } from "./useSwapExecutionPlan";
 import { useWalletSwapSubmitter } from "./useWalletSwapSubmitter";
 import SwapConfirmSheet from "./SwapConfirmSheet";
 import { SWAP_CONFIRM_CONTINUE_LABEL } from "../../state/approvedCopy";
+import { demoConfirmTerms } from "../../suggestions/swapExecution/demoConfirmTerms";
 import type { SwapExecutionEmitter } from "../../suggestions/swapExecution/swapExecutionEvents";
 
 export interface SwapExecutionSectionProps {
@@ -33,6 +34,12 @@ export interface SwapExecutionSectionProps {
   onClose: () => void;
   /** Receives funnel events. Absent emits none. */
   emit?: SwapExecutionEmitter;
+  /**
+   * Demo Mode. The confirm step still renders and still fetches nothing real: Approve is shown
+   * unavailable with the reason, so someone evaluating the product sees the whole flow through
+   * to its last step instead of hitting a dead end where the interesting part should be.
+   */
+  demo?: boolean;
 }
 
 export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
@@ -61,32 +68,49 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     submit,
   });
 
+  // DEMO MODE. There is no wallet, so the real flow cannot run — but the confirm step is the
+  // part someone evaluating the product most needs to see, and the wallet check below would
+  // render nothing at all. So the sheet is shown as a PREVIEW built from the demo quote: no
+  // plan, no transaction, no simulation, and the lifecycle machine untouched. `phase="ready"`
+  // is passed presentationally, exactly as the gallery passes it; nothing here can reach the
+  // execution endpoint because nothing here calls it.
+  if (props.demo) {
+    const demoTerms = demoConfirmTerms(action, assessment, props.slippageBps ?? 50);
+    // A demo quote missing its guaranteed minimum is not worth previewing — fall back to the
+    // modal's ordinary hand-off footer rather than show a sample swap with a blank floor.
+    if (!offer.offered || demoTerms == null) return null;
+    if (!started) return <ContinueFooter onClose={onClose} onContinue={() => setStarted(true)} />;
+    return (
+      <SwapConfirmSheet
+        demo
+        phase="ready"
+        terms={demoTerms}
+        failure={null}
+        signature={null}
+        onCancel={() => setStarted(false)}
+      />
+    );
+  }
+
   // The Boundary said no, or there is no wallet to sign with. Render nothing; the modal's
   // existing handoff footer is the answer, and it is already there.
   if (!offer.offered || takerPublicKey == null || submit == null) return null;
 
   if (!started) {
     return (
-      <div className="review-modal__footer review-modal__footer--actions">
-        <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="review-modal__primary-action"
-          onClick={() => {
-            setStarted(true);
-            execution.prepare();
-          }}
-        >
-          <span>{SWAP_CONFIRM_CONTINUE_LABEL}</span>
-        </button>
-      </div>
+      <ContinueFooter
+        onClose={onClose}
+        onContinue={() => {
+          setStarted(true);
+          execution.prepare();
+        }}
+      />
     );
   }
 
   return (
     <SwapConfirmSheet
+      demo={props.demo}
       phase={execution.phase}
       terms={execution.plan?.terms ?? null}
       failure={execution.failure}
@@ -100,5 +124,25 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
         setStarted(false);
       }}
     />
+  );
+}
+
+/**
+ * The two-step entry footer, shared by the live and Demo paths so they cannot drift apart.
+ *
+ * The step exists because a plan lives 25 seconds: preparing one when the review opens would
+ * start that clock while someone is still reading. In Demo Mode there is no clock, but the
+ * same two steps are shown — the point of the demo is that the flow looks like the real one.
+ */
+function ContinueFooter({ onClose, onContinue }: { onClose: () => void; onContinue: () => void }) {
+  return (
+    <div className="review-modal__footer review-modal__footer--actions">
+      <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
+        Cancel
+      </button>
+      <button type="button" className="review-modal__primary-action" onClick={onContinue}>
+        <span>{SWAP_CONFIRM_CONTINUE_LABEL}</span>
+      </button>
+    </div>
   );
 }
