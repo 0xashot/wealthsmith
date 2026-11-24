@@ -283,7 +283,7 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "confirming",
     label:
-      "Checking transaction — on-chain, not yet confirmed. The signature is already the user's record, so the Solscan link appears HERE, not only on success.",
+      "Confirming — on-chain, not yet confirmed. NO Solscan link while we are still watching: a link beside a spinner invites the reader to go check manually, in another tab, at the moment they have nothing to decide. It appears the instant we stop — on success, on timeout, or on a revert.",
     node: <SwapConfirmSheet phase={"confirming" as ExecutionPhase} terms={TERMS} failure={null} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
   },
   {

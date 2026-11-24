@@ -200,3 +200,24 @@ export function solscanTransactionUrl(signature: string): string | null {
   if (typeof signature !== "string" || signature.length === 0) return null;
   return `https://solscan.io/tx/${encodeURIComponent(signature)}`;
 }
+
+/**
+ * Whether to offer the explorer link for a signature in this phase.
+ *
+ * HIDDEN WHILE WE ARE STILL WATCHING. During `submitting` and `confirming` the sheet is already
+ * polling the chain on the reader's behalf and will say what happened. Putting a link to a block
+ * explorer beside a spinner invites them to go and do that job themselves, in another tab, at
+ * the one moment they have nothing to decide — and whatever they find there mid-flight is more
+ * likely to confuse than to inform.
+ *
+ * SHOWN THE MOMENT WE STOP. On success it is their record. On a timeout or a reverted
+ * transaction it is their only recourse, and the failure branch renders it for exactly that
+ * reason. So nothing is withheld: the link is deferred for as long as we are answering the
+ * question ourselves, and appears as soon as we are not.
+ */
+export function showsExplorerLink(phase: ExecutionPhase, signature: string | null | undefined): boolean {
+  if (typeof signature !== "string" || signature.length === 0) return false;
+  // `signing` has no signature yet, so this only ever excludes `submitting` and `confirming`.
+  if (busyPresentationFor(phase)?.where === "button") return false;
+  return true;
+}

@@ -51,6 +51,7 @@ import {
   isAfterApproval,
   solscanTransactionUrl,
   busyButtonLabelFor,
+  showsExplorerLink,
   statusLineFor,
 } from "./swapConfirmPresentation";
 
@@ -199,7 +200,7 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
         <p className="swap-confirm__complete">{SWAP_CONFIRM_COMPLETE_TITLE}</p>
       )}
 
-      {signature && explorerUrl && (
+      {showsExplorerLink(phase, signature) && explorerUrl && (
         <p className="swap-confirm__transaction">
           <a href={explorerUrl} target="_blank" rel="noopener noreferrer">{SWAP_CONFIRM_VIEW_TRANSACTION}</a>
         </p>

@@ -1012,6 +1012,13 @@ whether they may proceed. Afterwards the eye is on the control it just pressed,
 so that is where the answer belongs — and the button keeping its place is what
 makes the press look like it registered, at the one moment that matters most.
 
+**No explorer link while the swap is in flight.** During those two states the
+sheet is already polling the chain on the reader's behalf and will say what
+happened; a link beside a spinner invites them to go and do that job themselves,
+in another tab, at the moment they have nothing to decide. It appears the
+instant we stop — on success it is their record, and on a timeout or a revert it
+is their only recourse. Deferred, never denied.
+
 A spinner alone would be shorter, but it cannot tell someone whose wallet is
 merely open from someone whose transaction is already on the chain, and only the
 second means closing the tab will not stop it. That distinction is worth two

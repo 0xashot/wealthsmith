@@ -71,6 +71,7 @@ import {
   solscanTransactionUrl,
   busyButtonLabelFor,
   busyPresentationFor,
+  showsExplorerLink,
   statusLineFor,
 } from "../../components/swapExecution/swapConfirmPresentation";
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
@@ -170,6 +171,8 @@ function assessment(o: Partial<SwapQuoteComparisonAssessment> = {}): SwapQuoteCo
 
 /* Demo Mode preview helpers. The demo sheet is built from the demo QUOTE, so these are the
    quote fixtures above reused rather than a second set of numbers that could drift from them. */
+const SIG = "5xGallerySignatureForLinkRules";
+
 const demoAction = (): SwapActionContext => ({
   actionId: "rebalance:demo",
   suggestionId: "demo",
@@ -1251,6 +1254,30 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const after: ExecutionPhase[] = ["signing", "submitting", "confirming", "confirmed"];
     return before.every((p2) => !isAfterApproval(p2)) && after.every((p2) => isAfterApproval(p2));
   })(), "cancel window");
+  add("SWXS5-13b: no explorer link while WE are still watching the chain for them", (() => {
+    // A link beside a spinner invites the reader to go do, in another tab, the job the sheet is
+    // already doing — and what they find mid-flight is likelier to confuse than to inform.
+    return showsExplorerLink("submitting", SIG) === false &&
+      showsExplorerLink("confirming", SIG) === false;
+  })(), "not while in flight");
+  add("SWXS5-13c: the link appears the MOMENT we stop — nothing is withheld", (() => {
+    // Success makes it their record; a timeout or a revert makes it their only recourse. Every
+    // ending that leaves them holding a signature offers it.
+    return showsExplorerLink("confirmed", SIG) === true &&
+      showsExplorerLink("failed", SIG) === true &&
+      // And never conjured without one.
+      showsExplorerLink("confirmed", null) === false &&
+      showsExplorerLink("failed", "") === false &&
+      // `signing` has no signature yet; the rule must not depend on that accident.
+      showsExplorerLink("signing", SIG) === false;
+  })(), "deferred, not denied");
+  add("SWXS5-13d: the FAILURE branch renders the link too — a timeout is where it matters most", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // The failure branch returns early, so it needs its own render; it had none, and a confirm
+    // timeout showed "Still confirming" with no way to look the transaction up.
+    const failBlock = c.slice(0, c.indexOf("const providerIconUrl"));
+    return /swap-confirm__transaction/.test(failBlock);
+  })(), "recourse on failure");
   add("SWXS5-14: the explorer link is built only from a real signature, and is URL-safe", (() => {
     return solscanTransactionUrl("") === null && solscanTransactionUrl("5xSig") === "https://solscan.io/tx/5xSig" &&
       (solscanTransactionUrl("a/b?c") ?? "").endsWith("a%2Fb%3Fc");
