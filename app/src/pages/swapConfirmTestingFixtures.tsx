@@ -165,15 +165,9 @@ export interface SwapConfirmGalleryCase {
 
 export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
-    key: "hook_real",
-    label:
-      "REAL HOOK, NO WALLET — a genuine mainnet transaction through the real reducer and the real structural check. Reaches Ready with no Approve button, because no wallet is attached to this case: the button is rendered only when pressing it would really sign something, never greyed out. This is what a signed-out visitor sees. The next case is the same flow WITH a wallet.",
-    node: <HookDrivenCase />,
-  },
-  {
     key: "hook_approve_submitted",
     label:
-      "REAL HOOK + stubbed wallet — press Approve. Signing and submission are one wallet call, so the flow goes straight to confirming with a signature.",
+      "REAL HOOK — a genuine mainnet transaction through the real reducer and the real structural check, resting at Ready. Press Approve: signing and submission are one wallet call, so it goes straight to confirming with a signature.",
     node: <HookDrivenCase submit={async () => ({ kind: "submitted", signature: "5xGALLERYsignature" })} />,
   },
   {
@@ -192,7 +186,12 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     key: "hook_auto_refresh",
     label:
       "REAL HOOK, short-lived quote — watch the countdown hit zero. It renews itself and the clock restarts, instead of dropping you on “These terms expired”. Each renewal re-fetches and re-checks; after 3 it gives up and expires, so a forgotten tab stops costing simulations.",
-    node: <HookDrivenCase ttlMs={6_000} />,
+    node: (
+      <HookDrivenCase
+        ttlMs={6_000}
+        submit={async () => ({ kind: "submitted", signature: REAL_FINALIZED_SIGNATURE })}
+      />
+    ),
   },
   {
     key: "hook_approve_confirmed",
@@ -238,13 +237,8 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   },
   {
     key: "ready",
-    label: "Ready, WITH a wallet — the only state where Approve exists. Compare with the no-wallet case above: same state, button absent rather than disabled.",
+    label: "Ready — checked, wallet attached. The only state where Approve exists; every other state either has nothing to approve yet or has moved past it.",
     node: <SwapConfirmSheet phase={"ready" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} onApprove={noop} />,
-  },
-  {
-    key: "ready_no_signer",
-    label: "Ready, NO signer — today's real state. Approve is absent rather than disabled.",
-    node: <SwapConfirmSheet phase={"ready" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} />,
   },
   {
     key: "ready_absent_figures",
