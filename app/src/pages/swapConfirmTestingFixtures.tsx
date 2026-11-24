@@ -20,7 +20,7 @@ import type { SwapActionContext } from "../suggestions/swapQuote/swapQuoteContra
 import type { SwapExecutionPlan } from "../suggestions/swapExecution/executionContracts";
 import type { SwapPlanSubmitter } from "../components/swapExecution/useSwapExecutionPlan";
 import type { fetchConfirmationState } from "../suggestions/swapExecution/confirmationPolling";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { SwapExecutionTerms } from "../suggestions/swapExecution/executionContracts";
 import type { ExecutionFailureKey, ExecutionPhase } from "../suggestions/swapExecution/executionLifecycle";
 
@@ -112,7 +112,6 @@ function HookDrivenCase({
   submit,
   confirmationFetcher,
   ttlMs,
-  onGaveUp,
 }: {
   tamper?: (p: SwapExecutionPlan) => SwapExecutionPlan;
   submit?: SwapPlanSubmitter;
@@ -120,12 +119,20 @@ function HookDrivenCase({
   confirmationFetcher?: typeof fetchConfirmationState;
   /**
    * Shortens the plan's life so the auto-refresh is reviewable in seconds rather than in the
-   * real 25. Each fetch issues a FRESH expiry, which is what lets the countdown restart.
+   * real 25. Each fetch issues a FRESH expiry, which is what lets the clock restart.
    */
   ttlMs?: number;
-  /** Stands in for the host closing the review; the gallery has no modal to close. */
-  onGaveUp?: () => void;
 }) {
+  /**
+   * MIRRORS THE REAL CONTAINER, which is the point of these cases.
+   *
+   * In the app, Cancel unmounts the sheet and returns to the review's Continue footer, and
+   * giving up closes the review altogether. Wiring Cancel straight to `state.cancel` instead
+   * left a dead sheet on screen — terms still showing, Approve gone — which looks like a bug
+   * in the sheet and is not a state the product can reach.
+   */
+  const [dismissed, setDismissed] = useState<null | "cancelled" | "closed">(null);
+
   const state = useSwapExecutionPlan({
     action: GALLERY_ACTION,
     provider: "jupiter",
@@ -143,11 +150,28 @@ function HookDrivenCase({
     // on a real transaction is not a gallery, and one stray click would cost actual money.
     submit,
     confirmationFetcher,
-    onGaveUp,
+    onGaveUp: () => setDismissed("closed"),
   });
 
   // The gallery has no user to press anything, so the flow is started on mount.
   useEffect(() => { state.prepare(); }, [state.prepare]);
+
+  if (dismissed) {
+    return (
+      <p className="modal__intro">
+        {dismissed === "closed"
+          ? "The host was told to give up: in the app the review closes here and a toast says the terms expired. The gallery has no modal, so the sheet is simply gone."
+          : "Cancelled: in the app the sheet unmounts and the review returns to its Continue footer. The suggestion itself is untouched."}{" "}
+        <button
+          type="button"
+          className="review-modal__tertiary-action"
+          onClick={() => { setDismissed(null); state.prepare(); }}
+        >
+          Run it again
+        </button>
+      </p>
+    );
+  }
 
   return (
     <SwapConfirmSheet
@@ -155,7 +179,7 @@ function HookDrivenCase({
       terms={state.plan?.terms ?? null}
       failure={state.failure}
       signature={state.signature}
-      onCancel={state.cancel}
+      onCancel={() => { state.cancel(); setDismissed("cancelled"); }}
       onApprove={state.approve}
     />
   );
@@ -191,18 +215,10 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     label:
       "REAL HOOK, short-lived quote — watch it renew itself and the clock restart, instead of dropping you on “These terms expired”. Each renewal re-fetches and re-checks. Once the allowance is spent the host is told to close the review and show a toast; the gallery has no modal, so it is reported in the line above instead.",
     node: (
-      <>
-      <p id="gallery-gave-up" className="modal__intro">(waiting — the host has not been called yet)</p>
       <HookDrivenCase
         ttlMs={3_000}
         submit={async () => ({ kind: "submitted", signature: REAL_FINALIZED_SIGNATURE })}
-        onGaveUp={() => {
-          // Stands in for the host: the real app closes the review and pushes a toast.
-          const el = document.getElementById("gallery-gave-up");
-          if (el) el.textContent = "HOST CALLED: close the review + toast";
-        }}
       />
-      </>
     ),
   },
   {
@@ -299,12 +315,6 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"confirm_timeout" as ExecutionFailureKey} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
   },
   {
-    key: "cancelled",
-    label:
-      "Cancelled by the user — the one failure key with no error copy, because their own choice is not an error. In the real flow the sheet unmounts; this proves nothing alarming renders if it does not.",
-    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"cancelled" as ExecutionFailureKey} onCancel={noop} />,
-  },
-  {
     key: "demo_mode",
     label:
       "DEMO MODE — Approve is present but unavailable, with the reason on hover and on keyboard focus. The one place this sheet renders an action that cannot be taken: hiding the last step would hide what a demo exists to show. `aria-disabled`, not `disabled`, so the explanation is reachable without a mouse.",
@@ -362,7 +372,7 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   },
   {
     key: "expired",
-    label: "Expired — the one failure where Refresh is offered, because fresh terms are the remedy",
+    label: "Expired — still reachable, and NOT the ending where the review closes. Seen when the tab was in the background at expiry, or when there is no way to re-quote: the reader was not watching, so the card waits for them rather than a toast firing into an unwatched tab. The one failure offering Refresh, because fresh terms are the remedy.",
     node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"expired" as ExecutionFailureKey} onCancel={noop} onRefresh={noop} />,
   },
   {
