@@ -73,13 +73,13 @@ import {
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
 import { SWAP_CONFIRM_EXPIRED_TITLE } from "../../state/approvedCopy";
 import type { ExecutionFailureKey, ExecutionPhase } from "../swapExecution/executionLifecycle";
-import { executionReducer, initialExecutionState, isExecutionTerminal, isRestartable, type ExecutionEvent } from "../swapExecution/executionLifecycle";
+import { executionReducer, initialExecutionState, isExecutionBusy, isExecutionTerminal, isRestartable, type ExecutionEvent } from "../swapExecution/executionLifecycle";
 import { REAL_SWAP_TAKER, REAL_SWAP_TX } from "./realSwapTransactions";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
   SWAP_CONFIRM_CANCEL_LABEL,
+  SWAP_CONFIRM_AWAITING_WALLET,
   SWAP_CONFIRM_CHECKING,
-  SWAP_CONFIRM_CHECK_PASSED,
   SWAP_CONFIRM_COMPLETE_TITLE,
   SWAP_CONFIRM_DECLINED_DESC,
   SWAP_CONFIRM_EXPIRED,
@@ -88,6 +88,7 @@ import {
   SWAP_CONFIRM_NETWORK_FEE_LABEL,
   SWAP_CONFIRM_RECEIVE_LABEL,
   SWAP_CONFIRM_SUBMIT_FAILED_DESC,
+  SWAP_CONFIRM_SUBMITTING,
   SWAP_CONFIRM_TIMEOUT_DESC,
   SWAP_CONFIRM_TIMEOUT_TITLE,
   SWAP_CONFIRM_VERIFICATION_FAILED_DESC,
@@ -571,9 +572,28 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       /stayed in your wallet/i.test(SWAP_CONFIRM_SUBMIT_FAILED_DESC);
   })(), "funds are accounted for");
   add("SWCC-5: the check state claims only that the transaction was checked — never that the trade is safe", (() => {
-    const c = `${SWAP_CONFIRM_CHECKING} ${SWAP_CONFIRM_CHECK_PASSED}`.toLowerCase();
+    const c = SWAP_CONFIRM_CHECKING.toLowerCase();
     return !/safe|secure|verified|guaranteed|approved by/.test(c);
   })(), "no endorsement");
+  add("SWCC-5b: the checked state says NOTHING — a verdict there read as the swap having completed", (() => {
+    // "Success" sat directly above an unpressed Approve button, while the screen that really
+    // does succeed says "Swap complete". A word that appears only before anything happens, and
+    // never when it does, is worse than silence. `ready` is the resting state: terms on screen,
+    // button available, nothing to narrate.
+    return statusLineFor("ready") === null &&
+      // The states where something IS happening still say so — removing the verdict must not
+      // quietly empty the whole line.
+      statusLineFor("preparing") === SWAP_CONFIRM_CHECKING &&
+      statusLineFor("verifying") === SWAP_CONFIRM_CHECKING &&
+      statusLineFor("signing") === SWAP_CONFIRM_AWAITING_WALLET &&
+      statusLineFor("submitting") === SWAP_CONFIRM_SUBMITTING;
+  })(), "no verdict before the act");
+  add("SWCC-5c: the status line keeps its place when it empties, so Approve does not jump", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // Rendered on the phase, not on the text. Dropping the element at `ready` would pull the
+    // footer upward at the exact moment someone is reaching for the button.
+    return /\{!confirmed && \(/.test(c) && !/\{statusLine && \(/.test(c);
+  })(), "no layout jump");
   add("SWCC-6: every estimated FIGURE carries a tilde, the guaranteed one carries none", (() => {
     // The mark moved from the label to the value, so the guarantee is checked where it now
     // lives. What must hold is unchanged: an approximate figure is visibly approximate, and the
@@ -1071,14 +1091,24 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return /outcome\.kind !== "submitted"/.test(h);
   })(), "never drop a signature");
 
-  add("SWXS5-11: the status line is TOTAL over phases — approving produced a blank sheet before this", (() => {
-    // The gallery found it: after Approve the machine was in `submitting`/`confirming` and the
-    // sheet rendered an empty line. A person who had just authorised a transaction saw nothing.
-    const inFlight: ExecutionPhase[] = ["preparing", "verifying", "ready", "signing", "submitting", "confirming"];
-    const silent: ExecutionPhase[] = ["idle", "confirmed", "failed"];
-    return inFlight.every((p2) => (statusLineFor(p2) ?? "").length > 0) &&
-      silent.every((p2) => statusLineFor(p2) === null);
-  })(), "no blank states");
+  add("SWXS5-11: whenever WE are doing something the sheet says so — approving went blank before this", (() => {
+    // The gallery found the original: after Approve the machine sat in `submitting`/`confirming`
+    // and the sheet rendered an empty line, so a person who had just authorised a transaction
+    // was told nothing. The rule is about phases where the user is WAITING ON US.
+    //
+    // Keyed to `isExecutionBusy` rather than a hand-written list, so a phase added to the
+    // machine inherits the obligation instead of quietly joining the silent set.
+    const all: ExecutionPhase[] = [
+      "idle", "preparing", "verifying", "ready", "signing", "submitting", "confirming",
+      "confirmed", "failed",
+    ];
+    const busySpeaks = all.filter(isExecutionBusy).every((p2) => (statusLineFor(p2) ?? "").length > 0);
+    // `ready` is the one phase where nothing is happening and the user is the one to act: terms
+    // on screen, Approve available. It is deliberately silent — a verdict there read as the
+    // swap having already completed. `confirmed` has its own block; `idle`/`failed` are inert.
+    const silent: ExecutionPhase[] = ["idle", "ready", "confirmed", "failed"];
+    return busySpeaks && silent.every((p2) => statusLineFor(p2) === null);
+  })(), "no blank states while waiting on us");
   add("SWXS5-12: `submitting` and `confirming` read the SAME — the difference is ours, not the user's",
     statusLineFor("submitting") === statusLineFor("confirming"), "no false precision");
   add("SWXS5-13: Cancel is offered before approval and withdrawn after — nothing left to cancel", (() => {

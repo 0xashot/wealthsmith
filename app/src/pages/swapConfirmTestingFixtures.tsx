@@ -197,7 +197,7 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "hook_approve_confirmed",
     label:
-      "REAL HOOK, all the way to Success — stubbed wallet submits, stubbed confirmation reports it landed. The real reducer and the real polling decision; the one case that reaches the success screen through the sequence rather than by prop.",
+      "REAL HOOK, all the way to completion — stubbed wallet submits, stubbed confirmation reports it landed. The real reducer and the real polling decision; the one case that reaches the completed screen through the sequence rather than by prop.",
     node: (
       <HookDrivenCase
         submit={async () => ({ kind: "submitted", signature: REAL_FINALIZED_SIGNATURE })}
@@ -283,7 +283,7 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "confirmed",
     label:
-      "Success — and deliberately NO figure for what arrived. Reading the real delivered amount needs a chain read the browser cannot make, and the rule is to omit it rather than repeat the earlier estimate as if it were the outcome.",
+      "Swap complete — and deliberately NO figure for what arrived. Reading the real delivered amount needs a chain read the browser cannot make, and the rule is to omit it rather than repeat the earlier estimate as if it were the outcome.",
     node: <SwapConfirmSheet phase={"confirmed" as ExecutionPhase} terms={TERMS} failure={null} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
   },
   {

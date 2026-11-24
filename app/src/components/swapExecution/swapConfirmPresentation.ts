@@ -13,7 +13,6 @@
 import {
   SWAP_CONFIRM_AWAITING_WALLET,
   SWAP_CONFIRM_CHECKING,
-  SWAP_CONFIRM_CHECK_PASSED,
   SWAP_CONFIRM_DECLINED_DESC,
   SWAP_CONFIRM_DECLINED_TITLE,
   SWAP_CONFIRM_EXPIRED_DESC,
@@ -110,7 +109,13 @@ export function statusLineFor(phase: ExecutionPhase): string | null {
     case "verifying":
       return SWAP_CONFIRM_CHECKING;
     case "ready":
-      return SWAP_CONFIRM_CHECK_PASSED;
+      // NOTHING. The checked state is the sheet's resting state, and a resting state does not
+      // need narrating — the terms are on screen and the Approve button is there, which is the
+      // whole message. Announcing the check's result also put the word "Success" directly above
+      // an unpressed Approve button, where it read as though the swap had already gone through;
+      // the screen that really does succeed says "Swap complete" instead. A line that appears
+      // only before anything happens, and never when it does, was worse than no line.
+      return null;
     case "signing":
       return SWAP_CONFIRM_AWAITING_WALLET;
     case "submitting":

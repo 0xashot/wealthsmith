@@ -995,7 +995,7 @@ tolerance, a target, or a provider’s promise.
 
 ```text
 Checking:   Checking transaction…
-Passed:     Success
+Passed:     (nothing)
 Expired:    These terms expired. Nothing was sent.
 ```
 
@@ -1011,6 +1011,18 @@ The check is a statement about this transaction, not reassurance in general. Do
 not write “Verified”, “Safe”, “Secure”, or anything implying an endorsement of
 the trade itself. We checked that the transaction matches the terms. We did not
 check that the swap is a good idea.
+
+**The passed state says nothing at all.** It is the resting state — terms on
+screen, Approve available — and that is already the message. The word
+“Success” sat directly above an unpressed Approve button and read as though the
+swap had gone through, while the screen that really does complete says “Swap
+complete”. A verdict that appears only before anything happens, and never when
+it does, is worse than silence.
+
+The line still keeps its place when it empties, so the button underneath does
+not move at the moment someone is reaching for it. Whenever **we** are doing
+something — preparing, checking, waiting on the wallet, confirming — it must
+say so; silence is only for states where the user is the one to act.
 
 ### Actions
 

@@ -171,8 +171,14 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
       )}
 
       {/* One status line, for every phase. `aria-live` because it changes without the user
-          acting, and because what it says is the thing they are waiting on. */}
-      {statusLine && (
+          acting, and because what it says is the thing they are waiting on.
+
+          ALWAYS RENDERED before completion, even when it has nothing to say — which `ready` now
+          does. The element reserves its own height, so removing it when the check finishes
+          would pull the Approve button upward at the exact moment someone is reaching for it.
+          Keeping one live region in place also announces better than one that appears and
+          disappears. */}
+      {!confirmed && (
         <p className="swap-confirm__check" role="status" aria-live="polite">{statusLine}</p>
       )}
 

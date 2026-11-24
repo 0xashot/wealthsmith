@@ -1065,7 +1065,11 @@ export const SWAP_CONFIRM_MINIMUM_INFO =
 
 /** Verification states. A statement about this transaction, never reassurance in general. */
 export const SWAP_CONFIRM_CHECKING = "Checking transaction…";
-export const SWAP_CONFIRM_CHECK_PASSED = "Success";
+/*
+ * There is deliberately NO "checked" line. `ready` is the resting state — terms on screen,
+ * Approve available — and a verdict above an unpressed button read as the swap having already
+ * completed, which only the real completion screen may say.
+ */
 
 /** Actions. "Approve" describes what the user does in their wallet — not what we do. */
 export const SWAP_CONFIRM_APPROVE_LABEL = "Approve";
