@@ -19,6 +19,7 @@ import { REAL_SWAP_TAKER, REAL_SWAP_TX_SOL_INPUT } from "../suggestions/fixtures
 import type { SwapActionContext } from "../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapExecutionPlan } from "../suggestions/swapExecution/executionContracts";
 import type { SwapPlanSubmitter } from "../components/swapExecution/useSwapExecutionPlan";
+import type { fetchConfirmationState } from "../suggestions/swapExecution/confirmationPolling";
 import { useEffect } from "react";
 import type { SwapExecutionTerms } from "../suggestions/swapExecution/executionContracts";
 import type { ExecutionFailureKey, ExecutionPhase } from "../suggestions/swapExecution/executionLifecycle";
@@ -42,6 +43,15 @@ const TERMS: SwapExecutionTerms = {
 };
 
 const noop = () => {};
+
+/**
+ * A REAL finalized mainnet signature, so the Solscan link in the post-approval states actually
+ * resolves. A made-up string is not base58 of the right length and silently 404s, which means the
+ * one link in this flow the user is most likely to press would be reviewed by looking at it rather
+ * than by following it. Public data: a signature is on-chain by definition.
+ */
+const REAL_FINALIZED_SIGNATURE =
+  "3oxRM1QrjMfCTiC2FZW15rXRKzKQomcogEP77C9aBcds9DKCXWwNcZrLwkSKKfYMZxQbzFpeuiTZmiF1gYpKv7r8";
 
 /* ---------------------------------------------------------------------------
  * One case that runs the REAL hook.
@@ -98,9 +108,12 @@ const GALLERY_ACTION: SwapActionContext = {
 function HookDrivenCase({
   tamper,
   submit,
+  confirmationFetcher,
 }: {
   tamper?: (p: SwapExecutionPlan) => SwapExecutionPlan;
   submit?: SwapPlanSubmitter;
+  /** Stubbed chain read. Without one the sheet would sit in `confirming` for the full 90s deadline. */
+  confirmationFetcher?: typeof fetchConfirmationState;
 }) {
   const state = useSwapExecutionPlan({
     action: GALLERY_ACTION,
@@ -112,6 +125,7 @@ function HookDrivenCase({
     // A STUB, never the real wallet submitter. A gallery that could submit a real mainnet swap
     // on a real transaction is not a gallery, and one stray click would cost actual money.
     submit,
+    confirmationFetcher,
   });
 
   // The gallery has no user to press anything, so the flow is started on mount.
@@ -162,6 +176,28 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     node: <HookDrivenCase submit={async () => ({ kind: "failed", detail: "WalletSendTransactionError" })} />,
   },
   {
+    key: "hook_approve_confirmed",
+    label:
+      "REAL HOOK, all the way to Success — stubbed wallet submits, stubbed confirmation reports it landed. The real reducer and the real polling decision; the one case that reaches the success screen through the sequence rather than by prop.",
+    node: (
+      <HookDrivenCase
+        submit={async () => ({ kind: "submitted", signature: REAL_FINALIZED_SIGNATURE })}
+        confirmationFetcher={async () => ({ ok: true, state: "confirmed" })}
+      />
+    ),
+  },
+  {
+    key: "hook_approve_reverted",
+    label:
+      "REAL HOOK — the chain RAN it and it reverted. The one failure confirmation is allowed to report, and distinct from giving up: we know the funds did not move rather than merely not knowing.",
+    node: (
+      <HookDrivenCase
+        submit={async () => ({ kind: "submitted", signature: REAL_FINALIZED_SIGNATURE })}
+        confirmationFetcher={async () => ({ ok: true, state: "failed" })}
+      />
+    ),
+  },
+  {
     key: "hook_wrong_minimum",
     label:
       "REAL HOOK, tampered — the proof claims a check against a different minimum than the one displayed. Must refuse, and the refusal must be REACHED, not rendered.",
@@ -200,6 +236,67 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
         terms={{ ...TERMS, estimatedNetworkFeeUsd: null, priceImpactPct: Number.NaN }}
         failure={null}
         msUntilExpiry={9_000}
+        onCancel={noop}
+        onApprove={noop}
+      />
+    ),
+  },
+  /* ---- After Approve. Every one of these was previously unreachable in the gallery, which is
+   *      how the blank status line survived review: the states existed in the machine and
+   *      nowhere on screen. Cancel is deliberately absent in all of them. ---- */
+  {
+    key: "signing",
+    label:
+      "Awaiting the wallet — the user has pressed Approve and Phantom is open. No Cancel: the request is with the wallet now.",
+    node: <SwapConfirmSheet phase={"signing" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={null} onCancel={noop} />,
+  },
+  {
+    key: "submitting",
+    label:
+      "Submitting — signed and being sent. Shares its line with `confirming` on purpose: the difference is ours, not the user's.",
+    node: <SwapConfirmSheet phase={"submitting" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={null} onCancel={noop} />,
+  },
+  {
+    key: "confirming",
+    label:
+      "Checking transaction — on-chain, not yet confirmed. The signature is already the user's record, so the Solscan link appears HERE, not only on success.",
+    node: <SwapConfirmSheet phase={"confirming" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={null} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
+  },
+  {
+    key: "confirmed",
+    label:
+      "Success — and deliberately NO figure for what arrived. Reading the real delivered amount needs a chain read the browser cannot make, and the rule is to omit it rather than repeat the earlier estimate as if it were the outcome.",
+    node: <SwapConfirmSheet phase={"confirmed" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={null} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
+  },
+  {
+    key: "confirm_timeout_with_signature",
+    label:
+      "Gave up watching, but the user HAS a signature — the realistic timeout. The link is the only way they can find out what happened, so check it is present and that nothing here reads as failure.",
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"confirm_timeout" as ExecutionFailureKey} msUntilExpiry={null} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
+  },
+  {
+    key: "cancelled",
+    label:
+      "Cancelled by the user — the one failure key with no error copy, because their own choice is not an error. In the real flow the sheet unmounts; this proves nothing alarming renders if it does not.",
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"cancelled" as ExecutionFailureKey} msUntilExpiry={null} onCancel={noop} />,
+  },
+  {
+    key: "ready_as_production_returns_it",
+    label:
+      "Ready, with the EXACT terms production returned on 2026-11-24 for 0.01 SOL → USDC. Both cost figures come back null from the live endpoint, so Network fee reads “—”. This is what your first real swap will look like — if that dash is not acceptable, it is a backend fix, not a copy fix.",
+    node: (
+      <SwapConfirmSheet
+        phase={"ready" as ExecutionPhase}
+        terms={{
+          ...TERMS,
+          expectedOutputTokens: "0.708636",
+          minimumOutputTokens: "0.705093",
+          priceImpactPct: 0.00448661815241882,
+          estimatedTotalCostUsd: null,
+          estimatedNetworkFeeUsd: null,
+        }}
+        failure={null}
+        msUntilExpiry={22_000}
         onCancel={noop}
         onApprove={noop}
       />

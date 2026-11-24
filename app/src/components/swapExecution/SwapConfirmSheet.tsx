@@ -75,6 +75,18 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
       <section className="review-modal__section swap-confirm" aria-label={SWAP_CONFIRM_TITLE}>
         <h3 className="review-modal__section-title">{failed.title}</h3>
         <p className="modal__intro">{failed.desc}</p>
+        {/* A signature survives into a failure, and when it does it matters MORE here than on
+            success. `confirm_timeout` means we stopped watching a transaction that may well have
+            landed, and a reverted one means the chain ran it — in both cases this link is the only
+            way the user can find out what became of their money. Leaving it out of this branch was
+            a real omission: the gallery's timeout case showed the state with no link at all. */}
+        {signature && solscanTransactionUrl(signature) && (
+          <p className="swap-confirm__transaction">
+            <a href={solscanTransactionUrl(signature) as string} target="_blank" rel="noopener noreferrer">
+              {SWAP_CONFIRM_VIEW_TRANSACTION}
+            </a>
+          </p>
+        )}
         <div className="review-modal__footer review-modal__footer--actions">
           <button type="button" className="review-modal__tertiary-action" onClick={onCancel}>
             {SWAP_CONFIRM_CANCEL_LABEL}
