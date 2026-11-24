@@ -111,11 +111,17 @@ function HookDrivenCase({
   tamper,
   submit,
   confirmationFetcher,
+  ttlMs,
 }: {
   tamper?: (p: SwapExecutionPlan) => SwapExecutionPlan;
   submit?: SwapPlanSubmitter;
   /** Stubbed chain read. Without one the sheet would sit in `confirming` for the full 90s deadline. */
   confirmationFetcher?: typeof fetchConfirmationState;
+  /**
+   * Shortens the plan's life so the auto-refresh is reviewable in seconds rather than in the
+   * real 25. Each fetch issues a FRESH expiry, which is what lets the countdown restart.
+   */
+  ttlMs?: number;
 }) {
   const state = useSwapExecutionPlan({
     action: GALLERY_ACTION,
@@ -123,7 +129,13 @@ function HookDrivenCase({
     takerPublicKey: REAL_SWAP_TAKER,
     slippageBps: 50,
     enabled: true,
-    fetcher: async () => ({ ok: true, plan: tamper ? tamper(LIVE_SHAPED_PLAN) : LIVE_SHAPED_PLAN }),
+    fetcher: async () => {
+      const base =
+        ttlMs == null
+          ? LIVE_SHAPED_PLAN
+          : { ...LIVE_SHAPED_PLAN, expiresAt: new Date(Date.now() + ttlMs).toISOString() };
+      return { ok: true, plan: tamper ? tamper(base) : base };
+    },
     // A STUB, never the real wallet submitter. A gallery that could submit a real mainnet swap
     // on a real transaction is not a gallery, and one stray click would cost actual money.
     submit,
@@ -176,6 +188,12 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     label:
       "REAL HOOK + stubbed wallet that ERRORS — press Approve. This used to hang in `signing` with no way out.",
     node: <HookDrivenCase submit={async () => ({ kind: "failed", detail: "WalletSendTransactionError" })} />,
+  },
+  {
+    key: "hook_auto_refresh",
+    label:
+      "REAL HOOK, short-lived quote — watch the countdown hit zero. It renews itself and the clock restarts, instead of dropping you on “These terms expired”. Each renewal re-fetches and re-checks; after 3 it gives up and expires, so a forgotten tab stops costing simulations.",
+    node: <HookDrivenCase ttlMs={6_000} />,
   },
   {
     key: "hook_approve_confirmed",

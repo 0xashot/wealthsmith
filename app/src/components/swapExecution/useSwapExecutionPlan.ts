@@ -30,7 +30,7 @@
  * through the wallet's own infrastructure — see `submitResolution` for why that falls out of how
  * the adapters already work, and what it means for custody.
  */
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { SwapActionContext, SwapProviderId } from "../../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapExecutionPlan } from "../../suggestions/swapExecution/executionContracts";
 import {
@@ -46,6 +46,7 @@ import {
   type FetchSwapExecutionPlanOptions,
 } from "../../suggestions/swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../../suggestions/swapExecution/planResolution";
+import { decideOnExpiry } from "../../suggestions/swapExecution/quoteRefresh";
 import { eventsForSubmitOutcome, type SubmitOutcome } from "../../suggestions/swapExecution/submitResolution";
 import {
   swapEventForTransition,
@@ -167,19 +168,69 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
 
   // Expiry. A single timer rather than a ticking countdown: the reducer refuses `expire` after
   // submission, so a timer that fires late cannot claim a submitted transaction failed.
+  //
+  // At zero the flow either renews itself or expires, and `decideOnExpiry` owns that choice —
+  // see it for why a refresh is capped and why nothing past `ready` may be replaced. Counting
+  // the renewals in a ref rather than in the reducer keeps them out of the state machine: a
+  // renewed plan is a NEW plan reached through the ordinary `prepare` path, not a new phase.
+  const autoRefreshCountRef = useRef(0);
+
+  // A new request is a new flow, and gets its full allowance back.
+  useEffect(() => {
+    autoRefreshCountRef.current = 0;
+  }, [requestKey, enabled]);
+
   const expiresAtMs = state.plan ? Date.parse(state.plan.expiresAt) : NaN;
+
+  // Make the countdown actually count down.
+  //
+  // `msUntilExpiry` is derived at render, so without this it only changes when something else
+  // changes the state — and between `ready` and expiry nothing does. The sheet showed a single
+  // frozen number for the whole 25 seconds. That was survivable when it read "Terms expire in";
+  // under "Quote refreshes in" a clock that never moves reads as broken.
+  //
+  // One second, only while the countdown is on screen (`ready`), and never while the tab is
+  // hidden — a re-render per second in a background tab buys nobody anything.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (state.phase !== "ready" || !Number.isFinite(expiresAtMs)) return;
+    const id = window.setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      setTick((t) => t + 1);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [state.phase, expiresAtMs]);
+
   useEffect(() => {
     if (!Number.isFinite(expiresAtMs)) return;
     if (isExecutionTerminal(state.phase)) return;
+
+    const onExpiry = () => {
+      const decision = decideOnExpiry({
+        phase: state.phase,
+        autoRefreshCount: autoRefreshCountRef.current,
+        // Read at the moment the timer fires, not when it was set: the reader may have switched
+        // tabs during the 25 seconds, which is exactly the case worth not spending a refresh on.
+        documentHidden: typeof document !== "undefined" && document.hidden,
+        canPrepare: enabled && takerPublicKey != null,
+      });
+      if (decision === "auto_refresh") {
+        autoRefreshCountRef.current += 1;
+        prepare();
+        return;
+      }
+      dispatch({ type: "expire" });
+    };
+
     const remaining = expiresAtMs - now();
     if (remaining <= 0) {
-      dispatch({ type: "expire" });
+      onExpiry();
       return;
     }
-    const id = window.setTimeout(() => dispatch({ type: "expire" }), remaining);
+    const id = window.setTimeout(onExpiry, remaining);
     return () => window.clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expiresAtMs, state.phase]);
+  }, [expiresAtMs, state.phase, enabled, takerPublicKey, prepare]);
 
   // Watch a submitted transaction until it lands or we give up.
   //

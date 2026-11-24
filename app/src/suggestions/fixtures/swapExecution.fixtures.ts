@@ -53,6 +53,7 @@ import {
 } from "../swapExecution/confirmationPolling";
 import { isSignatureShaped, stateFromStatus } from "../../server/swapExecution/confirmationStatus";
 import { usdTermsFromSnapshot, usdValueOf } from "../../server/swapExecution/termsPricing";
+import { decideOnExpiry, MAX_AUTO_REFRESHES } from "../swapExecution/quoteRefresh";
 import {
   classifyWalletError,
   eventsForSubmitOutcome,
@@ -72,7 +73,7 @@ import {
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
 import { SWAP_CONFIRM_EXPIRED_TITLE } from "../../state/approvedCopy";
 import type { ExecutionFailureKey, ExecutionPhase } from "../swapExecution/executionLifecycle";
-import { executionReducer, initialExecutionState, isExecutionTerminal, type ExecutionEvent } from "../swapExecution/executionLifecycle";
+import { executionReducer, initialExecutionState, isExecutionTerminal, isRestartable, type ExecutionEvent } from "../swapExecution/executionLifecycle";
 import { REAL_SWAP_TAKER, REAL_SWAP_TX } from "./realSwapTransactions";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
@@ -803,6 +804,103 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // confirmation reads as "almost" and explains nothing.
     return /\{ready && onApprove && \(/.test(c) && !/disabled=/.test(c);
   })(), "no dead button");
+  /* ---- Re-preparing (SWXR) ----
+   *
+   * Asking for a new plan. Both the Refresh button and the countdown's auto-renewal go through
+   * this one transition, and it was MISSING: `prepare` dispatched into `ready` or `failed` was
+   * returned unchanged, so neither did anything and nothing said so.
+   */
+  {
+    const run = (events: ExecutionEvent[]) => events.reduce(executionReducer, initialExecutionState);
+    const planFor = (expiresAt: string) => ({ ...plan(), expiresAt });
+    const toReady = (): ExecutionEvent[] => [
+      { type: "prepare" },
+      { type: "plan_received", plan: planFor(new Date(NOW + 25_000).toISOString()) },
+      { type: "verified" },
+    ];
+    add("SWXR-1: the quote can renew itself from `ready` — what makes the countdown's copy true", (() => {
+      const s = run([...toReady(), { type: "prepare" }]);
+      return s.phase === "preparing";
+    })(), "renewal reaches the machine");
+    add("SWXR-2: Refresh on an expired quote actually restarts it — it was a dead button", (() => {
+      const expired = run([...toReady(), { type: "expire" }]);
+      const after = executionReducer(expired, { type: "prepare" });
+      return expired.phase === "failed" && expired.failure === "expired" && after.phase === "preparing";
+    })(), "refresh works");
+    add("SWXR-3: a restart carries NOTHING over — stale terms cannot survive into a new attempt", (() => {
+      const s = run([...toReady(), { type: "expire" }, { type: "prepare" }]);
+      // A plan left behind would be rendered beside the new attempt's status line, showing
+      // figures from a quote that has already been abandoned.
+      return s.plan === null && s.signature === null && s.failure === null && s.failureDetail === null;
+    })(), "clean slate");
+    add("SWXR-4: NOTHING is re-prepared once the user has approved", (() => {
+      const signing = run([...toReady(), { type: "sign" }]);
+      const submitting = executionReducer(signing, { type: "signed" });
+      const confirming = executionReducer(submitting, { type: "submitted", signature: "5xGallerySig" });
+      const confirmed = executionReducer(confirming, { type: "confirmed" });
+      // Replacing the plan here would mean the transaction the user authorised is not the one
+      // we hold. Each must be refused and left exactly as it was.
+      return [signing, submitting, confirming, confirmed].every((s) => {
+        const after = executionReducer(s, { type: "prepare" });
+        return after === s || after.phase === s.phase;
+      }) && signing.phase === "signing" && confirmed.phase === "confirmed";
+    })(), "no swap under the user");
+    add("SWXR-5: restartable phases are exactly the pre-approval ones plus `failed`", (() => {
+      const after: ExecutionPhase[] = ["signing", "submitting", "confirming", "confirmed"];
+      const before: ExecutionPhase[] = ["idle", "preparing", "verifying", "ready", "failed"];
+      return before.every((p) => isRestartable(p)) && after.every((p) => !isRestartable(p));
+    })(), "explicit list");
+  }
+
+  /* ---- Quote auto-refresh (SWQR) ----
+   *
+   * The countdown says "Quote refreshes in". These checks are what make that sentence true, and
+   * what stop it becoming expensive or dangerous.
+   */
+  {
+    const ctx = (o: Partial<Parameters<typeof decideOnExpiry>[0]> = {}) => ({
+      phase: "ready" as ExecutionPhase,
+      autoRefreshCount: 0,
+      documentHidden: false,
+      canPrepare: true,
+      ...o,
+    });
+    add("SWQR-1: a quote on screen and awaiting a decision renews itself — the copy's promise",
+      decideOnExpiry(ctx()) === "auto_refresh", "refresh happens");
+    add("SWQR-2: NOTHING past Approve is ever replaced — the user authorised a specific transaction", (() => {
+      // The reducer already refuses `expire` after submission, but a refresh is not an expiry
+      // and would slip past that refusal. Stated again here, where the choice is actually made.
+      const after: ExecutionPhase[] = ["signing", "submitting", "confirming", "confirmed"];
+      return after.every((phase) => decideOnExpiry(ctx({ phase })) === "expire");
+    })(), "no swap under the user");
+    add("SWQR-3: refreshes are capped, then the flow expires as it always did", (() => {
+      const under = decideOnExpiry(ctx({ autoRefreshCount: MAX_AUTO_REFRESHES - 1 }));
+      const at = decideOnExpiry(ctx({ autoRefreshCount: MAX_AUTO_REFRESHES }));
+      const over = decideOnExpiry(ctx({ autoRefreshCount: MAX_AUTO_REFRESHES + 99 }));
+      return under === "auto_refresh" && at === "expire" && over === "expire";
+    })(), "bounded cost");
+    add("SWQR-4: a hidden tab gets no refresh — nobody is reading, and each one costs a simulation",
+      decideOnExpiry(ctx({ documentHidden: true })) === "expire", "no background work");
+    add("SWQR-5: with no way to prepare (no wallet, not enabled) there is no choice to make",
+      decideOnExpiry(ctx({ canPrepare: false })) === "expire", "cannot refresh");
+    add("SWQR-6: a terminal or idle flow never resurrects itself", (() => {
+      const inert: ExecutionPhase[] = ["idle", "failed"];
+      return inert.every((phase) => decideOnExpiry(ctx({ phase })) === "expire");
+    })(), "no resurrection");
+    add("SWQR-7: every phase is decided — the rule is exhaustive, not a list someone remembered", (() => {
+      const all: ExecutionPhase[] = [
+        "idle", "preparing", "verifying", "ready", "signing", "submitting", "confirming",
+        "confirmed", "failed",
+      ];
+      // A new phase added to the machine lands here as "expire", the safe answer, rather than
+      // as undefined behaviour.
+      return all.every((phase) => {
+        const d = decideOnExpiry(ctx({ phase }));
+        return d === "auto_refresh" || d === "expire";
+      });
+    })(), "total function");
+  }
+
   add("SWCU-1: a USD sub-line is tokens x price, and refuses every input it cannot trust", (() => {
     return usdValueOf("0.01", 70.7) != null && Math.abs((usdValueOf("0.01", 70.7) as number) - 0.707) < 1e-9 &&
       usdValueOf("15", 1) === 15 &&

@@ -108,9 +108,30 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
     return PRE_SUBMISSION.has(state.phase) ? fail(state, "cancelled") : state;
   }
 
+  // RE-PREPARING, from anywhere nothing has been authorised yet.
+  //
+  // Handled before the switch because it is one rule about the whole machine rather than a
+  // transition belonging to a phase: asking for a new plan discards whatever is held and starts
+  // over at `preparing` with no plan, no signature and no failure. Reusing
+  // `initialExecutionState` is what guarantees the old terms cannot survive into the new attempt.
+  //
+  // This was missing, and two separate things were broken by its absence, both silently:
+  //   • the Refresh button offered on an expired quote dispatched `prepare` into `failed`, which
+  //     returned state unchanged — the only remedy the sheet offers did nothing at all;
+  //   • the quote could not renew itself at zero, because `prepare` from `ready` was dropped too.
+  // A dropped event is invisible: no error, no transition, no way to tell from the outside. The
+  // same shape as the `verification_failed` and `submit_failed` gaps fixed earlier.
+  //
+  // REFUSED from `signing` onward, which is the point of listing phases rather than allowing it
+  // everywhere. Once the user has approved, the transaction is the wallet's and then the chain's;
+  // replacing the plan underneath them would mean what they authorised is not what we hold.
+  if (event.type === "prepare" && isRestartable(state.phase)) {
+    return { ...initialExecutionState, phase: "preparing" };
+  }
+
   switch (state.phase) {
     case "idle":
-      return event.type === "prepare" ? { ...initialExecutionState, phase: "preparing" } : state;
+      return state;
 
     case "preparing":
       if (event.type === "plan_received") return { ...state, phase: "verifying", plan: event.plan };
@@ -174,6 +195,21 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
     default:
       return state;
   }
+}
+
+/**
+ * Phases from which a fresh plan may be requested.
+ *
+ * Everything before a signature is asked for, plus `failed` — a terminal outcome the user is
+ * entitled to retry, which is what the Refresh button on an expired quote is for. Retrying
+ * always means a NEW quote, never reusing a plan already looked at.
+ *
+ * Written as an explicit list rather than `!isAfterApproval(...)` so that adding a phase to the
+ * machine does not silently grant it the right to replace a live plan.
+ */
+export function isRestartable(phase: ExecutionPhase): boolean {
+  return phase === "idle" || phase === "preparing" || phase === "verifying" ||
+    phase === "ready" || phase === "failed";
 }
 
 /** True while the flow is doing something the user should not be able to restart. */
