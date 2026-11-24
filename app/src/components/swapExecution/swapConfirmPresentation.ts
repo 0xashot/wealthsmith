@@ -103,32 +103,61 @@ export function formatApproxTokens(amount: string | null | undefined, symbol: st
  *
  * `confirmed` returns null because success is its own block, not a status line.
  */
-export function statusLineFor(phase: ExecutionPhase): string | null {
+/**
+ * Where the sheet shows that something is happening, and what it says.
+ *
+ * ONE function rather than two, because the guarantee worth keeping is "whenever the user is
+ * waiting on us, the sheet says so somewhere" — and that is only checkable if both places are
+ * decided together. Splitting it into a status-line rule and a button rule would let a phase
+ * fall between them and go silent, which is exactly the bug the gallery found once already.
+ *
+ * BEFORE approval it is a line under the terms: nothing else on screen is moving, and the
+ * reader is waiting to be told whether they may proceed.
+ *
+ * AFTER approval it moves INTO the button. The eye is already on the control it just pressed,
+ * so that is where the answer belongs; a sentence appearing somewhere else asks it to go
+ * looking. The button also keeps its place, so the footer does not empty out at the one moment
+ * the user most wants confirmation that their press registered.
+ */
+export type BusyPresentation =
+  | { where: "line"; label: string }
+  | { where: "button"; label: string };
+
+export function busyPresentationFor(phase: ExecutionPhase): BusyPresentation | null {
   switch (phase) {
     case "preparing":
     case "verifying":
-      return SWAP_CONFIRM_CHECKING;
-    case "ready":
-      // NOTHING. The checked state is the sheet's resting state, and a resting state does not
-      // need narrating — the terms are on screen and the Approve button is there, which is the
-      // whole message. Announcing the check's result also put the word "Success" directly above
-      // an unpressed Approve button, where it read as though the swap had already gone through;
-      // the screen that really does succeed says "Swap complete" instead. A line that appears
-      // only before anything happens, and never when it does, was worse than no line.
-      return null;
+      return { where: "line", label: SWAP_CONFIRM_CHECKING };
     case "signing":
-      return SWAP_CONFIRM_AWAITING_WALLET;
+      return { where: "button", label: SWAP_CONFIRM_AWAITING_WALLET };
     case "submitting":
     case "confirming":
-      // Deliberately the same line for both. The difference between "sent" and "being
-      // confirmed" is ours, not the user's, and narrating it would imply a precision about
-      // where their transaction is that we do not have.
-      return SWAP_CONFIRM_SUBMITTING;
+      // Deliberately the same for both. The difference between "sent" and "being confirmed" is
+      // ours, not the user's, and narrating it would imply a precision about where their
+      // transaction is that we do not have.
+      return { where: "button", label: SWAP_CONFIRM_SUBMITTING };
+    case "ready":
+      // The resting state: terms on screen, Approve available, nothing happening. Narrating it
+      // put the word "Success" above an unpressed button, where it read as though the swap had
+      // already gone through — and the screen that really does succeed says "Swap complete".
+      return null;
     case "idle":
     case "confirmed":
     case "failed":
       return null;
   }
+}
+
+/** The status line only. Null once the state has moved into the button. */
+export function statusLineFor(phase: ExecutionPhase): string | null {
+  const busy = busyPresentationFor(phase);
+  return busy?.where === "line" ? busy.label : null;
+}
+
+/** The button's busy label, or null when the button is not in a busy state. */
+export function busyButtonLabelFor(phase: ExecutionPhase): string | null {
+  const busy = busyPresentationFor(phase);
+  return busy?.where === "button" ? busy.label : null;
 }
 
 /** Whether the flow has passed the point where cancelling is possible or meaningful. */

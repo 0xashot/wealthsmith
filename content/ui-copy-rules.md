@@ -999,10 +999,24 @@ tolerance, a target, or a provider’s promise.
 ### States
 
 ```text
-Checking:   Checking transaction…
+Checking:   Checking transaction…        (a line under the terms)
 Passed:     (nothing)
+Approved:   ⟳ Waiting for wallet            (in the button)
+Sent:       ⟳ Confirming                    (in the button)
 Expired:    These terms expired. Nothing was sent.
 ```
+
+**Before Approve the state is a line; after Approve it moves into the button.**
+Nothing else on screen is moving beforehand and the reader is waiting to be told
+whether they may proceed. Afterwards the eye is on the control it just pressed,
+so that is where the answer belongs — and the button keeping its place is what
+makes the press look like it registered, at the one moment that matters most.
+
+A spinner alone would be shorter, but it cannot tell someone whose wallet is
+merely open from someone whose transaction is already on the chain, and only the
+second means closing the tab will not stop it. That distinction is worth two
+words. `submitting` and `confirming` share a label on purpose: the difference
+between sent and confirmed is ours, not the user's.
 
 **When the quote gives up, the review closes.** After it has quietly re-quoted
 its full allowance with the modal in front of someone and still has no

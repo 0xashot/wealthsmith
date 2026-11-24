@@ -50,6 +50,7 @@ import {
   formatPercent,
   isAfterApproval,
   solscanTransactionUrl,
+  busyButtonLabelFor,
   statusLineFor,
 } from "./swapConfirmPresentation";
 
@@ -114,6 +115,7 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
   const ready = phase === "ready";
   const confirmed = phase === "confirmed";
   const statusLine = statusLineFor(phase);
+  const busyLabel = busyButtonLabelFor(phase);
   const afterApproval = isAfterApproval(phase);
   const explorerUrl = signature ? solscanTransactionUrl(signature) : null;
 
@@ -251,6 +253,27 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
         {ready && !demo && onApprove && (
           <button type="button" className="review-modal__primary-action" onClick={onApprove}>
             <span>{SWAP_CONFIRM_APPROVE_LABEL}</span>
+          </button>
+        )}
+        {/* AFTER APPROVE the button stays put and reports from where it was pressed, rather
+            than vanishing and leaving a sentence somewhere else to explain itself. The footer
+            keeping its shape matters at this moment above all others: the press has to look
+            like it registered.
+
+            `aria-disabled`, not `disabled` — the label changes here and a disabled control is
+            dropped from the accessibility tree by some screen readers, taking the live update
+            with it. Not focus-stealing, not clickable: there is nothing to press. */}
+        {busyLabel && (
+          <button
+            type="button"
+            className="review-modal__primary-action review-modal__primary-action--busy"
+            aria-disabled="true"
+            onClick={(e) => e.preventDefault()}
+          >
+            <span className="swap-confirm__spinner" aria-hidden="true" />
+            {/* The live region, so the change from one busy state to the next is announced
+                rather than silently swapped under a screen reader. */}
+            <span role="status" aria-live="polite">{busyLabel}</span>
           </button>
         )}
       </div>

@@ -1164,8 +1164,18 @@ export const SWAP_CONFIRM_TIMEOUT_DESC =
  * machine and nowhere on screen. Both are progress, not reassurance, and neither claims the swap
  * has happened — `confirmed` is the only state allowed to say that.
  */
-export const SWAP_CONFIRM_AWAITING_WALLET = "Waiting for your wallet…";
-export const SWAP_CONFIRM_SUBMITTING = "Confirming on the network…";
+/**
+ * After Approve, the state lives in the BUTTON — a spinner and two words where the action was,
+ * rather than a separate line under the terms. The eye is already on the button it just
+ * pressed, and a sentence appearing elsewhere asks it to go looking.
+ *
+ * Short enough for a button, and still distinct from each other on purpose. A bare spinner
+ * would be shorter still, but it cannot tell someone whose wallet is merely open from someone
+ * whose transaction is already on the chain — and only the second means closing the tab will
+ * not stop it. That distinction is worth two words.
+ */
+export const SWAP_CONFIRM_AWAITING_WALLET = "Waiting for wallet";
+export const SWAP_CONFIRM_SUBMITTING = "Confirming";
 
 /**
  * The step INTO the confirm sheet, from the review's footer.

@@ -5337,6 +5337,40 @@ td.vetting-scores-table__date {
   color: var(--color-text-primary);
 }
 
+/* The busy button, after Approve. Same size and position as the button it
+   replaces, so the footer does not shift at the one moment the user is looking
+   for confirmation that their press registered. */
+.review-modal__primary-action--busy {
+  opacity: 0.75;
+  cursor: default;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* A small ring with one lighter quarter, rotating. Drawn in CSS rather than
+   added as an asset: it is eight lines and avoids another request at the exact
+   moment the network is already busy with the swap. */
+.swap-confirm__spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: swap-confirm-spin 700ms linear infinite;
+}
+
+@keyframes swap-confirm-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Respect the setting. The label alone still says what is happening, so nothing
+   is lost by holding the ring still. */
+@media (prefers-reduced-motion: reduce) {
+  .swap-confirm__spinner { animation: none; }
+}
+
 /* Approve in Demo Mode: present, visibly unavailable, and explained on hover
    and on keyboard focus. The one action in this sheet rendered when it cannot
    be taken — Demo Mode exists to show the whole flow, so hiding the last step

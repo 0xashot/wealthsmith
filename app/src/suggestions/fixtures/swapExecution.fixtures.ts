@@ -69,6 +69,8 @@ import {
   formatUsd,
   isAfterApproval,
   solscanTransactionUrl,
+  busyButtonLabelFor,
+  busyPresentationFor,
   statusLineFor,
 } from "../../components/swapExecution/swapConfirmPresentation";
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
@@ -604,13 +606,14 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // does succeed says "Swap complete". A word that appears only before anything happens, and
     // never when it does, is worse than silence. `ready` is the resting state: terms on screen,
     // button available, nothing to narrate.
-    return statusLineFor("ready") === null &&
+    return busyPresentationFor("ready") === null &&
       // The states where something IS happening still say so — removing the verdict must not
-      // quietly empty the whole line.
+      // quietly empty the sheet. Checked against the combined rule, because after Approve the
+      // answer lives in the button rather than on the line.
       statusLineFor("preparing") === SWAP_CONFIRM_CHECKING &&
       statusLineFor("verifying") === SWAP_CONFIRM_CHECKING &&
-      statusLineFor("signing") === SWAP_CONFIRM_AWAITING_WALLET &&
-      statusLineFor("submitting") === SWAP_CONFIRM_SUBMITTING;
+      busyButtonLabelFor("signing") === SWAP_CONFIRM_AWAITING_WALLET &&
+      busyButtonLabelFor("submitting") === SWAP_CONFIRM_SUBMITTING;
   })(), "no verdict before the act");
   add("SWCC-5c: the status line keeps its place when it empties, so Approve does not jump", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
@@ -1190,26 +1193,59 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return /outcome\.kind !== "submitted"/.test(h);
   })(), "never drop a signature");
 
-  add("SWXS5-11: whenever WE are doing something the sheet says so — approving went blank before this", (() => {
+  add("SWXS5-11: whenever WE are doing something the sheet says so — SOMEWHERE", (() => {
     // The gallery found the original: after Approve the machine sat in `submitting`/`confirming`
     // and the sheet rendered an empty line, so a person who had just authorised a transaction
-    // was told nothing. The rule is about phases where the user is WAITING ON US.
-    //
-    // Keyed to `isExecutionBusy` rather than a hand-written list, so a phase added to the
-    // machine inherits the obligation instead of quietly joining the silent set.
+    // was told nothing. The answer has since moved into the button for those phases, so the
+    // rule is checked against the combined presentation rather than the line alone — otherwise
+    // moving the text between the two places could blank one without failing anything.
     const all: ExecutionPhase[] = [
       "idle", "preparing", "verifying", "ready", "signing", "submitting", "confirming",
       "confirmed", "failed",
     ];
-    const busySpeaks = all.filter(isExecutionBusy).every((p2) => (statusLineFor(p2) ?? "").length > 0);
-    // `ready` is the one phase where nothing is happening and the user is the one to act: terms
-    // on screen, Approve available. It is deliberately silent — a verdict there read as the
-    // swap having already completed. `confirmed` has its own block; `idle`/`failed` are inert.
+    const busySpeaks = all.filter(isExecutionBusy).every((p2) => {
+      const b = busyPresentationFor(p2);
+      return b != null && b.label.length > 0;
+    });
+    // `ready` is the one phase where nothing is happening and the user is the one to act.
+    // `confirmed` has its own block; `idle`/`failed` are inert.
     const silent: ExecutionPhase[] = ["idle", "ready", "confirmed", "failed"];
-    return busySpeaks && silent.every((p2) => statusLineFor(p2) === null);
+    return busySpeaks && silent.every((p2) => busyPresentationFor(p2) === null);
   })(), "no blank states while waiting on us");
+  add("SWXS5-11b: before Approve it is a line, after Approve it is the button", (() => {
+    // Not cosmetic. Before approval nothing else on screen is moving and the reader is waiting
+    // to be told whether they may proceed; after it, the eye is on the control it just pressed
+    // and the footer must not empty out.
+    const line: ExecutionPhase[] = ["preparing", "verifying"];
+    const button: ExecutionPhase[] = ["signing", "submitting", "confirming"];
+    return line.every((p2) => busyPresentationFor(p2)?.where === "line") &&
+      button.every((p2) => busyPresentationFor(p2)?.where === "button") &&
+      // And the two accessors agree with the one rule, rather than drifting from it.
+      line.every((p2) => statusLineFor(p2) != null && busyButtonLabelFor(p2) === null) &&
+      button.every((p2) => statusLineFor(p2) === null && busyButtonLabelFor(p2) != null);
+  })(), "one rule, two places");
+  add("SWXS5-11c: the busy button is never pressable and never a real `disabled`", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    const busyBlock = c.slice(c.indexOf("{busyLabel && ("));
+    // A label that changes inside a `disabled` control is dropped from the accessibility tree
+    // by some screen readers, taking the live update with it.
+    return /aria-disabled="true"/.test(busyBlock) &&
+      !/[^-]disabled=/.test(busyBlock) &&
+      /swap-confirm__spinner/.test(busyBlock) &&
+      /aria-live="polite"/.test(busyBlock);
+  })(), "announced, not pressable");
   add("SWXS5-12: `submitting` and `confirming` read the SAME — the difference is ours, not the user's",
-    statusLineFor("submitting") === statusLineFor("confirming"), "no false precision");
+    busyButtonLabelFor("submitting") === busyButtonLabelFor("confirming") &&
+      busyButtonLabelFor("submitting") != null, "no false precision");
+  add("SWXS5-12b: the two busy labels fit a button and still distinguish wallet from chain", (() => {
+    const wallet = busyButtonLabelFor("signing") ?? "";
+    const chain = busyButtonLabelFor("confirming") ?? "";
+    // A bare spinner would be shorter, but it cannot tell someone whose wallet is merely open
+    // from someone whose transaction is already on the chain — and only the second means
+    // closing the tab will not stop it.
+    return wallet !== chain && wallet.length <= 20 && chain.length <= 20 &&
+      /wallet/i.test(wallet) && /confirm/i.test(chain);
+  })(), "two words earn their place");
   add("SWXS5-13: Cancel is offered before approval and withdrawn after — nothing left to cancel", (() => {
     const before: ExecutionPhase[] = ["preparing", "verifying", "ready"];
     const after: ExecutionPhase[] = ["signing", "submitting", "confirming", "confirmed"];

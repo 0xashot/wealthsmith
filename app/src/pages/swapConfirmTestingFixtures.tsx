@@ -271,13 +271,13 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "signing",
     label:
-      "Awaiting the wallet — the user has pressed Approve and Phantom is open. No Cancel: the request is with the wallet now.",
+      "Awaiting the wallet — the user has pressed Approve and Phantom is open. The button stays where it was and reports from there, so the press visibly registered; no Cancel, because the request is with the wallet now.",
     node: <SwapConfirmSheet phase={"signing" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} />,
   },
   {
     key: "submitting",
     label:
-      "Submitting — signed and being sent. Shares its line with `confirming` on purpose: the difference is ours, not the user's.",
+      "Submitting — signed and being sent. Shares its label with `confirming` on purpose: the difference between sent and confirmed is ours, not the user's.",
     node: <SwapConfirmSheet phase={"submitting" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} />,
   },
   {
