@@ -193,6 +193,12 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
   useEffect(() => {
     if (!Number.isFinite(expiresAtMs)) return;
     if (isExecutionTerminal(state.phase)) return;
+    // NOTHING EXPIRES WHILE A FETCH IS IN FLIGHT. A renewal keeps the outgoing plan on screen,
+    // so its `expiresAt` is already in the past the moment the renewal starts — and without
+    // this the timer fires instantly, decides `preparing` is not a refreshable phase, and
+    // expires the flow it was in the middle of renewing. The incoming plan brings its own
+    // expiry; until it arrives there is nothing here worth timing.
+    if (state.phase === "preparing") return;
 
     const onExpiry = () => {
       const decision = decideOnExpiry({

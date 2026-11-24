@@ -77,7 +77,7 @@ import {
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
 import { SWAP_CONFIRM_EXPIRED_TITLE, SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER } from "../../state/approvedCopy";
 import type { ExecutionFailureKey, ExecutionPhase } from "../swapExecution/executionLifecycle";
-import { executionReducer, initialExecutionState, isExecutionBusy, isExecutionTerminal, isRestartable, type ExecutionEvent } from "../swapExecution/executionLifecycle";
+import { executionReducer, initialExecutionState, isExecutionBusy, isExecutionTerminal, isRenewal, isRestartable, type ExecutionEvent } from "../swapExecution/executionLifecycle";
 import { REAL_SWAP_TAKER, REAL_SWAP_TX } from "./realSwapTransactions";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
@@ -831,6 +831,39 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
   })(), "one formatter");
   add("SWCS-4: a real swap's sub-0.01% impact survives formatting — two decimals would erase it",
     formatPercent(0.0077) === "0.008%" && formatPercent(0.0077) !== "0.01%", "precision kept");
+  add("SWXC-0: nothing expires while a fetch is in flight — the renewal's own trap", (() => {
+    const h = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
+    // Keeping the outgoing plan through a renewal leaves its `expiresAt` already in the past.
+    // Without this guard the timer fires the instant the renewal starts, finds `preparing` is
+    // not a refreshable phase, and expires the very flow it was renewing — so the sheet
+    // dropped into "These terms expired" every time it tried to refresh itself. Fixtures
+    // passed throughout; only driving it in a browser at production latency showed it.
+    const effect = h.slice(h.indexOf("const onExpiry"), h.indexOf("window.setTimeout(onExpiry"));
+    const guard = h.slice(h.indexOf("if (!Number.isFinite(expiresAtMs)) return;"), h.indexOf("const onExpiry"));
+    return /state\.phase === "preparing"\) return;/.test(guard) && effect.length > 0;
+  })(), "no stale expiry mid-renewal");
+  add("SWXC-1: the first wait is held by the FOOTER, not by an empty sheet", (() => {
+    const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    // Mounting the sheet before there were terms opened a 148px card that became 452px when
+    // they landed, shoving the page down right after the reader committed.
+    return /awaitingFirstPlan/.test(c) &&
+      /execution\.plan == null/.test(c) &&
+      // Keyed on the absence of a plan, NOT on the phase: a renewal also passes through
+      // `preparing`, and by then the sheet is open with terms and must stay open.
+      !/phase === "preparing"/.test(c) &&
+      // A failure has no plan either, and it has something to show.
+      /execution\.phase !== "failed"/.test(c);
+  })(), "no empty sheet");
+  add("SWXC-2: the Continue button spins in place rather than being replaced or removed", (() => {
+    const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    const footer = c.slice(c.indexOf("function ContinueFooter"));
+    // Same button, same place. Disappearing or swapping position would lose the connection
+    // between the press and the wait it caused.
+    return /swap-confirm__spinner/.test(footer) &&
+      /aria-disabled="true"/.test(footer) &&
+      !/[^-]disabled=/.test(footer) &&
+      /aria-live="polite"/.test(footer);
+  })(), "same button, spinning");
   add("SWCS-5: EVERY failure key has copy except `cancelled`, which closes silently", (() => {
     const keys: ExecutionFailureKey[] = [
       "plan_unavailable", "verification_failed", "declined", "expired", "submit_failed", "confirm_timeout", "cancelled",
@@ -943,6 +976,31 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       // figures from a quote that has already been abandoned.
       return s.plan === null && s.signature === null && s.failure === null && s.failureDetail === null;
     })(), "clean slate");
+    add("SWXR-3b: a RENEWAL keeps the terms on screen — the sheet must not empty mid-read", (() => {
+      // Nobody asked for a renewal; it happens underneath someone reading. Clearing the plan
+      // blanked the terms for the length of the round trip — over a second in production,
+      // every twenty-five seconds — which interrupts reading far more than the expiry notice
+      // the auto-refresh exists to avoid.
+      const ready = run(toReady());
+      const renewing = executionReducer(ready, { type: "prepare" });
+      return renewing.phase === "preparing" &&
+        renewing.plan === ready.plan && renewing.plan != null &&
+        // Everything describing the finished attempt still goes.
+        renewing.signature === null && renewing.failure === null;
+    })(), "terms survive a renewal");
+    add("SWXR-3c: a RESTART still clears them — the two are not the same event", (() => {
+      // From `failed` the reader pressed Refresh themselves: there is nothing on screen worth
+      // keeping, and stale figures must not survive into an attempt they asked for.
+      const expired = run([...toReady(), { type: "expire" }]);
+      const restarted = executionReducer(expired, { type: "prepare" });
+      return restarted.plan === null && isRenewal("failed") === false && isRenewal("ready") === true;
+    })(), "restart is not renewal");
+    add("SWXR-3d: terms held through a renewal CANNOT be approved — the machine is not `ready`", (() => {
+      // This is what makes showing the outgoing terms safe. They are visible and inert.
+      const renewing = executionReducer(run(toReady()), { type: "prepare" });
+      const triedToSign = executionReducer(renewing, { type: "sign" });
+      return renewing.phase === "preparing" && triedToSign.phase === "preparing";
+    })(), "visible but inert");
     add("SWXR-4: NOTHING is re-prepared once the user has approved", (() => {
       const signing = run([...toReady(), { type: "sign" }]);
       const submitting = executionReducer(signing, { type: "signed" });

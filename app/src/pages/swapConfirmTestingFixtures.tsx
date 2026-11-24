@@ -112,6 +112,7 @@ function HookDrivenCase({
   submit,
   confirmationFetcher,
   ttlMs,
+  fetchDelayMs,
 }: {
   tamper?: (p: SwapExecutionPlan) => SwapExecutionPlan;
   submit?: SwapPlanSubmitter;
@@ -122,6 +123,14 @@ function HookDrivenCase({
    * real 25. Each fetch issues a FRESH expiry, which is what lets the clock restart.
    */
   ttlMs?: number;
+  /**
+   * Delays each fetch, so the gallery shows what production shows.
+   *
+   * An instant stub is why a real bug went unseen here: the renewal blanked the terms for the
+   * length of the round trip, and with a 0ms fetcher that window was one frame. Production
+   * measures 1.0–1.5s for a plan build plus simulation.
+   */
+  fetchDelayMs?: number;
 }) {
   /**
    * MIRRORS THE REAL CONTAINER, which is the point of these cases.
@@ -140,6 +149,7 @@ function HookDrivenCase({
     slippageBps: 50,
     enabled: true,
     fetcher: async () => {
+      if (fetchDelayMs) await new Promise((r) => setTimeout(r, fetchDelayMs));
       const base =
         ttlMs == null
           ? LIVE_SHAPED_PLAN
@@ -169,6 +179,18 @@ function HookDrivenCase({
         >
           Run it again
         </button>
+      </p>
+    );
+  }
+
+  // The app never mounts the sheet without terms: SwapExecutionSection holds that first wait in
+  // the Continue button instead. These cases drive the hook directly, so they would otherwise
+  // show an empty card the product cannot produce.
+  if (state.plan == null && state.phase !== "failed") {
+    return (
+      <p className="modal__intro">
+        <span className="swap-confirm__spinner" aria-hidden="true" /> Fetching terms — in the app
+        the Continue button spins here and the sheet opens once it has something to show.
       </p>
     );
   }
@@ -217,6 +239,7 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     node: (
       <HookDrivenCase
         ttlMs={3_000}
+        fetchDelayMs={1_200}
         submit={async () => ({ kind: "submitted", signature: REAL_FINALIZED_SIGNATURE })}
       />
     ),

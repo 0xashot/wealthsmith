@@ -111,9 +111,24 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
   // RE-PREPARING, from anywhere nothing has been authorised yet.
   //
   // Handled before the switch because it is one rule about the whole machine rather than a
-  // transition belonging to a phase: asking for a new plan discards whatever is held and starts
-  // over at `preparing` with no plan, no signature and no failure. Reusing
-  // `initialExecutionState` is what guarantees the old terms cannot survive into the new attempt.
+  // transition belonging to a phase.
+  //
+  // TWO KINDS, and the difference is what happens to the terms already on screen:
+  //
+  //   A RESTART — from `idle` or `failed` — clears everything. The reader asked for this (they
+  //   pressed Refresh on an expired quote, or the flow is beginning), so there is nothing on
+  //   screen worth keeping and stale figures must not survive into a new attempt.
+  //
+  //   A RENEWAL — from `ready` or `verifying` — KEEPS the plan while the new one is fetched.
+  //   Nobody asked for it: the quote is replacing itself underneath someone who is mid-read.
+  //   Clearing the plan emptied the sheet of its terms for as long as the round trip took,
+  //   which in production is over a second, every twenty-five seconds. The auto-refresh exists
+  //   precisely so that reading is not interrupted, and blanking the terms interrupts it far
+  //   more than the expiry notice it replaced.
+  //
+  //   Holding the old terms is safe because they cannot be acted on: Approve exists only in
+  //   `ready`, and this leaves the machine in `preparing`. The figures are replaced in place
+  //   when the new plan lands, which is how a live quote behaves everywhere else.
   //
   // This was missing, and two separate things were broken by its absence, both silently:
   //   • the Refresh button offered on an expired quote dispatched `prepare` into `failed`, which
@@ -126,7 +141,15 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
   // everywhere. Once the user has approved, the transaction is the wallet's and then the chain's;
   // replacing the plan underneath them would mean what they authorised is not what we hold.
   if (event.type === "prepare" && isRestartable(state.phase)) {
-    return { ...initialExecutionState, phase: "preparing" };
+    const renewal = isRenewal(state.phase);
+    return {
+      ...initialExecutionState,
+      phase: "preparing",
+      // A renewal shows the outgoing terms until the incoming ones replace them. Everything
+      // else — signature, failure, detail — is cleared either way: those describe an attempt
+      // that is over.
+      plan: renewal ? state.plan : null,
+    };
   }
 
   switch (state.phase) {
@@ -207,6 +230,16 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
  * Written as an explicit list rather than `!isAfterApproval(...)` so that adding a phase to the
  * machine does not silently grant it the right to replace a live plan.
  */
+/**
+ * Phases where a `prepare` is the quote replacing ITSELF rather than the reader starting over.
+ *
+ * Exactly the states where terms are already on screen. Nobody asked for the renewal, so the
+ * sheet must not empty out while it happens.
+ */
+export function isRenewal(phase: ExecutionPhase): boolean {
+  return phase === "ready" || phase === "verifying";
+}
+
 export function isRestartable(phase: ExecutionPhase): boolean {
   return phase === "idle" || phase === "preparing" || phase === "verifying" ||
     phase === "ready" || phase === "failed";

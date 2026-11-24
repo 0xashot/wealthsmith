@@ -21,7 +21,7 @@ import { deriveExecutionOffer } from "../../suggestions/swapExecution/executionO
 import { useSwapExecutionPlan } from "./useSwapExecutionPlan";
 import { useWalletSwapSubmitter } from "./useWalletSwapSubmitter";
 import SwapConfirmSheet from "./SwapConfirmSheet";
-import { SWAP_CONFIRM_CONTINUE_LABEL } from "../../state/approvedCopy";
+import { SWAP_CONFIRM_CHECKING, SWAP_CONFIRM_CONTINUE_LABEL } from "../../state/approvedCopy";
 import { demoConfirmTerms } from "../../suggestions/swapExecution/demoConfirmTerms";
 import type { SwapExecutionEmitter } from "../../suggestions/swapExecution/swapExecutionEvents";
 
@@ -106,10 +106,24 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
   // existing handoff footer is the answer, and it is already there.
   if (!offer.offered || takerPublicKey == null || submit == null) return null;
 
-  if (!started) {
+  // THE FOOTER HOLDS THE FIRST WAIT, rather than the sheet opening empty.
+  //
+  // Building the first plan takes over a second in production — a provider round trip plus a
+  // chain simulation. Mounting the sheet immediately meant a near-empty card (a title, a status
+  // line, a Cancel) that then tripled in height when the terms landed, shoving the page down
+  // right after the reader committed. So the Continue button keeps its place and spins, and the
+  // sheet appears once it has something to say.
+  //
+  // `execution.plan == null` rather than the phase, because a RENEWAL also passes through
+  // `preparing` — and by then the sheet is open with terms on screen and must stay that way.
+  // A failure has no plan either, but it has something to show, so it is excluded explicitly.
+  const awaitingFirstPlan = started && execution.plan == null && execution.phase !== "failed";
+
+  if (!started || awaitingFirstPlan) {
     return (
       <ContinueFooter
         onClose={onClose}
+        busy={awaitingFirstPlan}
         onContinue={() => {
           setStarted(true);
           execution.prepare();
@@ -144,15 +158,39 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
  * start that clock while someone is still reading. In Demo Mode there is no clock, but the
  * same two steps are shown — the point of the demo is that the flow looks like the real one.
  */
-function ContinueFooter({ onClose, onContinue }: { onClose: () => void; onContinue: () => void }) {
+function ContinueFooter({
+  onClose,
+  onContinue,
+  busy = false,
+}: {
+  onClose: () => void;
+  onContinue: () => void;
+  /** Terms are being fetched. The button holds the wait in place of an empty sheet. */
+  busy?: boolean;
+}) {
   return (
     <div className="review-modal__footer review-modal__footer--actions">
       <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
         Cancel
       </button>
-      <button type="button" className="review-modal__primary-action" onClick={onContinue}>
-        <span>{SWAP_CONFIRM_CONTINUE_LABEL}</span>
-      </button>
+      {busy ? (
+        // Same button, same place, same label — only now it spins and cannot be pressed twice.
+        // `aria-disabled` so the label change is still announced; see SwapConfirmSheet's busy
+        // button for why a real `disabled` loses that.
+        <button
+          type="button"
+          className="review-modal__primary-action review-modal__primary-action--busy"
+          aria-disabled="true"
+          onClick={(e) => e.preventDefault()}
+        >
+          <span className="swap-confirm__spinner" aria-hidden="true" />
+          <span role="status" aria-live="polite">{SWAP_CONFIRM_CHECKING}</span>
+        </button>
+      ) : (
+        <button type="button" className="review-modal__primary-action" onClick={onContinue}>
+          <span>{SWAP_CONFIRM_CONTINUE_LABEL}</span>
+        </button>
+      )}
     </div>
   );
 }
