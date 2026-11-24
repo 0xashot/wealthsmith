@@ -63,6 +63,30 @@ export function formatUsd(value: number | null | undefined): string {
 }
 
 /**
+ * An estimated figure, marked with a leading `~` on the VALUE.
+ *
+ * The mark belongs on the number rather than only in the label so that it travels with the
+ * figure: someone comparing the values down the column sees which are approximate without
+ * reading across to the labels, and the one figure with no tilde is the guaranteed one.
+ *
+ * An ABSENT value is returned untouched. "~—" would be marking the precision of a figure we do
+ * not have, which is worse than saying nothing.
+ */
+export function formatApproxUsd(value: number | null | undefined): string {
+  const formatted = formatUsd(value);
+  return formatted === ABSENT ? ABSENT : `~${formatted}`;
+}
+
+/**
+ * An estimated token amount, same rule. Never applied to the minimum: that figure is exact and
+ * enforced on-chain, and a tilde there would contradict the only promise the sheet makes.
+ */
+export function formatApproxTokens(amount: string | null | undefined, symbol: string): string {
+  if (typeof amount !== "string" || amount.length === 0) return ABSENT;
+  return `~${amount} ${symbol}`;
+}
+
+/**
  * The one line of status under the terms, for every phase.
  *
  * Written as a total function over the phase rather than a chain of ternaries in the component,

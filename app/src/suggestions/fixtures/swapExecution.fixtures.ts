@@ -60,6 +60,8 @@ import {
 import {
   failureCopy,
   formatCountdown,
+  formatApproxTokens,
+  formatApproxUsd,
   formatPercent,
   formatUsd,
   isAfterApproval,
@@ -568,11 +570,27 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const c = `${SWAP_CONFIRM_CHECKING} ${SWAP_CONFIRM_CHECK_PASSED}`.toLowerCase();
     return !/safe|secure|verified|guaranteed|approved by/.test(c);
   })(), "no endorsement");
-  add("SWCC-6: estimates are marked in the LABEL, and the minimum is not described as one", (() => {
-    return /\(estimated\)/.test(SWAP_CONFIRM_RECEIVE_LABEL) &&
+  add("SWCC-6: every estimated FIGURE carries a tilde, the guaranteed one carries none", (() => {
+    // The mark moved from the label to the value, so the guarantee is checked where it now
+    // lives. What must hold is unchanged: an approximate figure is visibly approximate, and the
+    // minimum — the only number the chain enforces — is never dressed as one.
+    const receive = formatApproxTokens("0.721313", "USDC");
+    const fee = formatApproxUsd(0.01);
+    return receive === "~0.721313 USDC" &&
+      fee === "~$0.01" &&
+      !/~/.test(SWAP_CONFIRM_MINIMUM_LABEL) &&
+      !/estimat/i.test(SWAP_CONFIRM_MINIMUM_LABEL) &&
+      // The receive label no longer says "(estimated)" because the figure does the work; the fee
+      // label keeps it, so neither reading of the rule can silently drop the marking entirely.
       /\(estimated\)/.test(SWAP_CONFIRM_NETWORK_FEE_LABEL) &&
-      !/estimat/i.test(SWAP_CONFIRM_MINIMUM_LABEL);
+      !/\(estimated\)/.test(SWAP_CONFIRM_RECEIVE_LABEL);
   })(), "estimate marking");
+  add("SWCC-6b: an ABSENT figure is never marked as an estimate — '~—' claims precision we lack", (() => {
+    return formatApproxUsd(null) === "—" &&
+      formatApproxUsd(Number.NaN) === "—" &&
+      formatApproxTokens(null, "USDC") === "—" &&
+      formatApproxTokens("", "USDC") === "—";
+  })(), "absent is not approximate");
   add("SWCC-7: the minimum's explanation states on-chain enforcement — the one claim that makes it meaningful",
     /enforced by the network/i.test(SWAP_CONFIRM_MINIMUM_INFO) &&
       /stay in your wallet/i.test(SWAP_CONFIRM_MINIMUM_INFO), "on-chain minimum");

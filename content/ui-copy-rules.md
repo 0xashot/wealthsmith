@@ -945,12 +945,12 @@ fees. None may be omitted, and none may be estimated when it can be exact.
 Labels:
 
 ```text
-You swap
-You receive (estimated)
-Minimum received
-Price impact
-Network fee (estimated)
-Route
+You swap            0.01 SOL
+You receive         ~0.721313 USDC
+Min received        0.717707 USDC
+Price impact        0.008%
+Network fee (estimated)  ~$0.01
+Route               Jupiter
 ```
 
 Hard Rule:
@@ -961,8 +961,17 @@ with equal or greater prominence than the estimated amount, never below the fold
 and never described as an estimate.
 ```
 
-Mark estimates as estimates in the label itself, not in a footnote. A number we
-cannot obtain renders as “—”; it is never replaced with a different number.
+Mark an estimate on the **figure**, with a leading `~`, not in a footnote. The
+mark then travels with the number: scanning the values alone shows which are
+approximate, and the one figure with no tilde is the guaranteed one. A label may
+also say “(estimated)”, but the tilde is what carries the meaning.
+
+Never put a tilde on the minimum. It is exact and enforced on-chain, and marking
+it approximate would undo the only promise this sheet makes.
+
+A number we cannot obtain renders as “—”; it is never replaced with a different
+number, and never written as “~—” — marking the precision of a figure we do not
+have is worse than saying nothing.
 
 The minimum carries an info icon with the explanation, rather than a line of body
 copy — it is a definition, and definitions belong in a tooltip (see Tooltip Copy
@@ -982,9 +991,15 @@ tolerance, a target, or a provider’s promise.
 ```text
 Checking:   Checking transaction…
 Passed:     Success
-Expiring:   Terms expire in 0:18
+Expiring:   Quote refreshes in 0:18
 Expired:    These terms expired. Nothing was sent.
 ```
+
+The countdown says the quote refreshes. Today it does **not** refresh by itself:
+at zero the sheet moves to the expired state and offers a Refresh button. Either
+make the refresh automatic or word the countdown for what happens. A countdown
+that promises an action the product does not take is the kind of small untruth
+this document exists to prevent.
 
 The check is a statement about this transaction, not reassurance in general. Do
 not write “Verified”, “Safe”, “Secure”, or anything implying an endorsement of

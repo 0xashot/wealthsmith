@@ -43,9 +43,10 @@ import type { ExecutionFailureKey, ExecutionPhase } from "../../suggestions/swap
 import { resolveProtocolIcon } from "../../state/iconRegistry";
 import {
   failureCopy,
+  formatApproxTokens,
+  formatApproxUsd,
   formatCountdown,
   formatPercent,
-  formatUsd,
   isAfterApproval,
   solscanTransactionUrl,
   statusLineFor,
@@ -122,7 +123,7 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
           </div>
           <div className="review-modal__metric">
             <dt className="review-modal__metric-label">{SWAP_CONFIRM_RECEIVE_LABEL}</dt>
-            <dd className="review-modal__metric-value">{terms.expectedOutputTokens} {terms.outputSymbol}</dd>
+            <dd className="review-modal__metric-value">{formatApproxTokens(terms.expectedOutputTokens, terms.outputSymbol)}</dd>
           </div>
 
           {/* The only guaranteed figure, so it carries the emphasis and the explanation. */}
@@ -144,7 +145,7 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
           </div>
           <div className="review-modal__metric">
             <dt className="review-modal__metric-label">{SWAP_CONFIRM_NETWORK_FEE_LABEL}</dt>
-            <dd className="review-modal__metric-value">{formatUsd(terms.estimatedNetworkFeeUsd)}</dd>
+            <dd className="review-modal__metric-value">{formatApproxUsd(terms.estimatedNetworkFeeUsd)}</dd>
           </div>
           <div className="review-modal__metric">
             <dt className="review-modal__metric-label">{SWAP_CONFIRM_ROUTE_LABEL}</dt>

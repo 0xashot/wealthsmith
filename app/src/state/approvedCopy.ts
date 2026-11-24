@@ -1035,10 +1035,18 @@ export const extAddedToast = (symbol: string) => `${symbol} added`;
 
 export const SWAP_CONFIRM_TITLE = "Review this swap";
 
-/** Term labels. An estimate says so in the label itself, never in a footnote. */
+/**
+ * Term labels.
+ *
+ * An estimate is marked on the FIGURE, with a leading `~`, rather than only in the label. The
+ * mark then travels with the number: someone scanning the values sees which are approximate
+ * without reading the labels, and the guaranteed figure is the one with no tilde. The minimum
+ * must never carry one — it is exact and enforced on-chain, and marking it approximate would
+ * undo the only promise this sheet makes.
+ */
 export const SWAP_CONFIRM_SELL_LABEL = "You swap";
-export const SWAP_CONFIRM_RECEIVE_LABEL = "You receive (estimated)";
-export const SWAP_CONFIRM_MINIMUM_LABEL = "Minimum received";
+export const SWAP_CONFIRM_RECEIVE_LABEL = "You receive";
+export const SWAP_CONFIRM_MINIMUM_LABEL = "Min received";
 export const SWAP_CONFIRM_PRICE_IMPACT_LABEL = "Price impact";
 export const SWAP_CONFIRM_NETWORK_FEE_LABEL = "Network fee (estimated)";
 export const SWAP_CONFIRM_ROUTE_LABEL = "Route";
@@ -1064,7 +1072,7 @@ export const SWAP_CONFIRM_APPROVE_LABEL = "Approve";
 export const SWAP_CONFIRM_CANCEL_LABEL = "Cancel";
 
 /** Expiry. Declining or letting terms lapse costs nothing, and the copy says so. */
-export const swapConfirmExpiresIn = (mmss: string) => `Terms expire in ${mmss}`;
+export const swapConfirmExpiresIn = (mmss: string) => `Quote refreshes in ${mmss}`;
 /**
  * Expiry has its own title. It is NOT an outage: the terms were fine and ran out of time, and
  * showing it under "Couldn't prepare this swap" told the reader the wrong thing about why.
