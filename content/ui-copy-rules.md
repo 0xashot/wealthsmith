@@ -945,12 +945,12 @@ fees. None may be omitted, and none may be estimated when it can be exact.
 Labels:
 
 ```text
-You swap            0.01 SOL
-You receive         ~0.721313 USDC
-Min received        0.717707 USDC
-Price impact        0.008%
-Network fee (estimated)  ~$0.01
-Route               Jupiter
+You swap        0.01 SOL
+You receive     ~0.721313 USDC
+Min received    0.717707 USDC
+Price impact    0.008%
+Network fee     ~$0.01
+Route           Jupiter
 ```
 
 Hard Rule:
@@ -961,10 +961,15 @@ with equal or greater prominence than the estimated amount, never below the fold
 and never described as an estimate.
 ```
 
-Mark an estimate on the **figure**, with a leading `~`, not in a footnote. The
-mark then travels with the number: scanning the values alone shows which are
-approximate, and the one figure with no tilde is the guaranteed one. A label may
-also say “(estimated)”, but the tilde is what carries the meaning.
+Mark an estimate on the **figure**, with a leading `~`, and nowhere else. No
+label says “(estimated)”: the tilde is the only marker, so the mark travels with
+the number and scanning the values alone shows which are approximate. The one
+figure with no tilde is the guaranteed one.
+
+Because the tilde is the only marker, rendering an estimated value without it
+silently removes the distinction while every copy constant still reads
+correctly. Estimated figures must go through the shared formatters rather than
+being interpolated directly.
 
 Never put a tilde on the minimum. It is exact and enforced on-chain, and marking
 it approximate would undo the only promise this sheet makes.

@@ -1048,7 +1048,7 @@ export const SWAP_CONFIRM_SELL_LABEL = "You swap";
 export const SWAP_CONFIRM_RECEIVE_LABEL = "You receive";
 export const SWAP_CONFIRM_MINIMUM_LABEL = "Min received";
 export const SWAP_CONFIRM_PRICE_IMPACT_LABEL = "Price impact";
-export const SWAP_CONFIRM_NETWORK_FEE_LABEL = "Network fee (estimated)";
+export const SWAP_CONFIRM_NETWORK_FEE_LABEL = "Network fee";
 export const SWAP_CONFIRM_ROUTE_LABEL = "Route";
 
 /**

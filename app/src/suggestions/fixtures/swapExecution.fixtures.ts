@@ -576,14 +576,15 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // minimum — the only number the chain enforces — is never dressed as one.
     const receive = formatApproxTokens("0.721313", "USDC");
     const fee = formatApproxUsd(0.01);
+    // The tilde is now the ONLY marker — no label says "(estimated)" any more. That makes the
+    // formatters load-bearing: rendering either figure without them silently drops the marking
+    // and nothing else would notice, so both are asserted exactly rather than by pattern.
     return receive === "~0.721313 USDC" &&
       fee === "~$0.01" &&
       !/~/.test(SWAP_CONFIRM_MINIMUM_LABEL) &&
       !/estimat/i.test(SWAP_CONFIRM_MINIMUM_LABEL) &&
-      // The receive label no longer says "(estimated)" because the figure does the work; the fee
-      // label keeps it, so neither reading of the rule can silently drop the marking entirely.
-      /\(estimated\)/.test(SWAP_CONFIRM_NETWORK_FEE_LABEL) &&
-      !/\(estimated\)/.test(SWAP_CONFIRM_RECEIVE_LABEL);
+      !/estimat/i.test(SWAP_CONFIRM_RECEIVE_LABEL) &&
+      !/estimat/i.test(SWAP_CONFIRM_NETWORK_FEE_LABEL);
   })(), "estimate marking");
   add("SWCC-6b: an ABSENT figure is never marked as an estimate — '~—' claims precision we lack", (() => {
     return formatApproxUsd(null) === "—" &&
@@ -799,6 +800,21 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // confirmation reads as "almost" and explains nothing.
     return /\{ready && onApprove && \(/.test(c) && !/disabled=/.test(c);
   })(), "no dead button");
+  add("SWCS-9b: the two estimated figures go through the tilde formatters, never rendered raw", (() => {
+    // With "(estimated)" gone from both labels, the tilde is the ONLY thing distinguishing an
+    // estimate from the guaranteed minimum. Rendering either value directly would drop the mark
+    // and no copy assertion would catch it — the constants would still be correct.
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    const usesFormatters =
+      /formatApproxTokens\(terms\.expectedOutputTokens/.test(c) &&
+      /formatApproxUsd\(terms\.estimatedNetworkFeeUsd/.test(c);
+    // And the raw interpolations those replaced must not come back.
+    const rawReceive = /\{terms\.expectedOutputTokens\}/.test(c);
+    const rawFee = /\{formatUsd\(terms\.estimatedNetworkFeeUsd\)\}/.test(c);
+    // The minimum, by contrast, MUST stay raw — a tilde there would be a lie.
+    const minimumRaw = /\{terms\.minimumOutputTokens\}/.test(c);
+    return usesFormatters && !rawReceive && !rawFee && minimumRaw;
+  })(), "tilde cannot be dropped");
   add("SWCS-9: Refresh is offered ONLY on expiry — never after a verification refusal", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
     // Otherwise the sheet invites someone to retry until a check happens to pass.
