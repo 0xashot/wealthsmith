@@ -1181,10 +1181,19 @@ export const SWAP_CONFIRM_SUBMITTING = "Confirming";
  * The step INTO the confirm sheet, from the review's footer.
  *
  * Two steps exist because a plan lives 25 seconds: preparing one when the review opens would
- * start that clock while the person is still reading. This label has to say an approval is
- * coming without claiming the swap happens on this click — "Swap" would claim it, and "Continue"
- * alone says nothing about what follows.
+ * start that clock while the person is still reading.
  *
- * NEW COPY, not yet reviewed with the product owner.
+ * REVIEWED AND CHANGED 2026-11-24, from "Continue to approve". The earlier note here argued
+ * that "Swap" would claim the swap happens on this click. Overruled, for two reasons:
+ *
+ *   • It is the dominant convention. Phantom's equivalent button says "Swap Now" and also only
+ *     opens a confirmation; nothing moves until a wallet signs. Writing our own step name
+ *     instead of the word everyone else uses makes the reader translate.
+ *   • Nothing can be lost to the misreading. The very next screen shows the terms and asks for
+ *     Approve, so a person who thought the swap had already happened is corrected immediately
+ *     and before any transaction exists.
+ *
+ * It also stays inside the rule that matters: we never describe WEALTHSMITH as acting. "Swap"
+ * names what the USER is doing, exactly as "Approve" does.
  */
-export const SWAP_CONFIRM_CONTINUE_LABEL = "Continue to approve";
+export const SWAP_CONFIRM_CONTINUE_LABEL = "Swap";

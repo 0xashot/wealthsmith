@@ -323,7 +323,7 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "demo_section_real_container",
     label:
-      "REAL CONTAINER (Demo Mode) — SwapExecutionSection itself, not just the sheet. Press Continue to approve: the two-step footer, the demo preview built from the demo quote, the unavailable Approve with its reason, and Cancel returning you to the footer. The only path through this component that needs no wallet.",
+      "REAL CONTAINER (Demo Mode) — the only case you can actually click through. Every other case below is a picture of the sheet; this one runs the real component, so it behaves as the app will. Press Swap to fetch the terms and open the confirm step, then Cancel to come back here. Approve is greyed out because Demo Mode has no wallet.",
     node: <DemoSectionCase />,
   },
   {

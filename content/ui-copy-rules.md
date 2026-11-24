@@ -1006,6 +1006,13 @@ Sent:       ⟳ Confirming                    (in the button)
 Expired:    These terms expired. Nothing was sent.
 ```
 
+**The review's footer button says `Swap`.** It opens the confirm step rather
+than swapping anything, which is the convention every wallet uses — Phantom's
+equivalent says "Swap Now" and also only opens a confirmation. The next screen
+shows the terms and asks for Approve, so a reader who expected an immediate
+swap is corrected before any transaction exists. It stays inside the rule that
+matters: it names what the USER is doing, never WealthSmith.
+
 **Before Approve the state is a line; after Approve it moves into the button.**
 Nothing else on screen is moving beforehand and the reader is waiting to be told
 whether they may proceed. Afterwards the eye is on the control it just pressed,
