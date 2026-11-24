@@ -50,7 +50,7 @@ import {
   formatPercent,
   isAfterApproval,
   solscanTransactionUrl,
-  busyButtonLabelFor,
+  busyPresentationFor,
   showsExplorerLink,
 } from "./swapConfirmPresentation";
 
@@ -114,7 +114,7 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
   const providerIconUrl = terms ? resolveProtocolIcon(`${terms.providerId}.svg`) : null;
   const ready = phase === "ready";
   const confirmed = phase === "confirmed";
-  const busyLabel = busyButtonLabelFor(phase);
+  const busy = busyPresentationFor(phase);
   const afterApproval = isAfterApproval(phase);
   const explorerUrl = signature ? solscanTransactionUrl(signature) : null;
 
@@ -251,7 +251,7 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
             `aria-disabled`, not `disabled` — the label changes here and a disabled control is
             dropped from the accessibility tree by some screen readers, taking the live update
             with it. Not focus-stealing, not clickable: there is nothing to press. */}
-        {busyLabel && (
+        {busy && (
           <button
             type="button"
             className="review-modal__primary-action review-modal__primary-action--busy"
@@ -259,9 +259,12 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
             onClick={(e) => e.preventDefault()}
           >
             <span className="swap-confirm__spinner" aria-hidden="true" />
-            {/* The live region, so the change from one busy state to the next is announced
-                rather than silently swapped under a screen reader. */}
-            <span role="status" aria-live="polite">{busyLabel}</span>
+            {/* The label is ALWAYS in the DOM, visible or not: it is the live region, so a
+                screen reader hears every change even where the screen shows only a spinner,
+                and it holds the button's width so the footer does not resize between states. */}
+            <span role="status" aria-live="polite" className={busy.labelVisible ? undefined : "sr-only"}>
+              {busy.label}
+            </span>
           </button>
         )}
       </div>

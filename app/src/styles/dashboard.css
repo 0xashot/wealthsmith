@@ -5345,7 +5345,17 @@ td.vetting-scores-table__date {
   cursor: default;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+}
+
+/* ONE width for the sheet's primary action, whichever button is occupying the slot.
+   Approve, the spinner-only fetch state and the two stated busy states all share it, so the
+   footer never resizes between them — a spinner-only button would otherwise collapse to the
+   width of the spinner and shift everything beside it, every renewal. */
+.swap-confirm .review-modal__primary-action,
+.swap-confirm .review-modal__primary-action--busy {
+  min-width: 7.5rem;
 }
 
 /* A small ring with one lighter quarter, rotating. Drawn in CSS rather than

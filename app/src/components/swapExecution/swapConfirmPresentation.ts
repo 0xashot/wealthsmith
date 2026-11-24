@@ -120,21 +120,37 @@ export function formatApproxTokens(amount: string | null | undefined, symbol: st
  * `confirmed` and `failed` return null: success has its own block, and a failure replaces the
  * sheet's whole body with its own title and remedy.
  */
-export type BusyPresentation = { where: "button"; label: string };
+export type BusyPresentation = {
+  /** Always set. Shown or merely announced, depending on `labelVisible`. */
+  label: string;
+  /**
+   * Whether the label is on screen, or only read out.
+   *
+   * QUIET while we fetch terms. Nothing is at stake there: no transaction exists, nothing is in
+   * flight, the reader has approved nothing. A spinner is the whole message, and words would
+   * narrate our plumbing at the one moment it does not concern them.
+   *
+   * STATED after Approve, because those two states are not interchangeable: "Waiting for
+   * wallet" means nothing has been sent and closing the tab costs nothing, while "Confirming"
+   * means the transaction is already on the chain and closing the tab will not stop it. A bare
+   * spinner cannot tell those apart, and the difference is the user's, not ours.
+   */
+  labelVisible: boolean;
+};
 
 export function busyPresentationFor(phase: ExecutionPhase): BusyPresentation | null {
   switch (phase) {
     case "preparing":
     case "verifying":
-      return { where: "button", label: SWAP_CONFIRM_CHECKING };
+      return { label: SWAP_CONFIRM_CHECKING, labelVisible: false };
     case "signing":
-      return { where: "button", label: SWAP_CONFIRM_AWAITING_WALLET };
+      return { label: SWAP_CONFIRM_AWAITING_WALLET, labelVisible: true };
     case "submitting":
     case "confirming":
       // Deliberately the same for both. The difference between "sent" and "being confirmed" is
       // ours, not the user's, and narrating it would imply a precision about where their
       // transaction is that we do not have.
-      return { where: "button", label: SWAP_CONFIRM_SUBMITTING };
+      return { label: SWAP_CONFIRM_SUBMITTING, labelVisible: true };
     case "ready":
       // The resting state: terms on screen, Approve available, nothing happening. Narrating it
       // put the word "Success" above an unpressed button, where it read as though the swap had
@@ -150,8 +166,7 @@ export function busyPresentationFor(phase: ExecutionPhase): BusyPresentation | n
 
 /** The button's busy label, or null when the button is not in a busy state. */
 export function busyButtonLabelFor(phase: ExecutionPhase): string | null {
-  const busy = busyPresentationFor(phase);
-  return busy?.where === "button" ? busy.label : null;
+  return busyPresentationFor(phase)?.label ?? null;
 }
 
 /** Whether the flow has passed the point where cancelling is possible or meaningful. */
@@ -211,7 +226,8 @@ export function solscanTransactionUrl(signature: string): string | null {
  */
 export function showsExplorerLink(phase: ExecutionPhase, signature: string | null | undefined): boolean {
   if (typeof signature !== "string" || signature.length === 0) return false;
-  // `signing` has no signature yet, so this only ever excludes `submitting` and `confirming`.
-  if (busyPresentationFor(phase)?.where === "button") return false;
+  // Any busy phase. `signing` has no signature yet, so this only ever excludes `submitting`
+  // and `confirming` in practice.
+  if (busyPresentationFor(phase) != null) return false;
   return true;
 }

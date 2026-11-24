@@ -1296,12 +1296,29 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // under the figures while the button below it said nothing. One slot now, always the
     // primary button.
     const waiting: ExecutionPhase[] = ["preparing", "verifying", "signing", "submitting", "confirming"];
-    return waiting.every((p2) => busyPresentationFor(p2)?.where === "button") &&
+    return waiting.every((p2) => busyPresentationFor(p2) != null) &&
       waiting.every((p2) => (busyButtonLabelFor(p2) ?? "").length > 0);
   })(), "one slot");
+  add("SWXS5-11d: fetching is QUIET; everything after Approve states which it is", (() => {
+    // Nothing is at stake while we fetch — no transaction, nothing in flight, nothing approved
+    // — so a spinner is the whole message. After Approve the two states are not
+    // interchangeable: "Waiting for wallet" means nothing was sent, "Confirming" means it is
+    // already on the chain and closing the tab will not stop it. A bare spinner cannot say
+    // which, so those stay stated.
+    const quiet: ExecutionPhase[] = ["preparing", "verifying"];
+    const stated: ExecutionPhase[] = ["signing", "submitting", "confirming"];
+    return quiet.every((p2) => busyPresentationFor(p2)?.labelVisible === false) &&
+      stated.every((p2) => busyPresentationFor(p2)?.labelVisible === true) &&
+      // Even when hidden the label exists, because it is the live region and the button width.
+      quiet.every((p2) => (busyPresentationFor(p2)?.label ?? "").length > 0);
+  })(), "quiet while fetching");
   add("SWXS5-11c: the busy button is never pressable and never a real `disabled`", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
-    const busyBlock = c.slice(c.indexOf("{busyLabel && ("));
+    const at = c.indexOf("{busy && (");
+    // Anchored, and asserted to BE anchored: slicing from a marker that has been renamed
+    // yields the whole file (or nothing) and quietly passes. This has bitten twice already.
+    if (at < 0) return false;
+    const busyBlock = c.slice(at, c.indexOf("</button>", at));
     // A label that changes inside a `disabled` control is dropped from the accessibility tree
     // by some screen readers, taking the live update with it.
     return /aria-disabled="true"/.test(busyBlock) &&

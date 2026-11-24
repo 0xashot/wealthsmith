@@ -999,7 +999,7 @@ tolerance, a target, or a provider’s promise.
 ### States
 
 ```text
-Checking:   ⟳ Checking transaction
+Checking:   ⟳                       (spinner only; label announced, not shown)
 Ready:      Approve
 Approved:   ⟳ Waiting for wallet
 Sent:       ⟳ Confirming
@@ -1018,6 +1018,18 @@ line.** There used to be one under the terms for everything before Approve.
 Two places meant the reader had to know which to watch, and during a quote
 renewal a sentence appeared under the figures while the button below it said
 nothing at all.
+
+**Fetching terms is silent; everything after Approve is not.** While a quote is
+being fetched or renewed nothing is at stake — no transaction exists, nothing
+is in flight, the reader has approved nothing — so the button shows a spinner
+and no words. After Approve the label stays, because those states are not
+interchangeable: "Waiting for wallet" means nothing was sent, while
+"Confirming" means the transaction is already on the chain and closing the tab
+will not stop it. A bare spinner cannot say which, and that difference belongs
+to the user.
+
+A hidden label is still in the DOM: it is the live region a screen reader
+reads, so the silence is visual only.
 
 The button slot is therefore occupied in every phase before completion —
 Approve when there is something to approve, a spinner and a word when there is

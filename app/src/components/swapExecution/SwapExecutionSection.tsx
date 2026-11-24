@@ -184,7 +184,10 @@ function ContinueFooter({
           onClick={(e) => e.preventDefault()}
         >
           <span className="swap-confirm__spinner" aria-hidden="true" />
-          <span role="status" aria-live="polite">{SWAP_CONFIRM_CHECKING}</span>
+          {/* Spinner only. Nothing is at stake while terms are fetched — no transaction, and
+              nothing approved — so words would narrate our plumbing. The label stays in the
+              DOM as the live region, and `sr-only` keeps it off screen. */}
+          <span role="status" aria-live="polite" className="sr-only">{SWAP_CONFIRM_CHECKING}</span>
         </button>
       ) : (
         <button type="button" className="review-modal__primary-action" onClick={onContinue}>
