@@ -1102,6 +1102,22 @@ export const SWAP_CONFIRM_CANCEL_LABEL = "Cancel";
  */
 export const SWAP_CONFIRM_EXPIRED_TITLE = "These terms expired";
 export const SWAP_CONFIRM_EXPIRED_DESC = "Nothing was sent. Refresh to get current terms.";
+
+/**
+ * The same ending, delivered as a toast once the review has closed itself.
+ *
+ * Used only after the quote has quietly re-quoted its full allowance with the page in front of
+ * someone and still had no decision. At that point keeping a dead-end card on screen offering a
+ * fourth attempt is an obstacle, so the review closes — and this is what stops that being
+ * silent. It must still account for the money, exactly as the in-sheet copy does: the first
+ * thing anyone wants to know when a window closes by itself is whether something happened.
+ *
+ * It does NOT say "Refresh", because there is no longer a button to press; it says how to get
+ * current terms from where the reader now is.
+ */
+export const SWAP_CONFIRM_EXPIRED_TOAST = "These terms expired";
+export const SWAP_CONFIRM_EXPIRED_TOAST_HELPER =
+  "Nothing was sent. Open the suggestion again for current terms.";
 /** The single-line form, for an inline notice rather than a titled state. */
 export const SWAP_CONFIRM_EXPIRED = "These terms expired. Nothing was sent.";
 export const SWAP_CONFIRM_REFRESH_LABEL = "Refresh terms";

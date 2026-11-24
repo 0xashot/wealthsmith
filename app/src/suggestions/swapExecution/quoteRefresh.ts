@@ -29,7 +29,27 @@ import type { ExecutionPhase } from "./executionLifecycle";
  */
 export const MAX_AUTO_REFRESHES = 3;
 
-export type ExpiryDecision = "auto_refresh" | "expire";
+export type ExpiryDecision =
+  /** Fetch a new plan; the clock restarts and the reader never sees an interruption. */
+  | "auto_refresh"
+  /**
+   * Show the expired state inside the sheet, with its Refresh button.
+   *
+   * For every expiry we did NOT choose: a hidden tab, or no way to prepare. The reader is not
+   * watching, so leaving the modal where they left it means they find an explanation and a way
+   * forward when they come back — rather than returning to a closed modal and a toast that
+   * auto-dismissed while they were away.
+   */
+  | "expire"
+  /**
+   * Give up, close the whole review, and say so in a toast.
+   *
+   * Only after the refresh allowance has actually been spent with the page in front of someone.
+   * At that point the sheet has quietly re-quoted three times and still has no decision, so a
+   * dead-end card offering a fourth attempt is just an obstacle between them and the rest of the
+   * app. Closing is the honest end of that sequence; the toast is what stops it being silent.
+   */
+  | "expire_and_close";
 
 export interface ExpiryContext {
   phase: ExecutionPhase;
@@ -63,7 +83,11 @@ const REFRESHABLE_PHASES: readonly ExecutionPhase[] = ["ready", "verifying"];
 export function decideOnExpiry(ctx: ExpiryContext): ExpiryDecision {
   if (!ctx.canPrepare) return "expire";
   if (!REFRESHABLE_PHASES.includes(ctx.phase)) return "expire";
+  // BEFORE the cap check, deliberately. Someone whose tab is in the background has not spent
+  // their attention on three refreshes — they have spent none — so closing their review and
+  // firing a toast into an unwatched tab would take the modal away and explain nothing. They
+  // get the expired card instead, waiting where they left it.
   if (ctx.documentHidden) return "expire";
-  if (ctx.autoRefreshCount >= MAX_AUTO_REFRESHES) return "expire";
+  if (ctx.autoRefreshCount >= MAX_AUTO_REFRESHES) return "expire_and_close";
   return "auto_refresh";
 }

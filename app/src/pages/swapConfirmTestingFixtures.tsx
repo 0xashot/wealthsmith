@@ -112,6 +112,7 @@ function HookDrivenCase({
   submit,
   confirmationFetcher,
   ttlMs,
+  onGaveUp,
 }: {
   tamper?: (p: SwapExecutionPlan) => SwapExecutionPlan;
   submit?: SwapPlanSubmitter;
@@ -122,6 +123,8 @@ function HookDrivenCase({
    * real 25. Each fetch issues a FRESH expiry, which is what lets the countdown restart.
    */
   ttlMs?: number;
+  /** Stands in for the host closing the review; the gallery has no modal to close. */
+  onGaveUp?: () => void;
 }) {
   const state = useSwapExecutionPlan({
     action: GALLERY_ACTION,
@@ -140,6 +143,7 @@ function HookDrivenCase({
     // on a real transaction is not a gallery, and one stray click would cost actual money.
     submit,
     confirmationFetcher,
+    onGaveUp,
   });
 
   // The gallery has no user to press anything, so the flow is started on mount.
@@ -185,12 +189,20 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "hook_auto_refresh",
     label:
-      "REAL HOOK, short-lived quote — watch the countdown hit zero. It renews itself and the clock restarts, instead of dropping you on “These terms expired”. Each renewal re-fetches and re-checks; after 3 it gives up and expires, so a forgotten tab stops costing simulations.",
+      "REAL HOOK, short-lived quote — watch it renew. After 3 renewals the host is told to close the review and show a toast; here that is reported in the line below instead, because the gallery has no modal. In the app this modal would simply close. It renews itself and the clock restarts, instead of dropping you on “These terms expired”. Each renewal re-fetches and re-checks; after 3 it gives up and expires, so a forgotten tab stops costing simulations.",
     node: (
+      <>
+      <p id="gallery-gave-up" className="modal__intro">(waiting — the host has not been called yet)</p>
       <HookDrivenCase
         ttlMs={6_000}
         submit={async () => ({ kind: "submitted", signature: REAL_FINALIZED_SIGNATURE })}
+        onGaveUp={() => {
+          // Stands in for the host: the real app closes the review and pushes a toast.
+          const el = document.getElementById("gallery-gave-up");
+          if (el) el.textContent = "HOST CALLED: close the review + toast";
+        }}
       />
+      </>
     ),
   },
   {

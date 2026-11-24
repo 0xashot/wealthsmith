@@ -22,6 +22,7 @@
 import { useMemo, useRef, useState } from "react";
 import { portfolioState as p } from "../state/portfolioState";
 import { buildRealWalletSmithAiContent } from "../state/realWalletSmithAi";
+import { SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER } from "../state/approvedCopy";
 import { ASK_SMITH_LABEL_PORTFOLIO } from "../state/approvedCopy";
 import { dashboardState as connected } from "../state/dashboardState";
 import type { SavedGoal } from "../types/goal";
@@ -107,7 +108,13 @@ export default function PortfolioPage({
           />
         ) : (
           // Same shared real-wallet Suggestion Engine rail as the Dashboard.
-          <RealWalletSuggestionsRail rail={rail} railLabel={connected.accessibility.right_rail_label} />
+          <RealWalletSuggestionsRail
+            rail={rail}
+            railLabel={connected.accessibility.right_rail_label}
+            onSwapQuoteGaveUp={() =>
+              pushToast(SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER)
+            }
+          />
         )}
       </div>
     </div>

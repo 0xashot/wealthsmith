@@ -35,6 +35,15 @@ export interface SwapExecutionSectionProps {
   /** Receives funnel events. Absent emits none. */
   emit?: SwapExecutionEmitter;
   /**
+   * The quote gave up after refreshing its full allowance in front of a visible reader.
+   *
+   * The host closes the review and raises a toast saying so — see SWAP_CONFIRM_EXPIRED_TOAST.
+   * Passed up rather than handled here because closing the review is the page's decision, and
+   * because every OTHER expiry still leaves the expired card in place with its Refresh button.
+   * Absent keeps that card for this case too, which is the behaviour this replaced.
+   */
+  onExpiredGiveUp?: () => void;
+  /**
    * Demo Mode. The confirm step still renders and still fetches nothing real: Approve is shown
    * unavailable with the reason, so someone evaluating the product sees the whole flow through
    * to its last step instead of hitting a dead end where the interesting part should be.
@@ -66,6 +75,7 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     slippageBps: props.slippageBps ?? 50,
     enabled: started,
     submit,
+    onGaveUp: props.onExpiredGiveUp,
   });
 
   // DEMO MODE. There is no wallet, so the real flow cannot run — but the confirm step is the

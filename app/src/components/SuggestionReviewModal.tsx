@@ -74,6 +74,14 @@ interface Props {
    */
   onDismiss?: () => void;
   onClose: () => void;
+  /**
+   * The swap quote gave up after refreshing its allowance with the modal in front of someone.
+   *
+   * The modal closes itself and the page says so in a toast — a review that has quietly
+   * re-quoted three times without a decision is no longer worth holding the screen. Absent
+   * leaves the expired card in place instead, so a host that has no toast still behaves.
+   */
+  onSwapQuoteGaveUp?: () => void;
 }
 
 /** Whole-dollar USD, e.g. "$8,176". No fake precision. */
@@ -116,7 +124,7 @@ function formatCalcValue(v: number, unit?: string): string {
   return `${num1(v)}${unit ? ` ${unit}` : ""}`;
 }
 
-export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onDismiss, onClose }: Props) {
+export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onDismiss, onClose, onSwapQuoteGaveUp }: Props) {
   useScrollLock();
   // Mobile: token amounts in the modal tables are shown whole (no decimals).
   const isMobile = useIsMobileViewport();
@@ -158,6 +166,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       assessment={executionCtx.assessment}
       nowMs={swapQuoteNowMs}
       onClose={onClose}
+      onExpiredGiveUp={onSwapQuoteGaveUp}
     />
   ) : null;
 

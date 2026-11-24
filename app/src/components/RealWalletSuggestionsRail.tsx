@@ -39,9 +39,16 @@ const noop = () => {};
 interface Props {
   rail: RailSuggestions | null;
   railLabel: string;
+  /**
+   * The swap quote in an open review gave up after refreshing its full allowance.
+   *
+   * The review closes itself and the page raises a toast. Optional: a host without a toast
+   * simply keeps the expired card, which is what every other expiry shows anyway.
+   */
+  onSwapQuoteGaveUp?: () => void;
 }
 
-export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
+export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuoteGaveUp }: Props) {
   // Which suggestion's Review modal is open (by stable engine id). Read-only —
   // opening the modal never transacts, signs, or hands off to a protocol.
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -89,6 +96,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
       swapQuoteIsDca={selectedCard?.type === "dca_buy"}
       swapQuoteFetcher={rail?.swapQuoteFetcher}
       onClose={() => setSelectedId(null)}
+      onSwapQuoteGaveUp={() => { setSelectedId(null); onSwapQuoteGaveUp?.(); }}
     />
   ) : detailsForModal ? (
     <SuggestionReviewModal
@@ -98,6 +106,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel }: Props) {
       swapQuoteFetcher={rail?.swapQuoteFetcher}
       onDismiss={onDismissSelected}
       onClose={() => setSelectedId(null)}
+      onSwapQuoteGaveUp={() => { setSelectedId(null); onSwapQuoteGaveUp?.(); }}
     />
   ) : null;
 

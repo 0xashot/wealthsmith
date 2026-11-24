@@ -72,7 +72,7 @@ import {
   statusLineFor,
 } from "../../components/swapExecution/swapConfirmPresentation";
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
-import { SWAP_CONFIRM_EXPIRED_TITLE } from "../../state/approvedCopy";
+import { SWAP_CONFIRM_EXPIRED_TITLE, SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER } from "../../state/approvedCopy";
 import type { ExecutionFailureKey, ExecutionPhase } from "../swapExecution/executionLifecycle";
 import { executionReducer, initialExecutionState, isExecutionBusy, isExecutionTerminal, isRestartable, type ExecutionEvent } from "../swapExecution/executionLifecycle";
 import { REAL_SWAP_TAKER, REAL_SWAP_TX } from "./realSwapTransactions";
@@ -853,6 +853,19 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const withoutAria = c.replace(/aria-disabled=/g, "");
     return /\{ready && !demo && onApprove && \(/.test(c) && !/disabled=/.test(withoutAria);
   })(), "no dead button");
+  add("SWQR-8: the give-up toast accounts for the money and does not say Refresh", (() => {
+    const all = `${SWAP_CONFIRM_EXPIRED_TOAST} ${SWAP_CONFIRM_EXPIRED_TOAST_HELPER}`;
+    // The first thing anyone wants to know when a window closes by itself is whether something
+    // happened. And there is no Refresh button any more, so the copy must not point at one.
+    return /nothing was sent/i.test(all) && /expired/i.test(all) && !/refresh/i.test(all);
+  })(), "closing is not silent");
+  add("SWQR-9: closing is the HOST's call — the hook and sheet never close themselves", (() => {
+    const h = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
+    const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // The hook reports; it does not reach out and dismantle its container. Without a handler
+    // the expired card still renders, which is what every other expiry shows.
+    return /opts\.onGaveUp\?\.\(\)/.test(h) && !/onGaveUp/.test(sheet);
+  })(), "report, do not close");
   add("SWDM-1: Demo Mode shows Approve unavailable WITH the reason, rather than hiding it", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
     // Hiding the last step would hide the thing a demo exists to show. Shown, unavailable, and
@@ -964,12 +977,27 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       const after: ExecutionPhase[] = ["signing", "submitting", "confirming", "confirmed"];
       return after.every((phase) => decideOnExpiry(ctx({ phase })) === "expire");
     })(), "no swap under the user");
-    add("SWQR-3: refreshes are capped, then the flow expires as it always did", (() => {
+    add("SWQR-3: refreshes are capped, and spending the cap CLOSES the review", (() => {
       const under = decideOnExpiry(ctx({ autoRefreshCount: MAX_AUTO_REFRESHES - 1 }));
       const at = decideOnExpiry(ctx({ autoRefreshCount: MAX_AUTO_REFRESHES }));
       const over = decideOnExpiry(ctx({ autoRefreshCount: MAX_AUTO_REFRESHES + 99 }));
-      return under === "auto_refresh" && at === "expire" && over === "expire";
+      // Having quietly re-quoted three times with no decision, a dead-end card offering a
+      // fourth attempt is an obstacle; the review closes and a toast says what happened.
+      return under === "auto_refresh" && at === "expire_and_close" && over === "expire_and_close";
     })(), "bounded cost");
+    add("SWQR-3b: a HIDDEN tab expires in place and never closes the review", (() => {
+      // The reader is not watching, so they spent no attention on refreshes and would return to
+      // a vanished modal and a toast that auto-dismissed without them. They get the card.
+      const hiddenAtCap = decideOnExpiry(ctx({ documentHidden: true, autoRefreshCount: MAX_AUTO_REFRESHES }));
+      const hiddenUnder = decideOnExpiry(ctx({ documentHidden: true, autoRefreshCount: 0 }));
+      return hiddenAtCap === "expire" && hiddenUnder === "expire";
+    })(), "never close behind their back");
+    add("SWQR-3c: only a spent allowance closes it — no other expiry does", (() => {
+      // Everything that is not "we tried three times while you watched" leaves the card up.
+      const notRefreshable = decideOnExpiry(ctx({ phase: "signing", autoRefreshCount: MAX_AUTO_REFRESHES }));
+      const cannotPrepare = decideOnExpiry(ctx({ canPrepare: false, autoRefreshCount: MAX_AUTO_REFRESHES }));
+      return notRefreshable === "expire" && cannotPrepare === "expire";
+    })(), "one reason to close");
     add("SWQR-4: a hidden tab gets no refresh — nobody is reading, and each one costs a simulation",
       decideOnExpiry(ctx({ documentHidden: true })) === "expire", "no background work");
     add("SWQR-5: with no way to prepare (no wallet, not enabled) there is no choice to make",
@@ -987,7 +1015,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       // as undefined behaviour.
       return all.every((phase) => {
         const d = decideOnExpiry(ctx({ phase }));
-        return d === "auto_refresh" || d === "expire";
+        return d === "auto_refresh" || d === "expire" || d === "expire_and_close";
       });
     })(), "total function");
   }

@@ -1004,6 +1004,25 @@ Passed:     (nothing)
 Expired:    These terms expired. Nothing was sent.
 ```
 
+**When the quote gives up, the review closes.** After it has quietly re-quoted
+its full allowance with the modal in front of someone and still has no
+decision, a dead-end card offering yet another attempt is an obstacle rather
+than a remedy. The review closes itself and a toast says what happened:
+
+```text
+These terms expired
+Nothing was sent. Open the suggestion again for current terms.
+```
+
+It still accounts for the money — the first thing anyone wants to know when a
+window closes by itself is whether something happened — and it does not say
+“Refresh”, because there is no longer a button to press.
+
+This applies ONLY to that one ending. Every other expiry (a backgrounded tab,
+no way to re-quote) leaves the expired card in place with its Refresh button,
+so a reader who was not watching comes back to an explanation rather than to a
+vanished modal and a toast that dismissed itself while they were away.
+
 **No countdown.** The quote renews itself while the sheet is open, so a clock
 would be reporting our bookkeeping rather than anything the reader must act on.
 It is also pressure: a timer on a financial confirmation pushes people to

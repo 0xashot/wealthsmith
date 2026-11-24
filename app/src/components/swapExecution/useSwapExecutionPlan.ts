@@ -84,6 +84,12 @@ export interface UseSwapExecutionPlanOptions {
   emit?: SwapExecutionEmitter;
   /** Injectable confirmation reader, for the gallery and for fixtures. */
   confirmationFetcher?: typeof fetchConfirmationState;
+  /**
+   * Called once the quote has spent its whole refresh allowance in front of a visible reader
+   * and still has no decision. The host closes the review and says so; see `ExpiryDecision`.
+   * Absent leaves the expired card in place, which is also what every other expiry does.
+   */
+  onGaveUp?: () => void;
   confirmationOptions?: FetchConfirmationOptions;
   /** Injectable clock, for the gallery and for fixtures. */
   nowMs?: () => number;
@@ -202,7 +208,13 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
         prepare();
         return;
       }
+      // The machine reaches `failed`/`expired` either way. `expire_and_close` additionally
+      // tells the host to take the review away, and it is the HOST's job rather than the
+      // hook's: a hook that closed its own container would be deciding the page's layout from
+      // inside a state machine, and the sheet still has to render the expired card for every
+      // other expiry. Without a handler nothing closes and the old behaviour stands.
       dispatch({ type: "expire" });
+      if (decision === "expire_and_close") opts.onGaveUp?.();
     };
 
     const remaining = expiresAtMs - now();
