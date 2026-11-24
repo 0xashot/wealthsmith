@@ -30,6 +30,8 @@ import DemoDashboardPage from "./pages/DemoDashboardPage";
 import DemoPortfolioPage from "./pages/DemoPortfolioPage";
 import ToastHost, { type ToastData } from "./components/ToastHost";
 import ConnectWalletModal from "./components/ConnectWalletModal";
+import { capture, setReplayMode, setSurface } from "./analytics/analytics";
+import { walletKind } from "./analytics/events";
 import ConfirmDialog from "./components/ConfirmDialog";
 import { dashboardState } from "./state/dashboardState";
 import { initialSavedGoal } from "./state/goalState";
@@ -131,7 +133,7 @@ export default function App() {
 
 function MainApp() {
   // Real wallet-adapter state drives connected/disconnected. No signing, no reads.
-  const { connected, publicKey, disconnect, select } = useWallet();
+  const { connected, publicKey, disconnect, select, wallet } = useWallet();
   const walletConnected = connected && !!publicKey;
 
   const [activePage, setActivePage] = useState<ConnectedPage>("dashboard");
@@ -161,6 +163,13 @@ function MainApp() {
 
   const mode: AppMode = demoActive ? "demo" : walletConnected ? "connected" : "disconnected";
 
+  // One source of truth for which experience a visitor is in. Every analytics event
+  // from here on carries it, so Demo and connected behaviour are the same events
+  // read through a filter rather than two parallel sets of names.
+  useEffect(() => {
+    setSurface(mode);
+  }, [mode]);
+
   const pushToast = (message: string, helper?: string, variant: ToastData["variant"] = "success") => {
     const id = nextToastId.current++;
     setToasts((prev) => [...prev, { id, message, helper, variant }]);
@@ -185,8 +194,14 @@ function MainApp() {
       setConnectModalOpen(false);
       connectTriggerRef.current = null;
       pushToast(dashboardState.wallet.copy.connected_toast);
+      setSurface("connected"); // before the event, for the same reason as demo_entered
+      capture({ name: "wallet_connected", wallet: walletKind(wallet?.adapter.name) });
+      // A connected session can show real balances on screen, so mask every text
+      // node in the replay. We keep the clicks and the shape of the page, not the figures.
+      setReplayMode("connected");
     } else if (was && !walletConnected) {
       setActivePage("dashboard");
+      capture({ name: "wallet_disconnected" });
       // Deselect the adapter on EVERY disconnect (app menu OR the extension side). The wallet-adapter
       // keeps the last wallet "selected" after a disconnect, so a later reconnect would call
       // select(sameWallet) — a no-op that never re-drives the connect flow, leaving the Connect modal
@@ -218,6 +233,7 @@ function MainApp() {
       return;
     }
     setActivePage(id);
+    capture({ name: "tab_viewed", tab: id });
   };
 
   // Demo Mode page switch — Dashboard / Portfolio / Goal / Support are all
@@ -225,6 +241,9 @@ function MainApp() {
   const demoNavigate = (id: string) => {
     if (id === "dashboard" || id === "portfolio" || id === "goal" || id === "support" || id === "strategy_lab" || id === "vetting") {
       setActivePage(id);
+      // Which parts of Demo people actually open — the clearest signal of what
+      // they came to find out before trusting the product with a wallet.
+      capture({ name: "tab_viewed", tab: id });
     }
   };
 
@@ -237,11 +256,34 @@ function MainApp() {
   const goDemo = () => {
     setActivePage("dashboard");
     setDemoActive(true);
+    // Set the surface BEFORE the event. The effect below would otherwise stamp this
+    // one with the surface being left, so counting "demo_entered WHERE surface=demo"
+    // would quietly return zero.
+    setSurface("demo");
+    capture({ name: "demo_entered" });
+    // Demo figures are sample data, so a recording here shows nobody's portfolio.
+    setReplayMode("demo");
   };
+  // Goal saves, wrapped so the funnel records that a goal was set at all. The goal
+  // VALUES are never sent — only whether this was the first save on this surface.
+  const demoGoalSavedOnce = useRef(false);
+  const saveDemoGoal = (goal: SavedGoal) => {
+    setDemoGoal(goal);
+    capture({ name: "goal_saved", firstTime: !demoGoalSavedOnce.current });
+    demoGoalSavedOnce.current = true;
+  };
+  const connectedGoalSavedOnce = useRef(false);
+  const saveConnectedGoal = (goal: SavedGoal) => {
+    setSavedGoal(goal);
+    capture({ name: "goal_saved", firstTime: !connectedGoalSavedOnce.current });
+    connectedGoalSavedOnce.current = true;
+  };
+
   const exitDemo = () => {
     setDemoActive(false);
     setActivePage("dashboard");
     pushToast(DEMO_EXIT_TOAST);
+    capture({ name: "demo_exited", via: "button" });
   };
 
   // Connect Wallet opens the modal (from disconnected or Demo Mode); the real
@@ -249,6 +291,7 @@ function MainApp() {
   const openConnectModal = () => {
     connectTriggerRef.current = document.activeElement as HTMLElement | null;
     setConnectModalOpen(true);
+    capture({ name: "wallet_modal_opened" });
   };
   const closeConnectModal = () => setConnectModalOpen(false);
 
@@ -292,7 +335,7 @@ function MainApp() {
           onExitDemo={exitDemo}
           onConnectWallet={openConnectModal}
           savedGoal={demoGoal}
-          onSaveGoal={setDemoGoal}
+          onSaveGoal={saveDemoGoal}
         />
       ) : activePage === "strategy_lab" ? (
         <StrategyLabPage
@@ -406,7 +449,7 @@ function MainApp() {
         onNavigate={navigate}
         onDisconnect={disconnectWallet}
         savedGoal={savedGoal}
-        onSaveGoal={setSavedGoal}
+        onSaveGoal={saveConnectedGoal}
         onDirtyChange={setGoalDirty}
       />
     );

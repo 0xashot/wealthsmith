@@ -59,6 +59,7 @@ import {
   LIVE_WALLET_WARNING_TOKEN2022,
   LIVE_WALLET_ERROR_ALL,
 } from "../state/approvedCopy";
+import { capture } from "../analytics/analytics";
 
 export type PortfolioStatus = "idle" | "loading" | "ready" | "error";
 
@@ -471,7 +472,15 @@ export function useWalletPortfolio(): WalletPortfolio {
       // that matches which reads failed.
       if (!nativeOk && !splOk && !tok22Ok) {
         setState({ status: "error", positions: [], error: LIVE_WALLET_ERROR_ALL, loading: false });
+        // A failure the user sees instead of their portfolio. Counted because an RPC
+        // problem is invisible to us otherwise — people just leave.
+        capture({ name: "portfolio_read_failed", scope: "total" });
         return;
+      }
+      // At least one core read succeeded here, so a failure among them is partial:
+      // the user sees a portfolio plus a warning rather than an error.
+      if (!nativeOk || !splOk || !tok22Ok) {
+        capture({ name: "portfolio_read_failed", scope: "partial" });
       }
 
       let warning: string | undefined;
@@ -793,6 +802,7 @@ export function useWalletPortfolio(): WalletPortfolio {
       // Defensive: never leave a stuck loading state.
       if (cancelled || myReq !== reqId.current) return;
       setState({ status: "error", positions: [], error: LIVE_WALLET_ERROR_ALL, loading: false });
+      capture({ name: "portfolio_read_failed", scope: "total" });
     });
 
     return () => {
