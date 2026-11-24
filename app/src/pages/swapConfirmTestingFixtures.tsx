@@ -30,9 +30,11 @@ const TERMS: SwapExecutionTerms = {
   inputMint: "So11111111111111111111111111111111111111112",
   inputAmountRaw: "10000000",
   inputAmountTokens: "0.01",
+  inputAmountUsd: 0.7271,
   outputSymbol: "USDC",
   outputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   expectedOutputTokens: "0.726942",
+  expectedOutputUsd: 0.7268,
   minimumOutputTokens: "0.723308",
   priceImpactPct: 0.0077,
   slippageBps: 50,
@@ -281,19 +283,35 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"cancelled" as ExecutionFailureKey} msUntilExpiry={null} onCancel={noop} />,
   },
   {
+    key: "ready_unpriced",
+    label:
+      "Ready, but the price source failed — the USD sub-lines are OMITTED, not shown as “—”. A dash under a token amount reads as a missing term; missing context should be invisible. The swap is unaffected: pricing never blocks a plan.",
+    node: (
+      <SwapConfirmSheet
+        phase={"ready" as ExecutionPhase}
+        terms={{ ...TERMS, inputAmountUsd: null, expectedOutputUsd: null }}
+        failure={null}
+        msUntilExpiry={20_000}
+        onCancel={noop}
+        onApprove={noop}
+      />
+    ),
+  },
+  {
     key: "ready_as_production_returns_it",
     label:
-      "Ready, with the EXACT terms production returned on 2026-11-24 for 0.01 SOL → USDC. Both cost figures come back null from the live endpoint, so Network fee reads “—”. This is what your first real swap will look like — if that dash is not acceptable, it is a backend fix, not a copy fix.",
+      "Ready, with the terms production returned on 2026-11-24 for 0.01 SOL → USDC, now with the USD sub-lines and the fee the backend change fills in. This is what your first real swap should look like.",
     node: (
       <SwapConfirmSheet
         phase={"ready" as ExecutionPhase}
         terms={{
           ...TERMS,
           expectedOutputTokens: "0.708636",
+          expectedOutputUsd: 0.7084,
+          inputAmountUsd: 0.7088,
           minimumOutputTokens: "0.705093",
           priceImpactPct: 0.00448661815241882,
           estimatedTotalCostUsd: null,
-          estimatedNetworkFeeUsd: null,
         }}
         failure={null}
         msUntilExpiry={22_000}

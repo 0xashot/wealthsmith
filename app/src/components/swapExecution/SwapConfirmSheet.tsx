@@ -43,6 +43,7 @@ import type { ExecutionFailureKey, ExecutionPhase } from "../../suggestions/swap
 import { resolveProtocolIcon } from "../../state/iconRegistry";
 import {
   failureCopy,
+  ABSENT_FIGURE,
   formatApproxTokens,
   formatApproxUsd,
   formatCountdown,
@@ -119,11 +120,24 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
         <dl className="review-modal__metrics swap-confirm__terms">
           <div className="review-modal__metric">
             <dt className="review-modal__metric-label">{SWAP_CONFIRM_SELL_LABEL}</dt>
-            <dd className="review-modal__metric-value">{terms.inputAmountTokens} {terms.inputSymbol}</dd>
+            <dd className="review-modal__metric-value">
+              {terms.inputAmountTokens} {terms.inputSymbol}
+              {/* The USD sits UNDER the token amount, never beside it: the swap is denominated in
+                  tokens and the dollar figure is context, so it must not compete for the same
+                  line. Rendered only when priced — an empty sub-line is worse than none. */}
+              {formatApproxUsd(terms.inputAmountUsd) !== ABSENT_FIGURE && (
+                <span className="swap-confirm__value-usd">{formatApproxUsd(terms.inputAmountUsd)}</span>
+              )}
+            </dd>
           </div>
           <div className="review-modal__metric">
             <dt className="review-modal__metric-label">{SWAP_CONFIRM_RECEIVE_LABEL}</dt>
-            <dd className="review-modal__metric-value">{formatApproxTokens(terms.expectedOutputTokens, terms.outputSymbol)}</dd>
+            <dd className="review-modal__metric-value">
+              {formatApproxTokens(terms.expectedOutputTokens, terms.outputSymbol)}
+              {formatApproxUsd(terms.expectedOutputUsd) !== ABSENT_FIGURE && (
+                <span className="swap-confirm__value-usd">{formatApproxUsd(terms.expectedOutputUsd)}</span>
+              )}
+            </dd>
           </div>
 
           {/* The only guaranteed figure, so it carries the emphasis and the explanation. */}

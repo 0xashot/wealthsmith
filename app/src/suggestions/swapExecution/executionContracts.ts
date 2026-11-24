@@ -49,10 +49,21 @@ export interface SwapExecutionTerms {
   inputAmountRaw: string;
   /** Human-readable input amount, already decimal-adjusted. */
   inputAmountTokens: string;
+  /**
+   * USD value of the input, for the sub-line under the token amount.
+   *
+   * Null whenever the mint could not be priced. It is a convenience for judging size at a
+   * glance, never a term of the trade: nothing is guaranteed in dollars, and the swap is
+   * denominated in tokens. Both USD figures come from ONE price snapshot taken with the quote,
+   * so they cannot disagree with each other or drift apart from the amounts they sit under.
+   */
+  inputAmountUsd: number | null;
 
   outputSymbol: string;
   outputMint: string;
   expectedOutputTokens: string;
+  /** USD value of the expected output, from the same snapshot. Null when unpriced. */
+  expectedOutputUsd: number | null;
   /** What the user is guaranteed at the configured slippage. Never null, never estimated. */
   minimumOutputTokens: string;
 

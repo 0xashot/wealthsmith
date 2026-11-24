@@ -22,6 +22,7 @@
 import http from "node:http";
 import { createSwapExecuteHandler, isExecutionEnabled } from "./executionHandler";
 import { createConfirmationChecker } from "./confirmationStatus";
+import { createJupiterPriceSource } from "../swapQuote/jupiterPriceSource";
 import { SwapRateLimiter, SWAP_RATE_LIMIT_CONFIG } from "../swapQuote/rateLimit";
 import { nodeEnvReader, detectLeakedSwapEnv, SWAP_PROVIDER_ENDPOINTS, type EnvReader } from "../swapQuote/providerConfig";
 
@@ -72,6 +73,9 @@ export function createExecutionRequestListener(opts: ExecutionServerOptions = {}
     env,
     fetchImpl: opts.fetchImpl,
     now: opts.now,
+    // The same public price source the quote lane uses, so the USD under an amount here and the
+    // USD in the route comparison above it are the same number from the same place.
+    priceSource: createJupiterPriceSource(opts.fetchImpl ?? fetch),
   });
   const checkConfirmation = createConfirmationChecker({ env });
   const limiter = new SwapRateLimiter();

@@ -5334,6 +5334,19 @@ td.vetting-scores-table__date {
   color: var(--color-text-primary);
 }
 
+/* USD under a token amount. Its own line, secondary colour, body size: the swap
+   is denominated in tokens and nothing is guaranteed in dollars, so this is
+   context for judging size at a glance and must never read as a term. Only the
+   two estimated amounts get one — the minimum deliberately has none, so the
+   guaranteed figure stays visually distinct. */
+.swap-confirm__value-usd {
+  display: block;
+  margin-top: 2px;
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
 /* The check's state. Quiet by default: it is a precondition the user is waiting
    on, not an achievement to celebrate, and a loud "Success" on a financial
    confirmation reads as an endorsement of the trade itself. */

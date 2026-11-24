@@ -23,6 +23,7 @@
  */
 import { assertNoTransactionFields } from "../../suggestions/swapQuote/swapQuoteSecurityGuard";
 import type { SwapExecutionTerms } from "../../suggestions/swapExecution/executionContracts";
+import { SWAP_NETWORK_FEE_POLICY } from "../../suggestions/swapQuote/swapQuotePolicy";
 
 export const JUPITER_SWAP_ADAPTER_VERSION = "jupiter_swap_adapter_1.0.0" as const;
 
@@ -180,15 +181,23 @@ export async function buildJupiterSwapTransaction(
     inputMint: request.inputMint,
     inputAmountRaw: request.inputAmountRaw,
     inputAmountTokens: rawToTokens(request.inputAmountRaw, request.inputDecimals),
+    // Left null here and filled by the handler, which owns the price snapshot. This adapter's job
+    // is the provider round trip; pricing is not the provider's claim and should not look like it.
+    inputAmountUsd: null,
     outputSymbol: request.outputSymbol,
     outputMint: request.outputMint,
     expectedOutputTokens: rawToTokens(outAmount, request.outputDecimals),
+    expectedOutputUsd: null,
     // otherAmountThreshold IS the guaranteed floor for an ExactIn swap at this slippage.
     minimumOutputTokens: rawToTokens(minimumOut, request.outputDecimals),
     priceImpactPct: impactToPercent(rawQuote.priceImpactPct),
     slippageBps: request.slippageBps,
     estimatedTotalCostUsd: null,
-    estimatedNetworkFeeUsd: null,
+    // The SAME disclosed constant the route comparison above this sheet uses. Deriving a
+    // per-route fee here would be defensible — unlike the quote lane we do hold a transaction —
+    // but then the two sections of one modal would quote different fees for one swap, which is
+    // the exact class of bug that two price-impact formatters already caused once.
+    estimatedNetworkFeeUsd: SWAP_NETWORK_FEE_POLICY.conservativeNetworkFeeUsd,
     providerId: "jupiter",
     providerName: "Jupiter",
   };

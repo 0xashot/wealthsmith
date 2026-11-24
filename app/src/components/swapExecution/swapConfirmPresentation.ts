@@ -34,6 +34,14 @@ import { pct, usd } from "../../suggestions/swapQuote/quotePresentation";
 /** The placeholder for a figure we do not have. Never a zero, never a guess. */
 const ABSENT = "—";
 
+/**
+ * Exported so a caller can ask "is this figure absent?" without re-deriving the dash.
+ *
+ * The USD sub-lines need it: an unpriced amount omits its line entirely rather than printing a
+ * dash under the token figure, which would read as a missing term rather than missing context.
+ */
+export const ABSENT_FIGURE = ABSENT;
+
 /** mm:ss for the expiry countdown. Clamped at zero; a negative countdown is not a countdown. */
 export function formatCountdown(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));

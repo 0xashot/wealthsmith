@@ -17,6 +17,8 @@
 import { buildJupiterSwapTransaction, type JupiterSwapContext } from "./jupiterSwapClient";
 import { sanitizeExecutionPlan } from "./executionSanitizer";
 import { verifyPlanBeforeOffering, type VerifyPlanDeps } from "./planVerification";
+import { priceTerms } from "./termsPricing";
+import type { PriceSource } from "../swapQuote/priceSnapshot";
 import type { SwapExecutionPlan } from "../../suggestions/swapExecution/executionContracts";
 import type { EnvReader } from "../swapQuote/providerConfig";
 
@@ -93,6 +95,11 @@ export function createSwapExecuteHandler(deps: {
   planId?: () => string;
   /** Injectable simulation RPC. The real path builds one from SOLANA_RPC_URL. */
   simulationRpc?: VerifyPlanDeps["rpc"];
+  /**
+   * Prices the two USD sub-lines. OPTIONAL on purpose: without it both render "—" and everything
+   * else about the plan is identical, so a deployment that cannot price mints still executes.
+   */
+  priceSource?: PriceSource;
 }) {
   return async function handleSwapExecuteRequest(
     req: SwapExecuteHttpRequest,
@@ -160,13 +167,20 @@ export function createSwapExecuteHandler(deps: {
       return { status: 503, body: { error: "unavailable" } };
     }
 
+    // Decoration, and the LAST thing done — after verification, so a slow or broken price source
+    // can never stand between a verified plan and the user. It returns the terms unchanged on any
+    // failure, so there is nothing to handle here.
+    const pricedTerms = deps.priceSource
+      ? await priceTerms(built.terms, { source: deps.priceSource, now })
+      : built.terms;
+
     try {
       const plan = sanitizeExecutionPlan({
         planId: (deps.planId ?? (() => `plan_${now()}`))(),
         actionId: b.actionId as string,
         legId: b.legId as string,
         unsignedTransaction: built.unsignedTransaction,
-        terms: built.terms,
+        terms: pricedTerms,
         verification: verified.verification,
         lastValidBlockHeight: built.lastValidBlockHeight,
         expiresAt: new Date(now() + PLAN_TTL_MS).toISOString(),

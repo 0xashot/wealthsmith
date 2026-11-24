@@ -52,6 +52,7 @@ import {
   timeoutEvent,
 } from "../swapExecution/confirmationPolling";
 import { isSignatureShaped, stateFromStatus } from "../../server/swapExecution/confirmationStatus";
+import { usdTermsFromSnapshot, usdValueOf } from "../../server/swapExecution/termsPricing";
 import {
   classifyWalletError,
   eventsForSubmitOutcome,
@@ -176,9 +177,11 @@ function terms(o: Partial<SwapExecutionTerms> = {}): SwapExecutionTerms {
     inputMint: USDC,
     inputAmountRaw: "15000000",
     inputAmountTokens: "15",
+    inputAmountUsd: 15,
     outputSymbol: "SOL",
     outputMint: WSOL,
     expectedOutputTokens: "0.197901",
+    expectedOutputUsd: 14.97,
     minimumOutputTokens: "0.196911",
     priceImpactPct: 0.02,
     slippageBps: 50,
@@ -800,6 +803,76 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // confirmation reads as "almost" and explains nothing.
     return /\{ready && onApprove && \(/.test(c) && !/disabled=/.test(c);
   })(), "no dead button");
+  add("SWCU-1: a USD sub-line is tokens x price, and refuses every input it cannot trust", (() => {
+    return usdValueOf("0.01", 70.7) != null && Math.abs((usdValueOf("0.01", 70.7) as number) - 0.707) < 1e-9 &&
+      usdValueOf("15", 1) === 15 &&
+      // No price, a nonsense price, or a nonsense amount yields null — never 0, which would
+      // render as "$0.00" and tell the user their swap is worthless.
+      usdValueOf("0.01", null) === null &&
+      usdValueOf("0.01", 0) === null &&
+      usdValueOf("0.01", -5) === null &&
+      usdValueOf("0.01", Number.NaN) === null &&
+      usdValueOf("not-a-number", 70.7) === null &&
+      usdValueOf("-1", 70.7) === null;
+  })(), "usd arithmetic");
+  add("SWCU-2: pricing NEVER costs a swap — no snapshot leaves both figures null, terms intact", (() => {
+    // The source failing, timing out or aborting all arrive here as a null snapshot.
+    const base = terms();
+    const out = { ...base, ...usdTermsFromSnapshot(base, null) };
+    return out.inputAmountUsd === null && out.expectedOutputUsd === null &&
+      // Everything the user actually commits to is untouched, so the plan stays offerable.
+      out.minimumOutputTokens === base.minimumOutputTokens &&
+      out.expectedOutputTokens === base.expectedOutputTokens &&
+      out.inputAmountTokens === base.inputAmountTokens;
+  })(), "pricing is best-effort");
+  add("SWCU-3: both USD figures come from ONE snapshot, so they cannot describe different moments", (() => {
+    // 15 USDC in at $1, 0.197901 SOL out at $100 — one snapshot, one instant, two figures.
+    const snapshot = {
+      pricesByMint: {
+        [USDC]: { usd: 1, observedAtMs: NOW, sourceId: "fixture" },
+        [WSOL]: { usd: 100, observedAtMs: NOW, sourceId: "fixture" },
+      },
+      snapshotVersion: "fixture",
+      observedAtMs: NOW,
+      unpricedMints: [],
+      fresh: true,
+    };
+    const out = usdTermsFromSnapshot(terms(), snapshot);
+    return out.inputAmountUsd === 15 && Math.abs((out.expectedOutputUsd as number) - 19.7901) < 1e-9;
+  })(), "one snapshot");
+  add("SWCU-3b: a mint the snapshot could not price yields null for THAT figure only", (() => {
+    const halfPriced = {
+      pricesByMint: { [USDC]: { usd: 1, observedAtMs: NOW, sourceId: "fixture" } },
+      snapshotVersion: "fixture",
+      observedAtMs: NOW,
+      unpricedMints: [WSOL],
+      fresh: true,
+    };
+    const out = usdTermsFromSnapshot(terms(), halfPriced);
+    // One missing price must not blank the other, and must never be filled by the other's.
+    return out.inputAmountUsd === 15 && out.expectedOutputUsd === null;
+  })(), "partial pricing");
+  add("SWCU-4: the MINIMUM gets no USD line — the guaranteed figure stays visually distinct", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // There is no minimumOutputUsd to render, and the sub-line markup must not appear inside the
+    // minimum's metric. A dollar figure there would be an estimate sitting under an exact number.
+    const start = c.indexOf("swap-confirm__metric--minimum");
+    // Searched FORWARD from the minimum: the label constant also appears in the import block
+    // above, and slicing to that earlier index produced an empty string that passed every
+    // negated test below. A scan over nothing is not a check.
+    const end = start < 0 ? -1 : c.indexOf("SWAP_CONFIRM_PRICE_IMPACT_LABEL", start);
+    if (start < 0 || end <= start) return false;
+    const minimumBlock = c.slice(start, end);
+    return /minimumOutputTokens/.test(minimumBlock) && // the slice really is the minimum's metric
+      !/swap-confirm__value-usd/.test(minimumBlock) &&
+      !/minimumOutputUsd/.test(c);
+  })(), "no usd on the guarantee");
+  add("SWCU-5: an unpriced amount OMITS its sub-line rather than printing a dash under the tokens", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // A "—" under a token figure reads as a missing term; missing context should be invisible.
+    const guarded = (c.match(/formatApproxUsd\(terms\.\w+\) !== ABSENT_FIGURE &&/g) ?? []).length;
+    return guarded === 2;
+  })(), "absent usd is omitted");
   add("SWCS-9b: the two estimated figures go through the tilde formatters, never rendered raw", (() => {
     // With "(estimated)" gone from both labels, the tilde is the ONLY thing distinguishing an
     // estimate from the guaranteed minimum. Rendering either value directly would drop the mark
