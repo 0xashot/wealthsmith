@@ -26,7 +26,9 @@
     "build:deploy": "npm run market:refresh-conditions && npm run build",
     "swap:build-server": "node scripts/build-swap-server.mjs",
     "swap:serve": "npm run swap:build-server && node dist-server/swap-quote-server.mjs",
-    "swap:smoke": "node scripts/swap-quote-smoke.mjs"
+    "swap:serve-execute": "npm run swap:build-server && node dist-server/swap-execute-server.mjs",
+    "swap:smoke": "node scripts/swap-quote-smoke.mjs",
+    "swap:smoke-execute": "node scripts/swap-execute-smoke.mjs"
   },
   "dependencies": {
     "@hubbleprotocol/hubble-sdk": "^8.0.4",

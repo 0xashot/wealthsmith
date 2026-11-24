@@ -767,7 +767,7 @@ Rules:
 - Dashboard alert may sync with Top Pick.
 - Top Pick should be explainable by Smith AI.
 - Top Pick visual treatment must not imply guaranteed outcome.
-- Top Pick card click follows MVP protocol handoff rules.
+- Top Pick card click follows protocol handoff rules; Top Pick grants no execution privilege.
 - Top Pick card click does not execute a transaction.
 - Top Pick card click does not request a wallet signature.
 
@@ -1149,7 +1149,7 @@ Claude Code should:
 - Use impact, urgency, and efficiency scores in the approved order.
 - Return `top_pick = null` when no valid actionable suggestions exist.
 - Keep Top Pick separate between Demo Mode and real wallet mode.
-- Keep Top Pick card click as external protocol handoff for MVP.
+- Keep Top Pick card click as a review, with the same handoff_type any other card would get.
 - Use safe empty states when no Top Pick exists.
 
 Claude Code must not:
@@ -1218,5 +1218,5 @@ This rule is followed when:
 - Smith AI explains Top Pick but does not change it.
 - Dashboard alert syncs to Top Pick without inventing new recommendation.
 - Demo Top Pick and real wallet Top Pick remain separate.
-- Top Pick card click opens approved protocol page in a new tab for MVP.
+- Top Pick card click opens a review; being Top Pick never upgrades it to a confirm step.
 - Top Pick card click does not execute transactions or request signatures.

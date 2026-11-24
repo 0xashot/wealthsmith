@@ -63,8 +63,26 @@ UI copy must describe real product state and real available actions.
 Hard Rule:
 
 ```text
-UI copy must not imply WealthSmith executes transactions, holds funds, guarantees returns, or controls the user’s wallet.
+UI copy must not imply WealthSmith holds funds, guarantees returns, or controls the user’s wallet.
 ```
+
+Hard Rule:
+
+```text
+UI copy must not imply WealthSmith executes a transaction on the user’s behalf.
+```
+
+MSP added one narrow exception, and only to the second of those rules: a swap the
+user approves transaction-by-transaction in their own wallet (`handoff_type:
+in_app_confirm` — see `rules/wallet-and-custody-rules.md` → Execution Boundary).
+
+Copy for that step may describe a transaction being prepared, checked and
+submitted, because that is what happens. It still may not describe WealthSmith as
+deciding to act, acting without approval, or holding anything at any point. The
+first and third rules above are unchanged and have no exception.
+
+Everything outside that one step remains a handoff, and the rules apply in full.
+See Swap Confirmation Copy.
 
 Hard Rule:
 
@@ -859,7 +877,12 @@ Rules:
 
 ## External Link Copy
 
-MVP protocol actions open external protocols in new tabs.
+Protocol actions open external protocols in new tabs. This is the default and the
+fallback: every action is a handoff unless Protocol Logic has marked it
+`in_app_confirm`, and a swap whose terms we cannot show or check falls back here.
+
+The one exception is covered by Swap Confirmation Copy. A confirm step is not a
+handoff and must never be described as one.
 
 Use:
 
@@ -896,6 +919,134 @@ Trade submitted.
 Rebalance complete.
 Funds moved.
 ```
+
+---
+
+## Swap Confirmation Copy
+
+Applies ONLY to a swap Protocol Logic has marked `in_app_confirm` and that
+satisfies the Execution Boundary. Everything else uses External Link Copy.
+
+What is true at this step, and what the copy must therefore reflect:
+
+```text
+WealthSmith prepares an unsigned transaction.
+WealthSmith checks that it performs the terms shown.
+The user approves it in their own wallet, once, for that transaction only.
+WealthSmith never holds funds and never approves anything.
+```
+
+### Terms
+
+Five terms are required before approval, per the Execution Boundary: what is
+sold, what is received, the minimum received after slippage, price impact, and
+fees. None may be omitted, and none may be estimated when it can be exact.
+
+Labels:
+
+```text
+You swap
+You receive (estimated)
+Minimum received
+Price impact
+Network fee (estimated)
+Route
+```
+
+Hard Rule:
+
+```text
+The minimum received is the only figure the user is guaranteed. It must be shown
+with equal or greater prominence than the estimated amount, never below the fold,
+and never described as an estimate.
+```
+
+Mark estimates as estimates in the label itself, not in a footnote. A number we
+cannot obtain renders as “—”; it is never replaced with a different number.
+
+The minimum carries an info icon with the explanation, rather than a line of body
+copy — it is a definition, and definitions belong in a tooltip (see Tooltip Copy
+Rules):
+
+```text
+The least you will receive. This is enforced by the network: if the swap would
+deliver less, it fails and your funds stay in your wallet.
+```
+
+That sentence may only be used where it is literally true — where the minimum is
+enforced on-chain by the transaction itself. It must not be used to describe a
+tolerance, a target, or a provider’s promise.
+
+### States
+
+```text
+Checking:   Checking transaction…
+Passed:     Success
+Expiring:   Terms expire in 0:18
+Expired:    These terms expired. Nothing was sent.
+```
+
+The check is a statement about this transaction, not reassurance in general. Do
+not write “Verified”, “Safe”, “Secure”, or anything implying an endorsement of
+the trade itself. We checked that the transaction matches the terms. We did not
+check that the swap is a good idea.
+
+### Actions
+
+```text
+Primary:    Approve
+Secondary:  Cancel
+```
+
+“Approve” is permitted here, while “Confirm trade” and “Execute now” remain
+forbidden, because the user approves in their own wallet and the label describes
+their action rather than ours.
+
+Cancelling is always available before submission and always free. Copy must never
+suggest a cost, a penalty, or a lost opportunity for declining.
+
+### Outcomes
+
+```text
+Approved:        Swap complete
+Declined:        Not approved. You declined in your wallet. Nothing was sent.
+Not sent:        The swap wasn’t sent. Your funds stayed in your wallet.
+Still pending:   Still confirming. We stopped waiting, but the swap may still
+                 complete. Check your wallet.
+```
+
+Hard Rule:
+
+```text
+Success copy may be shown only after the transaction is confirmed on-chain, and
+must state the amount actually received — never the estimate shown beforehand.
+If the received amount cannot be read, show the success state without a figure.
+```
+
+Hard Rule:
+
+```text
+A transaction that was submitted and not yet confirmed must never be described as
+failed. It is on-chain and may still succeed; saying otherwise is a false claim
+about the user’s money.
+```
+
+A transaction link (e.g. Solscan) may be offered on a completed or still-pending
+swap. Label it plainly and never as a required step.
+
+### Refusals
+
+When a check fails, the copy says what WE refused and why, without blaming the
+user or the provider, and offers the handoff:
+
+```text
+We couldn’t verify these terms.
+The transaction we were given doesn’t match the terms we’d show you, so we’re not
+asking you to approve it. You can swap on Jupiter directly.
+```
+
+This is the one place the copy should feel slightly alarming. A refusal the user
+skims past is a refusal that did nothing.
 
 ---
 
@@ -1179,6 +1330,15 @@ Send your private key
 Execute now
 Confirm trade
 ```
+
+“Execute now” and “Confirm trade” stay forbidden even at an approved confirm
+step: both describe WealthSmith acting. The permitted label there is “Approve”,
+which describes what the user does in their own wallet. See Swap Confirmation
+Copy.
+
+“Rebalance complete”, “Trade submitted” and “Funds moved” also stay forbidden.
+“Swap complete” is permitted ONLY after on-chain confirmation of a transaction
+the user approved, and only with the amount actually received.
 
 Use safer alternatives:
 

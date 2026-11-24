@@ -6,7 +6,10 @@
     "src/suggestions/suggestionEngine.fixtures.ts",
     "src/suggestions/stableYieldProductionProbeEntry.ts"
   ],
-  "project": ["src/**/*.{ts,tsx}", "scripts/**/*.mjs"],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "scripts/**/*.mjs"
+  ],
   "ignore": [
     "src/suggestions/protocolDataAdapters.kamino.ts",
     "src/components/swapQuote/SwapQuoteAlternatives.tsx",

@@ -46,10 +46,16 @@ export interface SwapQuoteComparisonSectionProps {
   nowMs?: number;
   /** 23C.2 — reports the read-only handoff for the modal's sticky "Swap on <provider>" footer (null = none). */
   onHandoff?: (handoff: SwapHandoff | null) => void;
+  /**
+   * Phase 6 — reports the single-leg action and its resolved assessment, so the modal can ask
+   * whether a confirm step may be offered. Reporting the INPUTS rather than a verdict keeps the
+   * Boundary's answer in one place: this section does not decide, it supplies.
+   */
+  onExecutionContext?: (ctx: { action: SwapActionContext; assessment: SwapQuoteComparisonAssessment } | null) => void;
 }
 
 export default function SwapQuoteComparisonSection(props: SwapQuoteComparisonSectionProps) {
-  const { readiness, enabled, isDca, onHandoff } = props;
+  const { readiness, enabled, isDca, onHandoff, onExecutionContext } = props;
   const legs: SwapActionContext[] = readiness.status === "ready" ? readiness.legs : [];
   const multiLeg = legs.length > 1;
   const usePreset = props.presetAssessments != null || props.presetLoading === true;
@@ -74,6 +80,16 @@ export default function SwapQuoteComparisonSection(props: SwapQuoteComparisonSec
     return () => onHandoff?.(null); // clear on close / action change / unmount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handoffKey]);
+
+  // The execution INPUTS, for whoever asks the Boundary. Single-leg only: a multi-leg plan has
+  // no single transaction to approve, and the Boundary would refuse it anyway.
+  const executionCtx = singleLeg && singleAssessment ? { action: singleLeg, assessment: singleAssessment } : null;
+  const executionKey = executionCtx ? `${executionCtx.action.legId}|${executionCtx.assessment.comparedAt}` : null;
+  useEffect(() => {
+    onExecutionContext?.(executionCtx);
+    return () => onExecutionContext?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [executionKey]);
 
   // ---- render ----
   if (readiness.status === "not_ready_for_quote") return renderView(notReadyView(isDca, readiness.reasons));

@@ -365,9 +365,11 @@ Never imply wallet connection moves funds.
 ### Execution
 
 ```text
-MVP suggestion cards open protocol pages in new tabs.
-They do not execute transactions.
-They do not request wallet signatures.
+Suggestion cards open a review. The review hands off to a protocol page in a new
+tab, or — only where the Execution Boundary allows it — offers a confirm step.
+A card click never executes a transaction.
+A card click never requests a wallet signature.
+Scope today: token swaps via Jupiter. Everything else is a handoff.
 ```
 
 ### Demo Mode

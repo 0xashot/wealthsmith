@@ -1020,3 +1020,114 @@ export const extDecimalsError = (chainName: string, decimals: number) =>
 export const EXT_MANAGE_LABEL = "Manage";
 /** Confirmation toast after an amount is added, e.g. "BTC added". */
 export const extAddedToast = (symbol: string) => `${symbol} added`;
+
+/* ---------------------------------------------------------------------------
+ * Swap confirmation (Phase 4) — the in-app confirm step for a swap Protocol
+ * Logic marked `in_app_confirm`. Source: content/ui-copy-rules.md → Swap
+ * Confirmation Copy. Everything outside this step is a handoff and uses the
+ * external-link copy above.
+ *
+ * What is true here, and what every string below has to stay consistent with:
+ * WealthSmith prepares an unsigned transaction and checks that it performs the
+ * terms shown. The user approves it in their own wallet, once, for that
+ * transaction only. WealthSmith holds nothing and approves nothing.
+ * ------------------------------------------------------------------------- */
+
+export const SWAP_CONFIRM_TITLE = "Review this swap";
+
+/** Term labels. An estimate says so in the label itself, never in a footnote. */
+export const SWAP_CONFIRM_SELL_LABEL = "You swap";
+export const SWAP_CONFIRM_RECEIVE_LABEL = "You receive (estimated)";
+export const SWAP_CONFIRM_MINIMUM_LABEL = "Minimum received";
+export const SWAP_CONFIRM_PRICE_IMPACT_LABEL = "Price impact";
+export const SWAP_CONFIRM_NETWORK_FEE_LABEL = "Network fee (estimated)";
+export const SWAP_CONFIRM_ROUTE_LABEL = "Route";
+
+/**
+ * The minimum's explanation, shown in an InfoPopover rather than as body copy —
+ * it is a definition, and definitions belong in a tooltip.
+ *
+ * Only usable because it is literally true: the minimum is the transaction's own
+ * on-chain threshold, and the swap reverts below it. Never reuse this sentence
+ * for a tolerance, a target, or a provider's promise.
+ */
+export const SWAP_CONFIRM_MINIMUM_INFO_LABEL = "What is the minimum received?";
+export const SWAP_CONFIRM_MINIMUM_INFO =
+  "The least you will receive. This is enforced by the network: if the swap would deliver less, it fails and your funds stay in your wallet.";
+
+/** Verification states. A statement about this transaction, never reassurance in general. */
+export const SWAP_CONFIRM_CHECKING = "Checking transaction…";
+export const SWAP_CONFIRM_CHECK_PASSED = "Success";
+
+/** Actions. "Approve" describes what the user does in their wallet — not what we do. */
+export const SWAP_CONFIRM_APPROVE_LABEL = "Approve";
+export const SWAP_CONFIRM_CANCEL_LABEL = "Cancel";
+
+/** Expiry. Declining or letting terms lapse costs nothing, and the copy says so. */
+export const swapConfirmExpiresIn = (mmss: string) => `Terms expire in ${mmss}`;
+/**
+ * Expiry has its own title. It is NOT an outage: the terms were fine and ran out of time, and
+ * showing it under "Couldn't prepare this swap" told the reader the wrong thing about why.
+ */
+export const SWAP_CONFIRM_EXPIRED_TITLE = "These terms expired";
+export const SWAP_CONFIRM_EXPIRED_DESC = "Nothing was sent. Refresh to get current terms.";
+/** The single-line form, for an inline notice rather than a titled state. */
+export const SWAP_CONFIRM_EXPIRED = "These terms expired. Nothing was sent.";
+export const SWAP_CONFIRM_REFRESH_LABEL = "Refresh terms";
+
+/**
+ * Outcomes. Success may be shown only after on-chain confirmation, and states the
+ * amount ACTUALLY received; when that cannot be read, the figure is omitted rather
+ * than replaced with the earlier estimate.
+ */
+export const SWAP_CONFIRM_COMPLETE_TITLE = "Swap complete";
+export const swapConfirmReceived = (amount: string, symbol: string) => `You received ${amount} ${symbol}.`;
+export const SWAP_CONFIRM_VIEW_TRANSACTION = "View on Solscan";
+
+/** Failure states. None blames the user; each says what is true about their funds. */
+export const SWAP_CONFIRM_DECLINED_TITLE = "Not approved";
+export const SWAP_CONFIRM_DECLINED_DESC = "You declined in your wallet. Nothing was sent.";
+
+export const SWAP_CONFIRM_UNAVAILABLE_TITLE = "Couldn’t prepare this swap";
+export const SWAP_CONFIRM_UNAVAILABLE_DESC =
+  "We couldn’t get terms we’re able to show you right now. You can swap on Jupiter directly.";
+
+/** The refusal that justifies the whole step. Deliberately not softened. */
+export const SWAP_CONFIRM_VERIFICATION_FAILED_TITLE = "We couldn’t verify these terms";
+export const SWAP_CONFIRM_VERIFICATION_FAILED_DESC =
+  "The transaction we were given doesn’t match the terms we’d show you, so we’re not asking you to approve it. You can swap on Jupiter directly.";
+
+export const SWAP_CONFIRM_SUBMIT_FAILED_TITLE = "The swap wasn’t sent";
+export const SWAP_CONFIRM_SUBMIT_FAILED_DESC =
+  "Your funds stayed in your wallet. You can try again or swap on Jupiter directly.";
+
+/**
+ * Submitted but unconfirmed. This must never read as failure: the transaction is
+ * on-chain and may still succeed, and claiming otherwise would be a false claim
+ * about the user's money.
+ */
+export const SWAP_CONFIRM_TIMEOUT_TITLE = "Still confirming";
+export const SWAP_CONFIRM_TIMEOUT_DESC =
+  "We stopped waiting, but the swap may still complete. Check your wallet.";
+
+/**
+ * In-flight states, after Approve and before an outcome.
+ *
+ * Added when the gallery showed that approving produced a blank sheet: the states existed in the
+ * machine and nowhere on screen. Both are progress, not reassurance, and neither claims the swap
+ * has happened — `confirmed` is the only state allowed to say that.
+ */
+export const SWAP_CONFIRM_AWAITING_WALLET = "Waiting for your wallet…";
+export const SWAP_CONFIRM_SUBMITTING = "Confirming on the network…";
+
+/**
+ * The step INTO the confirm sheet, from the review's footer.
+ *
+ * Two steps exist because a plan lives 25 seconds: preparing one when the review opens would
+ * start that clock while the person is still reading. This label has to say an approval is
+ * coming without claiming the swap happens on this click — "Swap" would claim it, and "Continue"
+ * alone says nothing about what follows.
+ *
+ * NEW COPY, not yet reviewed with the product owner.
+ */
+export const SWAP_CONFIRM_CONTINUE_LABEL = "Continue to approve";
