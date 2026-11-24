@@ -996,15 +996,16 @@ tolerance, a target, or a provider’s promise.
 ```text
 Checking:   Checking transaction…
 Passed:     Success
-Expiring:   Quote refreshes in 0:18
 Expired:    These terms expired. Nothing was sent.
 ```
 
-The countdown says the quote refreshes. Today it does **not** refresh by itself:
-at zero the sheet moves to the expired state and offers a Refresh button. Either
-make the refresh automatic or word the countdown for what happens. A countdown
-that promises an action the product does not take is the kind of small untruth
-this document exists to prevent.
+**No countdown.** The quote renews itself while the sheet is open, so a clock
+would be reporting our bookkeeping rather than anything the reader must act on.
+It is also pressure: a timer on a financial confirmation pushes people to
+approve before they have finished reading, which is the opposite of what a
+confirmation step is for. Wallets that re-quote continuously show no clock
+either. The plan still expires — after a few renewals the sheet falls through to
+the expired state above — the reader is simply not made to watch it.
 
 The check is a statement about this transaction, not reassurance in general. Do
 not write “Verified”, “Safe”, “Secure”, or anything implying an endorsement of

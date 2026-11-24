@@ -150,7 +150,6 @@ function HookDrivenCase({
       phase={state.phase}
       terms={state.plan?.terms ?? null}
       failure={state.failure}
-      msUntilExpiry={state.msUntilExpiry}
       signature={state.signature}
       onCancel={state.cancel}
       onApprove={state.approve}
@@ -230,22 +229,22 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "preparing",
     label: "Preparing — fetching terms from the execute endpoint",
-    node: <SwapConfirmSheet phase={"preparing" as ExecutionPhase} terms={null} failure={null} msUntilExpiry={null} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"preparing" as ExecutionPhase} terms={null} failure={null} onCancel={noop} />,
   },
   {
     key: "verifying",
     label: "Verifying — terms are shown, the check has not finished, and there is no Approve button yet",
-    node: <SwapConfirmSheet phase={"verifying" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={25_000} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"verifying" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} />,
   },
   {
     key: "ready",
     label: "Ready — checked, signer wired (Phase 5). The only state where Approve exists.",
-    node: <SwapConfirmSheet phase={"ready" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={18_000} onCancel={noop} onApprove={noop} />,
+    node: <SwapConfirmSheet phase={"ready" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} onApprove={noop} />,
   },
   {
     key: "ready_no_signer",
     label: "Ready, NO signer — today's real state. Approve is absent rather than disabled.",
-    node: <SwapConfirmSheet phase={"ready" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={18_000} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"ready" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} />,
   },
   {
     key: "ready_absent_figures",
@@ -255,7 +254,6 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
         phase={"ready" as ExecutionPhase}
         terms={{ ...TERMS, estimatedNetworkFeeUsd: null, priceImpactPct: Number.NaN }}
         failure={null}
-        msUntilExpiry={9_000}
         onCancel={noop}
         onApprove={noop}
       />
@@ -268,37 +266,37 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
     key: "signing",
     label:
       "Awaiting the wallet — the user has pressed Approve and Phantom is open. No Cancel: the request is with the wallet now.",
-    node: <SwapConfirmSheet phase={"signing" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={null} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"signing" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} />,
   },
   {
     key: "submitting",
     label:
       "Submitting — signed and being sent. Shares its line with `confirming` on purpose: the difference is ours, not the user's.",
-    node: <SwapConfirmSheet phase={"submitting" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={null} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"submitting" as ExecutionPhase} terms={TERMS} failure={null} onCancel={noop} />,
   },
   {
     key: "confirming",
     label:
       "Checking transaction — on-chain, not yet confirmed. The signature is already the user's record, so the Solscan link appears HERE, not only on success.",
-    node: <SwapConfirmSheet phase={"confirming" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={null} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"confirming" as ExecutionPhase} terms={TERMS} failure={null} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
   },
   {
     key: "confirmed",
     label:
       "Success — and deliberately NO figure for what arrived. Reading the real delivered amount needs a chain read the browser cannot make, and the rule is to omit it rather than repeat the earlier estimate as if it were the outcome.",
-    node: <SwapConfirmSheet phase={"confirmed" as ExecutionPhase} terms={TERMS} failure={null} msUntilExpiry={null} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"confirmed" as ExecutionPhase} terms={TERMS} failure={null} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
   },
   {
     key: "confirm_timeout_with_signature",
     label:
       "Gave up watching, but the user HAS a signature — the realistic timeout. The link is the only way they can find out what happened, so check it is present and that nothing here reads as failure.",
-    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"confirm_timeout" as ExecutionFailureKey} msUntilExpiry={null} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"confirm_timeout" as ExecutionFailureKey} signature={REAL_FINALIZED_SIGNATURE} onCancel={noop} />,
   },
   {
     key: "cancelled",
     label:
       "Cancelled by the user — the one failure key with no error copy, because their own choice is not an error. In the real flow the sheet unmounts; this proves nothing alarming renders if it does not.",
-    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"cancelled" as ExecutionFailureKey} msUntilExpiry={null} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"cancelled" as ExecutionFailureKey} onCancel={noop} />,
   },
   {
     key: "ready_unpriced",
@@ -309,7 +307,6 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
         phase={"ready" as ExecutionPhase}
         terms={{ ...TERMS, inputAmountUsd: null, expectedOutputUsd: null }}
         failure={null}
-        msUntilExpiry={20_000}
         onCancel={noop}
         onApprove={noop}
       />
@@ -332,7 +329,6 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
           estimatedTotalCostUsd: null,
         }}
         failure={null}
-        msUntilExpiry={22_000}
         onCancel={noop}
         onApprove={noop}
       />
@@ -341,31 +337,31 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
   {
     key: "verification_failed",
     label: "Verification refused — the state that justifies the whole step",
-    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"verification_failed" as ExecutionFailureKey} msUntilExpiry={null} onCancel={noop} onRefresh={noop} />,
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"verification_failed" as ExecutionFailureKey} onCancel={noop} onRefresh={noop} />,
   },
   {
     key: "expired",
     label: "Expired — the one failure where Refresh is offered, because fresh terms are the remedy",
-    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"expired" as ExecutionFailureKey} msUntilExpiry={0} onCancel={noop} onRefresh={noop} />,
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"expired" as ExecutionFailureKey} onCancel={noop} onRefresh={noop} />,
   },
   {
     key: "plan_unavailable",
     label: "Couldn’t prepare — provider outage, or execution switched off",
-    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={null} failure={"plan_unavailable" as ExecutionFailureKey} msUntilExpiry={null} onCancel={noop} onRefresh={noop} />,
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={null} failure={"plan_unavailable" as ExecutionFailureKey} onCancel={noop} onRefresh={noop} />,
   },
   {
     key: "declined",
     label: "Declined in the wallet — a normal outcome, not an error",
-    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"declined" as ExecutionFailureKey} msUntilExpiry={null} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"declined" as ExecutionFailureKey} onCancel={noop} />,
   },
   {
     key: "submit_failed",
     label: "Not sent — funds stayed in the wallet",
-    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"submit_failed" as ExecutionFailureKey} msUntilExpiry={null} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"submit_failed" as ExecutionFailureKey} onCancel={noop} />,
   },
   {
     key: "confirm_timeout",
     label: "Still confirming — MUST NOT read as failure; the transaction may still land",
-    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"confirm_timeout" as ExecutionFailureKey} msUntilExpiry={null} onCancel={noop} />,
+    node: <SwapConfirmSheet phase={"failed" as ExecutionPhase} terms={TERMS} failure={"confirm_timeout" as ExecutionFailureKey} onCancel={noop} />,
   },
 ];

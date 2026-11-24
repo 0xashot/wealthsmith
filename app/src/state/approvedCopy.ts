@@ -1071,8 +1071,13 @@ export const SWAP_CONFIRM_CHECK_PASSED = "Success";
 export const SWAP_CONFIRM_APPROVE_LABEL = "Approve";
 export const SWAP_CONFIRM_CANCEL_LABEL = "Cancel";
 
-/** Expiry. Declining or letting terms lapse costs nothing, and the copy says so. */
-export const swapConfirmExpiresIn = (mmss: string) => `Quote refreshes in ${mmss}`;
+/*
+ * There is deliberately NO countdown string here any more.
+ *
+ * The quote renews itself, so a clock would be reporting our bookkeeping, and a timer on a
+ * financial confirmation pressures people to approve before they have finished reading. The
+ * plan still expires; the reader is simply not made to watch it.
+ */
 /**
  * Expiry has its own title. It is NOT an outage: the terms were fine and ran out of time, and
  * showing it under "Couldn't prepare this swap" told the reader the wrong thing about why.

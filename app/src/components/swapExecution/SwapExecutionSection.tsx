@@ -90,7 +90,6 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
       phase={execution.phase}
       terms={execution.plan?.terms ?? null}
       failure={execution.failure}
-      msUntilExpiry={execution.msUntilExpiry}
       signature={execution.signature}
       onApprove={execution.approve}
       onRefresh={() => execution.prepare()}

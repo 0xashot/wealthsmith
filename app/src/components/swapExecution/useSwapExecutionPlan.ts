@@ -30,7 +30,7 @@
  * through the wallet's own infrastructure — see `submitResolution` for why that falls out of how
  * the adapters already work, and what it means for custody.
  */
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { SwapActionContext, SwapProviderId } from "../../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapExecutionPlan } from "../../suggestions/swapExecution/executionContracts";
 import {
@@ -97,8 +97,6 @@ export interface UseSwapExecutionPlanState {
   failure: ExecutionFailureKey | null;
   busy: boolean;
   terminal: boolean;
-  /** Milliseconds until the plan's terms expire; null when there is no live plan. */
-  msUntilExpiry: number | null;
   /** Start (or restart) the flow with a freshly quoted plan. */
   prepare: () => void;
   /** Abandon before submission. Always available, always free. */
@@ -182,24 +180,9 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
 
   const expiresAtMs = state.plan ? Date.parse(state.plan.expiresAt) : NaN;
 
-  // Make the countdown actually count down.
-  //
-  // `msUntilExpiry` is derived at render, so without this it only changes when something else
-  // changes the state — and between `ready` and expiry nothing does. The sheet showed a single
-  // frozen number for the whole 25 seconds. That was survivable when it read "Terms expire in";
-  // under "Quote refreshes in" a clock that never moves reads as broken.
-  //
-  // One second, only while the countdown is on screen (`ready`), and never while the tab is
-  // hidden — a re-render per second in a background tab buys nobody anything.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (state.phase !== "ready" || !Number.isFinite(expiresAtMs)) return;
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      setTick((t) => t + 1);
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [state.phase, expiresAtMs]);
+  // No per-second tick. One existed briefly to animate the countdown; with the countdown gone
+  // there is nothing on screen that changes between `ready` and expiry, and re-rendering every
+  // second to update a figure nobody is shown would be pure waste.
 
   useEffect(() => {
     if (!Number.isFinite(expiresAtMs)) return;
@@ -335,7 +318,6 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
     failure: state.failure,
     busy: isExecutionBusy(state.phase),
     terminal: isExecutionTerminal(state.phase),
-    msUntilExpiry: Number.isFinite(expiresAtMs) ? Math.max(0, expiresAtMs - now()) : null,
     prepare,
     cancel,
     approve,

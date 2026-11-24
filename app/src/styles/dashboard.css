@@ -5357,13 +5357,6 @@ td.vetting-scores-table__date {
   min-height: 1.25em; /* reserve the line so the footer does not jump when it fills */
 }
 
-.swap-confirm__expiry {
-  margin: var(--spacing-stack-gap-xs, 4px) 0 0;
-  font: var(--typography-body-sm-font);
-  color: var(--color-text-secondary);
-  font-variant-numeric: tabular-nums; /* a countdown must not reflow as digits change */
-}
-
 /* Success, and the transaction link. Quiet: the swap landing is the outcome the user asked
    for, not an achievement, and a celebratory treatment on money moving reads as a sales
    moment rather than a receipt. */

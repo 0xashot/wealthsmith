@@ -36,7 +36,6 @@ import {
   SWAP_CONFIRM_SELL_LABEL,
   SWAP_CONFIRM_TITLE,
   SWAP_CONFIRM_VIEW_TRANSACTION,
-  swapConfirmExpiresIn,
 } from "../../state/approvedCopy";
 import type { SwapExecutionTerms } from "../../suggestions/swapExecution/executionContracts";
 import type { ExecutionFailureKey, ExecutionPhase } from "../../suggestions/swapExecution/executionLifecycle";
@@ -46,7 +45,6 @@ import {
   ABSENT_FIGURE,
   formatApproxTokens,
   formatApproxUsd,
-  formatCountdown,
   formatPercent,
   isAfterApproval,
   solscanTransactionUrl,
@@ -58,7 +56,6 @@ export interface SwapConfirmSheetProps {
   terms: SwapExecutionTerms | null;
   failure: ExecutionFailureKey | null;
   /** Milliseconds of life left in the terms; null while there is no plan. */
-  msUntilExpiry: number | null;
   /** Present once the transaction is on-chain. The user's only record of it. */
   signature?: string | null;
   onCancel: () => void;
@@ -69,7 +66,7 @@ export interface SwapConfirmSheetProps {
 }
 
 export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
-  const { phase, terms, failure, msUntilExpiry, signature, onCancel, onRefresh, onApprove } = props;
+  const { phase, terms, failure, signature, onCancel, onRefresh, onApprove } = props;
 
   const failed = failureCopy(failure);
   if (phase === "failed" && failed) {
@@ -192,9 +189,11 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
         </p>
       )}
 
-      {ready && msUntilExpiry != null && (
-        <p className="swap-confirm__expiry" role="note">{swapConfirmExpiresIn(formatCountdown(msUntilExpiry))}</p>
-      )}
+      {/* NO COUNTDOWN. The quote renews itself now, so the clock is our bookkeeping rather than
+          anything the reader has to act on — and a timer on a financial confirmation pushes
+          people to approve before they have finished reading, which is the opposite of what this
+          step is for. Wallets that re-quote continuously show no clock for the same reason.
+          The plan's life is still enforced; it is simply not the user's problem. */}
 
       <div className="review-modal__footer review-modal__footer--actions">
         {/* Cancel disappears once the transaction is with the wallet. Before that it is always
