@@ -46,9 +46,11 @@ interface Props {
    * simply keeps the expired card, which is what every other expiry shows anyway.
    */
   onSwapQuoteGaveUp?: () => void;
+  /** Demo Mode — forwarded to the review so the confirm step is reviewable without a wallet. */
+  demo?: boolean;
 }
 
-export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuoteGaveUp }: Props) {
+export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuoteGaveUp, demo }: Props) {
   // Which suggestion's Review modal is open (by stable engine id). Read-only —
   // opening the modal never transacts, signs, or hands off to a protocol.
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -96,6 +98,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       swapQuoteIsDca={selectedCard?.type === "dca_buy"}
       swapQuoteFetcher={rail?.swapQuoteFetcher}
       onClose={() => setSelectedId(null)}
+      demo={demo}
       onSwapQuoteGaveUp={() => { setSelectedId(null); onSwapQuoteGaveUp?.(); }}
     />
   ) : detailsForModal ? (
@@ -106,6 +109,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       swapQuoteFetcher={rail?.swapQuoteFetcher}
       onDismiss={onDismissSelected}
       onClose={() => setSelectedId(null)}
+      demo={demo}
       onSwapQuoteGaveUp={() => { setSelectedId(null); onSwapQuoteGaveUp?.(); }}
     />
   ) : null;

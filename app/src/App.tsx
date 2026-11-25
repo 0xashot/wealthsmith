@@ -69,7 +69,8 @@ import {
  */
 const TestingPage = lazy(() => import("./pages/TestingPage"));
 const PortfolioTestingPage = lazy(() => import("./pages/PortfolioTestingPage"));
-import { isTestingPageEnabled, TESTING_PAGE_ROUTE, PORTFOLIO_TESTING_PAGE_ROUTE } from "./pages/internalTestingRoute";
+const SwapWalkthroughPage = lazy(() => import("./pages/SwapWalkthroughPage"));
+import { isTestingPageEnabled, TESTING_PAGE_ROUTE, PORTFOLIO_TESTING_PAGE_ROUTE, SWAP_WALKTHROUGH_ROUTE } from "./pages/internalTestingRoute";
 import "./styles/dashboard.css";
 // Mobile/tablet overrides (< 1280px) — loaded last so it wins; every rule is
 // scoped inside a max-width media query, so the desktop design is never affected.
@@ -109,6 +110,18 @@ export default function App() {
     return (
       <Suspense fallback={null}>
         <PortfolioTestingPage />
+      </Suspense>
+    );
+  }
+  // The swap confirm flow, driven rather than pictured. Same build-time gate.
+  if (
+    isTestingPageEnabled() &&
+    typeof window !== "undefined" &&
+    window.location.pathname === SWAP_WALKTHROUGH_ROUTE
+  ) {
+    return (
+      <Suspense fallback={null}>
+        <SwapWalkthroughPage />
       </Suspense>
     );
   }

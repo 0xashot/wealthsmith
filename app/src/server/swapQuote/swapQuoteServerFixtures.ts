@@ -19,6 +19,7 @@ import type { PoolLiquiditySource, PoolLiquidityReading } from "./liquidityResol
 import { buildRebalanceSwapAction, buildTrimSwapAction, buildDcaSwapAction, SWAP_USDC, SWAP_WSOL } from "../../suggestions/swapQuote/swapActionContext";
 import { fetchSwapQuoteComparison } from "../../suggestions/swapQuote/swapQuoteClient";
 import { demoSwapQuoteFetcher } from "../../suggestions/swapQuote/demoSwapQuote";
+import { resolveSwapHandoffType } from "../../suggestions/swapExecution/swapHandoffType";
 import { createJupiterPriceSource } from "./jupiterPriceSource";
 import { createRaydiumLiquiditySource } from "./raydiumLiquiditySource";
 import { assessServiceHealth } from "./serviceHealth";
@@ -255,7 +256,11 @@ export async function runSwapQuoteServerFixtureChecks(): Promise<SwapFixtureChec
   // ---- 23C.1: Demo deterministic fetcher (offline; no provider / no WealthSmith endpoint) ----
   const demoAction = usdcToSolAction();
   const demoRes = await demoSwapQuoteFetcher(demoAction, {});
-  add("SWS-C7: Demo fetcher returns a deterministic sanitized SELECTED assessment offline (no network)", demoRes.ok === true && demoRes.ok && demoRes.assessment.status === "selected" && demoRes.assessment.selectedProviderId === "raydium", `ok=${demoRes.ok}`);
+  // Jupiter, not merely "a winner": `in_app_confirm` is assigned to Jupiter alone, so a demo
+  // that selected anyone else could never reach the confirm step — the Boundary would refuse
+  // it and the demo would stop at the hand-off, hiding the part a demo most needs to show.
+  add("SWS-C7: Demo fetcher returns a deterministic sanitized SELECTED assessment offline (no network)", demoRes.ok === true && demoRes.ok && demoRes.assessment.status === "selected" && demoRes.assessment.selectedProviderId === "jupiter", `ok=${demoRes.ok}`);
+  add("SWS-C7b: the demo winner is EXECUTABLE — a demo that stops at the hand-off shows nothing", demoRes.ok && resolveSwapHandoffType({ providerId: demoRes.assessment.selectedProviderId, suggestionCategory: "rebalance" }) === "in_app_confirm", "demo reaches the confirm step");
   add("SWS-C8: Demo fetcher output passes production sanitization (no forbidden fields)", demoRes.ok && scanForForbiddenServerFields(demoRes.assessment).clean, "demo sanitized");
   const demoBad = await demoSwapQuoteFetcher({ ...demoAction, inputAsset: { symbol: "X", mint: "Mint333333333333333333333333333333333333333", decimals: 5 } }, {});
   add("SWS-C9: Demo fetcher fails closed for a non-demo pair (never invents a route)", demoBad.ok === false, `ok=${demoBad.ok}`);

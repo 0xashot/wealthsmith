@@ -83,15 +83,20 @@ function demoAssessment(action: SwapActionContext, nowMs: number): SwapQuoteComp
     liquidityAssessment: { status: "verified" as const, minimumRouteLegLiquidityUsd: 331_000, legs: [] }, freshness: "fresh" as const, eligible, exclusionReasons: [] as never[],
   });
 
-  const selected = c("raydium", ["Raydium CLMM"], true);
+  // JUPITER WINS the demo comparison, and that is not cosmetic: `in_app_confirm` is assigned
+  // to Jupiter alone, so a demo that selected anyone else could never reach the confirm step —
+  // the Boundary would correctly refuse it and the demo would stop at the hand-off, hiding the
+  // part of the product a demo most needs to show. Raydium and Orca still appear as real
+  // compared candidates, so the comparison story is unchanged.
+  const selected = c("jupiter", ["Raydium CLMM"], true);
   // The SAME production methodology the live path uses — the fixture states no
   // cost of its own, so the displayed $ and % are consistent by construction.
   const cost = computeSwapCostBreakdown(selected, inputUsd);
 
   return {
     status: "selected", actionId: action.actionId, legId: action.legId, pairClass: "major", comparedAt: quotedAt, expiresAt,
-    selectedProviderId: "raydium", selectionBasis: "lowest_estimated_total_cost", decidedBy: "net_output",
-    candidates: [selected, c("jupiter", ["Orca Whirlpool"], true), c("orca", ["Orca Whirlpool"], true)],
+    selectedProviderId: "jupiter", selectionBasis: "lowest_estimated_total_cost", decidedBy: "net_output",
+    candidates: [selected, c("raydium", ["Raydium CLMM"], true), c("orca", ["Orca Whirlpool"], true)],
     comparedProviders: ["jupiter", "raydium", "orca"], unavailableProviders: [],
     estimatedTotalCostUsd: cost.estimatedTotalCostUsd, estimatedTotalCostPct: cost.estimatedTotalCostPct,
     expectedOutputTokens: selected.expectedOutputTokens, minimumOutputTokens: tokensFromRaw(minimumOutputRaw, outDecimals),

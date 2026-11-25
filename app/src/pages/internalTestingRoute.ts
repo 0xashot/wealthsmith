@@ -24,6 +24,12 @@ export const TESTING_PAGE_ROUTE = "/testing";
 export const PORTFOLIO_TESTING_PAGE_ROUTE = "/portfolio-testing";
 
 /**
+ * The swap confirm flow end to end, in the app rather than as gallery stills. Same build-time
+ * gate: it drives the real review modal and confirm sheet, so it is internal tooling.
+ */
+export const SWAP_WALKTHROUGH_ROUTE = "/swap-walkthrough";
+
+/**
  * The internal-build flag. Default is FALSE — a public production build must opt in explicitly, and
  * nothing but an explicit env var can turn it on.
  *
