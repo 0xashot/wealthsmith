@@ -83,6 +83,7 @@ import {
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
 import { DEMO_OUTCOMES } from "../swapExecution/demoOutcomes";
 import { deliveredFromBalances, feeUsdFrom } from "../../server/swapExecution/confirmationStatus";
+import { needsFigureBackfill, FIGURE_BACKFILL_ATTEMPTS, FIGURE_BACKFILL_INTERVAL_MS } from "../swapExecution/confirmationPolling";
 import { SWAP_CONFIRM_EXPIRED_TITLE, SWAP_CONFIRM_EXPIRED_TOAST, swapConfirmReceivedUnknown } from "../../state/approvedCopy";
 import type { ExecutionFailureKey, ExecutionPhase } from "../swapExecution/executionLifecycle";
 import { executionReducer, initialExecutionState, isExecutionBusy, isExecutionTerminal, isRenewal, isRestartable, type ExecutionEvent } from "../swapExecution/executionLifecycle";
@@ -1364,6 +1365,65 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const modalBlock = css.slice(css.indexOf(".review-modal {"), css.indexOf(".review-modal__heading"));
     return scrolls && pinned && /max-height:/.test(modalBlock) && /overflow: hidden;/.test(modalBlock);
   })(), "reachable terms, reachable buttons");
+  add("SWXD-10: a landed swap whose FIGURES are not readable yet gets them later, not never", (() => {
+    // Observed in production, 2026-11-25: `getSignatureStatuses` reports a transaction as
+    // landed seconds before `getTransaction` can return it. A freshly landed Jupiter swap
+    // read as fee=null for over five seconds, then returned 5703 lamports matching the chain
+    // exactly. Our poll asks at precisely the worst instant — the first terminal read — and
+    // then stops, so without this the success screen would routinely say "we couldn't load
+    // the exact amount" about a swap whose amount was available one second later.
+    const missing = needsFigureBackfill({ ok: true, state: "confirmed", feeLamports: null, deliveredRaw: null });
+    const revertMissing = needsFigureBackfill({ ok: true, state: "failed", feeLamports: null });
+    // Keyed on the FEE, which both landed states have whenever the transaction was readable.
+    // Keying on deliveredRaw would send every revert chasing a figure that does not exist.
+    const revertWithFee = needsFigureBackfill({ ok: true, state: "failed", feeLamports: "5703", deliveredRaw: null });
+    const settled = needsFigureBackfill({ ok: true, state: "confirmed", feeLamports: "5000", deliveredRaw: "1" });
+    const stillFlying = needsFigureBackfill({ ok: true, state: "pending", feeLamports: null });
+    const unreachable = needsFigureBackfill({ ok: false });
+    return missing && revertMissing && !revertWithFee && !settled && !stillFlying && !unreachable &&
+      FIGURE_BACKFILL_ATTEMPTS >= 3 && FIGURE_BACKFILL_INTERVAL_MS >= 1000;
+  })(), "late numbers, not no numbers");
+  add("SWXD-11: a late figure can fill a gap and NOTHING else", (() => {
+    // The outcome was decided by the chain and is not up for revision. A backfill may only
+    // fill a field that is still null — so an out-of-order or failed attempt is harmless,
+    // and a later null can never erase a number already on screen.
+    const confirmed = executionReducer(
+      { ...initialExecutionState, phase: "confirmed", signature: "sig", deliveredRaw: null, feeLamports: null },
+      { type: "figures", deliveredRaw: "30606060750", feeLamports: "5703", feeUsd: 0.00038 },
+    );
+    const filled = confirmed.phase === "confirmed" && confirmed.signature === "sig" &&
+      confirmed.deliveredRaw === "30606060750" && confirmed.feeLamports === "5703";
+    // A second answer that knows less may not undo the first.
+    const notErased = executionReducer(confirmed, { type: "figures", deliveredRaw: null, feeLamports: null }).deliveredRaw === "30606060750";
+    // It cannot resurrect or re-decide a flow: a settled failure keeps its failure, and a
+    // phase that never landed accepts nothing at all.
+    const reverted = executionReducer(
+      { ...initialExecutionState, phase: "failed", failure: "submit_failed", signature: "sig" },
+      { type: "figures", feeLamports: "5703" },
+    );
+    const keepsFailure = reverted.phase === "failed" && reverted.failure === "submit_failed" &&
+      reverted.feeLamports === "5703";
+    const ignoredMidFlight = executionReducer(
+      { ...initialExecutionState, phase: "confirming", signature: "sig" },
+      { type: "figures", feeLamports: "5703" },
+    ).feeLamports == null;
+    return filled && notErased && keepsFailure && ignoredMidFlight;
+  })(), "fills a gap, revises nothing");
+  add("SWXD-12: the backfill is wired, bounded, and cannot delay the outcome", (() => {
+    const hook = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
+    // The outcome is dispatched BEFORE the backfill is considered, so a slow or dead chain
+    // read can never hold up telling someone their swap landed.
+    const outcomeFirst = /for \(const event of decision\.events\) dispatch\(event\);[\s\S]{0,900}if \(needsFigureBackfill\(result\)\) void backfill\(\);/.test(hook);
+    const bounded = /attempt < FIGURE_BACKFILL_ATTEMPTS/.test(hook);
+    // The only event it can produce. It must not be able to re-dispatch an outcome.
+    const figuresOnly = /dispatch\(\{\s*type: "figures"/.test(hook);
+    // Same account and mint as the poll that preceded it — asking about a different one
+    // would read a stranger's balance delta into this user's success screen.
+    const sameTarget = (hook.match(/delivery: deliveryRef\.current/g) ?? []).length === 2;
+    // And it stops when the component goes away, rather than firing into a dead reducer.
+    const cleanedUp = /cancelled = true;/.test(hook) && /clearTimeout\(backfillTimer\)/.test(hook);
+    return outcomeFirst && bounded && figuresOnly && sameTarget && cleanedUp;
+  })(), "chases numbers, never the outcome");
   add("SWCS-6: expiry has its OWN title — it is not an outage, and must not be filed under one", (() => {
     const exp = failureCopy("expired");
     const out = failureCopy("plan_unavailable");

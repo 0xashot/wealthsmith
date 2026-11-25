@@ -97,6 +97,14 @@ export type ExecutionEvent =
   | { type: "submitted"; signature: string }
   | { type: "submit_failed"; detail?: string; feeLamports?: string | null; feeUsd?: number | null }
   | { type: "confirmed"; deliveredRaw?: string | null; feeLamports?: string | null; feeUsd?: number | null }
+  /**
+   * Figures that arrived AFTER the outcome did.
+   *
+   * The chain reports a transaction as landed before it can be fetched, so the read that
+   * settles the outcome often cannot yet see the fee or the delivered amount. This fills them
+   * in without disturbing anything already decided — see `needsFigureBackfill`.
+   */
+  | { type: "figures"; deliveredRaw?: string | null; feeLamports?: string | null; feeUsd?: number | null }
   | { type: "confirm_timeout" }
   | { type: "expire" }
   | { type: "cancel" };
@@ -271,6 +279,23 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
 
     case "confirmed":
     case "failed":
+      /**
+       * The ONLY thing a settled flow still accepts: figures that were not readable when the
+       * outcome arrived.
+       *
+       * It cannot change the phase, the failure, or the signature — those were decided by the
+       * chain and are not up for revision — and it fills a field only while that field is
+       * still null. A later read returning null must never erase a figure we already have,
+       * which is what makes an out-of-order or failed backfill attempt harmless.
+       */
+      if (event.type === "figures") {
+        return {
+          ...state,
+          deliveredRaw: state.deliveredRaw ?? event.deliveredRaw ?? null,
+          feeLamports: state.feeLamports ?? event.feeLamports ?? null,
+          feeUsd: state.feeUsd ?? event.feeUsd ?? null,
+        };
+      }
       return state;
 
     default:

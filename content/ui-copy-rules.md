@@ -1144,10 +1144,25 @@ tilde’d expectation and a “Min received” floor — promises, shown as thou
 were the outcome.
 
 **The figure is what the chain delivered, never the quote.** It is read from the
-landed transaction’s own token balances, server-side, and travels with the
-confirmation itself so the screen can never say a swap completed while the
-amount is still loading. It is never replaced by the estimate: that number was a
-prediction made before the swap, and it is not evidence of what the swap did.
+landed transaction’s own token balances, server-side. It is never replaced by
+the estimate: that number was a prediction made before the swap, and it is not
+evidence of what the swap did.
+
+**The outcome never waits for the figure.** This rule used to read "the figure
+travels with the confirmation, so no screen can say a swap completed while the
+amount is still loading" — and production disagreed. The chain reports a
+transaction as landed through `getSignatureStatuses` seconds before
+`getTransaction` can return it: observed 2026-11-25, where a freshly landed
+swap read as fee-null for over five seconds and then returned the exact figure.
+Our poll asks at precisely that instant and then stops, so the old rule would
+have shown "we couldn’t load the exact amount" for swaps whose amount was
+available a second later.
+
+So the outcome is reported the moment it is known, and the figures get a few
+more attempts of their own. A late figure may fill a gap and nothing else: it
+cannot change the phase, the failure or the signature, and it fills a field
+only while that field is still null, so a later null can never erase a number
+already on screen. If they never arrive, the fallback copy below stands.
 
 When that read produces nothing — no RPC, a pruned transaction, an output that
 is not an SPL balance — the amount is omitted and the sentence takes its place:

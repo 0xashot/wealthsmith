@@ -1,0 +1,24 @@
+Hi Vahan — checked production just now and the swap confirm work isn't live
+yet on either side:
+
+  • api.wealthsmith.ai/api/swap-execute/status still returns {"state":"pending"}
+    with no deliveredRaw / feeLamports / feeUsd
+  • the app bundle (index-0d7674fb.js) still has the old copy — "Swap complete",
+    "Still confirming", "These terms expired"
+
+No rush and nothing is broken — I'm checking because the two halves need to go
+out together. If the frontend lands without the endpoint change, the success
+screen can't show what the user received and the failed-swap screen can't show
+the fee that was charged. They'd fall back to copy that says so, which works
+but isn't the intended screen.
+
+Everything is on github.com/0xashot/wealthsmith, branch main, commit 0488ef2.
+The endpoint reference implementation is
+app/src/server/swapExecution/confirmationStatus.ts, and
+notes/vahan-status-endpoint.md has the full contract.
+
+Is porting it across the thing that's slow? If so I'm happy to open a PR
+straight into your Bitbucket repo instead — just send me access, or tell me the
+branch you'd want it against.
+
+Any blockers, or a rough ETA?

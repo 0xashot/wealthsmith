@@ -98,6 +98,35 @@ export function decideFromConfirmation(result: ConfirmationFetchResult): PollDec
  * Separate from the decision above so the deadline is testable without a clock and so "we
  * stopped" can never be confused with "it failed" — they come from different functions.
  */
+/**
+ * How many extra reads to spend chasing the FIGURES after the outcome is known.
+ *
+ * A transaction is reported as landed by `getSignatureStatuses` seconds before
+ * `getTransaction` can return it — observed in production on 2026-11-25, where the fee on a
+ * freshly landed Jupiter swap read as null for over five seconds and then appeared, matching
+ * the chain exactly. Our poll asks at the worst possible instant: the moment it first sees a
+ * terminal state, and then it stops.
+ *
+ * So the outcome is never delayed — it lands the moment we know it — and the figures get a
+ * few more attempts of their own. If they never arrive, the screens already say so.
+ */
+export const FIGURE_BACKFILL_ATTEMPTS = 4;
+export const FIGURE_BACKFILL_INTERVAL_MS = 1_500;
+
+/**
+ * Whether this answer settled the outcome but not the numbers.
+ *
+ * Keyed on `feeLamports`, not on `deliveredRaw`: the fee is present for BOTH landed states
+ * whenever the transaction could be read, while a delivered amount is legitimately null on a
+ * revert. Asking "did the delivery read fail?" would send every reverted swap chasing a
+ * figure that does not exist.
+ */
+export function needsFigureBackfill(result: ConfirmationFetchResult): boolean {
+  if (!result.ok) return false;
+  if (result.state !== "confirmed" && result.state !== "failed") return false;
+  return result.feeLamports == null;
+}
+
 export function hasPassedDeadline(startedAtMs: number, nowMs: number): boolean {
   return nowMs - startedAtMs >= CONFIRMATION_DEADLINE_MS;
 }

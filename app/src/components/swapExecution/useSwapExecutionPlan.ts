@@ -56,6 +56,9 @@ import {
   CONFIRMATION_POLL_INTERVAL_MS,
   decideFromConfirmation,
   fetchConfirmationState,
+  needsFigureBackfill,
+  FIGURE_BACKFILL_ATTEMPTS,
+  FIGURE_BACKFILL_INTERVAL_MS,
   hasPassedDeadline,
   timeoutEvent,
   type FetchConfirmationOptions,
@@ -258,8 +261,20 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
     if (watchedSignature == null) return;
     const startedAt = now();
     const controller = new AbortController();
+    // Where to read what arrived. The plan's own output mint, never a symbol or a guess, and
+    // the taker we submitted for — so the figure the success screen shows is the delta on the
+    // exact account and mint these terms promised. Captured once so the poll and the backfill
+    // can never ask about different accounts.
+    const deliveryRef = {
+      current:
+        takerPublicKey != null && planRef.current != null
+          ? { owner: takerPublicKey, mint: planRef.current.terms.outputMint }
+          : null,
+    };
     let stopped = false;
+    let cancelled = false;
     let timer: number | undefined;
+    let backfillTimer: number | undefined;
 
     const tick = async () => {
       if (stopped) return;
@@ -268,10 +283,7 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
         // Where to read what arrived. The plan's own output mint, never a symbol or a guess,
         // and the taker we submitted for — so the figure the success screen shows is the
         // delta on the exact account and mint these terms promised.
-        delivery:
-          takerPublicKey != null && planRef.current != null
-            ? { owner: takerPublicKey, mint: planRef.current.terms.outputMint }
-            : null,
+        delivery: deliveryRef.current,
         signal: controller.signal,
       });
       if (stopped) return;
@@ -279,6 +291,17 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
       if (decision.action === "stop") {
         stopped = true;
         for (const event of decision.events) dispatch(event);
+        // THE OUTCOME IS SETTLED; THE NUMBERS MAY NOT BE. A transaction is reported as
+        // landed by `getSignatureStatuses` seconds before `getTransaction` can return it,
+        // and this poll asks at the worst instant — the moment it first sees a terminal
+        // state, after which it stops. Observed in production: the fee on a freshly landed
+        // swap read as null for five seconds, then appeared and matched the chain exactly.
+        //
+        // So the outcome is dispatched above without waiting, and the figures get a few
+        // attempts of their own. Nothing here can change what already happened: the only
+        // event this can produce is `figures`, which the reducer accepts in a settled phase
+        // and which fills a field only while that field is still null.
+        if (needsFigureBackfill(result)) void backfill();
         return;
       }
       // Check the deadline AFTER the read, so a transaction that confirmed on the last attempt
@@ -290,12 +313,44 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
       }
       timer = window.setTimeout(() => void tick(), CONFIRMATION_POLL_INTERVAL_MS);
     };
+    /**
+     * Ask again, a few times, only for the figures.
+     *
+     * Bounded and silent: if they never arrive the screens already say so — the success
+     * state omits the amount and points at Solscan, the revert states that a fee was
+     * charged without naming it. Better a late number than a wrong one, and better no
+     * number than the quote's estimate.
+     */
+    const backfill = async () => {
+      for (let attempt = 0; attempt < FIGURE_BACKFILL_ATTEMPTS; attempt += 1) {
+        await new Promise((resolve) => { backfillTimer = window.setTimeout(resolve, FIGURE_BACKFILL_INTERVAL_MS); });
+        if (cancelled) return;
+        const again = await confirmationFetcher(watchedSignature, {
+          ...opts.confirmationOptions,
+          delivery: deliveryRef.current,
+          signal: controller.signal,
+        });
+        if (cancelled) return;
+        if (!again.ok) continue;
+        if (again.feeLamports == null && again.deliveredRaw == null) continue;
+        dispatch({
+          type: "figures",
+          deliveredRaw: again.deliveredRaw ?? null,
+          feeLamports: again.feeLamports ?? null,
+          feeUsd: again.feeUsd ?? null,
+        });
+        return;
+      }
+    };
+
     void tick();
 
     return () => {
       stopped = true;
+      cancelled = true;
       controller.abort();
       if (timer != null) window.clearTimeout(timer);
+      if (backfillTimer != null) window.clearTimeout(backfillTimer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedSignature]);
