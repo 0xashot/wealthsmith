@@ -5446,17 +5446,18 @@ td.vetting-scores-table__date {
 
 /* The back control is the close control mirrored: the SAME padding token, radius
    and colour, so the two icon buttons are the same size and sit on the same
-   centre line in a `flex-start` header. Matching by eye instead left it 28px
-   against the close button's 34px and three pixels high. The negative margin
-   pulls the glyph flush with the title column, so its padding does not indent
-   the heading. */
+   centre line in a `flex-start` header.
+   NO negative margin. Mirroring means the BOX edges line up with the content
+   below — the close button's right edge sits on the cards' right edge, so the
+   back button's left edge sits on their left edge, and each glyph is inset by
+   its own padding exactly as the other's is. Pulling the glyph flush instead
+   lined up the arrow but left the two buttons visibly unmatched. */
 .review-modal__back {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: var(--spacing-inline-gap-sm);
-  margin-left: calc(-1 * var(--spacing-inline-gap-sm));
   border: none;
   border-radius: var(--radius-control-md);
   background: transparent;
