@@ -105,7 +105,7 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
         {!subpage && <h3 className="review-modal__section-title">{failed.title}</h3>}
         {showsFailureAlert(failure) && (
           <span className="swap-confirm__alert" aria-hidden="true">
-            <ButtonIcon src={alertCircleUrl} size={28} />
+            <ButtonIcon src={alertCircleUrl} size={40} />
           </span>
         )}
         <p className="modal__intro">{failed.desc}</p>

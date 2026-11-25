@@ -5447,56 +5447,58 @@ td.vetting-scores-table__date {
 /* The warning mark above a failure's explanation.
    Painted in the design system's warning colour, on its own tint as a soft
    disc — the same solid/tint pair the feedback tokens are built around, so it
-   reads as this system's warning rather than a borrowed one. 28px glyph in a
-   48px disc: large enough to register before the sentence, small enough not to
-   become the subject of the screen. */
+   reads as this system's warning rather than a borrowed one.
+   CENTRED above the text and large enough to land before the sentence does:
+   this is the first thing the eye meets on a screen that exists to say the
+   swap did not happen. */
 .swap-confirm__alert {
-  display: inline-flex;
+  position: relative;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: var(--spacing-stack-gap-sm);
+  width: 72px;
+  height: 72px;
+  margin: var(--spacing-stack-gap-xs, 4px) auto var(--spacing-stack-gap-md, 16px);
   border-radius: 50%;
   color: var(--color-feedback-warning-background-solid);
   background: var(--color-feedback-warning-background-tint);
-  /* A single settle on entry, not a loop. A pulsing alert on a screen about
-     money nags rather than informs, and the user has already been told the
-     swap did not happen — this only draws the eye to the sentence once. The
-     easing is the system's own warning curve. */
-  animation: swap-confirm-alert-in calc(var(--motion-feedback-warning-duration, 180ms) * 1.6)
+  /* A single settle, not a loop. A pulsing alert on a screen about money nags
+     rather than informs, and the reader has already been told the swap did not
+     happen — this draws the eye to the sentence once and then stops.
+     Slow enough to actually be seen: the first pass was under 300ms, which on
+     a screen that appears and settles at the same moment the reader's eye is
+     still travelling is motion nobody registers. The easing is the system's
+     own warning curve. */
+  animation: swap-confirm-alert-in calc(var(--motion-feedback-warning-duration, 180ms) * 3.5)
     var(--motion-feedback-warning-easing, cubic-bezier(0.2, 0, 0, 1)) both;
 }
 
-/* The disc itself echoes outward once behind the glyph, then is gone. Drawn
-   with a box-shadow rather than an element so it costs no markup and cannot
-   affect layout. */
+/* The disc echoes outward once behind the glyph, then is gone. Drawn on a
+   pseudo-element so it costs no markup and cannot affect layout. It outlasts
+   the icon's own settle, so the movement resolves rather than stopping dead. */
 .swap-confirm__alert::after {
   content: "";
   position: absolute;
-  width: 48px;
-  height: 48px;
+  inset: 0;
   border-radius: 50%;
-  animation: swap-confirm-alert-ring calc(var(--motion-feedback-warning-duration, 180ms) * 3.5)
+  animation: swap-confirm-alert-ring calc(var(--motion-feedback-warning-duration, 180ms) * 7)
     var(--motion-feedback-warning-easing, cubic-bezier(0.2, 0, 0, 1)) both;
 }
-.swap-confirm__alert { position: relative; }
 
 @keyframes swap-confirm-alert-in {
-  from { opacity: 0; transform: scale(0.82); }
-  60%  { transform: scale(1.04); }
+  from { opacity: 0; transform: scale(0.72); }
+  55%  { opacity: 1; transform: scale(1.06); }
   to   { opacity: 1; transform: scale(1); }
 }
 
 @keyframes swap-confirm-alert-ring {
-  from { opacity: 0.45; transform: scale(0.9); box-shadow: 0 0 0 0 var(--color-feedback-warning-background-tint); }
-  to   { opacity: 0; transform: scale(1.35); box-shadow: 0 0 0 10px transparent; }
+  from { opacity: 0.5; transform: scale(0.85); }
+  to   { opacity: 0; transform: scale(1.45); }
 }
 
 /* The icon still appears, it simply does not move. */
 @media (prefers-reduced-motion: reduce) {
-  .swap-confirm__alert,
-  .swap-confirm__alert::after { animation: none; }
+  .swap-confirm__alert { animation: none; }
   .swap-confirm__alert::after { display: none; }
 }
 
