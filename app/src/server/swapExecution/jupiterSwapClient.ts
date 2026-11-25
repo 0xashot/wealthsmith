@@ -190,6 +190,7 @@ export async function buildJupiterSwapTransaction(
     expectedOutputUsd: null,
     // otherAmountThreshold IS the guaranteed floor for an ExactIn swap at this slippage.
     minimumOutputTokens: rawToTokens(minimumOut, request.outputDecimals),
+    minimumOutputUsd: null,
     priceImpactPct: impactToPercent(rawQuote.priceImpactPct),
     slippageBps: request.slippageBps,
     estimatedTotalCostUsd: null,

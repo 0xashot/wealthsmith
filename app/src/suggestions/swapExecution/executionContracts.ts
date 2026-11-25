@@ -66,6 +66,14 @@ export interface SwapExecutionTerms {
   expectedOutputUsd: number | null;
   /** What the user is guaranteed at the configured slippage. Never null, never estimated. */
   minimumOutputTokens: string;
+  /**
+   * USD value of that floor, from the same snapshot as the other two.
+   *
+   * The TOKEN amount above is exact and enforced on-chain; this conversion is not, because it
+   * needs a price. Shown with a tilde for that reason while the token figure keeps none —
+   * the guarantee is in tokens, and saying so precisely is the point of the row.
+   */
+  minimumOutputUsd: number | null;
 
   priceImpactPct: number;
   slippageBps: number;

@@ -158,12 +158,23 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
           <div className="review-modal__metric swap-confirm__metric--minimum">
             <dt className="review-modal__metric-label metric__label--with-info">
               {SWAP_CONFIRM_MINIMUM_LABEL}
-              <InfoPopover label={SWAP_CONFIRM_MINIMUM_INFO_LABEL} align="right">
+              {/* `fixed` positions against the VIEWPORT rather than this metric card. The
+                  sheet sits in a modal that clips its overflow, so an absolutely-positioned
+                  popover was cut off at the card's edge — the explanation of the one
+                  guaranteed figure, half unreadable. */}
+              <InfoPopover label={SWAP_CONFIRM_MINIMUM_INFO_LABEL} align="right" strategy="fixed">
                 <p className="info-popover__text">{SWAP_CONFIRM_MINIMUM_INFO}</p>
               </InfoPopover>
             </dt>
             <dd className="review-modal__metric-value swap-confirm__minimum-value">
               {terms.minimumOutputTokens} {terms.outputSymbol}
+              {/* The TOKEN figure carries no tilde — it is exact and enforced on-chain. Its
+                  dollar value does, because converting it needs a price and a price moves.
+                  Marking only the conversion keeps the guarantee intact while still giving
+                  the floor a size the reader can judge. */}
+              {formatApproxUsd(terms.minimumOutputUsd) !== ABSENT_FIGURE && (
+                <span className="swap-confirm__value-usd">{formatApproxUsd(terms.minimumOutputUsd)}</span>
+              )}
             </dd>
           </div>
 

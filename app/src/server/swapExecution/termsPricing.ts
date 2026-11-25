@@ -57,11 +57,15 @@ export function usdValueOf(tokenAmount: string, usdPrice: number | null): number
 export function usdTermsFromSnapshot(
   terms: SwapExecutionTerms,
   snapshot: Parameters<typeof priceOf>[0] | null,
-): Pick<SwapExecutionTerms, "inputAmountUsd" | "expectedOutputUsd"> {
-  if (snapshot == null) return { inputAmountUsd: null, expectedOutputUsd: null };
+): Pick<SwapExecutionTerms, "inputAmountUsd" | "expectedOutputUsd" | "minimumOutputUsd"> {
+  if (snapshot == null) return { inputAmountUsd: null, expectedOutputUsd: null, minimumOutputUsd: null };
+  const outputPrice = priceOf(snapshot, terms.outputMint);
   return {
     inputAmountUsd: usdValueOf(terms.inputAmountTokens, priceOf(snapshot, terms.inputMint)),
-    expectedOutputUsd: usdValueOf(terms.expectedOutputTokens, priceOf(snapshot, terms.outputMint)),
+    expectedOutputUsd: usdValueOf(terms.expectedOutputTokens, outputPrice),
+    // Same price as the expected output, necessarily: two conversions of the same token at
+    // different rates in one column would be indefensible.
+    minimumOutputUsd: usdValueOf(terms.minimumOutputTokens, outputPrice),
   };
 }
 

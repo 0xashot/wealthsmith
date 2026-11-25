@@ -61,6 +61,12 @@ export function demoConfirmTerms(
     expectedOutputTokens: candidate.expectedOutputTokens,
     expectedOutputUsd: candidate.expectedOutputUsd,
     minimumOutputTokens,
+    // Derived from the candidate's own expected-output valuation, so the two dollar figures in
+    // the column cannot imply two different prices for one token.
+    minimumOutputUsd:
+      candidate.expectedOutputUsd != null && Number(candidate.expectedOutputTokens) > 0
+        ? (Number(minimumOutputTokens) / Number(candidate.expectedOutputTokens)) * candidate.expectedOutputUsd
+        : null,
     // Absent figures stay absent. The sheet renders "—" for these, which is the truth about a
     // demo quote that could not price them, and is the same thing it would do for a real one.
     priceImpactPct: candidate.priceImpactPct ?? Number.NaN,

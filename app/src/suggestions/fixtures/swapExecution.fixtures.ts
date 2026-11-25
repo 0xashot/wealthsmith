@@ -160,6 +160,7 @@ function assessment(o: Partial<SwapQuoteComparisonAssessment> = {}): SwapQuoteCo
     estimatedTotalCostPct: 0.09,
     expectedOutputTokens: "0.197901",
     minimumOutputTokens: "0.196911",
+    minimumOutputUsd: 14.89,
     economicallyEquivalent: false,
     warnings: [],
     blockingReasons: [],
@@ -213,6 +214,7 @@ function terms(o: Partial<SwapExecutionTerms> = {}): SwapExecutionTerms {
     expectedOutputTokens: "0.197901",
     expectedOutputUsd: 14.97,
     minimumOutputTokens: "0.196911",
+    minimumOutputUsd: 14.89,
     priceImpactPct: 0.02,
     slippageBps: 50,
     estimatedTotalCostUsd: 0.03,
@@ -1199,26 +1201,26 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // One missing price must not blank the other, and must never be filled by the other's.
     return out.inputAmountUsd === 15 && out.expectedOutputUsd === null;
   })(), "partial pricing");
-  add("SWCU-4: the MINIMUM gets no USD line — the guaranteed figure stays visually distinct", (() => {
+  add("SWCU-4: the minimum's TOKEN figure is never marked approximate; only its dollar value is", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
-    // There is no minimumOutputUsd to render, and the sub-line markup must not appear inside the
-    // minimum's metric. A dollar figure there would be an estimate sitting under an exact number.
     const start = c.indexOf("swap-confirm__metric--minimum");
-    // Searched FORWARD from the minimum: the label constant also appears in the import block
-    // above, and slicing to that earlier index produced an empty string that passed every
-    // negated test below. A scan over nothing is not a check.
     const end = start < 0 ? -1 : c.indexOf("SWAP_CONFIRM_PRICE_IMPACT_LABEL", start);
     if (start < 0 || end <= start) return false;
-    const minimumBlock = c.slice(start, end);
-    return /minimumOutputTokens/.test(minimumBlock) && // the slice really is the minimum's metric
-      !/swap-confirm__value-usd/.test(minimumBlock) &&
-      !/minimumOutputUsd/.test(c);
-  })(), "no usd on the guarantee");
+    const block = c.slice(start, end);
+    // The guarantee is in TOKENS and that figure stays exact — rendered raw, no tilde
+    // formatter anywhere near it. The USD underneath is a conversion and needs a price, so it
+    // is marked like every other estimate. Marking the token amount instead would undo the
+    // only promise this sheet makes.
+    return /\{terms\.minimumOutputTokens\}/.test(block) &&
+      !/formatApproxTokens\(terms\.minimumOutputTokens/.test(block) &&
+      /formatApproxUsd\(terms\.minimumOutputUsd\)/.test(block);
+  })(), "exact tokens, approximate dollars");
   add("SWCU-5: an unpriced amount OMITS its sub-line rather than printing a dash under the tokens", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
     // A "—" under a token figure reads as a missing term; missing context should be invisible.
+    // All three sub-lines: input, expected output, and the minimum's dollar value.
     const guarded = (c.match(/formatApproxUsd\(terms\.\w+\) !== ABSENT_FIGURE &&/g) ?? []).length;
-    return guarded === 2;
+    return guarded === 3;
   })(), "absent usd is omitted");
   add("SWCS-9b: the two estimated figures go through the tilde formatters, never rendered raw", (() => {
     // With "(estimated)" gone from both labels, the tilde is the ONLY thing distinguishing an

@@ -63,6 +63,7 @@ export function sanitizeExecutionPlan(input: {
       expectedOutputTokens: input.terms.expectedOutputTokens,
       expectedOutputUsd: input.terms.expectedOutputUsd,
       minimumOutputTokens: input.terms.minimumOutputTokens,
+      minimumOutputUsd: input.terms.minimumOutputUsd,
       priceImpactPct: input.terms.priceImpactPct,
       slippageBps: input.terms.slippageBps,
       estimatedTotalCostUsd: input.terms.estimatedTotalCostUsd,

@@ -37,6 +37,7 @@ const TERMS: SwapExecutionTerms = {
   expectedOutputTokens: "0.726942",
   expectedOutputUsd: 0.7268,
   minimumOutputTokens: "0.723308",
+  minimumOutputUsd: 0.7231,
   priceImpactPct: 0.0077,
   slippageBps: 50,
   estimatedTotalCostUsd: 0.011,
@@ -164,6 +165,7 @@ const GALLERY_ASSESSMENT = {
   estimatedTotalCostPct: 0.01,
   expectedOutputTokens: "0.726942",
   minimumOutputTokens: "0.723308",
+  minimumOutputUsd: 0.7231,
   economicallyEquivalent: false,
   warnings: [],
   blockingReasons: [],
@@ -468,6 +470,7 @@ export const SWAP_CONFIRM_GALLERY_CASES: SwapConfirmGalleryCase[] = [
           expectedOutputUsd: 0.7084,
           inputAmountUsd: 0.7088,
           minimumOutputTokens: "0.705093",
+          minimumOutputUsd: 0.7049,
           priceImpactPct: 0.00448661815241882,
           estimatedTotalCostUsd: null,
         }}

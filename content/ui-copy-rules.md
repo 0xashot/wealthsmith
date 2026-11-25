@@ -976,8 +976,11 @@ silently removes the distinction while every copy constant still reads
 correctly. Estimated figures must go through the shared formatters rather than
 being interpolated directly.
 
-Never put a tilde on the minimum. It is exact and enforced on-chain, and marking
-it approximate would undo the only promise this sheet makes.
+Never put a tilde on the minimum's TOKEN figure. It is exact and enforced
+on-chain, and marking it approximate would undo the only promise this sheet
+makes. Its dollar value is a different matter: converting tokens to dollars
+needs a price, so that line is marked like any other estimate. Exact in tokens,
+approximate in dollars — which is precisely what the guarantee is.
 
 A number we cannot obtain renders as “—”; it is never replaced with a different
 number, and never written as “~—” — marking the precision of a figure we do not
