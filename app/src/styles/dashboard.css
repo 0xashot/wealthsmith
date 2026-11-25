@@ -5458,7 +5458,11 @@ td.vetting-scores-table__date {
   justify-content: center;
   width: 72px;
   height: 72px;
-  margin: var(--spacing-stack-gap-xs, 4px) auto var(--spacing-stack-gap-md, 16px);
+  /* `auto` only, to centre it. The section is a flex column with its own gap,
+     so any vertical margin here ADDS to that gap rather than setting it — the
+     8px written here was arriving as 24px on screen. The layout owns the
+     rhythm; this element only owns its horizontal placement. */
+  margin: 0 auto;
   border-radius: 50%;
   color: var(--color-feedback-warning-background-solid);
   background: var(--color-feedback-warning-background-tint);
