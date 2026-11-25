@@ -1150,10 +1150,17 @@ export const SWAP_CONFIRM_UNAVAILABLE_TITLE = "Couldn’t Prepare Your Swap";
 export const SWAP_CONFIRM_UNAVAILABLE_DESC =
   "We couldn’t load a swap quote right now. No transaction was submitted, and your funds haven’t moved.";
 
-/** The refusal that justifies the whole step. Deliberately not softened. */
-export const SWAP_CONFIRM_VERIFICATION_FAILED_TITLE = "We couldn’t verify these terms";
+/**
+ * The refusal that justifies the whole step. Deliberately not softened.
+ *
+ * It names the check and says WE stopped — not that something failed, not that the provider
+ * was at fault. The hand-off used to be a sentence here ("You can swap on Jupiter directly");
+ * it is a button now, so the prose can stay on the one thing only we can explain: why a swap
+ * the user asked for did not reach their wallet.
+ */
+export const SWAP_CONFIRM_VERIFICATION_FAILED_TITLE = "We Couldn’t Verify This Swap";
 export const SWAP_CONFIRM_VERIFICATION_FAILED_DESC =
-  "The transaction we were given doesn’t match the terms we’d show you, so we’re not asking you to approve it. You can swap on Jupiter directly.";
+  "The transaction details didn’t match the swap quote, so we stopped before requesting your approval. No transaction was submitted.";
 
 /**
  * The wallet could not send it. Nothing reached the network, so there is no signature, no

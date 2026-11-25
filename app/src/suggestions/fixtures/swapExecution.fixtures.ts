@@ -675,10 +675,19 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
   add("SWCC-7: the minimum's explanation states on-chain enforcement — the one claim that makes it meaningful",
     /enforced by the network/i.test(SWAP_CONFIRM_MINIMUM_INFO) &&
       /stay in your wallet/i.test(SWAP_CONFIRM_MINIMUM_INFO), "on-chain minimum");
-  add("SWCC-8: the verification refusal says WE refused, and offers the handoff", (() => {
+  add("SWCC-8: the verification refusal says WE stopped, and the hand-off is still offered", (() => {
     const d = SWAP_CONFIRM_VERIFICATION_FAILED_DESC.toLowerCase();
-    return /we\u2019re not asking you to approve it|we're not asking you to approve it/.test(d) &&
-      /jupiter directly/.test(d);
+    // WE stopped — not "verification failed", not the provider's fault. The user is owed the
+    // actor, because a swap they asked for did not reach their wallet and we are the reason.
+    const weStopped = /we stopped/.test(d) && /before requesting your approval/.test(d);
+    // And it accounts for the money, like every other ending that did not happen.
+    const accountsForFunds = /no transaction was submitted/.test(d);
+    // The hand-off used to be a SENTENCE here and is a button now, so it is checked where it
+    // actually lives. Dropping this assertion with the sentence would have lost the guarantee
+    // rather than relocated it.
+    const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    const handoffOffered = /label: `Swap on \$\{handoff\.providerName\}`/.test(sheet);
+    return weStopped && accountsForFunds && handoffOffered;
   })(), "refusal is explicit");
   add("SWCC-9: success copy is a template needing the ACTUAL received amount — it cannot render the estimate by default", (() => {
     // A function, not a constant: there is no way to show the success line without supplying a
