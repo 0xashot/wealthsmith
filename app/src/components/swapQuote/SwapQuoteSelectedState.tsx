@@ -12,8 +12,6 @@ import { resolveProtocolIcon } from "../../state/iconRegistry";
 
 /** The compact Swap Route section shows only these figures, in this order. */
 const COMPACT_METRIC_LABELS = ["Estimated total cost", "Price impact"] as const;
-/** Read-only reminder that a live quote can move before the user acts (no transaction is prepared here). */
-const QUOTE_BANNER = "Quotes are time sensitive and may change.";
 
 /** The selected execution surface's approved logo (Jupiter / Raydium / Orca), or null → text-only fallback. */
 function providerLogo(providerId: QuoteView["selectedProviderId"]): string | null {
@@ -49,8 +47,6 @@ export default function SwapQuoteSelectedState({ view, headingOverride }: { view
           </div>
         ))}
       </dl>
-
-      <p className="swap-quote__banner" role="note">{QUOTE_BANNER}</p>
     </section>
   );
 }
