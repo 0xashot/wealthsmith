@@ -5444,6 +5444,28 @@ td.vetting-scores-table__date {
   gap: var(--spacing-inline-gap-sm);
 }
 
+/* The walkthrough's outcome picker: one link per ending, the current one marked.
+   Internal tooling, so it borrows the shared control tokens rather than earning
+   a surface of its own. */
+.swap-walkthrough__outcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-inline-gap-sm);
+  margin: var(--spacing-stack-gap-sm) 0;
+}
+.swap-walkthrough__outcome {
+  padding: var(--spacing-inset-xs, 4px) var(--spacing-inline-gap-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-control-sm);
+  font: var(--typography-body-sm-font);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+.swap-walkthrough__outcome--current {
+  border-color: var(--color-action-primary-background-default);
+  color: var(--color-action-primary-background-default);
+}
+
 /* The back control is the close control mirrored: the SAME padding token, radius
    and colour, so the two icon buttons are the same size and sit on the same
    centre line in a `flex-start` header.

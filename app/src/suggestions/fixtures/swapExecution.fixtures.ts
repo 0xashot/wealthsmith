@@ -898,7 +898,11 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const demoCancelCloses = /onCancel=\{onClose\}/.test(c);
     const liveCancelCloses = /execution\.cancel\(\);\s*\n\s*onClose\(\);/.test(c);
     // Back is still the step's own exit, and still only that.
-    const backReturns = /const leaveStep = useCallback\(\(\) => setStarted\(false\), \[\]\);/.test(c);
+    // Behaviour, not spelling: back returns to the review, so it clears the step and must not
+    // close. Pinned to the exact line before, which then broke the moment the handler grew a
+    // second statement that changed nothing about the rule.
+    const leaveStep = c.slice(c.indexOf("const leaveStep ="), c.indexOf("useEffect(() => { onStepChange"));
+    const backReturns = /setStarted\(false\)/.test(leaveStep) && !/onClose\(\)/.test(leaveStep);
     return demoCancelCloses && liveCancelCloses && backReturns;
   })(), "cancel leaves, back returns");
   add("SWXC-2: the Continue button spins in place rather than being replaced or removed", (() => {
@@ -985,6 +989,23 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       // Tied to the button, so it is announced rather than merely adjacent.
       /aria-describedby=/.test(c);
   })(), "explained, not hidden");
+  add("SWDM-1b: a demo failure is ignored OUTSIDE Demo Mode — it can never alter a real outcome", (() => {
+    const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    // `demoFailure` exists so the walkthrough can be driven to each ending rather than only the
+    // one that works. It is read inside the `props.demo` branch and nowhere else, so a live
+    // flow's outcome still comes only from what actually happened.
+    const demoBranch = c.slice(c.indexOf("if (props.demo) {"), c.indexOf("// The Boundary said no"));
+    const elsewhere = c.replace(demoBranch, "");
+    return /demoFailure/.test(demoBranch) && !/demoFailure/.test(elsewhere.replace(/demoFailure\?:[^;]*;/, ""));
+  })(), "demo-only outcome");
+  add("SWDM-1c: the expired demo offers the Refresh its own copy promises", (() => {
+    const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    // "Nothing was sent. Refresh to get current terms." sat above no such button, because the
+    // demo branch passed no handler. Copy that names a control the screen does not have is
+    // the same class of untruth as a figure that is wrong.
+    const demoBranch = c.slice(c.indexOf("if (props.demo) {"), c.indexOf("// The Boundary said no"));
+    return /onRefresh=\{\(\) => setDemoRefreshed\(true\)\}/.test(demoBranch);
+  })(), "refresh exists where promised");
   add("SWDM-2: the demo reason names the mode and the way out, and blames nobody", (() => {
     const t = SWAP_CONFIRM_DEMO_DISABLED.toLowerCase();
     return /demo mode/.test(t) && /connect your wallet/.test(t) &&

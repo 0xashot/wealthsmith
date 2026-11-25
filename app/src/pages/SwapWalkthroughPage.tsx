@@ -29,6 +29,7 @@ import { useMemo, useState } from "react";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import ToastHost, { type ToastData } from "../components/ToastHost";
 import { END_TO_END_SCENARIOS } from "./endToEndTestingFixtures";
+import type { ExecutionFailureKey } from "../suggestions/swapExecution/executionLifecycle";
 import { SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER } from "../state/approvedCopy";
 
 /**
@@ -42,8 +43,26 @@ import { SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER } from ".
  */
 const CRYPTO_HEAVY = END_TO_END_SCENARIOS.find((s) => s.key === "e2e-crypto-heavy");
 
+/**
+ * The outcomes a walkthrough can end in, and the words for choosing one.
+ *
+ * Every entry drives the SAME chain — rail, review, confirm step — and differs only in how it
+ * ends. The happy path was the only one anyone could walk, which is how a confirm step's
+ * failure copy stays unread until a user is the first to meet it.
+ */
+const OUTCOMES: { key: string; failure: ExecutionFailureKey | null; label: string; note: string }[] = [
+  { key: "ready", failure: null, label: "Succeeds", note: "Terms, then an Approve that Demo Mode cannot press." },
+  { key: "unavailable", failure: "plan_unavailable", label: "Couldn't prepare", note: "The provider is down, or execution is switched off. Nothing was attempted." },
+  { key: "verification", failure: "verification_failed", label: "Couldn't verify", note: "The transaction we were handed does not match the terms we would show. We refuse on the user's behalf." },
+  { key: "expired", failure: "expired", label: "Terms expired", note: "The quote ran out before it was approved. Refresh is offered because fresh terms are the remedy." },
+  { key: "declined", failure: "declined", label: "Declined", note: "Said no in the wallet. A normal outcome, not an error." },
+];
+
 export default function SwapWalkthroughPage() {
   const [toasts, setToasts] = useState<ToastData[]>([]);
+  // Chosen in the URL so a particular walkthrough can be linked to and returned to.
+  const outcomeKey = typeof window === "undefined" ? "ready" : (new URLSearchParams(window.location.search).get("outcome") ?? "ready");
+  const outcome = OUTCOMES.find((o) => o.key === outcomeKey) ?? OUTCOMES[0];
   const pushToast = (message: string, helper?: string) =>
     setToasts((t) => [...t, { id: Date.now(), message, helper, variant: "info" }]);
 
@@ -67,6 +86,19 @@ export default function SwapWalkthroughPage() {
             confirm step. Approve is unavailable because there is no wallet — hover it for the
             reason. Nothing here can reach the execution endpoint.
           </p>
+          <nav className="swap-walkthrough__outcomes" aria-label="Walkthrough outcome">
+            {OUTCOMES.map((o) => (
+              <a
+                key={o.key}
+                href={`?outcome=${o.key}`}
+                className={`swap-walkthrough__outcome${o.key === outcome.key ? " swap-walkthrough__outcome--current" : ""}`}
+                aria-current={o.key === outcome.key ? "page" : undefined}
+              >
+                {o.label}
+              </a>
+            ))}
+          </nav>
+          <p className="modal__intro"><strong>{outcome.label}.</strong> {outcome.note}</p>
           <p className="modal__intro">
             Pipeline produced <strong>{rail.cards.length}</strong> card(s) and{" "}
             <strong>{swapActions}</strong> swap action(s).
@@ -79,6 +111,7 @@ export default function SwapWalkthroughPage() {
           rail={rail}
           railLabel="Suggestions"
           demo
+          demoFailure={outcome.failure}
           onSwapQuoteGaveUp={() => pushToast(SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER)}
         />
       </aside>

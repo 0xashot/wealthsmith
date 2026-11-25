@@ -24,6 +24,7 @@ import SwapConfirmSheet from "./SwapConfirmSheet";
 import { SWAP_CONFIRM_CHECKING, SWAP_CONFIRM_CONTINUE_LABEL } from "../../state/approvedCopy";
 import { demoConfirmTerms } from "../../suggestions/swapExecution/demoConfirmTerms";
 import type { SwapExecutionEmitter } from "../../suggestions/swapExecution/swapExecutionEvents";
+import type { ExecutionFailureKey } from "../../suggestions/swapExecution/executionLifecycle";
 
 export interface SwapExecutionSectionProps {
   action: SwapActionContext;
@@ -52,6 +53,18 @@ export interface SwapExecutionSectionProps {
    */
   onStepChange?: (step: { active: boolean; onBack: () => void }) => void;
   /**
+   * Demo Mode only: show a FAILURE instead of the terms preview.
+   *
+   * The live path reaches these by actually failing — a provider outage, a refused
+   * verification, an expired quote. Demo Mode cannot, because it never calls anything, so
+   * without this the only outcome anyone could walk through was the one that works. Reviewing
+   * a confirm step by its happy path alone is how its failure copy goes unread until a user
+   * meets it.
+   *
+   * Ignored outside Demo Mode, so it can never alter a real flow's outcome.
+   */
+  demoFailure?: ExecutionFailureKey | null;
+  /**
    * Demo Mode. The confirm step still renders and still fetches nothing real: Approve is shown
    * unavailable with the reason, so someone evaluating the product sees the whole flow through
    * to its last step instead of hitting a dead end where the interesting part should be.
@@ -64,12 +77,20 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
   const { publicKey } = useWallet();
   const submit = useWalletSwapSubmitter();
   const [started, setStarted] = useState(false);
+  /**
+   * Demo Mode only: the chosen failure has been refreshed past.
+   *
+   * The expired card's copy says "Refresh to get current terms", and without a handler it said
+   * so above no such button — copy pointing at a control that does not exist. In a demo a
+   * refresh yields the terms, because there is nothing real to re-fetch.
+   */
+  const [demoRefreshed, setDemoRefreshed] = useState(false);
 
   // Report the step to the review, which hides its own content while it is open.
   const onStepChange = props.onStepChange;
   // The back handler travels with the report, because the review draws the control but only
   // this component knows how to leave the step.
-  const leaveStep = useCallback(() => setStarted(false), []);
+  const leaveStep = useCallback(() => { setStarted(false); setDemoRefreshed(false); }, []);
   useEffect(() => { onStepChange?.({ active: started, onBack: leaveStep }); }, [started, onStepChange, leaveStep]);
   // Leaving the review entirely must not leave it hidden behind a step that is gone.
   useEffect(() => () => onStepChange?.({ active: false, onBack: leaveStep }), [onStepChange, leaveStep]);
@@ -110,13 +131,15 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     // whether to OFFER, not whether to keep what was already opened.
     if ((!offer.offered && !started) || demoTerms == null) return null;
     if (!started) return <ContinueFooter onClose={onClose} onContinue={() => setStarted(true)} />;
+    const demoFailure = demoRefreshed ? null : props.demoFailure ?? null;
     return (
       <SwapConfirmSheet
         demo
-        phase="ready"
+        phase={demoFailure ? "failed" : "ready"}
         terms={demoTerms}
-        failure={null}
+        failure={demoFailure}
         signature={null}
+        onRefresh={() => setDemoRefreshed(true)}
         subpage
         // Cancel LEAVES; back returns to the review. Two exits, because they answer different
         // questions: "not this swap" and "let me re-read why you suggested it".
