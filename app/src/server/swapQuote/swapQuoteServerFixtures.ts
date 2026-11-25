@@ -165,10 +165,10 @@ export async function runSwapQuoteServerFixtureChecks(): Promise<SwapFixtureChec
   add("SWS-25: the orchestrator NEVER mutates the immutable action (source/dest/amount/ids unchanged) and echoes exact amount", JSON.stringify(action) === before && immut.candidates.every((c) => c.inputAmountRaw === "1000000000"), "action immutable");
 
   // ---- Action-specific integration (Rebalance both directions, Trim, DCA) over the live orchestrator ----
-  const s2c = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: new Date(FIXED).toISOString(), direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 1000, selectionState: "selected", usdcUnitPriceUsd: 1 } });
+  const s2c = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: new Date(FIXED).toISOString(), direction: "stables_to_crypto", requiredCorrectionUsd: 1000, usdcSource: { verifiedExcessValueUsd: 1000, selectionState: "selected", usdcUnitPriceUsd: 1 } });
   const s2cRes = s2c.status === "ready" ? await collectSwapQuoteSnapshot(s2c.legs[0], baseOptions({ jupiter: succeed("jupiter", { expectedOutputUsd: 998.2 }), raydium: succeed("raydium", { expectedOutputUsd: 997.6 }), orca: succeed("orca", { expectedOutputUsd: 997.4 }) })) : null;
   add("SWS-26: Rebalance USDC→SOL action → live comparison selects a route; amount unchanged", s2cRes != null && s2cRes.status === "selected" && s2cRes.candidates[0].inputMint === USDC, `status=${s2cRes?.status}`);
-  const c2s = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: new Date(FIXED).toISOString(), direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
+  const c2s = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: new Date(FIXED).toISOString(), direction: "crypto_to_stables", requiredCorrectionUsd: 300, nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
   // SOL→USDC: price source must price the SOL input; reuse priceSource (WSOL=150, USDC=1). Output USDC → expectedOutputUsd set on candidates.
   const solInCand = (p: SwapProviderId, usd: number) => succeed(p, { inputMint: WSOL, outputMint: USDC, expectedOutputUsd: usd, inputAmountRaw: "2000000000" });
   const c2sAction = c2s.status === "ready" ? c2s.legs[0] : null;

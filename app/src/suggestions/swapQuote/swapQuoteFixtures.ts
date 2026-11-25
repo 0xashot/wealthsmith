@@ -295,18 +295,67 @@ export function runSwapQuoteFixtureChecks(): SwapFixtureCheck[] {
 
   /* ---------------- Rebalance readiness ---------------- */
   add("SWQ-RB1: Rebalance stables_to_crypto with selected USDC excess → quote-ready USDC→SOL (exact raw)", (() => {
-    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected", usdcUnitPriceUsd: 1 } });
+    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected", usdcUnitPriceUsd: 1 } });
     return r.status === "ready" && r.legs[0].inputAsset.mint === USDC && r.legs[0].outputAsset.mint === WSOL && r.legs[0].inputAmountRaw === "500000000";
   })(), "rb ready");
-  add("SWQ-RB2: Rebalance within_threshold → not_required", buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, direction: "within_threshold" }).status === "not_required", "rb not required");
-  add("SWQ-RB3: Rebalance USDC source not selected → not_ready_for_quote (no locked/abstract quote)", buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 0, selectionState: "no_excess", usdcUnitPriceUsd: 1 } }).status === "not_ready_for_quote", "rb not ready");
-  add("SWQ-RB3b: Kamino-sourced Rebalance (requiresPriorWithdrawal) → not_ready_for_quote; NEVER quoted as in-wallet funds", (() => { const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected", usdcUnitPriceUsd: 1, requiresPriorWithdrawal: true } }); return r.status === "not_ready_for_quote" && (r as { reasons?: string[] }).reasons?.includes("usdc_source_requires_prior_withdrawal") === true; })(), "withdraw first");
+  add("SWQ-RB1c: the swap is CAPPED at the correction — never the whole balance", (() => {
+    // The bug this replaces: the adapter swapped everything available, so a wallet holding
+    // 600 SOL with a $30,628 correction produced a confirm sheet for 599.9 SOL ($89,985) under
+    // a card that said "Swap $30,628 of excess SOL" — nearly three times as much. The on-chain
+    // minimum would have protected that faithfully: a minimum guards a swap's PRICE, not its
+    // SIZE, so nothing downstream would have caught it.
+    const correction = 30_628;
+    const r = buildRebalanceSwapAction({
+      actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT,
+      direction: "crypto_to_stables", requiredCorrectionUsd: correction,
+      nativeSolSource: { technicallyAvailableLamports: 599_900_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 },
+    });
+    if (r.status !== "ready") return false;
+    const leg = r.legs[0];
+    // 30,628 / 150 = 204.187 SOL, not the 599.9 available.
+    const lamports = Number(leg.inputAmountRaw);
+    return Math.abs(lamports / 1e9 - correction / 150) < 1e-6 &&
+      Math.abs((leg.inputAmountUsd ?? 0) - correction) < 0.01 &&
+      lamports < 599_900_000_000;
+  })(), "capped at the correction");
+  add("SWQ-RB1d: when the correction exceeds what is available, available wins", (() => {
+    // The cap is a minimum of the two, not a replacement: a wallet that cannot cover the whole
+    // correction swaps everything it has, which is what a partial rebalance means.
+    const r = buildRebalanceSwapAction({
+      actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT,
+      direction: "crypto_to_stables", requiredCorrectionUsd: 1_000_000,
+      nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 },
+    });
+    return r.status === "ready" && r.legs[0].inputAmountRaw === "2000000000";
+  })(), "partial rebalance still swaps all it can");
+  add("SWQ-RB1e: the SAME cap applies to stables_to_crypto — both directions, one rule", (() => {
+    const r = buildRebalanceSwapAction({
+      actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT,
+      direction: "stables_to_crypto", requiredCorrectionUsd: 200,
+      usdcSource: { verifiedExcessValueUsd: 5_000, selectionState: "selected", usdcUnitPriceUsd: 1 },
+    });
+    // $200 of the $5,000 excess, not all of it.
+    return r.status === "ready" && r.legs[0].inputAmountRaw === "200000000" && r.legs[0].inputAmountUsd === 200;
+  })(), "both directions capped");
+  add("SWQ-RB1f: with no SOL price the correction cannot be sized, so NOTHING is offered", (() => {
+    // Falling back to "all of it" is exactly the failure being fixed; an unpriced swap of a
+    // whole position is worse than no in-app swap at all.
+    const r = buildRebalanceSwapAction({
+      actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT,
+      direction: "crypto_to_stables", requiredCorrectionUsd: 1000,
+      nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: null },
+    });
+    return r.status === "not_ready_for_quote";
+  })(), "no price, no swap");
+  add("SWQ-RB2: Rebalance within_threshold → not_required", buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "within_threshold" }).status === "not_required", "rb not required");
+  add("SWQ-RB3: Rebalance USDC source not selected → not_ready_for_quote (no locked/abstract quote)", buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 0, selectionState: "no_excess", usdcUnitPriceUsd: 1 } }).status === "not_ready_for_quote", "rb not ready");
+  add("SWQ-RB3b: Kamino-sourced Rebalance (requiresPriorWithdrawal) → not_ready_for_quote; NEVER quoted as in-wallet funds", (() => { const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected", usdcUnitPriceUsd: 1, requiresPriorWithdrawal: true } }); return r.status === "not_ready_for_quote" && (r as { reasons?: string[] }).reasons?.includes("usdc_source_requires_prior_withdrawal") === true; })(), "withdraw first");
   add("SWQ-RB4: Rebalance crypto_to_stables uses exact native-SOL lamports → SOL→USDC", (() => {
-    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
+    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
     return r.status === "ready" && r.legs[0].inputAmountRaw === "2000000000" && r.legs[0].inputAsset.mint === WSOL && r.legs[0].outputAsset.mint === USDC;
   })(), "rb c2s");
   add("SWQ-RB5: stables_to_crypto action context carries EXACT USDC mint + decimals + raw + wrapped-SOL destination + wallet_transferable", (() => {
-    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected", usdcUnitPriceUsd: 1 } });
+    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected", usdcUnitPriceUsd: 1 } });
     if (r.status !== "ready") return false;
     const l = r.legs[0];
     return l.inputAsset.mint === USDC && l.inputAsset.decimals === 6 && l.inputAmountRaw === "500000000" && l.outputAsset.mint === SWAP_WSOL.mint && l.outputAsset.decimals === 9 && l.sourceAvailability === "wallet_transferable" && l.suggestionId === "rebalance_to_plan";
@@ -315,26 +364,26 @@ export function runSwapQuoteFixtureChecks(): SwapFixtureCheck[] {
     const solPos = { id: "sol", type: "native", amount: "2100000000", symbol: "SOL", name: "Solana", detection: "direct_wallet_balance", source: "wallet", valueUsd: 315 } as unknown as WalletPosition;
     const src = deriveNativeSolRebalanceSource([solPos], 150, true, REBALANCE_NATIVE_SOL_RESERVE_POLICY, true, COMPARED_AT);
     if (src.sourceEligibilityState !== "eligible" || src.recognizedLamports !== 2_100_000_000 || src.technicallyAvailableLamports !== 2_000_000_000) return false;
-    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: src.technicallyAvailableLamports, sourceEligibilityState: src.sourceEligibilityState, solUnitPriceUsd: 150 } });
+    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: src.technicallyAvailableLamports, sourceEligibilityState: src.sourceEligibilityState, solUnitPriceUsd: 150 } });
     return r.status === "ready" && r.legs[0].inputAmountRaw === "2000000000" && r.legs[0].inputAmountRaw === String(src.technicallyAvailableLamports) && r.legs[0].inputAmountRaw !== String(src.recognizedLamports);
   })(), "reserve owned by assessment");
   add("SWQ-RB7: adapter does NOT recompute the reserve — it uses technicallyAvailableLamports verbatim (no second 0.1 SOL subtraction)", (() => {
-    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
+    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
     // If the adapter wrongly re-subtracted 0.1 SOL, the raw would be 1_900_000_000.
     return r.status === "ready" && r.legs[0].inputAmountRaw === "2000000000";
   })(), "no reserve recompute");
   add("SWQ-RB8: adapter never quotes MORE than the canonical source capacity (quoted raw === technicallyAvailableLamports, never above)", (() => {
     const avail = 1_234_567_890;
-    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: avail, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
+    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: avail, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
     return r.status === "ready" && BigInt(r.legs[0].inputAmountRaw) === BigInt(avail);
   })(), "no over-quote");
   add("SWQ-RB9: EXPLICIT native-SOL → Wrapped-SOL mapping — crypto_to_stables input mint is wSOL (symbol SOL), and NATIVE_SOL_QUOTE_ASSET is the wrapped mint", (() => {
-    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
+    const r = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "s", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
     return r.status === "ready" && r.legs[0].inputAsset.mint === SWAP_WSOL.mint && r.legs[0].inputAsset.symbol === "SOL" && r.legs[0].inputAsset.decimals === 9 && NATIVE_SOL_QUOTE_ASSET.mint === SWAP_WSOL.mint;
   })(), "native→wrapped mapping");
   add("SWQ-RB10: BOTH canonical directions produce a valid, immutable, quote-ready action context from transferable sources", (() => {
-    const s2c = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 400, selectionState: "selected", usdcUnitPriceUsd: 1 } });
-    const c2s = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: 3_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
+    const s2c = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "stables_to_crypto", usdcSource: { verifiedExcessValueUsd: 400, selectionState: "selected", usdcUnitPriceUsd: 1 } });
+    const c2s = buildRebalanceSwapAction({ actionId: "rb", suggestionId: "rebalance_to_plan", generatedAt: QUOTED_AT, requiredCorrectionUsd: 1_000_000, direction: "crypto_to_stables", nativeSolSource: { technicallyAvailableLamports: 3_000_000_000, sourceEligibilityState: "eligible", solUnitPriceUsd: 150 } });
     return s2c.status === "ready" && c2s.status === "ready" && s2c.legs[0].inputAsset.mint === USDC && s2c.legs[0].outputAsset.mint === WSOL && c2s.legs[0].inputAsset.mint === WSOL && c2s.legs[0].outputAsset.mint === USDC && s2c.legs[0].sourceAvailability === "wallet_transferable" && c2s.legs[0].sourceAvailability === "wallet_transferable";
   })(), "both directions ready");
 
@@ -554,10 +603,10 @@ export function runRailSwapActionFixtureChecks(): SwapFixtureCheck[] {
   const gen = QUOTED_AT;
 
   // Rebalance stables_to_crypto → ready USDC→SOL.
-  const rb = deriveRailSwapActions({ cards: [card("rebalance_to_plan", "rebalance")], generatedAt: gen, rebalance: { assessment: { direction: "stables_to_crypto" } as never, usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected" } as never, nativeSolSource: { technicallyAvailableLamports: null, sourceEligibilityState: "unavailable" } as never, usdcUnitPriceUsd: 1, solUnitPriceUsd: 150 } });
+  const rb = deriveRailSwapActions({ cards: [card("rebalance_to_plan", "rebalance")], generatedAt: gen, rebalance: { assessment: { direction: "stables_to_crypto", requiredCorrectionUsd: 1_000_000 } as never, usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected" } as never, nativeSolSource: { technicallyAvailableLamports: null, sourceEligibilityState: "unavailable" } as never, usdcUnitPriceUsd: 1, solUnitPriceUsd: 150 } });
   add("SWR-1: real-wallet Rebalance card → exact ready USDC→SOL SwapActionContext (via 23A adapter)", (() => { const a = rb["rebalance_to_plan"]; return a?.status === "ready" && a.legs[0].inputAsset.mint === USDC && a.legs[0].outputAsset.mint === WSOL && a.legs[0].inputAmountRaw === "500000000"; })(), "rb ready");
   // Rebalance crypto_to_stables → SOL→USDC using reserve-netted lamports.
-  const rb2 = deriveRailSwapActions({ cards: [card("rebalance_to_plan", "rebalance")], generatedAt: gen, rebalance: { assessment: { direction: "crypto_to_stables" } as never, usdcSource: { verifiedExcessValueUsd: 0, selectionState: "no_excess" } as never, nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible" } as never, usdcUnitPriceUsd: 1, solUnitPriceUsd: 150 } });
+  const rb2 = deriveRailSwapActions({ cards: [card("rebalance_to_plan", "rebalance")], generatedAt: gen, rebalance: { assessment: { direction: "crypto_to_stables", requiredCorrectionUsd: 1_000_000 } as never, usdcSource: { verifiedExcessValueUsd: 0, selectionState: "no_excess" } as never, nativeSolSource: { technicallyAvailableLamports: 2_000_000_000, sourceEligibilityState: "eligible" } as never, usdcUnitPriceUsd: 1, solUnitPriceUsd: 150 } });
   add("SWR-2: Rebalance crypto_to_stables → SOL→USDC using reserve-netted lamports (no UI reserve recompute)", (() => { const a = rb2["rebalance_to_plan"]; return a?.status === "ready" && a.legs[0].inputAsset.mint === WSOL && a.legs[0].outputAsset.mint === USDC && a.legs[0].inputAmountRaw === "2000000000"; })(), "rb c2s");
   // Trim → token→USDC.
   const trim = deriveRailSwapActions({ cards: [card("trim_long_tail_assets", "trim")], generatedAt: gen, trimHoldings: [{ holdingId: "h", mint: "Mint111111111111111111111111111111111111111", decimals: 6, rawBalance: "5000000", uiAmount: 5, recognizedValueUsd: 200, symbol: "BONK", reviewEligibilityState: "eligible", actionabilityState: "transferable", coreAssetState: "non_core" } as never] });
@@ -576,7 +625,7 @@ export function runRailSwapActionFixtureChecks(): SwapFixtureCheck[] {
   // Immutability: derivation does not mutate its inputs.
   const cardsIn = [card("rebalance_to_plan", "rebalance")];
   const before = JSON.stringify(cardsIn);
-  deriveRailSwapActions({ cards: cardsIn, generatedAt: gen, rebalance: { assessment: { direction: "stables_to_crypto" } as never, usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected" } as never, nativeSolSource: { technicallyAvailableLamports: null, sourceEligibilityState: "unavailable" } as never, usdcUnitPriceUsd: 1, solUnitPriceUsd: 150 } });
+  deriveRailSwapActions({ cards: cardsIn, generatedAt: gen, rebalance: { assessment: { direction: "stables_to_crypto", requiredCorrectionUsd: 1_000_000 } as never, usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected" } as never, nativeSolSource: { technicallyAvailableLamports: null, sourceEligibilityState: "unavailable" } as never, usdcUnitPriceUsd: 1, solUnitPriceUsd: 150 } });
   add("SWR-8: deriveRailSwapActions does NOT mutate cards/assessments (read-only)", JSON.stringify(cardsIn) === before, "no mutation");
 
   // Wiring guards (source scans).
@@ -612,7 +661,7 @@ export function runRailSwapActionFixtureChecks(): SwapFixtureCheck[] {
   })(), "disjoint");
   add("SWR-13: a card carrying the MAPPER's own type/category still derives a swap action (guards against matching engine names)", (() => {
     const real = { id: "x", type: CARD_TYPE.rebalance, category: CARD_CATEGORY.rebalance } as unknown as SuggestionCardState;
-    const out = deriveRailSwapActions({ cards: [real], generatedAt: gen, rebalance: { assessment: { direction: "stables_to_crypto" } as never, usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected" } as never, nativeSolSource: { technicallyAvailableLamports: null, sourceEligibilityState: "unavailable" } as never, usdcUnitPriceUsd: 1, solUnitPriceUsd: 150 } });
+    const out = deriveRailSwapActions({ cards: [real], generatedAt: gen, rebalance: { assessment: { direction: "stables_to_crypto", requiredCorrectionUsd: 1_000_000 } as never, usdcSource: { verifiedExcessValueUsd: 500, selectionState: "selected" } as never, nativeSolSource: { technicallyAvailableLamports: null, sourceEligibilityState: "unavailable" } as never, usdcUnitPriceUsd: 1, solUnitPriceUsd: 150 } });
     return out["x"]?.status === "ready";
   })(), "mapper vocabulary matches");
   add("SWR-11: Demo rails carry a DETERMINISTIC fetcher (offline) — never the live client", /swapQuoteFetcher: demoSwapQuoteFetcher/.test(readSrc("src/pages/DemoDashboardPage.tsx")) && /Never calls a provider or the WealthSmith service/.test(readSrc("src/suggestions/swapQuote/demoSwapQuote.ts")), "demo offline");

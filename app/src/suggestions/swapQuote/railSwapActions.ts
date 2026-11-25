@@ -43,6 +43,10 @@ export function deriveRailSwapActions(input: RailSwapActionInputs): Record<strin
         suggestionId: card.id,
         generatedAt: input.generatedAt,
         direction: r.assessment.direction,
+        // The size of the problem. The adapter swaps the smaller of this and what is
+        // available, which is the same rule `rebalanceSuggestion` uses for the figure on
+        // the card — so the confirm sheet and the suggestion cannot name different amounts.
+        requiredCorrectionUsd: r.assessment.requiredCorrectionUsd,
         usdcSource: { verifiedExcessValueUsd: r.usdcSource.verifiedExcessValueUsd, selectionState: r.usdcSource.selectionState, usdcUnitPriceUsd: r.usdcUnitPriceUsd, requiresPriorWithdrawal: r.usdcSource.requiresPriorWithdrawal },
         nativeSolSource: { technicallyAvailableLamports: r.nativeSolSource.technicallyAvailableLamports, sourceEligibilityState: r.nativeSolSource.sourceEligibilityState, solUnitPriceUsd: r.solUnitPriceUsd },
       });

@@ -68,6 +68,21 @@ export interface RebalanceSwapActionInput {
   suggestionId: string;
   generatedAt: string;
   direction: "stables_to_crypto" | "crypto_to_stables" | "within_threshold" | "unresolved";
+  /**
+   * How much the allocation is actually out by, in USD — `assessment.requiredCorrectionUsd`.
+   *
+   * THE AMOUNT TO SWAP IS THE SMALLER OF THIS AND WHAT IS AVAILABLE, which is exactly what
+   * `rebalanceSuggestion` computes for the figure on the card:
+   *
+   *     suggestedAmountUsd = Math.min(requiredCorrectionUsd, availableValueUsd)
+   *
+   * Without it this adapter swapped everything available. On a wallet holding 600 SOL where
+   * the correction was $30,628, the card read "Swap $30,628 of excess SOL" and the confirm
+   * sheet asked to approve 599.9 SOL — $89,985, nearly three times as much. The on-chain
+   * minimum check would have protected that faithfully, because a minimum guards the price of
+   * a swap and not its size.
+   */
+  requiredCorrectionUsd: number;
   /** stables_to_crypto: verified excess wallet USDC (USD) + a fresh USDC unit price for exact raw conversion. */
   usdcSource?: { verifiedExcessValueUsd: number; selectionState: string; usdcUnitPriceUsd: number | null; requiresPriorWithdrawal?: boolean };
   /** crypto_to_stables: exact native-SOL raw lamports available + a fresh SOL price for the USD estimate. */
@@ -87,9 +102,12 @@ export function buildRebalanceSwapAction(input: RebalanceSwapActionInput): SwapA
     // the normal direct-wallet path once the USDC arrives.
     if (s.requiresPriorWithdrawal === true) return { status: "not_ready_for_quote", reasons: ["usdc_source_requires_prior_withdrawal"] };
     if (s.usdcUnitPriceUsd == null) return { status: "not_ready_for_quote", reasons: ["usdc_price_unresolved"] };
-    const raw = usdToRaw(s.verifiedExcessValueUsd, s.usdcUnitPriceUsd, SWAP_USDC.decimals);
+    // The correction, or everything available if that is less — never more than either.
+    const amountUsd = Math.min(input.requiredCorrectionUsd, s.verifiedExcessValueUsd);
+    if (!(amountUsd > 0)) return { status: "not_ready_for_quote", reasons: ["usdc_amount_unresolved"] };
+    const raw = usdToRaw(amountUsd, s.usdcUnitPriceUsd, SWAP_USDC.decimals);
     if (raw == null || raw === "0") return { status: "not_ready_for_quote", reasons: ["usdc_amount_unresolved"] };
-    return { status: "ready", legs: [makeLeg({ actionId: input.actionId, suggestionId: input.suggestionId, category: "rebalance", legIndex: 0, totalLegs: 1, input: SWAP_USDC, output: SWAP_WSOL, inputAmountRaw: raw, inputAmountUsd: s.verifiedExcessValueUsd, generatedAt: input.generatedAt, legKey: "usdc_to_sol" })] };
+    return { status: "ready", legs: [makeLeg({ actionId: input.actionId, suggestionId: input.suggestionId, category: "rebalance", legIndex: 0, totalLegs: 1, input: SWAP_USDC, output: SWAP_WSOL, inputAmountRaw: raw, inputAmountUsd: amountUsd, generatedAt: input.generatedAt, legKey: "usdc_to_sol" })] };
   }
 
   // crypto_to_stables — exact native SOL lamports → USDC. The 0.1 SOL operating reserve is owned by the Rebalance
@@ -99,8 +117,25 @@ export function buildRebalanceSwapAction(input: RebalanceSwapActionInput): SwapA
   if (!s || s.sourceEligibilityState !== "eligible" || s.technicallyAvailableLamports == null || s.technicallyAvailableLamports <= 0) {
     return { status: "not_ready_for_quote", reasons: ["native_sol_source_not_eligible"] };
   }
-  const raw = BigInt(Math.floor(s.technicallyAvailableLamports)).toString();
-  const usd = s.solUnitPriceUsd != null ? (s.technicallyAvailableLamports / 1_000_000_000) * s.solUnitPriceUsd : null;
+  // WITHOUT A PRICE the correction cannot be expressed in lamports, so there is no way to size
+  // this to the recommendation. Refuse rather than fall back to "all of it": an unpriced swap
+  // of the whole position is the failure this guard exists to prevent.
+  if (s.solUnitPriceUsd == null || !(s.solUnitPriceUsd > 0)) {
+    return { status: "not_ready_for_quote", reasons: ["native_sol_price_unresolved"] };
+  }
+  const availableLamports = Math.floor(s.technicallyAvailableLamports);
+  const availableUsd = (availableLamports / 1_000_000_000) * s.solUnitPriceUsd;
+  // The correction, or everything available if that is less. The reserve is already out of
+  // `technicallyAvailableLamports`, so capping here can only ever reduce the amount further.
+  const amountUsd = Math.min(input.requiredCorrectionUsd, availableUsd);
+  if (!(amountUsd > 0)) return { status: "not_ready_for_quote", reasons: ["native_sol_amount_unresolved"] };
+  const lamports = Math.min(
+    availableLamports,
+    Math.floor((amountUsd / s.solUnitPriceUsd) * 1_000_000_000),
+  );
+  if (lamports <= 0) return { status: "not_ready_for_quote", reasons: ["native_sol_amount_unresolved"] };
+  const raw = BigInt(lamports).toString();
+  const usd = (lamports / 1_000_000_000) * s.solUnitPriceUsd;
   return { status: "ready", legs: [makeLeg({ actionId: input.actionId, suggestionId: input.suggestionId, category: "rebalance", legIndex: 0, totalLegs: 1, input: NATIVE_SOL_QUOTE_ASSET, output: SWAP_USDC, inputAmountRaw: raw, inputAmountUsd: usd, generatedAt: input.generatedAt, legKey: "sol_to_usdc" })] };
 }
 
