@@ -5435,6 +5435,39 @@ td.vetting-scores-table__date {
   display: none;
 }
 
+/* THE CONFIRM STEP SCROLLS. It is rendered as a DIRECT child of the modal,
+   because the review's own body is hidden behind it — and that body was the
+   only scroll container in here. So anything taller than the modal's
+   max-height was simply clipped, with no way to reach it: on the terms screen
+   that meant Cancel and Approve vanished, which is the one screen where the
+   buttons disappearing is unacceptable.
+
+   `min-height: 0` is the load-bearing half. A flex item's default minimum is
+   its content, so without it the section refuses to shrink below its natural
+   height, the modal's max-height has nothing to push against, and overflow-y
+   never engages. Same pair the review's own body already uses. */
+.review-modal > .swap-confirm {
+  min-height: 0;
+  overflow-y: auto;
+  /* Matches the body's gutter so the cards line up with the header above them
+     whether or not a scrollbar is present. */
+  padding-right: var(--spacing-inline-gap-sm);
+}
+
+/* The actions stay put while the terms scroll under them. On a screen where
+   someone is approving a transaction, the control that does it may not be
+   something they have to go looking for — and a reader who has scrolled to
+   read the minimum should not have to scroll back to act on it. */
+.review-modal > .swap-confirm > .review-modal__footer {
+  position: sticky;
+  bottom: 0;
+  /* The modal's own surface, so the terms do not show through as they pass
+     underneath, and a little extra bottom padding so the last card does not
+     touch the buttons at the end of the scroll. */
+  background: var(--color-surface-card);
+  padding-bottom: var(--spacing-inline-gap-sm);
+}
+
 /* The confirm step's heading, in the review's OWN header row: back control and
    title on one baseline, so both align with the close button opposite them and
    the title keeps `modal__title` sizing like every other modal heading. */
@@ -5464,6 +5497,24 @@ td.vetting-scores-table__date {
      rhythm; this element only owns its horizontal placement. */
   margin: 0 auto;
   border-radius: 50%;
+}
+
+/* The disc echoes outward once behind the glyph, then is gone. Drawn on a
+   pseudo-element so it costs no markup and cannot affect layout, and painted
+   in `currentColor` so it is whatever colour the mark itself is — one rule
+   that follows the kind rather than two that can drift apart.
+   (It carried no paint at all until now: geometry and an animation over
+   nothing, so the echo this comment described never actually rendered.) */
+.swap-confirm__alert::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* --- Something went wrong, and the reader did not choose it. Amber. --- */
+.swap-confirm__alert--warning {
   color: var(--color-feedback-warning-background-solid);
   background: var(--color-feedback-warning-background-tint);
   /* A single settle, not a loop. A pulsing alert on a screen about money nags
@@ -5477,16 +5528,57 @@ td.vetting-scores-table__date {
     var(--motion-feedback-warning-easing, cubic-bezier(0.2, 0, 0, 1)) both;
 }
 
-/* The disc echoes outward once behind the glyph, then is gone. Drawn on a
-   pseudo-element so it costs no markup and cannot affect layout. It outlasts
-   the icon's own settle, so the movement resolves rather than stopping dead. */
-.swap-confirm__alert::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
+/* Outlasts the icon's own settle, so the movement resolves rather than
+   stopping dead. */
+.swap-confirm__alert--warning::after {
   animation: swap-confirm-alert-ring calc(var(--motion-feedback-warning-duration, 180ms) * 7)
     var(--motion-feedback-warning-easing, cubic-bezier(0.2, 0, 0, 1)) both;
+}
+
+/* --- Nothing went wrong: a quote aged out, or a confirmation outran our
+   own deadline. Primary, not amber: neither is a failure. ---
+   Same geometry as the warning so the layout cannot shift between outcomes,
+   and the system's own entrance curve rather than its warning curve, because
+   this mark is announcing a screen, not a problem. */
+.swap-confirm__alert--clock {
+  color: var(--color-feedback-info-background-solid);
+  background: var(--color-feedback-info-background-tint);
+  animation: swap-confirm-clock-in calc(var(--motion-overlay-enter-duration, 240ms) * 3)
+    var(--motion-overlay-enter-easing, cubic-bezier(0, 0, 0.2, 1)) both;
+}
+
+.swap-confirm__alert--clock::after {
+  animation: swap-confirm-alert-ring calc(var(--motion-overlay-enter-duration, 240ms) * 6)
+    var(--motion-overlay-enter-easing, cubic-bezier(0, 0, 0.2, 1)) both;
+}
+
+/* --- The reader said no in their wallet. Danger, and not a euphemism. ---
+   The red is not claiming something broke — the copy above it says "Swap
+   Canceled" — it confirms a refusal, which is what every wallet uses this
+   colour for and the fastest way to see that a No landed. */
+.swap-confirm__alert--cross {
+  color: var(--color-feedback-danger-background-solid);
+  background: var(--color-feedback-danger-background-tint);
+  animation: swap-confirm-cross-in calc(var(--motion-feedback-error-duration, 180ms) * 3.5)
+    var(--motion-feedback-error-easing, cubic-bezier(0.2, 0, 0, 1)) both;
+}
+
+.swap-confirm__alert--cross::after {
+  animation: swap-confirm-alert-ring calc(var(--motion-feedback-error-duration, 180ms) * 7)
+    var(--motion-feedback-error-easing, cubic-bezier(0.2, 0, 0, 1)) both;
+}
+
+/* --- It happened, and it worked. Success. --- */
+.swap-confirm__alert--success {
+  color: var(--color-feedback-success-background-solid);
+  background: var(--color-feedback-success-background-tint);
+  animation: swap-confirm-success-in calc(var(--motion-feedback-success-duration, 180ms) * 3.5)
+    var(--motion-feedback-success-easing, cubic-bezier(0.2, 0, 0, 1)) both;
+}
+
+.swap-confirm__alert--success::after {
+  animation: swap-confirm-alert-ring calc(var(--motion-feedback-success-duration, 180ms) * 7)
+    var(--motion-feedback-success-easing, cubic-bezier(0.2, 0, 0, 1)) both;
 }
 
 @keyframes swap-confirm-alert-in {
@@ -5495,15 +5587,117 @@ td.vetting-scores-table__date {
   to   { opacity: 1; transform: scale(1); }
 }
 
+/* The clock winds into place and settles: the same fade and overshoot as the
+   warning mark, plus a short counter-rotation that resolves at zero, so the
+   face arrives upright having moved like a dial rather than appearing fully
+   formed. Deliberately small — a clock tumbling through a full turn reads as
+   a loading spinner, which is the one thing this state is not. */
+@keyframes swap-confirm-clock-in {
+  from { opacity: 0; transform: scale(0.72) rotate(-18deg); }
+  55%  { opacity: 1; transform: scale(1.06) rotate(3deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* The cross turns a quarter-turn into place. An X maps onto itself at 90
+   degrees, so the mark starts and ends identically and the rotation is only
+   ever visible as movement — it reads as the glyph clicking shut rather than
+   as a spinner, and it cannot leave the icon looking crooked if it is
+   interrupted mid-flight. */
+@keyframes swap-confirm-cross-in {
+  from { opacity: 0; transform: scale(0.72) rotate(-90deg); }
+  55%  { opacity: 1; transform: scale(1.06) rotate(6deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* A plainer arrival than the other three: straight in, one overshoot, done. The failure
+   marks earn a gesture because they have to catch an eye that was expecting something else;
+   this one lands on a reader who is already looking at it, and anything more elaborate would
+   be a celebration of a routine trade. It starts smaller, so the settle still registers. */
+@keyframes swap-confirm-success-in {
+  from { opacity: 0; transform: scale(0.6); }
+  55%  { opacity: 1; transform: scale(1.08); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* Soft, because it is now actually painted and sits under a tint that is
+   itself only 12–16% opaque: a half-opaque solid disc expanding past the
+   glyph would read as a flash, not an echo. */
 @keyframes swap-confirm-alert-ring {
-  from { opacity: 0.5; transform: scale(0.85); }
+  from { opacity: 0.28; transform: scale(0.85); }
   to   { opacity: 0; transform: scale(1.45); }
 }
 
-/* The icon still appears, it simply does not move. */
+/* The icon still appears, it simply does not move. Both kinds are named: the
+   animation now lives on the modifiers, and a bare `.swap-confirm__alert` rule
+   would be relying on source order to beat an equally specific selector. */
 @media (prefers-reduced-motion: reduce) {
-  .swap-confirm__alert { animation: none; }
+  .swap-confirm__alert--warning,
+  .swap-confirm__alert--clock,
+  .swap-confirm__alert--cross,
+  .swap-confirm__alert--success { animation: none; }
   .swap-confirm__alert::after { display: none; }
+}
+
+/* THE SETTLED SWAP. Centred, because there is one thing to read and no second
+   column to compare it against — every other state on this sheet is a table
+   because the reader is checking values off, and this one is not. */
+.swap-confirm__settled-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* The label belongs to the figure, so they sit closer to each other than the
+     group does to anything around it. The section's own gap handles the rest. */
+  gap: var(--spacing-stack-gap-xs);
+  text-align: center;
+}
+
+.swap-confirm__settled-label {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--typography-body-sm-font, 400 14px/20px Manrope);
+}
+
+/* The one number anybody came back for. */
+.swap-confirm__settled-amount {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm, 8px);
+  margin: 0;
+  color: var(--color-text-primary);
+  font: var(--typography-heading-xl-font, 700 24px/32px Manrope);
+  /* Digits line up with themselves across renders and between the two lines. */
+  font-variant-numeric: tabular-nums;
+}
+
+.swap-confirm__settled-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* What was given up. Context, not the headline, and typeset to say so. */
+.swap-confirm__settled-swapped {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--typography-body-sm-font, 400 14px/20px Manrope);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Shown in place of the figure when the chain read produced none. */
+.swap-confirm__settled-unknown {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font: var(--typography-body-sm-font, 400 14px/20px Manrope);
+}
+
+/* The footer's secondary slot as a link, matching the button it replaces. */
+.review-modal__tertiary-action--link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm, 8px);
+  text-decoration: none;
 }
 
 /* The walkthrough's outcome picker: one link per ending, the current one marked.

@@ -100,6 +100,12 @@ export interface UseSwapExecutionPlanState {
   plan: SwapExecutionPlan | null;
   /** Present once the wallet has submitted. Kept through a timeout — it is the user's only record. */
   signature: string | null;
+  /** Base units actually received, once the chain read produced one. Null until then, and null
+   *  whenever it could not be read — the success screen omits the figure rather than guess. */
+  deliveredRaw: string | null;
+  /** What the chain charged, for either landed outcome. The revert screen states it as fact. */
+  feeLamports: string | null;
+  feeUsd: number | null;
   failure: ExecutionFailureKey | null;
   busy: boolean;
   terminal: boolean;
@@ -122,6 +128,13 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
   // arriving during a NEW attempt would otherwise be accepted as that attempt's plan.
   const generationRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+
+  // The plan, readable from inside the confirmation effect without making it a dependency.
+  // That effect is keyed on the SIGNATURE on purpose — re-running it would restart the
+  // deadline and re-poll a transaction already being watched — so it reads the plan through a
+  // ref rather than closing over a value that was current when the watch began.
+  const planRef = useRef(state.plan);
+  planRef.current = state.plan;
 
   // Identity of the thing being approved. A change to any of it invalidates a plan in flight:
   // the terms on screen would no longer describe what the user asked for.
@@ -252,6 +265,13 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
       if (stopped) return;
       const result = await confirmationFetcher(watchedSignature, {
         ...opts.confirmationOptions,
+        // Where to read what arrived. The plan's own output mint, never a symbol or a guess,
+        // and the taker we submitted for — so the figure the success screen shows is the
+        // delta on the exact account and mint these terms promised.
+        delivery:
+          takerPublicKey != null && planRef.current != null
+            ? { owner: takerPublicKey, mint: planRef.current.terms.outputMint }
+            : null,
         signal: controller.signal,
       });
       if (stopped) return;
@@ -337,6 +357,9 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
     plan: state.plan,
     signature: state.signature,
     failure: state.failure,
+    deliveredRaw: state.deliveredRaw,
+    feeLamports: state.feeLamports,
+    feeUsd: state.feeUsd,
     busy: isExecutionBusy(state.phase),
     terminal: isExecutionTerminal(state.phase),
     prepare,

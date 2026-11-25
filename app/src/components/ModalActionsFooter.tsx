@@ -32,19 +32,45 @@ export type ModalPrimaryAction =
       ariaLabel?: string;
     };
 
+/**
+ * The secondary slot is USUALLY a dismissal, and occasionally a read-only link — a finished
+ * swap offers "View on Solscan" there, beside a Done that is the primary action. Same
+ * no-transaction guarantee as the primary external link: it opens a block explorer, nothing
+ * more. Expressed as a variant rather than another boolean for the same reason the primary is.
+ */
+export type ModalSecondaryAction =
+  | { kind: "button"; label: string; onClick: () => void }
+  | { kind: "external-link"; label: string; href: string; ariaLabel: string; newTab?: boolean };
+
 interface Props {
-  /** Secondary (dismissive) action label. */
+  /** Secondary (dismissive) action label. Ignored when `secondary` is given. */
   secondaryLabel?: string;
-  onSecondary: () => void;
+  onSecondary?: () => void;
+  /** The secondary slot as an explicit variant, for the cases a plain dismissal does not fit. */
+  secondary?: ModalSecondaryAction;
   primary: ModalPrimaryAction;
 }
 
-export default function ModalActionsFooter({ secondaryLabel = "Cancel", onSecondary, primary }: Props) {
+export default function ModalActionsFooter({ secondaryLabel = "Cancel", onSecondary, secondary, primary }: Props) {
+  const secondaryAction: ModalSecondaryAction =
+    secondary ?? { kind: "button", label: secondaryLabel, onClick: onSecondary ?? (() => {}) };
   return (
     <div className="review-modal__footer review-modal__footer--actions">
-      <button type="button" className="review-modal__tertiary-action" onClick={onSecondary}>
-        {secondaryLabel}
-      </button>
+      {secondaryAction.kind === "external-link" ? (
+        <a
+          className="review-modal__tertiary-action review-modal__tertiary-action--link"
+          href={secondaryAction.href}
+          {...(secondaryAction.newTab ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+          aria-label={secondaryAction.ariaLabel}
+        >
+          <span>{secondaryAction.label}</span>
+          <ButtonIcon src={externalLinkUrl} />
+        </a>
+      ) : (
+        <button type="button" className="review-modal__tertiary-action" onClick={secondaryAction.onClick}>
+          {secondaryAction.label}
+        </button>
+      )}
       {primary.kind === "external-link" ? (
         <a
           className="review-modal__primary-action"

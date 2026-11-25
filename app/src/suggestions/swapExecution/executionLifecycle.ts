@@ -53,6 +53,25 @@ export interface ExecutionState {
   failure: ExecutionFailureKey | null;
   /** Detail for analytics and logs. Never rendered. */
   failureDetail: string | null;
+  /**
+   * Base units actually delivered, read from the landed transaction. Only ever set alongside
+   * `confirmed`, and null whenever the chain read could not produce it.
+   *
+   * It is kept on the machine rather than fetched by the view because it is part of the
+   * OUTCOME: "the swap confirmed" and "it delivered this much" are one fact learned in one
+   * read, and splitting them would let the success screen exist in a state where the first is
+   * true and the second is still loading.
+   */
+  deliveredRaw: string | null;
+  /**
+   * What the chain charged, in lamports, and in USD. Set by either landed outcome.
+   *
+   * The reverted screen states this as a charge that already happened, so it may only ever
+   * be the fee the transaction actually paid — never the conservative estimate the quote
+   * disclosed beforehand, which was a different claim about a different moment.
+   */
+  feeLamports: string | null;
+  feeUsd: number | null;
 }
 
 export const initialExecutionState: ExecutionState = {
@@ -61,6 +80,9 @@ export const initialExecutionState: ExecutionState = {
   signature: null,
   failure: null,
   failureDetail: null,
+  deliveredRaw: null,
+  feeLamports: null,
+  feeUsd: null,
 };
 
 export type ExecutionEvent =
@@ -73,8 +95,8 @@ export type ExecutionEvent =
   | { type: "signed" }
   | { type: "declined" }
   | { type: "submitted"; signature: string }
-  | { type: "submit_failed"; detail?: string }
-  | { type: "confirmed" }
+  | { type: "submit_failed"; detail?: string; feeLamports?: string | null; feeUsd?: number | null }
+  | { type: "confirmed"; deliveredRaw?: string | null; feeLamports?: string | null; feeUsd?: number | null }
   | { type: "confirm_timeout" }
   | { type: "expire" }
   | { type: "cancel" };
@@ -91,7 +113,20 @@ const fail = (
   state: ExecutionState,
   failure: ExecutionFailureKey,
   detail: string | null = null,
-): ExecutionState => ({ ...state, phase: "failed", failure, failureDetail: detail });
+  /**
+   * What the chain charged on the way to this failure. Only a REVERT has one: every other
+   * failure stopped before a transaction existed, and carrying a fee into those would let a
+   * screen report a charge that never happened.
+   */
+  fee: { feeLamports?: string | null; feeUsd?: number | null } = {},
+): ExecutionState => ({
+  ...state,
+  phase: "failed",
+  failure,
+  failureDetail: detail,
+  feeLamports: fee.feeLamports ?? null,
+  feeUsd: fee.feeUsd ?? null,
+});
 
 /**
  * The transition function. Unknown transitions return the state unchanged rather than throwing —
@@ -195,16 +230,28 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
       //
       // Dispatching `signed` first to reach `submitting` would be the alternative, and it would
       // be a lie: it records a signature that does not exist.
-      if (event.type === "submit_failed") return fail(state, "submit_failed", event.detail ?? null);
+      if (event.type === "submit_failed") {
+        return fail(state, "submit_failed", event.detail ?? null, event);
+      }
       return state;
 
     case "submitting":
       if (event.type === "submitted") return { ...state, phase: "confirming", signature: event.signature };
-      if (event.type === "submit_failed") return fail(state, "submit_failed", event.detail ?? null);
+      if (event.type === "submit_failed") {
+        return fail(state, "submit_failed", event.detail ?? null, event);
+      }
       return state;
 
     case "confirming":
-      if (event.type === "confirmed") return { ...state, phase: "confirmed" };
+      if (event.type === "confirmed") {
+        return {
+          ...state,
+          phase: "confirmed",
+          deliveredRaw: event.deliveredRaw ?? null,
+          feeLamports: event.feeLamports ?? null,
+          feeUsd: event.feeUsd ?? null,
+        };
+      }
       // A timeout means we stopped watching, NOT that the transaction failed. The signature is
       // kept so the user can look it up; claiming failure for something still in flight would be
       // the worst lie this flow could tell.
@@ -217,7 +264,9 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
       //
       // Distinct from `confirm_timeout` precisely because we DO know. The signature survives
       // (`fail` spreads the state), so the sheet can show what happened and link to it.
-      if (event.type === "submit_failed") return fail(state, "submit_failed", event.detail ?? null);
+      if (event.type === "submit_failed") {
+        return fail(state, "submit_failed", event.detail ?? null, event);
+      }
       return state;
 
     case "confirmed":

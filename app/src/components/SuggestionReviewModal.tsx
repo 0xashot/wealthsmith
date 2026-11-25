@@ -32,7 +32,7 @@ import type { ContributionPlanReviewDetails } from "../suggestions/contributionP
 import type { StableYieldReviewPresentation } from "../suggestions/yieldStrategyPlanPresentationTypes";
 import { cardProtocolName } from "../suggestions/yieldStrategyPlanPresentation";
 import type { SwapActionContext, SwapActionReadiness, SwapQuoteComparisonAssessment } from "../suggestions/swapQuote/swapQuoteContracts";
-import type { ExecutionFailureKey } from "../suggestions/swapExecution/executionLifecycle";
+import type { DemoExecutionOutcome } from "../suggestions/swapExecution/demoOutcomes";
 import type { SwapQuoteFetcher } from "../suggestions/swapQuote/swapQuoteClient";
 import type { SwapHandoff } from "../suggestions/swapQuote/providerSwapLinks";
 import SwapQuoteComparisonSection from "./swapQuote/SwapQuoteComparisonSection";
@@ -92,7 +92,7 @@ interface Props {
    */
   demo?: boolean;
   /** Demo Mode only — the walkthrough's chosen outcome. See SwapExecutionSection. */
-  demoFailure?: ExecutionFailureKey | null;
+  demoOutcome?: DemoExecutionOutcome | null;
 }
 
 /** Whole-dollar USD, e.g. "$8,176". No fake precision. */
@@ -135,7 +135,7 @@ function formatCalcValue(v: number, unit?: string): string {
   return `${num1(v)}${unit ? ` ${unit}` : ""}`;
 }
 
-export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onDismiss, onClose, onSwapQuoteGaveUp, demo, demoFailure }: Props) {
+export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onDismiss, onClose, onSwapQuoteGaveUp, demo, demoOutcome }: Props) {
   useScrollLock();
   // Mobile: token amounts in the modal tables are shown whole (no decimals).
   const isMobile = useIsMobileViewport();
@@ -188,7 +188,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
   const executionSection = executionCtx ? (
     <SwapExecutionSection
       demo={demo}
-      demoFailure={demoFailure}
+      demoOutcome={demoOutcome}
       action={executionCtx.action}
       assessment={executionCtx.assessment}
       nowMs={swapQuoteNowMs}

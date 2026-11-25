@@ -1012,7 +1012,7 @@ Checking:   ⟳                       (spinner only; label announced, not shown)
 Ready:      Approve
 Approved:   ⟳ Waiting for wallet
 Sent:       ⟳ Confirming
-Expired:    These terms expired. Nothing was sent.
+Expired:    Your swap quote expired. No transaction was submitted.
 ```
 
 **The review's footer button says `Swap`.** It opens the confirm step rather
@@ -1064,18 +1064,212 @@ decision, a dead-end card offering yet another attempt is an obstacle rather
 than a remedy. The review closes itself and a toast says what happened:
 
 ```text
-These terms expired
-Nothing was sent. Open the suggestion again for current terms.
+Swap Quote Expired
 ```
 
-It still accounts for the money — the first thing anyone wants to know when a
-window closes by itself is whether something happened — and it does not say
-“Refresh”, because there is no longer a button to press.
+One line, no helper. A toast is a notification, not a screen: it names which
+thing just happened and gets out of the way. The explanation — nothing
+submitted, open the suggestion again — belongs on the card, which is one click
+away and states it in full.
+
+It carries the card's name for the ending, because it is the same ending on a
+different surface and a reader who meets both should not have to work out
+whether they are two events. Shorter by one word: the card addresses someone
+mid-decision and names the swap as theirs, while a toast slides past the corner
+of a screen they may already have left, where "Your" is a syllable in the way.
+
+**Toasts dismiss themselves after six seconds**, in `ToastHost` rather than in
+each caller. The timer was the caller's job until a caller forgot and left one
+on screen indefinitely; "every caller must remember" is not a guarantee. It still accounts for the money — the first thing
+anyone wants to know when a window closes by itself is whether something
+happened — and it does not offer a new quote as a button, because there is no
+longer one to press.
 
 This applies ONLY to that one ending. Every other expiry (a backgrounded tab,
 no way to re-quote) leaves the expired card in place with its Refresh button,
 so a reader who was not watching comes back to an explanation rather than to a
 vanished modal and a toast that dismissed itself while they were away.
+
+**The expired card names the quote, not our bookkeeping.**
+
+```text
+Your Swap Quote Expired
+No transaction was submitted. Get a new quote to review the latest price and fees.
+[ Get New Quote ]
+```
+
+"Terms" is our word. What expired, from the reader's side, is the quote they
+were looking at — so the heading says so, the description leads with the money,
+and the button names the thing the press produces rather than the mechanic that
+produces it. "Refresh" told them what the app does; "Get New Quote" tells them
+what they get, and matches the heading's noun so the button is visibly the
+answer to the sentence above it. The second half of the description says why a
+new quote is worth reading rather than clicking through: the price and fees may
+have moved while they were deciding.
+
+**Two kinds of mark, and most endings get neither.** A failure state may carry
+one 72px disc above its description. Which one — and whether it appears at all
+— is decided by `failureMarkFor`, not by the component:
+
+| Ending | Mark | Why |
+| --- | --- | --- |
+| `plan_unavailable`, `verification_failed`, `submit_failed` | amber alert | Something went wrong and the reader did not choose it. |
+| `expired` | primary-coloured clock | Nothing went wrong. A quote aged out and a new one fixes it, so the mark matches the action offered, not the vocabulary of failure. |
+| `confirm_timeout` | primary-coloured clock |  Nothing broke: our deadline ran out, not the transaction. Same mark as an expiry, because both are about time rather than failure. |
+| `declined` | danger-coloured cross | The reader's own No, confirmed the way every wallet confirms a rejected request. The red does not claim a problem — the copy says "Swap Canceled" — it makes the refusal unmistakable at a glance. |
+| `cancelled` | none | Never rests on screen — cancelling leaves the step rather than resting in it. |
+
+An amber alert over an expiry would tell the reader something broke, which is
+untrue; no mark at all leaves an unexplained change of screen mid-decision with
+nothing to anchor it. Three kinds, three colours, none standing in for another:
+collapse any two and the mark stops telling the reader which kind of ending
+they are looking at.
+
+**A finished swap answers a different question, so it is a different screen.**
+
+```text
+            ( ✓ )
+
+        You received
+    ⬤ 30,606.06 USDC
+  Swapped: 204.1833 SOL
+
+[ View on Solscan ]  [ Done ]
+```
+
+Before the swap the reader is deciding and needs every term, which is why that
+screen is a table. Afterwards they want one number and a way out. Leaving the
+terms table up after confirmation meant a completed swap was still displaying a
+tilde’d expectation and a “Min received” floor — promises, shown as though they
+were the outcome.
+
+**The figure is what the chain delivered, never the quote.** It is read from the
+landed transaction’s own token balances, server-side, and travels with the
+confirmation itself so the screen can never say a swap completed while the
+amount is still loading. It is never replaced by the estimate: that number was a
+prediction made before the swap, and it is not evidence of what the swap did.
+
+When that read produces nothing — no RPC, a pruned transaction, an output that
+is not an SPL balance — the amount is omitted and the sentence takes its place:
+
+```text
+            ( ✓ )
+
+Your swap succeeded. We couldn’t load the exact USDC amount received.
+View the transaction on Solscan for details.
+        Swapped: 204.1833 SOL
+
+[ View on Solscan ]  [ Done ]
+```
+
+It leads with the OUTCOME, so a reader meeting a screen without its number is
+not left wondering whether the missing figure means a missing swap. It names the
+token we could not count rather than saying “the exact amount”, and points at
+the one place that does have it — which is also the button below. The swapped
+line stays: it comes from the terms, which we have either way.
+
+**Rounded for reading, not for brevity.** Two decimals from a thousand up, four
+below it, and never to zero — a balance that would round away keeps enough
+decimals to show four significant digits. Rounding is a reading aid; it may not
+change what the number says.
+
+**Done, not Close.** Nothing is being closed unfinished. Solscan sits beside it
+as the secondary action rather than as a link in the body, because after the
+fact it is one of the two things a reader might actually want to do.
+
+**Try Again is offered on exactly one ending.** The wallet or the network
+refused to broadcast: nothing reached the chain, nothing was charged, and the
+terms themselves were fine, so a second attempt is the remedy rather than a
+workaround.
+
+```text
+Your Swap Wasn’t Sent
+No transaction was submitted. Your funds haven’t moved. Please try again.
+[ Cancel ]  [ Try Again ]
+```
+
+It re-quotes rather than resending — terms that failed to send are older than
+the ones the reader would be agreeing to now.
+
+**The same key with a signature is a different event**, and it keeps the retry
+with a warning attached rather than losing it:
+
+```text
+Your Swap Failed
+Your tokens weren’t swapped. A network fee of 0.000075 SOL (≈$0.01) was charged.
+You can review a new quote and try again. Another attempt may incur a network fee.
+[ Cancel ]  [ Try Again ]
+```
+
+That transaction reached the chain, ran, failed and took a fee, so a retry can
+cost money again. Removing the button would not protect anyone — somebody whose
+swap reverted still wants the swap, and would go and retry it somewhere with no
+warning at all. The answer is disclosure: the second paragraph says what another
+attempt may cost, and the person decides. It is a separate paragraph because a
+cost warning may not be buried at the end of a line about tokens.
+
+**The fee is the one the chain took.** Read from the landed transaction, priced
+from the same public source the terms used, and never the conservative constant
+the quote disclosed beforehand — “was charged” is a statement about something
+that already happened, and that constant described a different moment. When the
+read produces nothing the sentence keeps the fact and drops the figure: “A
+network fee was charged.” A reader who checks Solscan sees the real one either
+way.
+
+Before this, the description asked the reader to try again while the footer
+offered only Cancel and another venue — the same class of untruth as copy
+naming a Refresh button that is not on screen.
+
+**When we do not know the outcome, the screen offers nothing that could start a
+second swap.**
+
+```text
+            ( 🕐 )
+
+Awaiting Confirmation
+Confirmation is taking longer than expected. Your swap may still complete.
+Check its status before starting another swap.
+
+View on Solscan                                            [ Close ]
+```
+
+WE stopped watching; the transaction did not stop. "Taking longer than
+expected" names whose deadline ran out — ours — and leaves the swap's own
+status open. It may never say failed, lost or gone.
+
+The real risk here is not confusion, it is a SECOND swap. Someone who reads
+"we don't know" and starts again can end up executing both, so there is no
+hand-off on this screen. A revert can be retried with a cost warning because we
+know the first attempt is dead; here we know nothing yet, and could not even
+tell them what another attempt might cost. The last sentence says to check
+first, and the only outward link is the explorer, which is how they check.
+
+**A decline is the reader's decision, so the screen stops asking.**
+
+```text
+Swap Canceled
+The approval request was declined in your wallet. No transaction was
+submitted, and your funds haven’t moved.
+[ Close ]
+```
+
+"Not approved" was a verdict in the passive voice: it named the state of the
+request rather than what the person did. The description says where the
+decision was made, because the wallet and this screen are two surfaces, and
+accounts for the money twice — nothing submitted, nothing moved — which are
+separate reassurances, since a transaction can be submitted and still fail.
+
+No provider hand-off here. The hand-off is an apology with a door attached and
+belongs on the endings **we** caused; a reader who just pressed Reject is not
+blocked, and "Swap on Jupiter" under their own decision asks the same question
+again in a venue where none of this screen's checks apply.
+
+The one remaining button says **Close**, not Cancel. "Cancel" is correct beside
+a primary action, where it means "not that one". Standing alone, with nothing
+left to decide, it would be asking the reader to cancel their own cancellation. Both marks share their geometry so the layout does not
+shift between outcomes, settle once rather than looping — a pulsing mark on a
+money screen nags rather than informs — and are `aria-hidden`, because the
+sentence beside them already says what happened.
 
 **No countdown.** The quote renews itself while the sheet is open, so a clock
 would be reporting our bookkeeping rather than anything the reader must act on.
@@ -1173,11 +1367,14 @@ suggest a cost, a penalty, or a lost opportunity for declining.
 ### Outcomes
 
 ```text
-Approved:        Swap complete
-Declined:        Not approved. You declined in your wallet. Nothing was sent.
-Not sent:        The swap wasn’t sent. Your funds stayed in your wallet.
-Still pending:   Still confirming. We stopped waiting, but the swap may still
-                 complete. Check your wallet.
+Approved:        Swap Completed
+Declined:        Swap Canceled. The approval request was declined in your wallet.
+Not sent:        Your Swap Wasn’t Sent. No transaction was submitted. Your
+                 funds haven’t moved. Please try again.
+Reverted:        Your Swap Failed. Your tokens weren’t swapped. A network fee
+                 of [amount] SOL (≈$[value]) was charged.
+Still pending:   Awaiting Confirmation. Confirmation is taking longer than
+                 expected. Your swap may still complete.
 ```
 
 Hard Rule:
@@ -1502,7 +1699,7 @@ which describes what the user does in their own wallet. See Swap Confirmation
 Copy.
 
 “Rebalance complete”, “Trade submitted” and “Funds moved” also stay forbidden.
-“Swap complete” is permitted ONLY after on-chain confirmation of a transaction
+“Swap Completed” is permitted ONLY after on-chain confirmation of a transaction
 the user approved, and only with the amount actually received.
 
 Use safer alternatives:

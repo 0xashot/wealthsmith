@@ -18,7 +18,8 @@ import {
   SWAP_CONFIRM_EXPIRED_DESC,
   SWAP_CONFIRM_EXPIRED_TITLE,
   SWAP_CONFIRM_SUBMITTING,
-  SWAP_CONFIRM_REVERTED_DESC,
+  swapConfirmRevertedDesc,
+  SWAP_CONFIRM_REVERTED_RETRY_NOTE,
   SWAP_CONFIRM_REVERTED_TITLE,
   SWAP_CONFIRM_SUBMIT_FAILED_DESC,
   SWAP_CONFIRM_SUBMIT_FAILED_TITLE,
@@ -216,7 +217,12 @@ export function failureCopy(
    * being rendered and must stay that way.
    */
   reachedChain = false,
-): { title: string; desc: string } | null {
+  /**
+   * What the chain charged, already formatted. Only a revert uses it, and only when the
+   * landed transaction could be read — see `swapConfirmRevertedDesc`.
+   */
+  fee: { sol: string; usd: string | null } | null = null,
+): { title: string; desc: string; note?: string } | null {
   switch (failure) {
     case "declined":
       return { title: SWAP_CONFIRM_DECLINED_TITLE, desc: SWAP_CONFIRM_DECLINED_DESC };
@@ -228,7 +234,14 @@ export function failureCopy(
       return { title: SWAP_CONFIRM_VERIFICATION_FAILED_TITLE, desc: SWAP_CONFIRM_VERIFICATION_FAILED_DESC };
     case "submit_failed":
       return reachedChain
-        ? { title: SWAP_CONFIRM_REVERTED_TITLE, desc: SWAP_CONFIRM_REVERTED_DESC }
+        ? {
+            title: SWAP_CONFIRM_REVERTED_TITLE,
+            desc: swapConfirmRevertedDesc(fee),
+            // A separate paragraph, not a third sentence: what happened and what to do next
+            // are different things to read, and the second one carries a cost warning that
+            // must not be buried at the end of a line about tokens.
+            note: SWAP_CONFIRM_REVERTED_RETRY_NOTE,
+          }
         : { title: SWAP_CONFIRM_SUBMIT_FAILED_TITLE, desc: SWAP_CONFIRM_SUBMIT_FAILED_DESC };
     case "confirm_timeout":
       return { title: SWAP_CONFIRM_TIMEOUT_TITLE, desc: SWAP_CONFIRM_TIMEOUT_DESC };
@@ -276,31 +289,165 @@ export function showsExplorerLink(phase: ExecutionPhase, signature: string | nul
 }
 
 /**
- * Whether a failure warrants the warning icon.
+ * Which mark, if any, belongs above a failure's description — and what KIND of mark it is.
  *
- * NOT every ending that is not success. Three of them are not problems, and the sheet's own
- * copy already says so — putting an alert above them would contradict it:
+ * NOT every ending gets one, and the ones that do must not share an icon. This returns a kind
+ * rather than a boolean because the colour carries meaning the glyph alone cannot:
  *
- *   `declined`        the user said no. "A normal outcome, not an error."
- *   `expired`         nothing went wrong; a quote aged out, and Refresh fixes it.
- *   `confirm_timeout` we stopped watching. The copy insists this must NOT read as failure,
- *                     because the transaction may still land.
+ *   "warning"   amber alert. Something went wrong and the user did not choose it — we could
+ *               not prepare a swap, we refused terms we could not verify, or it failed to
+ *               send. The reader needs to know their intent did not happen.
+ *   "clock"     primary clock. Two endings, and neither is a failure. A quote aged out,
+ *               which is the system working as designed and a new quote fixes. Or a
+ *               confirmation outran OUR deadline while the transaction carried on — which
+ *               must never read as failure, because it may still land. Amber on either would
+ *               say something broke; a clock says something is about time, true of both.
+ *   "cross"     danger cross. The user rejected the request in their wallet. The red is doing
+ *               a different job from the amber one: it does not say "a problem occurred", it
+ *               confirms a refusal, which is the convention every wallet uses for a rejected
+ *               request and the fastest way for a reader to see their No landed. The COPY
+ *               carries the tone — "Swap Canceled", not an error — and the mark only has to
+ *               be unmistakable at a glance.
+ *   null        `cancelled` alone, which never reaches a rendered state.
  *
- * What is left is the set where something actually went wrong and the user did not choose it:
- * we could not prepare a swap, we refused terms we could not verify, or it failed to send. An
- * icon that appears for everything stops meaning anything.
+ * An icon that appears for everything, in one colour, stops meaning anything.
  */
-export function showsFailureAlert(failure: ExecutionFailureKey | null): boolean {
+/**
+ * Whether a failure should offer a retry.
+ *
+ * BOTH halves of `submit_failed` qualify, and they qualify for different reasons.
+ *
+ * A send that never left cost nothing and the terms were fine, so a second attempt is simply
+ * the remedy. A REVERT is the harder case: the transaction reached the chain, ran, failed and
+ * took a fee, so a retry can cost money again for a swap that may fail the same way.
+ *
+ * The answer is disclosure, not withholding. Someone whose swap reverted still wants the swap;
+ * removing the button would not protect them, it would only send them to find the same retry
+ * somewhere with no warning attached. So the button stays and the copy says what it may cost
+ * — see SWAP_CONFIRM_REVERTED_RETRY_NOTE — which is the same trade this product makes
+ * everywhere else: state the cost and let the person decide.
+ *
+ * Every other ending either has a better remedy (a new quote, the provider's own page) or
+ * nothing to retry at all.
+ *
+ * The retry RE-QUOTES rather than resending: terms that failed are older than the ones the
+ * user would be agreeing to now, which is also why the note says "review a new quote".
+ */
+export function offersRetry(failure: ExecutionFailureKey | null, _reachedChain: boolean): boolean {
+  return failure === "submit_failed";
+}
+
+/**
+ * Whether a failure should offer the provider's own swap page.
+ *
+ * The handoff is an apology with a door attached: we could not do this for you, so here is
+ * where you can do it yourself. That is the right offer when WE are the reason the swap did
+ * not happen — an outage, a refused verification, a failed send, a quote we could not renew.
+ *
+ * It is the wrong offer in two cases. When the USER is the reason — someone who has just
+ * pressed Reject in their wallet is not blocked and does not need a door; putting "Swap on
+ * Jupiter" under their own decision reads as a second attempt at the same ask, in a venue
+ * where none of the checks on this screen apply. And when WE DO NOT KNOW the outcome: a
+ * confirmation that outran our deadline may still land, and a second swap started beside it
+ * can execute twice. Both get one button, and that button closes the screen.
+ */
+export function offersProviderHandoff(failure: ExecutionFailureKey | null): boolean {
+  switch (failure) {
+    case "declined":
+    case "cancelled":
+      return false;
+    case "plan_unavailable":
+    case "verification_failed":
+    case "submit_failed":
+    case "expired":
+      return true;
+    // NOT a timeout. There the hand-off is not an apology with a door attached, it is a
+    // second swap offered while the first may still be in flight — and if the original lands
+    // a minute later the user has executed both. Unlike a revert we cannot even warn them
+    // what it costs, because we do not yet know whether the first one cost anything. The
+    // screen says to check the status first, and offers nothing that would start another.
+    case "confirm_timeout":
+      return false;
+    case null:
+      return false;
+  }
+}
+
+/**
+ * Named after the MARK, not the ending, because endings share marks: an expired quote and a
+ * confirmation we stopped watching are different events that want the same clock.
+ */
+export type FailureMarkKind = "warning" | "clock" | "cross";
+
+export function failureMarkFor(failure: ExecutionFailureKey | null): FailureMarkKind | null {
   switch (failure) {
     case "plan_unavailable":
     case "verification_failed":
     case "submit_failed":
-      return true;
-    case "declined":
+      return "warning";
     case "expired":
     case "confirm_timeout":
+      return "clock";
+    case "declined":
+      return "cross";
     case "cancelled":
     case null:
-      return false;
+      return null;
   }
+}
+
+/**
+ * Base units → a decimal token string. No float anywhere on the path.
+ *
+ * The same arithmetic as the server's `rawToTokens`, repeated here rather than imported
+ * because that module is server-only and importing it into a component would pull the
+ * execution adapter into the browser bundle.
+ */
+export function rawToTokenString(raw: string, decimals: number): string | null {
+  if (!/^[0-9]+$/.test(raw)) return null;
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 18) return null;
+  if (decimals === 0) return raw;
+  const padded = raw.padStart(decimals + 1, "0");
+  const whole = padded.slice(0, padded.length - decimals);
+  const frac = padded.slice(padded.length - decimals).replace(/0+$/, "");
+  return frac.length > 0 ? `${whole}.${frac}` : whole;
+}
+
+/**
+ * How many decimals a FIGURE gets when it is the headline of a finished swap.
+ *
+ * The terms table prints amounts in full, because before a swap every digit is part of what
+ * is being agreed to. Afterwards the job changes: the reader wants to recognise a number, not
+ * audit it, and `30606.06075 USDC` is harder to read at a glance than `30,606.06`.
+ *
+ * So: two decimals from a thousand up, four below it. That is not a stylistic preference, it
+ * is where the digits stop carrying information — four decimals of a thousand-unit balance is
+ * a millionth of a percent, and two decimals of a fractional token is nothing at all.
+ *
+ * NEVER TO ZERO. A small balance that rounds away would state that nothing arrived, so a
+ * figure that would render as 0 keeps enough decimals to show four significant digits
+ * instead. Rounding is a reading aid; it may not change what the number says.
+ */
+export function displayDecimalsFor(value: number): number {
+  if (!Number.isFinite(value)) return 2;
+  const magnitude = Math.abs(value);
+  if (magnitude >= 1000) return 2;
+  if (magnitude >= 0.0001 || magnitude === 0) return 4;
+  // Four significant digits for anything smaller, capped so the string stays readable.
+  return Math.min(12, Math.ceil(-Math.log10(magnitude)) + 3);
+}
+
+/**
+ * The headline figure for a completed swap: grouped, rounded for reading, never a bare float
+ * artefact. Returns null for anything it cannot parse, so the caller omits rather than prints
+ * a dash where an amount should be.
+ */
+export function formatSettledAmount(tokens: string): string | null {
+  const value = Number(tokens);
+  if (!Number.isFinite(value)) return null;
+  const decimals = displayDecimalsFor(value);
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: Math.min(2, decimals),
+    maximumFractionDigits: decimals,
+  });
 }

@@ -29,6 +29,9 @@ import { nodeEnvReader, detectLeakedSwapEnv, SWAP_PROVIDER_ENDPOINTS, type EnvRe
 /** Default port. Distinct from the quote service's 8787 so both can run side by side in dev. */
 export const DEFAULT_EXECUTION_PORT = 8788;
 
+/** Network fees are paid in SOL. Wrapped SOL is how the price source names it. */
+const SOL_MINT_FOR_FEES = "So11111111111111111111111111111111111111112";
+
 export interface ExecutionServerOptions {
   port?: number;
   env?: EnvReader;
@@ -77,7 +80,22 @@ export function createExecutionRequestListener(opts: ExecutionServerOptions = {}
     // USD in the route comparison above it are the same number from the same place.
     priceSource: createJupiterPriceSource(opts.fetchImpl ?? fetch),
   });
-  const checkConfirmation = createConfirmationChecker({ env });
+  // The fee on a reverted swap is reported as a charge that already happened, so it is priced
+  // from the SAME public source the terms above it were priced with rather than from the
+  // conservative constant the quote carried. A failed price simply drops the dollar figure.
+  const feePriceSource = createJupiterPriceSource(opts.fetchImpl ?? fetch);
+  const checkConfirmation = createConfirmationChecker({
+    env,
+    solUsdPrice: async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2_500);
+      try {
+        return (await feePriceSource.getUsdPrice(SOL_MINT_FOR_FEES, controller.signal))?.usd ?? null;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  });
   const limiter = new SwapRateLimiter();
 
   return (req, res) => {
@@ -100,9 +118,15 @@ export function createExecutionRequestListener(opts: ExecutionServerOptions = {}
     // Confirmation status: a READ, so GET, and deliberately before the POST-only gate below.
     // It returns one of three words and nothing about the transaction's contents.
     if (req.method === "GET" && req.url?.startsWith("/api/swap-execute/status")) {
-      const signature = new URL(req.url, "http://localhost").searchParams.get("signature") ?? "";
+      const params = new URL(req.url, "http://localhost").searchParams;
+      const signature = params.get("signature") ?? "";
+      // Where to read the delivered amount. Both or neither — a balance delta needs an account
+      // and a mint — and both are public values already on the caller's screen.
+      const owner = params.get("owner");
+      const mint = params.get("mint");
+      const delivery = owner && mint ? { owner, mint } : null;
       void (async () => {
-        const result = await checkConfirmation(signature);
+        const result = await checkConfirmation(signature, delivery);
         if (result == null) { send(400, { error: "invalid_signature" }); return; }
         send(200, result);
       })();

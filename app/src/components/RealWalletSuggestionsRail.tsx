@@ -17,7 +17,7 @@ import { useState } from "react";
 import SuggestionRail from "./SuggestionRail";
 import EmptyStateCard from "./EmptyStateCard";
 import SuggestionReviewModal from "./SuggestionReviewModal";
-import type { ExecutionFailureKey } from "../suggestions/swapExecution/executionLifecycle";
+import type { DemoExecutionOutcome } from "../suggestions/swapExecution/demoOutcomes";
 import SmithInitialLoadingState from "./SmithInitialLoadingState";
 import ButtonIcon from "./ButtonIcon";
 import { useSolStakingSelectorPresentation } from "../hooks/useSolStakingSelectorPresentation";
@@ -50,10 +50,10 @@ interface Props {
   /** Demo Mode — forwarded to the review so the confirm step is reviewable without a wallet. */
   demo?: boolean;
   /** Demo Mode only — forwarded to the review. See SwapExecutionSection. */
-  demoFailure?: ExecutionFailureKey | null;
+  demoOutcome?: DemoExecutionOutcome | null;
 }
 
-export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuoteGaveUp, demo, demoFailure }: Props) {
+export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuoteGaveUp, demo, demoOutcome }: Props) {
   // Which suggestion's Review modal is open (by stable engine id). Read-only —
   // opening the modal never transacts, signs, or hands off to a protocol.
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -102,7 +102,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       swapQuoteFetcher={rail?.swapQuoteFetcher}
       onClose={() => setSelectedId(null)}
       demo={demo}
-      demoFailure={demoFailure}
+      demoOutcome={demoOutcome}
       onSwapQuoteGaveUp={() => { setSelectedId(null); onSwapQuoteGaveUp?.(); }}
     />
   ) : detailsForModal ? (
@@ -114,7 +114,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       onDismiss={onDismissSelected}
       onClose={() => setSelectedId(null)}
       demo={demo}
-      demoFailure={demoFailure}
+      demoOutcome={demoOutcome}
       onSwapQuoteGaveUp={() => { setSelectedId(null); onSwapQuoteGaveUp?.(); }}
     />
   ) : null;

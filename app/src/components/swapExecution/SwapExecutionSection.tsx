@@ -21,12 +21,17 @@ import { deriveExecutionOffer } from "../../suggestions/swapExecution/executionO
 import { useSwapExecutionPlan } from "./useSwapExecutionPlan";
 import { useWalletSwapSubmitter } from "./useWalletSwapSubmitter";
 import SwapConfirmSheet from "./SwapConfirmSheet";
-import { SWAP_CONFIRM_CHECKING, SWAP_CONFIRM_CONTINUE_LABEL, SWAP_CONFIRM_SUBPAGE_TITLE } from "../../state/approvedCopy";
-import { failureCopy } from "./swapConfirmPresentation";
+import {
+  SWAP_CONFIRM_CHECKING,
+  SWAP_CONFIRM_COMPLETE_TITLE,
+  SWAP_CONFIRM_CONTINUE_LABEL,
+  SWAP_CONFIRM_SUBPAGE_TITLE,
+} from "../../state/approvedCopy";
+import { failureCopy, rawToTokenString } from "./swapConfirmPresentation";
 import { buildSwapHandoff } from "../../suggestions/swapQuote/providerSwapLinks";
 import { demoConfirmTerms } from "../../suggestions/swapExecution/demoConfirmTerms";
 import type { SwapExecutionEmitter } from "../../suggestions/swapExecution/swapExecutionEvents";
-import type { ExecutionFailureKey } from "../../suggestions/swapExecution/executionLifecycle";
+import type { DemoExecutionOutcome } from "../../suggestions/swapExecution/demoOutcomes";
 
 export interface SwapExecutionSectionProps {
   action: SwapActionContext;
@@ -55,17 +60,21 @@ export interface SwapExecutionSectionProps {
    */
   onStepChange?: (step: { active: boolean; onBack: () => void; title: string }) => void;
   /**
-   * Demo Mode only: show a FAILURE instead of the terms preview.
+   * Demo Mode only: rest the sheet in a given ENDING instead of the terms preview.
    *
-   * The live path reaches these by actually failing — a provider outage, a refused
-   * verification, an expired quote. Demo Mode cannot, because it never calls anything, so
-   * without this the only outcome anyone could walk through was the one that works. Reviewing
-   * a confirm step by its happy path alone is how its failure copy goes unread until a user
-   * meets it.
+   * The live path reaches these by actually happening — a provider outage, a refused
+   * verification, a wallet rejection, a revert. Demo Mode cannot, because it never calls
+   * anything, so without this the only outcome anyone could walk through was the one that
+   * works. Reviewing a confirm step by its happy path alone is how its failure copy goes
+   * unread until a user is the first to meet it.
+   *
+   * A whole outcome rather than a failure key, because four of the endings — success, a
+   * refusal to broadcast, a revert, and a timeout — are distinguished by phase and by the
+   * presence of a signature, not by the key. See `demoOutcomes.ts`.
    *
    * Ignored outside Demo Mode, so it can never alter a real flow's outcome.
    */
-  demoFailure?: ExecutionFailureKey | null;
+  demoOutcome?: DemoExecutionOutcome | null;
   /**
    * Demo Mode. The confirm step still renders and still fetches nothing real: Approve is shown
    * unavailable with the reason, so someone evaluating the product sees the whole flow through
@@ -95,8 +104,9 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
    * body explaining why there is nothing to review. The heading is the step's one title, so a
    * failed step must not be announced as a review of terms it does not have.
    */
-  const demoFailureKey = demoRefreshed ? null : props.demoFailure ?? null;
-  const activeFailure = props.demo ? demoFailureKey : null;
+  const demoChosen = demoRefreshed ? null : props.demoOutcome ?? null;
+  const activeOutcome = props.demo ? demoChosen : null;
+  const activeFailure = activeOutcome?.failure ?? null;
 
   // Report the step to the review, which hides its own content while it is open.
   const onStepChange = props.onStepChange;
@@ -127,13 +137,37 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
 
   const liveFailure = props.demo ? null : execution.failure;
   const shownFailure = activeFailure ?? liveFailure;
+  // The signature decides WHICH `submit_failed` this is, so the header has to read it from the
+  // same place the sheet does — otherwise a revert is titled as a swap that was never sent.
+  const shownSignature = props.demo ? activeOutcome?.signature ?? null : execution.signature;
+  const shownPhase = props.demo ? activeOutcome?.phase ?? "ready" : execution.phase;
   const stepTitle =
-    (shownFailure ? failureCopy(shownFailure, execution.signature != null)?.title : null) ??
-    SWAP_CONFIRM_SUBPAGE_TITLE;
+    (shownFailure ? failureCopy(shownFailure, shownSignature != null)?.title : null) ??
+    // A finished swap is not a review of terms. The step's heading is its one title, and
+    // leaving it at "Review Swap" told the reader to go on deciding something already done.
+    (shownPhase === "confirmed" ? SWAP_CONFIRM_COMPLETE_TITLE : SWAP_CONFIRM_SUBPAGE_TITLE);
 
   useEffect(() => {
     onStepChange?.({ active: started, onBack: leaveStep, title: stepTitle });
   }, [started, onStepChange, leaveStep, stepTitle]);
+  /**
+   * REVIEW SURFACE ONLY. The chosen demo outcome is the give-up ending, so pressing Swap
+   * does what a spent renewal allowance does in the live flow: raise the toast, close the
+   * review.
+   *
+   * Guarded on `props.demo` like every other demo affordance, so a real flow can never take
+   * this path — the live give-up is decided by `useSwapExecutionPlan` from actual expiries
+   * and renewals, and nothing here touches that. It exists because Demo Mode has no expiry
+   * at all, which left the toast's copy the one surface nobody had ever seen on screen.
+   */
+  const demoGaveUp = props.demo && started && (activeOutcome?.gaveUp ?? false);
+  const onExpiredGiveUp = props.onExpiredGiveUp;
+  useEffect(() => {
+    if (!demoGaveUp) return;
+    onExpiredGiveUp?.();
+    onClose();
+  }, [demoGaveUp, onExpiredGiveUp, onClose]);
+
   // Leaving the review entirely must not leave it hidden behind a step that is gone.
   useEffect(() => () => onStepChange?.({ active: false, onBack: leaveStep, title: SWAP_CONFIRM_SUBPAGE_TITLE }), [onStepChange, leaveStep]);
 
@@ -161,14 +195,33 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     // whether to OFFER, not whether to keep what was already opened.
     if ((!offer.offered && !started) || demoTerms == null) return null;
     if (!started) return <ContinueFooter onClose={onClose} onContinue={() => setStarted(true)} />;
-    const demoFailure = demoFailureKey;
+    // The give-up effect above is closing this review; showing a confirm step for the frame
+    // in between would be a flash of a screen that is not the outcome being demonstrated.
+    if (demoGaveUp) return null;
     return (
       <SwapConfirmSheet
         demo
-        phase={demoFailure ? "failed" : "ready"}
+        phase={activeOutcome?.phase ?? "ready"}
         terms={demoTerms}
-        failure={demoFailure}
-        signature={null}
+        failure={activeOutcome?.failure ?? null}
+        // Null unless the chosen ending is one the live path would have reached WITH a
+        // signature. The sheet reads it to decide the explorer link and which `submit_failed`
+        // copy to use, so a sample here is the only way those two are reviewable at all.
+        signature={activeOutcome?.signature ?? null}
+        // Demo Mode has no chain to read, so a settled preview shows the sample quote's own
+        // output figure. The LIVE screen shows what the transaction actually delivered — see
+        // `deliveredRaw` below — and will not print this estimate in its place.
+        receivedTokens={
+          activeOutcome?.phase === "confirmed" && !activeOutcome.chainReadFailed
+            ? demoTerms.expectedOutputTokens
+            : null
+        }
+        onDone={onClose}
+        // A sample fee, so the revert screen can be reviewed with its figures in place. The
+        // live screen reads the real one off the transaction.
+        fee={activeOutcome?.feeLamports != null && !activeOutcome.chainReadFailed
+          ? { lamports: activeOutcome.feeLamports, usd: activeOutcome.feeUsd ?? null }
+          : null}
         onRefresh={() => setDemoRefreshed(true)}
         handoff={handoff}
         subpage
@@ -226,6 +279,22 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
       terms={execution.plan?.terms ?? null}
       failure={execution.failure}
       signature={execution.signature}
+      // What the chain says arrived, converted with the plan's OWN output decimals — the same
+      // number the verification was checked against, so the figure on screen and the figure
+      // we guaranteed cannot be denominated differently.
+      receivedTokens={
+        execution.deliveredRaw != null && execution.plan != null
+          ? rawToTokenString(execution.deliveredRaw, execution.plan.verification.outputDecimals)
+          : null
+      }
+      onDone={onClose}
+      // Read from the landed transaction, so the revert screen states a charge that actually
+      // happened rather than the conservative estimate the quote disclosed beforehand.
+      fee={
+        execution.feeLamports != null
+          ? { lamports: execution.feeLamports, usd: execution.feeUsd }
+          : null
+      }
       subpage
       onApprove={execution.approve}
       onRefresh={() => execution.prepare()}

@@ -33,7 +33,7 @@ import GlobalNav from "../components/GlobalNav";
 import PageHeader from "../components/PageHeader";
 import DashboardBody from "../components/DashboardBody";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
-import { SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER } from "../state/approvedCopy";
+import { SWAP_CONFIRM_EXPIRED_TOAST } from "../state/approvedCopy";
 import type { RailSuggestions } from "../suggestions/useRailSuggestions";
 import { requestWalletPortfolioRefresh } from "../wallet/useWalletPortfolio";
 import AskSmithAiPanel from "../components/AskSmithAiPanel";
@@ -135,7 +135,7 @@ export default function DashboardPage({
             rail={rail}
             railLabel={s.accessibility.right_rail_label}
             onSwapQuoteGaveUp={() =>
-              pushToast(SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER)
+              pushToast(SWAP_CONFIRM_EXPIRED_TOAST)
             }
           />
         ) : (

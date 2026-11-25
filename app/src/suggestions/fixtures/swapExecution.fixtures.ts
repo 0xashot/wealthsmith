@@ -73,16 +73,26 @@ import {
   busyButtonLabelFor,
   busyPresentationFor,
   showsExplorerLink,
-  showsFailureAlert,
+  failureMarkFor,
+  offersProviderHandoff,
+  offersRetry,
+  formatSettledAmount,
+  displayDecimalsFor,
+  rawToTokenString,
 } from "../../components/swapExecution/swapConfirmPresentation";
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
-import { SWAP_CONFIRM_EXPIRED_TITLE, SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER } from "../../state/approvedCopy";
+import { DEMO_OUTCOMES } from "../swapExecution/demoOutcomes";
+import { deliveredFromBalances, feeUsdFrom } from "../../server/swapExecution/confirmationStatus";
+import { SWAP_CONFIRM_EXPIRED_TITLE, SWAP_CONFIRM_EXPIRED_TOAST, swapConfirmReceivedUnknown } from "../../state/approvedCopy";
 import type { ExecutionFailureKey, ExecutionPhase } from "../swapExecution/executionLifecycle";
 import { executionReducer, initialExecutionState, isExecutionBusy, isExecutionTerminal, isRenewal, isRestartable, type ExecutionEvent } from "../swapExecution/executionLifecycle";
 import { REAL_SWAP_TAKER, REAL_SWAP_TX } from "./realSwapTransactions";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
   SWAP_CONFIRM_CANCEL_LABEL,
+  SWAP_CONFIRM_CLOSE_LABEL,
+  SWAP_CONFIRM_RETRY_LABEL,
+  SWAP_CONFIRM_REVERTED_RETRY_NOTE,
   SWAP_CONFIRM_AWAITING_WALLET,
   SWAP_CONFIRM_CHECKING,
   SWAP_CONFIRM_COMPLETE_TITLE,
@@ -615,10 +625,19 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const t = `${SWAP_CONFIRM_TIMEOUT_TITLE} ${SWAP_CONFIRM_TIMEOUT_DESC}`.toLowerCase();
     return !/fail|error|lost|gone/.test(t) && /may still complete/.test(t);
   })(), "no false failure claim");
-  add("SWCC-4: declining and expiring both state that nothing was sent", (() => {
-    return /nothing was sent/i.test(SWAP_CONFIRM_DECLINED_DESC) &&
-      /nothing was sent/i.test(SWAP_CONFIRM_EXPIRED) &&
-      /stayed in your wallet/i.test(SWAP_CONFIRM_SUBMIT_FAILED_DESC);
+  add("SWCC-4: declining and expiring both account for the money", (() => {
+    // The WORDS may change — "nothing was sent" and "no transaction was submitted" say the
+    // same true thing — but an ending where the swap did not happen may never leave the
+    // reader wondering about their funds. That is the rule; the phrasing is not.
+    const accountsForFunds = (t: string) => /nothing was sent|no transaction was submitted/i.test(t);
+    return accountsForFunds(SWAP_CONFIRM_DECLINED_DESC) &&
+      accountsForFunds(SWAP_CONFIRM_EXPIRED) &&
+      // A decline is the one the user chose, so it says the stronger thing as well.
+      /funds haven\u2019t moved|funds have not moved/i.test(SWAP_CONFIRM_DECLINED_DESC) &&
+      // A send that never left says BOTH halves: nothing was submitted, and nothing moved.
+      // Which words carry it is not the rule; that the money is accounted for is.
+      accountsForFunds(SWAP_CONFIRM_SUBMIT_FAILED_DESC) &&
+      /funds haven\u2019t moved|funds have not moved|stayed in your wallet/i.test(SWAP_CONFIRM_SUBMIT_FAILED_DESC);
   })(), "funds are accounted for");
   add("SWCC-5: the check state claims only that the transaction was checked — never that the trade is safe", (() => {
     const c = SWAP_CONFIRM_CHECKING.toLowerCase();
@@ -694,13 +713,16 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // figure, so "reuse the estimate" has to be a deliberate act rather than the default.
     return typeof swapConfirmReceived === "function" &&
       swapConfirmReceived("71.77", "USDC") === "You received 71.77 USDC." &&
-      SWAP_CONFIRM_COMPLETE_TITLE === "Swap complete";
+      // The title states completion and nothing about an amount, so it can never stand in
+      // for a figure we did not read.
+      /completed/i.test(SWAP_CONFIRM_COMPLETE_TITLE) &&
+      !/[0-9]/.test(SWAP_CONFIRM_COMPLETE_TITLE);
   })(), "actual amount");
   add("SWCC-10: the copy rules document the confirm step — the strings are not ahead of their rule", (() => {
     const rules = readSrc("../content/ui-copy-rules.md");
     return /## Swap Confirmation Copy/.test(rules) &&
       /in_app_confirm/.test(rules) &&
-      /Swap complete.{0,200}on-chain confirmation/s.test(rules);
+      /Swap Completed.{0,300}on-chain confirmation/s.test(rules);
   })(), "rule exists");
 
   /* ---- Phase 4: a plan must carry proof it was simulated (SWXV-P) ----
@@ -942,44 +964,406 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return reverted != null && neverSent != null &&
       reverted.title !== neverSent.title &&
       !/wasn.t sent/i.test(reverted.title) &&
-      !/stayed in your wallet/i.test(reverted.desc) &&
+      // The revert must not borrow the never-sent reassurance: the tokens did not move, but
+      // the transaction DID leave, and a fee went with it.
+      !/stayed in your wallet|haven\u2019t moved/i.test(reverted.desc) &&
       // It must own up to the fee, which a user checking Solscan will see anyway.
       /network fee/i.test(reverted.desc) &&
       // The wallet-error case is accurate as it stands and must keep saying so.
-      /wasn.t sent/i.test(neverSent.title) && /stayed in your wallet/i.test(neverSent.desc);
+      /wasn.t sent/i.test(neverSent.title) &&
+      /no transaction was submitted/i.test(neverSent.desc) &&
+      /haven\u2019t moved|stayed in your wallet/i.test(neverSent.desc);
   })(), "a revert is not a non-send");
   add("SWCS-5c: the sheet decides that from the SIGNATURE, not from failureDetail", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
     // `failureDetail` is documented as never rendered; the signature is the honest signal and
     // already decides whether the explorer link shows.
-    return /failureCopy\(failure, typeof signature === "string" && signature\.length > 0\)/.test(c) &&
+    return /const reachedChain = typeof signature === "string" && signature\.length > 0;/.test(c) &&
+      /failureCopy\(failure, reachedChain,/.test(c) &&
+      // And the same signal decides the retry, so a transaction that WAS sent is never
+      // offered a button that would send it a second time.
+      /offersRetry\(failure, reachedChain\)/.test(c) &&
       !/failureDetail/.test(c);
   })(), "signature is the signal");
-  add("SWCS-5d: the warning mark appears only where something actually went WRONG", (() => {
-    // Three endings are not problems, and this sheet's own copy says so: a decline is "a
-    // normal outcome, not an error", an expiry is a quote aging out with Refresh as the
-    // remedy, and a timeout must NOT read as failure because the swap may still land. An
-    // alert above any of those contradicts the words underneath it, and an icon that appears
-    // on everything stops meaning anything.
+  add("SWCS-5d: the mark says WHICH kind of ending this is — broken, refused, or about time", (() => {
+    // Three marks, and the colour is the message. An outage, a refused verification and a
+    // failed send went wrong without the reader choosing them: amber. A decline is the
+    // reader's own No, confirmed in danger red the way every wallet confirms a rejected
+    // request. An expired quote and a confirmation that outran our deadline are NEITHER —
+    // nothing broke in either — so they share one primary clock. Collapse any two of those
+    // groups into one colour and the mark stops telling the reader which kind of ending
+    // they are looking at.
     const wrong: ExecutionFailureKey[] = ["plan_unavailable", "verification_failed", "submit_failed"];
-    const notWrong: ExecutionFailureKey[] = ["declined", "expired", "confirm_timeout", "cancelled"];
-    return wrong.every((f) => showsFailureAlert(f)) &&
-      notWrong.every((f) => !showsFailureAlert(f)) &&
-      showsFailureAlert(null) === false;
-  })(), "an alert means something");
-  add("SWCS-5e: the mark is decorative and takes the system's warning colour, not a hand-picked one", (() => {
+    const timing: ExecutionFailureKey[] = ["expired", "confirm_timeout"];
+    return wrong.every((f) => failureMarkFor(f) === "warning") &&
+      timing.every((f) => failureMarkFor(f) === "clock") &&
+      failureMarkFor("declined") === "cross" &&
+      // `cancelled` never rests on screen, so it has no mark to show.
+      failureMarkFor("cancelled") === null && failureMarkFor(null) === null &&
+      // The whole point of the split: three distinct kinds, none standing in for another.
+      new Set(["expired", "declined", "plan_unavailable"].map((f) =>
+        failureMarkFor(f as ExecutionFailureKey))).size === 3;
+  })(), "a mark means something, and says which something");
+  add("SWCS-5e: both marks are decorative and take SYSTEM colours, not hand-picked ones", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
     const css = readSrc("src/styles/dashboard.css");
-    const block = css.slice(css.indexOf(".swap-confirm__alert {"), css.indexOf("@keyframes swap-confirm-alert-in"));
+    const from = css.indexOf(".swap-confirm__alert {");
+    const to = css.indexOf("@keyframes swap-confirm-alert-in");
+    // Anchor check first: a slice that came back empty or backwards would make every
+    // assertion below vacuously true, which is how two earlier fixtures passed while
+    // testing nothing.
+    if (from < 0 || to <= from) return false;
+    const block = css.slice(from, to);
+    const warn = block.slice(block.indexOf(".swap-confirm__alert--warning"));
+    const exp = block.slice(block.indexOf(".swap-confirm__alert--clock"));
+    const dec = block.slice(block.indexOf(".swap-confirm__alert--cross"));
+    if (warn.length === 0 || exp.length === 0 || dec.length === 0) return false;
     // The sentence beside it already says what happened, so the icon adds nothing to a screen
-    // reader and is hidden from it. Colour and motion come from the feedback tokens.
-    return /className="swap-confirm__alert" aria-hidden="true"/.test(c) &&
-      /--color-feedback-warning-background-solid/.test(block) &&
-      /--color-feedback-warning-background-tint/.test(block) &&
-      /--motion-feedback-warning-easing/.test(block) &&
-      // One settle, never a loop: a pulsing alert on a money screen nags rather than informs.
-      !/infinite/.test(block);
-  })(), "system warning, settled once");
+    // reader and is hidden from it. Colour and motion come from the tokens.
+    return /className=\{`swap-confirm__alert swap-confirm__alert--\$\{mark\}`\} aria-hidden="true"/.test(c) &&
+      /--color-feedback-warning-background-solid/.test(warn) &&
+      /--color-feedback-warning-background-tint/.test(warn) &&
+      // The clock mark is the PRIMARY colour, not the warning one — that is the distinction
+      // the kind exists to carry, and it is the one thing a copy-paste of the warning block
+      // would silently lose.
+      /--color-feedback-info-background-solid/.test(exp) &&
+      !/feedback-warning/.test(exp) &&
+      // And the decline is the danger colour, which is neither of the other two.
+      /--color-feedback-danger-background-solid/.test(dec) &&
+      !/feedback-warning|feedback-info/.test(dec) &&
+      // One settle each, never a loop: a pulsing mark on a money screen nags rather than informs.
+      !/infinite/.test(block) &&
+      // The echo is painted. It carried geometry and an animation over nothing for a while,
+      // so the comment describing it was the only place it existed.
+      /\.swap-confirm__alert::after \{[^}]*background: currentColor/.test(block);
+  })(), "system colours, settled once, actually painted");
+  add("SWCS-5f: a decline is offered no second venue, and its one button says Close", (() => {
+    const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // The handoff is an apology with a door attached, and it belongs on the endings WE caused.
+    // A reader who just pressed Reject in their wallet is not blocked: putting "Swap on
+    // Jupiter" under their own decision asks the same question again, in a venue where none
+    // of this screen's checks apply.
+    const weCaused: ExecutionFailureKey[] = [
+      "plan_unavailable", "verification_failed", "submit_failed", "expired",
+    ];
+    const rulePresent = weCaused.every((f) => offersProviderHandoff(f)) &&
+      !offersProviderHandoff("declined") &&
+      !offersProviderHandoff("cancelled") &&
+      // Nor a timeout, and for a sharper reason: the first swap may still be in flight, so a
+      // second one started beside it can execute both. A revert can be retried with a cost
+      // warning because we KNOW the first attempt is dead; here we know nothing yet.
+      !offersProviderHandoff("confirm_timeout") &&
+      !offersProviderHandoff(null);
+    // The rule has to be WIRED, not merely written: the handoff branch is gated on it, and
+    // the fallback footer's single button is a dismissal rather than a Cancel.
+    const wired = /handoff && offersProviderHandoff\(failure\) \?/.test(sheet);
+    const closes = /review-modal__tertiary-action[\s\S]{0,120}SWAP_CONFIRM_CLOSE_LABEL/.test(sheet) &&
+      SWAP_CONFIRM_CLOSE_LABEL === "Close" &&
+      // "Cancel" keeps its job beside a primary action; this is about the lone button.
+      SWAP_CONFIRM_CANCEL_LABEL === "Cancel";
+    return rulePresent && wired && closes;
+  })(), "no second ask, and a Close that closes");
+  add("SWCS-5g: every ending a reader can reach is reviewable, and none is faked into existence", (() => {
+    // The four endings that happen AFTER Approve went unreviewed for exactly as long as the
+    // review surface could not reach them — it took one failure KEY, and those four are
+    // distinguished by phase and signature instead. This holds the catalogue to the union, so
+    // adding a reachable ending without a way to walk to it fails here rather than shipping.
+    const keys: ExecutionFailureKey[] = [
+      "plan_unavailable", "verification_failed", "declined", "expired", "submit_failed", "confirm_timeout",
+    ];
+    const covered = keys.every((k) => DEMO_OUTCOMES.some((o) => o.outcome.failure === k));
+    // `cancelled` is in the union and never rests on screen — cancelling LEAVES the step — so
+    // it is the one key with no entry, deliberately.
+    const cancelledAbsent = !DEMO_OUTCOMES.some((o) => o.outcome.failure === "cancelled");
+    // Both halves of `submit_failed`, which share a key and are different events.
+    const bothSubmitFailures =
+      DEMO_OUTCOMES.some((o) => o.outcome.failure === "submit_failed" && o.outcome.signature != null) &&
+      DEMO_OUTCOMES.some((o) => o.outcome.failure === "submit_failed" && o.outcome.signature == null);
+    const successCovered = DEMO_OUTCOMES.some((o) => o.outcome.phase === "confirmed");
+    // And no combination the live path cannot produce: a confirmed swap always has a
+    // signature, and nothing that was never broadcast may carry one.
+    const honest = DEMO_OUTCOMES.every((o) =>
+      (o.outcome.phase !== "confirmed" || o.outcome.signature != null) &&
+      (o.outcome.phase !== "ready" || o.outcome.signature == null) &&
+      (o.outcome.failure !== "declined" || o.outcome.signature == null) &&
+      (o.outcome.failure !== "expired" || o.outcome.signature == null) &&
+      (o.outcome.failure !== "plan_unavailable" || o.outcome.signature == null) &&
+      (o.outcome.failure !== "verification_failed" || o.outcome.signature == null));
+    return covered && cancelledAbsent && bothSubmitFailures && successCovered && honest;
+  })(), "every ending is walkable");
+  add("SWCS-5h: a finished swap is not headed as a review of terms", (() => {
+    const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // The step's header is its ONE title. Leaving it at "Review Swap" over a confirmed swap
+    // told the reader to go on deciding something that had already happened.
+    const titled = /shownPhase === "confirmed" \? SWAP_CONFIRM_COMPLETE_TITLE/.test(c);
+    // And the sheet then does not print the same sentence again underneath it.
+    const notDoubled = /\{confirmed && !subpage && \(/.test(sheet);
+    // The header reads the signature the SHEET reads, so a revert cannot be titled as a swap
+    // that was never sent.
+    const sameSignal = /failureCopy\(shownFailure, shownSignature != null\)/.test(c);
+    return titled && notDoubled && sameSignal;
+  })(), "the heading tells the truth about the phase");
+  add("SWXD-1: the received figure is the DELIVERED amount, read from the landed transaction", (() => {
+    const owner = "Taker11111111111111111111111111111111111111";
+    const mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const row = (o: string, m: string, amount: string) => ({ owner: o, mint: m, uiTokenAmount: { amount } });
+    // The ordinary case: the taker held none of the output mint and now holds some.
+    const fresh = deliveredFromBalances([], [row(owner, mint, "30606060750")], owner, mint);
+    // And the case that actually happens — they already held some, so only the DELTA arrived.
+    const topUp = deliveredFromBalances(
+      [row(owner, mint, "1000000")],
+      [row(owner, mint, "30607060750")],
+      owner, mint,
+    );
+    return fresh === "30606060750" && topUp === "30606060750";
+  })(), "the delta, not the balance");
+  add("SWXD-2: a reading that is not clearly positive yields NO figure rather than a wrong one", (() => {
+    const owner = "Taker11111111111111111111111111111111111111";
+    const other = "Someone1se11111111111111111111111111111111";
+    const mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const row = (o: string, m: string, amount: string) => ({ owner: o, mint: m, uiTokenAmount: { amount } });
+    // Somebody else's balance is not the taker's.
+    const wrongOwner = deliveredFromBalances([], [row(other, mint, "500")], owner, mint);
+    // A balance that did not grow means the records are not what we assumed — the wrong
+    // account, a mint that is also an input, a route that settled elsewhere. We do not know.
+    const wentDown = deliveredFromBalances([row(owner, mint, "900")], [row(owner, mint, "100")], owner, mint);
+    const unchanged = deliveredFromBalances([row(owner, mint, "900")], [row(owner, mint, "900")], owner, mint);
+    // And a figure that is not an integer string is not a figure.
+    const garbage = deliveredFromBalances([], [row(owner, mint, "30.6e9")], owner, mint);
+    return wrongOwner == null && wentDown == null && unchanged == null && garbage == null;
+  })(), "null beats a wrong number");
+  add("SWXD-3: BigInt throughout — the arithmetic does not lose base units at scale", (() => {
+    const owner = "T", mint = "M";
+    const row = (amount: string) => ({ owner, mint, uiTokenAmount: { amount } });
+    // Above 2^53 a double can only hold even integers, so an odd post-balance is silently
+    // rounded before the subtraction and the answer comes out one base unit wrong. USDC
+    // reaches this many base units at ~9 billion dollars and lamports at ~9 million SOL, so
+    // it is not hypothetical for a treasury — and being wrong by any amount on the one
+    // number this screen exists to state is the kind of error nobody can audit from the UI.
+    const huge = deliveredFromBalances([row("1")], [row("9007199254740995")], owner, mint);
+    // A float implementation yields ...995 here. BigInt yields ...994, which is correct.
+    return huge === "9007199254740994";
+  })(), "no float on the money path");
+  add("SWXD-4: the delivered figure travels WITH the confirmation, in one event", (() => {
+    // Two reads would leave a window where the screen says a swap completed and the amount is
+    // still loading — and the amount is the whole reason anyone is on that screen.
+    const confirmed = decideFromConfirmation({ ok: true, state: "confirmed", deliveredRaw: "30606060750" });
+    if (confirmed.action !== "stop") return false;
+    const event = confirmed.events[0];
+    if (event.type !== "confirmed" || event.deliveredRaw !== "30606060750") return false;
+    // And the machine keeps it, so the view never has to ask again.
+    const state = executionReducer(
+      { ...initialExecutionState, phase: "confirming", signature: "sig" },
+      event,
+    );
+    // A confirmation with no figure stays a confirmation: the swap landed either way, and an
+    // unreadable amount may not cost the user the outcome.
+    const without = decideFromConfirmation({ ok: true, state: "confirmed" });
+    const withoutOk = without.action === "stop" && without.events[0]?.type === "confirmed";
+    return state.phase === "confirmed" && state.deliveredRaw === "30606060750" && withoutOk;
+  })(), "one read, one outcome");
+  add("SWXD-5: the settled figure is rounded for READING and never to nothing", (() => {
+    // Two decimals from a thousand up, four below: past that the digits stop carrying
+    // information — four decimals of a thousand-unit balance is a millionth of a percent.
+    const bigOne = formatSettledAmount("30606.06075");
+    const smallOne = formatSettledAmount("204.183333333");
+    // A balance that rounded away would STATE that nothing arrived, which is a different
+    // claim from "a very small amount arrived".
+    const tiny = formatSettledAmount("0.00000123");
+    return bigOne === "30,606.06" && smallOne === "204.1833" &&
+      tiny != null && !/^0\.0*$/.test(tiny) && Number(tiny.replace(/,/g, "")) > 0 &&
+      displayDecimalsFor(1000) === 2 && displayDecimalsFor(999) === 4 &&
+      // Grouped, because an ungrouped five-figure balance is read wrong at a glance.
+      bigOne.includes(",");
+  })(), "readable, and still true");
+  add("SWXD-6: base units convert with the PLAN's own decimals, with no float in between", (() => {
+    // The same decimals the verification was checked against, so the figure shown and the
+    // figure guaranteed cannot be denominated differently.
+    return rawToTokenString("30606060750", 6) === "30606.06075" &&
+      rawToTokenString("204183333333", 9) === "204.183333333" &&
+      // Trailing zeros are not precision.
+      rawToTokenString("1500000", 6) === "1.5" &&
+      rawToTokenString("1000000", 6) === "1" &&
+      // Nonsense in, nothing out.
+      rawToTokenString("1.5", 6) == null && rawToTokenString("100", -1) == null;
+  })(), "exact conversion");
+  add("SWXD-7: a settled swap shows what arrived, or says it cannot — never the estimate", (() => {
+    const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    const from = sheet.indexOf('if (phase === "confirmed" && terms) {');
+    const to = sheet.indexOf("const failed = failureCopy(");
+    if (from < 0 || to <= from) return false;
+    const branch = sheet.slice(from, to);
+    // The figure comes from the prop, which the live path fills from the CHAIN read.
+    const fromDelivered = /receivedTokens \? formatSettledAmount\(receivedTokens\) : null/.test(branch);
+    // The CONDITION, not merely a mention: the figure is shown when the chain read produced
+    // one, and the ternary is what decides that. A looser test passed while the guard had
+    // been short-circuited to `false` and the identifier survived in the dead branch.
+    const liveUsesChain = /execution\.deliveredRaw != null && execution\.plan != null/.test(section) &&
+      /rawToTokenString\(execution\.deliveredRaw, execution\.plan\.verification\.outputDecimals\)/.test(section);
+    // And nowhere in that branch does the expected output stand in for it.
+    const noEstimate = !/expectedOutput/.test(branch);
+    // No figure means no label hanging over an empty space.
+    // No figure means no label standing over an empty space — and the sentence names the
+    // token we could not count rather than saying "the exact amount".
+    const honestFallback = /swapConfirmReceivedUnknown\(terms\.outputSymbol\)/.test(branch) &&
+      /exact \$\{symbol\} amount received/.test(readSrc("src/state/approvedCopy.ts")) &&
+      // It leads with the OUTCOME, so a reader meeting a screen without its number is not
+      // left wondering whether the missing figure means a missing swap.
+      /^Your swap succeeded\./.test(swapConfirmReceivedUnknown("USDC")) &&
+      // The swapped line is NOT part of the figure: it comes from the terms, which we have
+      // either way, and it survives when the chain read does not.
+      /\{swapped && \(/.test(branch) &&
+      branch.indexOf("swapConfirmSwapped") > branch.indexOf("swapConfirmReceivedUnknown");
+    // Done and the explorer, not a Cancel for something already finished.
+    const footer = /SWAP_CONFIRM_DONE_LABEL/.test(branch) && /SWAP_CONFIRM_VIEW_TRANSACTION/.test(branch) &&
+      !/SWAP_CONFIRM_CANCEL_LABEL/.test(branch);
+    return fromDelivered && liveUsesChain && noEstimate && honestFallback && footer;
+  })(), "the chain's number or none");
+  add("SWCS-5i: Try Again is offered where retrying is the remedy, and a costly retry says so", (() => {
+    const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    // BOTH halves of `submit_failed`, for different reasons. A send that never left cost
+    // nothing and the terms were fine. A revert reached the chain and took a fee, so a retry
+    // can cost again — and the answer to that is disclosure, not removing the button:
+    // somebody whose swap reverted still wants the swap, and would otherwise go and retry it
+    // somewhere with no warning at all.
+    const both = offersRetry("submit_failed", false) && offersRetry("submit_failed", true);
+    const nowhereElse =
+      (["plan_unavailable", "verification_failed", "declined", "expired", "confirm_timeout", "cancelled"] as ExecutionFailureKey[])
+        .every((f) => !offersRetry(f, false) && !offersRetry(f, true)) && !offersRetry(null, false);
+    // Wired, and BEFORE the hand-off branch — otherwise "Swap on Jupiter" claims these
+    // endings first and the retry is unreachable code.
+    const retryIndex = sheet.indexOf("offersRetry(failure, reachedChain) ?");
+    const handoffIndex = sheet.indexOf("handoff && offersProviderHandoff(failure) ?");
+    const ordered = retryIndex > 0 && handoffIndex > retryIndex;
+    const labelled = /label: SWAP_CONFIRM_RETRY_LABEL, onClick: onRefresh/.test(sheet) &&
+      SWAP_CONFIRM_RETRY_LABEL === "Try Again";
+    // The never-sent screen asks for a retry and now has one.
+    const promiseKept = /please try again/i.test(SWAP_CONFIRM_SUBMIT_FAILED_DESC);
+    // And the costly one warns before the reader presses it. A screen that has just said
+    // they paid for nothing may not offer a button without saying it could happen again.
+    const warned = /network fee/i.test(SWAP_CONFIRM_REVERTED_RETRY_NOTE) &&
+      /may/i.test(SWAP_CONFIRM_REVERTED_RETRY_NOTE) &&
+      failureCopy("submit_failed", true)?.note === SWAP_CONFIRM_REVERTED_RETRY_NOTE &&
+      // The never-sent screen has no such warning, because its retry is free.
+      failureCopy("submit_failed", false)?.note == null;
+    return both && nowhereElse && ordered && labelled && promiseKept && warned;
+  })(), "a retry where retrying is the answer, priced honestly");
+  add("SWCS-5j: the fee a revert reports is the one the chain took, never the quote's estimate", (() => {
+    // "Was charged" is a statement about something that already happened. The disclosed
+    // constant on the terms is a conservative guess made beforehand — a different claim
+    // about a different moment, and not usable in the past tense.
+    const withFee = failureCopy("submit_failed", true, { sol: "0.000075", usd: "$0.01" });
+    const noUsd = failureCopy("submit_failed", true, { sol: "0.000075", usd: null });
+    const unread = failureCopy("submit_failed", true, null);
+    if (withFee == null || noUsd == null || unread == null) return null === "unreachable";
+    // ONE approximation mark. The sentence supplies its own ≈, and feeding it the sheet's
+    // approximate formatter — which prepends a tilde to the value — rendered "(≈~$0.01)".
+    const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    const oneMark = /const feeUsdText = fee\?\.usd != null \? formatUsd\(fee\.usd\) : ABSENT_FIGURE;/.test(sheet) &&
+      !/usd: fee\.usd != null \? formatApproxUsd/.test(sheet);
+    return oneMark &&
+      /0\.000075 SOL/.test(withFee.desc) && /\$0\.01/.test(withFee.desc) && !/~/.test(withFee.desc) &&
+      // Without a price, the amount still stands on its own.
+      /0\.000075 SOL/.test(noUsd.desc) && !/\$/.test(noUsd.desc) &&
+      // Unread: the FACT survives, the figure does not. Naming a fee we did not read would
+      // be wrong; omitting that one was taken would be incomplete.
+      /network fee was charged/i.test(unread.desc) && !/[0-9]/.test(unread.desc) &&
+      // And none of them claims the tokens moved.
+      [withFee, noUsd, unread].every((c) => /weren\u2019t swapped|were not swapped/i.test(c.desc));
+  })(), "the charge that happened");
+  add("SWXD-8: the fee is READ for a revert, and the live screen takes it from that read", (() => {
+    const server = readSrc("src/server/swapExecution/confirmationStatus.ts");
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    if (server.length === 0 || section.length === 0) return false;
+    // A revert is the whole reason the fee is read at all: it moved no tokens and still cost
+    // money. Gating the read on `confirmed` — the obvious thing to write, since that is where
+    // the delivered amount comes from — would leave the revert screen with no figure, which
+    // is precisely the screen whose honesty depends on having one.
+    const readsBothLanded = /if \(state === "pending" \|\| rpc\.getLandedFacts == null\) return \{ state, \.\.\.empty \};/.test(server);
+    // The delivery lookup stays confirmed-only; a revert has no delta to find.
+    const deliveryStillConfirmedOnly = /delivery: state === "confirmed" \? delivery \?\? null : null/.test(server);
+    // And the screen takes the figure from that read. The quote's disclosed constant is a
+    // conservative estimate made beforehand and cannot follow "was charged" — a fallback to
+    // it would render a plausible wrong number that nobody could spot from the UI.
+    const fromChain = /execution\.feeLamports != null\s*\?\s*\{ lamports: execution\.feeLamports, usd: execution\.feeUsd \}/.test(section);
+    const noEstimateFallback = !/fee=\{[\s\S]{0,200}estimatedNetworkFeeUsd/.test(section);
+    return readsBothLanded && deliveryStillConfirmedOnly && fromChain && noEstimateFallback;
+  })(), "the fee comes from the transaction");
+  add("SWXD-9: lamports price into USD only when both halves are real", (() => {
+    // 75,000 lamports at $184/SOL is 1.38 cents — the order of magnitude a Jupiter swap
+    // actually pays, and small enough that a double is not a risk here, unlike a balance.
+    const priced = feeUsdFrom("75000", 184);
+    return priced != null && Math.abs(priced - 0.0138) < 0.0001 &&
+      // No price, no dollars. The SOL figure still stands on its own.
+      feeUsdFrom("75000", null) === null &&
+      feeUsdFrom("75000", 0) === null &&
+      feeUsdFrom("75000", Number.NaN) === null &&
+      // No fee, nothing to price.
+      feeUsdFrom(null, 184) === null &&
+      feeUsdFrom("not-a-number", 184) === null;
+  })(), "priced or omitted");
+  add("SWCS-5k: the paths that only appear when a chain read FAILS are reviewable too", (() => {
+    // These render exactly when the backend is already having a bad day — the RPC is down,
+    // the transaction has been pruned — which is the worst possible moment to discover the
+    // copy reads badly. Unreviewable until now, because nothing in the walkthrough could
+    // produce them.
+    const unreadable = DEMO_OUTCOMES.filter((o) => o.outcome.chainReadFailed);
+    const settled = unreadable.find((o) => o.outcome.phase === "confirmed");
+    const reverted = unreadable.find((o) => o.outcome.failure === "submit_failed");
+    if (settled == null || reverted == null) return false;
+    // ONE flag for both figures, because in production there is one cause: a single
+    // getTransaction yields the delivered amount and the fee together. Separate switches
+    // would let a reviewer approve a screen the live path cannot produce.
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    const suppressesAmount = /activeOutcome\?\.phase === "confirmed" && !activeOutcome\.chainReadFailed/.test(section);
+    const suppressesFee = /activeOutcome\?\.feeLamports != null && !activeOutcome\.chainReadFailed/.test(section);
+    // The OUTCOME is unaffected — only the figures are missing. A swap that confirmed still
+    // confirmed, and still has a signature to look up.
+    return suppressesAmount && suppressesFee &&
+      settled.outcome.signature != null && reverted.outcome.signature != null;
+  })(), "the bad-day screens are walkable");
+  add("SWDM-6: the walkthrough's give-up is a REVIEW short-circuit and changes no real behaviour", (() => {
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    const hook = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
+    // Demo Mode has no expiry and therefore no renewals, so the one ending that needs
+    // several of them — the quote giving up and closing the review — could never be shown.
+    // The toast's copy was the only surface nobody had ever seen.
+    const entry = DEMO_OUTCOMES.find((o) => o.outcome.gaveUp);
+    // Gated on Demo Mode, like every other demo affordance.
+    const gated = /const demoGaveUp = props\.demo && started && \(activeOutcome\?\.gaveUp \?\? false\);/.test(section);
+    // And the REAL ending is untouched: it is still decided inside the hook, from actual
+    // expiries and renewals, and reported upward rather than triggered from the view.
+    const liveUnchanged = /onGaveUp: props\.onExpiredGiveUp/.test(section) &&
+      /opts\.onGaveUp\?\.\(\)/.test(hook) &&
+      // Nothing in the hook knows this flag exists.
+      !/gaveUp\b/.test(hook.replace(/onGaveUp/g, ""));
+    return entry != null && gated && liveUnchanged;
+  })(), "a review affordance, not a behaviour change");
+  add("SWCS-5m: the confirm step SCROLLS, and its actions do not scroll away", (() => {
+    const css = readSrc("src/styles/dashboard.css");
+    const from = css.indexOf(".review-modal > .swap-confirm {");
+    if (from < 0) return false;
+    const block = css.slice(from, from + 1200);
+    // The step is a DIRECT child of the modal, because the review's own body is hidden
+    // behind it — and that body was the only scroll container in there. So anything taller
+    // than the modal's max-height was clipped with no way to reach it: on the terms screen
+    // that meant Cancel and Approve simply vanished, which is the one screen where a
+    // missing button is unacceptable. Reported after a Try Again, which lands back on the
+    // tallest state of all.
+    const scrolls = /overflow-y: auto;/.test(block) &&
+      // The load-bearing half. A flex item's default minimum is its content, so without
+      // this the section refuses to shrink, the modal's max-height has nothing to push
+      // against, and overflow-y never engages. Same pair the review's own body uses.
+      /min-height: 0;/.test(block);
+    const pinned = /\.review-modal > \.swap-confirm > \.review-modal__footer \{[\s\S]{0,400}position: sticky;/.test(css) &&
+      // Opaque, or the terms show through as they pass underneath.
+      /\.review-modal > \.swap-confirm > \.review-modal__footer \{[\s\S]{0,400}background: var\(--color-surface-card\)/.test(css);
+    // The modal still clips at its own edge; only the step inside it scrolls.
+    const modalBlock = css.slice(css.indexOf(".review-modal {"), css.indexOf(".review-modal__heading"));
+    return scrolls && pinned && /max-height:/.test(modalBlock) && /overflow: hidden;/.test(modalBlock);
+  })(), "reachable terms, reachable buttons");
   add("SWCS-6: expiry has its OWN title — it is not an outage, and must not be filed under one", (() => {
     const exp = failureCopy("expired");
     const out = failureCopy("plan_unavailable");
@@ -1002,12 +1386,69 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const withoutAria = c.replace(/aria-disabled=/g, "");
     return /\{ready && !demo && onApprove && \(/.test(c) && !/disabled=/.test(withoutAria);
   })(), "no dead button");
-  add("SWQR-8: the give-up toast accounts for the money and does not say Refresh", (() => {
-    const all = `${SWAP_CONFIRM_EXPIRED_TOAST} ${SWAP_CONFIRM_EXPIRED_TOAST_HELPER}`;
-    // The first thing anyone wants to know when a window closes by itself is whether something
-    // happened. And there is no Refresh button any more, so the copy must not point at one.
-    return /nothing was sent/i.test(all) && /expired/i.test(all) && !/refresh/i.test(all);
+  add("SWCS-8b: the unavailable Approve is DEMO-ONLY — a real wallet always gets a real button", (() => {
+    const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    // The two Approves are mutually exclusive by construction: one requires `demo`, the
+    // other requires `!demo`. There is no window in which a connected wallet is shown the
+    // greyed-out button with "Demo Mode uses a sample portfolio" under it, and no window in
+    // which Demo Mode is shown a pressable one.
+    const demoOnly = /\{ready && demo && \(/.test(sheet) && /\{ready && !demo && onApprove && \(/.test(sheet);
+    const tipIsDemoOnly = (() => {
+      const from = sheet.indexOf("{ready && demo && (");
+      const to = sheet.indexOf("{ready && !demo && onApprove && (");
+      if (from < 0 || to <= from) return false;
+      const branch = sheet.slice(from, to);
+      return /SWAP_CONFIRM_DEMO_DISABLED/.test(branch) && !sheet.slice(to).includes("SWAP_CONFIRM_DEMO_DISABLED");
+    })();
+    // And the LIVE branch always has a handler to give it: the section returns null without
+    // a taker and a submitter, so `onApprove` is never absent on a sheet a real user sees.
+    const liveAlwaysWired = /if \(\(!offer\.offered && !started\) \|\| takerPublicKey == null \|\| submit == null\) return null;/.test(section) &&
+      /onApprove=\{execution\.approve\}/.test(section) &&
+      // The demo branch passes no approver at all, so even its exception cannot execute.
+      (() => {
+        const demoBranch = section.slice(section.indexOf("if (props.demo) {"), section.indexOf("// The Boundary said no"));
+        return !/onApprove/.test(demoBranch);
+      })();
+    return demoOnly && tipIsDemoOnly && liveAlwaysWired;
+  })(), "demo explains, live acts");
+  add("SWQR-8: the give-up toast names the ending, and the screen is not left silent", (() => {
+    const walkthrough = readSrc("src/pages/SwapWalkthroughPage.tsx");
+    const dashboard = readSrc("src/pages/DashboardPage.tsx");
+    // One line. A toast is a notification, not a screen: it says which thing just happened
+    // and gets out of the way. The explanation — nothing submitted, open the suggestion
+    // again — belongs on the card, which is one click away and states it in full.
+    const oneLine = SWAP_CONFIRM_EXPIRED_TOAST === "Swap Quote Expired" &&
+      !/\./.test(SWAP_CONFIRM_EXPIRED_TOAST) &&
+      // It must not point at a Refresh button: by this point there is none to press.
+      !/refresh/i.test(SWAP_CONFIRM_EXPIRED_TOAST);
+    // Recognisably the same ending as the card, which keeps the fuller wording. The toast
+    // may be SHORTER — it drops the "Your" — so the rule is the shared name, not an
+    // identical string.
+    const sameEnding = SWAP_CONFIRM_EXPIRED_TITLE.includes(SWAP_CONFIRM_EXPIRED_TOAST);
+    // And the review closing itself is never silent: every caller raises it.
+    const raised = /pushToast\(SWAP_CONFIRM_EXPIRED_TOAST\)/.test(walkthrough) &&
+      /pushToast\(SWAP_CONFIRM_EXPIRED_TOAST\)/.test(dashboard);
+    return oneLine && sameEnding && raised;
   })(), "closing is not silent");
+  add("SWQR-8b: a toast dismisses ITSELF — no caller can forget the timer", (() => {
+    const host = readSrc("src/components/ToastHost.tsx");
+    const walkthrough = readSrc("src/pages/SwapWalkthroughPage.tsx");
+    if (host.length === 0) return false;
+    // The timer used to belong to each caller, and a caller forgot: the walkthrough's own
+    // pushToast had no setTimeout, so its toast sat on screen indefinitely. "Every caller
+    // must remember" is not a guarantee; owning it in the component is.
+    const ownsTimer = /window\.setTimeout\(/.test(host) && /dismiss\.current\(t\.id\)/.test(host) &&
+      /TOAST_DURATION_MS = 6000/.test(host);
+    // Cleared on early dismissal and on unmount, so a timer never fires against an id that
+    // is gone, and a closed page leaves none running.
+    const cleansUp = (host.match(/clearTimeout/g) ?? []).length >= 2;
+    // And the component says so, rather than the old docstring telling callers to do it.
+    const documented = /auto-dismissed HERE/.test(host) && !/auto-dismissed by the caller/.test(host);
+    // The caller that had the bug still does not set its own timer — the fix is in one place.
+    const callerStaysSimple = !/setTimeout/.test(walkthrough);
+    return ownsTimer && cleansUp && documented && callerStaysSimple;
+  })(), "a toast that leaves");
   add("SWQR-9: closing is the HOST's call — the hook and sheet never close themselves", (() => {
     const h = readSrc("src/components/swapExecution/useSwapExecutionPlan.ts");
     const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
@@ -1028,10 +1469,10 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
   })(), "explained, not hidden");
   add("SWDM-1b: a demo failure is GATED on Demo Mode — it can never alter a real outcome", (() => {
     const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
-    // `demoFailure` exists so the walkthrough can be driven to each ending rather than only
+    // `demoOutcome` exists so the walkthrough can be driven to each ending rather than only
     // the one that works. Checked as a gate rather than by where the identifier appears: it is
     // read once at the top now, and a location test would have passed while the value leaked.
-    const gated = /const activeFailure = props\.demo \? demoFailureKey : null;/.test(c);
+    const gated = /const activeOutcome = props\.demo \? demoChosen : null;/.test(c);
     // And a live flow's failure still comes only from what actually happened.
     const liveFromMachine = /const liveFailure = props\.demo \? null : execution\.failure;/.test(c);
     return gated && liveFromMachine;
@@ -1534,17 +1975,33 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const onlyFromPoll = /if \(watchedSignature == null\) return;/.test(h) &&
       /const watchedSignature = state\.phase === "confirming" \? state\.signature : null;/.test(h);
     const onlyFromConfirming = /if \(event\.type === "confirm_timeout"\) return fail\(state, "confirm_timeout"\);/.test(l);
-    const failKeepsState = /\(\{ \.\.\.state, phase: "failed", failure, failureDetail: detail \}\)/.test(l);
-    return onlyFromPoll && onlyFromConfirming && failKeepsState;
+    // Behaviour, not the shape of one object literal: a timeout from `confirming` keeps the
+    // signature. Pinning the literal meant adding a field to `fail` broke this test while the
+    // guarantee it protects was untouched.
+    const timedOut = executionReducer(
+      { ...initialExecutionState, phase: "confirming", signature: "sig-abc" },
+      { type: "confirm_timeout" },
+    );
+    const keepsSignature = timedOut.phase === "failed" &&
+      timedOut.failure === "confirm_timeout" && timedOut.signature === "sig-abc";
+    return onlyFromPoll && onlyFromConfirming && keepsSignature && l.length > 0;
   })(), "timeout keeps its signature");
   add("SWXS5-14: the explorer link is built only from a real signature, and is URL-safe", (() => {
     return solscanTransactionUrl("") === null && solscanTransactionUrl("5xSig") === "https://solscan.io/tx/5xSig" &&
       (solscanTransactionUrl("a/b?c") ?? "").endsWith("a%2Fb%3Fc");
   })(), "explorer link");
-  add("SWXS5-15: success shows NO amount — the browser cannot read what arrived, and the estimate is not it", (() => {
+  add("SWXS5-15: the success figure is the delivered one or none — the estimate is never relabelled", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
-    // The rule permits omitting the figure; it forbids relabelling the estimate as the result.
-    return /SWAP_CONFIRM_COMPLETE_TITLE/.test(c) && !/swapConfirmReceived/.test(c);
+    // This began as "success shows NO amount", which was right while the browser was the
+    // only place that could have read one. The server reads it now, so the rule is the one
+    // that was always underneath: the figure shown is what ARRIVED, or there is none.
+    //
+    // `swapConfirmReceived(` with the paren, so the check cannot be satisfied — or broken —
+    // by `swapConfirmReceivedUnknown`, which is the opposite thing: the sentence shown when
+    // there is no figure at all.
+    return /SWAP_CONFIRM_COMPLETE_TITLE/.test(c) && !/swapConfirmReceived\(/.test(c) &&
+      // And nothing in the settled branch reaches for the quote's expectation.
+      !/expectedOutput/.test(c.slice(c.indexOf('if (phase === "confirmed" && terms) {'), c.indexOf("const reachedChain")));
   })(), "no relabelled estimate");
 
   /* ---- Phase 6: the offer, and confirmation (SWXO / SWXC6) ---- */

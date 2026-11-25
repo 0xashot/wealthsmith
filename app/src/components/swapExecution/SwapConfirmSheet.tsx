@@ -25,9 +25,17 @@ import InfoPopover from "../InfoPopover";
 import ModalActionsFooter from "../ModalActionsFooter";
 import ButtonIcon from "../ButtonIcon";
 import alertCircleUrl from "../../../../assets/icons/ui/alert-circle-solid.svg";
+import clockUrl from "../../../../assets/icons/ui/clock-solid.svg";
+import xCircleUrl from "../../../../assets/icons/ui/x-circle-solid.svg";
+import checkBadgeUrl from "../../../../assets/icons/ui/check-badge-solid.svg";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
   SWAP_CONFIRM_CANCEL_LABEL,
+  SWAP_CONFIRM_CLOSE_LABEL,
+  SWAP_CONFIRM_DONE_LABEL,
+  SWAP_CONFIRM_RECEIVED_LABEL,
+  swapConfirmReceivedUnknown,
+  swapConfirmSwapped,
   SWAP_CONFIRM_DEMO_DISABLED,
   SWAP_CONFIRM_COMPLETE_TITLE,
   SWAP_CONFIRM_MINIMUM_INFO,
@@ -37,6 +45,7 @@ import {
   SWAP_CONFIRM_PRICE_IMPACT_LABEL,
   SWAP_CONFIRM_RECEIVE_LABEL,
   SWAP_CONFIRM_REFRESH_LABEL,
+  SWAP_CONFIRM_RETRY_LABEL,
   SWAP_CONFIRM_ROUTE_LABEL,
   SWAP_CONFIRM_SELL_LABEL,
   SWAP_CONFIRM_TITLE,
@@ -44,20 +53,36 @@ import {
 } from "../../state/approvedCopy";
 import type { SwapExecutionTerms } from "../../suggestions/swapExecution/executionContracts";
 import type { ExecutionFailureKey, ExecutionPhase } from "../../suggestions/swapExecution/executionLifecycle";
-import { resolveProtocolIcon } from "../../state/iconRegistry";
+import { resolveProtocolIcon, resolveTokenIcon } from "../../state/iconRegistry";
 import {
   failureCopy,
   ABSENT_FIGURE,
   formatApproxTokens,
   formatTokens,
   formatApproxUsd,
+  formatUsd,
   formatPercent,
   isAfterApproval,
   solscanTransactionUrl,
   busyPresentationFor,
   showsExplorerLink,
-  showsFailureAlert,
+  failureMarkFor,
+  offersProviderHandoff,
+  offersRetry,
+  formatSettledAmount,
+  rawToTokenString,
 } from "./swapConfirmPresentation";
+import type { FailureMarkKind } from "./swapConfirmPresentation";
+
+/**
+ * One glyph per mark kind. A table rather than a chain of ternaries: adding a fourth kind
+ * should be one line here and one rule in the stylesheet, not an edit to the JSX.
+ */
+const MARK_GLYPHS: Record<FailureMarkKind, string> = {
+  warning: alertCircleUrl,
+  clock: clockUrl,
+  cross: xCircleUrl,
+};
 
 export interface SwapConfirmSheetProps {
   phase: ExecutionPhase;
@@ -66,6 +91,22 @@ export interface SwapConfirmSheetProps {
   /** Milliseconds of life left in the terms; null while there is no plan. */
   /** Present once the transaction is on-chain. The user's only record of it. */
   signature?: string | null;
+  /**
+   * What ACTUALLY arrived, already decimal-adjusted. Only ever set on a confirmed swap.
+   *
+   * Null means the chain read could not produce it, and the screen then says so rather than
+   * reprinting the quote's expectation under the words "You received". The estimate was a
+   * prediction made before the swap; it is not evidence of what the swap did.
+   */
+  receivedTokens?: string | null;
+  /** Dismiss a FINISHED swap. Distinct from Cancel, which abandons one that has not happened. */
+  onDone?: () => void;
+  /**
+   * What the chain charged, when a transaction landed. Lamports and USD, already read from
+   * the transaction itself — never the quote's disclosed estimate, which described a
+   * different moment and cannot follow the words "was charged".
+   */
+  fee?: { lamports: string; usd: number | null } | null;
   onCancel: () => void;
   /** Re-quote. Offered only where new terms would help. */
   onRefresh?: () => void;
@@ -92,23 +133,110 @@ export interface SwapConfirmSheetProps {
 }
 
 export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
-  const { phase, terms, failure, signature, onCancel, onRefresh, onApprove, subpage = false, demo = false, handoff = null } = props;
+  const {
+    phase, terms, failure, signature, receivedTokens = null,
+    onCancel, onRefresh, onApprove, onDone, fee = null, subpage = false, demo = false, handoff = null,
+  } = props;
   const demoTipId = useId();
 
   // A signature means it reached the chain, which changes what a `submit_failed` means.
-  const failed = failureCopy(failure, typeof signature === "string" && signature.length > 0);
+  /**
+   * THE SETTLED SCREEN. A finished swap is not a confirmation screen with a sentence added —
+   * it answers a different question. Before, the reader is deciding and needs every term;
+   * after, they want one number and a way out. So this branches rather than decorating the
+   * terms table, which otherwise sat there afterwards still showing a tilde'd expectation and
+   * a "Min received" floor for a swap that already happened.
+   */
+  if (phase === "confirmed" && terms) {
+    const received = receivedTokens ? formatSettledAmount(receivedTokens) : null;
+    const swapped = formatSettledAmount(terms.inputAmountTokens);
+    const outputIcon = resolveTokenIcon(`${terms.outputSymbol.toLowerCase()}.svg`);
+    const explorer = signature ? solscanTransactionUrl(signature) : null;
+    return (
+      <section className="review-modal__section swap-confirm swap-confirm--settled" aria-label={SWAP_CONFIRM_TITLE}>
+        {/* As a subpage the step's header already says "Swap Completed". */}
+        {!subpage && <h3 className="review-modal__section-title">{SWAP_CONFIRM_COMPLETE_TITLE}</h3>}
+        <span className="swap-confirm__alert swap-confirm__alert--success" aria-hidden="true">
+          <ButtonIcon src={checkBadgeUrl} size={40} />
+        </span>
+        <div className="swap-confirm__settled-block">
+          {received ? (
+            <>
+              <p className="swap-confirm__settled-label">{SWAP_CONFIRM_RECEIVED_LABEL}</p>
+              <p className="swap-confirm__settled-amount">
+                {/* The token's own mark, so the figure is identifiable before it is read. The
+                    registry falls back rather than inventing one, and the symbol beside it
+                    carries the meaning either way. */}
+                <img className="swap-confirm__settled-icon" src={outputIcon.url} alt="" width={24} height={24} />
+                <span>{received} {terms.outputSymbol}</span>
+              </p>
+            </>
+          ) : (
+            // No figure, so no label standing over an empty space. It names the token we
+            // could not count — vaguer would be easy and less useful — and points at the
+            // explorer, which is also the button directly below it.
+            <p className="swap-confirm__settled-unknown">
+              {swapConfirmReceivedUnknown(terms.outputSymbol)}
+            </p>
+          )}
+          {swapped && (
+            <p className="swap-confirm__settled-swapped">{swapConfirmSwapped(swapped, terms.inputSymbol)}</p>
+          )}
+        </div>
+        <ModalActionsFooter
+          secondary={
+            explorer
+              ? {
+                  kind: "external-link",
+                  label: SWAP_CONFIRM_VIEW_TRANSACTION,
+                  href: explorer,
+                  newTab: true,
+                  ariaLabel: `${SWAP_CONFIRM_VIEW_TRANSACTION}. Opens Solscan in a new tab.`,
+                }
+              : { kind: "button", label: SWAP_CONFIRM_CLOSE_LABEL, onClick: onDone ?? onCancel }
+          }
+          primary={{ kind: "button", label: SWAP_CONFIRM_DONE_LABEL, onClick: onDone ?? onCancel }}
+        />
+      </section>
+    );
+  }
+
+  const reachedChain = typeof signature === "string" && signature.length > 0;
+  // Lamports are SOL's base units, nine decimals, and the figure is small — so it keeps more
+  // precision than the settled screen's headline, where rounding is a reading aid. A fee is
+  // read to check it, not to admire it.
+  // `formatUsd`, NOT `formatApproxUsd`: the sentence already carries its own ≈, and the
+  // approximate formatter prepends a tilde of its own — together they rendered "(≈~$0.01)".
+  // One mark per approximation.
+  const feeUsdText = fee?.usd != null ? formatUsd(fee.usd) : ABSENT_FIGURE;
+  const feeCopy = fee
+    ? {
+        sol: rawToTokenString(fee.lamports, 9) ?? fee.lamports,
+        usd: feeUsdText === ABSENT_FIGURE ? null : feeUsdText,
+      }
+    : null;
+  const failed = failureCopy(failure, reachedChain, feeCopy);
+  const mark = failureMarkFor(failure);
   if (phase === "failed" && failed) {
     return (
       <section className="review-modal__section swap-confirm" aria-label={SWAP_CONFIRM_TITLE}>
         {/* No title here when the step owns the modal: the review's header already shows this
             failure's own name, and repeating it below would read as a heading for the body. */}
         {!subpage && <h3 className="review-modal__section-title">{failed.title}</h3>}
-        {showsFailureAlert(failure) && (
-          <span className="swap-confirm__alert" aria-hidden="true">
-            <ButtonIcon src={alertCircleUrl} size={40} />
+        {/* The mark, when the ending earns one. Its KIND decides both the glyph and the
+            colour: an amber alert for something that went wrong, a primary-coloured clock for
+            a quote that simply aged out. Same geometry either way, so the layout does not
+            shift between outcomes. */}
+        {mark && (
+          <span className={`swap-confirm__alert swap-confirm__alert--${mark}`} aria-hidden="true">
+            <ButtonIcon src={MARK_GLYPHS[mark]} size={40} />
           </span>
         )}
         <p className="modal__intro">{failed.desc}</p>
+        {/* A second paragraph, where the ending has one. On a revert it carries the cost
+            warning for trying again, which may not be buried at the end of the line about
+            what happened to the tokens. */}
+        {failed.note && <p className="modal__intro">{failed.note}</p>}
         {/* A signature survives into a failure, and when it does it matters MORE here than on
             success: a confirm timeout means we stopped watching something that may well have
             landed, and a revert means the chain ran it. In both cases this link is the only
@@ -120,17 +248,25 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
             </a>
           </p>
         )}
-        {/* Expiry is the one failure a fresh quote fixes, so it gets Refresh. Everything else
-            gets the provider's own page — we could not do this for them, so the honest offer
-            is the place they can do it themselves. Neither is shown without the means to
-            deliver it: no handler, no button. */}
-        {onRefresh && failure === "expired" ? (
+        {/* Expiry is the one failure a fresh quote fixes, so it gets Refresh. The endings WE
+            caused get the provider's own page — we could not do this for them, so the honest
+            offer is the place they can do it themselves. A decline gets neither: the user is
+            not blocked, and offering another venue for the thing they just refused reads as
+            asking twice. Nothing is shown without the means to deliver it: no handler, no
+            button. */}
+        {onRefresh && offersRetry(failure, reachedChain) ? (
+          <ModalActionsFooter
+            secondaryLabel={SWAP_CONFIRM_CANCEL_LABEL}
+            onSecondary={onCancel}
+            primary={{ kind: "button", label: SWAP_CONFIRM_RETRY_LABEL, onClick: onRefresh }}
+          />
+        ) : onRefresh && failure === "expired" ? (
           <ModalActionsFooter
             secondaryLabel={SWAP_CONFIRM_CANCEL_LABEL}
             onSecondary={onCancel}
             primary={{ kind: "button", label: SWAP_CONFIRM_REFRESH_LABEL, onClick: onRefresh }}
           />
-        ) : handoff ? (
+        ) : handoff && offersProviderHandoff(failure) ? (
           <ModalActionsFooter
             secondaryLabel={SWAP_CONFIRM_CANCEL_LABEL}
             onSecondary={onCancel}
@@ -143,9 +279,12 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
             }}
           />
         ) : (
+          /* A lone button that only dismisses says Close, not Cancel — there is nothing left
+             to cancel, and on a decline "Cancel" would be asking the reader to cancel their
+             own cancellation. */
           <div className="review-modal__footer review-modal__footer--actions">
             <button type="button" className="review-modal__tertiary-action" onClick={onCancel}>
-              {SWAP_CONFIRM_CANCEL_LABEL}
+              {SWAP_CONFIRM_CLOSE_LABEL}
             </button>
           </div>
         )}
@@ -236,8 +375,12 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
 
       {/* Success. No figure: reading what actually arrived needs a chain read the browser
           cannot make, and the rule is explicit that an unreadable amount is omitted rather than
-          replaced with the estimate shown beforehand. */}
-      {confirmed && (
+          replaced with the estimate shown beforehand.
+
+          Suppressed as a subpage for the same reason the failure branch suppresses its own
+          heading: the step's header already says "Swap complete", and printing the identical
+          sentence directly underneath reads as a caption for itself. */}
+      {confirmed && !subpage && (
         <p className="swap-confirm__complete">{SWAP_CONFIRM_COMPLETE_TITLE}</p>
       )}
 

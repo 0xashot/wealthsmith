@@ -26,7 +26,23 @@ export const CONFIRMATION_POLL_INTERVAL_MS = 2_000;
 export type ConfirmationState = "confirmed" | "pending" | "failed";
 
 export type ConfirmationFetchResult =
-  | { ok: true; state: ConfirmationState }
+  | {
+      ok: true;
+      state: ConfirmationState;
+      /**
+       * Base units the taker actually received, when the service could read them. Null is the
+       * normal case for anything but a confirmed swap, and remains possible even then.
+       */
+      deliveredRaw?: string | null;
+      /**
+       * What the chain charged, read from the landed transaction. Present on BOTH landed
+       * outcomes — a reverted swap moved no tokens and still cost money, and that is the
+       * figure its screen reports.
+       */
+      feeLamports?: string | null;
+      /** That fee in USD, priced server-side from the same source the terms used. */
+      feeUsd?: number | null;
+    }
   /** We could not ask. Indistinguishable from `pending` to the caller, and treated as such. */
   | { ok: false };
 
@@ -44,12 +60,33 @@ export function decideFromConfirmation(result: ConfirmationFetchResult): PollDec
   if (!result.ok) return { action: "keep_waiting" };
   switch (result.state) {
     case "confirmed":
-      return { action: "stop", events: [{ type: "confirmed" }] };
+      // The delivered figure travels WITH the outcome rather than being fetched afterwards:
+      // one read, one event, and no window in which the sheet says a swap completed while a
+      // second request decides what it completed with.
+      return {
+        action: "stop",
+        events: [{
+          type: "confirmed",
+          deliveredRaw: result.deliveredRaw ?? null,
+          feeLamports: result.feeLamports ?? null,
+          feeUsd: result.feeUsd ?? null,
+        }],
+      };
     case "failed":
       // The chain ran it and it reverted. This is the ONE failure confirmation may report, and
       // it is a different event from giving up — the user's funds did not move, and we know it
       // rather than merely not knowing.
-      return { action: "stop", events: [{ type: "submit_failed", detail: "transaction_reverted" }] };
+      return {
+        action: "stop",
+        events: [{
+          type: "submit_failed",
+          detail: "transaction_reverted",
+          // The one failure that costs money. The screen says so with a figure, so the figure
+          // travels with the outcome rather than being fetched after it.
+          feeLamports: result.feeLamports ?? null,
+          feeUsd: result.feeUsd ?? null,
+        }],
+      };
     case "pending":
       return { action: "keep_waiting" };
   }
@@ -74,6 +111,14 @@ export interface FetchConfirmationOptions {
   fetchImpl?: typeof fetch;
   apiBase?: string;
   signal?: AbortSignal;
+  /**
+   * Where to read what arrived: the taker's public key and the output mint.
+   *
+   * Omitted, the service answers with the state alone and the success screen shows no figure.
+   * Both are public and both are already on the confirm sheet, so sending them discloses
+   * nothing the signature did not.
+   */
+  delivery?: { owner: string; mint: string } | null;
 }
 
 /** Resolve the execute service base — the same variable the plan request uses. */
@@ -99,14 +144,31 @@ export async function fetchConfirmationState(
   const fetchImpl = opts.fetchImpl ?? fetch;
   const base = opts.apiBase ?? resolveBase();
   try {
-    const res = await fetchImpl(
-      `${base}/api/swap-execute/status?signature=${encodeURIComponent(signature)}`,
-      { method: "GET", signal: opts.signal },
-    );
+    const query = new URLSearchParams({ signature });
+    if (opts.delivery) {
+      query.set("owner", opts.delivery.owner);
+      query.set("mint", opts.delivery.mint);
+    }
+    const res = await fetchImpl(`${base}/api/swap-execute/status?${query.toString()}`, {
+      method: "GET",
+      signal: opts.signal,
+    });
     if (!res.ok) return { ok: false };
-    const json = (await res.json()) as { state?: unknown };
+    const json = (await res.json()) as {
+      state?: unknown; deliveredRaw?: unknown; feeLamports?: unknown; feeUsd?: unknown;
+    };
     const state = json?.state;
-    if (state === "confirmed" || state === "pending" || state === "failed") return { ok: true, state };
+    // Base units or nothing. A malformed figure is dropped rather than shown: the one number
+    // on the success screen may not be something we failed to parse.
+    const deliveredRaw =
+      typeof json?.deliveredRaw === "string" && /^[0-9]+$/.test(json.deliveredRaw) ? json.deliveredRaw : null;
+    const feeLamports =
+      typeof json?.feeLamports === "string" && /^[0-9]+$/.test(json.feeLamports) ? json.feeLamports : null;
+    const feeUsd =
+      typeof json?.feeUsd === "number" && Number.isFinite(json.feeUsd) && json.feeUsd >= 0 ? json.feeUsd : null;
+    if (state === "confirmed" || state === "pending" || state === "failed") {
+      return { ok: true, state, deliveredRaw, feeLamports, feeUsd };
+    }
     return { ok: false };
   } catch {
     return { ok: false };

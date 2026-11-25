@@ -1099,6 +1099,15 @@ export const SWAP_CONFIRM_APPROVE_LABEL = "Approve";
 export const SWAP_CONFIRM_DEMO_DISABLED =
   "Demo Mode uses a sample portfolio. Connect your wallet to make a real swap.";
 export const SWAP_CONFIRM_CANCEL_LABEL = "Cancel";
+/**
+ * The label on a lone dismissal.
+ *
+ * "Cancel" is the right word beside a primary action, where it means "not that one". Standing
+ * by itself, with nothing left to decide, it asks the reader to cancel something that already
+ * ended — and on the declined state it would be asking them to cancel their own cancellation.
+ * A button that only dismisses a screen says Close.
+ */
+export const SWAP_CONFIRM_CLOSE_LABEL = "Close";
 
 /*
  * There is deliberately NO countdown string here any more.
@@ -1110,41 +1119,112 @@ export const SWAP_CONFIRM_CANCEL_LABEL = "Cancel";
 /**
  * Expiry has its own title. It is NOT an outage: the terms were fine and ran out of time, and
  * showing it under "Couldn't prepare this swap" told the reader the wrong thing about why.
+ *
+ * Named for what expired — the QUOTE — rather than for "terms", which is our word and not the
+ * reader's. The description leads with the money ("No transaction was submitted") because that
+ * is the first thing anyone wants to know when a confirm screen changes under them, and then
+ * says what a new quote is for: the price and fees may have moved while they were reading, so
+ * the next screen is worth looking at rather than clicking through.
  */
-export const SWAP_CONFIRM_EXPIRED_TITLE = "These terms expired";
-export const SWAP_CONFIRM_EXPIRED_DESC = "Nothing was sent. Refresh to get current terms.";
+export const SWAP_CONFIRM_EXPIRED_TITLE = "Your Swap Quote Expired";
+export const SWAP_CONFIRM_EXPIRED_DESC =
+  "No transaction was submitted. Get a new quote to review the latest price and fees.";
 
 /**
  * The same ending, delivered as a toast once the review has closed itself.
  *
- * Used only after the quote has quietly re-quoted its full allowance with the page in front of
- * someone and still had no decision. At that point keeping a dead-end card on screen offering a
- * fourth attempt is an obstacle, so the review closes — and this is what stops that being
- * silent. It must still account for the money, exactly as the in-sheet copy does: the first
- * thing anyone wants to know when a window closes by itself is whether something happened.
+ * Used only after the quote has quietly re-quoted its full allowance with the page in front
+ * of someone and still had no decision. At that point keeping a dead-end card on screen
+ * offering a fourth attempt is an obstacle, so the review closes — and this is what stops
+ * that being silent.
  *
- * It does NOT say "Refresh", because there is no longer a button to press; it says how to get
- * current terms from where the reader now is.
+ * ONE LINE, no helper. A toast is a notification, not a screen: it says which thing just
+ * happened and gets out of the way. The explanation belongs on the card, which is one click
+ * away and states it in full. It carries the card's name for the ending, minus the "Your" —
+ * see SWAP_CONFIRM_EXPIRED_TOAST.
  */
-export const SWAP_CONFIRM_EXPIRED_TOAST = "These terms expired";
-export const SWAP_CONFIRM_EXPIRED_TOAST_HELPER =
-  "Nothing was sent. Open the suggestion again for current terms.";
+/**
+ * Shorter than the card's heading, and deliberately so. The card addresses someone who is
+ * mid-decision and names the thing as theirs; a toast is a notification sliding past the
+ * corner of a screen they may already have moved on from, where "Your" is a syllable in the
+ * way. Same ending, same words for it, one fewer.
+ */
+export const SWAP_CONFIRM_EXPIRED_TOAST = "Swap Quote Expired";
 /** The single-line form, for an inline notice rather than a titled state. */
-export const SWAP_CONFIRM_EXPIRED = "These terms expired. Nothing was sent.";
-export const SWAP_CONFIRM_REFRESH_LABEL = "Refresh terms";
+export const SWAP_CONFIRM_EXPIRED = "Your swap quote expired. No transaction was submitted.";
+/**
+ * The action on the expired state. It names the THING the press produces — a new quote — rather
+ * than the mechanic ("Refresh"), which told the reader what the app does instead of what they
+ * get. Matches the heading's noun, so the button is visibly the answer to the sentence above it.
+ */
+export const SWAP_CONFIRM_REFRESH_LABEL = "Get New Quote";
+/**
+ * Send it again, from the top.
+ *
+ * Offered only where a retry is genuinely the remedy — the wallet refused to broadcast and
+ * nothing happened — and never where something DID happen that a second attempt could
+ * duplicate. The press re-quotes rather than resending the old transaction: the terms that
+ * failed to send are a minute older than the ones the user would be agreeing to now.
+ */
+export const SWAP_CONFIRM_RETRY_LABEL = "Try Again";
 
 /**
  * Outcomes. Success may be shown only after on-chain confirmation, and states the
  * amount ACTUALLY received; when that cannot be read, the figure is omitted rather
  * than replaced with the earlier estimate.
  */
-export const SWAP_CONFIRM_COMPLETE_TITLE = "Swap complete";
+export const SWAP_CONFIRM_COMPLETE_TITLE = "Swap Completed";
 export const swapConfirmReceived = (amount: string, symbol: string) => `You received ${amount} ${symbol}.`;
+
+/**
+ * The settled screen's own words.
+ *
+ * The label and the figure are SEPARATE because they are typeset differently — the figure is
+ * the one thing on this screen anybody came back for, and it carries the weight. The label
+ * stays in the past tense and stays plain: the swap happened, and this is the result of it.
+ */
+export const SWAP_CONFIRM_RECEIVED_LABEL = "You received";
+/**
+ * What was given up, stated under what was gained and deliberately quieter.
+ *
+ * It is context, not the headline. A reader checking "did the right thing happen" needs both
+ * halves, but only one of them is the answer to "what do I have now".
+ */
+export const swapConfirmSwapped = (amount: string, symbol: string) => `Swapped: ${amount} ${symbol}`;
+/**
+ * When the chain read could not produce a figure.
+ *
+ * The swap still confirmed — that is not in doubt, and the sentence leads with it so a
+ * reader meeting a screen without its number is not left wondering whether the missing
+ * figure means a missing swap. What we cannot do is state an amount: the rule has always
+ * been to omit it rather than reprint the quote's estimate as though it were the outcome.
+ *
+ * TAKES THE SYMBOL, because "the exact amount" is vaguer than it needs to be when we know
+ * precisely which token we could not count. It then points at the one place that does have
+ * the figure, which is also the button in the footer.
+ */
+export const swapConfirmReceivedUnknown = (symbol: string) =>
+  `Your swap succeeded. We couldn\u2019t load the exact ${symbol} amount received. View the transaction on Solscan for details.`;
+/** Dismisses a finished swap. Not "Close": nothing is being closed unfinished. */
+export const SWAP_CONFIRM_DONE_LABEL = "Done";
 export const SWAP_CONFIRM_VIEW_TRANSACTION = "View on Solscan";
 
 /** Failure states. None blames the user; each says what is true about their funds. */
-export const SWAP_CONFIRM_DECLINED_TITLE = "Not approved";
-export const SWAP_CONFIRM_DECLINED_DESC = "You declined in your wallet. Nothing was sent.";
+/**
+ * A decline is the user's own decision, and the copy says so without making it sound like an
+ * outcome that happened TO them. "Not approved" was a verdict in the passive voice — it named
+ * the state of the request rather than what the person did. "Swap Canceled" names the thing
+ * they cancelled, in their words.
+ *
+ * The description then says where the decision was made ("in your wallet"), because the wallet
+ * and this screen are two different surfaces and a reader who pressed Reject in a popup should
+ * see that reflected here, and accounts for the money twice over: nothing was submitted, and
+ * nothing moved. Those are separate reassurances — a transaction can be submitted and fail —
+ * and on the one ending the user chose, both are worth stating plainly.
+ */
+export const SWAP_CONFIRM_DECLINED_TITLE = "Swap Canceled";
+export const SWAP_CONFIRM_DECLINED_DESC =
+  "The approval request was declined in your wallet. No transaction was submitted, and your funds haven\u2019t moved.";
 
 export const SWAP_CONFIRM_UNAVAILABLE_TITLE = "Couldn’t Prepare Your Swap";
 export const SWAP_CONFIRM_UNAVAILABLE_DESC =
@@ -1165,10 +1245,17 @@ export const SWAP_CONFIRM_VERIFICATION_FAILED_DESC =
 /**
  * The wallet could not send it. Nothing reached the network, so there is no signature, no
  * transaction to look up, and no fee.
+ *
+ * "Your swap", not "the swap": this is the one failure where nothing at all happened, and
+ * naming it as theirs keeps it a thing they still have rather than an event that went wrong
+ * somewhere out of reach. The description accounts for the money twice — nothing submitted,
+ * nothing moved — and then says what to do, because unlike every other failure on this sheet
+ * there is no obstacle in the way: the terms were fine and the send simply did not go. The
+ * screen backs that sentence with an actual Try Again; see SWCS-5i.
  */
-export const SWAP_CONFIRM_SUBMIT_FAILED_TITLE = "The swap wasn’t sent";
+export const SWAP_CONFIRM_SUBMIT_FAILED_TITLE = "Your Swap Wasn’t Sent";
 export const SWAP_CONFIRM_SUBMIT_FAILED_DESC =
-  "Your funds stayed in your wallet. You can try again or swap on Jupiter directly.";
+  "No transaction was submitted. Your funds haven\u2019t moved. Please try again.";
 
 /**
  * The chain RAN it and it reverted — a different outcome, and until now it borrowed the copy
@@ -1183,18 +1270,55 @@ export const SWAP_CONFIRM_SUBMIT_FAILED_DESC =
  * fee is small and admitting it is the whole point — a person who checks Solscan will see it,
  * and finding it unmentioned is what turns a failed swap into a reason to distrust the app.
  */
-export const SWAP_CONFIRM_REVERTED_TITLE = "The swap didn’t go through";
-export const SWAP_CONFIRM_REVERTED_DESC =
-  "It reached the network and failed, so your tokens weren’t swapped. The network fee was still charged. You can try again or swap on Jupiter directly.";
+export const SWAP_CONFIRM_REVERTED_TITLE = "Your Swap Failed";
+/**
+ * The first half: what happened to the tokens, and what it cost.
+ *
+ * The fee is stated as a charge that ALREADY HAPPENED, so it must be the fee the chain
+ * actually took — read from the landed transaction, never the conservative estimate the
+ * quote disclosed beforehand. Those are two different claims about two different moments,
+ * and only one of them can follow the words "was charged".
+ *
+ * When the chain read produces no figure the sentence keeps the fact and drops the number.
+ * Saying a fee was charged without naming it is incomplete; naming one we did not read
+ * would be wrong, and a reader who checks Solscan sees the real one either way.
+ */
+export const swapConfirmRevertedDesc = (fee: { sol: string; usd: string | null } | null): string => {
+  if (fee == null) return "Your tokens weren\u2019t swapped. A network fee was charged.";
+  const amount = fee.usd ? `${fee.sol} SOL (\u2248${fee.usd})` : `${fee.sol} SOL`;
+  return `Your tokens weren\u2019t swapped. A network fee of ${amount} was charged.`;
+};
+/**
+ * The second half: what they can do, and what it may cost to do it.
+ *
+ * A retry here is not free, unlike the one on a swap that never left — and a screen that has
+ * just told someone they paid for nothing may not then offer them a button without saying
+ * the same thing could happen again. "May" because it depends on whether the next attempt
+ * also reaches the chain; stating it as a certainty would be its own inaccuracy.
+ */
+export const SWAP_CONFIRM_REVERTED_RETRY_NOTE =
+  "You can review a new quote and try again. Another attempt may incur a network fee.";
 
 /**
  * Submitted but unconfirmed. This must never read as failure: the transaction is
  * on-chain and may still succeed, and claiming otherwise would be a false claim
  * about the user's money.
  */
-export const SWAP_CONFIRM_TIMEOUT_TITLE = "Still confirming";
+export const SWAP_CONFIRM_TIMEOUT_TITLE = "Awaiting Confirmation";
+/**
+ * WE stopped watching; the transaction did not stop. Every word here is built around that.
+ *
+ * "Taking longer than expected" names whose problem this is — ours, a deadline we set — and
+ * keeps the swap's own status open. It may never say failed, lost or gone: the transaction is
+ * on-chain and may well land a minute from now.
+ *
+ * The last sentence is the operative one. The real risk on this screen is not confusion, it
+ * is a SECOND swap: someone who reads "we don't know" and starts again can end up executing
+ * both. So the screen tells them to check first, and offers no button that would start one —
+ * `offersProviderHandoff` returns false here for the same reason.
+ */
 export const SWAP_CONFIRM_TIMEOUT_DESC =
-  "We stopped waiting, but the swap may still complete. Check your wallet.";
+  "Confirmation is taking longer than expected. Your swap may still complete. Check its status before starting another swap.";
 
 /**
  * In-flight states, after Approve and before an outcome.
