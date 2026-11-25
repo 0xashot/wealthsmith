@@ -14,7 +14,7 @@
  * provider we cannot build for — any of them and this is absent, and the modal keeps its
  * ordinary handoff footer. That is the fallback working, not a degraded state.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { SwapActionContext, SwapQuoteComparisonAssessment } from "../../suggestions/swapQuote/swapQuoteContracts";
 import { deriveExecutionOffer } from "../../suggestions/swapExecution/executionOffer";
@@ -50,7 +50,7 @@ export interface SwapExecutionSectionProps {
    * this sheet's back control returns them. Reported rather than assumed, because the review
    * owns its own layout and this component should not reach into it.
    */
-  onStepChange?: (active: boolean) => void;
+  onStepChange?: (step: { active: boolean; onBack: () => void }) => void;
   /**
    * Demo Mode. The confirm step still renders and still fetches nothing real: Approve is shown
    * unavailable with the reason, so someone evaluating the product sees the whole flow through
@@ -67,9 +67,12 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
 
   // Report the step to the review, which hides its own content while it is open.
   const onStepChange = props.onStepChange;
-  useEffect(() => { onStepChange?.(started); }, [started, onStepChange]);
+  // The back handler travels with the report, because the review draws the control but only
+  // this component knows how to leave the step.
+  const leaveStep = useCallback(() => setStarted(false), []);
+  useEffect(() => { onStepChange?.({ active: started, onBack: leaveStep }); }, [started, onStepChange, leaveStep]);
   // Leaving the review entirely must not leave it hidden behind a step that is gone.
-  useEffect(() => () => onStepChange?.(false), [onStepChange]);
+  useEffect(() => () => onStepChange?.({ active: false, onBack: leaveStep }), [onStepChange, leaveStep]);
 
   const offer = deriveExecutionOffer({
     action,
@@ -114,7 +117,7 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
         terms={demoTerms}
         failure={null}
         signature={null}
-        onBack={() => setStarted(false)}
+        subpage
         onCancel={() => setStarted(false)}
       />
     );
@@ -167,7 +170,7 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
       terms={execution.plan?.terms ?? null}
       failure={execution.failure}
       signature={execution.signature}
-      onBack={() => { execution.cancel(); setStarted(false); }}
+      subpage
       onApprove={execution.approve}
       onRefresh={() => execution.prepare()}
       onCancel={() => {

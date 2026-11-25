@@ -54,7 +54,18 @@ function tokensFromRaw(raw: string, decimals: number): string {
 
 function demoAssessment(action: SwapActionContext, nowMs: number): SwapQuoteComparisonAssessment | null {
   const quotedAt = new Date(nowMs - 8_000).toISOString();
-  const expiresAt = new Date(nowMs + 40_000).toISOString();
+  /**
+   * Deliberately long. A demo quote is a FIXTURE — it is computed from the action, it talks to
+   * nothing, and no market can move underneath it, so there is no sense in which it goes stale.
+   * At 40 seconds it expired while someone was still reading the comparison and the modal
+   * replaced it with "Route comparison is unavailable right now", which is true of a live quote
+   * that aged out and simply false here. A reviewer walking the flow met a failure state
+   * manufactured by the fixture.
+   *
+   * The expired and unavailable states are still reviewable — the confirm gallery renders both
+   * directly — so nothing is hidden by letting the demo's own quote stand.
+   */
+  const expiresAt = new Date(nowMs + 30 * 60_000).toISOString();
 
   // Everything scales off the ACTION's own USD notional. Without it the demo
   // cannot state a consistent cost, so it fails closed rather than inventing one.

@@ -19,6 +19,8 @@ import { useScrollLock } from "./useScrollLock";
 import { useIsMobileViewport } from "./useIsMobileViewport";
 import SolStakingLeaderExplanation from "./SolStakingLeaderExplanation";
 import closeUrl from "../../../assets/icons/ui/close.svg";
+import chevronLeftUrl from "../../../assets/icons/ui/chevron-left.svg";
+import { SWAP_CONFIRM_BACK_LABEL, SWAP_CONFIRM_SUBPAGE_TITLE } from "../state/approvedCopy";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
 import { resolveTokenIcon, resolveProtocolIcon } from "../state/iconRegistry";
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
@@ -156,7 +158,8 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
    * step vanished the instant it was asked for. Hiding also keeps the quote it already
    * fetched, so Back does not pay for a refetch.
    */
-  const [swapStepActive, setSwapStepActive] = useState(false);
+  const [swapStep, setSwapStep] = useState<{ active: boolean; onBack: () => void } | null>(null);
+  const swapStepActive = swapStep?.active === true;
   const bodyClass = `review-modal__body${swapStepActive ? " review-modal__body--behind-subpage" : ""}`;
 
   // The read-only "Swap Route" section (Rebalance / Trim / eligible DCA), reused across modal variants. Suppressed
@@ -187,7 +190,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       nowMs={swapQuoteNowMs}
       onClose={onClose}
       onExpiredGiveUp={onSwapQuoteGaveUp}
-      onStepChange={setSwapStepActive}
+      onStepChange={setSwapStep}
     />
   ) : null;
 
@@ -347,9 +350,9 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         <div ref={dialogRef} className="modal review-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={reasonId} onKeyDown={onKeyDown} onClick={(e) => e.stopPropagation()}>
           <div className="modal__header">
             <div className="review-modal__heading">
-              {/* The subpage brings its own heading; this one steps aside rather than
-                  stacking a second title above it. */}
-              {!swapStepActive && <h2 id={titleId} className="modal__title">{cr.title}</h2>}
+              {swapStepActive
+                ? <SubpageHeading onBack={swapStep!.onBack} titleId={titleId} />
+                : <h2 id={titleId} className="modal__title">{cr.title}</h2>}
             </div>
             <button ref={closeRef} type="button" className="modal__close" aria-label="Close review details" onClick={onClose}>
               <ButtonIcon src={closeUrl} size={18} />
@@ -440,7 +443,9 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       >
         <div className="modal__header">
           <div className="review-modal__heading">
-            {!swapStepActive && (
+            {swapStepActive ? (
+              <SubpageHeading onBack={swapStep!.onBack} titleId={titleId} />
+            ) : (
               <h2 id={titleId} className="modal__title">
                 {summary.title}
               </h2>
@@ -885,6 +890,24 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
           />
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The confirm step's heading, drawn in the REVIEW'S OWN header row.
+ *
+ * It lives here rather than inside the sheet so the back control and the title line up with
+ * the close button on the same baseline, and so the title is a `modal__title` like every other
+ * modal heading — a step that looked like a section heading sat at the wrong size and indent.
+ */
+function SubpageHeading({ onBack, titleId }: { onBack: () => void; titleId: string }) {
+  return (
+    <div className="review-modal__subpage-heading">
+      <button type="button" className="review-modal__back" onClick={onBack} aria-label={SWAP_CONFIRM_BACK_LABEL}>
+        <ButtonIcon src={chevronLeftUrl} size={18} />
+      </button>
+      <h2 id={titleId} className="modal__title">{SWAP_CONFIRM_SUBPAGE_TITLE}</h2>
     </div>
   );
 }

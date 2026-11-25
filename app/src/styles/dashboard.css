@@ -5435,37 +5435,38 @@ td.vetting-scores-table__date {
   display: none;
 }
 
-/* The confirm step's own header, when it renders as a subpage of the review:
-   a back control and the step's name on one row. Spacing and the title style
-   come from the review-modal furniture it sits inside, so the subpage reads as
-   part of the same sheet rather than a second surface. */
-.swap-confirm__subpage-header {
+/* The confirm step's heading, in the review's OWN header row: back control and
+   title on one baseline, so both align with the close button opposite them and
+   the title keeps `modal__title` sizing like every other modal heading. */
+.review-modal__subpage-heading {
   display: flex;
   align-items: center;
   gap: var(--spacing-inline-gap-sm);
-  margin-bottom: var(--spacing-stack-gap-sm);
 }
-.swap-confirm__subpage-title {
-  margin: 0;
-}
-/* Matches the modal's own close control: a quiet icon button that takes its
-   colour from the text around it, with the same focus treatment. */
-.swap-confirm__back {
+
+/* The back control is the close control mirrored: the SAME padding token, radius
+   and colour, so the two icon buttons are the same size and sit on the same
+   centre line in a `flex-start` header. Matching by eye instead left it 28px
+   against the close button's 34px and three pixels high. The negative margin
+   pulls the glyph flush with the title column, so its padding does not indent
+   the heading. */
+.review-modal__back {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: var(--spacing-inset-xs, 4px);
-  margin-left: calc(-1 * var(--spacing-inset-xs, 4px));
+  padding: var(--spacing-inline-gap-sm);
+  margin-left: calc(-1 * var(--spacing-inline-gap-sm));
   border: none;
-  background: none;
-  border-radius: var(--radius-control-sm);
-  color: var(--color-text-primary);
+  border-radius: var(--radius-control-md);
+  background: transparent;
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
-.swap-confirm__back:hover {
-  background: var(--color-surface-muted, rgba(120, 120, 140, 0.08));
+.review-modal__back:hover:not(:disabled) {
+  background: var(--color-action-secondary-background-hover);
 }
-.swap-confirm__back:focus-visible {
+.review-modal__back:focus-visible {
   outline: none;
   box-shadow: var(--shadow-control-focus);
 }

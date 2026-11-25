@@ -21,13 +21,9 @@
  * explanation. Everything else is an expectation and says so in its own label.
  */
 import { useId } from "react";
-import ButtonIcon from "../ButtonIcon";
-import chevronLeftUrl from "../../../../assets/icons/ui/chevron-left.svg";
 import InfoPopover from "../InfoPopover";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
-  SWAP_CONFIRM_BACK_LABEL,
-  SWAP_CONFIRM_SUBPAGE_TITLE,
   SWAP_CONFIRM_CANCEL_LABEL,
   SWAP_CONFIRM_DEMO_DISABLED,
   SWAP_CONFIRM_COMPLETE_TITLE,
@@ -71,13 +67,12 @@ export interface SwapConfirmSheetProps {
   /** Phase 5. Undefined until a signer is wired — the button is then not rendered. */
   onApprove?: () => void;
   /**
-   * Returns to the review this step was opened from.
-   *
-   * Given, the sheet renders as a SUBPAGE: its own back control and heading, with the review's
-   * own content hidden behind it. The confirm step asks one question, and a reader answering it
-   * should not be scrolling past the reasoning that led here — they have already read it.
+   * The sheet is rendered as a SUBPAGE of the review, which supplies the heading and the back
+   * control in its own header row — so the two line up with the close button and share the
+   * modal's title size. The sheet then draws no title of its own; a second one directly below
+   * would read as a heading for the terms rather than for the step.
    */
-  onBack?: () => void;
+  subpage?: boolean;
   /**
    * Demo Mode. Approve is shown but unavailable, with the reason on hover and focus — the one
    * place this sheet renders an action that cannot be taken. See the footer for why.
@@ -86,7 +81,7 @@ export interface SwapConfirmSheetProps {
 }
 
 export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
-  const { phase, terms, failure, signature, onCancel, onRefresh, onApprove, onBack, demo = false } = props;
+  const { phase, terms, failure, signature, onCancel, onRefresh, onApprove, subpage = false, demo = false } = props;
   const demoTipId = useId();
 
   // A signature means it reached the chain, which changes what a `submit_failed` means.
@@ -94,7 +89,6 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
   if (phase === "failed" && failed) {
     return (
       <section className="review-modal__section swap-confirm" aria-label={SWAP_CONFIRM_TITLE}>
-        {onBack && <SubpageHeader onBack={onBack} />}
         <h3 className="review-modal__section-title">{failed.title}</h3>
         <p className="modal__intro">{failed.desc}</p>
         {/* A signature survives into a failure, and when it does it matters MORE here than on
@@ -134,7 +128,7 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
 
   return (
     <section className="review-modal__section swap-confirm" aria-label={SWAP_CONFIRM_TITLE}>
-      {onBack ? <SubpageHeader onBack={onBack} /> : <h3 className="review-modal__section-title">{SWAP_CONFIRM_TITLE}</h3>}
+      {!subpage && <h3 className="review-modal__section-title">{SWAP_CONFIRM_TITLE}</h3>}
 
       {terms && (
         <dl className="review-modal__metrics swap-confirm__terms">
@@ -286,24 +280,3 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
   );
 }
 
-/**
- * The subpage's own header: back to the review, and the step's name.
- *
- * Uses the design system's `chevron-left` asset through `ButtonIcon`, the same way the modal's
- * own close control is drawn — not an inlined path, so a change to the icon set reaches here.
- */
-function SubpageHeader({ onBack }: { onBack: () => void }) {
-  return (
-    <div className="swap-confirm__subpage-header">
-      <button
-        type="button"
-        className="swap-confirm__back"
-        onClick={onBack}
-        aria-label={SWAP_CONFIRM_BACK_LABEL}
-      >
-        <ButtonIcon src={chevronLeftUrl} size={20} />
-      </button>
-      <h3 className="review-modal__section-title swap-confirm__subpage-title">{SWAP_CONFIRM_SUBPAGE_TITLE}</h3>
-    </div>
-  );
-}
