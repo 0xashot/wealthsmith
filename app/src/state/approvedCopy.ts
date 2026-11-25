@@ -1146,9 +1146,9 @@ export const SWAP_CONFIRM_VIEW_TRANSACTION = "View on Solscan";
 export const SWAP_CONFIRM_DECLINED_TITLE = "Not approved";
 export const SWAP_CONFIRM_DECLINED_DESC = "You declined in your wallet. Nothing was sent.";
 
-export const SWAP_CONFIRM_UNAVAILABLE_TITLE = "Couldn’t prepare this swap";
+export const SWAP_CONFIRM_UNAVAILABLE_TITLE = "Couldn’t Prepare Your Swap";
 export const SWAP_CONFIRM_UNAVAILABLE_DESC =
-  "We couldn’t get terms we’re able to show you right now. You can swap on Jupiter directly.";
+  "We couldn’t load a swap quote right now. No transaction was submitted, and your funds haven’t moved.";
 
 /** The refusal that justifies the whole step. Deliberately not softened. */
 export const SWAP_CONFIRM_VERIFICATION_FAILED_TITLE = "We couldn’t verify these terms";

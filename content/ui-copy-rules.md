@@ -1125,6 +1125,25 @@ Use `aria-disabled`, not `disabled` — a truly disabled button leaves the tab
 order and fires no pointer events, which would make the explanation unreachable
 by keyboard and absent on hover, defeating the point of showing it.
 
+**A failed step is titled by its failure, in the modal's own header.** The
+subpage heading is the step's one title, so a step that failed must not be
+announced as "Review Swap" above a body explaining why there are no terms to
+review. The body then carries only the explanation — repeating the title under
+it reads as a heading for the paragraph.
+
+```text
+Couldn't Prepare Your Swap
+We couldn't load a swap quote right now. No transaction was submitted, and
+your funds haven't moved.
+
+                                        [Cancel]  [Swap on Jupiter ↗]
+```
+
+Every failure we could not fix offers the provider's own page, because we could
+not do this for the user and the honest offer is the place they can do it
+themselves. Expiry is the exception: a fresh quote fixes it, so it offers
+Refresh instead. Neither button appears without the means to deliver it.
+
 **The passed state says nothing at all.** It is the resting state — terms on
 screen, Approve available — and that is already the message. The word
 “Success” sat directly above an unpressed Approve button and read as though the

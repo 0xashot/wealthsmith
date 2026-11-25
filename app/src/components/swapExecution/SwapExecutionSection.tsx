@@ -21,7 +21,9 @@ import { deriveExecutionOffer } from "../../suggestions/swapExecution/executionO
 import { useSwapExecutionPlan } from "./useSwapExecutionPlan";
 import { useWalletSwapSubmitter } from "./useWalletSwapSubmitter";
 import SwapConfirmSheet from "./SwapConfirmSheet";
-import { SWAP_CONFIRM_CHECKING, SWAP_CONFIRM_CONTINUE_LABEL } from "../../state/approvedCopy";
+import { SWAP_CONFIRM_CHECKING, SWAP_CONFIRM_CONTINUE_LABEL, SWAP_CONFIRM_SUBPAGE_TITLE } from "../../state/approvedCopy";
+import { failureCopy } from "./swapConfirmPresentation";
+import { buildSwapHandoff } from "../../suggestions/swapQuote/providerSwapLinks";
 import { demoConfirmTerms } from "../../suggestions/swapExecution/demoConfirmTerms";
 import type { SwapExecutionEmitter } from "../../suggestions/swapExecution/swapExecutionEvents";
 import type { ExecutionFailureKey } from "../../suggestions/swapExecution/executionLifecycle";
@@ -51,7 +53,7 @@ export interface SwapExecutionSectionProps {
    * this sheet's back control returns them. Reported rather than assumed, because the review
    * owns its own layout and this component should not reach into it.
    */
-  onStepChange?: (step: { active: boolean; onBack: () => void }) => void;
+  onStepChange?: (step: { active: boolean; onBack: () => void; title: string }) => void;
   /**
    * Demo Mode only: show a FAILURE instead of the terms preview.
    *
@@ -86,14 +88,21 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
    */
   const [demoRefreshed, setDemoRefreshed] = useState(false);
 
+  /**
+   * What the review's header shows while the step is open.
+   *
+   * A FAILURE names itself — "Couldn't Prepare Your Swap" rather than "Review Swap" above a
+   * body explaining why there is nothing to review. The heading is the step's one title, so a
+   * failed step must not be announced as a review of terms it does not have.
+   */
+  const demoFailureKey = demoRefreshed ? null : props.demoFailure ?? null;
+  const activeFailure = props.demo ? demoFailureKey : null;
+
   // Report the step to the review, which hides its own content while it is open.
   const onStepChange = props.onStepChange;
   // The back handler travels with the report, because the review draws the control but only
   // this component knows how to leave the step.
   const leaveStep = useCallback(() => { setStarted(false); setDemoRefreshed(false); }, []);
-  useEffect(() => { onStepChange?.({ active: started, onBack: leaveStep }); }, [started, onStepChange, leaveStep]);
-  // Leaving the review entirely must not leave it hidden behind a step that is gone.
-  useEffect(() => () => onStepChange?.({ active: false, onBack: leaveStep }), [onStepChange, leaveStep]);
 
   const offer = deriveExecutionOffer({
     action,
@@ -116,6 +125,27 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     onGaveUp: props.onExpiredGiveUp,
   });
 
+  const liveFailure = props.demo ? null : execution.failure;
+  const shownFailure = activeFailure ?? liveFailure;
+  const stepTitle =
+    (shownFailure ? failureCopy(shownFailure, execution.signature != null)?.title : null) ??
+    SWAP_CONFIRM_SUBPAGE_TITLE;
+
+  useEffect(() => {
+    onStepChange?.({ active: started, onBack: leaveStep, title: stepTitle });
+  }, [started, onStepChange, leaveStep, stepTitle]);
+  // Leaving the review entirely must not leave it hidden behind a step that is gone.
+  useEffect(() => () => onStepChange?.({ active: false, onBack: leaveStep, title: SWAP_CONFIRM_SUBPAGE_TITLE }), [onStepChange, leaveStep]);
+
+  // The provider's own page, offered when we could not prepare a swap ourselves. Built from
+  // the comparison's winner and this leg's exact pair, so the hand-off lands on the same swap.
+  const handoff = buildSwapHandoff(
+    assessment?.selectedProviderId ?? null,
+    action.inputAsset.mint,
+    action.outputAsset.mint,
+    action.inputAmountTokens,
+  );
+
   // DEMO MODE. There is no wallet, so the real flow cannot run — but the confirm step is the
   // part someone evaluating the product most needs to see, and the wallet check below would
   // render nothing at all. So the sheet is shown as a PREVIEW built from the demo quote: no
@@ -131,7 +161,7 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     // whether to OFFER, not whether to keep what was already opened.
     if ((!offer.offered && !started) || demoTerms == null) return null;
     if (!started) return <ContinueFooter onClose={onClose} onContinue={() => setStarted(true)} />;
-    const demoFailure = demoRefreshed ? null : props.demoFailure ?? null;
+    const demoFailure = demoFailureKey;
     return (
       <SwapConfirmSheet
         demo
@@ -140,6 +170,7 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
         failure={demoFailure}
         signature={null}
         onRefresh={() => setDemoRefreshed(true)}
+        handoff={handoff}
         subpage
         // Cancel LEAVES; back returns to the review. Two exits, because they answer different
         // questions: "not this swap" and "let me re-read why you suggested it".
@@ -198,6 +229,7 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
       subpage
       onApprove={execution.approve}
       onRefresh={() => execution.prepare()}
+      handoff={handoff}
       onCancel={() => {
         // Abandon anything in flight first — nothing is submitted at this stage, so leaving
         // costs the user nothing — then close the review entirely. The back control is what

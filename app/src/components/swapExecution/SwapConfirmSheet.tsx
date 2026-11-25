@@ -22,6 +22,7 @@
  */
 import { useId } from "react";
 import InfoPopover from "../InfoPopover";
+import ModalActionsFooter from "../ModalActionsFooter";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
   SWAP_CONFIRM_CANCEL_LABEL,
@@ -75,6 +76,12 @@ export interface SwapConfirmSheetProps {
    */
   subpage?: boolean;
   /**
+   * The provider's own swap page, for the hand-off offered when we could not prepare one
+   * ourselves. Absent when no provider was selected, and the footer then offers only Cancel —
+   * a dead "Swap on" button would be worse than none.
+   */
+  handoff?: { providerName: string; swapUrl: string } | null;
+  /**
    * Demo Mode. Approve is shown but unavailable, with the reason on hover and focus — the one
    * place this sheet renders an action that cannot be taken. See the footer for why.
    */
@@ -82,7 +89,7 @@ export interface SwapConfirmSheetProps {
 }
 
 export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
-  const { phase, terms, failure, signature, onCancel, onRefresh, onApprove, subpage = false, demo = false } = props;
+  const { phase, terms, failure, signature, onCancel, onRefresh, onApprove, subpage = false, demo = false, handoff = null } = props;
   const demoTipId = useId();
 
   // A signature means it reached the chain, which changes what a `submit_failed` means.
@@ -90,13 +97,14 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
   if (phase === "failed" && failed) {
     return (
       <section className="review-modal__section swap-confirm" aria-label={SWAP_CONFIRM_TITLE}>
-        <h3 className="review-modal__section-title">{failed.title}</h3>
+        {/* No title here when the step owns the modal: the review's header already shows this
+            failure's own name, and repeating it below would read as a heading for the body. */}
+        {!subpage && <h3 className="review-modal__section-title">{failed.title}</h3>}
         <p className="modal__intro">{failed.desc}</p>
         {/* A signature survives into a failure, and when it does it matters MORE here than on
-            success. `confirm_timeout` means we stopped watching a transaction that may well have
-            landed, and a reverted one means the chain ran it — in both cases this link is the only
-            way the user can find out what became of their money. Leaving it out of this branch was
-            a real omission: the gallery's timeout case showed the state with no link at all. */}
+            success: a confirm timeout means we stopped watching something that may well have
+            landed, and a revert means the chain ran it. In both cases this link is the only
+            way the user can find out what became of their money. */}
         {signature && solscanTransactionUrl(signature) && (
           <p className="swap-confirm__transaction">
             <a href={solscanTransactionUrl(signature) as string} target="_blank" rel="noopener noreferrer">
@@ -104,21 +112,39 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
             </a>
           </p>
         )}
-        <div className="review-modal__footer review-modal__footer--actions">
-          <button type="button" className="review-modal__tertiary-action" onClick={onCancel}>
-            {SWAP_CONFIRM_CANCEL_LABEL}
-          </button>
-          {/* Offered only when fresh terms are the actual remedy. A refresh after a verification
-              refusal would invite someone to retry until a check happens to pass. */}
-          {onRefresh && failure === "expired" && (
-            <button type="button" className="review-modal__primary-action" onClick={onRefresh}>
-              <span>{SWAP_CONFIRM_REFRESH_LABEL}</span>
+        {/* Expiry is the one failure a fresh quote fixes, so it gets Refresh. Everything else
+            gets the provider's own page — we could not do this for them, so the honest offer
+            is the place they can do it themselves. Neither is shown without the means to
+            deliver it: no handler, no button. */}
+        {onRefresh && failure === "expired" ? (
+          <ModalActionsFooter
+            secondaryLabel={SWAP_CONFIRM_CANCEL_LABEL}
+            onSecondary={onCancel}
+            primary={{ kind: "button", label: SWAP_CONFIRM_REFRESH_LABEL, onClick: onRefresh }}
+          />
+        ) : handoff ? (
+          <ModalActionsFooter
+            secondaryLabel={SWAP_CONFIRM_CANCEL_LABEL}
+            onSecondary={onCancel}
+            primary={{
+              kind: "external-link",
+              label: `Swap on ${handoff.providerName}`,
+              href: handoff.swapUrl,
+              newTab: true,
+              ariaLabel: `Swap on ${handoff.providerName}. Opens ${handoff.providerName} in a new tab. No transaction is prepared.`,
+            }}
+          />
+        ) : (
+          <div className="review-modal__footer review-modal__footer--actions">
+            <button type="button" className="review-modal__tertiary-action" onClick={onCancel}>
+              {SWAP_CONFIRM_CANCEL_LABEL}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </section>
     );
   }
+
 
   const providerIconUrl = terms ? resolveProtocolIcon(`${terms.providerId}.svg`) : null;
   const ready = phase === "ready";

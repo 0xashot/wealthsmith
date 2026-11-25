@@ -901,7 +901,9 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // Behaviour, not spelling: back returns to the review, so it clears the step and must not
     // close. Pinned to the exact line before, which then broke the moment the handler grew a
     // second statement that changed nothing about the rule.
-    const leaveStep = c.slice(c.indexOf("const leaveStep ="), c.indexOf("useEffect(() => { onStepChange"));
+    const at = c.indexOf("const leaveStep =");
+    if (at < 0) return false;
+    const leaveStep = c.slice(at, c.indexOf("\n", c.indexOf("}, []);", at)));
     const backReturns = /setStarted\(false\)/.test(leaveStep) && !/onClose\(\)/.test(leaveStep);
     return demoCancelCloses && liveCancelCloses && backReturns;
   })(), "cancel leaves, back returns");
@@ -989,14 +991,15 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       // Tied to the button, so it is announced rather than merely adjacent.
       /aria-describedby=/.test(c);
   })(), "explained, not hidden");
-  add("SWDM-1b: a demo failure is ignored OUTSIDE Demo Mode — it can never alter a real outcome", (() => {
+  add("SWDM-1b: a demo failure is GATED on Demo Mode — it can never alter a real outcome", (() => {
     const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
-    // `demoFailure` exists so the walkthrough can be driven to each ending rather than only the
-    // one that works. It is read inside the `props.demo` branch and nowhere else, so a live
-    // flow's outcome still comes only from what actually happened.
-    const demoBranch = c.slice(c.indexOf("if (props.demo) {"), c.indexOf("// The Boundary said no"));
-    const elsewhere = c.replace(demoBranch, "");
-    return /demoFailure/.test(demoBranch) && !/demoFailure/.test(elsewhere.replace(/demoFailure\?:[^;]*;/, ""));
+    // `demoFailure` exists so the walkthrough can be driven to each ending rather than only
+    // the one that works. Checked as a gate rather than by where the identifier appears: it is
+    // read once at the top now, and a location test would have passed while the value leaked.
+    const gated = /const activeFailure = props\.demo \? demoFailureKey : null;/.test(c);
+    // And a live flow's failure still comes only from what actually happened.
+    const liveFromMachine = /const liveFailure = props\.demo \? null : execution\.failure;/.test(c);
+    return gated && liveFromMachine;
   })(), "demo-only outcome");
   add("SWDM-1c: the expired demo offers the Refresh its own copy promises", (() => {
     const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");

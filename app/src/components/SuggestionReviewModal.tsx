@@ -20,7 +20,7 @@ import { useIsMobileViewport } from "./useIsMobileViewport";
 import SolStakingLeaderExplanation from "./SolStakingLeaderExplanation";
 import closeUrl from "../../../assets/icons/ui/close.svg";
 import chevronLeftUrl from "../../../assets/icons/ui/chevron-left.svg";
-import { SWAP_CONFIRM_BACK_LABEL, SWAP_CONFIRM_SUBPAGE_TITLE } from "../state/approvedCopy";
+import { SWAP_CONFIRM_BACK_LABEL } from "../state/approvedCopy";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
 import { resolveTokenIcon, resolveProtocolIcon } from "../state/iconRegistry";
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
@@ -161,7 +161,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
    * step vanished the instant it was asked for. Hiding also keeps the quote it already
    * fetched, so Back does not pay for a refetch.
    */
-  const [swapStep, setSwapStep] = useState<{ active: boolean; onBack: () => void } | null>(null);
+  const [swapStep, setSwapStep] = useState<{ active: boolean; onBack: () => void; title: string } | null>(null);
   const swapStepActive = swapStep?.active === true;
   const bodyClass = `review-modal__body${swapStepActive ? " review-modal__body--behind-subpage" : ""}`;
 
@@ -355,7 +355,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
           <div className="modal__header">
             <div className="review-modal__heading">
               {swapStepActive
-                ? <SubpageHeading onBack={swapStep!.onBack} titleId={titleId} />
+                ? <SubpageHeading onBack={swapStep!.onBack} title={swapStep!.title} titleId={titleId} />
                 : <h2 id={titleId} className="modal__title">{cr.title}</h2>}
             </div>
             <button ref={closeRef} type="button" className="modal__close" aria-label="Close review details" onClick={onClose}>
@@ -448,7 +448,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         <div className="modal__header">
           <div className="review-modal__heading">
             {swapStepActive ? (
-              <SubpageHeading onBack={swapStep!.onBack} titleId={titleId} />
+              <SubpageHeading onBack={swapStep!.onBack} title={swapStep!.title} titleId={titleId} />
             ) : (
               <h2 id={titleId} className="modal__title">
                 {summary.title}
@@ -905,13 +905,15 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
  * the close button on the same baseline, and so the title is a `modal__title` like every other
  * modal heading — a step that looked like a section heading sat at the wrong size and indent.
  */
-function SubpageHeading({ onBack, titleId }: { onBack: () => void; titleId: string }) {
+function SubpageHeading({ onBack, title, titleId }: { onBack: () => void; title: string; titleId: string }) {
   return (
     <div className="review-modal__subpage-heading">
       <button type="button" className="review-modal__back" onClick={onBack} aria-label={SWAP_CONFIRM_BACK_LABEL}>
         <ButtonIcon src={chevronLeftUrl} size={18} />
       </button>
-      <h2 id={titleId} className="modal__title">{SWAP_CONFIRM_SUBPAGE_TITLE}</h2>
+      {/* The step's own title: "Review Swap" normally, or the failure's name when it failed,
+          so the header never announces a review of terms that do not exist. */}
+      <h2 id={titleId} className="modal__title">{title}</h2>
     </div>
   );
 }
