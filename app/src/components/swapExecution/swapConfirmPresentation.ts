@@ -274,3 +274,33 @@ export function showsExplorerLink(phase: ExecutionPhase, signature: string | nul
   if (busyPresentationFor(phase) != null) return false;
   return true;
 }
+
+/**
+ * Whether a failure warrants the warning icon.
+ *
+ * NOT every ending that is not success. Three of them are not problems, and the sheet's own
+ * copy already says so — putting an alert above them would contradict it:
+ *
+ *   `declined`        the user said no. "A normal outcome, not an error."
+ *   `expired`         nothing went wrong; a quote aged out, and Refresh fixes it.
+ *   `confirm_timeout` we stopped watching. The copy insists this must NOT read as failure,
+ *                     because the transaction may still land.
+ *
+ * What is left is the set where something actually went wrong and the user did not choose it:
+ * we could not prepare a swap, we refused terms we could not verify, or it failed to send. An
+ * icon that appears for everything stops meaning anything.
+ */
+export function showsFailureAlert(failure: ExecutionFailureKey | null): boolean {
+  switch (failure) {
+    case "plan_unavailable":
+    case "verification_failed":
+    case "submit_failed":
+      return true;
+    case "declined":
+    case "expired":
+    case "confirm_timeout":
+    case "cancelled":
+    case null:
+      return false;
+  }
+}

@@ -73,6 +73,7 @@ import {
   busyButtonLabelFor,
   busyPresentationFor,
   showsExplorerLink,
+  showsFailureAlert,
 } from "../../components/swapExecution/swapConfirmPresentation";
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
 import { SWAP_CONFIRM_EXPIRED_TITLE, SWAP_CONFIRM_EXPIRED_TOAST, SWAP_CONFIRM_EXPIRED_TOAST_HELPER } from "../../state/approvedCopy";
@@ -945,6 +946,31 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return /failureCopy\(failure, typeof signature === "string" && signature\.length > 0\)/.test(c) &&
       !/failureDetail/.test(c);
   })(), "signature is the signal");
+  add("SWCS-5d: the warning mark appears only where something actually went WRONG", (() => {
+    // Three endings are not problems, and this sheet's own copy says so: a decline is "a
+    // normal outcome, not an error", an expiry is a quote aging out with Refresh as the
+    // remedy, and a timeout must NOT read as failure because the swap may still land. An
+    // alert above any of those contradicts the words underneath it, and an icon that appears
+    // on everything stops meaning anything.
+    const wrong: ExecutionFailureKey[] = ["plan_unavailable", "verification_failed", "submit_failed"];
+    const notWrong: ExecutionFailureKey[] = ["declined", "expired", "confirm_timeout", "cancelled"];
+    return wrong.every((f) => showsFailureAlert(f)) &&
+      notWrong.every((f) => !showsFailureAlert(f)) &&
+      showsFailureAlert(null) === false;
+  })(), "an alert means something");
+  add("SWCS-5e: the mark is decorative and takes the system's warning colour, not a hand-picked one", (() => {
+    const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    const css = readSrc("src/styles/dashboard.css");
+    const block = css.slice(css.indexOf(".swap-confirm__alert {"), css.indexOf("@keyframes swap-confirm-alert-in"));
+    // The sentence beside it already says what happened, so the icon adds nothing to a screen
+    // reader and is hidden from it. Colour and motion come from the feedback tokens.
+    return /className="swap-confirm__alert" aria-hidden="true"/.test(c) &&
+      /--color-feedback-warning-background-solid/.test(block) &&
+      /--color-feedback-warning-background-tint/.test(block) &&
+      /--motion-feedback-warning-easing/.test(block) &&
+      // One settle, never a loop: a pulsing alert on a money screen nags rather than informs.
+      !/infinite/.test(block);
+  })(), "system warning, settled once");
   add("SWCS-6: expiry has its OWN title — it is not an outage, and must not be filed under one", (() => {
     const exp = failureCopy("expired");
     const out = failureCopy("plan_unavailable");

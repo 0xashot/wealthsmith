@@ -23,6 +23,8 @@
 import { useId } from "react";
 import InfoPopover from "../InfoPopover";
 import ModalActionsFooter from "../ModalActionsFooter";
+import ButtonIcon from "../ButtonIcon";
+import alertCircleUrl from "../../../../assets/icons/ui/alert-circle-solid.svg";
 import {
   SWAP_CONFIRM_APPROVE_LABEL,
   SWAP_CONFIRM_CANCEL_LABEL,
@@ -54,6 +56,7 @@ import {
   solscanTransactionUrl,
   busyPresentationFor,
   showsExplorerLink,
+  showsFailureAlert,
 } from "./swapConfirmPresentation";
 
 export interface SwapConfirmSheetProps {
@@ -100,6 +103,11 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
         {/* No title here when the step owns the modal: the review's header already shows this
             failure's own name, and repeating it below would read as a heading for the body. */}
         {!subpage && <h3 className="review-modal__section-title">{failed.title}</h3>}
+        {showsFailureAlert(failure) && (
+          <span className="swap-confirm__alert" aria-hidden="true">
+            <ButtonIcon src={alertCircleUrl} size={28} />
+          </span>
+        )}
         <p className="modal__intro">{failed.desc}</p>
         {/* A signature survives into a failure, and when it does it matters MORE here than on
             success: a confirm timeout means we stopped watching something that may well have
