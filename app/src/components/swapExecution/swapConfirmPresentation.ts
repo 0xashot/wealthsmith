@@ -87,12 +87,36 @@ export function formatApproxUsd(value: number | null | undefined): string {
 }
 
 /**
+ * Thousands separators for a token amount, WITHOUT touching its precision.
+ *
+ * Done on the string, digit by digit, rather than through `Number` or `toLocaleString`: a
+ * minimum like `30453.030446` is the exact figure the chain enforces, and passing it through a
+ * float to make it prettier is how a guarantee quietly becomes `30,453.03`. Only the integer
+ * part is grouped; the fraction is copied through untouched, however long it is.
+ *
+ * Anything that is not a plain decimal is returned unchanged — a formatter is not the place to
+ * decide what an unrecognised amount means.
+ */
+export function groupTokenAmount(amount: string): string {
+  const [whole, fraction] = amount.split(".");
+  if (!/^\d+$/.test(whole ?? "")) return amount;
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return fraction == null ? grouped : `${grouped}.${fraction}`;
+}
+
+/** An exact token amount: grouped, with its symbol, and no approximation mark. */
+export function formatTokens(amount: string | null | undefined, symbol: string): string {
+  if (typeof amount !== "string" || amount.length === 0) return ABSENT;
+  return `${groupTokenAmount(amount)} ${symbol}`;
+}
+
+/**
  * An estimated token amount, same rule. Never applied to the minimum: that figure is exact and
  * enforced on-chain, and a tilde there would contradict the only promise the sheet makes.
  */
 export function formatApproxTokens(amount: string | null | undefined, symbol: string): string {
-  if (typeof amount !== "string" || amount.length === 0) return ABSENT;
-  return `~${amount} ${symbol}`;
+  const exact = formatTokens(amount, symbol);
+  return exact === ABSENT ? ABSENT : `~${exact}`;
 }
 
 /**

@@ -64,6 +64,7 @@ import {
   failureCopy,
   formatCountdown,
   formatApproxTokens,
+  groupTokenAmount,
   formatApproxUsd,
   formatPercent,
   formatUsd,
@@ -1211,10 +1212,24 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // formatter anywhere near it. The USD underneath is a conversion and needs a price, so it
     // is marked like every other estimate. Marking the token amount instead would undo the
     // only promise this sheet makes.
-    return /\{terms\.minimumOutputTokens\}/.test(block) &&
+    return /formatTokens\(terms\.minimumOutputTokens, terms\.outputSymbol\)/.test(block) &&
       !/formatApproxTokens\(terms\.minimumOutputTokens/.test(block) &&
       /formatApproxUsd\(terms\.minimumOutputUsd\)/.test(block);
   })(), "exact tokens, approximate dollars");
+  add("SWCU-4b: grouping adds separators and NOTHING else — not one digit of precision", (() => {
+    // Done on the string rather than through Number/toLocaleString, because the minimum is the
+    // figure the chain enforces and a float round-trip is how `30453.030446` quietly becomes
+    // `30,453.03`. The fraction must survive whole, however long it is.
+    return groupTokenAmount("30453.030446") === "30,453.030446" &&
+      groupTokenAmount("204.183333333") === "204.183333333" &&
+      groupTokenAmount("1234567.000000001") === "1,234,567.000000001" &&
+      groupTokenAmount("999") === "999" &&
+      groupTokenAmount("1000") === "1,000" &&
+      // Stripping the separators must give back exactly what went in.
+      ["0.000000001", "7", "89012.5"].every((x) => groupTokenAmount(x).replace(/,/g, "") === x) &&
+      // Anything unrecognised is left alone rather than guessed at.
+      groupTokenAmount("not-a-number") === "not-a-number";
+  })(), "separators only");
   add("SWCU-5: an unpriced amount OMITS its sub-line rather than printing a dash under the tokens", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
     // A "—" under a token figure reads as a missing term; missing context should be invisible.
@@ -1234,8 +1249,12 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const rawReceive = /\{terms\.expectedOutputTokens\}/.test(c);
     const rawFee = /\{formatUsd\(terms\.estimatedNetworkFeeUsd\)\}/.test(c);
     // The minimum, by contrast, MUST stay raw — a tilde there would be a lie.
-    const minimumRaw = /\{terms\.minimumOutputTokens\}/.test(c);
-    return usesFormatters && !rawReceive && !rawFee && minimumRaw;
+    // The minimum goes through the EXACT formatter — grouped like the others, never tilde'd.
+    // Raw interpolation would lose the thousands separators; the approx formatter would lose
+    // the guarantee.
+    const minimumExact = /formatTokens\(terms\.minimumOutputTokens/.test(c) &&
+      !/\{terms\.minimumOutputTokens\}/.test(c);
+    return usesFormatters && !rawReceive && !rawFee && minimumExact;
   })(), "tilde cannot be dropped");
   add("SWCS-9: Refresh is offered ONLY on expiry — never after a verification refusal", (() => {
     const c = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");

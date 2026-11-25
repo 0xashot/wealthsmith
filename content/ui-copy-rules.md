@@ -982,6 +982,12 @@ makes. Its dollar value is a different matter: converting tokens to dollars
 needs a price, so that line is marked like any other estimate. Exact in tokens,
 approximate in dollars — which is precisely what the guarantee is.
 
+Token amounts carry thousands separators — `30,453.030446 USDC`, not
+`30453.030446 USDC`. Group the integer part of the STRING and copy the fraction
+through untouched: the minimum is the figure the chain enforces, and sending it
+through `Number` or `toLocaleString` to make it prettier is how a guarantee
+quietly becomes `30,453.03`.
+
 A number we cannot obtain renders as “—”; it is never replaced with a different
 number, and never written as “~—” — marking the precision of a figure we do not
 have is worse than saying nothing.

@@ -46,6 +46,7 @@ import {
   failureCopy,
   ABSENT_FIGURE,
   formatApproxTokens,
+  formatTokens,
   formatApproxUsd,
   formatPercent,
   isAfterApproval,
@@ -135,7 +136,7 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
           <div className="review-modal__metric">
             <dt className="review-modal__metric-label">{SWAP_CONFIRM_SELL_LABEL}</dt>
             <dd className="review-modal__metric-value">
-              {terms.inputAmountTokens} {terms.inputSymbol}
+              {formatTokens(terms.inputAmountTokens, terms.inputSymbol)}
               {/* The USD sits UNDER the token amount, never beside it: the swap is denominated in
                   tokens and the dollar figure is context, so it must not compete for the same
                   line. Rendered only when priced — an empty sub-line is worse than none. */}
@@ -167,7 +168,7 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
               </InfoPopover>
             </dt>
             <dd className="review-modal__metric-value swap-confirm__minimum-value">
-              {terms.minimumOutputTokens} {terms.outputSymbol}
+              {formatTokens(terms.minimumOutputTokens, terms.outputSymbol)}
               {/* The TOKEN figure carries no tilde — it is exact and enforced on-chain. Its
                   dollar value does, because converting it needs a price and a price moves.
                   Marking only the conversion keeps the guarantee intact while still giving
