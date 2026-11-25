@@ -118,7 +118,9 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
         failure={null}
         signature={null}
         subpage
-        onCancel={() => setStarted(false)}
+        // Cancel LEAVES; back returns to the review. Two exits, because they answer different
+        // questions: "not this swap" and "let me re-read why you suggested it".
+        onCancel={onClose}
       />
     );
   }
@@ -174,10 +176,11 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
       onApprove={execution.approve}
       onRefresh={() => execution.prepare()}
       onCancel={() => {
+        // Abandon anything in flight first — nothing is submitted at this stage, so leaving
+        // costs the user nothing — then close the review entirely. The back control is what
+        // returns them to the suggestion; Cancel is the way out.
         execution.cancel();
-        // Back to the review, not out of it. Cancelling an approval is not cancelling the
-        // suggestion, and closing the whole modal would throw away what they came to read.
-        setStarted(false);
+        onClose();
       }}
     />
   );

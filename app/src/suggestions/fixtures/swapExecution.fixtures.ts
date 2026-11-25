@@ -888,6 +888,16 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const termsFromPlan = /terms=\{execution\.plan\?\.terms \?\? null\}/.test(c);
     return guard && returnsFooter && termsFromPlan;
   })(), "no empty card is reachable");
+  add("SWXC-1c: Cancel LEAVES the review; back returns to it — two exits, two answers", (() => {
+    const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    // They answer different questions: "not this swap" and "let me re-read why you suggested
+    // it". Wiring Cancel back to the suggestion left no way out of the review from the step.
+    const demoCancelCloses = /onCancel=\{onClose\}/.test(c);
+    const liveCancelCloses = /execution\.cancel\(\);\s*\n\s*onClose\(\);/.test(c);
+    // Back is still the step's own exit, and still only that.
+    const backReturns = /const leaveStep = useCallback\(\(\) => setStarted\(false\), \[\]\);/.test(c);
+    return demoCancelCloses && liveCancelCloses && backReturns;
+  })(), "cancel leaves, back returns");
   add("SWXC-2: the Continue button spins in place rather than being replaced or removed", (() => {
     const c = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
     const footer = c.slice(c.indexOf("function ContinueFooter"));
