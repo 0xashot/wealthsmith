@@ -5427,6 +5427,49 @@ td.vetting-scores-table__date {
   .swap-confirm__approve-tip { transition: none; }
 }
 
+/* The review's body while the confirm step is open. HIDDEN rather than
+   unmounted: the route comparison inside it is what supplies the execution
+   context, so unmounting took the confirm step away the moment it was asked
+   for — and hiding keeps the quote it already fetched, so Back is free. */
+.review-modal__body--behind-subpage {
+  display: none;
+}
+
+/* The confirm step's own header, when it renders as a subpage of the review:
+   a back control and the step's name on one row. Spacing and the title style
+   come from the review-modal furniture it sits inside, so the subpage reads as
+   part of the same sheet rather than a second surface. */
+.swap-confirm__subpage-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-sm);
+  margin-bottom: var(--spacing-stack-gap-sm);
+}
+.swap-confirm__subpage-title {
+  margin: 0;
+}
+/* Matches the modal's own close control: a quiet icon button that takes its
+   colour from the text around it, with the same focus treatment. */
+.swap-confirm__back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-inset-xs, 4px);
+  margin-left: calc(-1 * var(--spacing-inset-xs, 4px));
+  border: none;
+  background: none;
+  border-radius: var(--radius-control-sm);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+.swap-confirm__back:hover {
+  background: var(--color-surface-muted, rgba(120, 120, 140, 0.08));
+}
+.swap-confirm__back:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+
 /* USD under a token amount. Its own line, secondary colour, body size: the swap
    is denominated in tokens and nothing is guaranteed in dollars, so this is
    context for judging size at a glance and must never read as a term. Only the

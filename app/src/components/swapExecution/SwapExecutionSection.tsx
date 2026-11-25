@@ -14,7 +14,7 @@
  * provider we cannot build for — any of them and this is absent, and the modal keeps its
  * ordinary handoff footer. That is the fallback working, not a degraded state.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { SwapActionContext, SwapQuoteComparisonAssessment } from "../../suggestions/swapQuote/swapQuoteContracts";
 import { deriveExecutionOffer } from "../../suggestions/swapExecution/executionOffer";
@@ -44,6 +44,14 @@ export interface SwapExecutionSectionProps {
    */
   onExpiredGiveUp?: () => void;
   /**
+   * Reports whether the confirm step is open, so the review can stand aside for it.
+   *
+   * The step is a SUBPAGE: while it is open the review hides its own heading and body, and
+   * this sheet's back control returns them. Reported rather than assumed, because the review
+   * owns its own layout and this component should not reach into it.
+   */
+  onStepChange?: (active: boolean) => void;
+  /**
    * Demo Mode. The confirm step still renders and still fetches nothing real: Approve is shown
    * unavailable with the reason, so someone evaluating the product sees the whole flow through
    * to its last step instead of hitting a dead end where the interesting part should be.
@@ -56,6 +64,12 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
   const { publicKey } = useWallet();
   const submit = useWalletSwapSubmitter();
   const [started, setStarted] = useState(false);
+
+  // Report the step to the review, which hides its own content while it is open.
+  const onStepChange = props.onStepChange;
+  useEffect(() => { onStepChange?.(started); }, [started, onStepChange]);
+  // Leaving the review entirely must not leave it hidden behind a step that is gone.
+  useEffect(() => () => onStepChange?.(false), [onStepChange]);
 
   const offer = deriveExecutionOffer({
     action,
@@ -88,7 +102,10 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     const demoTerms = demoConfirmTerms(action, assessment, props.slippageBps ?? 50);
     // A demo quote missing its guaranteed minimum is not worth previewing — fall back to the
     // modal's ordinary hand-off footer rather than show a sample swap with a blank floor.
-    if (!offer.offered || demoTerms == null) return null;
+    // `!started` on the offer check, not the whole branch: the route quote has a TTL, and once
+    // someone is reading the preview it must not evaporate underneath them. The offer decides
+    // whether to OFFER, not whether to keep what was already opened.
+    if ((!offer.offered && !started) || demoTerms == null) return null;
     if (!started) return <ContinueFooter onClose={onClose} onContinue={() => setStarted(true)} />;
     return (
       <SwapConfirmSheet
@@ -97,6 +114,7 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
         terms={demoTerms}
         failure={null}
         signature={null}
+        onBack={() => setStarted(false)}
         onCancel={() => setStarted(false)}
       />
     );
@@ -104,7 +122,17 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
 
   // The Boundary said no, or there is no wallet to sign with. Render nothing; the modal's
   // existing handoff footer is the answer, and it is already there.
-  if (!offer.offered || takerPublicKey == null || submit == null) return null;
+  //
+  // THE OFFER GATES ENTRY ONLY. It is recomputed every render from the route comparison, which
+  // has a TTL of its own — so checking it unconditionally meant the whole confirm section
+  // unmounted the moment that quote aged out, however far the user had got. In the live path
+  // that could happen with the wallet already open: the sheet, the "Confirming" state and the
+  // explorer link would all disappear while their transaction was in flight, leaving them with
+  // no record of a swap that was still happening.
+  //
+  // Once `started`, the flow owns itself. The PLAN's expiry governs from there, and it renews
+  // itself; the route comparison that got us here has done its job.
+  if ((!offer.offered && !started) || takerPublicKey == null || submit == null) return null;
 
   // THE FOOTER HOLDS THE FIRST WAIT, rather than the sheet opening empty.
   //
@@ -139,6 +167,7 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
       terms={execution.plan?.terms ?? null}
       failure={execution.failure}
       signature={execution.signature}
+      onBack={() => { execution.cancel(); setStarted(false); }}
       onApprove={execution.approve}
       onRefresh={() => execution.prepare()}
       onCancel={() => {

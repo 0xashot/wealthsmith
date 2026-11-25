@@ -1036,6 +1036,17 @@ export const extAddedToast = (symbol: string) => `${symbol} added`;
 export const SWAP_CONFIRM_TITLE = "Review this swap";
 
 /**
+ * The confirm step rendered as a SUBPAGE of the review, with its own back control.
+ *
+ * Shorter than the inline title because it is a destination now, not a section: the reader
+ * navigated here deliberately and the review's own reasoning is behind them, so the heading
+ * names the step rather than instructing them to read it.
+ */
+export const SWAP_CONFIRM_SUBPAGE_TITLE = "Review Swap";
+/** Accessible name for the back control. The visible chevron carries no text. */
+export const SWAP_CONFIRM_BACK_LABEL = "Back to the suggestion";
+
+/**
  * Term labels.
  *
  * An estimate is marked on the FIGURE, with a leading `~`, rather than only in the label. The

@@ -145,6 +145,19 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
   // Phase 6 — the inputs for the Execution Boundary, reported by the route section. Null unless
   // a single-leg route resolved; the Boundary still has to say yes after that.
   const [executionCtx, setExecutionCtx] = useState<{ action: SwapActionContext; assessment: SwapQuoteComparisonAssessment } | null>(null);
+  /**
+   * True while the confirm step is open. It is a SUBPAGE of this review: the heading and body
+   * give way so the step owns the modal, and its back control brings them back. Someone
+   * answering "approve this swap?" should not have to scroll past the reasoning that led them
+   * here — they have read it, and leaving it on screen buries the question.
+   *
+   * The body is HIDDEN, not unmounted. The route comparison lives inside it and is what
+   * supplies `executionCtx`; unmounting it took the execution context away and the confirm
+   * step vanished the instant it was asked for. Hiding also keeps the quote it already
+   * fetched, so Back does not pay for a refetch.
+   */
+  const [swapStepActive, setSwapStepActive] = useState(false);
+  const bodyClass = `review-modal__body${swapStepActive ? " review-modal__body--behind-subpage" : ""}`;
 
   // The read-only "Swap Route" section (Rebalance / Trim / eligible DCA), reused across modal variants. Suppressed
   // when the suggestion opts out (details.hideSwapRoute) — e.g. a frozen asset that can't be swapped.
@@ -174,6 +187,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       nowMs={swapQuoteNowMs}
       onClose={onClose}
       onExpiredGiveUp={onSwapQuoteGaveUp}
+      onStepChange={setSwapStepActive}
     />
   ) : null;
 
@@ -278,7 +292,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
               <ButtonIcon src={closeUrl} size={18} />
             </button>
           </div>
-          <div className="review-modal__body">
+          <div className={bodyClass}>
             <section className="review-modal__section" aria-label="Recommendation">
               <p id={reasonId} className="modal__intro">{description}</p>
             </section>
@@ -333,13 +347,15 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         <div ref={dialogRef} className="modal review-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={reasonId} onKeyDown={onKeyDown} onClick={(e) => e.stopPropagation()}>
           <div className="modal__header">
             <div className="review-modal__heading">
-              <h2 id={titleId} className="modal__title">{cr.title}</h2>
+              {/* The subpage brings its own heading; this one steps aside rather than
+                  stacking a second title above it. */}
+              {!swapStepActive && <h2 id={titleId} className="modal__title">{cr.title}</h2>}
             </div>
             <button ref={closeRef} type="button" className="modal__close" aria-label="Close review details" onClick={onClose}>
               <ButtonIcon src={closeUrl} size={18} />
             </button>
           </div>
-          <div className="review-modal__body">
+          <div className={bodyClass}>
             <section className="review-modal__section" aria-label="Why this fits your plan">
               {!cr.focusedLayout && <h3 className="review-modal__section-title">Why this fits your plan</h3>}
               <p id={reasonId} className="modal__intro">{cr.whySection.body}</p>
@@ -424,9 +440,11 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       >
         <div className="modal__header">
           <div className="review-modal__heading">
-            <h2 id={titleId} className="modal__title">
-              {summary.title}
-            </h2>
+            {!swapStepActive && (
+              <h2 id={titleId} className="modal__title">
+                {summary.title}
+              </h2>
+            )}
           </div>
           <button
             ref={closeRef}
@@ -439,7 +457,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
           </button>
         </div>
 
-        <div className="review-modal__body">
+        <div className={bodyClass}>
           {details.demoLabel && (
             <div className="review-modal__demo-badge">
               <Badge label={details.demoLabel} tone="warning" />

@@ -410,9 +410,26 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     if (!renderers[0].endsWith("SwapExecutionSection.tsx")) return false;
     const section = readSrc(renderers[0]);
     // Asks, and returns nothing when the answer is no — including with no wallet to sign with.
+    //
+    // The offer gates ENTRY (`!started`), not continued display. Recomputed unconditionally it
+    // unmounted the whole section the moment the route quote aged out, which in the live path
+    // could happen with the wallet already open — taking the sheet, the confirming state and
+    // the explorer link away mid-flight. A wallet is still required unconditionally: that is
+    // not a staleness question and never becomes true later.
     return /deriveExecutionOffer/.test(section) &&
-      /if \(!offer\.offered \|\| takerPublicKey == null \|\| submit == null\) return null;/.test(section);
+      /if \(\(!offer\.offered && !started\) \|\| takerPublicKey == null \|\| submit == null\) return null;/.test(section);
   })(), "one gated entry point");
+  add("SWX-26c: an aged-out ROUTE quote never unmounts a confirm step already in progress", (() => {
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    // Both branches — live and demo — must qualify the offer check with `!started`. The demo
+    // preview has the same problem for a different reason: its quote carries a 48s TTL and a
+    // preview nobody can act on should not evaporate while it is being read.
+    const live = /if \(\(!offer\.offered && !started\) \|\| takerPublicKey == null/.test(section);
+    const demo = /if \(\(!offer\.offered && !started\) \|\| demoTerms == null\) return null;/.test(section);
+    // And the wallet requirement stays unconditional — it is not a staleness question.
+    const walletAlways = /takerPublicKey == null \|\| submit == null\) return null;/.test(section);
+    return live && demo && walletAlways;
+  })(), "entry gate, not a display gate");
   add("SWX-26b: the mounted section renders the sheet only AFTER the user asks for terms", (() => {
     // A plan lives 25 seconds. Preparing one when the review opens would spend that clock while
     // someone reads, and they would meet an expiry notice for reading carefully.
