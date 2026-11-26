@@ -29,6 +29,8 @@ import { prefetchSwapQuoteComparison } from "./swapQuote/useSwapQuoteComparison"
 import type { RightRailState, SuggestionCardState } from "../types/dashboard";
 import { railOnTrackUnavailableMessage } from "./portfolioCompletenessUi";
 import { useDismissedSuggestions } from "../state/dismissedSuggestions";
+import type { SwapProgress } from "./swapExecution/SwapExecutionSection";
+import { requestWalletPortfolioRefresh } from "../wallet/useWalletPortfolio";
 import {
   REAL_WALLET_SUGGESTIONS_TITLE,
   SUGGESTIONS_RAIL_DESC,
@@ -91,6 +93,16 @@ interface OpenedReview {
   swapQuoteFetcher?: SwapQuoteFetcher;
 }
 
+/**
+ * Which portfolio read a suggestion's swap was derived from. Every leg carries the time of the
+ * read it was built on (`generatedAt`), which changes when the wallet is read again and not when
+ * a price ticks — so "same stamp" means "still the data from before the swap". A suggestion
+ * with no swap has no stamp; none is ever acted on this way.
+ */
+export function portfolioStampOf(swapAction: SwapActionReadiness | undefined): string {
+  return swapAction?.status === "ready" ? swapAction.legs.map((l) => l.generatedAt).join("|") : "";
+}
+
 export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuoteGaveUp, onConnectWallet, demo, demoOutcome }: Props) {
   // The open review, as a snapshot (see OpenedReview). Read-only — opening the modal never
   // transacts, signs, or hands off to a protocol.
@@ -98,7 +110,30 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
   // The card whose Review button is busy fetching its route. One at a time.
   const [pendingId, setPendingId] = useState<string | null>(null);
   const pendingRef = useRef<string | null>(null);
-  const close = () => setOpened(null);
+  // AFTER A SWAP, THE SUGGESTION IS OUT OF DATE. `swapProgress` is what the open review's swap
+  // has reached; `acted` is the suggestions whose swap landed, each with the stamp of the
+  // portfolio read it was made from (see `portfolioStampOf`).
+  const swapProgressRef = useRef<SwapProgress | null>(null);
+  const [acted, setActed] = useState<Record<string, string>>({});
+  const close = () => {
+    const progress = swapProgressRef.current;
+    swapProgressRef.current = null;
+    if (opened != null && progress != null) {
+      // The swap landed: the card it came from goes at once, not when the next read arrives —
+      // closing "Swap Completed" onto the same suggestion asked for the swap a second time.
+      if (progress === "landed") {
+        const stamp = portfolioStampOf(opened.swapAction);
+        setActed((prev) => ({ ...prev, [opened.id]: stamp }));
+      }
+      // And the wallet is read again, the way Refresh dashboard does — for a swap that landed and
+      // for one that was sent and not yet confirmed, which may have landed since.
+      requestWalletPortfolioRefresh();
+    }
+    setOpened(null);
+  };
+  const onSwapProgress = (progress: SwapProgress) => {
+    if (swapProgressRef.current !== "landed") swapProgressRef.current = progress;
+  };
   // The suggestion whose review left for the Connect Wallet dialog. Set when the host reports a
   // wallet connected; the effect further down reopens it from the rail's CURRENT data.
   const [resumeId, setResumeId] = useState<string | null>(null);
@@ -206,6 +241,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       demoOutcome={demoOutcome}
       onSwapQuoteGaveUp={() => { close(); onSwapQuoteGaveUp?.(); }}
       onConnectWallet={leaveToConnectWallet}
+      onSwapProgress={onSwapProgress}
     />
   ) : detailsForModal ? (
     <SuggestionReviewModal
@@ -219,10 +255,21 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       demoOutcome={demoOutcome}
       onSwapQuoteGaveUp={() => { close(); onSwapQuoteGaveUp?.(); }}
       onConnectWallet={leaveToConnectWallet}
+      onSwapProgress={onSwapProgress}
     />
   ) : null;
 
-  if (rail?.loading) {
+  // A suggestion acted on stays hidden for as long as the rail is still built from the SAME
+  // portfolio read the swap was made from. Once a newer read arrives, whatever the engine says
+  // is shown — usually nothing, sometimes what is left (a Trim where one token was declined).
+  const visibleCards = rail
+    ? rail.cards.filter((c) => acted[c.id] == null || portfolioStampOf(rail.swapActionById?.[c.id]) !== acted[c.id])
+    : [];
+  // Every card hidden that way means a refresh is on its way and there is nothing to show yet:
+  // the same "preparing" state as a reload, not "suggestions unavailable".
+  const awaitingFreshRead = rail != null && rail.available && rail.cards.length > 0 && visibleCards.length === 0;
+
+  if (rail?.loading || awaitingFreshRead) {
     // Same header as the ready/default state (icon + title + description); the
     // single card shows the animated Smith AI symbol + a "preparing" label,
     // mirroring the first-open "Smith AI getting ready" beat.
@@ -257,10 +304,10 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       description: SUGGESTIONS_RAIL_DESC,
       state: { status: "active" },
       summary: {
-        suggestions_count: rail.cards.length,
-        top_pick_id: rail.cards.find((c) => c.is_top_pick)?.id ?? "",
+        suggestions_count: visibleCards.length,
+        top_pick_id: visibleCards.find((c) => c.is_top_pick)?.id ?? "",
       },
-      cards: rail.cards,
+      cards: visibleCards,
     };
     return (
       <>

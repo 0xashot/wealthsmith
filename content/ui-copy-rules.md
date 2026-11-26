@@ -1161,6 +1161,25 @@ The total is the sum of what the chain says arrived, never the estimates. If an
 amount could not be read, the summary says how many tokens were swapped and gives
 no figure.
 
+### After a swap lands
+
+A suggestion whose swap landed is out of date the moment it lands. When its review
+is closed — from "Swap Completed", or from a Trim summary where at least one token
+was swapped — the suggestion leaves the dashboard at once and the wallet is read
+again, exactly as Refresh dashboard does. The user is never left looking at the
+suggestion they just carried out.
+
+  - It stays hidden only while the dashboard is still built from the wallet read
+    the swap was made from. When the fresh read arrives the engine decides: usually
+    the suggestion is gone; a Trim where one token was declined may return listing
+    only what is left.
+  - A swap that was sent but not confirmed re-reads the wallet on close without
+    hiding anything — it may or may not have landed.
+  - A swap that was declined, failed or never sent changes nothing: the suggestion
+    stays.
+  - If that was the only suggestion, the rail shows "Preparing your personalized
+    suggestions" until the fresh read arrives, not an empty or unavailable state.
+
 ### Tokens outside the approved list
 
 A token the approved registry does not know is shown as a shortened address

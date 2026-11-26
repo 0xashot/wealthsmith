@@ -132,7 +132,16 @@ export interface SwapExecutionSectionProps {
   perLegApproval?: boolean;
   autoStart?: boolean;
   onSettled?: (result: SwapSettled) => void;
+  /**
+   * Told when this review's swap has left the wallet ("sent") and when the chain has confirmed
+   * it ("landed"). The swap changed the wallet, so the suggestion it came from is out of date:
+   * the host uses this to refresh what it shows — and drop that suggestion — once the review
+   * closes. It never changes anything in this section.
+   */
+  onSwapProgress?: (progress: SwapProgress) => void;
 }
+
+export type SwapProgress = "sent" | "landed";
 
 /** How one step of a sequence ended. */
 export type SwapSettled =
@@ -230,6 +239,17 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
   // same place the sheet does — otherwise a revert is titled as a swap that was never sent.
   const shownSignature = props.demo ? activeOutcome?.signature ?? null : execution.signature;
   const shownPhase = props.demo ? activeOutcome?.phase ?? "ready" : execution.phase;
+  // Tell the host once per stage. "landed" implies "sent" — a host that only hears the second
+  // (a confirmation that arrived in one step) still knows the wallet changed.
+  const onSwapProgressRef = useRef(props.onSwapProgress);
+  onSwapProgressRef.current = props.onSwapProgress;
+  const reportedProgressRef = useRef<SwapProgress | null>(null);
+  useEffect(() => {
+    const progress: SwapProgress | null = shownPhase === "confirmed" ? "landed" : shownPhase === "confirming" ? "sent" : null;
+    if (progress == null || reportedProgressRef.current === progress || reportedProgressRef.current === "landed") return;
+    reportedProgressRef.current = progress;
+    onSwapProgressRef.current?.(progress);
+  }, [shownPhase]);
   const stepTitle =
     (shownFailure ? failureCopy(shownFailure, shownSignature != null)?.title : null) ??
     // A finished swap is not a review of terms. The step's heading is its one title, and

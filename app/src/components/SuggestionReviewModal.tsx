@@ -36,7 +36,7 @@ import type { DemoExecutionOutcome } from "../suggestions/swapExecution/demoOutc
 import type { SwapQuoteFetcher } from "../suggestions/swapQuote/swapQuoteClient";
 import SwapQuoteComparisonSection, { type SwapQuoteState, type SwapPlanState } from "./swapQuote/SwapQuoteComparisonSection";
 import TrimFlowSection from "./trim/TrimFlowSection";
-import SwapExecutionSection from "./swapExecution/SwapExecutionSection";
+import SwapExecutionSection, { type SwapProgress } from "./swapExecution/SwapExecutionSection";
 import InfoBanner from "./InfoBanner";
 import AssetIdentity from "./AssetIdentity";
 import ModalActionsFooter from "./ModalActionsFooter";
@@ -88,6 +88,8 @@ interface Props {
   onSwapQuoteGaveUp?: () => void;
   /** Opens the app's Connect Wallet dialog from the swap footer. See SwapExecutionSection. */
   onConnectWallet?: () => void;
+  /** This review's swap left the wallet / landed on-chain. See SwapExecutionSection. */
+  onSwapProgress?: (progress: SwapProgress) => void;
   /**
    * Demo Mode. The confirm step still opens, built from the demo quote, with Approve shown
    * unavailable and the reason on hover — so an evaluator sees the flow through to its last
@@ -138,7 +140,7 @@ function formatCalcValue(v: number, unit?: string): string {
   return `${num1(v)}${unit ? ` ${unit}` : ""}`;
 }
 
-export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onDismiss, onClose, onSwapQuoteGaveUp, onConnectWallet, demo, demoOutcome }: Props) {
+export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onDismiss, onClose, onSwapQuoteGaveUp, onConnectWallet, onSwapProgress, demo, demoOutcome }: Props) {
   useScrollLock();
   // Mobile: token amounts in the modal tables are shown whole (no decimals).
   const isMobile = useIsMobileViewport();
@@ -240,6 +242,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       onClose={onClose}
       onExpiredGiveUp={onSwapQuoteGaveUp}
       onConnectWallet={onConnectWallet}
+      onSwapProgress={onSwapProgress}
       onStepChange={setSwapStep}
       continueLabel={swapLeg.suggestionCategory === "trim" ? TRIM_ACTION_LABEL : undefined}
     />
@@ -256,6 +259,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       demo={demo}
       onClose={onClose}
       onConnectWallet={onConnectWallet}
+      onSwapProgress={onSwapProgress}
       onStepChange={setSwapStep}
       // The gallery's fixed presets have nothing to run against; its selector is for looking at.
       canRun={swapQuotePresetAssessments == null}

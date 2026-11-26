@@ -27,7 +27,7 @@ import type { ReviewAsset } from "../../suggestions/engineTypes";
 import { deriveTrimRows, isTrimRetryable, sumTokenStrings, type TrimResult } from "../../suggestions/swapExecution/trimFlow";
 import type { SwapPlanState } from "../swapQuote/SwapQuoteComparisonSection";
 import { useSwapQuoteComparison } from "../swapQuote/useSwapQuoteComparison";
-import SwapExecutionSection, { type SwapSettled } from "../swapExecution/SwapExecutionSection";
+import SwapExecutionSection, { type SwapProgress, type SwapSettled } from "../swapExecution/SwapExecutionSection";
 import { SwapFlowEventsContext } from "../swapExecution/swapFlowEvents";
 import { trimFinishedEvent } from "../../suggestions/swapExecution/trimEvents";
 import { failureCopy, formatSettledAmount, formatUsd, solscanTransactionUrl } from "../swapExecution/swapConfirmPresentation";
@@ -87,6 +87,8 @@ export interface TrimFlowSectionProps {
   onClose: () => void;
   onStepChange: (step: TrimStep | null) => void;
   onConnectWallet?: () => void;
+  /** Each token's swap, as it leaves the wallet and as it lands. See SwapExecutionSection. */
+  onSwapProgress?: (progress: SwapProgress) => void;
   demo?: boolean;
   /**
    * False where there is nothing to run against (the gallery's fixed presets). The selector
@@ -361,6 +363,7 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
             onConnectWallet={props.onConnectWallet}
             onStop={stopRun}
             onSettled={(result) => onSettled(row.key, result)}
+            onSwapProgress={props.onSwapProgress}
           />
         )}
       </>
@@ -420,7 +423,7 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
  * the rest to the ordinary swap step, started for the user and reporting how it ended.
  */
 function TrimLegRunner({
-  leg, fetcher, slippageBps, nowMs, demo, onConnectWallet, onStop, onSettled,
+  leg, fetcher, slippageBps, nowMs, demo, onConnectWallet, onStop, onSettled, onSwapProgress,
 }: {
   leg: SwapActionContext;
   fetcher?: SwapQuoteFetcher;
@@ -430,6 +433,7 @@ function TrimLegRunner({
   onConnectWallet?: () => void;
   onStop: () => void;
   onSettled: (result: SwapSettled) => void;
+  onSwapProgress?: (progress: SwapProgress) => void;
 }) {
   const legs = useMemo(() => [leg], [leg]);
   const { phase, legResults, refresh, refreshing } = useSwapQuoteComparison(legs, { enabled: true, slippageBps, fetcher });
@@ -450,6 +454,7 @@ function TrimLegRunner({
       perLegApproval
       autoStart
       onSettled={onSettled}
+      onSwapProgress={onSwapProgress}
     />
   );
 }

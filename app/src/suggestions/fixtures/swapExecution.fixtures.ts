@@ -2912,5 +2912,40 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       /if \(reportedRunRef\.current === runKey\) return;\s*reportedRunRef\.current = runKey;/.test(flow);
   })(), "once per run");
 
+  // AFTER A SWAP LANDS, ITS SUGGESTION GOES. Found in the live Trim test (2026-11-26): closing
+  // "Trim Completed" left the same suggestion on the dashboard until Refresh was pressed.
+  add("SWTR-17: the swap step reports 'sent' then 'landed', once each, and 'landed' is never downgraded", (() => {
+    const sec = stripComments(readSrc("src/components/swapExecution/SwapExecutionSection.tsx"));
+    return /const progress: SwapProgress \| null = shownPhase === "confirmed" \? "landed" : shownPhase === "confirming" \? "sent" : null;/.test(sec) &&
+      /if \(progress == null \|\| reportedProgressRef\.current === progress \|\| reportedProgressRef\.current === "landed"\) return;/.test(sec) &&
+      /onSwapProgressRef\.current\?\.\(progress\);/.test(sec);
+  })(), "sent → landed");
+  add("SWTR-18: both the single swap and every token of a Trim report it to the rail", (() => {
+    const modal = stripComments(readSrc("src/components/SuggestionReviewModal.tsx"));
+    const flow = stripComments(readSrc("src/components/trim/TrimFlowSection.tsx"));
+    const rail = stripComments(readSrc("src/components/RealWalletSuggestionsRail.tsx"));
+    return (modal.match(/onSwapProgress=\{onSwapProgress\}/g) ?? []).length === 2 &&
+      /onSwapProgress=\{props\.onSwapProgress\}/.test(flow) && /onSwapProgress=\{onSwapProgress\}/.test(flow) &&
+      (rail.match(/onSwapProgress=\{onSwapProgress\}/g) ?? []).length === 2;
+  })(), "wired through");
+  add("SWTR-19: closing a review whose swap landed hides that suggestion and re-reads the wallet; one that was only sent re-reads without hiding", (() => {
+    const rail = stripComments(readSrc("src/components/RealWalletSuggestionsRail.tsx"));
+    const onClose = /if \(opened != null && progress != null\) \{[\s\S]{0,200}if \(progress === "landed"\) \{\s*const stamp = portfolioStampOf\(opened\.swapAction\);\s*setActed\(\(prev\) => \(\{ \.\.\.prev, \[opened\.id\]: stamp \}\)\);\s*\}[\s\S]{0,200}requestWalletPortfolioRefresh\(\);\s*\}\s*setOpened\(null\);/.test(rail);
+    // Nothing sent → nothing hidden and no re-read: a declined or failed swap leaves the card.
+    const onlyAfterSwap = /const progress = swapProgressRef\.current;\s*swapProgressRef\.current = null;/.test(rail);
+    return onClose && onlyAfterSwap;
+  })(), "hide + refresh on close");
+  add("SWTR-20: the suggestion stays hidden only while the rail is still built from the read the swap was made from", (() => {
+    const rail = stripComments(readSrc("src/components/RealWalletSuggestionsRail.tsx"));
+    const filter = /rail\.cards\.filter\(\(c\) => acted\[c\.id\] == null \|\| portfolioStampOf\(rail\.swapActionById\?\.\[c\.id\]\) !== acted\[c\.id\]\)/.test(rail);
+    const stamp = /swapAction\?\.status === "ready" \? swapAction\.legs\.map\(\(l\) => l\.generatedAt\)\.join\("\|"\) : ""/.test(rail);
+    // The stamp is the time of the portfolio read, not of a price tick.
+    const fromRead = /generatedAt: new Date\(pricedAsOf \?\? Date\.now\(\)\)\.toISOString\(\)/.test(readSrc("src/suggestions/useRailSuggestions.ts"));
+    const shown = /cards: visibleCards,/.test(rail) && /suggestions_count: visibleCards\.length/.test(rail) &&
+      /const awaitingFreshRead = rail != null && rail\.available && rail\.cards\.length > 0 && visibleCards\.length === 0;/.test(rail) &&
+      /if \(rail\?\.loading \|\| awaitingFreshRead\)/.test(rail);
+    return filter && stamp && fromRead && shown;
+  })(), "same read → hidden; newer read → the engine decides");
+
   return checks;
 }
