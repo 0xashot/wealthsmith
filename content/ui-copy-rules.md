@@ -1161,6 +1161,27 @@ The total is the sum of what the chain says arrived, never the estimates. If an
 amount could not be read, the summary says how many tokens were swapped and gives
 no figure.
 
+### Tokens outside the approved list
+
+A token the approved registry does not know is shown as a shortened address
+(`2b1k…4GXo`) with the generic icon: a token can call itself anything, so the app
+trusts no name it has not approved.
+
+When Jupiter has **verified that exact mint**, the row shows the ticker, name and
+icon Jupiter lists instead. This is a display name only:
+
+  - the position's own symbol and name are not replaced, so the engine counts,
+    classifies and suggests exactly as before — a listed "PayPal USD" is not a
+    stablecoin to the Safety Buffer, and is not a Trim candidate, because of its
+    listing;
+  - a listing may never carry a ticker the app already uses for an approved asset
+    (a second "USDC" keeps its address);
+  - tickers and names are plain text only — no emoji, look-alike letters or
+    control characters; a longer name is cut with an ellipsis;
+  - an icon is loaded only over https from an allow-listed host, with no referrer;
+    a missing or failed icon falls back to the generic one;
+  - a token Jupiter has not verified, or a lookup that fails, keeps the address.
+
 ### Terms
 
 Five terms are required before approval, per the Execution Boundary: what is

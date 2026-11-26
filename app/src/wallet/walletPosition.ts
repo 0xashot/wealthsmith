@@ -44,6 +44,14 @@ export interface WalletPosition {
   logoUri?: string;
   /** Approved icon path (assets/icons/token/*.svg) for known tokens. */
   icon?: string;
+  /**
+   * DISPLAY ONLY — what Jupiter's verified token list calls this exact mint, for a token the
+   * approved registry does not know (see tokenListings.ts). `symbol` and `name` above are NOT
+   * replaced: the engine reads them as identity, and a listing must never change how a
+   * position is counted, classified or suggested. Read it through `positionDisplaySymbol` /
+   * `positionDisplayName` on screens that name the row.
+   */
+  listing?: { symbol: string; name: string; iconUrl: string | null; source: "jupiter_verified" };
   protocol?: string;
   detection:
     | "direct_wallet_balance"
@@ -332,6 +340,16 @@ export const TOKEN_REGISTRY: Record<string, TokenInfo> = {
 
 export function lookupMint(mint: string): TokenInfo | undefined {
   return TOKEN_REGISTRY[mint];
+}
+
+/** What a row is CALLED on screen: the verified listing's ticker when there is one, else the symbol. */
+export function positionDisplaySymbol(p: Pick<WalletPosition, "symbol" | "listing">): string {
+  return p.listing?.symbol ?? p.symbol;
+}
+
+/** The on-screen name: the verified listing's name when there is one, else the position's own. */
+export function positionDisplayName(p: Pick<WalletPosition, "symbol" | "name" | "listing">): string {
+  return p.listing?.name ?? p.name ?? p.symbol;
 }
 
 /** Short mint for unknown tokens, e.g. "9WzD…AWWM". */

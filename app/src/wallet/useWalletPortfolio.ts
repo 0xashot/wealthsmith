@@ -53,6 +53,7 @@ import { isSupportedLstMint, normalizeLstBacking, applyLstNormalization, type Ls
 import type { VrtInfo } from "./jitoRestaking";
 import type { SanctumLstInfo } from "./sanctumLsts";
 import { applyPrice, buildPositions, sortPositions, accountsOf, priceMintFor } from "./portfolioPositionDerivation";
+import { withTokenListings } from "./tokenListings";
 import type { ParsedTokenAccount } from "./portfolioPositionDerivation";
 import {
   LIVE_WALLET_WARNING_TOKENS,
@@ -784,6 +785,13 @@ export function useWalletPortfolio(): WalletPortfolio {
           }
         }
       } catch { /* strict no-op on any failure — portfolio unchanged */ }
+      if (cancelled || myReq !== reqId.current) return;
+
+      // DISPLAY NAMES, LAST. Tokens the registry could not name are looked up in Jupiter's verified
+      // list and given a `listing` (ticker, name, icon). Done after every merge and dedupe above, so
+      // a row that turned out to be an LP or receipt token is already gone, and done to nothing the
+      // engine reads — `symbol`/`name` are untouched. Never throws; a failure leaves the addresses.
+      merged = await withTokenListings(merged);
       if (cancelled || myReq !== reqId.current) return;
 
       // Final update of the read: apply any APY/LP/price changes and clear the

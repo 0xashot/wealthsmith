@@ -12,7 +12,7 @@
  */
 import { useId, useState } from "react";
 import { TrendIcon } from "./TrendBadge";
-import type { WalletPosition } from "../wallet/walletPosition";
+import { positionDisplaySymbol, type WalletPosition } from "../wallet/walletPosition";
 import type { PortfolioCompletenessResult } from "../wallet/portfolioCompleteness";
 import { positionCompletenessNote } from "./portfolioCompletenessUi";
 import { usd0, formatAmount, explorerUrl } from "./deployTable";
@@ -120,14 +120,17 @@ export default function LiquidAssetsCard({ positions, loading, completeness }: P
                 {visible.map((p) => {
                   // Approved icon when the token has one; safe fallback otherwise
                   // (the visible symbol still identifies the asset).
-                  const iconUrl = p.icon ? resolveTokenIcon(p.icon).url : fallbackTokenUrl;
+                  // A token outside the registry that Jupiter has verified shows the listed icon
+                  // (a remote image — it falls back to the generic one if it fails to load).
+                  const iconUrl = p.icon ? resolveTokenIcon(p.icon).url : p.listing?.iconUrl ?? fallbackTokenUrl;
                   const url = explorerUrl(p);
                   return (
                     <tr key={p.id}>
                       <td className="portfolio-table__cell">
                         <AssetIdentity
                           iconUrl={iconUrl}
-                          label={p.symbol}
+                          iconFallbackUrl={fallbackTokenUrl}
+                          label={positionDisplaySymbol(p)}
                           {...(url ? { href: url } : {})}
                           {...(() => {
                             const note = positionCompletenessNote(completeness, p.id);

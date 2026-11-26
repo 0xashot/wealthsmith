@@ -2,6 +2,7 @@ import { runRecordedObligationFixtureChecks } from "./fixtures/recordedObligatio
 import { runObservationDismissalFixtureChecks } from "./fixtures/observationDismissal.fixtures";
 import { runSwapExecutionFixtureChecks } from "./fixtures/swapExecution.fixtures";
 import { runSwapExecutionServerFixtureChecks } from "./fixtures/swapExecutionServer.fixtures";
+import { runTokenListingsFixtureChecks } from "./fixtures/tokenListings.fixtures";
 import { runSwapExecutionVerificationFixtureChecks } from "./fixtures/swapExecutionVerification.fixtures";
 import { runSwapQuoteServerFixtureChecks, runSwapQuoteServerGuardChecks } from "../server/swapQuote/swapQuoteServerFixtures";
 import { runContributionFinalizationFixtureChecks, runDcaCopy23CFixtureChecks, runInternalTestingRouteFixtureChecks, runPositionOptimizationAssessmentFixtureChecks, runRebalanceCanonicalMountFixtureChecks, runSlice7BRebalanceMigrationFixtureChecks, runStep22GCloseoutFixtureChecks, runTrimAssessmentFixtureChecks } from "./fixtures/assessmentMounts.fixtures";
@@ -58,6 +59,7 @@ export async function printFixtureResults(): Promise<void> {
     ...runSwapQuoteFixtureChecks(),
     ...runSwapExecutionFixtureChecks(),
     ...(await runSwapExecutionServerFixtureChecks()),
+    ...(await runTokenListingsFixtureChecks()),
     ...(await runSwapExecutionVerificationFixtureChecks()),
     ...runSwapQuoteUiFixtureChecks(),
     ...runRailSwapActionFixtureChecks(),

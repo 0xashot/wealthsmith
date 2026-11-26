@@ -3,7 +3,7 @@
  * table cards (Liquid Assets / Staked Assets / Yield Strategies). No values are
  * computed here beyond display formatting of SOURCED numbers.
  */
-import type { WalletPosition } from "../wallet/walletPosition";
+import { positionDisplaySymbol, type WalletPosition } from "../wallet/walletPosition";
 
 /**
  * Solscan's native-SOL token page id (all 1s). Distinct from the wrapped-SOL
@@ -21,7 +21,7 @@ export function formatAmount(p: WalletPosition): string {
     p.uiAmount != null
       ? p.uiAmount.toLocaleString("en-US", { maximumFractionDigits: 2 })
       : p.amount;
-  return `${amount} ${p.symbol}`;
+  return `${amount} ${positionDisplaySymbol(p)}`;
 }
 
 /**
@@ -33,7 +33,7 @@ export function formatAmount(p: WalletPosition): string {
 export function formatAmountWhole(p: WalletPosition): string {
   const amount =
     p.uiAmount != null ? Math.trunc(p.uiAmount).toLocaleString("en-US") : p.amount;
-  return `${amount} ${p.symbol}`;
+  return `${amount} ${positionDisplaySymbol(p)}`;
 }
 
 /**

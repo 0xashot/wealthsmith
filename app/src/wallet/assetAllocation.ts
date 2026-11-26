@@ -7,7 +7,7 @@
  * Priced value only. Unpriced holdings are excluded (and flagged via anyUnpriced);
  * they are NEVER placed into `Other`. No price, percentage, or grouping is invented.
  */
-import type { WalletPosition } from "./walletPosition";
+import { positionDisplaySymbol, type WalletPosition } from "./walletPosition";
 import { STABLE_SYMBOLS } from "./walletSummary";
 import type { DonutSegment } from "../components/DonutAllocationChart";
 
@@ -38,14 +38,15 @@ export interface AssetAllocation {
 
 export function deriveAssetAllocation(positions: WalletPosition[]): AssetAllocation {
   // Aggregate priced positions by symbol.
-  const bySymbol = new Map<string, { valueUsd: number; isStable: boolean }>();
+  const bySymbol = new Map<string, { valueUsd: number; isStable: boolean; label: string }>();
   let anyUnpriced = false;
   for (const p of positions) {
     if (typeof p.valueUsd === "number" && p.valueUsd > 0) {
       const key = p.symbol && p.symbol.trim() !== "" ? p.symbol : "Unknown";
       // Color a stablecoin teal regardless of where it sits (wallet-held or supplied).
       const isStable = STABLE_SYMBOLS.has(p.symbol);
-      const cur = bySymbol.get(key) ?? { valueUsd: 0, isStable };
+      // Grouped and coloured by the engine's own symbol; a verified listing changes only the label.
+      const cur = bySymbol.get(key) ?? { valueUsd: 0, isStable, label: p.listing ? positionDisplaySymbol(p) : key };
       cur.valueUsd += p.valueUsd;
       bySymbol.set(key, cur);
     } else if (typeof p.uiAmount === "number" && p.valueUsd == null) {
@@ -54,7 +55,7 @@ export function deriveAssetAllocation(positions: WalletPosition[]): AssetAllocat
   }
 
   const assets = [...bySymbol.entries()]
-    .map(([symbol, v]) => ({ symbol, valueUsd: v.valueUsd, isStable: v.isStable }))
+    .map(([symbol, v]) => ({ symbol, label: v.label, valueUsd: v.valueUsd, isStable: v.isStable }))
     .sort((a, b) => b.valueUsd - a.valueUsd);
   const total = assets.reduce((s, a) => s + a.valueUsd, 0);
   if (assets.length === 0 || total <= 0) return { segments: [], totalUsd: null, anyUnpriced };
@@ -74,8 +75,8 @@ export function deriveAssetAllocation(positions: WalletPosition[]): AssetAllocat
   // remainder and base the visible percentages on the displayed assets).
   const showOther = rest.length > 0 && otherPct >= 2;
 
-  const displayed: Array<{ symbol: string; valueUsd: number; isStable: boolean; other?: boolean }> =
-    showOther ? [...shown, { symbol: "Other", valueUsd: otherUsd, isStable: false, other: true }] : shown;
+  const displayed: Array<{ symbol: string; label: string; valueUsd: number; isStable: boolean; other?: boolean }> =
+    showOther ? [...shown, { symbol: "Other", label: "Other", valueUsd: otherUsd, isStable: false, other: true }] : shown;
   const displayedTotal = displayed.reduce((s, a) => s + a.valueUsd, 0);
 
   let paletteIdx = 0;
@@ -87,7 +88,7 @@ export function deriveAssetAllocation(positions: WalletPosition[]): AssetAllocat
         : CRYPTO_PALETTE[paletteIdx++ % CRYPTO_PALETTE.length];
     return {
       id: a.symbol.toLowerCase(),
-      label: a.symbol,
+      label: a.label,
       valueUsd: a.valueUsd,
       percent: (a.valueUsd / displayedTotal) * 100,
       colorToken,

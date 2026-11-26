@@ -12,9 +12,17 @@
  * Callers resolve the icon themselves (registry lookup + their own fallback
  * policy) and pass the finished URL — this component never invents an icon.
  */
+import { useState } from "react";
+
 interface Props {
   /** Fully resolved icon URL; null renders the text alone (no invented icon). */
   iconUrl: string | null;
+  /**
+   * Shown instead when `iconUrl` fails to load. Only a REMOTE icon can fail (a verified
+   * listing's image, hosted elsewhere); bundled icons never do. Without it a failed image is
+   * removed rather than left as a broken-image mark.
+   */
+  iconFallbackUrl?: string;
   /** Primary label — the symbol or name the row is identified by. */
   label: string;
   /** Read-only external page (block explorer). Renders the label as a new-tab link. */
@@ -25,13 +33,20 @@ interface Props {
   note?: string;
 }
 
-export default function AssetIdentity({ iconUrl, label, href, sub, note }: Props) {
+export default function AssetIdentity({ iconUrl, iconFallbackUrl, label, href, sub, note }: Props) {
+  // Which URL failed — keyed by URL, so a row re-used for another token starts fresh.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const failed = iconUrl != null && failedUrl === iconUrl;
+  const shownIcon = failed ? iconFallbackUrl ?? null : iconUrl;
   return (
     <span className="asset-identity">
-      {iconUrl && (
+      {shownIcon && (
         <img
           className="asset-identity__icon"
-          src={iconUrl}
+          src={shownIcon}
+          // A remote icon's host learns nothing about the page it was shown on.
+          referrerPolicy="no-referrer"
+          onError={() => { if (!failed && iconUrl) setFailedUrl(iconUrl); }}
           alt=""
           width={24}
           height={24}
