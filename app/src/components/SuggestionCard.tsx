@@ -132,6 +132,11 @@ interface Props {
    */
   onReview?: (card: SuggestionCardState) => void;
   /**
+   * Review was pressed and what the review needs is being fetched. The button keeps its size
+   * and place and shows a spinner; the review opens complete rather than filling in.
+   */
+  busy?: boolean;
+  /**
    * Step 14Z — the current SOL staking comparison presentation. Rendered as a compact read-only
    * "Top protocol to review right now" summary on the SOL staking card only. Never changes the
    * suggestion title/action; never a leader when unavailable/stale.
@@ -144,7 +149,7 @@ function isSolStakingCard(card: SuggestionCardState): boolean {
   return card.type === "stake_idle_sol" || card.category === "staked_assets";
 }
 
-export default function SuggestionCard({ card, onExternalHandoff, onReview, stakingPresentation }: Props) {
+export default function SuggestionCard({ card, onExternalHandoff, onReview, busy = false, stakingPresentation }: Props) {
   const isLocked = card.status === "locked";
   // A below-minimum engine suggestion maps to status "disabled": render it the
   // same non-actionable way as a locked card (dimmed, disabled button, reason
@@ -241,11 +246,21 @@ export default function SuggestionCard({ card, onExternalHandoff, onReview, stak
         // Informational cards (On Track) have an empty CTA label → no button.
         <button
           type="button"
-          className="suggestion-card__cta"
+          className={busy ? "suggestion-card__cta cta-hold" : "suggestion-card__cta"}
           aria-label={card.accessibleCtaLabel ?? card.cta.label}
-          onClick={() => onReview?.(card)}
+          // `aria-disabled`, not `disabled`: the button keeps focus, so a keyboard user is not
+          // dropped to the top of the page while the review loads.
+          aria-disabled={busy || undefined}
+          aria-busy={busy || undefined}
+          onClick={() => { if (!busy) onReview?.(card); }}
         >
-          {card.cta.label}
+          {busy ? (
+            <>
+              {/* The label stays, invisible, so the button is exactly the size it was. */}
+              <span className="cta-hold__label">{card.cta.label}</span>
+              <span className="swap-confirm__spinner cta-hold__spinner" aria-hidden="true" />
+            </>
+          ) : card.cta.label}
         </button>
       ) : null}
     </article>

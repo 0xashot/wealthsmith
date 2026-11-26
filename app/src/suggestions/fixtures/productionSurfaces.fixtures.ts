@@ -861,7 +861,11 @@ export function runRebalanceProductionFixtureChecks(): FixtureCheck[] {
   // the quote service is degraded, which left the review sheet with no action at all. The card now carries
   // a static Jupiter link as a FALLBACK — a direct link, not a recommendation — which the modal suppresses
   // whenever a live route resolves. The Kamino assertions are unchanged: no Kamino copy, no Kamino handoff.
-  add("RC-32: wallet-sourced card copy unchanged — 'Swap … into SOL', NO Kamino mention, Jupiter fallback handoff", (() => { const c = card([sol(100), usdc(900)], "high", 100); const d = c?.descriptionOverride ?? ""; const el = c?.reviewDetails?.externalLink; return c !== null && /Swap \$[\d,]+ of USDC above your Safety Buffer into SOL/.test(d) && !/Kamino/.test(d) && el != null && el.ctaLabel === "Swap on Jupiter" && el.url === "https://jup.ag/swap/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v-So11111111111111111111111111111111111111112" && el.opensInNewTab === true; })(), "wallet card + Jupiter fallback");
+  //
+  // 2026-11-26 — the fallback link is REMOVED again, and this time the review is not left without an
+  // action: its footer is owned by the in-app Swap step from the first render (Swap, or Close with the
+  // reason shown), so the gap the link was added to cover no longer exists. See SWXE-14/15/16.
+  add("RC-32: wallet-sourced card copy unchanged — 'Swap … into SOL', NO Kamino mention, and NO link out (the swap is approved in the review)", (() => { const c = card([sol(100), usdc(900)], "high", 100); const d = c?.descriptionOverride ?? ""; return c !== null && /Swap \$[\d,]+ of USDC above your Safety Buffer into SOL/.test(d) && !/Kamino/.test(d) && c?.reviewDetails?.externalLink == null && !/Swap on Jupiter|jup\.ag/.test(JSON.stringify(c)); })(), "wallet card, no link-out");
 
   // ---- Regression / immutability ----
   add("RC-28: legacy engine call (no override) unchanged — bucket rebalance still fires", (() => { const withReb = runSuggestionEngine(fundedInp(), FIXTURE_GENERATED_AT); const woReb = runSuggestionEngine(fundedInp(), FIXTURE_GENERATED_AT, null, null, undefined, undefined); return withReb.suggestions.length === woReb.suggestions.length; })(), "legacy stable");

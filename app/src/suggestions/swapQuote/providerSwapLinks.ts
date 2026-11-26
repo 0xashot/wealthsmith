@@ -44,32 +44,3 @@ export function buildSwapHandoff(providerId: SwapProviderId | null, inputMint: s
   if (!providerId) return null;
   return { providerId, providerName: SWAP_PROVIDER_NAME[providerId], swapUrl: buildProviderSwapUrl(providerId, inputMint, outputMint, inputAmountTokens) };
 }
-
-/**
- * The canonical USDC and wrapped-SOL mints, exported so a suggestion can build its static
- * Jupiter fallback link without re-declaring them.
- */
-export const SWAP_LINK_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
-export const SWAP_LINK_WSOL_MINT = WSOL;
-
-/**
- * The read-only Jupiter fallback handoff for a Rebalance whose live swap-route comparison has not
- * produced a selected provider — Demo Mode, or a degraded/unavailable quote path. It is the SAME
- * kind of link-out as the Jito / Kamino / Moonpay handoffs: Jupiter's own swap page, correct pair,
- * new tab. WealthSmith constructs / simulates / signs / submits NOTHING.
- *
- * When a live route DOES resolve, the modal shows that handoff instead (it names the actually
- * selected provider and carries the quoted amount), so the two never appear together.
- */
-export function jupiterRebalanceFallbackLink(direction: "sol_to_usdc" | "usdc_to_sol") {
-  const [inMint, outMint] = direction === "sol_to_usdc"
-    ? [SWAP_LINK_WSOL_MINT, SWAP_LINK_USDC_MINT]
-    : [SWAP_LINK_USDC_MINT, SWAP_LINK_WSOL_MINT];
-  return {
-    label: "Jupiter",
-    ctaLabel: "Swap on Jupiter",
-    url: buildProviderSwapUrl("jupiter", inMint, outMint),
-    opensInNewTab: true,
-    secondaryLabel: "Cancel",
-  } as const;
-}

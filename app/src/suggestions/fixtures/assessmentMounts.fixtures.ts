@@ -611,7 +611,7 @@ export function runDcaCopy23CFixtureChecks(): FixtureCheck[] {
   add("DCC-4: recurring (future) DCA modal → read-only Moonpay handoff 'Buy SOL on Moonpay' → moonpay.com/buy/sol", recDetails.externalLink?.ctaLabel === "Buy SOL on Moonpay" && /moonpay\.com\/buy\/sol/.test(recDetails.externalLink?.url ?? "") && recDetails.externalLink?.secondaryLabel === "Cancel" && recDetails.externalLink?.opensInNewTab === true, recDetails.externalLink?.ctaLabel ?? "none");
   add("DCC-5: funded excess-USDC DCA has NO Moonpay link (it uses the live swap handoff instead)", buildContributionPlanReviewDetails(excess).externalLink == null, `link=${buildContributionPlanReviewDetails(excess).externalLink?.ctaLabel ?? "none"}`);
   const modal = readIfSrc("src/components/SuggestionReviewModal.tsx");
-  add("DCC-6: the modal renders the contribution external-link footer read-only (new tab, no transaction); swap handoff takes precedence", /swapFooter \?\? externalLinkFooter\(contributionReview\.externalLink\)/.test(modal) && /No transaction is prepared/.test(modal), "modal footer");
+  add("DCC-6: the modal renders the contribution external-link footer read-only (new tab, no transaction); the in-app Swap footer takes precedence when the contribution has a swap", /\{executionSection \?\? externalLinkFooter\(contributionReview\.externalLink\)\}/.test(modal) && /No transaction is prepared/.test(modal), "modal footer");
   add("DCC-7: the Trim card uses trim.svg (mapped by the trim_long_tail card type)", /trim_long_tail: trimUrl/.test(readIfSrc("src/components/SuggestionCard.tsx")) && /icons\/ui\/trim\.svg/.test(readIfSrc("src/components/SuggestionCard.tsx")), "trim icon");
 
   return checks;

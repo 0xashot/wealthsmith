@@ -34,8 +34,7 @@ import { cardProtocolName } from "../suggestions/yieldStrategyPlanPresentation";
 import type { SwapActionContext, SwapActionReadiness, SwapQuoteComparisonAssessment } from "../suggestions/swapQuote/swapQuoteContracts";
 import type { DemoExecutionOutcome } from "../suggestions/swapExecution/demoOutcomes";
 import type { SwapQuoteFetcher } from "../suggestions/swapQuote/swapQuoteClient";
-import type { SwapHandoff } from "../suggestions/swapQuote/providerSwapLinks";
-import SwapQuoteComparisonSection from "./swapQuote/SwapQuoteComparisonSection";
+import SwapQuoteComparisonSection, { type SwapQuoteState } from "./swapQuote/SwapQuoteComparisonSection";
 import SwapExecutionSection from "./swapExecution/SwapExecutionSection";
 import AssetIdentity from "./AssetIdentity";
 import ModalActionsFooter from "./ModalActionsFooter";
@@ -144,12 +143,28 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const reasonId = useId();
-  // 23C.2 — the read-only handoff reported by the "Suggested route" section drives the sticky "Swap on <provider>"
-  // footer (a link out only; WealthSmith prepares/signs/submits nothing). Null when there is no selected route.
-  const [swapHandoff, setSwapHandoff] = useState<SwapHandoff | null>(null);
-  // Phase 6 — the inputs for the Execution Boundary, reported by the route section. Null unless
-  // a single-leg route resolved; the Boundary still has to say yes after that.
-  const [executionCtx, setExecutionCtx] = useState<{ action: SwapActionContext; assessment: SwapQuoteComparisonAssessment } | null>(null);
+  // Phase 6 — the state of the route comparison, reported by the route section: the assessment
+  // (once there is one), whether a request is in flight, and a quiet refresh. The Boundary
+  // still has to say yes after that.
+  const [quoteState, setQuoteState] = useState<SwapQuoteState | null>(null);
+  /**
+   * THE ONE SWAP THIS REVIEW CAN OFFER, read straight from the prop rather than from anything
+   * the route section reports later.
+   *
+   * A review for a single-leg swap has exactly one footer for its whole life — Cancel and Swap
+   * — and that has to be known on the first render. It used to be decided by what had been
+   * reported so far, so the footer went through three owners while the comparison loaded: a
+   * static "Swap on Jupiter" link, then a live "Swap on <provider>" link, then the Swap button
+   * — and when the Swap button withdrew (an aged quote, a wallet not yet connected) the modal
+   * was left with no footer at all, because the element that rendered nothing was still an
+   * element and the fallback behind `??` was never reached.
+   *
+   * There is no link out to a provider any more. A swap WealthSmith suggests is approved here.
+   */
+  const swapLeg: SwapActionContext | null =
+    swapAction && !details?.hideSwapRoute && swapAction.status === "ready" && swapAction.legs.length === 1
+      ? swapAction.legs[0]
+      : null;
   /**
    * True while the confirm step is open. It is a SUBPAGE of this review: the heading and body
    * give way so the step owns the modal, and its back control brings them back. Someone
@@ -157,7 +172,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
    * here — they have read it, and leaving it on screen buries the question.
    *
    * The body is HIDDEN, not unmounted. The route comparison lives inside it and is what
-   * supplies `executionCtx`; unmounting it took the execution context away and the confirm
+   * supplies `quoteState`; unmounting it took the execution context away and the confirm
    * step vanished the instant it was asked for. Hiding also keeps the quote it already
    * fetched, so Back does not pay for a refetch.
    */
@@ -176,39 +191,26 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       presetAssessments={swapQuotePresetAssessments}
       presetLoading={swapQuotePresetLoading}
       nowMs={swapQuoteNowMs}
-      onHandoff={setSwapHandoff}
-      onExecutionContext={setExecutionCtx}
+      onExecutionContext={setQuoteState}
     />
   ) : null;
 
-  // Phase 6 — the in-app confirm step, when the Boundary permits one. It renders null whenever
-  // it does not: no wallet, an unpermitted rail, an expired quote, a provider we cannot build
-  // for. The handoff footer below then stands, which is the fallback working rather than a
-  // degraded state.
-  const executionSection = executionCtx ? (
+  // Phase 6 — the footer of a single-leg swap review, in every state: Swap while a swap can be
+  // offered (spinning while terms load), Close when it cannot. It owns the footer from the
+  // first render and never renders nothing, so there is no moment with a different footer or
+  // none. Null only when this review has no single swap to offer.
+  const executionSection = swapLeg ? (
     <SwapExecutionSection
       demo={demo}
       demoOutcome={demoOutcome}
-      action={executionCtx.action}
-      assessment={executionCtx.assessment}
+      action={swapLeg}
+      assessment={quoteState?.assessment ?? null}
+      comparisonLoading={quoteState == null || quoteState.loading}
+      onRefreshComparison={quoteState?.refresh}
       nowMs={swapQuoteNowMs}
       onClose={onClose}
       onExpiredGiveUp={onSwapQuoteGaveUp}
       onStepChange={setSwapStep}
-    />
-  ) : null;
-
-  // The sticky "Swap on <provider>" footer — READ-ONLY handoff to the provider's own swap page in a new tab.
-  const swapFooter = swapHandoff ? (
-    <ModalActionsFooter
-      onSecondary={onClose}
-      primary={{
-        kind: "external-link",
-        label: `Swap on ${swapHandoff.providerName}`,
-        href: swapHandoff.swapUrl,
-        newTab: true,
-        ariaLabel: `Swap on ${swapHandoff.providerName}. Opens ${swapHandoff.providerName} in a new tab. No transaction is prepared.`,
-      }}
     />
   ) : null;
 
@@ -403,9 +405,9 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             {/* Step 23C — read-only "Suggested route" for an eligible funded DCA (contribution) review. */}
             {swapSection}
           </div>
-          {/* Funded DCA → the live "Swap on <provider>" handoff; a future DCA with no on-chain source → its
-              read-only Moonpay handoff ("Buy SOL on Moonpay"). Mutually exclusive by construction. */}
-          {executionSection ?? swapFooter ?? externalLinkFooter(contributionReview.externalLink)}
+          {/* Funded DCA → the in-app Swap footer; a future DCA with no on-chain source → its read-only
+              Moonpay handoff ("Buy SOL on Moonpay"). Mutually exclusive by construction. */}
+          {executionSection ?? externalLinkFooter(contributionReview.externalLink)}
         </div>
       </div>
     );
@@ -860,9 +862,9 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         </div>
         {/* Sticky footer — shown only when a read-only protocol link is available. Cancel closes the modal;
             the primary button opens the protocol's own page in a new tab (no in-app transaction/signature). */}
-        {/* A live swap route supersedes a static provider link: when `swapFooter` is present it names the
-            actually selected provider and carries the quoted amount, so the two must never both render. */}
-        {details.externalLink && !swapHandoff && (
+        {/* A review that can offer a swap has ONE footer, and it is the Swap footer below. A static
+            protocol link is for reviews with no swap of their own (staking, lending, a withdrawal). */}
+        {details.externalLink && !swapLeg && (
           <ModalActionsFooter
             secondaryLabel={details.externalLink.secondaryLabel ?? "Cancel"}
             onSecondary={onClose}
@@ -875,8 +877,8 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             }}
           />
         )}
-        {/* 23C.2 — read-only "Swap on <provider>" handoff footer (Rebalance / Trim; DCA uses its own branch). */}
-        {executionSection ?? swapFooter}
+        {/* The Swap footer (Rebalance / Trim; DCA uses its own branch). */}
+        {executionSection}
         {/* Sticky footer for an OBSERVATION. There is no action to hand off here —
             reviewing IS the action — so the primary control acknowledges it. Dismiss
             hides only THIS situation; the card returns by itself once the underlying

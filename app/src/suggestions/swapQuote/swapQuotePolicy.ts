@@ -7,7 +7,7 @@
  */
 import { APPROVED_SWAP_PROVIDER_IDS, type SwapProviderId } from "./swapQuoteContracts";
 
-export const SWAP_QUOTE_POLICY_VERSION = "swap_quote_policy_1.0.0" as const;
+export const SWAP_QUOTE_POLICY_VERSION = "swap_quote_policy_1.1.0" as const;
 
 /**
  * The APPROVED deterministic provider tie-break order: Jupiter → Raydium → Orca (lower number ranks first).
@@ -18,6 +18,26 @@ export const SWAP_QUOTE_POLICY_VERSION = "swap_quote_policy_1.0.0" as const;
  */
 export const SWAP_PROVIDER_PRIORITY: Record<SwapProviderId, number> = { jupiter: 0, raydium: 1, orca: 2 };
 export const SWAP_PROVIDER_PRIORITY_ORDER: readonly SwapProviderId[] = ["jupiter", "raydium", "orca"] as const;
+
+/**
+ * Providers whose route can be approved INSIDE WealthSmith (a confirm step, then the user's own
+ * wallet). Every other provider's route can only be shown.
+ *
+ * Used for exactly one thing: between routes that are ECONOMICALLY EQUIVALENT — net outputs
+ * within `economicallyEquivalentEpsilon`, 0.05% — the one that can be approved here is
+ * selected. It never beats a route that is better by more than that band; a meaningfully better
+ * route still wins on its economics, whoever provides it.
+ *
+ * Why it exists: two quotes a fraction of a cent apart trade places from one request to the
+ * next. Selecting on that noise made the suggested route flip between a provider the user can
+ * act on here and one they cannot, on a difference too small to matter to them — measured at
+ * $0.0002–$0.0009 on a $4 swap, with the "winner" changing between consecutive comparisons.
+ *
+ * Must list the same providers as `EXECUTABLE_PROVIDER_IDS` (executionEligibility.ts). They are
+ * separate lists because this one belongs to the quote layer, which the server runs without the
+ * execution modules; fixture SWXE-20 fails if they ever differ.
+ */
+export const SWAP_IN_APP_PROVIDER_IDS: readonly SwapProviderId[] = ["jupiter"] as const;
 
 /* ------------------------------------------------------------------ *
  * Cost + risk thresholds (documented Protocol Decision Logic — authoritative, not inferred).

@@ -107,7 +107,19 @@ export type ExecutionEvent =
   | { type: "figures"; deliveredRaw?: string | null; feeLamports?: string | null; feeUsd?: number | null }
   | { type: "confirm_timeout" }
   | { type: "expire" }
-  | { type: "cancel" };
+  | { type: "cancel" }
+  /**
+   * The confirm step was closed (Back), so the attempt is put away.
+   *
+   * Without it the previous attempt's last state was still there when the step reopened, and
+   * the sheet showed it — an old plan's terms, or an old failure — for as long as the new plan
+   * took to arrive. Reopening should look like opening.
+   *
+   * REFUSED once a wallet has been asked to sign. From `signing` on there may be a transaction,
+   * and from `submitted` on there is a signature; both are the user's record and must survive
+   * them looking at the review again.
+   */
+  | { type: "reset" };
 
 /** Phases from which a local expiry or cancellation may still end the flow. */
 const PRE_SUBMISSION: ReadonlySet<ExecutionPhase> = new Set([
@@ -149,6 +161,15 @@ export function executionReducer(state: ExecutionState, event: ExecutionEvent): 
   }
   if (event.type === "cancel") {
     return PRE_SUBMISSION.has(state.phase) ? fail(state, "cancelled") : state;
+  }
+  if (event.type === "reset") {
+    // Listed as the phases that MAY be discarded, not the ones that may not: a phase added later
+    // is kept by default, which is the safe direction for anything that might hold a transaction.
+    const discardable =
+      state.signature == null &&
+      (state.phase === "idle" || state.phase === "preparing" || state.phase === "verifying" ||
+        state.phase === "ready" || state.phase === "failed");
+    return discardable ? initialExecutionState : state;
   }
 
   // RE-PREPARING, from anywhere nothing has been authorised yet.

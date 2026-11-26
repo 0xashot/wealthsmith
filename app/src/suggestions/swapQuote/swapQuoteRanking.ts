@@ -11,10 +11,16 @@
  *   1. lower estimated total-cost %   2. lower price impact   3. higher minimum output
  *   4. fresher quote (later quotedAt) 5. lower quote latency
  *   6. deterministic provider priority: Jupiter → Raydium → Orca (final, economics-equivalent only).
+ *
+ * ONE ADJUSTMENT AFTER THE SORT — the in-app preference. If the top route cannot be approved inside
+ * WealthSmith and another eligible route can, AND that route's net output is within the equivalence
+ * epsilon of the top, the in-app route is selected instead and `decidedBy` records `in_app_execution`.
+ * Outside the epsilon nothing changes: a meaningfully better route wins on its economics. See
+ * `SWAP_IN_APP_PROVIDER_IDS` for the measurement behind it.
  */
 import type { SwapQuoteCandidate } from "./swapQuoteContracts";
 import type { SwapCostBreakdown } from "./swapCostMethodology";
-import { SWAP_QUOTE_OPERATIONAL_POLICY, SWAP_PROVIDER_PRIORITY } from "./swapQuotePolicy";
+import { SWAP_QUOTE_OPERATIONAL_POLICY, SWAP_PROVIDER_PRIORITY, SWAP_IN_APP_PROVIDER_IDS } from "./swapQuotePolicy";
 
 export interface RankableCandidate {
   candidate: SwapQuoteCandidate;
@@ -37,6 +43,8 @@ export type SwapDecidingFactor =
   | "freshness"
   | "latency"
   | "provider_priority"
+  /** The economic order was a near-tie, and the route that can be approved in-app was selected. */
+  | "in_app_execution"
   | null;
 
 export interface RankingResult {
@@ -105,18 +113,38 @@ export function decidingFactor(a: RankableCandidate, b: RankableCandidate): Swap
   return null;
 }
 
+const isInApp = (c: RankableCandidate): boolean => SWAP_IN_APP_PROVIDER_IDS.includes(c.candidate.providerId);
+
+/** Net outputs within `epsilon` of the larger. False when either is unpriced: an unknown is not a tie. */
+function withinEpsilon(a: RankableCandidate, b: RankableCandidate, epsilon: number): boolean {
+  const x = a.cost.netOutputUsd;
+  const y = b.cost.netOutputUsd;
+  if (x == null || y == null) return false;
+  const larger = Math.max(Math.abs(x), Math.abs(y));
+  if (!(larger > 0)) return false;
+  return Math.abs(x - y) / larger <= epsilon;
+}
+
 /** Rank eligible candidates and flag economic equivalence between the top two. Non-eligible are excluded. */
 export function rankEligibleCandidates(candidates: readonly RankableCandidate[], epsilon = SWAP_QUOTE_OPERATIONAL_POLICY.economicallyEquivalentEpsilon): RankingResult {
   const eligible = candidates.filter((c) => c.candidate.eligible);
   const ranked = [...eligible].sort(compare);
-  let economicallyEquivalent = false;
-  if (ranked.length >= 2) {
-    const top = ranked[0].cost.netOutputUsd;
-    const second = ranked[1].cost.netOutputUsd;
-    if (top != null && second != null && top > 0) {
-      economicallyEquivalent = Math.abs(top - second) / Math.max(Math.abs(top), Math.abs(second)) <= epsilon;
+
+  // The in-app preference. Only when the economic winner cannot be approved here, and only for
+  // a route inside the equivalence band of that winner — the best such route, since `ranked` is
+  // already in economic order. Everything else keeps its order.
+  let promotedInApp = false;
+  if (ranked.length >= 2 && !isInApp(ranked[0])) {
+    const index = ranked.findIndex((c) => isInApp(c) && withinEpsilon(ranked[0], c, epsilon));
+    if (index > 0) {
+      const [inApp] = ranked.splice(index, 1);
+      ranked.unshift(inApp);
+      promotedInApp = true;
     }
   }
-  const decidedBy = ranked.length >= 2 ? decidingFactor(ranked[0], ranked[1]) : null;
+
+  const economicallyEquivalent = ranked.length >= 2 && withinEpsilon(ranked[0], ranked[1], epsilon);
+  const decidedBy: SwapDecidingFactor =
+    ranked.length < 2 ? null : promotedInApp ? "in_app_execution" : decidingFactor(ranked[0], ranked[1]);
   return { ranked, economicallyEquivalent, decidedBy };
 }

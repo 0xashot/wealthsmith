@@ -29,6 +29,8 @@ interface Props {
   notice?: string;
   onExternalHandoff?: (card: SuggestionCardState) => void;
   onReview?: (card: SuggestionCardState) => void;
+  /** The card whose Review is fetching what its review needs. Its button spins in place. */
+  busyCardId?: string | null;
   /** Step 14Z — current SOL staking comparison presentation, forwarded to the SOL staking card. */
   stakingPresentation?: SolStakingSelectorPresentation;
 }
@@ -39,6 +41,7 @@ export default function SuggestionRail({
   notice,
   onExternalHandoff,
   onReview,
+  busyCardId,
   stakingPresentation,
 }: Props) {
   const { dismissed } = useDismissedSuggestions();
@@ -55,6 +58,7 @@ export default function SuggestionRail({
       card={card}
       onExternalHandoff={onExternalHandoff}
       onReview={onReview}
+      busy={busyCardId === card.id}
       stakingPresentation={stakingPresentation}
     />
   );

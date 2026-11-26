@@ -1361,3 +1361,10 @@ export const SWAP_CONFIRM_SUBMITTING = "Confirming";
  * names what the USER is doing, exactly as "Approve" does.
  */
 export const SWAP_CONFIRM_CONTINUE_LABEL = "Swap";
+/**
+ * Beside a greyed Swap button when no connected wallet can sign for this session — the wallet
+ * extension is not connected to the page, or it is on a different account from the one signed
+ * in. Names the remedy, not the mechanism. Before this the button simply was not there, with
+ * nothing to say why.
+ */
+export const SWAP_ENTRY_WALLET_NOTE = "Reconnect your wallet to swap.";

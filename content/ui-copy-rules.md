@@ -936,6 +936,56 @@ The user approves it in their own wallet, once, for that transaction only.
 WealthSmith never holds funds and never approves anything.
 ```
 
+### Getting to the confirm step: Review, then Swap
+
+Decided 2026-11-26, after the first real swap attempt in production. The path
+is two presses, and each one waits IN PLACE:
+
+```text
+[ Review ]   on the suggestion card   → spins on the card until the route is chosen
+[ Swap ]     in the review            → spins in the review until the terms are loaded
+[ Approve ]  in the confirm step      → the user's own wallet
+```
+
+Hard Rules:
+
+```text
+The review opens with its route ALREADY selected. No loading state inside the
+review, and no footer that changes while one resolves.
+
+The selected route does not change while the review is open. It is a snapshot
+of one proposal: a price refresh behind it changes nothing in front of the
+reader, and a comparison that has aged stays on screen.
+
+Pressing Swap changes nothing on screen except the button, until the confirm
+step has terms to show. The review keeps its heading and its body the whole
+time.
+
+The review's footer is Cancel and Swap. There is NO link out to a swap
+provider — no "Swap on Jupiter", "Swap on Raydium" or similar — in any state.
+```
+
+The footer has exactly four states and never renders nothing:
+
+```text
+A swap can be offered            [Cancel]  [Swap]
+A comparison is in flight        [Cancel]  [ ◌ ]          spinner, same size as Swap
+No wallet here can sign          Reconnect your wallet to swap.   [Cancel]  [Swap] (greyed)
+No swap can be offered           [Close]                   the route section says why
+```
+
+An aged comparison is not a reason to take Swap away: the terms someone
+approves are the plan's own, fetched when Swap is pressed. If the comparison
+has actually expired, Swap re-runs it first, quietly, still spinning in place.
+
+Between routes whose outcomes are within 0.05% of each other, the route that
+can be approved in WealthSmith is the one selected. A route that is better by
+more than that still wins on its price, whoever provides it.
+
+These rules cover the REVIEW. The confirm step's own failure screens are
+governed below, and two of them ("Couldn't Prepare Your Swap", a refused
+verification) still offer the provider's page — see "Refusals".
+
 ### Terms
 
 Five terms are required before approval, per the Execution Boundary: what is

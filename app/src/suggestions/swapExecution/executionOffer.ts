@@ -54,3 +54,62 @@ export function deriveExecutionOffer(input: ExecutionOfferInput): ExecutionOffer
     ? { offered: true, action }
     : { offered: false, blockReasons: eligibility.blockReasons };
 }
+
+/**
+ * What the review's footer shows BEFORE the confirm step is open.
+ *
+ * One answer for every state, so the footer is never empty and never a link out:
+ *   swap               — the Swap button. `refreshFirst` says the comparison has expired and must
+ *                        be re-run before any terms are shown.
+ *   loading            — the Swap button, spinning: a comparison is in flight and has not answered.
+ *   wallet_unavailable — a swap could be offered, but no wallet here can sign it.
+ *   unavailable        — no swap can be offered for this route. Close is the only control.
+ */
+export type SwapEntry =
+  | { kind: "swap"; refreshFirst: boolean }
+  | { kind: "loading" }
+  | { kind: "wallet_unavailable" }
+  | { kind: "unavailable" };
+
+export interface SwapEntryInput {
+  offer: ExecutionOffer;
+  assessment: SwapQuoteComparisonAssessment | null;
+  /** A comparison request is in flight (the first, or a refresh). */
+  comparisonLoading: boolean;
+  /** A wallet is connected that can sign for this session. Always true in Demo Mode. */
+  walletReady: boolean;
+  nowMs: number;
+}
+
+/**
+ * Decide the entry footer.
+ *
+ * AN AGED COMPARISON DOES NOT WITHDRAW THE BUTTON. The Boundary refuses a quote with under ten
+ * seconds left (`quote_expired`), which was written when the confirm step showed the
+ * comparison's own terms. It no longer does: pressing Swap builds a PLAN, with its own fresh
+ * quote, its own verification and its own expiry, and those are the terms someone approves. So
+ * the comparison's age is not a reason to take the button away from a reader who has changed
+ * nothing — which is what happened about ten seconds after every review opened, leaving no
+ * control at all.
+ *
+ * Age still counts for what the comparison DOES decide: which route. So when it has actually
+ * expired, Swap re-runs it first (`refreshFirst`) and continues only if a swap is still
+ * offered. Inside its validity it is used as it stands — the server would hand back the same
+ * cached answer anyway.
+ *
+ * Every OTHER refusal stands. A route that lost its comparison, an unverified pool, a provider
+ * we cannot build for: none of those become a Swap button here.
+ */
+export function deriveSwapEntry(input: SwapEntryInput): SwapEntry {
+  const { offer, assessment, comparisonLoading, walletReady, nowMs } = input;
+  const agedOnly =
+    !offer.offered && offer.blockReasons.length === 1 && offer.blockReasons[0] === "quote_expired";
+
+  if (offer.offered || agedOnly) {
+    if (!walletReady) return { kind: "wallet_unavailable" };
+    const expiry = assessment?.expiresAt != null ? Date.parse(assessment.expiresAt) : NaN;
+    const expired = !Number.isFinite(expiry) || expiry <= nowMs;
+    return { kind: "swap", refreshFirst: agedOnly && expired };
+  }
+  return comparisonLoading ? { kind: "loading" } : { kind: "unavailable" };
+}

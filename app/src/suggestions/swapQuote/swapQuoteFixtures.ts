@@ -526,22 +526,23 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
     const ray = buildSwapHandoff("raydium", USDC, WSOL, "1000"); const jup = buildSwapHandoff("jupiter", USDC, WSOL, "1000"); const orc = buildSwapHandoff("orca", USDC, WSOL, "1000");
     return ray?.providerName === "Raydium" && /raydium\.io\/swap/.test(ray?.swapUrl ?? "") && jup?.providerName === "Jupiter" && /jup\.ag\/swap/.test(jup?.swapUrl ?? "") && /orca\.so/.test(orc?.swapUrl ?? "") && buildSwapHandoff(null, USDC, WSOL) === null;
   })(), "provider handoff url");
-  add("SWC-29: the modal footer is a READ-ONLY external link (Cancel + 'Swap on <provider>', target=_blank rel=noopener, 'No transaction is prepared') — no in-app execution", (() => {
-    // The footer markup is the shared ModalActionsFooter; the modal supplies the
-    // swap handoff as an external-link action. The read-only contract is asserted
-    // across BOTH: the call site (label/href/new-tab/no-transaction aria) and the
-    // shared component (anchor with target=_blank rel=noopener, Cancel default).
+  // SWC-29/30 pinned a "Swap on <provider>" link out as the modal's footer. That link is gone: a swap
+  // WealthSmith suggests is approved in the review (Swap → terms → the user's own wallet), and where no
+  // swap can be offered the review says so. They now pin its ABSENCE, and what replaced it.
+  add("SWC-29: the review modal carries NO 'Swap on <provider>' link; the shared footer component is still a read-only link-out for the reviews that have one", (() => {
     const m = readSrc("src/components/SuggestionReviewModal.tsx");
     const f = readSrc("src/components/ModalActionsFooter.tsx");
-    return /Swap on \$\{swapHandoff\.providerName\}/.test(m) && /href: swapHandoff\.swapUrl/.test(m) && /newTab: true/.test(m) && /No transaction is prepared/.test(m)
+    return !/Swap on /.test(stripComments(m)) && !/swapHandoff/.test(stripComments(m))
+      // Staking / lending / withdrawal reviews still hand off, read-only, through the shared footer.
       && /target: "_blank", rel: "noopener noreferrer"/.test(f) && /secondaryLabel = "Cancel"/.test(f)
       && !/signTransaction|sendTransaction|Connect to execute/i.test(stripComments(m))
       && !/signTransaction|sendTransaction|Connect to execute/i.test(stripComments(f));
-  })(), "read-only footer");
-  add("SWC-30: the handoff appears ONLY for a single-leg eligible selected route (multi-leg + non-eligible report no handoff)", (() => {
+  })(), "no swap link-out");
+  add("SWC-30: the route section reports QUOTE STATE for a single-leg ready action only (multi-leg + not-ready report nothing), and builds no handoff", (() => {
     const s = stripComments(readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx"));
-    return /singleLeg && singleView && isEligibleResultKind\(singleView\.kind\) && singleView\.selectedProviderId/.test(s) && /onHandoff\?\.\(null\)/.test(s);
-  })(), "handoff single-leg eligible");
+    return /singleLeg && readiness\.status === "ready"\s*\? \{ action: singleLeg, assessment: singleAssessment, loading: quoteLoading, refresh: quietRefresh \}\s*: null/.test(s)
+      && /onExecutionContext\?\.\(null\)/.test(s) && !/buildSwapHandoff|onHandoff/.test(s);
+  })(), "quote state single-leg");
   // --- decidedBy: the MECHANISM, not the margin (SWC-35..39) -----------------
   // selectionBasis describes how close the win was; it was previously named
   // "economically_equivalent_tiebreak", which read as "the provider tie-break chose this" and is not what
@@ -569,13 +570,58 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
     ]);
     return a.decidedBy === "provider_priority" && a.ranked[0].candidate.providerId === "jupiter";
   })(), "exact tie only");
-  add("SWC-38: ANY economic difference pre-empts provider priority, even one that favours the lower-priority provider", (() => {
+  // SWC-38 used to say ANY economic difference decides, down to a millionth of a dollar. Measured in
+  // production that selected on noise: two quotes $0.0002–$0.0009 apart on a $4 swap traded places
+  // between consecutive comparisons, flipping the suggested route between one the user can approve
+  // here and one they cannot. The rule now has a band — the equivalence epsilon, 0.05% — and these
+  // pin both sides of it.
+  add("SWC-38: OUTSIDE the equivalence band an economic difference still wins — for a provider that cannot execute in-app too", (() => {
+    const a = rankEligibleCandidates([
+      { candidate: cand("jupiter", {}), cost: { netOutputUsd: 99.9, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("raydium", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
+    ]);
+    // 0.1% better: twice the band. Raydium wins on its economics and nothing promotes Jupiter.
+    return a.ranked[0].candidate.providerId === "raydium" && a.decidedBy === "net_output" && !a.economicallyEquivalent;
+  })(), "economics win");
+  add("SWC-40: INSIDE the band, the route that can be approved in-app is selected, and the result says so", (() => {
     const a = rankEligibleCandidates([
       { candidate: cand("jupiter", {}), cost: { netOutputUsd: 99.999999, estimatedTotalCostPct: 0.1 } as never },
       { candidate: cand("raydium", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
     ]);
-    return a.ranked[0].candidate.providerId === "raydium" && a.decidedBy === "net_output";
-  })(), "economics win");
+    return a.ranked[0].candidate.providerId === "jupiter" && a.ranked[1].candidate.providerId === "raydium" &&
+      a.decidedBy === "in_app_execution" && a.economicallyEquivalent === true;
+  })(), "near-tie → in-app");
+  add("SWC-41: the band's edge is the policy epsilon — just inside promotes, just outside does not", (() => {
+    const eps = SWAP_QUOTE_OPERATIONAL_POLICY.economicallyEquivalentEpsilon;
+    const pair = (jup: number) => rankEligibleCandidates([
+      { candidate: cand("jupiter", {}), cost: { netOutputUsd: jup, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("raydium", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
+    ]);
+    const inside = pair(100 * (1 - eps * 0.9));
+    const outside = pair(100 * (1 - eps * 1.1));
+    return inside.ranked[0].candidate.providerId === "jupiter" && inside.decidedBy === "in_app_execution" &&
+      outside.ranked[0].candidate.providerId === "raydium" && outside.decidedBy === "net_output";
+  })(), "band edge");
+  add("SWC-42: the preference never reorders anything else — an in-app winner is untouched, and a three-way keeps the rest in economic order", (() => {
+    const inAppAlreadyWins = rankEligibleCandidates([
+      { candidate: cand("jupiter", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("raydium", {}), cost: { netOutputUsd: 99.99, estimatedTotalCostPct: 0.1 } as never },
+    ]);
+    const threeWay = rankEligibleCandidates([
+      { candidate: cand("orca", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("raydium", {}), cost: { netOutputUsd: 99.99, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("jupiter", {}), cost: { netOutputUsd: 99.98, estimatedTotalCostPct: 0.1 } as never },
+    ]);
+    return inAppAlreadyWins.decidedBy === "net_output" && inAppAlreadyWins.ranked[0].candidate.providerId === "jupiter" &&
+      threeWay.ranked.map((r) => r.candidate.providerId).join(">") === "jupiter>orca>raydium" && threeWay.decidedBy === "in_app_execution";
+  })(), "minimal reorder");
+  add("SWC-43: an unpriced route is never 'within the band' — an unknown is not a tie", (() => {
+    const a = rankEligibleCandidates([
+      { candidate: cand("jupiter", {}), cost: { netOutputUsd: null, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("raydium", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
+    ]);
+    return a.ranked[0].candidate.providerId === "raydium" && a.decidedBy !== "in_app_execution" && !a.economicallyEquivalent;
+  })(), "unknown is not a tie");
   add("SWC-39: decidedBy is null with fewer than two eligible candidates — nothing was decided", (() => {
     const a = rankEligibleCandidates([{ candidate: cand("jupiter", {}), cost: { netOutputUsd: 100 } as never }]);
     return a.decidedBy === null;
@@ -631,12 +677,22 @@ export function runRailSwapActionFixtureChecks(): SwapFixtureCheck[] {
   // Wiring guards (source scans).
   const readSrc = (rel: string) => { try { return readFileSync(`${process.cwd()}/${rel}`, "utf8"); } catch { return ""; } };
   const rail = readSrc("src/components/RealWalletSuggestionsRail.tsx");
-  add("SWR-9: the shared rail passes swapAction + isDca + fetcher to BOTH the contribution (DCA) and details (Rebalance/Trim) modals", (rail.match(/swapAction=\{selectedId \? rail\?\.swapActionById/g) ?? []).length >= 2 && /swapQuoteIsDca=\{selectedCard\?\.type === "dca_buy"\}/.test(rail)
+  add("SWR-9: the shared rail passes the SNAPSHOT's swapAction + isDca + fetcher to BOTH the contribution (DCA) and details (Rebalance/Trim) modals", (rail.match(/swapAction=\{opened\??\.swapAction\}/g) ?? []).length >= 2 && (rail.match(/swapQuoteFetcher=\{opened\??\.swapQuoteFetcher\}/g) ?? []).length >= 2 && /swapQuoteIsDca=\{selectedCard\?\.type === "dca_buy"\}/.test(rail)
     // Pin the DISCRIMINATOR, not just the prop: this assertion used to require the
     // expression `selectedCard?.category === "dca"`, which a card never satisfies
     // (its category is "contribution_plan"), so the test enforced the dead check.
     && !/selectedCard\?\.category === "(dca|rebalance|trim|buffer|stable_yield|staking)"/.test(rail), "rail wiring");
-  add("SWR-10: no quote request occurs before Review opens — the section renders only inside the modal, and the hook loads only when enabled", (() => { const hook = readSrc("src/components/swapQuote/useSwapQuoteComparison.ts"); const modal = readSrc("src/components/SuggestionReviewModal.tsx"); return /if \(!enabled\b/.test(hook) && /swapAction &&[^\n]*\? \(/.test(modal); })(), "no prefetch");
+  // SWR-10 said no request happens before the review OPENS. The review now opens with its route already
+  // chosen, so the request moved to the PRESS of Review — still never earlier: not on render, not on hover,
+  // not for a card nobody asked about.
+  add("SWR-10: no quote request occurs before Review is PRESSED — the prefetch is called only from the review handler, and the hook loads only when enabled", (() => {
+    const hook = readSrc("src/components/swapQuote/useSwapQuoteComparison.ts");
+    const modal = readSrc("src/components/SuggestionReviewModal.tsx");
+    const handler = rail.slice(rail.indexOf("const onReviewSuggestion = "), rail.indexOf("const selectedCard = "));
+    const railCode = rail.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const everywhere = (railCode.match(/prefetchSwapQuoteComparison\(/g) ?? []).length;
+    return /if \(!enabled\b/.test(hook) && /swapAction &&[^\n]*\? \(/.test(modal) && everywhere === 1 && /prefetchSwapQuoteComparison\(/.test(handler);
+  })(), "request on press only");
   // SWR-14 — pin the id match, so a later change cannot quietly start quoting a
   // contribution that has not arrived. A split contribution renders TWO dca_buy cards
   // whose ids cannot both equal the single suggestion's; those legs carry no funding

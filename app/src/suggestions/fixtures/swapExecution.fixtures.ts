@@ -37,7 +37,10 @@ import {
 } from "../swapExecution/executionGuard";
 import { validateExecutionPlan } from "../swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../swapExecution/planResolution";
-import { deriveExecutionOffer } from "../swapExecution/executionOffer";
+import { deriveExecutionOffer, deriveSwapEntry } from "../swapExecution/executionOffer";
+import { comparisonSelectedARoute } from "../../components/swapQuote/useSwapQuoteComparison";
+import { SWAP_IN_APP_PROVIDER_IDS } from "../swapQuote/swapQuotePolicy";
+import { presentSwapQuote } from "../swapQuote/quotePresentation";
 import {
   eventPropertyValues,
   swapEventForTransition,
@@ -425,26 +428,35 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     if (renderers.length !== 1) return false;
     if (!renderers[0].endsWith("SwapExecutionSection.tsx")) return false;
     const section = readSrc(renderers[0]);
-    // Asks, and returns nothing when the answer is no — including with no wallet to sign with.
+    // Asks the Boundary, and turns its answer into the entry footer through ONE pure rule.
     //
-    // The offer gates ENTRY (`!started`), not continued display. Recomputed unconditionally it
-    // unmounted the whole section the moment the route quote aged out, which in the live path
-    // could happen with the wallet already open — taking the sheet, the confirming state and
-    // the explorer link away mid-flight. A wallet is still required unconditionally: that is
-    // not a staleness question and never becomes true later.
-    return /deriveExecutionOffer/.test(section) &&
-      /if \(\(!offer\.offered && !started\) \|\| takerPublicKey == null \|\| submit == null\) return null;/.test(section);
+    // The step opens in exactly two places, and both are behind `deriveSwapEntry` saying
+    // "swap": the press itself, and the continuation after an expired comparison was re-run.
+    // `swap` requires a wallet that can sign (`walletReady`), so the sheet is still unreachable
+    // without one — the section now SAYS so beside a greyed button instead of rendering nothing.
+    const opens = (section.match(/setStarted\(true\)/g) ?? []).length;
+    return /deriveExecutionOffer/.test(section) && /deriveSwapEntry/.test(section) &&
+      opens === 2 &&
+      /if \(at\.kind !== "swap"\) return;/.test(section) &&
+      /if \(at\.kind === "swap" && !at\.refreshFirst\) setStarted\(true\);/.test(section) &&
+      /const walletReady = props\.demo === true \|\| \(takerPublicKey != null && submit != null\);/.test(section);
   })(), "one gated entry point");
   add("SWX-26c: an aged-out ROUTE quote never unmounts a confirm step already in progress", (() => {
     const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
     // Both branches — live and demo — must qualify the offer check with `!started`. The demo
     // preview has the same problem for a different reason: its quote carries a 48s TTL and a
     // preview nobody can act on should not evaporate while it is being read.
-    const live = /if \(\(!offer\.offered && !started\) \|\| takerPublicKey == null/.test(section);
-    const demo = /if \(\(!offer\.offered && !started\) \|\| demoTerms == null\) return null;/.test(section);
-    // And the wallet requirement stays unconditional — it is not a staleness question.
-    const walletAlways = /takerPublicKey == null \|\| submit == null\) return null;/.test(section);
-    return live && demo && walletAlways;
+    //
+    // Both now read the entry footer ONLY while `!started`. After that line the offer and the
+    // entry are never consulted again in either branch, so nothing the comparison does can take
+    // an open step away.
+    const gates = (section.match(/if \(!started\) return entryFooter\(\);/g) ?? []).length;
+    const liveFrom = section.lastIndexOf("if (!started) return entryFooter();");
+    const afterLiveGate = stripComments(section.slice(liveFrom + 1, section.indexOf("function ContinueFooter")));
+    const demoFrom = section.indexOf("if (!started) return entryFooter();");
+    const afterDemoGate = stripComments(section.slice(demoFrom + 1, section.indexOf("// THE OFFER GATES ENTRY ONLY")));
+    const consulted = /offer\.offered|entry\.kind|deriveSwapEntry/;
+    return gates === 2 && liveFrom > demoFrom && !consulted.test(afterLiveGate) && !consulted.test(afterDemoGate);
   })(), "entry gate, not a display gate");
   add("SWX-26b: the mounted section renders the sheet only AFTER the user asks for terms", (() => {
     // A plan lives 25 seconds. Preparing one when the review opens would spend that clock while
@@ -919,8 +931,9 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // can open either has terms or has a failure branch that needs none. That is what makes an
     // empty "Checking transaction…" card unreachable rather than merely unlikely — the loading
     // state lives in the Swap button instead.
-    const guard = /const awaitingFirstPlan = started && execution\.plan == null && execution\.phase !== "failed";/.test(c);
-    const returnsFooter = /if \(!started \|\| awaitingFirstPlan\) \{/.test(c);
+    const guard = /const awaitingFirstPlan =\s+props\.demo !== true && started && execution\.plan == null && execution\.phase !== "failed";/.test(c);
+    const returnsFooter = /if \(!started\) return entryFooter\(\);/.test(c) &&
+      /if \(awaitingFirstPlan\) return <ContinueFooter onClose=\{onClose\} busy onContinue=\{onSwap\} \/>;/.test(c);
     // And the sheet reads its terms from the plan, so "has a plan" and "has terms" cannot drift.
     const termsFromPlan = /terms=\{execution\.plan\?\.terms \?\? null\}/.test(c);
     return guard && returnsFooter && termsFromPlan;
@@ -1551,14 +1564,15 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       const branch = sheet.slice(from, to);
       return /SWAP_CONFIRM_DEMO_DISABLED/.test(branch) && !sheet.slice(to).includes("SWAP_CONFIRM_DEMO_DISABLED");
     })();
-    // And the LIVE branch always has a handler to give it: the section returns null without
-    // a taker and a submitter, so `onApprove` is never absent on a sheet a real user sees.
-    const liveAlwaysWired = /if \(\(!offer\.offered && !started\) \|\| takerPublicKey == null \|\| submit == null\) return null;/.test(section) &&
+    // And the LIVE branch always has a handler to give it: the step cannot open without a
+    // taker and a submitter (`walletReady`), so `onApprove` is never absent on a sheet a real
+    // user sees.
+    const liveAlwaysWired = /const walletReady = props\.demo === true \|\| \(takerPublicKey != null && submit != null\);/.test(section) &&
       /onApprove=\{execution\.approve\}/.test(section) &&
       // The demo branch passes no approver at all, so even its exception cannot execute.
       (() => {
-        const demoBranch = section.slice(section.indexOf("if (props.demo) {"), section.indexOf("// The Boundary said no"));
-        return !/onApprove/.test(demoBranch);
+        const demoBranch = section.slice(section.indexOf("if (props.demo) {"), section.indexOf("// THE OFFER GATES ENTRY ONLY"));
+        return demoBranch.length > 0 && !/onApprove/.test(demoBranch);
       })();
     return demoOnly && tipIsDemoOnly && liveAlwaysWired;
   })(), "demo explains, live acts");
@@ -2331,6 +2345,189 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const files = ["src/suggestions/swapExecution/swapExecutionEvents.ts", "src/components/swapExecution/useSwapExecutionPlan.ts"];
     return files.every((f) => !/posthog|analytics\/analytics/i.test(stripComments(readSrc(f))));
   })(), "no transport coupling");
+
+
+  /* ---- The review's entry footer, and the press that opens the step (SWXE-1..20) ----
+   *
+   * Found by the first real swap attempt in production, 2026-11-26. Every one of these was
+   * invisible to the fixtures that existed, because they pinned pure functions and the faults
+   * were in how the pieces were joined: a stale closure, a footer with three owners, a display
+   * clock. Demo Mode and the walkthrough could not show them either — they use no wallet. */
+  const entryFor = (a: SwapQuoteComparisonAssessment | null, o: { loading?: boolean; wallet?: boolean; nowMs?: number } = {}) => {
+    const nowMs = o.nowMs ?? NOW;
+    const act = { ...action(), suggestionCategory: "rebalance" as const, totalLegs: 1 };
+    return deriveSwapEntry({
+      offer: deriveExecutionOffer({ action: act, assessment: a, nowMs }),
+      assessment: a,
+      comparisonLoading: o.loading ?? false,
+      walletReady: o.wallet ?? true,
+      nowMs,
+    });
+  };
+  add("SWXE-1: a fresh, offered route shows Swap and needs no refresh", (() => {
+    const e = entryFor(assessment());
+    return e.kind === "swap" && e.refreshFirst === false;
+  })(), "swap");
+  add("SWXE-2: an AGED comparison keeps the Swap button — its age is not a reason to take the control away", (() => {
+    // Under ten seconds of life left: the Boundary says `quote_expired`, and before this the
+    // footer rendered nothing at all from about ten seconds after every review opened.
+    const aged = assessment({ expiresAt: new Date(NOW + MIN_QUOTE_LIFE_MS - 1).toISOString() });
+    const e = entryFor(aged);
+    // Still inside its validity, so it is used as it stands — the server would return the same
+    // cached answer to a refresh anyway.
+    return e.kind === "swap" && e.refreshFirst === false;
+  })(), "aged keeps Swap");
+  add("SWXE-3: an EXPIRED comparison still shows Swap, and the press re-runs it first", (() => {
+    const e = entryFor(assessment({ expiresAt: new Date(NOW - 60_000).toISOString() }));
+    return e.kind === "swap" && e.refreshFirst === true;
+  })(), "expired refreshes first");
+  add("SWXE-4: age is the ONLY refusal that keeps the button — every other one stands", (() => {
+    const notJupiter = entryFor(assessment({ selectedProviderId: "raydium" }));
+    const noMinimum = entryFor(assessment({ minimumOutputTokens: null }));
+    const twoFaults = entryFor(assessment({ minimumOutputTokens: null, expiresAt: new Date(NOW - 1).toISOString() }));
+    return notJupiter.kind === "unavailable" && noMinimum.kind === "unavailable" && twoFaults.kind === "unavailable";
+  })(), "other refusals stand");
+  add("SWXE-5: no answer yet, request in flight → the Swap button spins; no answer and nothing in flight → Close", (() => {
+    return entryFor(null, { loading: true }).kind === "loading" && entryFor(null, { loading: false }).kind === "unavailable";
+  })(), "loading vs unavailable");
+  add("SWXE-6: a refused route that is being re-requested spins rather than offering Close mid-refresh", (() => {
+    return entryFor(assessment({ selectedProviderId: "raydium" }), { loading: true }).kind === "loading";
+  })(), "refresh in flight");
+  add("SWXE-7: without a wallet that can sign, an offerable swap says so — it never becomes pressable", (() => {
+    const fresh = entryFor(assessment(), { wallet: false });
+    const expired = entryFor(assessment({ expiresAt: new Date(NOW - 1).toISOString() }), { wallet: false });
+    return fresh.kind === "wallet_unavailable" && expired.kind === "wallet_unavailable";
+  })(), "wallet required");
+  add("SWXE-8: a missing wallet never upgrades a refused route — the refusal is reported, not the wallet", (() => {
+    return entryFor(assessment({ selectedProviderId: "raydium" }), { wallet: false }).kind === "unavailable";
+  })(), "refusal first");
+
+  add("SWXE-9: THE STEP OPENING REQUESTS THE PLAN — an effect on `enabled`, not the click handler", (() => {
+    const hook = stripComments(readSrc("src/components/swapExecution/useSwapExecutionPlan.ts"));
+    const section = stripComments(readSrc("src/components/swapExecution/SwapExecutionSection.tsx"));
+    // The fault: the Swap button called `execution.prepare()` right after `setStarted(true)`.
+    // That `prepare` closed over `enabled === false` and returned at once, and nothing else
+    // ever asked for the first plan. In a real wallet session the button span forever, with no
+    // request made and no failure reported.
+    const effect = /useLayoutEffect\(\(\) => \{\s*if \(!enabled \|\| takerPublicKey == null\) return;\s*prepare\(\);[\s\S]{0,120}\}, \[enabled\]\);/.test(hook);
+    // The only `prepare()` left in the section is the sheet's own Refresh, which is called
+    // while the step is open and therefore holds a current `prepare`.
+    const calls = section.match(/execution\.prepare\(\)/g) ?? [];
+    return effect && calls.length === 1 && /onRefresh=\{\(\) => execution\.prepare\(\)\}/.test(section);
+  })(), "no stale prepare");
+  add("SWXE-10: the review is not replaced until the step has something to show", (() => {
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    // `active` was `started`, so the press swapped the review's heading and hid its body while
+    // the footer was still fetching — a near-empty modal titled "Review Swap".
+    return /const stepOpen = started && !awaitingFirstPlan;/.test(section) &&
+      /onStepChange\?\.\(\{ active: stepOpen, onBack: leaveStep, title: stepTitle \}\);/.test(section) &&
+      !/active: started,/.test(section);
+  })(), "button holds the wait");
+  add("SWXE-11: `reset` puts a pre-signing attempt away, so reopening the step starts clean", (() => {
+    const ready = { ...initialExecutionState, phase: "ready" as const, plan: plan() };
+    const failed = { ...initialExecutionState, phase: "failed" as const, failure: "expired" as const };
+    const preparing = { ...initialExecutionState, phase: "preparing" as const };
+    return [ready, failed, preparing].every((st) => executionReducer(st, { type: "reset" }) === initialExecutionState);
+  })(), "clean reopen");
+  add("SWXE-12: `reset` NEVER discards anything a wallet was asked to sign, or a signature", (() => {
+    const kept = [
+      { ...initialExecutionState, phase: "signing" as const, plan: plan() },
+      { ...initialExecutionState, phase: "submitting" as const, plan: plan() },
+      { ...initialExecutionState, phase: "confirming" as const, signature: "sig" },
+      { ...initialExecutionState, phase: "confirmed" as const, signature: "sig" },
+      // A revert and a timeout are `failed` WITH a signature — the user's only record.
+      { ...initialExecutionState, phase: "failed" as const, failure: "submit_failed" as const, signature: "sig" },
+      { ...initialExecutionState, phase: "failed" as const, failure: "confirm_timeout" as const, signature: "sig" },
+    ];
+    return kept.every((st) => executionReducer(st, { type: "reset" }) === st);
+  })(), "record survives");
+  add("SWXE-13: closing the step dispatches `reset`", (() => {
+    const hook = stripComments(readSrc("src/components/swapExecution/useSwapExecutionPlan.ts"));
+    return /if \(enabled\) return;\s*generationRef\.current \+= 1;\s*abortRef\.current\?\.abort\(\);\s*dispatch\(\{ type: "reset" \}\);/.test(hook);
+  })(), "reset on close");
+
+  add("SWXE-14: a swap review has ONE footer owner from the first render, decided from the prop", (() => {
+    const modal = stripComments(readSrc("src/components/SuggestionReviewModal.tsx"));
+    // It used to be decided by what the route section had reported so far, so the footer went
+    // through three owners while the comparison loaded, and none at all when the last one
+    // rendered nothing: `executionSection ?? swapFooter` never fell back, because an element
+    // that renders null is still an element.
+    const fromProp = /const swapLeg: SwapActionContext \| null =\s*swapAction && !details\?\.hideSwapRoute && swapAction\.status === "ready" && swapAction\.legs\.length === 1/.test(modal);
+    const owns = /const executionSection = swapLeg \? \(/.test(modal) && /action=\{swapLeg\}/.test(modal);
+    const staticLinkYields = /\{details\.externalLink && !swapLeg && \(/.test(modal);
+    return fromProp && owns && staticLinkYields;
+  })(), "one owner");
+  add("SWXE-15: there is NO link out to a swap provider anywhere in the review", (() => {
+    const modal = readSrc("src/components/SuggestionReviewModal.tsx");
+    const section = readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx");
+    const rebalance = readSrc("src/suggestions/rebalanceSuggestion.ts");
+    const links = readSrc("src/suggestions/swapQuote/providerSwapLinks.ts");
+    const code = (src: string) => stripComments(src);
+    return !/Swap on /.test(code(modal)) && !/swapHandoff|swapFooter|onHandoff/.test(code(modal)) &&
+      !/buildSwapHandoff|onHandoff/.test(code(section)) &&
+      !/jupiterRebalanceFallbackLink|Swap on Jupiter/.test(code(rebalance)) &&
+      !/jupiterRebalanceFallbackLink/.test(code(links));
+  })(), "no link out");
+  add("SWXE-16: the entry footer never renders nothing — four states, each with a control", (() => {
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    const body = section.slice(section.indexOf("const entryFooter = () => {"), section.indexOf("// DEMO MODE."));
+    const stripped = stripComments(body);
+    return /entry\.kind === "swap"/.test(stripped) && /entry\.kind === "loading"/.test(stripped) &&
+      /entry\.kind === "wallet_unavailable"/.test(stripped) && /return <CloseFooter onClose=\{onClose\} \/>;/.test(stripped) &&
+      !/return null/.test(stripped) &&
+      // And neither branch of the component returns null any more.
+      !/return null;/.test(stripComments(section.slice(section.indexOf("export default function SwapExecutionSection"), section.indexOf("function ContinueFooter"))).replace(/if \(demoGaveUp\) return null;/, ""));
+  })(), "never empty");
+
+  add("SWXE-17: the route on screen is presented as of ITS OWN time, so it cannot age into 'unavailable'", (() => {
+    const section = readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx");
+    const pinned = /const viewNowMs = props\.nowMs \?\? \(Number\.isFinite\(comparedAtMs\) \? comparedAtMs : undefined\);/.test(section) &&
+      /presentSwapQuote\(singleAssessment, \{ nowMs: viewNowMs \}\)/.test(section);
+    // The rule it works around is real and unchanged: against the wall clock, a comparison past
+    // its expiry presents as expired. Pinning the clock is what keeps a decided route on screen.
+    const a = assessment({ expiresAt: new Date(NOW + 20_000).toISOString() });
+    const atItsOwnTime = presentSwapQuote(a, { nowMs: Date.parse(a.comparedAt) }).kind;
+    const aMinuteLater = presentSwapQuote(a, { nowMs: NOW + 60_000 }).kind;
+    return pinned && atItsOwnTime !== "expired" && aMinuteLater === "expired";
+  })(), "route stays put");
+  add("SWXE-18: the review opens on a SNAPSHOT taken when Review was pressed, after the route was fetched", (() => {
+    const rail = stripComments(readSrc("src/components/RealWalletSuggestionsRail.tsx"));
+    // Reading the live rail let a price refresh change the swap amount under an open review,
+    // which re-ran the comparison and could name a different route.
+    const snapshot = /swapAction: rail\.swapActionById\?\.\[card\.id\]/.test(rail) && /swapAction=\{opened\.swapAction\}/.test(rail) &&
+      !/swapAction=\{selectedId \? rail/.test(rail);
+    // Prefetched from the press — and from nowhere else: not on render, not on hover.
+    const prefetches = rail.match(/prefetchSwapQuoteComparison\(/g) ?? [];
+    const fromPress = /void prefetchSwapQuoteComparison\(legs, \{ fetcher: snapshot\.swapQuoteFetcher \}\)\.then\(/.test(rail);
+    // And an open review survives the rail reloading behind it.
+    const mountedEverywhere = (rail.match(/\{reviewModal\}/g) ?? []).length === 3;
+    return snapshot && prefetches.length === 1 && fromPress && mountedEverywhere;
+  })(), "frozen proposal");
+  add("SWXE-19: only a comparison that NAMED a route counts as an answer worth opening on without a retry", (() => {
+    const ok = comparisonSelectedARoute({ ok: true, assessment: assessment() });
+    const noRoute = comparisonSelectedARoute({ ok: true, assessment: assessment({ status: "no_valid_route", selectedProviderId: null }) });
+    const failed = comparisonSelectedARoute({ ok: false, error: "unavailable" });
+    return ok && !noRoute && !failed;
+  })(), "retry rule");
+  add("SWXE-20: the quote layer's in-app list is the execution layer's list — they cannot drift", (() => {
+    return SWAP_IN_APP_PROVIDER_IDS.length === EXECUTABLE_PROVIDER_IDS.length &&
+      SWAP_IN_APP_PROVIDER_IDS.every((id) => EXECUTABLE_PROVIDER_IDS.includes(id));
+  })(), "one list in effect");
+
+  add("SWXE-21: the live-simulation seam REPLACES the wallet — it is provided by the walkthrough only, and nothing in it can reach a real one", (() => {
+    const section = stripComments(readSrc("src/components/swapExecution/SwapExecutionSection.tsx"));
+    const sim = stripComments(readSrc("src/pages/swapLiveSimulation.ts"));
+    // With a seam present, neither the adapter's key nor its submitter is used.
+    const replaces = /const submit = seam \? seam\.submit : walletSubmit;/.test(section) &&
+      /const takerPublicKey = seam \? seam\.takerPublicKey : publicKey\?\.toBase58\(\) \?\? null;/.test(section);
+    // Exactly one file provides it, and it is the walkthrough — never a product page.
+    const providers = tsFilesUnder(["src/components", "src/pages"])
+      .filter((f) => /SwapExecutionSeamContext\.Provider/.test(stripComments(readSrc(f))));
+    const onlyWalkthrough = providers.length === 1 && providers[0].endsWith("SwapWalkthroughPage.tsx");
+    // The stand-ins import no wallet code and make no request: the "wallet" is a timer.
+    const inert = !/wallet-adapter|useWallet|useWalletSwapSubmitter|sendTransaction|signTransaction|fetch\(/.test(sim);
+    return replaces && onlyWalkthrough && inert;
+  })(), "simulation cannot sign");
 
   return checks;
 }

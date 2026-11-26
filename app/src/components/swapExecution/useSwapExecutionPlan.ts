@@ -30,7 +30,7 @@
  * through the wallet's own infrastructure — see `submitResolution` for why that falls out of how
  * the adapters already work, and what it means for custody.
  */
-import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useLayoutEffect, useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { SwapActionContext, SwapProviderId } from "../../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapExecutionPlan } from "../../suggestions/swapExecution/executionContracts";
 import {
@@ -177,12 +177,36 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
     dispatch({ type: "cancel" });
   }, []);
 
+  // OPENING THE STEP STARTS THE FLOW — here, and nowhere else.
+  //
+  // The Swap button used to call `prepare()` itself, right after asking for the step to open.
+  // But the `prepare` it held was the one from the render where the step was still CLOSED, and
+  // that copy returns immediately (`!enabled`). Nothing else ever asked for the first plan, so
+  // in a real wallet session the button span forever: no request was made, no failure was
+  // reported, and there was nothing on screen to say why. Demo Mode never showed it, because
+  // Demo Mode does not use this hook.
+  //
+  // An effect keyed on `enabled` runs AFTER the render in which it became true, so the
+  // `prepare` it calls is the current one. A layout effect rather than a passive one, so a
+  // re-entry (Back, then Swap again) never paints the previous attempt's ending for a frame
+  // before the new attempt replaces it.
+  useLayoutEffect(() => {
+    if (!enabled || takerPublicKey == null) return;
+    prepare();
+    // Only the step opening starts a flow. A changed request while it is open is handled by
+    // the expiry/renewal path and by the user's own Refresh, never by silently restarting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
+
   // Closing the sheet, changing the action, or disconnecting cancels anything in flight. Nothing
   // is submitted at this stage, so abandoning costs the user nothing.
   useEffect(() => {
     if (enabled) return;
     generationRef.current += 1;
     abortRef.current?.abort();
+    // Put the attempt away, so reopening the step starts clean instead of showing where the
+    // last one stopped. The reducer keeps anything a wallet has been asked to sign.
+    dispatch({ type: "reset" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, requestKey]);
 

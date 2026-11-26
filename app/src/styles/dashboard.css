@@ -5215,6 +5215,28 @@ td.vetting-scores-table__date {
   justify-content: flex-end;
   gap: var(--spacing-inline-gap-sm);
 }
+/* Why the primary action cannot be pressed, beside the control it explains. Pushed to the left
+   edge so the buttons keep their place whether or not a note is showing. */
+.review-modal__footer-note {
+  /* Beside the buttons when there is room for a readable line; on its own row above them when
+     there is not — a phone-width footer squeezed it into a three-word column otherwise. */
+  flex: 1 1 14rem;
+  margin: 0;
+  align-self: center;
+  color: var(--color-text-secondary);
+  font: var(--typography-body-sm-font);
+}
+.review-modal__footer--noted {
+  flex-wrap: wrap;
+  row-gap: var(--spacing-inline-gap-sm);
+}
+.review-modal__primary-action:disabled {
+  border-color: var(--color-disabled-background-default);
+  background: var(--color-disabled-background-default);
+  color: var(--color-text-secondary);
+  box-shadow: none;
+  cursor: not-allowed;
+}
 /* Design-system tertiary (low-emphasis, text-like) button — used for Cancel beside the primary action. */
 .review-modal__tertiary-action {
   display: inline-flex;
@@ -5377,6 +5399,22 @@ td.vetting-scores-table__date {
 
 @keyframes swap-confirm-spin {
   to { transform: rotate(360deg); }
+}
+
+/* A button holding a wait IN PLACE. Its label stays in the layout, invisible, and the spinner
+   sits over it — so the button is exactly the size it was before the press and nothing beside
+   it moves, on the suggestion card's Review and on the review's Swap alike. */
+.cta-hold {
+  position: relative;
+  cursor: default;
+}
+.cta-hold__label {
+  visibility: hidden;
+}
+.cta-hold__spinner {
+  position: absolute;
+  inset: 0;
+  margin: auto;
 }
 
 /* Respect the setting. The label alone still says what is happening, so nothing

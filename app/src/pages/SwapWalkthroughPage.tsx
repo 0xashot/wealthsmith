@@ -23,6 +23,12 @@
  * Mode the sheet opens, the terms are the demo quote's own, and Approve is visibly unavailable
  * with the reason. Nothing on this page can reach the execution endpoint.
  *
+ * LIVE SIMULATION (`?sim=…`). Demo Mode shows each ending at rest; it cannot show the flow
+ * MOVING, because it bypasses the plan hook, the wallet and the submitter. The simulation runs
+ * the LIVE branch instead — same hook, state machine and sheet a connected wallet gets — with a
+ * pretend wallet and a pretend server (see swapLiveSimulation.ts). It still cannot move money:
+ * with the seam provided the real wallet adapter is not used at all.
+ *
  * Gated behind the same build-time flag as /testing, so a public build never registers it.
  */
 import { useMemo, useState } from "react";
@@ -31,6 +37,22 @@ import ToastHost, { type ToastData } from "../components/ToastHost";
 import { END_TO_END_SCENARIOS } from "./endToEndTestingFixtures";
 import { DEMO_OUTCOMES } from "../suggestions/swapExecution/demoOutcomes";
 import { SWAP_CONFIRM_EXPIRED_TOAST } from "../state/approvedCopy";
+import { SwapExecutionSeamContext } from "../components/swapExecution/swapExecutionSeam";
+import {
+  buildLiveSimulationSeam,
+  noRouteQuoteFetcher,
+  shortLivedFirstQuoteFetcher,
+  slowedQuoteFetcher,
+} from "./swapLiveSimulation";
+
+/** The live-simulation variants. Each runs the real (non-demo) flow against stand-ins. */
+const SIMULATIONS = [
+  { key: "swap", label: "Full swap", note: "The whole live flow: Review waits for the route, Swap waits in place for terms, Approve hands to a pretend wallet, and the swap lands." },
+  { key: "expired-quote", label: "Aged quote", note: "The route comparison goes stale a moment after the review opens. Wait three seconds, then press Swap: it re-runs the comparison first, still spinning in place." },
+  { key: "no-route", label: "No route", note: "No route meets the limits. The review says so and offers Close — no Swap, and no link out." },
+  { key: "no-wallet", label: "No wallet", note: "A swap could be offered, but no connected wallet can sign. Swap is greyed, with the reason beside it." },
+] as const;
+type SimulationKey = (typeof SIMULATIONS)[number]["key"];
 
 /**
  * The crypto-heavy scenario the End-to-End tab already lists, reused rather than rebuilt.
@@ -51,8 +73,27 @@ export default function SwapWalkthroughPage() {
   const pushToast = (message: string, helper?: string) =>
     setToasts((t) => [...t, { id: Date.now(), message, helper, variant: "info" }]);
 
+  const simKey = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("sim");
+  const simulation = SIMULATIONS.find((x) => x.key === simKey) ?? null;
+
   // The scenario already carries the offline demo fetcher; the live client is never used here.
-  const rail = useMemo(() => CRYPTO_HEAVY?.rail ?? null, []);
+  const baseRail = useMemo(() => CRYPTO_HEAVY?.rail ?? null, []);
+  // In a simulation the same offline quotes arrive after a realistic delay, shaped per variant.
+  const simParts = useMemo(() => {
+    const inner = baseRail?.swapQuoteFetcher;
+    if (simulation == null || baseRail == null || inner == null) return null;
+    const variant: SimulationKey = simulation.key;
+    const shaped =
+      variant === "expired-quote" ? shortLivedFirstQuoteFetcher(inner)
+        : variant === "no-route" ? noRouteQuoteFetcher(inner)
+          : inner;
+    return {
+      rail: { ...baseRail, swapQuoteFetcher: slowedQuoteFetcher(shaped) },
+      // The plan's terms come from the UNSHAPED quotes: a simulated plan service always answers.
+      seam: buildLiveSimulationSeam({ quoteFetcher: inner, walletConnected: variant !== "no-wallet" }),
+    };
+  }, [baseRail, simulation]);
+  const rail = simParts?.rail ?? baseRail;
 
   if (rail == null) {
     return <p className="modal__intro">The e2e-crypto-heavy scenario is missing — it was renamed or removed.</p>;
@@ -76,14 +117,32 @@ export default function SwapWalkthroughPage() {
               <a
                 key={o.key}
                 href={`?outcome=${o.key}`}
-                className={`swap-walkthrough__outcome${o.key === outcome.key ? " swap-walkthrough__outcome--current" : ""}`}
-                aria-current={o.key === outcome.key ? "page" : undefined}
+                className={`swap-walkthrough__outcome${simulation == null && o.key === outcome.key ? " swap-walkthrough__outcome--current" : ""}`}
+                aria-current={simulation == null && o.key === outcome.key ? "page" : undefined}
               >
                 {o.label}
               </a>
             ))}
           </nav>
-          <p className="modal__intro"><strong>{outcome.label}.</strong> {outcome.note}</p>
+          <p className="modal__intro">
+            <strong>Live simulation</strong> — the real flow in motion, with a pretend wallet and
+            a pretend server. Nothing is sent anywhere.
+          </p>
+          <nav className="swap-walkthrough__outcomes" aria-label="Live simulation">
+            {SIMULATIONS.map((x) => (
+              <a
+                key={x.key}
+                href={`?sim=${x.key}`}
+                className={`swap-walkthrough__outcome${x.key === simulation?.key ? " swap-walkthrough__outcome--current" : ""}`}
+                aria-current={x.key === simulation?.key ? "page" : undefined}
+              >
+                {x.label}
+              </a>
+            ))}
+          </nav>
+          {simulation
+            ? <p className="modal__intro"><strong>{simulation.label}.</strong> {simulation.note}</p>
+            : <p className="modal__intro"><strong>{outcome.label}.</strong> {outcome.note}</p>}
           <p className="modal__intro">
             Pipeline produced <strong>{rail.cards.length}</strong> card(s) and{" "}
             <strong>{swapActions}</strong> swap action(s).
@@ -92,13 +151,25 @@ export default function SwapWalkthroughPage() {
         </header>
       </main>
       <aside className="dashboard-page__rail">
-        <RealWalletSuggestionsRail
-          rail={rail}
-          railLabel="Suggestions"
-          demo
-          demoOutcome={outcome.outcome}
-          onSwapQuoteGaveUp={() => pushToast(SWAP_CONFIRM_EXPIRED_TOAST)}
-        />
+        {simParts ? (
+          // LIVE branch, stand-in edges. `demo` is NOT passed: this is the path a connected
+          // wallet takes, and the seam is what keeps it away from a real one.
+          <SwapExecutionSeamContext.Provider value={simParts.seam}>
+            <RealWalletSuggestionsRail
+              rail={simParts.rail}
+              railLabel="Suggestions"
+              onSwapQuoteGaveUp={() => pushToast(SWAP_CONFIRM_EXPIRED_TOAST)}
+            />
+          </SwapExecutionSeamContext.Provider>
+        ) : (
+          <RealWalletSuggestionsRail
+            rail={rail}
+            railLabel="Suggestions"
+            demo
+            demoOutcome={outcome.outcome}
+            onSwapQuoteGaveUp={() => pushToast(SWAP_CONFIRM_EXPIRED_TOAST)}
+          />
+        )}
       </aside>
       <ToastHost toasts={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
     </div>
