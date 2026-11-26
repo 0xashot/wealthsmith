@@ -259,11 +259,25 @@ function MainApp() {
 
   // Connect Wallet opens the modal (from disconnected or Demo Mode); the real
   // connection happens on a wallet selection inside the modal.
-  const openConnectModal = () => {
+  // `onConnected` is supplied by a caller that wants to carry on afterwards (the swap review
+  // reopening its suggestion). `unknown`, because this is also used directly as a click handler
+  // and is then handed the click event — only a function counts.
+  const afterConnectRef = useRef<(() => void) | null>(null);
+  const openConnectModal = (onConnected?: unknown) => {
     connectTriggerRef.current = document.activeElement as HTMLElement | null;
+    afterConnectRef.current = typeof onConnected === "function" ? (onConnected as () => void) : null;
     setConnectModalOpen(true);
   };
   const closeConnectModal = () => setConnectModalOpen(false);
+  // The dialog has closed. Tell whoever asked — but only if it left a wallet connected: a
+  // dialog that was dismissed has nothing to carry on from.
+  useEffect(() => {
+    if (connectModalOpen) return;
+    const resume = afterConnectRef.current;
+    afterConnectRef.current = null;
+    if (resume && walletConnected) resume();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectModalOpen]);
 
   // Finish Setup (onboarding complete): commit the collected answers into the same
   // local savedGoal state Goal Settings uses, mark onboarding complete, land on the

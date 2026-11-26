@@ -55,7 +55,7 @@ const SIMULATIONS = [
   { key: "route-returns", label: "Route returns", note: "No route when the review opens. Press Check Again: this time one is found, the banner goes, and the review shows the route with Cancel and Swap." },
   { key: "no-wallet", label: "After a refresh", note: "Signed in, but the wallet link is gone — what every page refresh leaves behind. Swap is a normal button: pressing it reopens the link, spinning in place, and carries on to the terms." },
   { key: "wallet-declined", label: "Reconnect declined", note: "Same start, but the wallet declines the first request. Swap is replaced by Reconnect Wallet; press it and the link opens, and Swap returns." },
-  { key: "wallet-unknown", label: "No wallet known", note: "No wallet is known to reconnect to. Swap is replaced by Connect Wallet, which closes the review and opens the app's Connect Wallet dialog." },
+  { key: "wallet-unknown", label: "No wallet known", note: "No wallet is known to reconnect to. Swap is replaced by Connect Wallet, which closes the review and opens the app's Connect Wallet dialog. A moment later a wallet is 'connected' and the same review reopens, now with Swap." },
 ] as const;
 type SimulationKey = (typeof SIMULATIONS)[number]["key"];
 
@@ -186,8 +186,13 @@ export default function SwapWalkthroughPage() {
               rail={simParts.rail}
               railLabel="Suggestions"
               onSwapQuoteGaveUp={() => pushToast(SWAP_CONFIRM_EXPIRED_TOAST)}
-              // The walkthrough has no Connect Wallet dialog of its own; this marks where it opens.
-              onConnectWallet={() => pushToast("The Connect Wallet dialog opens here.")}
+              // The walkthrough has no Connect Wallet dialog of its own. This marks where it
+              // opens, then reports a (pretend) wallet connected, as the app does when its
+              // dialog closes with one — so the review can be seen reopening itself.
+              onConnectWallet={(onConnected) => {
+                pushToast("The Connect Wallet dialog opens here.");
+                void simWait(SIM_RECONNECT_DELAY_MS).then(() => { setWalletLinked(true); onConnected?.(); });
+              }}
             />
           </SwapExecutionSeamContext.Provider>
         ) : (

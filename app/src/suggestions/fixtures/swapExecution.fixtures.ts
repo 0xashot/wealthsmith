@@ -2605,14 +2605,33 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const last = footer.indexOf("<ConnectWalletFooter") > footer.indexOf("<ReconnectFooter");
     // The review closes before the dialog opens — a new sign-in may be a different wallet.
     const rail = stripComments(readSrc("src/components/RealWalletSuggestionsRail.tsx"));
-    const closesFirst = (rail.match(/onConnectWallet=\{onConnectWallet \? \(\) => \{ close\(\); onConnectWallet\(\); \} : undefined\}/g) ?? []).length === 2;
+    const closesFirst = (rail.match(/onConnectWallet=\{leaveToConnectWallet\}/g) ?? []).length === 2 &&
+      /const id = opened\?\.id \?\? null;\s*close\(\);\s*onConnectWallet\(/.test(rail);
     // And the real pages supply it.
-    const wired = /onConnectWallet=\{connectWallet\}/.test(readSrc("src/pages/DashboardPage.tsx")) &&
+    const wired = /<RealWalletSuggestionsRail[\s\S]{0,300}onConnectWallet=\{onConnectWallet\}/.test(readSrc("src/pages/DashboardPage.tsx")) &&
       /onConnectWallet=\{onConnectWallet\}/.test(readSrc("src/pages/PortfolioPage.tsx")) &&
       /<PortfolioPage[\s\S]{0,200}onConnectWallet=\{openConnectModal\}/.test(readSrc("src/App.tsx"));
     // One label for one action: the same words the header and the dialog use.
     return offered && last && closesFirst && wired && SWAP_ENTRY_CONNECT_LABEL === CONNECT_WALLET_LABEL && SWAP_ENTRY_CONNECT_LABEL === "Connect Wallet";
   })(), "a way forward");
+  add("SWXE-30: back from Connect Wallet, the SAME suggestion reopens — freshly, only once a wallet is connected, and never out of nowhere", (() => {
+    const rail = stripComments(readSrc("src/components/RealWalletSuggestionsRail.tsx"));
+    const app = stripComments(readSrc("src/App.tsx"));
+    // The rail hands the host a continuation naming the suggestion it left.
+    const handsOver = /onConnectWallet\(id != null \? \(\) => setResumeId\(id\) : undefined\);/.test(rail);
+    // Reopened through the Review path (new snapshot, new route), from the rail's current data;
+    // it waits while the rail reloads, and opens nothing if the suggestion is gone.
+    const fresh = /if \(!rail \|\| !rail\.available\) return;\s*const card = rail\.cards\.find\(\(c\) => c\.id === resumeId\);\s*setResumeId\(null\);\s*if \(card\) onReviewSuggestion\(card\);/.test(rail);
+    // Never over something already open, and never after the cap.
+    const guarded = /if \(opened != null \|\| pendingRef\.current != null\) \{ setResumeId\(null\); return; \}/.test(rail) &&
+      /setTimeout\(\(\) => setResumeId\(null\), RESUME_AFTER_CONNECT_CAP_MS\)/.test(rail) &&
+      /export const RESUME_AFTER_CONNECT_CAP_MS = 20_000;/.test(rail);
+    // The host calls it only when the dialog closed WITH a wallet connected — a dismissed
+    // dialog carries nothing on — and a click event handed to the same function is not one.
+    const hostDecides = /afterConnectRef\.current = typeof onConnected === "function" \? \(onConnected as \(\) => void\) : null;/.test(app) &&
+      /if \(connectModalOpen\) return;\s*const resume = afterConnectRef\.current;\s*afterConnectRef\.current = null;\s*if \(resume && walletConnected\) resume\(\);/.test(app);
+    return handsOver && fresh && guarded && hostDecides;
+  })(), "pick up where they left");
 
   add("SWXE-17: the route on screen is presented as of ITS OWN time, so it cannot age into 'unavailable'", (() => {
     const section = readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx");

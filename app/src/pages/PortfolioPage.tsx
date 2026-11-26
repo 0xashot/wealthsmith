@@ -39,7 +39,7 @@ interface Props {
   onNavigate: (id: string) => void;
   onDisconnect: () => void;
   /** Opens the Connect Wallet dialog — used by a swap review with no wallet to reconnect to. */
-  onConnectWallet?: () => void;
+  onConnectWallet?: (onConnected?: () => void) => void;
   /** Saved plan — drives the same real-wallet Suggestion Engine rail as Dashboard. */
   savedGoal?: SavedGoal;
 }

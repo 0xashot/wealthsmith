@@ -13,7 +13,7 @@
  * exists (the Dashboard's Safety Buffer card); it never executes, signs, or
  * completes anything.
  */
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import SuggestionRail from "./SuggestionRail";
 import EmptyStateCard from "./EmptyStateCard";
 import SuggestionReviewModal from "./SuggestionReviewModal";
@@ -41,6 +41,9 @@ import sparcleUrl from "../../../assets/icons/ui/sparcle.svg";
  *  swaps in the ready rail when `loading` flips — so onComplete is a no-op. */
 const noop = () => {};
 
+/** How long the rail waits to reopen a review after the Connect Wallet dialog, before giving up. */
+export const RESUME_AFTER_CONNECT_CAP_MS = 20_000;
+
 interface Props {
   rail: RailSuggestions | null;
   railLabel: string;
@@ -54,8 +57,12 @@ interface Props {
   /**
    * Opens the app's Connect Wallet dialog, for a swap review with no wallet to reconnect to.
    * The review closes itself first. Optional: without it that state keeps a greyed Swap.
+   *
+   * The host calls `onConnected` once the dialog has closed WITH that wallet connected, and the
+   * rail then reopens the same suggestion — the reader left to connect a wallet, not to start
+   * over. A host that never calls it simply leaves them on the page, as before.
    */
-  onConnectWallet?: () => void;
+  onConnectWallet?: (onConnected?: () => void) => void;
   /** Demo Mode — forwarded to the review so the confirm step is reviewable without a wallet. */
   demo?: boolean;
   /** Demo Mode only — forwarded to the review. See SwapExecutionSection. */
@@ -92,6 +99,9 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
   const [pendingId, setPendingId] = useState<string | null>(null);
   const pendingRef = useRef<string | null>(null);
   const close = () => setOpened(null);
+  // The suggestion whose review left for the Connect Wallet dialog. Set when the host reports a
+  // wallet connected; the effect further down reopens it from the rail's CURRENT data.
+  const [resumeId, setResumeId] = useState<string | null>(null);
 
   // Step 14Z — the CURRENT SOL staking comparison presentation, fetched once at this shared
   // level from the same-origin runtime artifact (no external provider calls). Demo and Real
@@ -138,6 +148,33 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
     });
   };
 
+  // BACK FROM CONNECT WALLET. Reopened through the same path as pressing Review — a fresh
+  // snapshot and a fresh route — never by restoring the old one: what was on screen before was
+  // drawn before the wallet was connected. If the rail is reloading it waits; if the suggestion
+  // is no longer there, nothing opens.
+  useEffect(() => {
+    if (resumeId == null) return;
+    if (opened != null || pendingRef.current != null) { setResumeId(null); return; }
+    if (!rail || !rail.available) return;
+    const card = rail.cards.find((c) => c.id === resumeId);
+    setResumeId(null);
+    if (card) onReviewSuggestion(card);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeId, rail]);
+  // A rail that never comes back must not reopen a review minutes later, out of nowhere.
+  useEffect(() => {
+    if (resumeId == null) return;
+    const timer = setTimeout(() => setResumeId(null), RESUME_AFTER_CONNECT_CAP_MS);
+    return () => clearTimeout(timer);
+  }, [resumeId]);
+  const leaveToConnectWallet = onConnectWallet
+    ? () => {
+        const id = opened?.id ?? null;
+        close();
+        onConnectWallet(id != null ? () => setResumeId(id) : undefined);
+      }
+    : undefined;
+
   const selectedCard = opened?.card;
   // Inject the current comparison into the SOL staking suggestion's modal details (read-only).
   const isStakingSelected = selectedCard != null && (selectedCard.type === "stake_idle_sol" || selectedCard.category === "staked_assets");
@@ -168,7 +205,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       demo={demo}
       demoOutcome={demoOutcome}
       onSwapQuoteGaveUp={() => { close(); onSwapQuoteGaveUp?.(); }}
-      onConnectWallet={onConnectWallet ? () => { close(); onConnectWallet(); } : undefined}
+      onConnectWallet={leaveToConnectWallet}
     />
   ) : detailsForModal ? (
     <SuggestionReviewModal
@@ -181,7 +218,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       demo={demo}
       demoOutcome={demoOutcome}
       onSwapQuoteGaveUp={() => { close(); onSwapQuoteGaveUp?.(); }}
-      onConnectWallet={onConnectWallet ? () => { close(); onConnectWallet(); } : undefined}
+      onConnectWallet={leaveToConnectWallet}
     />
   ) : null;
 

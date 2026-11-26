@@ -45,7 +45,8 @@ interface Props {
   mode: "connected" | "disconnected";
   pushToast: (message: string, helper?: string) => void;
   onDisconnect: () => void;
-  onConnectWallet: () => void;
+  /** `onConnected` is called once the dialog closes with a wallet connected — see the rail. */
+  onConnectWallet: (onConnected?: () => void) => void;
   onTryDemo: () => void;
   /** connected only: in-app page switch + active page (undefined disables nav) */
   activePage?: string;
@@ -137,7 +138,7 @@ export default function DashboardPage({
             onSwapQuoteGaveUp={() =>
               pushToast(SWAP_CONFIRM_EXPIRED_TOAST)
             }
-            onConnectWallet={connectWallet}
+            onConnectWallet={onConnectWallet}
           />
         ) : (
           <aside className="suggestion-rail" aria-label={s.accessibility.right_rail_label}>

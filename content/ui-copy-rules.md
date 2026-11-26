@@ -1001,6 +1001,12 @@ in, possibly for a different wallet than the review was drawn for, so the
 review is not kept open behind it. Use the same label as the header and the
 dialog — it is the same action.
 
+When the dialog closes with a wallet connected, the same suggestion's review
+reopens by itself — through the ordinary Review path, so its amounts and route
+are fresh. It does not reopen if the dialog was dismissed, if the suggestion is
+no longer there, or (where the app has a signed-in session) if a different
+wallet was connected than the one the review was drawn for.
+
 Only on a surface that cannot open that dialog does a greyed Swap remain, with
 its reason as a tooltip on hover and on focus — nothing is written beside it:
 
