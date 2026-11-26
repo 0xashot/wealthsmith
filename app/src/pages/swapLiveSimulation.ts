@@ -38,7 +38,17 @@ export interface LiveSimulationOptions {
   quoteFetcher: SwapQuoteFetcher;
   /** False simulates a session whose wallet cannot sign (disconnected, or another account). */
   walletConnected: boolean;
+  /**
+   * Stands in for reopening the wallet link — what a signed-in session needs after a page
+   * refresh. The walkthrough flips `walletConnected` when it resolves true. Absent simulates a
+   * session with no wallet to reconnect to.
+   */
+  reconnect?: () => Promise<boolean>;
 }
+
+/** Roughly how long a trusted wallet takes to answer a connect request. */
+export const SIM_RECONNECT_DELAY_MS = 1_200;
+export const simWait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /** The quote source, slowed to a realistic round trip so the Review button's wait is visible. */
 export function slowedQuoteFetcher(inner: SwapQuoteFetcher): SwapQuoteFetcher {
@@ -96,6 +106,7 @@ export function buildLiveSimulationSeam(options: LiveSimulationOptions): SwapExe
   let delivered: string | null = null;
   return {
     takerPublicKey: options.walletConnected ? REAL_SWAP_TAKER : null,
+    reconnect: options.reconnect,
 
     planFetcher: async (request) => {
       await wait(SIM_PLAN_DELAY_MS);

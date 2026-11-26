@@ -30,6 +30,12 @@ export interface SwapExecutionSeam {
   planFetcher: typeof fetchSwapExecutionPlan;
   /** Stands in for GET /api/swap-execute/status. */
   confirmationFetcher: typeof fetchConfirmationState;
+  /**
+   * Stands in for reopening the wallet link. Resolves true when the stand-in wallet is usable
+   * afterwards (the provider of the seam then supplies a non-null `takerPublicKey`), false when
+   * the attempt was refused. Absent simulates a session with no wallet to reconnect to.
+   */
+  reconnect?: () => Promise<boolean>;
 }
 
 export const SwapExecutionSeamContext = createContext<SwapExecutionSeam | null>(null);

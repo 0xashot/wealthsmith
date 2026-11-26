@@ -96,6 +96,7 @@ import {
   SWAP_CONFIRM_CANCEL_LABEL,
   SWAP_CONFIRM_CLOSE_LABEL,
   SWAP_ENTRY_CHECK_AGAIN_LABEL,
+  SWAP_ENTRY_RECONNECT_LABEL,
   SWAP_ENTRY_WALLET_TOOLTIP,
   SWAP_CONFIRM_RETRY_LABEL,
   SWAP_CONFIRM_REVERTED_RETRY_NOTE,
@@ -2489,7 +2490,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // check for a pending Check Again has to come BEFORE every entry kind.
     const first = body.indexOf("if (checkingAgain) return <CheckAgainFooter onClose={onClose} busy");
     const anyKind = body.indexOf("entry.kind ===");
-    const footer = section.slice(section.indexOf("function CheckAgainFooter("), section.indexOf("function CloseFooter("));
+    const footer = section.slice(section.indexOf("function CheckAgainFooter("), section.indexOf("function ReconnectFooter("));
     // Same construction as the busy Swap: label kept invisibly for size, spinner over it,
     // `aria-disabled` so a second press is a no-op and the status is still announced.
     const holds = /cta-hold__label[^>]*>\{SWAP_ENTRY_CHECK_AGAIN_LABEL\}/.test(footer) && /cta-hold__spinner/.test(footer) &&
@@ -2544,6 +2545,54 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const shownOnHoverAndFocus = /\.swap-confirm__approve-wrap:hover \.swap-confirm__approve-tip,\s*\.swap-confirm__approve-wrap:focus-within \.swap-confirm__approve-tip/.test(css);
     return focusable && tip && noNote && shownOnHoverAndFocus && SWAP_ENTRY_WALLET_TOOLTIP === "Reconnect your wallet to swap";
   })(), "the reason is on the button");
+  add("SWXE-26: a missing wallet LINK does not grey Swap — pressing Swap reopens it, in place, and then carries on", (() => {
+    const section = stripComments(readSrc("src/components/swapExecution/SwapExecutionSection.tsx"));
+    const footer = section.slice(section.indexOf("const entryFooter = () => {"), section.indexOf("// DEMO MODE."));
+    // After a page refresh the session is signed in and the adapter is not connected. That is
+    // the ordinary case, and its footer is the ordinary one: a working Swap that holds the wait.
+    const ordinary = /if \(walletLink\.canReconnect && !walletFailed\) \{\s*return <ContinueFooter onClose=\{onClose\} busy=\{awaitingWallet === "swap"\} onContinue=\{onSwap\} \/>;/.test(footer);
+    const pressReconnects = /if \(at\.kind === "wallet_unavailable"\) \{ startReconnect\("swap"\); return; \}/.test(section);
+    // The press that asked carries on once a wallet is there — and nothing else does.
+    const continues = /if \(walletReady\) \{\s*const was = awaitingWallet;\s*setAwaitingWallet\(null\);\s*setWalletFailed\(false\);\s*if \(was === "swap"\) onSwap\(\);/.test(section);
+    // Before paint, so there is no frame of an idle Swap between the wallet and the spinner.
+    const before = /useLayoutEffect\(\(\) => \{\s*if \(awaitingWallet == null\) return;/.test(section);
+    return ordinary && pressReconnects && continues && before;
+  })(), "the press that needs the wallet opens it");
+  add("SWXE-27: when the link cannot be reopened, RECONNECT WALLET takes Swap's place — and never spins for good", (() => {
+    const src = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    const section = stripComments(src);
+    const footer = section.slice(section.indexOf("const entryFooter = () => {"), section.indexOf("// DEMO MODE."));
+    const replaced = /if \(walletLink\.canReconnect\) \{\s*return <ReconnectFooter onClose=\{onClose\} busy=\{awaitingWallet === "reconnect"\} onReconnect=\{onReconnect\} \/>;/.test(footer);
+    // Declined, or connected on a different account than the session's — both end the wait.
+    const endsOnFailure = /if \(walletLinkStatus === "failed" \|\| walletLinkStatus === "connected"\) \{\s*setAwaitingWallet\(null\);\s*setWalletFailed\(true\);/.test(section);
+    // And an unanswered wallet prompt ends it too.
+    const capped = /setTimeout\(\(\) => \{ setAwaitingWallet\(null\); setWalletFailed\(true\); \}, WALLET_RECONNECT_CAP_MS\)/.test(section) &&
+      /export const WALLET_RECONNECT_CAP_MS = 30_000;/.test(section);
+    const comp = src.slice(src.indexOf("function ReconnectFooter("), src.indexOf("function CloseFooter("));
+    const holds = /cta-hold__label[^>]*>\{SWAP_ENTRY_RECONNECT_LABEL\}/.test(comp) && /aria-disabled="true"/.test(comp) && /\{SWAP_ENTRY_RECONNECTING\}/.test(comp);
+    // A wallet that turns up by itself (account switched in the extension) brings Swap back.
+    const clears = /if \(walletReady && walletFailed\) setWalletFailed\(false\);/.test(section);
+    // The greyed Swap with a tooltip is now only for a session with no wallet to reconnect to.
+    const lastResort = footer.indexOf("unavailableTooltip={SWAP_ENTRY_WALLET_TOOLTIP}") > footer.indexOf("<ReconnectFooter");
+    return replaced && endsOnFailure && capped && holds && clears && lastResort && SWAP_ENTRY_RECONNECT_LABEL === "Reconnect Wallet";
+  })(), "the remedy is the button");
+  add("SWXE-28: reconnecting is the wallet's CONNECT and nothing more — and a simulation never reaches the real adapter", (() => {
+    const hook = stripComments(readSrc("src/components/swapExecution/useWalletReconnect.ts"));
+    // No signature, no transaction: opening the link asks the wallet for its address only.
+    const connectOnly = !/signMessage|signTransaction|signAllTransactions|sendTransaction|signIn\b/.test(hook);
+    // With a seam the function returns before the adapter is touched.
+    const seamAt = hook.indexOf("if (seam) {");
+    const seamReturn = hook.indexOf("return;", seamAt);
+    const adapterAt = hook.indexOf("setPendingName(name)");
+    const seamFirst = seamAt > 0 && seamReturn > seamAt && adapterAt > seamReturn;
+    // Select, then connect once the adapter reflects the selection — one connect() per attempt.
+    const ordered = /if \(wallet\?\.adapter\.name !== pendingName\) \{\s*select\(pendingName as WalletName\);\s*return;/.test(hook) &&
+      /if \(connecting \|\| firedRef\.current\) return;\s*firedRef\.current = true;\s*connect\(\)\.catch/.test(hook);
+    // The mounted flag is SET on mount: cleared-only, Strict Mode leaves it false for good and
+    // every outcome is dropped — the button then spins until the cap.
+    const mounted = /useEffect\(\(\) => \{\s*mountedRef\.current = true;\s*return \(\) => \{ mountedRef\.current = false; \};\s*\}, \[\]\);/.test(hook);
+    return connectOnly && seamFirst && ordered && mounted;
+  })(), "connect only");
 
   add("SWXE-17: the route on screen is presented as of ITS OWN time, so it cannot age into 'unavailable'", (() => {
     const section = readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx");

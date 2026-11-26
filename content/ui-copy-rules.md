@@ -966,18 +966,37 @@ provider — no "Swap on Jupiter", "Swap on Raydium" or similar — in any state
 including the confirm step's failure screens.
 ```
 
-The footer has exactly five states and never renders nothing:
+The footer never renders nothing. Its states:
 
 ```text
 A swap can be offered            [Cancel]  [Swap]
-A comparison is in flight        [Cancel]  [ ◌ ]            spinner, same size as Swap
-No wallet here can sign          [Cancel]  [Swap] (greyed)  reason in a tooltip on the button
-No swap can be offered           [Close]   [Check Again]    a banner under the title says why
-Checking again                   [Close]   [ ◌ ]            spinner, same size as Check Again
+A wait is in flight              [Cancel]  [ ◌ ]                 spinner, same size as the button pressed
+Wallet link could not be opened  [Cancel]  [Reconnect Wallet]
+No wallet known to reconnect to  [Cancel]  [Swap] (greyed)       reason in a tooltip on the button
+No swap can be offered           [Close]   [Check Again]         a banner under the title says why
+Checking again                   [Close]   [ ◌ ]                 spinner, same size as Check Again
 ```
 
-**No wallet.** The greyed Swap carries its reason as a tooltip, on hover and on
-focus — nothing is written beside it:
+**Signed in, wallet link closed.** A session survives a page refresh; the
+wallet's live connection does not (auto-connect is off by design). The header
+still names the wallet, so the review must not tell that person to reconnect.
+
+```text
+Swap stays a working button. Pressing it reopens the wallet link first —
+spinning in place — and then continues to the terms. It is the wallet's own
+connect request: no signature, no transaction.
+
+Only if that fails (declined in the wallet, a different account from the one
+signed in, or no answer within 30 seconds) does Reconnect Wallet take Swap's
+place. Pressing it tries again; it does not continue into the swap by itself.
+When a wallet that can sign is connected, the footer is Cancel and Swap again.
+
+Never show a greyed Swap beside a header that says the wallet is connected.
+```
+
+**No wallet known to reconnect to** (a last resort that a signed-in session
+should not reach). The greyed Swap carries its reason as a tooltip, on hover and
+on focus — nothing is written beside it:
 
 ```text
 Reconnect your wallet to swap

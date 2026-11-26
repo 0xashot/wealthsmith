@@ -31,7 +31,7 @@
  *
  * Gated behind the same build-time flag as /testing, so a public build never registers it.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import ToastHost, { type ToastData } from "../components/ToastHost";
 import { END_TO_END_SCENARIOS } from "./endToEndTestingFixtures";
@@ -43,6 +43,8 @@ import {
   noRouteQuoteFetcher,
   shortLivedFirstQuoteFetcher,
   slowedQuoteFetcher,
+  simWait,
+  SIM_RECONNECT_DELAY_MS,
 } from "./swapLiveSimulation";
 
 /** The live-simulation variants. Each runs the real (non-demo) flow against stand-ins. */
@@ -51,7 +53,9 @@ const SIMULATIONS = [
   { key: "expired-quote", label: "Aged quote", note: "The route comparison goes stale a moment after the review opens. Wait three seconds, then press Swap: it re-runs the comparison first, still spinning in place." },
   { key: "no-route", label: "No route", note: "No route meets the limits. The review says so in a banner under its title and offers Close and Check Again — no Swap, and no link out. Check Again spins in place and, here, finds nothing new." },
   { key: "route-returns", label: "Route returns", note: "No route when the review opens. Press Check Again: this time one is found, the banner goes, and the review shows the route with Cancel and Swap." },
-  { key: "no-wallet", label: "No wallet", note: "A swap could be offered, but no connected wallet can sign. Swap is greyed; hover or focus it for the reason." },
+  { key: "no-wallet", label: "After a refresh", note: "Signed in, but the wallet link is gone — what every page refresh leaves behind. Swap is a normal button: pressing it reopens the link, spinning in place, and carries on to the terms." },
+  { key: "wallet-declined", label: "Reconnect declined", note: "Same start, but the wallet declines the first request. Swap is replaced by Reconnect Wallet; press it and the link opens, and Swap returns." },
+  { key: "wallet-unknown", label: "No wallet known", note: "No wallet is known to reconnect to. Swap is greyed; hover or focus it for the reason." },
 ] as const;
 type SimulationKey = (typeof SIMULATIONS)[number]["key"];
 
@@ -89,13 +93,34 @@ export default function SwapWalkthroughPage() {
         : variant === "no-route" ? noRouteQuoteFetcher(inner)
           : variant === "route-returns" ? noRouteQuoteFetcher(inner, 2)
             : inner;
-    return {
-      rail: { ...baseRail, swapQuoteFetcher: slowedQuoteFetcher(shaped) },
-      // The plan's terms come from the UNSHAPED quotes: a simulated plan service always answers.
-      seam: buildLiveSimulationSeam({ quoteFetcher: inner, walletConnected: variant !== "no-wallet" }),
-    };
+    return { rail: { ...baseRail, swapQuoteFetcher: slowedQuoteFetcher(shaped) } };
   }, [baseRail, simulation]);
   const rail = simParts?.rail ?? baseRail;
+
+  // The pretend wallet link. It starts closed in the wallet variants and is opened by the
+  // flow's own reconnect — kept apart from the rail above so that opening it does not rebuild
+  // the suggestions under an open review.
+  const startsUnlinked = simulation?.key === "no-wallet" || simulation?.key === "wallet-declined" || simulation?.key === "wallet-unknown";
+  const [walletLinked, setWalletLinked] = useState(false);
+  const reconnectAttempts = useRef(0);
+  const seam = useMemo(() => {
+    const inner = baseRail?.swapQuoteFetcher;
+    if (simulation == null || inner == null) return null;
+    const variant: SimulationKey = simulation.key;
+    return buildLiveSimulationSeam({
+      // The plan's terms come from the UNSHAPED quotes: a simulated plan service always answers.
+      quoteFetcher: inner,
+      walletConnected: !startsUnlinked || walletLinked,
+      reconnect: variant === "wallet-unknown" ? undefined : async () => {
+        await simWait(SIM_RECONNECT_DELAY_MS);
+        reconnectAttempts.current += 1;
+        // The first request is declined in this variant; the retry goes through.
+        if (variant === "wallet-declined" && reconnectAttempts.current === 1) return false;
+        setWalletLinked(true);
+        return true;
+      },
+    });
+  }, [baseRail, simulation, startsUnlinked, walletLinked]);
 
   if (rail == null) {
     return <p className="modal__intro">The e2e-crypto-heavy scenario is missing — it was renamed or removed.</p>;
@@ -153,10 +178,10 @@ export default function SwapWalkthroughPage() {
         </header>
       </main>
       <aside className="dashboard-page__rail">
-        {simParts ? (
+        {simParts && seam ? (
           // LIVE branch, stand-in edges. `demo` is NOT passed: this is the path a connected
           // wallet takes, and the seam is what keeps it away from a real one.
-          <SwapExecutionSeamContext.Provider value={simParts.seam}>
+          <SwapExecutionSeamContext.Provider value={seam}>
             <RealWalletSuggestionsRail
               rail={simParts.rail}
               railLabel="Suggestions"

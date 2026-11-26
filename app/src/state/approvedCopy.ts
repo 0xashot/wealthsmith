@@ -1368,6 +1368,16 @@ export const SWAP_CONFIRM_CONTINUE_LABEL = "Swap";
  */
 export const SWAP_ENTRY_WALLET_TOOLTIP = "Reconnect your wallet to swap";
 /**
+ * The review's primary action when the wallet link could not be reopened by pressing Swap — the
+ * request was declined in the wallet, or the wallet is on a different account from the one
+ * signed in. It takes Swap's place rather than sitting beside a greyed Swap: the one useful
+ * thing to do next is the button. Pressing it tries again; once a wallet that can sign is
+ * connected, Swap returns.
+ */
+export const SWAP_ENTRY_RECONNECT_LABEL = "Reconnect Wallet";
+/** Read to assistive technology while the wallet is being reconnected; the button only spins. */
+export const SWAP_ENTRY_RECONNECTING = "Reconnecting wallet";
+/**
  * The review's primary action when no swap can be offered right now: re-run the route
  * comparison. It replaced a "Refresh comparison" text button at the bottom of the body, which
  * sat below the fold and named our mechanism instead of what the reader gets.

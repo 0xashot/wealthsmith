@@ -10,8 +10,9 @@
  * and the plan is fetched when the user signals intent. The countdown then measures what it is
  * supposed to measure: the time between seeing the terms and approving them.
  *
- * IT ALWAYS RENDERS A FOOTER. Swap while a swap can be offered; a greyed Swap with the reason on
- * hover when the wallet cannot sign; Close and Check Again when the comparison offers nothing.
+ * IT ALWAYS RENDERS A FOOTER. Swap while a swap can be offered — including when the wallet link
+ * has to be reopened first, which pressing Swap does; Reconnect Wallet when that did not work;
+ * Close and Check Again when the comparison offers nothing.
  * There is no link out to a provider anywhere in it — not before the step, and not on its
  * failure screens.
  */
@@ -22,6 +23,7 @@ import { deriveExecutionOffer, deriveSwapEntry, type SwapEntry } from "../../sug
 import { useSwapExecutionPlan } from "./useSwapExecutionPlan";
 import { useWalletSwapSubmitter } from "./useWalletSwapSubmitter";
 import { SwapExecutionSeamContext } from "./swapExecutionSeam";
+import { useWalletReconnect } from "./useWalletReconnect";
 import SwapConfirmSheet from "./SwapConfirmSheet";
 import {
   SWAP_CONFIRM_CHECKING,
@@ -31,6 +33,8 @@ import {
   SWAP_CONFIRM_SUBPAGE_TITLE,
   SWAP_ENTRY_CHECK_AGAIN_LABEL,
   SWAP_ENTRY_CHECKING_AGAIN,
+  SWAP_ENTRY_RECONNECT_LABEL,
+  SWAP_ENTRY_RECONNECTING,
   SWAP_ENTRY_WALLET_TOOLTIP,
 } from "../../state/approvedCopy";
 import { failureCopy, rawToTokenString } from "./swapConfirmPresentation";
@@ -100,6 +104,9 @@ export interface SwapExecutionSectionProps {
   demo?: boolean;
 }
 
+/** How long a reconnect may go unanswered before the button stops spinning and offers a retry. */
+export const WALLET_RECONNECT_CAP_MS = 30_000;
+
 export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
   const { action, assessment, onClose } = props;
   const comparisonLoading = props.comparisonLoading === true;
@@ -145,6 +152,9 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
   const takerPublicKey = seam ? seam.takerPublicKey : publicKey?.toBase58() ?? null;
   // Demo Mode has no wallet and needs none: its confirm step is a preview that cannot submit.
   const walletReady = props.demo === true || (takerPublicKey != null && submit != null);
+  // Reopens the wallet link on request. The wallet name is the adapter's own selection here; a
+  // host with its own session passes the wallet that session signed in with.
+  const walletLink = useWalletReconnect(null, seam);
   // What the footer shows before the step is open. See `deriveSwapEntry` for why an aged
   // comparison keeps the button and every other refusal does not.
   const entry: SwapEntry = deriveSwapEntry({
@@ -228,9 +238,32 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     });
   }, [action, assessment, walletReady, props.nowMs]);
 
+  /**
+   * THE WALLET LINK IS REOPENED BY THE PRESS THAT NEEDS IT.
+   *
+   * After a page refresh the session is still signed in and the header still names the wallet,
+   * but the adapter's live connection is gone (auto-connect is off by design). Greying Swap and
+   * asking someone who looks connected to "reconnect" was true and useless. So Swap stays a
+   * working button: pressing it reopens the link — spinning in place, like every other wait
+   * here — and then carries on exactly as a press with a wallet would.
+   *
+   * If that does not produce a wallet that can sign (declined in the wallet, a different
+   * account, nothing within the cap), the button becomes Reconnect Wallet, which tries again
+   * and does NOT continue into the swap by itself.
+   */
+  const [awaitingWallet, setAwaitingWallet] = useState<"swap" | "reconnect" | null>(null);
+  const [walletFailed, setWalletFailed] = useState(false);
+  const startReconnect = (then: "swap" | "reconnect") => {
+    if (!walletLink.canReconnect || awaitingWallet != null) return;
+    setAwaitingWallet(then);
+    walletLink.reconnect();
+  };
+  const onReconnect = () => startReconnect("reconnect");
+
   const onRefreshComparison = props.onRefreshComparison;
   const onSwap = () => {
     const at = entryNow();
+    if (at.kind === "wallet_unavailable") { startReconnect("swap"); return; }
     if (at.kind !== "swap") return;
     if (at.refreshFirst && onRefreshComparison) {
       awaitingQuoteRef.current = { comparedAt: assessment?.comparedAt ?? null, sawLoading: false };
@@ -271,13 +304,45 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     if (at.kind === "swap" && !at.refreshFirst) setStarted(true);
   }, [awaitingRefresh, comparisonLoading, assessment, entryNow]);
 
+  // How a reconnect ends. A LAYOUT effect, so the press that asked for it carries straight on:
+  // a passive one would paint a frame of an idle Swap between the wallet arriving and the
+  // spinner resuming for the terms.
+  const walletLinkStatus = walletLink.status;
+  useLayoutEffect(() => {
+    if (awaitingWallet == null) return;
+    if (walletReady) {
+      const was = awaitingWallet;
+      setAwaitingWallet(null);
+      setWalletFailed(false);
+      // Only a pressed Swap continues. Reconnect Wallet stops here and Swap returns.
+      if (was === "swap") onSwap();
+      return;
+    }
+    // "connected" without a ready wallet is a wallet on a different account from the session's.
+    if (walletLinkStatus === "failed" || walletLinkStatus === "connected") {
+      setAwaitingWallet(null);
+      setWalletFailed(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [awaitingWallet, walletReady, walletLinkStatus]);
+  // A wallet prompt left unanswered must not leave the button spinning for good.
+  useEffect(() => {
+    if (awaitingWallet == null) return;
+    const timer = setTimeout(() => { setAwaitingWallet(null); setWalletFailed(true); }, WALLET_RECONNECT_CAP_MS);
+    return () => clearTimeout(timer);
+  }, [awaitingWallet]);
+  // A wallet that turns up by itself (the account was switched in the extension) clears it.
+  useEffect(() => {
+    if (walletReady && walletFailed) setWalletFailed(false);
+  }, [walletReady, walletFailed]);
+
   // A wallet that goes away before there is anything to show takes the step back to its entry
   // footer, which says so. Without this the button would spin for a plan nobody can request.
   useEffect(() => {
     if (started && awaitingFirstPlan && !walletReady) setStarted(false);
   }, [started, awaitingFirstPlan, walletReady]);
 
-  // The footer before the step is open — one of five, never nothing.
+  // The footer before the step is open — never nothing.
   const entryFooter = () => {
     // First, because a re-run passes through "loading": the button that was pressed keeps the
     // wait, instead of the footer turning into a spinning Swap for the length of the request.
@@ -287,6 +352,15 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     }
     if (entry.kind === "loading") return <ContinueFooter onClose={onClose} busy onContinue={onSwap} />;
     if (entry.kind === "wallet_unavailable") {
+      // Swap itself reopens the link — see `awaitingWallet`.
+      if (walletLink.canReconnect && !walletFailed) {
+        return <ContinueFooter onClose={onClose} busy={awaitingWallet === "swap"} onContinue={onSwap} />;
+      }
+      // That was tried and did not work: the remedy takes Swap's place.
+      if (walletLink.canReconnect) {
+        return <ReconnectFooter onClose={onClose} busy={awaitingWallet === "reconnect"} onReconnect={onReconnect} />;
+      }
+      // No wallet is known here to reconnect to. Greyed, with the reason on hover.
       return <ContinueFooter onClose={onClose} unavailableTooltip={SWAP_ENTRY_WALLET_TOOLTIP} onContinue={onSwap} />;
     }
     // Nothing to offer. Asking again is the one thing that can change that, so it is the
@@ -528,6 +602,47 @@ function CheckAgainFooter({
       ) : (
         <button type="button" className="review-modal__primary-action" onClick={onCheckAgain}>
           <span>{SWAP_ENTRY_CHECK_AGAIN_LABEL}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A swap could be offered, but pressing Swap could not reopen the wallet link.
+ *
+ * Reconnect Wallet in Swap's place — not a greyed Swap with the remedy in a tooltip: the next
+ * useful action is the button. It spins in place while the wallet is asked, and when a wallet
+ * that can sign is connected the footer is Cancel and Swap again.
+ */
+function ReconnectFooter({
+  onClose,
+  onReconnect,
+  busy = false,
+}: {
+  onClose: () => void;
+  onReconnect: () => void;
+  busy?: boolean;
+}) {
+  return (
+    <div className="review-modal__footer review-modal__footer--actions">
+      <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
+        Cancel
+      </button>
+      {busy ? (
+        <button
+          type="button"
+          className="review-modal__primary-action review-modal__primary-action--busy cta-hold"
+          aria-disabled="true"
+          onClick={(e) => e.preventDefault()}
+        >
+          <span className="cta-hold__label" aria-hidden="true">{SWAP_ENTRY_RECONNECT_LABEL}</span>
+          <span className="swap-confirm__spinner cta-hold__spinner" aria-hidden="true" />
+          <span role="status" aria-live="polite" className="sr-only">{SWAP_ENTRY_RECONNECTING}</span>
+        </button>
+      ) : (
+        <button type="button" className="review-modal__primary-action" onClick={onReconnect}>
+          <span>{SWAP_ENTRY_RECONNECT_LABEL}</span>
         </button>
       )}
     </div>
