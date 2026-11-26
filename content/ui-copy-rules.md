@@ -1092,9 +1092,8 @@ reason. It is never hidden, so the total above still adds up.
 A reason is about this sale, never a verdict on the token: "Price impact is too
 high for this amount", not "illiquid" or "risky".
 
-A token with only one eligible route may be sold (Trim only). The selector says
-so underneath: "Where only one route was available, WealthSmith could not verify
-that it was the lowest-cost option."
+A token with only one eligible route may be sold (Trim only), and is offered like
+any other: the selector does not mark it out or add a line about it.
 
 A failure does not stop the others. Cancel does: tokens already swapped stay
 swapped, and the summary says exactly which.

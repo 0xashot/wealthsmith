@@ -84,8 +84,11 @@ export interface ExecutionEligibilityInput {
    * for those a single route is the normal case, not an outage: in a probe of eleven real
    * tokens the aggregator was the only acceptable route for five. Refusing them would leave
    * Trim working for a handful of large tokens. Every other check still applies — price
-   * impact, total cost, complete terms, the simulation and the on-chain minimum — and the
-   * review states that no second route was available to compare.
+   * impact, total cost, complete terms, the simulation and the on-chain minimum.
+   *
+   * The Trim selector does NOT say which tokens had a single route (a line doing so was
+   * removed by product decision, 2026-11-26): the token's own terms are what the user approves,
+   * and those are identical in kind whether one route was found or three.
    */
   allowSingleRoute?: boolean;
 }

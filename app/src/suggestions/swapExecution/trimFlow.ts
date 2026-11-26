@@ -26,8 +26,6 @@ export interface TrimTokenRow {
   previewTokens: string | null;
   /** Why not, when not sellable. */
   blockedReason: string | null;
-  /** Exactly one route was eligible — the sale is offered, and the list says so underneath. */
-  singleRoute: boolean;
 }
 
 /**
@@ -52,7 +50,6 @@ export function deriveTrimRows(input: {
     const offer = deriveExecutionOffer({ action: leg, assessment, nowMs, perLegApproval: true });
     const agedOnly = !offer.offered && offer.blockReasons.length === 1 && offer.blockReasons[0] === "quote_expired";
     const sellable = offer.offered || agedOnly;
-    const eligible = assessment?.candidates.filter((c) => c.eligible).length ?? 0;
     let blockedReason: string | null = null;
     if (!sellable) {
       const codes = [
@@ -71,7 +68,6 @@ export function deriveTrimRows(input: {
       sellable,
       previewTokens: sellable ? assessment?.expectedOutputTokens ?? null : null,
       blockedReason,
-      singleRoute: sellable && eligible === 1,
     };
   });
 
@@ -91,7 +87,6 @@ export function deriveTrimRows(input: {
       sellable: false,
       previewTokens: null,
       blockedReason: TRIM_BLOCKED_REASON.not_transferable,
-      singleRoute: false,
     });
   }
   // Largest first: it matters most, and it is the likeliest to pass the limits.

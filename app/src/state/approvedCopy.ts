@@ -1411,9 +1411,6 @@ export const TRIM_BLOCKED_REASON: Record<string, string> = {
   not_transferable: "This token can\u2019t be transferred",
 };
 export const TRIM_BLOCKED_REASON_DEFAULT = "Can\u2019t be swapped right now";
-/** Under the list when a selectable token had one route only — the existing disclosure. */
-export const TRIM_SINGLE_ROUTE_NOTE =
-  "Where only one route was available, WealthSmith could not verify that it was the lowest-cost option.";
 /** The step's title while a token's terms are on screen: "Review Swap · 1 of 2". */
 export const trimRunTitle = (index: number, total: number): string => `Review Swap \u00b7 ${index} of ${total}`;
 /** Row statuses in the run and in the summary. */

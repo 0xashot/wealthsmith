@@ -103,7 +103,6 @@ import {
   TRIM_BLOCKED_REASON_DEFAULT,
   TRIM_SELECT_INTRO,
   TRIM_SELECT_TITLE,
-  TRIM_SINGLE_ROUTE_NOTE,
   TRIM_SUMMARY_ALL_TITLE,
   TRIM_SUMMARY_NONE_DESC,
   TRIM_SUMMARY_NONE_TITLE,
@@ -2760,9 +2759,10 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     });
     const [a, b, c] = rows;
     return rows.length === 3 &&
-      a.symbol === "BONK" && a.sellable && !a.singleRoute && a.previewTokens === "0.197901" && a.blockedReason === null &&
+      a.symbol === "BONK" && a.sellable && a.previewTokens === "0.197901" && a.blockedReason === null &&
       b.symbol === "THIN" && !b.sellable && b.previewTokens === null && b.blockedReason === TRIM_BLOCKED_REASON.price_impact_high &&
-      c.symbol === "SML" && c.sellable && c.singleRoute;
+      // A token with one route only is ticked like any other — and nothing marks it out.
+      c.symbol === "SML" && c.sellable && !("singleRoute" in c);
   })(), "what can be sold, and why not");
   add("SWTR-5: an AGED comparison still ticks the token; an unanswered or failed one does not", (() => {
     const leg = trimLeg(0, BONK, "BONK", 300);
@@ -2844,7 +2844,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return multi && single && noDeadBack && galleryInert && TRIM_ACTION_LABEL === "Trim";
   })(), "selector for several, straight through for one");
   add("SWTR-12: the Trim copy says the user picks and the user approves — WealthSmith sells nothing", (() => {
-    const all = [TRIM_SELECT_TITLE, TRIM_SELECT_INTRO, trimSelectCta(1), trimSelectCta(3), TRIM_SINGLE_ROUTE_NOTE, TRIM_SUMMARY_ALL_TITLE, TRIM_SUMMARY_SOME_TITLE, TRIM_SUMMARY_NONE_TITLE, TRIM_SUMMARY_NONE_DESC, TRIM_SUMMARY_PENDING_NOTE, trimSummaryReceived("1,998.60", 2, 3), ...Object.values(TRIM_BLOCKED_REASON)].join(" ");
+    const all = [TRIM_SELECT_TITLE, TRIM_SELECT_INTRO, trimSelectCta(1), trimSelectCta(3), TRIM_SUMMARY_ALL_TITLE, TRIM_SUMMARY_SOME_TITLE, TRIM_SUMMARY_NONE_TITLE, TRIM_SUMMARY_NONE_DESC, TRIM_SUMMARY_PENDING_NOTE, trimSummaryReceived("1,998.60", 2, 3), ...Object.values(TRIM_BLOCKED_REASON)].join(" ");
     return TRIM_SELECT_TITLE === "Select Tokens to Trim" &&
       /You approve them one at a time/.test(TRIM_SELECT_INTRO) &&
       trimSelectCta(1) === "Trim 1 Token" && trimSelectCta(3) === "Trim 3 Tokens" &&

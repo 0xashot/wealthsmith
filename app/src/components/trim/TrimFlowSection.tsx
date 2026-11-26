@@ -44,7 +44,6 @@ import {
     TRIM_BLOCKED_REASON_DEFAULT,
   TRIM_SELECT_INTRO,
   TRIM_SELECT_TITLE,
-  TRIM_SINGLE_ROUTE_NOTE,
   TRIM_STATUS_ACTIVE,
   TRIM_STATUS_NOT_STARTED,
   TRIM_STATUS_SWAPPED,
@@ -219,7 +218,6 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
 
   if (stage === "select") {
     const count = rows.filter((r) => r.sellable && selected.has(r.key)).length;
-    const anySingleRoute = rows.some((r) => r.singleRoute);
     return (
       <section className="review-modal__section swap-confirm trim-step" aria-label={TRIM_SELECT_TITLE}>
         <p className="modal__intro">{TRIM_SELECT_INTRO}</p>
@@ -253,7 +251,6 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
             );
           })}
         </ul>
-        {anySingleRoute && <p className="review-modal__guardrail-hint">{TRIM_SINGLE_ROUTE_NOTE}</p>}
         <div className="review-modal__footer review-modal__footer--actions">
           <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
             {SWAP_CONFIRM_CANCEL_LABEL}

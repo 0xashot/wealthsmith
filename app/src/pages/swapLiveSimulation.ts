@@ -112,7 +112,7 @@ export function noRouteQuoteFetcher(inner: SwapQuoteFetcher, blockedCalls = Numb
 /**
  * Pretend quotes for a Trim's tokens — a token → USDC sale, per mint:
  *   default          a normal comparison, the in-app route selected
- *   `singleRoute`    one eligible route only (the others found none) — offered, and disclosed
+ *   `singleRoute`    one eligible route only (the others found none) — offered like any other
  *   `blocked`        every route refused on price impact — no sale can be offered
  * Derived from the action like the demo quotes are, so the figures agree with the amounts.
  */

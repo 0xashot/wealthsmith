@@ -5849,6 +5849,9 @@ td.vetting-scores-table__date {
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-surface-lg);
   background: var(--color-surface-card);
+  /* Rows are clipped to the card's corners, so a highlighted first or last row follows the
+     same radius instead of poking square corners past it. */
+  overflow: hidden;
 }
 .trim-row + .trim-row {
   border-top: 1px solid var(--color-border-subtle);
