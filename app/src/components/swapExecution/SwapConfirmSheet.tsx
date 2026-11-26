@@ -60,7 +60,7 @@ import {
   formatApproxTokens,
   formatTokens,
   formatApproxUsd,
-  formatUsd,
+  formatFeeUsd,
   formatPercent,
   isAfterApproval,
   solscanTransactionUrl,
@@ -205,14 +205,11 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
   // Lamports are SOL's base units, nine decimals, and the figure is small — so it keeps more
   // precision than the settled screen's headline, where rounding is a reading aid. A fee is
   // read to check it, not to admire it.
-  // `formatUsd`, NOT `formatApproxUsd`: the sentence already carries its own ≈, and the
-  // approximate formatter prepends a tilde of its own — together they rendered "(≈~$0.01)".
-  // One mark per approximation.
-  const feeUsdText = fee?.usd != null ? formatUsd(fee.usd) : ABSENT_FIGURE;
   const feeCopy = fee
     ? {
         sol: rawToTokenString(fee.lamports, 9) ?? fee.lamports,
-        usd: feeUsdText === ABSENT_FIGURE ? null : feeUsdText,
+        // Carries its own mark — "≈$0.02" or "<$0.01" — so the sentence adds none.
+        usd: formatFeeUsd(fee.usd),
       }
     : null;
   const failed = failureCopy(failure, reachedChain, feeCopy);

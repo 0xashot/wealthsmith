@@ -1285,7 +1285,8 @@ export const SWAP_CONFIRM_REVERTED_TITLE = "Your Swap Failed";
  */
 export const swapConfirmRevertedDesc = (fee: { sol: string; usd: string | null } | null): string => {
   if (fee == null) return "Your tokens weren\u2019t swapped. A network fee was charged.";
-  const amount = fee.usd ? `${fee.sol} SOL (\u2248${fee.usd})` : `${fee.sol} SOL`;
+  // `fee.usd` arrives with its own mark ("≈$0.02", or "<$0.01" for the usual sub-cent fee).
+  const amount = fee.usd ? `${fee.sol} SOL (${fee.usd})` : `${fee.sol} SOL`;
   return `Your tokens weren\u2019t swapped. A network fee of ${amount} was charged.`;
 };
 /**

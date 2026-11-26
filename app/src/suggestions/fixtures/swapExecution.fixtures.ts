@@ -77,12 +77,13 @@ import {
   offersProviderHandoff,
   offersRetry,
   formatSettledAmount,
+  formatFeeUsd,
   displayDecimalsFor,
   rawToTokenString,
 } from "../../components/swapExecution/swapConfirmPresentation";
 import { pct as quotePct, usd as quoteUsd } from "../swapQuote/quotePresentation";
 import { DEMO_OUTCOMES } from "../swapExecution/demoOutcomes";
-import { deliveredFromBalances, feeUsdFrom } from "../../server/swapExecution/confirmationStatus";
+import { deliveredFromBalances, deliveredFromLanded, deliveredNativeLamports, feeUsdFrom } from "../../server/swapExecution/confirmationStatus";
 import { needsFigureBackfill, FIGURE_BACKFILL_ATTEMPTS, FIGURE_BACKFILL_INTERVAL_MS } from "../swapExecution/confirmationPolling";
 import { SWAP_CONFIRM_EXPIRED_TITLE, SWAP_CONFIRM_EXPIRED_TOAST, swapConfirmReceivedUnknown } from "../../state/approvedCopy";
 import type { ExecutionFailureKey, ExecutionPhase } from "../swapExecution/executionLifecycle";
@@ -1255,17 +1256,17 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // "Was charged" is a statement about something that already happened. The disclosed
     // constant on the terms is a conservative guess made beforehand — a different claim
     // about a different moment, and not usable in the past tense.
-    const withFee = failureCopy("submit_failed", true, { sol: "0.000075", usd: "$0.01" });
+    const withFee = failureCopy("submit_failed", true, { sol: "0.000075", usd: "\u2248$0.01" });
     const noUsd = failureCopy("submit_failed", true, { sol: "0.000075", usd: null });
     const unread = failureCopy("submit_failed", true, null);
     if (withFee == null || noUsd == null || unread == null) return null === "unreachable";
-    // ONE approximation mark. The sentence supplies its own ≈, and feeding it the sheet's
-    // approximate formatter — which prepends a tilde to the value — rendered "(≈~$0.01)".
+    // ONE mark per figure, and it travels WITH the figure: `formatFeeUsd` returns "≈$0.02" or
+    // "<$0.01" and the sentence adds nothing. Two layers each adding their own once rendered
+    // "(≈~$0.01)".
     const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
-    const oneMark = /const feeUsdText = fee\?\.usd != null \? formatUsd\(fee\.usd\) : ABSENT_FIGURE;/.test(sheet) &&
-      !/usd: fee\.usd != null \? formatApproxUsd/.test(sheet);
+    const oneMark = /usd: formatFeeUsd\(fee\.usd\)/.test(sheet) && !/formatApproxUsd\(fee\.usd\)/.test(sheet);
     return oneMark &&
-      /0\.000075 SOL/.test(withFee.desc) && /\$0\.01/.test(withFee.desc) && !/~/.test(withFee.desc) &&
+      /0\.000075 SOL \(\u2248\$0\.01\)/.test(withFee.desc) && !/~/.test(withFee.desc) &&
       // Without a price, the amount still stands on its own.
       /0\.000075 SOL/.test(noUsd.desc) && !/\$/.test(noUsd.desc) &&
       // Unread: the FACT survives, the figure does not. Naming a fee we did not read would
@@ -1442,10 +1443,77 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // a node that served the transaction happily would still be refused in our own process.
     const rawRead = /method: "getTransaction"/.test(src) && /JSON\.stringify\(\{/.test(src) &&
       !/connection\.getTransaction/.test(src);
-    // We want meta and nothing else, so nothing in the path parses a message.
-    const metaOnly = /body\?\.result\?\.meta/.test(src);
+    // We read what the node PRINTED — meta, and the account keys as plain strings — so
+    // nothing in the path deserializes a message.
+    // (Checked on comment-stripped source: the prose above the function explains at length
+    // why nothing is deserialized, and would otherwise trip the very scan that enforces it.)
+    const metaOnly = /body\?\.result\?\.meta/.test(src) &&
+      !/VersionedMessage|Message\.from|deserialize/.test(stripComments(src));
     return used && noZero && rawRead && metaOnly;
   })(), "a version we do not know is not a figure we cannot read");
+  add("SWXD-14: a fee under a cent is never printed as zero dollars", (() => {
+    // Real Solana fees are a fraction of a cent: the swaps measured on 2026-11-26 paid $0.0013
+    // to $0.0035. A two-decimal format renders every one as "$0.00", and on the screen that
+    // tells someone a fee WAS charged, "(≈$0.00)" says nothing was — contradicting its own
+    // sentence. The walkthrough's sample fee had been a tidy $0.0138, which is how this hid.
+    const measured = [0.001345, 0.00349, 0.000379].map((v) => formatFeeUsd(v));
+    const neverZero = measured.every((t) => t === "<$0.01");
+    // From a cent up it is approximate and says so, with exactly one mark.
+    const larger = formatFeeUsd(0.0234) === "\u2248$0.02" && formatFeeUsd(1.5) === "\u2248$1.50";
+    // No price, no dollars — and a zero or negative "fee" is not a figure at all.
+    const absent = formatFeeUsd(null) === null && formatFeeUsd(0) === null && formatFeeUsd(Number.NaN) === null;
+    // And the whole sentence, as production will actually render it.
+    const sentence = failureCopy("submit_failed", true, { sol: "0.000019", usd: formatFeeUsd(0.001345) })?.desc ?? "";
+    return neverZero && larger && absent &&
+      /A network fee of 0\.000019 SOL \(<\$0\.01\) was charged\./.test(sentence) && !/\$0\.00/.test(sentence);
+  })(), "a charge that reads as a charge");
+  add("SWXD-15: a swap INTO SOL reports what arrived, from lamports", (() => {
+    const owner = "Taker11111111111111111111111111111111111111";
+    const other = "Someone1se11111111111111111111111111111111";
+    const WSOL_MINT = "So11111111111111111111111111111111111111112";
+    const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    // The shape production returned for a real swap on 2026-11-26: 0.32 SOL arrived, and the
+    // payer has NO wrapped-SOL row — the route pays into a temporary account that is created
+    // and closed inside the transaction. The token-balance read returned null, which would
+    // have told every user swapping into SOL that we could not see what they received.
+    const tx = {
+      fee: 49303,
+      accountKeys: [owner, other],
+      preBalances: [1_000_000_000, 5],
+      postBalances: [1_000_000_000 + 320654798, 5],
+      preTokenBalances: [{ owner, mint: USDC_MINT, uiTokenAmount: { amount: "50000000" } }],
+      postTokenBalances: [{ owner, mint: USDC_MINT, uiTokenAmount: { amount: "0" } }],
+    };
+    // Lamport delta PLUS the fee: the taker pays the fee from the balance the swap pays into,
+    // and this is the same rule `verifyMeasuredValue` applied to the promise before signing.
+    const native = deliveredFromLanded(tx, owner, WSOL_MINT) === String(320654798 + 49303);
+    // Not the fee payer: their balance never fell by the fee, so nothing is added back.
+    const notPayer = deliveredNativeLamports({ ...tx, accountKeys: [other, owner], preBalances: [9, 100], postBalances: [9, 400] }, owner) === "300";
+    // A token output is untouched by any of this.
+    const tokenStillToken = deliveredFromLanded(
+      { ...tx, postTokenBalances: [{ owner, mint: USDC_MINT, uiTokenAmount: { amount: "50000700" } }] }, owner, USDC_MINT) === "700";
+    // Somebody who is not in the transaction is not somebody it can speak for.
+    const stranger = deliveredNativeLamports(tx, "Nobody1111111111111111111111111111111111111") === null;
+    // A balance that did not grow, a missing fee for the payer, or a number past 2^53 that
+    // lost precision in transit: no figure, never a guess.
+    const wentDown = deliveredNativeLamports({ ...tx, postBalances: [900_000_000, 5] }, owner) === null;
+    const noFee = deliveredNativeLamports({ ...tx, fee: null }, owner) === null;
+    const unsafe = deliveredNativeLamports({ ...tx, postBalances: [2 ** 53 + 2, 5] }, owner) === null;
+    return native && notPayer && tokenStillToken && stranger && wentDown && noFee && unsafe;
+  })(), "SOL arrives as lamports, and is read as lamports");
+  add("SWXD-16: every account the owner holds for a mint counts toward the delivery", (() => {
+    const owner = "T", mint = "M";
+    const row = (amount: string) => ({ owner, mint, uiTokenAmount: { amount } });
+    // A wallet can hold several accounts for one mint and a route may pay into any of them.
+    // Taking the first row reported 0 here — the delivery landed in the second.
+    const second = deliveredFromBalances([row("100"), row("0")], [row("100"), row("750")], owner, mint) === "750";
+    // A PRE row that exists but cannot be read is not a zero: treating it as one would report
+    // the whole post-balance as the delivery.
+    const unreadablePre = deliveredFromBalances([{ owner, mint, uiTokenAmount: { amount: "1e9" } }], [row("5000")], owner, mint) === null;
+    // No pre row at all remains a legitimate zero — the account was created by this swap.
+    const created = deliveredFromBalances([], [row("5000")], owner, mint) === "5000";
+    return second && unreadablePre && created;
+  })(), "the owner's total, not their first account");
   add("SWCS-6: expiry has its OWN title — it is not an outage, and must not be filed under one", (() => {
     const exp = failureCopy("expired");
     const out = failureCopy("plan_unavailable");

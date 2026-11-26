@@ -1211,7 +1211,7 @@ with a warning attached rather than losing it:
 
 ```text
 Your Swap Failed
-Your tokens weren’t swapped. A network fee of 0.000075 SOL (≈$0.01) was charged.
+Your tokens weren’t swapped. A network fee of 0.000019 SOL (<$0.01) was charged.
 You can review a new quote and try again. Another attempt may incur a network fee.
 [ Cancel ]  [ Try Again ]
 ```
@@ -1222,6 +1222,18 @@ swap reverted still wants the swap, and would go and retry it somewhere with no
 warning at all. The answer is disclosure: the second paragraph says what another
 attempt may cost, and the person decides. It is a separate paragraph because a
 cost warning may not be buried at the end of a line about tokens.
+
+**A fee under a cent is "<$0.01", never "$0.00".** Real Solana fees are a
+fraction of a cent — swaps measured on 2026-11-26 paid $0.0013 to $0.0035 — and
+a two-decimal format prints every one of them as zero dollars, on the one screen
+whose sentence says a fee WAS charged. From a cent up it reads "≈$0.02". The mark
+travels with the figure, so the sentence adds none.
+
+**A swap into SOL is read from lamports.** The route pays wrapped SOL into a
+temporary account that is created and closed inside the transaction, so no token
+balance survives to be read. The delivered figure is the taker's lamport delta
+plus the fee — the same rule the pre-signing verification applies to the promised
+minimum, so "delivered" has one definition on both sides of the signature.
 
 **The fee is the one the chain took.** Read from the landed transaction, priced
 from the same public source the terms used, and never the conservative constant

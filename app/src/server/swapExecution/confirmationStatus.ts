@@ -18,6 +18,7 @@
 import { Connection } from "@solana/web3.js";
 import type { EnvReader } from "../swapQuote/providerConfig";
 import { EXECUTION_RPC_ENV_KEY } from "./planVerification";
+import { outputIsNativeSol } from "../../suggestions/swapExecution/executionVerification";
 
 /** Base58, 64 bytes — 86 to 88 characters. Shape only; the chain decides if it is real. */
 const SIGNATURE_RE = /^[1-9A-HJ-NP-Za-km-z]{86,88}$/;
@@ -69,7 +70,10 @@ export const LAMPORTS_PER_SOL = 1_000_000_000;
 export function feeUsdFrom(feeLamports: string | null, solUsdPrice: number | null): number | null {
   if (feeLamports == null || !/^[0-9]+$/.test(feeLamports)) return null;
   if (typeof solUsdPrice !== "number" || !Number.isFinite(solUsdPrice) || solUsdPrice <= 0) return null;
-  return (Number(feeLamports) / LAMPORTS_PER_SOL) * solUsdPrice;
+  // Rounded to a millionth of a dollar: the raw product carries float noise
+  // (0.007455000000000001), which is harmless to the screen and ugly in a response body.
+  const usd = (Number(feeLamports) / LAMPORTS_PER_SOL) * solUsdPrice;
+  return Number.isFinite(usd) ? Math.round(usd * 1e6) / 1e6 : null;
 }
 
 /** The read this needs. Narrow on purpose, so the stub in a fixture is the whole surface. */
@@ -102,25 +106,85 @@ export interface SignatureStatusRpc {
  * case we do not know what arrived, and saying so is the only honest option.
  */
 export function deliveredFromBalances(
-  pre: { owner?: string | null; mint?: string | null; uiTokenAmount?: { amount?: string | null } | null }[],
-  post: { owner?: string | null; mint?: string | null; uiTokenAmount?: { amount?: string | null } | null }[],
+  pre: TokenBalanceRow[],
+  post: TokenBalanceRow[],
   owner: string,
   mint: string,
 ): string | null {
-  const amountOf = (
-    rows: { owner?: string | null; mint?: string | null; uiTokenAmount?: { amount?: string | null } | null }[],
-  ): bigint | null => {
-    const row = rows.find((r) => r.owner === owner && r.mint === mint);
-    const raw = row?.uiTokenAmount?.amount;
-    if (typeof raw !== "string" || !/^[0-9]+$/.test(raw)) return null;
-    return BigInt(raw);
+  /**
+   * The owner's TOTAL in this mint, across every token account they hold for it.
+   *
+   * A wallet can hold several accounts for one mint, and a route may deliver into any of
+   * them. Taking the first match — which this did until Vahan's port did it properly —
+   * reported a fraction of the delivery, or none of it, whenever the receiving account was
+   * not the first row.
+   *
+   * `null` means "no rows" or "a row we could not read"; the two callers treat those
+   * differently, so the distinction is made by `hasRow` below, not folded in here.
+   */
+  const totalOf = (rows: TokenBalanceRow[]): bigint | null => {
+    let total = 0n;
+    let found = false;
+    for (const row of rows) {
+      if (row?.owner !== owner || row?.mint !== mint) continue;
+      const raw = row.uiTokenAmount?.amount;
+      // One unreadable row poisons the figure. Skipping it would silently under-count.
+      if (typeof raw !== "string" || !/^[0-9]+$/.test(raw)) return null;
+      total += BigInt(raw);
+      found = true;
+    }
+    return found ? total : null;
   };
-  const after = amountOf(post);
-  // Absent BEFORE is a legitimate zero: the taker may not have held this mint until now, which
-  // is the common case for a swap into a token. Absent AFTER is not readable at all.
+  const hasRow = (rows: TokenBalanceRow[]) => rows.some((r) => r?.owner === owner && r?.mint === mint);
+
+  const after = totalOf(post ?? []);
   if (after == null) return null;
-  const before = amountOf(pre) ?? 0n;
+  // Absent BEFORE is a legitimate zero: the taker may not have held this mint until now, which
+  // is the common case for a swap into a token. PRESENT BUT UNREADABLE is not a zero — treating
+  // it as one would report the whole post-balance as the delivery.
+  const before = hasRow(pre ?? []) ? totalOf(pre) : 0n;
+  if (before == null) return null;
   const delta = after - before;
+  return delta > 0n ? delta.toString() : null;
+}
+
+/**
+ * What a swap into NATIVE SOL delivered, in lamports.
+ *
+ * A swap whose output is SOL does not leave a token balance to read. The route pays out
+ * wrapped SOL into a temporary account that is created and closed inside the same
+ * transaction, so it appears in neither the pre nor the post token balances, and the
+ * delivery arrives as plain lamports. Measured against production on 2026-11-26: a swap
+ * that delivered 0.32 SOL reported `deliveredRaw: null`, which would have told every user
+ * swapping INTO SOL that we could not read what they received.
+ *
+ * THE SAME RULE AS THE PROMISE. `verifyMeasuredValue` measures a native output before signing
+ * as the taker's lamport delta plus the fee, because the taker pays the fee out of the same
+ * balance the swap pays into. Using that rule here means the figure on the success screen is
+ * measured exactly the way the guaranteed minimum was checked — one definition of "delivered",
+ * not two that can disagree by a fee.
+ *
+ * The fee is added back only when the owner is the fee payer (account 0), which is the only
+ * case in which their balance fell by it. An owner who is not in the transaction at all is
+ * not somebody whose balance this can speak for.
+ */
+export function deliveredNativeLamports(
+  tx: { accountKeys: unknown; preBalances: unknown; postBalances: unknown; fee: unknown },
+  owner: string,
+): string | null {
+  if (!Array.isArray(tx.accountKeys) || !Array.isArray(tx.preBalances) || !Array.isArray(tx.postBalances)) return null;
+  const index = tx.accountKeys.indexOf(owner);
+  if (index < 0) return null;
+  const before = tx.preBalances[index];
+  const after = tx.postBalances[index];
+  // Lamports arrive as JSON numbers. Past 2^53 they have already lost precision in transit,
+  // and a figure we cannot trust to the lamport is a figure we do not have.
+  if (!Number.isSafeInteger(before) || !Number.isSafeInteger(after) || before < 0 || after < 0) return null;
+  let delta = BigInt(after as number) - BigInt(before as number);
+  if (index === 0) {
+    if (!Number.isSafeInteger(tx.fee) || (tx.fee as number) < 0) return null;
+    delta += BigInt(tx.fee as number);
+  }
   return delta > 0n ? delta.toString() : null;
 }
 
@@ -154,11 +218,22 @@ export const MAX_SUPPORTED_TRANSACTION_VERSION = 10;
  *
  * Never throws: every failure is `null`, which the caller reports as "could not read".
  */
-export async function fetchTransactionMeta(
+export interface LandedTransaction {
+  fee: unknown;
+  preTokenBalances: TokenBalanceRow[];
+  postTokenBalances: TokenBalanceRow[];
+  /** Lamport balances, index-aligned with `accountKeys`. Needed for a native-SOL output. */
+  preBalances: unknown;
+  postBalances: unknown;
+  /** Static account keys as the node printed them. Account 0 is the fee payer. */
+  accountKeys: unknown;
+}
+
+export async function fetchLandedTransaction(
   rpcUrl: string,
   signature: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ fee?: unknown; preTokenBalances?: TokenBalanceRow[]; postTokenBalances?: TokenBalanceRow[] } | null> {
+): Promise<LandedTransaction | null> {
   try {
     const res = await fetchImpl(rpcUrl, {
       method: "POST",
@@ -175,10 +250,23 @@ export async function fetchTransactionMeta(
       }),
     });
     if (!res.ok) return null;
-    const body = (await res.json()) as { result?: { meta?: unknown } | null; error?: unknown };
+    const body = (await res.json()) as {
+      result?: { meta?: Record<string, unknown> | null; transaction?: { message?: { accountKeys?: unknown } } } | null;
+      error?: unknown;
+    };
     if (body?.error != null) return null;
     const meta = body?.result?.meta;
-    return meta != null && typeof meta === "object" ? (meta as { fee?: unknown }) : null;
+    if (meta == null || typeof meta !== "object") return null;
+    return {
+      fee: meta.fee,
+      preTokenBalances: Array.isArray(meta.preTokenBalances) ? (meta.preTokenBalances as TokenBalanceRow[]) : [],
+      postTokenBalances: Array.isArray(meta.postTokenBalances) ? (meta.postTokenBalances as TokenBalanceRow[]) : [],
+      preBalances: meta.preBalances,
+      postBalances: meta.postBalances,
+      // Read as the node PRINTED it — an array of strings under `encoding: "json"`, for every
+      // transaction version seen so far. Nothing here deserializes a message.
+      accountKeys: body?.result?.transaction?.message?.accountKeys,
+    };
   } catch {
     return null;
   }
@@ -189,6 +277,19 @@ export interface TokenBalanceRow {
   owner?: string | null;
   mint?: string | null;
   uiTokenAmount?: { amount?: string | null } | null;
+}
+
+/**
+ * What the owner received in `mint`, by whichever record actually holds it.
+ *
+ * A token output is a token-balance delta. A native-SOL output is a lamport delta, because
+ * the wrapped SOL it was paid in no longer exists by the time the transaction ends. Asking the
+ * token balances about a SOL output returns nothing, every time — see `deliveredNativeLamports`.
+ */
+export function deliveredFromLanded(tx: LandedTransaction, owner: string, mint: string): string | null {
+  return outputIsNativeSol(mint)
+    ? deliveredNativeLamports(tx, owner)
+    : deliveredFromBalances(tx.preTokenBalances, tx.postTokenBalances, owner, mint);
 }
 
 /** Build the RPC-backed reader, or null when no RPC is configured. */
@@ -207,18 +308,13 @@ export function resolveSignatureStatusRpc(env: EnvReader): SignatureStatusRpc | 
       return { confirmed: status === "confirmed" || status === "finalized", err: value.err };
     },
     async getLandedFacts({ signature, delivery }) {
-      const meta = await fetchTransactionMeta(url, signature);
-      if (meta == null) return { deliveredRaw: null, feeLamports: null };
+      const tx = await fetchLandedTransaction(url, signature);
+      if (tx == null) return { deliveredRaw: null, feeLamports: null };
       const feeLamports =
-        typeof meta.fee === "number" && Number.isFinite(meta.fee) && meta.fee >= 0
-          ? Math.trunc(meta.fee).toString()
-          : null;
+        typeof tx.fee === "number" && Number.isSafeInteger(tx.fee) && tx.fee >= 0 ? String(tx.fee) : null;
       // A reverted transaction has a fee and no delivery; asking for the delta anyway would
       // read a pair of balances that did not change and correctly return null.
-      const deliveredRaw =
-        delivery == null
-          ? null
-          : deliveredFromBalances(meta.preTokenBalances ?? [], meta.postTokenBalances ?? [], delivery.owner, delivery.mint);
+      const deliveredRaw = delivery == null ? null : deliveredFromLanded(tx, delivery.owner, delivery.mint);
       return { deliveredRaw, feeLamports };
     },
   };

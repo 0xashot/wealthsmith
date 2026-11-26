@@ -132,7 +132,7 @@ export const DEMO_OUTCOMES: DemoOutcomeChoice[] = [
     note: "Approved, submitted and confirmed on-chain. No received figure: reading what actually arrived needs a chain read the browser cannot make, and the rule is to omit it rather than reprint the estimate as if it were fact.",
     outcome: {
       phase: "confirmed", failure: null, signature: DEMO_SIGNATURE,
-      feeLamports: "75000", feeUsd: 0.0138,
+      feeLamports: "19000", feeUsd: 0.001345,
     },
   },
   {
@@ -151,10 +151,12 @@ export const DEMO_OUTCOMES: DemoOutcomeChoice[] = [
     key: "reverted",
     label: "Didn't go through",
     note: "Same failure key as the one above, and a different event: this one WAS sent, ran on-chain and failed. There is a signature, the fee it took is stated as fact (read from the transaction, not from the quote's estimate), and Try Again carries a warning that another attempt may cost again.",
-    // 5,000 lamports base + a priority fee, which is what a Jupiter swap typically pays.
+    // A fee measured on a real Jupiter swap (2026-11-26): 19,000 lamports, about a tenth of
+    // a cent. The sample used to be 75,000 / $0.0138, which rendered a tidy "(≈$0.01)" and
+    // hid what production actually shows for nearly every swap.
     outcome: {
       phase: "failed", failure: "submit_failed", signature: DEMO_SIGNATURE,
-      feeLamports: "75000", feeUsd: 0.0138,
+      feeLamports: "19000", feeUsd: 0.001345,
     },
   },
   {

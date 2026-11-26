@@ -451,3 +451,23 @@ export function formatSettledAmount(tokens: string): string | null {
     maximumFractionDigits: decimals,
   });
 }
+
+/**
+ * A network fee in dollars, as the parenthetical after its SOL amount.
+ *
+ * Its own formatter because a fee lives where the ordinary one cannot go. Real Solana fees
+ * are a fraction of a cent — the swaps measured on 2026-11-26 paid $0.0013 to $0.0035 — and
+ * a two-decimal format renders every one of them as "$0.00". On the screen that tells
+ * someone a fee WAS charged, "(≈$0.00)" reads as "nothing was charged", directly contradicting
+ * the sentence it sits in.
+ *
+ * So a positive amount under a cent is "<$0.01": true, and unmistakably not zero. From a cent
+ * up it is approximate and says so. The returned string carries its own mark, so the sentence
+ * adds none — one mark per figure, which the "(≈~$0.01)" rendering once got wrong.
+ */
+export function formatFeeUsd(usd: number | null | undefined): string | null {
+  if (typeof usd !== "number" || !Number.isFinite(usd) || usd <= 0) return null;
+  if (usd < 0.01) return "<$0.01";
+  const formatted = formatUsd(usd);
+  return formatted === ABSENT ? null : `\u2248${formatted}`;
+}
