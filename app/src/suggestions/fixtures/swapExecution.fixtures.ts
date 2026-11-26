@@ -1424,6 +1424,28 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const cleanedUp = /cancelled = true;/.test(hook) && /clearTimeout\(backfillTimer\)/.test(hook);
     return outcomeFirst && bounded && figuresOnly && sameTarget && cleanedUp;
   })(), "chases numbers, never the outcome");
+  add("SWXD-13: the landed read accepts transaction versions it has never heard of", (() => {
+    const src = readSrc("src/server/swapExecution/confirmationStatus.ts");
+    if (src.length === 0) return false;
+    // Measured against live Jupiter swaps, 2026-11-26: with maxSupportedTransactionVersion
+    // at 0, every v0 transaction returned its fee and every v1 returned nothing. The node
+    // rejects anything newer than the version the caller claims to understand (-32015), the
+    // error is caught, and the figures come back null — so the success screen says it could
+    // not read an amount that is sitting right there. Perfect correlation, six for six.
+    const futureProof = /MAX_SUPPORTED_TRANSACTION_VERSION = (\d+)/.exec(src);
+    if (futureProof == null || Number(futureProof[1]) < 2) return false;
+    const used = new RegExp(`maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION`).test(src);
+    // Zero must not survive anywhere in this file, in any spelling.
+    const noZero = !/maxSupportedTransactionVersion:\s*0/.test(src);
+    // And the read goes over raw JSON-RPC rather than through web3.js, whose return type
+    // deserializes the message and therefore understands only the versions it shipped with:
+    // a node that served the transaction happily would still be refused in our own process.
+    const rawRead = /method: "getTransaction"/.test(src) && /JSON\.stringify\(\{/.test(src) &&
+      !/connection\.getTransaction/.test(src);
+    // We want meta and nothing else, so nothing in the path parses a message.
+    const metaOnly = /body\?\.result\?\.meta/.test(src);
+    return used && noZero && rawRead && metaOnly;
+  })(), "a version we do not know is not a figure we cannot read");
   add("SWCS-6: expiry has its OWN title — it is not an outage, and must not be filed under one", (() => {
     const exp = failureCopy("expired");
     const out = failureCopy("plan_unavailable");

@@ -1,0 +1,53 @@
+Hi Vahan — backend is done, and it's good. I read through
+confirmationStatus.ts and probed it against live Jupiter transactions: the
+delta arithmetic, the BigInt handling, reading the fee for reverts as well as
+successes, and the rule that an unreadable figure never changes `state` are all
+exactly right.
+
+One thing you did better than my version: sumFor adds up every one of the
+owner's token accounts for a mint, where mine took only the first match. A
+taker holding two accounts for the same mint would have been under-reported by
+my code. I've taken your approach.
+
+Two things left.
+
+1. THE FRONTEND HALF HASN'T STARTED
+
+The vendored src/ds in frontend/feature/reconstruction is an older snapshot —
+it still contains statusLineFor, which I removed when the busy states moved
+into the button, and none of the new confirm-step work is there:
+
+  • the twelve confirm screens and their copy (Swap Completed, Awaiting
+    Confirmation, Your Swap Quote Expired, Swap Canceled, Your Swap Failed,
+    Your Swap Wasn't Sent)
+  • the settled-swap screen that shows what actually arrived
+  • the mark system (amber alert / danger cross / primary clock)
+  • confirmationPolling sending owner+mint and reading your new fields
+
+Nothing is broken in the meantime: the old client ignores the extra keys your
+endpoint now returns, so production is fine as it stands.
+
+2. PULL MAIN FRESH — THERE'S A NEW FIX
+
+Not the commit in my earlier note. Take github.com/0xashot/wealthsmith @
+c5cb3ed.
+
+While checking your deployment I found a real bug, and it was mine, not yours.
+getSignatureStatuses reports a transaction as landed several seconds before
+getTransaction can return it. I caught a Jupiter swap at the moment of landing
+and your endpoint returned fee=null for five seconds straight, then returned
+5703 lamports matching the chain exactly — correct behaviour, nothing to fix on
+your side.
+
+The problem is that our client asks at exactly that instant: the first poll
+that sees a terminal state, and then it stops. So the success screen would
+often have said "we couldn't load the exact USDC amount received" about a swap
+whose amount was available one second later.
+
+Fixed client-side in c5cb3ed: the outcome is reported immediately, and the
+figures get four more attempts 1.5s apart. Your endpoint and its contract are
+unchanged.
+
+If porting across repos by hand is the slow part, I'm happy to open a PR
+straight into the Bitbucket frontend instead — send me access and tell me which
+branch to target.

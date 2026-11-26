@@ -128,6 +128,69 @@ export function isSignatureShaped(signature: unknown): signature is string {
   return typeof signature === "string" && SIGNATURE_RE.test(signature);
 }
 
+/**
+ * The highest transaction version this read will accept.
+ *
+ * NOT ZERO, and this is the whole point. `getTransaction` rejects any transaction newer than
+ * the version the caller claims to understand, with `-32015`, and version 1 transactions are
+ * now routine on mainnet — measured 2026-11-26 against live Jupiter swaps, where every v0
+ * returned its fee and every v1 returned nothing at all. The failure is silent: the error is
+ * caught, the figures come back null, and the success screen says it could not read the
+ * amount for a transaction that is sitting right there.
+ *
+ * A high constant rather than 1, because the next version will arrive the same way and this
+ * read has no opinion about transaction formats — it only wants `meta`.
+ */
+export const MAX_SUPPORTED_TRANSACTION_VERSION = 10;
+
+/**
+ * Read a landed transaction's `meta` over raw JSON-RPC.
+ *
+ * Deliberately NOT through web3.js. The library deserializes the message to build its return
+ * type and understands only the versions it shipped with, so a future format would be
+ * rejected in our own process even when the node served it happily. We need three fields out
+ * of `meta` and no part of the message, so the parsing is the only thing that could break and
+ * we simply do not do it.
+ *
+ * Never throws: every failure is `null`, which the caller reports as "could not read".
+ */
+export async function fetchTransactionMeta(
+  rpcUrl: string,
+  signature: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ fee?: unknown; preTokenBalances?: TokenBalanceRow[]; postTokenBalances?: TokenBalanceRow[] } | null> {
+  try {
+    const res = await fetchImpl(rpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getTransaction",
+        params: [signature, {
+          commitment: "confirmed",
+          maxSupportedTransactionVersion: MAX_SUPPORTED_TRANSACTION_VERSION,
+          encoding: "json",
+        }],
+      }),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { result?: { meta?: unknown } | null; error?: unknown };
+    if (body?.error != null) return null;
+    const meta = body?.result?.meta;
+    return meta != null && typeof meta === "object" ? (meta as { fee?: unknown }) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One token-balance row of a landed transaction's meta (pre or post). */
+export interface TokenBalanceRow {
+  owner?: string | null;
+  mint?: string | null;
+  uiTokenAmount?: { amount?: string | null } | null;
+}
+
 /** Build the RPC-backed reader, or null when no RPC is configured. */
 export function resolveSignatureStatusRpc(env: EnvReader): SignatureStatusRpc | null {
   const url = env(EXECUTION_RPC_ENV_KEY);
@@ -144,11 +207,7 @@ export function resolveSignatureStatusRpc(env: EnvReader): SignatureStatusRpc | 
       return { confirmed: status === "confirmed" || status === "finalized", err: value.err };
     },
     async getLandedFacts({ signature, delivery }) {
-      const tx = await connection.getTransaction(signature, {
-        commitment: "confirmed",
-        maxSupportedTransactionVersion: 0,
-      });
-      const meta = tx?.meta;
+      const meta = await fetchTransactionMeta(url, signature);
       if (meta == null) return { deliveredRaw: null, feeLamports: null };
       const feeLamports =
         typeof meta.fee === "number" && Number.isFinite(meta.fee) && meta.fee >= 0
