@@ -21,6 +21,7 @@ import { fetchSwapQuoteComparison } from "../../suggestions/swapQuote/swapQuoteC
 import { demoSwapQuoteFetcher } from "../../suggestions/swapQuote/demoSwapQuote";
 import { resolveSwapHandoffType } from "../../suggestions/swapExecution/swapHandoffType";
 import { createJupiterPriceSource } from "./jupiterPriceSource";
+import { createResilientPriceSource, PRICE_CACHE_TTL_MS, PRICE_RETRY_DELAYS_MS } from "./resilientPriceSource";
 import { createRaydiumLiquiditySource } from "./raydiumLiquiditySource";
 import { assessServiceHealth } from "./serviceHealth";
 import { SwapRateLimiter, SWAP_RATE_LIMIT_CONFIG } from "./rateLimit";
@@ -207,6 +208,77 @@ export async function runSwapQuoteServerFixtureChecks(): Promise<SwapFixtureChec
   const jp = createJupiterPriceSource(mockFetch(200, { [WSOL]: { usdPrice: 150.5, decimals: 9 }, [USDC]: { usdPrice: 1.0001, decimals: 6 } }));
   add("SWS-39: Jupiter Price v3 → fresh SOL + USDC USD prices (mint-keyed, sourced not hard-coded)", (await jp.getUsdPrice(WSOL, sig))?.usd === 150.5 && (await jp.getUsdPrice(USDC, sig))?.usd === 1.0001, "price parse");
   add("SWS-40: price source → null on missing mint / malformed / non-2xx / non-positive (fail closed, never invented)", (await createJupiterPriceSource(mockFetch(200, {}))?.getUsdPrice(WSOL, sig)) === null && (await createJupiterPriceSource(mockFetch(500, {}))?.getUsdPrice(WSOL, sig)) === null && (await createJupiterPriceSource(mockFetch(200, { [WSOL]: { usdPrice: 0 } }))?.getUsdPrice(WSOL, sig)) === null, "price fail closed");
+
+  // ---- Prices under a burst (2026-11-26): the public API refuses after ~5 calls in 10s, and a multi-token Trim
+  // opens several comparisons at once. Fewer calls, shared lookups, a bounded retry — and never an invented price. ----
+  const BONK_M = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+  const WIF_M = "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm";
+  const priceAt = (usd: number, at: number) => ({ usd, observedAtMs: at, sourceId: "test" });
+  const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+  {
+    const urls: string[] = [];
+    const recFetch = (async (u: string) => { urls.push(u); return { ok: true, status: 200, json: async () => ({ [WSOL]: { usdPrice: 150 }, [USDC]: { usdPrice: 1 }, [BONK_M]: { usdPrice: 0.00002 } }) }; }) as unknown as typeof fetch;
+    const many = await createJupiterPriceSource(recFetch).getUsdPrices!([WSOL, USDC, "MissingMint11111111111111111111111111111111"], sig);
+    add("SWS-40b: several mints are priced in ONE request (comma-separated ids), and a mint the response omits is null — not invented",
+      urls.length === 1 && /ids=So1[^&]*%2CEPj/.test(urls[0]) && many[WSOL]?.usd === 150 && many[USDC]?.usd === 1 && many["MissingMint11111111111111111111111111111111"] === null, "one call, many mints");
+  }
+  {
+    let batchCalls = 0; const asked: string[][] = [];
+    const inner = { sourceId: "test", getUsdPrice: async () => null, getUsdPrices: async (mints: readonly string[]) => { batchCalls += 1; asked.push([...mints]); return Object.fromEntries(mints.map((m) => [m, priceAt(m === USDC ? 1 : 2, 1_000)])); } };
+    const src = createResilientPriceSource(inner, { now: () => 1_000, sleep: tick });
+    // Three comparisons opened together: three tokens, and USDC asked for three times.
+    const got = await Promise.all([src.getUsdPrice(BONK_M, sig), src.getUsdPrice(USDC, sig), src.getUsdPrice(WIF_M, sig), src.getUsdPrice(USDC, sig), src.getUsdPrice(WSOL, sig), src.getUsdPrice(USDC, sig)]);
+    add("SWS-40c: lookups made together go out as ONE request, and a mint asked for by several callers is fetched ONCE",
+      batchCalls === 1 && asked[0].length === 4 && new Set(asked[0]).size === 4 && got.every((p) => p != null) && got[1]?.usd === 1 && got[3] === got[1], "one call for a burst");
+    const again = await src.getUsdPrice(USDC, sig);
+    add("SWS-40d: a real price is reused inside the cache window — no second request", batchCalls === 1 && again?.usd === 1, "short cache");
+  }
+  {
+    let clock = 1_000; let calls = 0;
+    const inner = { sourceId: "test", getUsdPrice: async () => null, getUsdPrices: async (mints: readonly string[]) => { calls += 1; return Object.fromEntries(mints.map((m) => [m, priceAt(1, clock)])); } };
+    const src = createResilientPriceSource(inner, { now: () => clock, sleep: tick });
+    const first = await src.getUsdPrice(USDC, sig);
+    clock += PRICE_CACHE_TTL_MS + 1;
+    const second = await src.getUsdPrice(USDC, sig);
+    add("SWS-40e: the cache EXPIRES, and a cached price keeps the time it was really observed — the cache cannot make a price look fresher",
+      calls === 2 && first?.observedAtMs === 1_000 && second?.observedAtMs === 1_000 + PRICE_CACHE_TTL_MS + 1 && PRICE_CACHE_TTL_MS < 20_000 / 2, "honest freshness");
+  }
+  {
+    let calls = 0; const asked: string[][] = [];
+    // The first answer prices USDC only (the token's lookup was refused); the retry prices the token.
+    const inner = { sourceId: "test", getUsdPrice: async () => null, getUsdPrices: async (mints: readonly string[]) => { calls += 1; asked.push([...mints]); return Object.fromEntries(mints.map((m) => [m, m === USDC || calls > 1 ? priceAt(1, 1_000) : null])); } };
+    const src = createResilientPriceSource(inner, { now: () => 1_000, sleep: tick });
+    const [token, usdcP] = await Promise.all([src.getUsdPrice(BONK_M, sig), src.getUsdPrice(USDC, sig)]);
+    add("SWS-40f: a lookup that comes back empty is RETRIED — and only the mints that are missing are asked for again",
+      token != null && usdcP != null && calls === 2 && asked[1].length === 1 && asked[1][0] === BONK_M, "retry only what failed");
+  }
+  {
+    let calls = 0;
+    const inner = { sourceId: "test", getUsdPrice: async () => null, getUsdPrices: async (mints: readonly string[]) => { calls += 1; return Object.fromEntries(mints.map((m) => [m, null])); } };
+    const src = createResilientPriceSource(inner, { now: () => 1_000, sleep: tick });
+    const none = await src.getUsdPrice(BONK_M, sig);
+    const callsAfterFirst = calls;
+    const stillNone = await src.getUsdPrice(BONK_M, sig);
+    add("SWS-40g: a mint the source cannot price is NULL after the bounded retries — never invented, and the failure is never cached",
+      none === null && stillNone === null && callsAfterFirst === 1 + PRICE_RETRY_DELAYS_MS.length && calls === 2 * (1 + PRICE_RETRY_DELAYS_MS.length), "fail closed");
+  }
+  {
+    let singles = 0;
+    const inner = { sourceId: "test", getUsdPrice: async (m: string) => { singles += 1; return priceAt(m === USDC ? 1 : 3, 1_000); } };
+    const src = createResilientPriceSource(inner, { now: () => 1_000, sleep: tick });
+    const [a2, b2] = await Promise.all([src.getUsdPrice(USDC, sig), src.getUsdPrice(BONK_M, sig)]);
+    add("SWS-40h: a source with no batch call still works — one lookup per mint, same answers", a2?.usd === 1 && b2?.usd === 3 && singles === 2, "graceful without batching");
+  }
+  add("SWS-40i: BOTH servers price through the resilient source — neither calls the price API directly per lookup", (() => {
+    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const quoteEntry = strip(readFileSync(`${process.cwd()}/src/server/swapQuote/nodeServerEntry.ts`, "utf8"));
+    const execServer = strip(readFileSync(`${process.cwd()}/src/server/swapExecution/executionServer.ts`, "utf8"));
+    return /const priceSource = createResilientPriceSource\(createJupiterPriceSource\(/.test(quoteEntry) &&
+      /const prices = createResilientPriceSource\(createJupiterPriceSource\(/.test(execServer) &&
+      /priceSource: prices,/.test(execServer) && /const feePriceSource = prices;/.test(execServer) &&
+      // Exactly one construction each: no second, uncached source beside it.
+      (quoteEntry.match(/createJupiterPriceSource\(/g) ?? []).length === 1 && (execServer.match(/createJupiterPriceSource\(/g) ?? []).length === 1;
+  })(), "one resilient source per server");
 
   // ---- 23B.1: approved liquidity source (Raydium pool TVL) ----
   const rl = createRaydiumLiquiditySource(mockFetch(200, { success: true, data: [{ id: "pool1", tvl: 250000, type: "Concentrated" }] }));

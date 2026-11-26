@@ -22,6 +22,9 @@ import {
 import { deriveSwapEndpoint, rawToTokens } from "../../server/swapExecution/jupiterSwapClient";
 import { sanitizeExecutionPlan } from "../../server/swapExecution/executionSanitizer";
 import { SWAP_PROVIDER_ENDPOINTS } from "../../server/swapQuote/providerConfig";
+import { classifySwapPair, SELL_TO_USDC_RULE, SWAP_PAIR_REGISTRY_VERSION } from "../swapQuote/swapPairRegistry";
+import { SWAP_COST_THRESHOLDS } from "../swapQuote/swapQuotePolicy";
+import { readFileSync } from "node:fs";
 
 const NOW = Date.parse("2026-11-23T12:00:00.000Z");
 const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -177,6 +180,55 @@ export async function runSwapExecutionServerFixtureChecks(): Promise<FixtureChec
   const sameMint = await handler()({ method: "POST", body: body({ outputMint: USDC }) });
   add("SWXS-19: input and output mint may not be equal",
     sameMint.status === 400, "distinct mints");
+  /* ---- Which pairs this lane will build for (2026-11-26) ----
+   * It used to build for ANY two mints. It now asks the same classification the quote route
+   * does: SOL ↔ USDC, and any token SOLD FOR USDC. Buying an arbitrary token is refused before
+   * any provider is called. */
+  const BONK = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+  let providerCalls = 0;
+  const counting: typeof fetch = (async (...args: Parameters<typeof fetch>) => { providerCalls += 1; return stubJupiter()(...args); }) as typeof fetch;
+  const buyToken = await handler({ fetchImpl: counting })({ method: "POST", body: body({ inputMint: USDC, outputMint: BONK, inputSymbol: "USDC", outputSymbol: "BONK", outputDecimals: 5 }) });
+  const buyCalls = providerCalls;
+  add("SWXS-19b: BUYING an arbitrary token is refused — pair_not_approved, before any provider call",
+    buyToken.status === 400 && (buyToken.body as { error: string }).error === "pair_not_approved" && buyCalls === 0, "no arbitrary buys");
+  const tokenToToken = await handler({ fetchImpl: counting })({ method: "POST", body: body({ inputMint: BONK, outputMint: WSOL, inputSymbol: "BONK", inputDecimals: 5 }) });
+  add("SWXS-19c: a token sold for anything but USDC is refused too — the rule is 'sold FOR USDC', not 'any pair with a known side'",
+    tokenToToken.status === 400 && (tokenToToken.body as { error: string }).error === "pair_not_approved" && providerCalls === 0, "USDC is the only exit");
+  const sellToken = await handler({ fetchImpl: counting })({ method: "POST", body: body({ inputMint: BONK, outputMint: USDC, inputSymbol: "BONK", outputSymbol: "USDC", inputDecimals: 5, outputDecimals: 6 }) });
+  add("SWXS-19d: a token sold FOR USDC is accepted and goes on to the provider — validation no longer stops it",
+    (sellToken.body as { error?: string }).error !== "pair_not_approved" && (sellToken.body as { error?: string }).error !== "invalid_mints" && providerCalls > 0, "sell to USDC proceeds");
+  const junkMint = await handler()({ method: "POST", body: body({ inputMint: "not-a-mint" }) });
+  add("SWXS-19e: a mint that is not a public key is refused as malformed, not looked up",
+    junkMint.status === 400 && (junkMint.body as { error: string }).error === "invalid_mints", "mint shape");
+  add("SWXS-19f: the pair rule is DIRECTIONAL and narrow — SOL/USDC either way is major, token → USDC is minor, USDC → token is nothing", (() =>
+    classifySwapPair(WSOL, USDC) === "major" && classifySwapPair(USDC, WSOL) === "major" &&
+    classifySwapPair(BONK, USDC) === "minor" &&
+    classifySwapPair(USDC, BONK) === "unresolved" && classifySwapPair(BONK, WSOL) === "unresolved" && classifySwapPair(WSOL, BONK) === "unresolved" &&
+    classifySwapPair(USDC, USDC) === "unresolved" && classifySwapPair("", USDC) === "unresolved" &&
+    SELL_TO_USDC_RULE.outputMint === USDC && SELL_TO_USDC_RULE.pairClass === "minor" && SWAP_PAIR_REGISTRY_VERSION === "swap_pair_registry_1.1.0")(), "one direction only");
+  add("SWXS-19g: the quote route and the execute route ask the SAME classification — neither has a pair list of its own", (() => {
+    const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const quote = strip(readFileSync(`${process.cwd()}/src/server/swapQuote/httpHandler.ts`, "utf8"));
+    const execute = strip(readFileSync(`${process.cwd()}/src/server/swapExecution/executionHandler.ts`, "utf8"));
+    const same = /classifySwapPair\(req\.inputMint, req\.outputMint\) === "unresolved"\) return "pair_not_approved"/.test(quote) &&
+      /classifySwapPair\(b\.inputMint, b\.outputMint\) === "unresolved"\) return "pair_not_approved"/.test(execute);
+    // No mint is named in either handler: approval lives in the registry module and nowhere else.
+    const noLocalList = !/EPjFWdd5|So1111111/.test(quote) && !/EPjFWdd5|So1111111/.test(execute);
+    return same && noLocalList;
+  })(), "one rule, two doors");
+  /* ---- The price-impact ceiling is enforced on the PLAN's own quote, not only on the comparison ---- */
+  const quoteWith = (impact: unknown) => stubJupiter({ quote: { outAmount: "197901045", otherAmountThreshold: "196911540", priceImpactPct: impact, routePlan: [{ swapInfo: { label: "Raydium CLMM" } }] } });
+  const atCeiling = await handler({ fetchImpl: quoteWith("0.005") })({ method: "POST", body: body() });
+  const overCeiling = await handler({ fetchImpl: quoteWith("0.0055") })({ method: "POST", body: body() });
+  const justUnder = await handler({ fetchImpl: quoteWith("0.00499") })({ method: "POST", body: body() });
+  const unreadable = await handler({ fetchImpl: quoteWith("n/a") })({ method: "POST", body: body() });
+  add("SWXS-19h: a plan whose OWN quote is at or above the 0.5% price-impact ceiling is refused — the ceiling is true of what is signed",
+    atCeiling.status === 422 && (atCeiling.body as { error: string }).error === "price_impact_high" &&
+    overCeiling.status === 422 && (overCeiling.body as { error: string }).error === "price_impact_high" &&
+    justUnder.status === 200 &&
+    SWAP_COST_THRESHOLDS.maxPriceImpactPctExclusive === 0.5, "ceiling at plan time");
+  add("SWXS-19i: a price impact that cannot be read is refused too — unknown is not low",
+    unreadable.status === 422 && (unreadable.body as { error: string }).error === "price_impact_high", "unknown impact");
   const floatAmount = await handler()({ method: "POST", body: body({ inputAmountRaw: "15.5" }) });
   add("SWXS-20: a non-integer raw amount is refused — raw amounts are base units",
     floatAmount.status === 400, "integer base units");

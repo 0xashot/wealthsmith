@@ -16,6 +16,8 @@
  */
 import { buildJupiterSwapTransaction, type JupiterSwapContext } from "./jupiterSwapClient";
 import { sanitizeExecutionPlan } from "./executionSanitizer";
+import { classifySwapPair } from "../../suggestions/swapQuote/swapPairRegistry";
+import { SWAP_COST_THRESHOLDS } from "../../suggestions/swapQuote/swapQuotePolicy";
 import { verifyPlanBeforeOffering, type VerifyPlanDeps } from "./planVerification";
 import { priceTerms } from "./termsPricing";
 import type { PriceSource } from "../swapQuote/priceSnapshot";
@@ -70,7 +72,13 @@ function validate(req: SwapExecuteHttpRequest): string | null {
   if (typeof b.actionId !== "string" || b.actionId.length === 0) return "invalid_action";
   if (typeof b.legId !== "string" || b.legId.length === 0) return "invalid_action";
   if (typeof b.inputMint !== "string" || typeof b.outputMint !== "string") return "invalid_mints";
+  if (!PUBKEY_RE.test(b.inputMint) || !PUBKEY_RE.test(b.outputMint)) return "invalid_mints";
   if (b.inputMint === b.outputMint) return "invalid_mints";
+  // ONLY PAIRS THE QUOTE LAYER WOULD COMPARE. This lane used to build a transaction for any two
+  // mints at all — the review never asked for one, because it only offers Swap on a compared
+  // route, but nothing here enforced that. The same classification the quote route uses now
+  // gates both: SOL ↔ USDC, and any token sold FOR USDC. Buying an arbitrary token is refused.
+  if (classifySwapPair(b.inputMint, b.outputMint) === "unresolved") return "pair_not_approved";
   if (typeof b.inputSymbol !== "string" || typeof b.outputSymbol !== "string") return "invalid_assets";
   if (typeof b.inputDecimals !== "number" || !Number.isInteger(b.inputDecimals)) return "invalid_decimals";
   if (typeof b.outputDecimals !== "number" || !Number.isInteger(b.outputDecimals)) return "invalid_decimals";
@@ -143,6 +151,18 @@ export function createSwapExecuteHandler(deps: {
       // The provider's reason is deliberately NOT echoed: it is provider detail, and the client
       // has one correct response to all of them — fall back to the handoff.
       return { status: 503, body: { error: "unavailable" } };
+    }
+
+    // THE PRICE-IMPACT CEILING HOLDS HERE TOO, on the plan's OWN quote.
+    //
+    // The route comparison refuses a quote at or above the ceiling — but the plan is built from
+    // a fresh quote seconds later, and for a thinly traded token the impact moves. Observed on
+    // 2026-11-26: a token's comparison was refused at 0.55% while this lane would still have
+    // built the same sale. The review never asks for a refused route, so this is not a path the
+    // product takes; it is the ceiling being true of what is signed, not only of what was
+    // compared. An impact we cannot read is refused the same way — unknown is not "low".
+    if (!Number.isFinite(built.terms.priceImpactPct) || built.terms.priceImpactPct >= SWAP_COST_THRESHOLDS.maxPriceImpactPctExclusive) {
+      return { status: 422, body: { error: "price_impact_high" } };
     }
 
     // VERIFY BEFORE OFFERING. A plan is not offered until a simulation says it delivers at

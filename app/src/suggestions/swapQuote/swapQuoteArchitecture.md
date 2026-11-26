@@ -92,9 +92,17 @@ until an explicit RFQ-liquidity policy is approved (`SWAP_RFQ_POLICY`).
 
 ## Pair classification (`swapPairRegistry.ts`)
 
-Versioned, identity-based (exact mint pair), direction-agnostic. **Major:** SOL/USDC only. **Minor:** other
-approved pairs (none enabled yet). Unknown → `unresolved` → `pair_classification_unresolved` (no valid route).
-Never inferred from live market cap.
+Versioned and identity-based. **Major:** SOL/USDC only, an exact pair matched in either direction. **Minor,
+by rule (2026-11-26, Trim):** any token **sold for USDC** — `SELL_TO_USDC_RULE`, matched on the OUTPUT mint
+only, so it approves leaving a held token for USDC and never buying one (USDC → anything else, and
+token → SOL, stay `unresolved`). There is no approved-token list: what makes a sale acceptable is that the
+sale itself passes the minor-pair limits below, then the plan's simulation and on-chain minimum. Anything
+else is `unresolved` → `pair_classification_unresolved` (no valid route), never guessed.
+
+The quote route (`pair_not_approved`, 422) and the execute route (`pair_not_approved`, 400) ask the same
+`classifySwapPair`; neither keeps a pair list of its own. The execute route also re-applies the price-impact
+ceiling to the plan's OWN quote (`price_impact_high`, 422), because that quote is taken seconds after the
+comparison and a thin token's impact moves.
 
 ## Thresholds (`swapQuotePolicy.ts`, versioned)
 

@@ -23,6 +23,7 @@ import http from "node:http";
 import { createSwapExecuteHandler, isExecutionEnabled } from "./executionHandler";
 import { createConfirmationChecker } from "./confirmationStatus";
 import { createJupiterPriceSource } from "../swapQuote/jupiterPriceSource";
+import { createResilientPriceSource } from "../swapQuote/resilientPriceSource";
 import { SwapRateLimiter, SWAP_RATE_LIMIT_CONFIG } from "../swapQuote/rateLimit";
 import { nodeEnvReader, detectLeakedSwapEnv, SWAP_PROVIDER_ENDPOINTS, type EnvReader } from "../swapQuote/providerConfig";
 
@@ -71,19 +72,22 @@ export function createExecutionRequestListener(opts: ExecutionServerOptions = {}
   const allowedOrigin = opts.allowedOrigin ?? env("SWAP_ALLOWED_ORIGIN") ?? null;
   const quoteEndpoint = env("JUPITER_QUOTE_URL") ?? SWAP_PROVIDER_ENDPOINTS.jupiter.quoteEndpoint;
 
+  // ONE price source for this process: the terms' USD values and the fee's USD value share its
+  // lookups and its short cache, instead of each making calls of their own against an API that
+  // refuses after about five in ten seconds. The same public source the quote lane uses, so the
+  // USD under an amount here and in the route comparison are the same number from the same place.
+  const prices = createResilientPriceSource(createJupiterPriceSource(opts.fetchImpl ?? fetch));
   const handler = createSwapExecuteHandler({
     quoteEndpoint,
     env,
     fetchImpl: opts.fetchImpl,
     now: opts.now,
-    // The same public price source the quote lane uses, so the USD under an amount here and the
-    // USD in the route comparison above it are the same number from the same place.
-    priceSource: createJupiterPriceSource(opts.fetchImpl ?? fetch),
+    priceSource: prices,
   });
   // The fee on a reverted swap is reported as a charge that already happened, so it is priced
   // from the SAME public source the terms above it were priced with rather than from the
   // conservative constant the quote carried. A failed price simply drops the dollar figure.
-  const feePriceSource = createJupiterPriceSource(opts.fetchImpl ?? fetch);
+  const feePriceSource = prices;
   const checkConfirmation = createConfirmationChecker({
     env,
     solUsdPrice: async () => {

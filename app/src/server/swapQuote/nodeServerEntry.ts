@@ -7,6 +7,7 @@
  */
 import { createSwapQuoteHandler, type SwapQuoteHttpRequest, type SwapQuoteHttpResponse } from "./httpHandler";
 import { createJupiterPriceSource, JUPITER_PRICE_V3_URL } from "./jupiterPriceSource";
+import { createResilientPriceSource } from "./resilientPriceSource";
 import { createRaydiumLiquiditySource, RAYDIUM_POOLS_INFO_URL } from "./raydiumLiquiditySource";
 import { SwapQuoteCache } from "./swapQuoteCache";
 import { nodeEnvReader, detectLeakedSwapEnv, type EnvReader } from "./providerConfig";
@@ -31,7 +32,9 @@ export function createSwapQuoteRequestHandler(deps: NodeServerDeps = {}) {
   const cache = new SwapQuoteCache(SWAP_QUOTE_OPERATIONAL_POLICY.cacheDurationMs, deps.now);
   // Approved production sources: Jupiter Price v3 (shared USD snapshot) + Raydium pool-TVL (per-leg liquidity).
   // A server env var may point at an approved mirror; otherwise the canonical public endpoints are used.
-  const priceSource = createJupiterPriceSource(fetchImpl, env("SWAP_PRICE_URL") ?? JUPITER_PRICE_V3_URL);
+  // Shared by every comparison this process runs, so concurrent ones (a Trim's tokens) share
+  // lookups instead of each asking for USDC's price again — see resilientPriceSource.
+  const priceSource = createResilientPriceSource(createJupiterPriceSource(fetchImpl, env("SWAP_PRICE_URL") ?? JUPITER_PRICE_V3_URL));
   const liquiditySource = createRaydiumLiquiditySource(fetchImpl, env("SWAP_LIQUIDITY_URL") ?? RAYDIUM_POOLS_INFO_URL);
   return createSwapQuoteHandler({
     // slippageBps is per-request; the handler injects req.slippageBps into the orchestrator.
