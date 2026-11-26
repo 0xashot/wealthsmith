@@ -18,6 +18,8 @@ export interface TrimTokenRow {
   symbol: string;
   /** The token-icon registry key from the review's asset row; null → the fallback mark. */
   icon: string | null;
+  /** A verified listing's remote icon, for a token with no registry icon; null otherwise. */
+  iconUrl: string | null;
   valueUsd: number | null;
   /** The leg, when the engine built one. Absent for a token that cannot be moved at all. */
   leg: SwapActionContext | null;
@@ -63,6 +65,7 @@ export function deriveTrimRows(input: {
       key: leg.legId,
       symbol: leg.inputAsset.symbol,
       icon: assetFor(leg)?.icon ?? null,
+      iconUrl: assetFor(leg)?.iconUrl ?? null,
       valueUsd: leg.inputAmountUsd,
       leg,
       sellable,
@@ -82,6 +85,7 @@ export function deriveTrimRows(input: {
       key: `asset:${a.mint ?? a.symbol}`,
       symbol: a.symbol,
       icon: a.icon ?? null,
+      iconUrl: a.iconUrl ?? null,
       valueUsd: typeof a.valueUsd === "number" ? a.valueUsd : null,
       leg: null,
       sellable: false,

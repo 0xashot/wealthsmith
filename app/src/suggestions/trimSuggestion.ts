@@ -87,7 +87,7 @@ export function buildTrimCardFromAssessment(assessment: TrimAssessment, generate
       role: "long_tail_asset" as const,
       // Portfolio-style identity: read-only Solscan link by mint + approved token icon when one exists.
       ...(h.mint ? { mint: h.mint } : {}),
-      ...(h.mint && TOKEN_REGISTRY[h.mint]?.icon ? { icon: TOKEN_REGISTRY[h.mint]!.icon as string } : {}),
+      ...(h.mint && TOKEN_REGISTRY[h.mint]?.icon ? { icon: TOKEN_REGISTRY[h.mint]!.icon as string } : h.iconUrl ? { iconUrl: h.iconUrl } : {}),
       ...(holdingShare !== undefined ? { portfolioSharePct: holdingShare } : {}),
       actionability: h.actionabilityState === "unavailable" ? "unavailable" : h.actionabilityState === "unresolved" ? "unresolved" : "transferable",
       reasonCategory: isConc ? "concentrated" : isSmall ? "small_position" : "part_of_aggregate_exposure",

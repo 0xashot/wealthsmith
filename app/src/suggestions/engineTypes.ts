@@ -367,6 +367,11 @@ export interface ReviewAsset {
    */
   icon?: string;
   mint?: string;
+  /**
+   * A remote icon (allow-listed https host) for a token with no approved one — a verified meme
+   * listing in a Trim review. Used only when `icon` is absent; falls back to the neutral mark.
+   */
+  iconUrl?: string;
 }
 
 export type ReviewPositionRole =

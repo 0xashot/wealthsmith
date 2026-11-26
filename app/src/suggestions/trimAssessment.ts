@@ -20,6 +20,7 @@ import { classifyPositionClass, type PortfolioCompletenessResult, computePortfol
 import { resolveAssetOwner } from "./productAssetOwnership";
 import { computeSafetyBufferCoverage, type SafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
 import { derivePortfolioAssetAccounting } from "../wallet/portfolioAssetAccounting";
+import { verifiedMemeIdentity } from "../wallet/verifiedMemeIdentity";
 import {
   MIN_TRIM_SUGGESTION_USD,
   TRIM_PORTFOLIO_SHARE_THRESHOLD,
@@ -89,6 +90,10 @@ export interface TrimTokenHolding {
   tokenProgram: string;
   symbol: string;
   name: string;
+  /** Present only when the identity came from a verified meme listing rather than the registry. */
+  identitySource?: "verified_meme_listing";
+  /** That listing's remote icon (allow-listed https host), or null. Absent for registry tokens. */
+  iconUrl?: string | null;
   decimals: number | null;
   rawBalance: string; // exact integer lamports/base units (BigInt-summed → string)
   uiAmount: number | null;
@@ -226,7 +231,11 @@ export function deriveTrimAssessment(input: TrimInput): TrimAssessment {
     // Per-position completeness (first row is representative for identity/freshness/dedupe of the mint).
     const ca = completenessFor(completeness, first.id);
     const stale = ca?.freshnessState === "stale";
-    const identityUnresolved = ca?.identityState === "unresolved" || cls === "unknown_token" || first.name === "Unknown token" || !mint;
+    // A token the registry cannot name is unresolved — UNLESS Jupiter has verified that exact mint and
+    // tags it a meme coin (wallet/verifiedMemeIdentity.ts: the one recorded exception, which the
+    // completeness classification applies too). Its own name is still "Unknown token".
+    const listed = verifiedMemeIdentity(first);
+    const identityUnresolved = !mint || (listed == null && (ca?.identityState === "unresolved" || cls === "unknown_token" || first.name === "Unknown token"));
     const dedupeInvalid = ca?.dedupeState === "invalid";
 
     // Transferability → actionability (review eligibility is separate; §7). Classic SPL is transferable;
@@ -263,8 +272,10 @@ export function deriveTrimAssessment(input: TrimInput): TrimAssessment {
       assetId: core?.assetId ?? mint,
       mint,
       tokenProgram: program,
-      symbol: first.symbol,
-      name: first.name ?? first.symbol,
+      // What Trim CALLS the holding: the verified listing's ticker and name when that is its identity.
+      symbol: listed?.symbol ?? first.symbol,
+      name: listed?.name ?? first.name ?? first.symbol,
+      ...(listed ? { identitySource: "verified_meme_listing" as const, iconUrl: listed.iconUrl } : {}),
       decimals: num(first.decimals),
       rawBalance,
       uiAmount,

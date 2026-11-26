@@ -100,6 +100,26 @@ export interface TrimFlowSectionProps {
 type Stage = "review" | "select" | "run" | "summary";
 const iconUrlFor = (icon: string | null): string => (icon ? resolveTokenIcon(icon).url : fallbackTokenUrl);
 
+/**
+ * A row's icon: the approved one when the token has it; otherwise a verified listing's remote
+ * image, loaded with no referrer and replaced by the neutral mark if it fails.
+ */
+function TrimRowIcon({ icon, iconUrl }: { icon: string | null; iconUrl: string | null }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const remote = icon == null && iconUrl != null && failedUrl !== iconUrl ? iconUrl : null;
+  return (
+    <img
+      className="trim-row__icon"
+      src={remote ?? iconUrlFor(icon)}
+      referrerPolicy="no-referrer"
+      onError={() => { if (remote) setFailedUrl(remote); }}
+      alt=""
+      width={24}
+      height={24}
+    />
+  );
+}
+
 export default function TrimFlowSection(props: TrimFlowSectionProps) {
   const { legs, plan, assets, onClose, onStepChange } = props;
   const [stage, setStage] = useState<Stage>("review");
@@ -254,7 +274,7 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
                     disabled={!r.sellable}
                     onChange={() => toggle(r.key)}
                   />
-                  <img className="trim-row__icon" src={iconUrlFor(r.icon)} alt="" width={24} height={24} />
+                  <TrimRowIcon icon={r.icon} iconUrl={r.iconUrl} />
                   <span className="trim-row__main">
                     <span className="trim-row__symbol">{r.symbol}</span>
                     <span className="trim-row__value">{formatUsd(r.valueUsd)}</span>
@@ -312,7 +332,7 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
         const explorer = st.signature ? solscanTransactionUrl(st.signature) : null;
         return (
           <li key={k} className={`trim-row trim-row--status${k === activeKey ? " trim-row--active" : ""}`}>
-            <img className="trim-row__icon" src={iconUrlFor(r.icon)} alt="" width={24} height={24} />
+            <TrimRowIcon icon={r.icon} iconUrl={r.iconUrl} />
             <span className="trim-row__main">
               <span className="trim-row__symbol">{r.symbol}</span>
               <span className="trim-row__value">{formatUsd(r.valueUsd)}</span>

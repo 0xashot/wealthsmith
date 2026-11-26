@@ -602,12 +602,14 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
                   </thead>
                   <tbody>
                     {involvedAssets.map((a, i) => {
-                      const iconUrl = a.icon ? resolveTokenIcon(a.icon).url : fallbackTokenUrl;
+                      // Approved icon first; else a verified listing's remote one (a Trim of a verified
+                      // meme coin), which falls back to the neutral mark if it fails to load.
+                      const iconUrl = a.icon ? resolveTokenIcon(a.icon).url : a.iconUrl ?? fallbackTokenUrl;
                       const url = a.mint ? `https://solscan.io/token/${a.mint}` : undefined;
                       return (
                         <tr key={`${a.symbol}-${i}`}>
                           <td className="portfolio-table__cell">
-                            <AssetIdentity iconUrl={iconUrl} label={a.symbol} {...(url ? { href: url } : {})} />
+                            <AssetIdentity iconUrl={iconUrl} iconFallbackUrl={fallbackTokenUrl} label={a.symbol} {...(url ? { href: url } : {})} />
                           </td>
                           <td className="portfolio-table__cell portfolio-table__cell--right">
                             <span className="portfolio-table__value">{typeof a.amount === "number" ? amountFmt(a.amount) : "—"}</span>

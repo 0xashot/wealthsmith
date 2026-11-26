@@ -25,6 +25,16 @@ const wsol = (v: number) => w({ id: "wsol", symbol: "SOL", name: "Wrapped SOL", 
 const fakeUsdc = (v: number) => w({ id: "fakeusdc", symbol: "Fake USDC", name: "Fake USDC", mint: "FakeUSDCMint1111", amount: String(v), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
 const t22 = (v: number, state: string, id = "t22") => w({ id, symbol: `TX${id}`, name: `T22 ${id}`, mint: `T22Mint-${id}`, tokenProgram: TOKEN_2022_PROGRAM_ID, transferabilityState: state, amount: String(Math.round(v)), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v, liquidValueUsd: state === "transferable" ? v : 0 });
 const staleTok = (v: number) => w({ id: "st", symbol: "TKst", name: "Stale token", mint: "StaleMint", amount: String(v), uiAmount: v, decimals: 0, priceUsd: 1, valueUsd: v, withdrawalState: "stale" });
+// Tokens the registry cannot name (symbol = shortened address, name "Unknown token"), with and without a
+// verified listing. `meme` is Jupiter's own tag — the one fact about a listing the engine may act on.
+const PENGU = "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv";
+const FARTCOIN = "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump";
+const PYUSD = "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo";
+const JUP_ICON = "https://static.datapi.jup.ag/token-icons/0817b3345e648b1663385bac48eb086877635ee27639c3d5da2a4d9dfd8603b1.webp";
+const unlisted = (v: number, id: string, mint = `Unlisted1111111111111111111111111111${id}`) =>
+  w({ id, symbol: `${mint.slice(0, 4)}…${mint.slice(-4)}`, name: "Unknown token", mint, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
+const listed = (v: number, id: string, mint: string, symbol: string, name: string, meme: boolean, iconUrl: string | null = JUP_ICON) =>
+  ({ ...unlisted(v, id, mint), listing: { symbol, name, iconUrl, meme, source: "jupiter_verified" as const } });
 const unknownTok = () => w({ id: "unk", symbol: "9x", name: "Unknown token", mint: "UnkMint", uiAmount: 5, amount: "5", valueUsd: null });
 const jlusdc = () => w({ id: "jl", type: "protocol", symbol: "USDC", name: "Jupiter Lend USDC", candidateId: "jupiter_lend_usdc", dedupeKey: "jupiter-lend:x", withdrawalState: "unresolved", recognizedValueUsd: null, valueUsd: null, uiAmount: 100, amount: "100000000", mint: USDC });
 const debt = (v: number | null) => w({ id: "hb", type: "protocol", symbol: "USDH", name: "USDH loan", side: "borrowed", valueUsd: v, uiAmount: 1, amount: "1" });
@@ -68,5 +78,11 @@ export function getTrimTestingFixtures(): TrimTestingFixture[] {
     fx("kamino_unresolved", "18. Unrelated protocol liquidity unresolved — card still appears", [usdc(1000), tok(300, "a"), kaminoUnresolved(400)]),
     fx("msol_unresolved", "19. mSOL backing unresolved — card still appears", [usdc(1000), tok(300, "a"), msolUnresolved(260)]),
     fx("buffer_incomplete", "20. Safety Buffer incomplete — no card", [usdc(100), tok(300, "a")], 2000),
+    // Tokens OUTSIDE the approved registry (wallet/verifiedMemeIdentity.ts): only one Jupiter has verified AND
+    // tags a meme coin has an identity. It is then an ordinary non-core token, shown by its listed name and icon.
+    fx("verified_meme", "21. Verified meme coin outside our list — card, with its listed name and icon", [usdc(1000), listed(300, "pengu", PENGU, "PENGU", "Pudgy Penguins", true)]),
+    fx("verified_meme_multi", "22. Two verified meme coins + a registry one — one Trim listing all three", [usdc(3000), listed(260, "pengu", PENGU, "PENGU", "Pudgy Penguins", true), listed(180, "fart", FARTCOIN, "Fartcoin", "Fartcoin", true, null), tok(200, "a")]),
+    fx("verified_not_meme", "23. Verified but not a meme coin (PYUSD) — not a candidate; its value is unverified, so no card", [usdc(1000), tok(300, "a"), listed(300, "pyusd", PYUSD, "PYUSD", "PayPal USD", false)]),
+    fx("unverified_beside_meme", "24. Verified meme coin beside an unverified token — no card (the unverified value blocks the portfolio)", [usdc(1000), listed(300, "pengu", PENGU, "PENGU", "Pudgy Penguins", true), unlisted(40, "spam")]),
   ];
 }

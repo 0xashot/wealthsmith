@@ -27,6 +27,12 @@ import { sortPositions } from "../../wallet/portfolioPositionDerivation";
 import { deriveAssetAllocation } from "../../wallet/assetAllocation";
 import { groupPositionsByCategory, isStablecoin } from "../../wallet/walletSummary";
 import { formatAmount } from "../../components/deployTable";
+import { VERIFIED_MEME_LISTING_IS_IDENTITY, verifiedMemeIdentity } from "../../wallet/verifiedMemeIdentity";
+import { computePortfolioCompleteness } from "../../wallet/portfolioCompleteness";
+import { deriveTrimAssessment } from "../trimAssessment";
+import { buildTrimCardFromAssessment } from "../trimSuggestion";
+import { deriveTrimRows } from "../swapExecution/trimFlow";
+import { getTrimTestingFixtures } from "../../pages/trimTestingFixtures";
 import type { FixtureCheck } from "./fixtureCheck";
 
 const PYUSD = "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo";
@@ -46,7 +52,9 @@ const usdcPos: WalletPosition = {
   id: `mint-${USDC}`, source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: USDC, icon: "assets/icons/token/usdc.svg",
   amount: "2491201", uiAmount: 2.491201, decimals: 6, detection: "direct_wallet_balance", valueUsd: 2.49, apy: null,
 };
-const PYUSD_LISTING: TokenListing = { symbol: "PYUSD", name: "PayPal USD", iconUrl: JUP_ICON, source: "jupiter_verified" };
+const PYUSD_LISTING: TokenListing = { symbol: "PYUSD", name: "PayPal USD", iconUrl: JUP_ICON, meme: false, source: "jupiter_verified" };
+const PENGU = "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv";
+const PENGU_LISTING: TokenListing = { symbol: "PENGU", name: "Pudgy Penguins", iconUrl: JUP_ICON, meme: true, source: "jupiter_verified" };
 
 /** A stubbed lookup endpoint that records what it was asked. */
 function endpoint(answer: (mints: string[]) => unknown, o: { ok?: boolean; throws?: boolean } = {}) {
@@ -77,7 +85,7 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
   // ---- 1. what may become a listing ------------------------------------------------------
   add("TL-1: a mint Jupiter has verified becomes a listing — its ticker, name and icon", (() => {
     const l = sanitizeTokenListing(row(), PYUSD);
-    return l != null && l.symbol === "PYUSD" && l.name === "PayPal USD" && l.iconUrl === JUP_ICON && l.source === "jupiter_verified";
+    return l != null && l.symbol === "PYUSD" && l.name === "PayPal USD" && l.iconUrl === JUP_ICON && l.source === "jupiter_verified" && l.meme === false;
   })(), "verified → listing");
 
   add("TL-2: not verified, verified-looking, or a row for another mint → no listing", (() => {
@@ -221,12 +229,21 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
       !b.segments.some((s) => s.label === shortMint(PYUSD)) && b.segments.some((s) => s.label === shortMint(PUMP));
   })(), "same slices, new label");
 
-  add("TL-15: nothing under suggestions/ reads a listing — the engine cannot depend on one by accident", (() => {
-    const root = join(process.cwd(), "src/suggestions");
-    const offenders = sourceFiles(root)
-      .filter((f) => !/[\\/]fixtures[\\/]|[Ff]ixtures\.ts$|ownerTest/.test(f))
-      .filter((f) => /\.listing\b|positionDisplaySymbol|positionDisplayName|tokenListings/.test(readFileSync(f, "utf8")));
-    return offenders.length === 0;
+  add("TL-15: the engine reads a listing in exactly one module, and exactly two files use that module", (() => {
+    const src = join(process.cwd(), "src");
+    const engine = [...sourceFiles(join(src, "suggestions")), ...sourceFiles(join(src, "wallet"))]
+      .filter((f) => !/[\\/]fixtures[\\/]|[Ff]ixtures\.ts$|ownerTest/.test(f));
+    const rel = (f: string) => f.slice(src.length + 1).replace(/\\/g, "/");
+    const matching = (re: RegExp) => engine.filter((f) => re.test(readFileSync(f, "utf8"))).map(rel).sort();
+    // `.listing` appears in: the module that attaches it, the two display helpers' home, the chart label,
+    // and the one identity module. Nowhere under suggestions/.
+    const readers = matching(/\.listing\b/);
+    // The identity module is used by completeness (the value counts) and Trim (it is a candidate) — nothing else.
+    const users = matching(/verifiedMemeIdentity\(/).filter((f) => f !== "wallet/verifiedMemeIdentity.ts");
+    const display = matching(/positionDisplaySymbol|positionDisplayName/).filter((f) => f.startsWith("suggestions/"));
+    return JSON.stringify(readers) === JSON.stringify(["wallet/assetAllocation.ts", "wallet/tokenListings.ts", "wallet/verifiedMemeIdentity.ts", "wallet/walletPosition.ts"]) &&
+      JSON.stringify(users) === JSON.stringify(["suggestions/trimAssessment.ts", "wallet/portfolioCompleteness.ts"]) &&
+      display.length === 0;
   })(), "static");
 
   {
@@ -249,6 +266,80 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
     const safeImage = /referrerPolicy="no-referrer"/.test(identity) && /onError=\{\(\) => \{ if \(!failed && iconUrl\) setFailedUrl\(iconUrl\); \}\}/.test(identity);
     return last && shown && safeImage;
   })(), "wiring");
+
+  // ---- 4. the one exception: a verified MEME coin has an identity --------------------------
+  add("TL-18: 'meme' is Jupiter's own tag, read exactly — anything else is not a meme", (() => {
+    const meme = (tags: unknown) => sanitizeTokenListing(row({ tags }), PYUSD)?.meme;
+    return meme(["verified", "community", "meme"]) === true &&
+      [["verified", "defi"], [], undefined, null, "meme", ["Meme"], ["memes"], [["meme"]], { meme: true }].every((t) => meme(t) === false);
+  })(), "exact tag");
+
+  const memePos = unnamed(PENGU, 300, { listing: PENGU_LISTING, priceUsd: 1, uiAmount: 300, amount: "300000000" });
+  add("TL-19: only an unnamed direct-wallet token whose listing is verified AND tagged meme has that identity", (() => {
+    const id = verifiedMemeIdentity(memePos);
+    const none = [
+      unnamed(PYUSD, 300, { listing: PYUSD_LISTING }),                                   // verified, not a meme
+      unnamed(PENGU, 300),                                                              // no listing
+      unnamed(PENGU, 300, { listing: { symbol: "PENGU", name: "Pudgy Penguins", iconUrl: null, source: "jupiter_verified" } }), // an older snapshot, no tag
+      unnamed(PENGU, 300, { listing: { ...PENGU_LISTING, meme: "true" as unknown as boolean } }),
+      { ...usdcPos, listing: PENGU_LISTING },                                           // a registry token is never re-identified
+      { ...memePos, type: "protocol" as const },
+      { ...memePos, source: "kamino" as const },
+      { ...memePos, mint: undefined },
+    ];
+    return VERIFIED_MEME_LISTING_IS_IDENTITY === true && id != null && id.symbol === "PENGU" && id.name === "Pudgy Penguins" && id.iconUrl === JUP_ICON &&
+      none.every((p) => verifiedMemeIdentity(p as WalletPosition) === null);
+  })(), "verified + meme, nothing else");
+
+  add("TL-20: its value counts — it is an ordinary token to completeness, where any other unnamed token leaves net worth unresolved", (() => {
+    const usdc1000: WalletPosition = { ...usdcPos, amount: "1000000000", uiAmount: 1000, priceUsd: 1, valueUsd: 1000 };
+    const withMeme = computePortfolioCompleteness([usdc1000, memePos], { requiredBufferUsd: 500 });
+    const withNonMeme = computePortfolioCompleteness([usdc1000, unnamed(PYUSD, 300, { listing: PYUSD_LISTING })], { requiredBufferUsd: 500 });
+    const withUnlisted = computePortfolioCompleteness([usdc1000, unnamed(PUMP, 300)], { requiredBufferUsd: 500 });
+    return classifyPositionClass(memePos) === "classic_spl" && isStablecoin(memePos) === false &&
+      memePos.symbol === shortMint(PENGU) && memePos.name === "Unknown token" &&
+      withMeme.netWorthState === "complete" && withMeme.hasUnknownMagnitudeValue === false &&
+      withNonMeme.netWorthState === "unresolved" && withNonMeme.hasUnknownMagnitudeValue === true &&
+      withUnlisted.netWorthState === "unresolved";
+  })(), "counted; others still block");
+
+  const trimOf = (positions: WalletPosition[]) => {
+    const assessment = deriveTrimAssessment({ positions, requiredBufferUsd: 500, generatedAt: 1_700_000_000_000 });
+    return { assessment, card: buildTrimCardFromAssessment(assessment, 1_700_000_000_000) };
+  };
+  const usdc1000: WalletPosition = { ...usdcPos, amount: "1000000000", uiAmount: 1000, priceUsd: 1, valueUsd: 1000 };
+  add("TL-21: a verified meme coin is a Trim candidate, named and pictured by its listing", (() => {
+    const { assessment, card } = trimOf([usdc1000, memePos]);
+    const h = assessment.candidateHoldings[0];
+    const asset = card?.reviewDetails?.involvedAssets?.[0];
+    return assessment.candidateHoldings.length === 1 && h.mint === PENGU && h.symbol === "PENGU" && h.name === "Pudgy Penguins" &&
+      h.identitySource === "verified_meme_listing" && h.identityState === "resolved" && h.reviewEligibilityState === "eligible" &&
+      card != null && card.titleOverride === "Reduce PENGU exposure" &&
+      asset?.symbol === "PENGU" && asset.mint === PENGU && asset.iconUrl === JUP_ICON && asset.icon === undefined;
+  })(), "candidate + card");
+
+  add("TL-22: verified-but-not-meme, unverified and untagged tokens are not candidates — and no card is made", (() => {
+    const cases = [
+      unnamed(PYUSD, 300, { listing: PYUSD_LISTING }),
+      unnamed(PUMP, 300),
+      unnamed(PENGU, 300, { listing: { symbol: "PENGU", name: "Pudgy Penguins", iconUrl: null, source: "jupiter_verified" } }),
+    ];
+    return cases.every((p) => {
+      const { assessment, card } = trimOf([usdc1000, p]);
+      return assessment.candidateHoldings.length === 0 && card === null;
+    });
+  })(), "no identity → no Trim");
+
+  add("TL-23: the Trim rows and the gallery carry the listed icon; a registry token keeps its own", (() => {
+    const { card } = trimOf([{ ...usdc1000, valueUsd: 3000, uiAmount: 3000, amount: "3000000000" }, memePos]);
+    const assets = card?.reviewDetails?.involvedAssets ?? [];
+    const rows = deriveTrimRows({ legs: [], assessments: {}, assets: assets.map((a) => ({ ...a, actionability: "unavailable" as const })), nowMs: 0 });
+    const gallery = getTrimTestingFixtures();
+    const byId = (id: string) => gallery.find((f) => f.id === id);
+    return rows.length === 1 && rows[0].symbol === "PENGU" && rows[0].iconUrl === JUP_ICON && rows[0].icon === null &&
+      byId("verified_meme")?.card != null && byId("verified_meme_multi")?.card?.reviewDetails?.involvedAssets?.length === 3 &&
+      byId("verified_not_meme")?.card === null && byId("unverified_beside_meme")?.card === null;
+  })(), "icons + gallery");
 
   return checks;
 }

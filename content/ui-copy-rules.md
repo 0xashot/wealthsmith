@@ -1161,6 +1161,23 @@ The total is the sum of what the chain says arrived, never the estimates. If an
 amount could not be read, the summary says how many tokens were swapped and gives
 no figure.
 
+### Verified meme coins are Trim candidates
+
+Decided 2026-11-26. A token outside the approved list has an identity — and is a
+Trim candidate — when Jupiter has verified that exact mint **and** Jupiter itself
+tags it a meme coin. It is then treated the way the approved list's own meme
+coins (BONK, WIF) are: an ordinary, priced, non-core wallet token, named and
+pictured by its listing in the Trim card, review and selector.
+
+  - Not candidates: verified tokens that are not tagged meme (utility and DeFi
+    tokens, tokenized stocks, stablecoins such as PYUSD, staking tokens);
+    anything unverified; JUP, which belongs to JUP staking.
+  - "Almost all" meme coins, not all: a meme coin Jupiter has not tagged is not
+    listed.
+  - Still true, and unchanged: one token whose value cannot be verified — any
+    other token outside the approved list, priced or not — leaves the portfolio's
+    net worth unresolved, and Trim (like Rebalance) is not shown at all.
+
 ### After a swap lands
 
 A suggestion whose swap landed is out of date the moment it lands. When its review
@@ -1192,7 +1209,7 @@ icon Jupiter lists instead. This is a display name only:
   - the position's own symbol and name are not replaced, so the engine counts,
     classifies and suggests exactly as before — a listed "PayPal USD" is not a
     stablecoin to the Safety Buffer, and is not a Trim candidate, because of its
-    listing;
+    listing (one exception follows);
   - a listing may never carry a ticker the app already uses for an approved asset
     (a second "USDC" keeps its address);
   - tickers and names are plain text only — no emoji, look-alike letters or

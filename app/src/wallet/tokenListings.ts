@@ -8,12 +8,17 @@
  * This looks the mint up in Jupiter's VERIFIED token list and, when Jupiter has verified that
  * exact mint, attaches the symbol, name and icon it lists as `position.listing`.
  *
+ * ONE EXCEPTION, decided by the product owner on 2026-11-26: a verified listing that Jupiter
+ * itself tags `meme` gives the token an identity: its value counts and it is a Trim candidate.
+ * That lives in exactly one module, wallet/verifiedMemeIdentity.ts — the only place the engine
+ * may read a listing.
+ *
  * WHAT THIS IS NOT. It does not rename the position. `symbol` stays the shortened address and
  * `name` stays "Unknown token", because the engine reads both as identity: liquidity-pool
  * detection, receipt-token dedupe, portfolio completeness and Trim's eligibility all key on
  * them. A listing changes what a row is CALLED on screen and nothing about how it is counted,
- * classified or suggested. Nothing in `suggestions/` may read `listing` without an explicit,
- * recorded decision to let a verified listing stand in for an approved identity.
+ * classified or suggested, with the one exception above. Nothing else in `suggestions/` may
+ * read `listing` without an explicit, recorded decision of the same kind.
  *
  * READ-ONLY and best-effort: one public HTTP GET per wallet read at most, cached per mint. Any
  * failure — timeout, bad status, malformed body — yields no listings, and every row keeps its
@@ -28,6 +33,13 @@ export interface TokenListing {
   name: string;
   /** An https icon on an allow-listed host, or null (the generic icon is used). */
   iconUrl: string | null;
+  /**
+   * Jupiter's own `meme` tag for this mint. The ONE fact about a listing the engine is allowed
+   * to act on, and only in one place: a verified meme coin outside the registry is a Trim
+   * candidate and its value counts (wallet/verifiedMemeIdentity.ts, decided 2026-11-26).
+   * Everything else about a listing stays display-only.
+   */
+  meme: boolean;
   source: "jupiter_verified";
 }
 
@@ -104,7 +116,9 @@ export function sanitizeTokenListing(raw: unknown, mint: string): TokenListing |
   const rawName = cleanText(r.name);
   if (rawName == null) return null;
   const name = rawName.length > NAME_MAX ? `${rawName.slice(0, NAME_MAX - 1).trimEnd()}…` : rawName;
-  return { symbol, name, iconUrl: cleanIconUrl(r.icon), source: "jupiter_verified" };
+  // Exactly the tag, exactly as a string in an array — a missing or malformed `tags` is "not a meme".
+  const meme = Array.isArray(r.tags) && r.tags.includes("meme");
+  return { symbol, name, iconUrl: cleanIconUrl(r.icon), meme, source: "jupiter_verified" };
 }
 
 export interface TokenListingSource {

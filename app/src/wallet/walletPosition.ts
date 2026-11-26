@@ -51,7 +51,7 @@ export interface WalletPosition {
    * position is counted, classified or suggested. Read it through `positionDisplaySymbol` /
    * `positionDisplayName` on screens that name the row.
    */
-  listing?: { symbol: string; name: string; iconUrl: string | null; source: "jupiter_verified" };
+  listing?: { symbol: string; name: string; iconUrl: string | null; meme?: boolean; source: "jupiter_verified" };
   protocol?: string;
   detection:
     | "direct_wallet_balance"

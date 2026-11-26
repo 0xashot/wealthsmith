@@ -15,6 +15,7 @@ import type { WalletPosition } from "./walletPosition";
 import { computeSafetyBufferCoverage, type SafetyBufferCoverage } from "./safetyBufferCoverage";
 import { SUPPORTED_LSTS, isSupportedLstMint } from "./lstUnderlyingNormalization";
 import { isStablecoin } from "./walletSummary";
+import { verifiedMemeIdentity } from "./verifiedMemeIdentity";
 
 export const PORTFOLIO_COMPLETENESS_VERSION = "1.0.0" as const;
 const MSOL_MINT = SUPPORTED_LSTS.msol.mint;
@@ -106,7 +107,9 @@ export function classifyPositionClass(p: WalletPosition): PositionClass {
     return "protocol_other";
   }
   if (p.type === "token") {
-    if (p.name === "Unknown token") return "unknown_token";
+    // A token the registry cannot name is unknown — unless Jupiter has verified that exact mint and tags
+    // it a meme coin (verifiedMemeIdentity.ts). That one is an ordinary token: its sourced value counts.
+    if (p.name === "Unknown token" && verifiedMemeIdentity(p) == null) return "unknown_token";
     if (typeof p.tokenProgram === "string" && p.tokenProgram === "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") return "token_2022";
     if (typeof p.transferabilityState === "string") return "token_2022";
     return isStablecoin(p) ? "stablecoin" : "classic_spl";
