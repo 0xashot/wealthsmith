@@ -56,6 +56,16 @@ export const COMPARISON_STATUSES_ALLOWING_EXECUTION: ReadonlySet<string> = new S
  */
 export const MIN_ELIGIBLE_FOR_COMPARISON = 2;
 
+/**
+ * Comparison outcomes that may carry a confirm step when a SINGLE surviving route is permitted
+ * (see `allowSingleRoute`). `only_route_available` joins the list; nothing else does.
+ */
+export const SINGLE_ROUTE_STATUSES_ALLOWING_EXECUTION: ReadonlySet<string> = new Set([
+  "selected",
+  "partial_comparison",
+  "only_route_available",
+]);
+
 export interface ExecutionEligibilityInput {
   assessment: SwapQuoteComparisonAssessment;
   /** From Protocol Logic. Anything other than `in_app_confirm` is a handoff — including absent. */
@@ -63,6 +73,21 @@ export interface ExecutionEligibilityInput {
   /** Legs in the whole action. The Boundary allows one transaction doing one thing. */
   totalLegs: number;
   nowMs: number;
+  /**
+   * Permit a route that is the ONLY eligible one — no second quote to compare it with.
+   *
+   * Off by default, and off for every swap between assets with deep, widely quoted markets:
+   * there, a lone quote means providers were down, and "this is the best route" would be a
+   * claim nothing verified.
+   *
+   * On for Trim (decided 2026-11-26). Trim SELLS long-tail tokens the user already holds, and
+   * for those a single route is the normal case, not an outage: in a probe of eleven real
+   * tokens the aggregator was the only acceptable route for five. Refusing them would leave
+   * Trim working for a handful of large tokens. Every other check still applies — price
+   * impact, total cost, complete terms, the simulation and the on-chain minimum — and the
+   * review states that no second route was available to compare.
+   */
+  allowSingleRoute?: boolean;
 }
 
 export interface ExecutionEligibility {
@@ -116,10 +141,16 @@ export function deriveExecutionEligibility(input: ExecutionEligibilityInput): Ex
   //    What this does concede: with a provider unavailable we cannot know whether IT would have
   //    been cheaper. That is true of any absent provider, and the user is shown which ones were
   //    actually compared.
-  const comparedWithWinner =
-    COMPARISON_STATUSES_ALLOWING_EXECUTION.has(assessment.status) &&
-    assessment.selectedProviderId != null &&
-    assessment.candidates.filter((c) => c.eligible).length >= MIN_ELIGIBLE_FOR_COMPARISON;
+  const eligibleCount = assessment.candidates.filter((c) => c.eligible).length;
+  const comparedWithWinner = input.allowSingleRoute === true
+    // A lone eligible route, where the caller's policy permits one. Still a SELECTED route:
+    // the comparison ran, and this is what survived it.
+    ? SINGLE_ROUTE_STATUSES_ALLOWING_EXECUTION.has(assessment.status) &&
+      assessment.selectedProviderId != null &&
+      eligibleCount >= 1
+    : COMPARISON_STATUSES_ALLOWING_EXECUTION.has(assessment.status) &&
+      assessment.selectedProviderId != null &&
+      eligibleCount >= MIN_ELIGIBLE_FOR_COMPARISON;
   const selected = comparedWithWinner
     ? assessment.candidates.find((c) => c.providerId === assessment.selectedProviderId) ?? null
     : null;

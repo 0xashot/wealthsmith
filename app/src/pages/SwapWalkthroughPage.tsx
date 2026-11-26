@@ -34,7 +34,7 @@
 import { useMemo, useRef, useState } from "react";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import ToastHost, { type ToastData } from "../components/ToastHost";
-import { END_TO_END_SCENARIOS } from "./endToEndTestingFixtures";
+import { END_TO_END_SCENARIOS, buildTrimWalkthroughRail, WIF_MINT, MOBY_MINT } from "./endToEndTestingFixtures";
 import { DEMO_OUTCOMES } from "../suggestions/swapExecution/demoOutcomes";
 import { SWAP_CONFIRM_EXPIRED_TOAST } from "../state/approvedCopy";
 import { SwapExecutionSeamContext } from "../components/swapExecution/swapExecutionSeam";
@@ -43,6 +43,7 @@ import {
   noRouteQuoteFetcher,
   shortLivedFirstQuoteFetcher,
   slowedQuoteFetcher,
+  trimSimQuoteFetcher,
   simWait,
   SIM_RECONNECT_DELAY_MS,
 } from "./swapLiveSimulation";
@@ -55,6 +56,10 @@ const SIMULATIONS = [
   { key: "route-returns", label: "Route returns", note: "No route when the review opens. Press Check Again: this time one is found, the banner goes, and the review shows the route with Cancel and Swap." },
   { key: "no-wallet", label: "After a refresh", note: "Signed in, but the wallet link is gone — what every page refresh leaves behind. Swap is a normal button: pressing it reopens the link, spinning in place, and carries on to the terms." },
   { key: "wallet-declined", label: "Reconnect declined", note: "Same start, but the wallet declines the first request. Swap is replaced by Reconnect Wallet; press it and the link opens, and Swap returns." },
+  { key: "trim", label: "Trim: three tokens", note: "A Trim naming three tokens. Press Trim: the selector ticks the two that can be sold (WIF has one route only, and says so) and shows why MOBY cannot. Trim 2 Tokens runs them one at a time — terms, approval, result — and ends on a summary." },
+  { key: "trim-fail", label: "Trim: one fails", note: "Same Trim, but WIF's swap cannot be prepared the first time. The run carries on, the summary says which token failed, and Try Again runs only that one." },
+  { key: "trim-decline", label: "Trim: one declined", note: "Same Trim, but the wallet declines WIF's approval. BONK stays swapped; the summary says WIF was canceled and offers Try Again." },
+  { key: "trim-single", label: "Trim: one token", note: "A Trim naming a single token. No selector: Trim goes straight to that token's terms." },
   { key: "wallet-unknown", label: "No wallet known", note: "No wallet is known to reconnect to. Swap is replaced by Connect Wallet, which closes the review and opens the app's Connect Wallet dialog. A moment later a wallet is 'connected' and the same review reopens, now with Swap." },
 ] as const;
 type SimulationKey = (typeof SIMULATIONS)[number]["key"];
@@ -82,10 +87,20 @@ export default function SwapWalkthroughPage() {
   const simulation = SIMULATIONS.find((x) => x.key === simKey) ?? null;
 
   // The scenario already carries the offline demo fetcher; the live client is never used here.
-  const baseRail = useMemo(() => CRYPTO_HEAVY?.rail ?? null, []);
+  const isTrimSim = simulation != null && simulation.key.startsWith("trim");
+  const baseRail = useMemo(
+    () => (isTrimSim ? buildTrimWalkthroughRail(simulation?.key === "trim-single" ? "one" : "three") : CRYPTO_HEAVY?.rail ?? null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isTrimSim, simulation?.key],
+  );
+  // The offline quote source: the scenario's own, or — for a Trim — pretend quotes per token.
+  const innerFetcher = useMemo(
+    () => (isTrimSim ? trimSimQuoteFetcher({ singleRoute: [WIF_MINT], blocked: [MOBY_MINT] }) : baseRail?.swapQuoteFetcher),
+    [isTrimSim, baseRail],
+  );
   // In a simulation the same offline quotes arrive after a realistic delay, shaped per variant.
   const simParts = useMemo(() => {
-    const inner = baseRail?.swapQuoteFetcher;
+    const inner = innerFetcher;
     if (simulation == null || baseRail == null || inner == null) return null;
     const variant: SimulationKey = simulation.key;
     const shaped =
@@ -94,7 +109,7 @@ export default function SwapWalkthroughPage() {
           : variant === "route-returns" ? noRouteQuoteFetcher(inner, 2)
             : inner;
     return { rail: { ...baseRail, swapQuoteFetcher: slowedQuoteFetcher(shaped) } };
-  }, [baseRail, simulation]);
+  }, [baseRail, simulation, innerFetcher]);
   const rail = simParts?.rail ?? baseRail;
 
   // The pretend wallet link. It starts closed in the wallet variants and is opened by the
@@ -104,10 +119,12 @@ export default function SwapWalkthroughPage() {
   const [walletLinked, setWalletLinked] = useState(false);
   const reconnectAttempts = useRef(0);
   const seam = useMemo(() => {
-    const inner = baseRail?.swapQuoteFetcher;
+    const inner = innerFetcher;
     if (simulation == null || inner == null) return null;
     const variant: SimulationKey = simulation.key;
     return buildLiveSimulationSeam({
+      failPlanOnce: variant === "trim-fail" ? [WIF_MINT] : undefined,
+      declineOnce: variant === "trim-decline" ? [WIF_MINT] : undefined,
       // The plan's terms come from the UNSHAPED quotes: a simulated plan service always answers.
       quoteFetcher: inner,
       walletConnected: !startsUnlinked || walletLinked,
@@ -120,7 +137,7 @@ export default function SwapWalkthroughPage() {
         return true;
       },
     });
-  }, [baseRail, simulation, startsUnlinked, walletLinked]);
+  }, [innerFetcher, simulation, startsUnlinked, walletLinked]);
 
   if (rail == null) {
     return <p className="modal__intro">The e2e-crypto-heavy scenario is missing — it was renamed or removed.</p>;

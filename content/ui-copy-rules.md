@@ -1068,6 +1068,88 @@ more than that still wins on its price, whoever provides it.
 These rules cover the REVIEW. The confirm step's own failure screens are
 governed below; none of them links out to a provider either — see "Refusals".
 
+### Trim: choose tokens, then one at a time
+
+Decided 2026-11-26. A Trim sells long-tail tokens for USDC, and each token is its
+own transaction. The review's button is **Trim**, not Swap.
+
+```text
+One token      [Cancel] [Trim]  → that token's terms → approval
+Several        [Cancel] [Trim]  → Select Tokens to Trim → one token at a time → summary
+```
+
+Hard Rules:
+
+```text
+One approval is one transaction. Tokens are never batched and nothing is signed
+unseen: each token shows its own terms and gets its own approval in the user's
+wallet. The flow moves to the next token by itself after each result.
+
+Any token may be sold if THAT sale passes the checks — there is no approved
+list. A token that fails stays in the selector, unticked and disabled, with its
+reason. It is never hidden, so the total above still adds up.
+
+A reason is about this sale, never a verdict on the token: "Price impact is too
+high for this amount", not "illiquid" or "risky".
+
+A token with only one eligible route may be sold (Trim only). The selector says
+so underneath: "Where only one route was available, WealthSmith could not verify
+that it was the lowest-cost option."
+
+A failure does not stop the others. Cancel does: tokens already swapped stay
+swapped, and the summary says exactly which.
+
+"Trim Completed" only when every chosen token was swapped. Otherwise "Trim Partly
+Completed" or "Nothing Was Trimmed".
+
+Try Again never includes a swap that was sent and not confirmed — it may still
+land, and a second swap beside it could execute both — and never one whose
+verification was refused.
+
+WealthSmith is never the actor: the user picks the tokens and approves each one.
+```
+
+Selector:
+
+```text
+Select Tokens to Trim
+Each token is swapped to USDC in its own transaction. You approve them one at a time.
+
+☑ BONK   $1,200.00                          ~1,199.16 USDC
+☑ WIF      $800.00                            ~799.44 USDC
+☐ MOBY     $300.00      Price impact is too high for this amount
+
+                                            [Cancel] [Trim 2 Tokens]
+```
+
+Reasons a token cannot be ticked:
+
+```text
+Price impact is too high for this amount
+Swap cost is too high for this amount
+No swap route available
+This token can’t be transferred
+Can’t be swapped right now            (anything else)
+```
+
+While it runs, the step is titled "Review Swap · 1 of 2" and each token's row
+shows where it stands: Waiting, In progress, "Received 1,199.16 USDC", or the
+name of what went wrong (the same title its full screen uses, e.g. "Couldn’t
+Prepare Your Swap", "Swap Canceled"). A decline is the user's own choice and is
+not drawn as an error.
+
+Summary:
+
+```text
+Trim Completed            You received 1,998.60 USDC from 2 of 2 tokens.      [Done]
+Trim Partly Completed     You received 1,199.16 USDC from 1 of 2 tokens.      [Done] [Try Again]
+Nothing Was Trimmed       No token was swapped, and your funds haven’t moved. [Done] [Try Again]
+```
+
+The total is the sum of what the chain says arrived, never the estimates. If an
+amount could not be read, the summary says how many tokens were swapped and gives
+no figure.
+
 ### Terms
 
 Five terms are required before approval, per the Execution Boundary: what is

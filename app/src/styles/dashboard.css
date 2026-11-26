@@ -5835,3 +5835,136 @@ td.vetting-scores-table__date {
 .swap-confirm__transaction a {
   color: var(--color-action-primary-background-default);
 }
+
+/* ---------- Trim: choose tokens, then one at a time (components/trim/TrimFlowSection) ----------
+   A list of token rows used three ways: the selector (a checkbox per row), the run (a status
+   per row, the current one marked), and the summary. One row shape for all three, so a token
+   sits in the same place from the moment it is ticked to the moment it is accounted for. */
+.trim-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-surface-lg);
+  background: var(--color-surface-card);
+}
+.trim-row + .trim-row {
+  border-top: 1px solid var(--color-border-subtle);
+}
+.trim-row__label,
+.trim-row--status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-inline-gap-md);
+  padding: var(--spacing-inline-gap-md) var(--spacing-card-padding-sm);
+  min-width: 0;
+}
+.trim-row__label {
+  cursor: pointer;
+}
+.trim-row--blocked .trim-row__label {
+  cursor: default;
+}
+.trim-row__check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-action-primary-background-default);
+  cursor: inherit;
+}
+.trim-row__check:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-control-focus);
+}
+.trim-row__icon {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+}
+.trim-row__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.trim-row__symbol {
+  color: var(--color-text-primary);
+  font: var(--typography-label-md-font);
+}
+.trim-row__value {
+  color: var(--color-text-secondary);
+  font: var(--typography-body-sm-font);
+  font-variant-numeric: tabular-nums;
+}
+/* What the token would bring, or why it cannot be sold — pushed to the row's right edge. */
+.trim-row__meta {
+  margin-left: auto;
+  min-width: 0;
+  color: var(--color-text-primary);
+  font: var(--typography-body-md-font);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.trim-row__meta--reason {
+  color: var(--color-text-secondary);
+  font: var(--typography-body-sm-font);
+}
+/* A token that cannot be sold stays legible — its reason is the point of the row — while its
+   identity steps back, so the tickable rows read first. */
+.trim-row--blocked .trim-row__icon,
+.trim-row--blocked .trim-row__symbol,
+.trim-row--blocked .trim-row__value {
+  opacity: 0.55;
+}
+.trim-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font: var(--typography-body-sm-font);
+}
+.trim-status--ok { color: var(--color-feedback-success-text-tint); }
+.trim-status--failed { color: var(--color-feedback-danger-text-tint); }
+.trim-status--muted { color: var(--color-text-secondary); }
+.trim-status--active { color: var(--color-text-primary); font-weight: 600; }
+.trim-status__link {
+  color: var(--color-action-tertiary-text-default, var(--color-action-primary-background-default));
+  font: var(--typography-body-sm-font);
+}
+.trim-row--active {
+  background: var(--color-feedback-info-background-tint);
+}
+/* The run's token list sits above the current token's terms and does not scroll away with
+   them: where the run stands should be visible the whole time something is being approved. */
+.review-modal > .trim-progress {
+  flex: none;
+  padding-right: var(--spacing-inline-gap-sm);
+}
+.trim-summary__line {
+  text-align: center;
+}
+.swap-confirm--settled.trim-step .trim-list {
+  align-self: stretch;
+}
+.trim-step .review-modal__primary-action {
+  white-space: nowrap;
+}
+/* Phone width: what the token brings — or why it cannot be sold — moves under the token instead
+   of being squeezed beside it into a column two words wide. */
+@media (max-width: 520px) {
+  .trim-row__label,
+  .trim-row--status {
+    flex-wrap: wrap;
+    row-gap: var(--spacing-stack-gap-xs);
+  }
+  .trim-row__meta {
+    flex: 1 0 100%;
+    margin-left: 0;
+    text-align: left;
+  }
+  .trim-status {
+    align-items: flex-start;
+  }
+}

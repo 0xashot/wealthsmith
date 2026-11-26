@@ -37,7 +37,8 @@ import {
 } from "../swapExecution/executionGuard";
 import { validateExecutionPlan } from "../swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../swapExecution/planResolution";
-import { deriveExecutionOffer, deriveSwapEntry } from "../swapExecution/executionOffer";
+import { deriveExecutionOffer, deriveSwapEntry, SINGLE_ROUTE_EXECUTION_CATEGORIES } from "../swapExecution/executionOffer";
+import { deriveTrimRows, isTrimRetryable, sumTokenStrings } from "../swapExecution/trimFlow";
 import { comparisonSelectedARoute } from "../../components/swapQuote/useSwapQuoteComparison";
 import { SWAP_IN_APP_PROVIDER_IDS } from "../swapQuote/swapQuotePolicy";
 import { presentSwapQuote } from "../swapQuote/quotePresentation";
@@ -97,6 +98,20 @@ import {
   SWAP_CONFIRM_CLOSE_LABEL,
   CONNECT_WALLET_LABEL,
   SWAP_ENTRY_CHECK_AGAIN_LABEL,
+  TRIM_ACTION_LABEL,
+  TRIM_BLOCKED_REASON,
+  TRIM_BLOCKED_REASON_DEFAULT,
+  TRIM_SELECT_INTRO,
+  TRIM_SELECT_TITLE,
+  TRIM_SINGLE_ROUTE_NOTE,
+  TRIM_SUMMARY_ALL_TITLE,
+  TRIM_SUMMARY_NONE_DESC,
+  TRIM_SUMMARY_NONE_TITLE,
+  TRIM_SUMMARY_PENDING_NOTE,
+  TRIM_SUMMARY_SOME_TITLE,
+  trimRunTitle,
+  trimSelectCta,
+  trimSummaryReceived,
   SWAP_ENTRY_CONNECT_LABEL,
   SWAP_ENTRY_RECONNECT_LABEL,
   SWAP_ENTRY_WALLET_TOOLTIP,
@@ -939,7 +954,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // state lives in the Swap button instead.
     const guard = /const awaitingFirstPlan =\s+props\.demo !== true && started && execution\.plan == null && execution\.phase !== "failed";/.test(c);
     const returnsFooter = /if \(!started\) return entryFooter\(\);/.test(c) &&
-      /if \(awaitingFirstPlan\) return <ContinueFooter onClose=\{onClose\} busy onContinue=\{onSwap\} \/>;/.test(c);
+      /if \(awaitingFirstPlan\) return <ContinueFooter onClose=\{onClose\} busy onContinue=\{onSwap\} label=\{continueLabel\} \/>;/.test(c);
     // And the sheet reads its terms from the plan, so "has a plan" and "has terms" cannot drift.
     const termsFromPlan = /terms=\{execution\.plan\?\.terms \?\? null\}/.test(c);
     return guard && returnsFooter && termsFromPlan;
@@ -2483,7 +2498,9 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       /\? <CheckAgainFooter onClose=\{onClose\} onCheckAgain=\{onCheckAgain\} \/>\s*: <CloseFooter onClose=\{onClose\} \/>;/.test(stripped) &&
       !/return null/.test(stripped) &&
       // And neither branch of the component returns null any more.
-      !/return null;/.test(stripComments(section.slice(section.indexOf("export default function SwapExecutionSection"), section.indexOf("function ContinueFooter"))).replace(/if \(demoGaveUp\) return null;/, ""));
+      !/return null;/.test(stripComments(section.slice(section.indexOf("export default function SwapExecutionSection"), section.indexOf("function ContinueFooter"))).replace(/if \(demoGaveUp\) return null;/, "")
+        // …and a step of a sequence that has SETTLED, where the host shows the result and moves on.
+        .replace(/if \(onSettled != null && \(execution\.phase === "confirmed" \|\| execution\.phase === "failed"\)\) return null;/, ""));
   })(), "never empty");
   add("SWXE-22: CHECK AGAIN holds its own wait — the footer does not turn into a spinning Swap while the comparison re-runs", (() => {
     const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
@@ -2552,7 +2569,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const footer = section.slice(section.indexOf("const entryFooter = () => {"), section.indexOf("// DEMO MODE."));
     // After a page refresh the session is signed in and the adapter is not connected. That is
     // the ordinary case, and its footer is the ordinary one: a working Swap that holds the wait.
-    const ordinary = /if \(walletLink\.canReconnect && !walletFailed\) \{\s*return <ContinueFooter onClose=\{onClose\} busy=\{awaitingWallet === "swap"\} onContinue=\{onSwap\} \/>;/.test(footer);
+    const ordinary = /if \(walletLink\.canReconnect && !walletFailed\) \{\s*return <ContinueFooter onClose=\{onClose\} busy=\{awaitingWallet === "swap" \|\| props\.autoStart === true\} onContinue=\{onSwap\} label=\{continueLabel\} \/>;/.test(footer);
     const pressReconnects = /if \(at\.kind === "wallet_unavailable"\) \{ startReconnect\("swap"\); return; \}/.test(section);
     // The press that asked carries on once a wallet is there — and nothing else does.
     const continues = /if \(walletReady\) \{\s*const was = awaitingWallet;\s*setAwaitingWallet\(null\);\s*setWalletFailed\(false\);\s*if \(was === "swap"\) onSwap\(\);/.test(section);
@@ -2682,6 +2699,162 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const inert = !/wallet-adapter|useWallet|useWalletSwapSubmitter|sendTransaction|signTransaction|fetch\(/.test(sim);
     return replaces && onlyWalkthrough && inert;
   })(), "simulation cannot sign");
+
+  /* ---- Trim: choose tokens, then one at a time (SWTR-1..12) ----
+   *
+   * Decided 2026-11-26. A Trim sells long-tail tokens to USDC, one transaction per token. Three
+   * rules changed to make that executable, each narrowly: a lone eligible route is allowed FOR
+   * TRIM ONLY, a leg may be judged alone WHEN IT IS APPROVED ALONE, and the review grew a
+   * selector, a run and a summary. These pin the rules and the join between the pieces. */
+  const BONK = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+  const trimLeg = (i: number, mint: string, symbol: string, usd: number, total = 3): SwapActionContext => ({
+    ...action(), actionId: "trim:t1", suggestionId: "t1", suggestionCategory: "trim", legId: `trim:t1:${i}`, legIndex: i, totalLegs: total,
+    inputAsset: { symbol, mint, decimals: 5 }, outputAsset: { symbol: "USDC", mint: USDC, decimals: 6 }, inputAmountUsd: usd,
+  });
+  const onlyRoute = () => assessment({
+    status: "only_route_available",
+    candidates: [candidate(), candidate({ providerId: "raydium", providerName: "Raydium", executionSurface: "raydium", eligible: false, exclusionReasons: ["no_route"] })],
+  });
+  const impactBlocked = () => assessment({
+    status: "no_valid_route", selectedProviderId: null, expiresAt: null, expectedOutputTokens: null, minimumOutputTokens: null,
+    blockingReasons: ["price_impact_high"],
+    candidates: [candidate({ eligible: false, exclusionReasons: ["price_impact_high"] })],
+  });
+  add("SWTR-1: a LONE eligible route is executable for Trim — and for nothing else", (() => {
+    const trim = deriveExecutionOffer({ action: trimLeg(0, BONK, "BONK", 300, 1), assessment: onlyRoute(), nowMs: NOW });
+    const rebalance = deriveExecutionOffer({ action: { ...action(), suggestionCategory: "rebalance", totalLegs: 1 }, assessment: onlyRoute(), nowMs: NOW });
+    const dca = deriveExecutionOffer({ action: { ...action(), suggestionCategory: "dca", totalLegs: 1 }, assessment: onlyRoute(), nowMs: NOW });
+    return trim.offered === true &&
+      rebalance.offered === false && rebalance.blockReasons.includes("no_selected_route") &&
+      dca.offered === false &&
+      SINGLE_ROUTE_EXECUTION_CATEGORIES.length === 1 && SINGLE_ROUTE_EXECUTION_CATEGORIES[0] === "trim";
+  })(), "one route, Trim only");
+  add("SWTR-2: a lone route is still held to every OTHER check — a blocked one stays blocked", (() => {
+    const noRoute = deriveExecutionOffer({ action: trimLeg(0, BONK, "BONK", 300, 1), assessment: impactBlocked(), nowMs: NOW });
+    const raydiumOnly = deriveExecutionOffer({
+      action: trimLeg(0, BONK, "BONK", 300, 1), nowMs: NOW,
+      assessment: assessment({ status: "only_route_available", selectedProviderId: "raydium", candidates: [candidate({ providerId: "raydium", providerName: "Raydium", executionSurface: "raydium" })] }),
+    });
+    const unverified = deriveExecutionOffer({
+      action: trimLeg(0, BONK, "BONK", 300, 1), nowMs: NOW,
+      assessment: assessment({ status: "only_route_available", candidates: [candidate({ liquidityAssessment: { status: "unresolved", minimumRouteLegLiquidityUsd: null, legs: [] } as never })] }),
+    });
+    // A "selected" provider whose own candidate is not eligible is not a surviving route at all.
+    const noneEligible = deriveExecutionOffer({
+      action: trimLeg(0, BONK, "BONK", 300, 1), nowMs: NOW,
+      assessment: assessment({ status: "only_route_available", candidates: [candidate({ eligible: false, exclusionReasons: ["price_impact_high"] })] }),
+    });
+    return noRoute.offered === false && raydiumOnly.offered === false && unverified.offered === false && noneEligible.offered === false;
+  })(), "nothing else is relaxed");
+  add("SWTR-3: a leg of several is refused as one action, and offered only when it is approved BY ITSELF", (() => {
+    const leg = trimLeg(1, BONK, "BONK", 300, 3);
+    const together = deriveExecutionOffer({ action: leg, assessment: assessment(), nowMs: NOW });
+    const alone = deriveExecutionOffer({ action: leg, assessment: assessment(), nowMs: NOW, perLegApproval: true });
+    return together.offered === false && together.blockReasons.includes("multi_leg") && alone.offered === true;
+  })(), "one approval, one transaction");
+  add("SWTR-4: the selector ticks what can be sold, says why the rest cannot, and puts the largest first", (() => {
+    const legs = [trimLeg(0, "MintSmall1111111111111111111111111111111111", "SML", 40), trimLeg(1, BONK, "BONK", 1200), trimLeg(2, "MintThin11111111111111111111111111111111111", "THIN", 300)];
+    const rows = deriveTrimRows({
+      legs, nowMs: NOW, assets: [],
+      assessments: { [legs[0].legId]: onlyRoute(), [legs[1].legId]: assessment(), [legs[2].legId]: impactBlocked() },
+    });
+    const [a, b, c] = rows;
+    return rows.length === 3 &&
+      a.symbol === "BONK" && a.sellable && !a.singleRoute && a.previewTokens === "0.197901" && a.blockedReason === null &&
+      b.symbol === "THIN" && !b.sellable && b.previewTokens === null && b.blockedReason === TRIM_BLOCKED_REASON.price_impact_high &&
+      c.symbol === "SML" && c.sellable && c.singleRoute;
+  })(), "what can be sold, and why not");
+  add("SWTR-5: an AGED comparison still ticks the token; an unanswered or failed one does not", (() => {
+    const leg = trimLeg(0, BONK, "BONK", 300);
+    const aged = deriveTrimRows({ legs: [leg], nowMs: NOW, assets: [], assessments: { [leg.legId]: assessment({ expiresAt: new Date(NOW + 2_000).toISOString() }) } });
+    const none = deriveTrimRows({ legs: [leg], nowMs: NOW, assets: [], assessments: {} });
+    // Its own step re-runs the comparison before any terms are shown — the same allowance the
+    // Swap button gets — so its age is not a reason to untick it.
+    return aged[0].sellable === true && none[0].sellable === false && none[0].blockedReason === TRIM_BLOCKED_REASON_DEFAULT;
+  })(), "age is not a refusal");
+  add("SWTR-6: a token that cannot be moved stays in the list with its reason, and can never be ticked", (() => {
+    const leg = trimLeg(0, BONK, "BONK", 300);
+    const rows = deriveTrimRows({
+      legs: [leg], nowMs: NOW, assessments: { [leg.legId]: assessment() },
+      assets: [
+        { symbol: "BONK", role: "involved", mint: BONK, valueUsd: 300, actionability: "transferable" },
+        { symbol: "FRZ", role: "involved", mint: "MintFrozen111111111111111111111111111111111", valueUsd: 900, actionability: "unavailable" },
+      ] as never,
+    });
+    const frozen = rows.find((r) => r.symbol === "FRZ");
+    return rows.length === 2 && frozen != null && frozen.leg === null && !frozen.sellable &&
+      frozen.blockedReason === TRIM_BLOCKED_REASON.not_transferable && rows[0].symbol === "FRZ";
+  })(), "listed, never sold");
+  add("SWTR-7: Try Again never includes a swap that may still land, or one that would be refused again", (() => {
+    const failed = (failure: string) => ({ status: "failed", failure, signature: null }) as never;
+    return !isTrimRetryable(failed("confirm_timeout")) && !isTrimRetryable(failed("verification_failed")) &&
+      isTrimRetryable(failed("declined")) && isTrimRetryable(failed("plan_unavailable")) && isTrimRetryable(failed("submit_failed")) && isTrimRetryable(failed("expired")) &&
+      isTrimRetryable({ status: "not_started" }) && isTrimRetryable({ status: "not_offered" }) &&
+      !isTrimRetryable({ status: "confirmed", receivedTokens: "1", signature: "s" }) && !isTrimRetryable(undefined);
+  })(), "no second swap beside a pending one");
+  add("SWTR-8: the summary's total is added EXACTLY — as integers, never through a float", (() =>
+    sumTokenStrings(["1199.16", "799.44"], 6) === "1998.6" &&
+    sumTokenStrings(["0.1", "0.2"], 6) === "0.3" &&
+    sumTokenStrings(["4.276778", "0.000001"], 6) === "4.276779" &&
+    sumTokenStrings([], 6) === "0" &&
+    sumTokenStrings(["12", "not a number", "1.5"], 6) === "13.5" &&
+    // Past the point a float can count: 9,007,199,254.740993 has no exact double.
+    sumTokenStrings(["9007199254.740993", "0.000001"], 6) === "9007199254.740994")(), "exact total");
+  add("SWTR-9: each token's turn is the ORDINARY swap step — judged alone, started for the user, reporting its end", (() => {
+    const flow = stripComments(readSrc("src/components/trim/TrimFlowSection.tsx"));
+    const section = stripComments(readSrc("src/components/swapExecution/SwapExecutionSection.tsx"));
+    // No second way to build, verify or sign: the Trim flow mounts the same section, and nothing
+    // in it touches a plan, a wallet or a transaction itself.
+    const sameStep = /<SwapExecutionSection[\s\S]{0,500}perLegApproval\s+autoStart\s+onSettled=\{onSettled\}/.test(flow) &&
+      !/useSwapExecutionPlan|useWalletSwapSubmitter|useWallet\(|sendTransaction|signTransaction|fetchSwapExecutionPlan/.test(flow);
+    // Its comparison is fetched at its own turn, so no token is held to a quote that aged
+    // while the ones before it were being approved.
+    const freshQuote = /useSwapQuoteComparison\(legs, \{ enabled: true, slippageBps, fetcher \}\)/.test(flow);
+    // Auto-start goes through the same gate as a press, and reports "nothing to offer" otherwise.
+    const gated = /if \(at\.kind === "swap" \|\| at\.kind === "wallet_unavailable"\) \{ autoStartedRef\.current = true; onSwap\(\); return; \}/.test(section) &&
+      /onSettled\?\.\(\{ status: "not_offered" \}\);/.test(section);
+    // Reported once, and the section then draws nothing — the host shows the result.
+    const once = /if \(onSettled == null \|\| settledRef\.current\) return;/.test(section) &&
+      /if \(onSettled != null && \(execution\.phase === "confirmed" \|\| execution\.phase === "failed"\)\) return null;/.test(section);
+    return sameStep && freshQuote && gated && once;
+  })(), "one way to swap");
+  add("SWTR-10: a failure does not stop the run, Cancel does — and what was swapped stays accounted for", (() => {
+    const flow = stripComments(readSrc("src/components/trim/TrimFlowSection.tsx"));
+    // Every outcome advances, success or not, after the result has been on its row a moment.
+    const advances = /setResults\(\(prev\) => \(prev\[key\] != null \? prev : \{ \.\.\.prev, \[key\]: result \}\)\);[\s\S]{0,200}setIndex\(\(i\) => i \+ 1\);[\s\S]{0,40}TRIM_ADVANCE_DELAY_MS/.test(flow);
+    // Cancel with nothing done returns to the selector; otherwise the untouched tokens are
+    // marked not started and the summary says so.
+    const stops = /if \(!anySettled\) \{ setStage\("select"\); return; \}/.test(flow) &&
+      /if \(next\[k\] == null\) next\[k\] = \{ status: "not_started" \};/.test(flow);
+    // "Completed" only when every chosen token was swapped.
+    const honestTitle = /swappedKeys\.length === 0 \? TRIM_SUMMARY_NONE_TITLE\s*: swappedKeys\.length === chosen\.length \? TRIM_SUMMARY_ALL_TITLE\s*: TRIM_SUMMARY_SOME_TITLE/.test(flow);
+    // And a pending swap means the summary may not say that nothing moved.
+    const pendingAware = /swappedKeys\.length === 0\s*\? \(pending \? TRIM_SUMMARY_PENDING_NOTE : TRIM_SUMMARY_NONE_DESC\)/.test(flow);
+    return advances && stops && honestTitle && pendingAware;
+  })(), "carry on, account for everything");
+  add("SWTR-11: only a Trim naming SEVERAL tokens gets the selector; one token goes straight to its terms, labelled Trim", (() => {
+    const modal = stripComments(readSrc("src/components/SuggestionReviewModal.tsx"));
+    const multi = /swapAction\.legs\.length > 1 &&\s*swapAction\.legs\.every\(\(l\) => l\.suggestionCategory === "trim"\)/.test(modal) &&
+      /hostShowsPlan=\{trimLegs != null\}/.test(modal) && /\{trimFlow\}/.test(modal);
+    const single = /continueLabel=\{swapLeg\.suggestionCategory === "trim" \? TRIM_ACTION_LABEL : undefined\}/.test(modal);
+    // The step header has no back control where going back makes no sense.
+    const noDeadBack = /\{onBack && \(\s*<button type="button" className="review-modal__back"/.test(modal);
+    // The gallery's presets have nothing to run against.
+    const galleryInert = /canRun=\{swapQuotePresetAssessments == null\}/.test(modal);
+    return multi && single && noDeadBack && galleryInert && TRIM_ACTION_LABEL === "Trim";
+  })(), "selector for several, straight through for one");
+  add("SWTR-12: the Trim copy says the user picks and the user approves — WealthSmith sells nothing", (() => {
+    const all = [TRIM_SELECT_TITLE, TRIM_SELECT_INTRO, trimSelectCta(1), trimSelectCta(3), TRIM_SINGLE_ROUTE_NOTE, TRIM_SUMMARY_ALL_TITLE, TRIM_SUMMARY_SOME_TITLE, TRIM_SUMMARY_NONE_TITLE, TRIM_SUMMARY_NONE_DESC, TRIM_SUMMARY_PENDING_NOTE, trimSummaryReceived("1,998.60", 2, 3), ...Object.values(TRIM_BLOCKED_REASON)].join(" ");
+    return TRIM_SELECT_TITLE === "Select Tokens to Trim" &&
+      /You approve them one at a time/.test(TRIM_SELECT_INTRO) &&
+      trimSelectCta(1) === "Trim 1 Token" && trimSelectCta(3) === "Trim 3 Tokens" &&
+      trimRunTitle(1, 2) === "Review Swap \u00b7 1 of 2" &&
+      trimSummaryReceived("1,998.60", 2, 3) === "You received 1,998.60 USDC from 2 of 3 tokens." &&
+      // Never WealthSmith as the actor, and never a verdict on a token.
+      !/WealthSmith (will|sells|sold|swaps|swapped|trims|trimmed)|we (sold|swapped|sell)|scam|risky|bad token/i.test(all) &&
+      // A blocked sale is about THIS amount where a smaller one might pass.
+      /for this amount/.test(TRIM_BLOCKED_REASON.price_impact_high) && /for this amount/.test(TRIM_BLOCKED_REASON.estimated_cost_high);
+  })(), "the user picks, the user approves");
 
   return checks;
 }

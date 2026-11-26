@@ -1381,6 +1381,67 @@ export const SWAP_ENTRY_RECONNECT_LABEL = "Reconnect Wallet";
  * dialog — the same label that dialog and the header use, because it is the same action.
  */
 export const SWAP_ENTRY_CONNECT_LABEL = CONNECT_WALLET_LABEL;
+/* ------------------------------------------------------------------ *
+ * TRIM — several tokens, chosen and then swapped ONE AT A TIME.
+ *
+ * Decided 2026-11-26. A Trim can name several long-tail tokens, and each sale is its own
+ * transaction. The review's button is "Trim"; it opens a selector; the chosen tokens are then
+ * swapped to USDC one by one, each with its own terms and its own wallet approval, moving on
+ * by itself after each success. Nothing here says WealthSmith sells anything: the user picks,
+ * and the user approves every transaction.
+ * ------------------------------------------------------------------ */
+/** The Trim review's primary action — single-token and multi-token alike. */
+export const TRIM_ACTION_LABEL = "Trim";
+export const TRIM_SELECT_TITLE = "Select Tokens to Trim";
+/** Under the title: what pressing the button will and will not do. */
+export const TRIM_SELECT_INTRO =
+  "Each token is swapped to USDC in its own transaction. You approve them one at a time.";
+export const trimSelectCta = (count: number): string => (count === 1 ? "Trim 1 Token" : `Trim ${count} Tokens`);
+/** What a token would bring, on its row. A preview: the terms approved are fetched at its turn. */
+export const trimSelectPreview = (amount: string): string => `~${amount} USDC`;
+/**
+ * Why a token cannot be selected, on its own row. Short enough for one line beside the token,
+ * and about THIS sale — "for this amount" where a smaller one might pass — never a verdict on
+ * the token. Keyed by the quote layer's exclusion reason; anything unlisted gets the default.
+ */
+export const TRIM_BLOCKED_REASON: Record<string, string> = {
+  price_impact_high: "Price impact is too high for this amount",
+  estimated_cost_high: "Swap cost is too high for this amount",
+  no_route: "No swap route available",
+  not_transferable: "This token can\u2019t be transferred",
+};
+export const TRIM_BLOCKED_REASON_DEFAULT = "Can\u2019t be swapped right now";
+/** Under the list when a selectable token had one route only — the existing disclosure. */
+export const TRIM_SINGLE_ROUTE_NOTE =
+  "Where only one route was available, WealthSmith could not verify that it was the lowest-cost option.";
+/** The step's title while a token's terms are on screen: "Review Swap · 1 of 2". */
+export const trimRunTitle = (index: number, total: number): string => `Review Swap \u00b7 ${index} of ${total}`;
+/** Row statuses in the run and in the summary. */
+export const TRIM_STATUS_WAITING = "Waiting";
+export const TRIM_STATUS_ACTIVE = "In progress";
+export const trimStatusReceived = (amount: string): string => `Received ${amount} USDC`;
+/** Landed, but the delivered amount could not be read. Never an estimate in its place. */
+export const TRIM_STATUS_SWAPPED = "Swapped";
+export const TRIM_STATUS_NOT_STARTED = "Not started";
+/**
+ * The summary's title, by outcome. "Completed" only when every chosen token was swapped.
+ */
+export const TRIM_SUMMARY_ALL_TITLE = "Trim Completed";
+export const TRIM_SUMMARY_SOME_TITLE = "Trim Partly Completed";
+export const TRIM_SUMMARY_NONE_TITLE = "Nothing Was Trimmed";
+export const trimSummaryReceived = (amount: string, swapped: number, total: number): string =>
+  `You received ${amount} USDC from ${swapped} of ${total} ${total === 1 ? "token" : "tokens"}.`;
+/** Landed swaps whose amounts could not all be read: say how many, promise no figure. */
+export const trimSummarySwapped = (swapped: number, total: number): string =>
+  `${swapped} of ${total} ${total === 1 ? "token was" : "tokens were"} swapped to USDC.`;
+export const TRIM_SUMMARY_NONE_DESC = "No token was swapped, and your funds haven\u2019t moved.";
+/**
+ * When a swap was sent and we stopped watching it. It may still land, so the summary may not
+ * say nothing moved, and it offers no retry for that token — a second swap beside it could
+ * execute both.
+ */
+export const TRIM_SUMMARY_PENDING_NOTE =
+  "A swap is still awaiting confirmation and may yet complete. Check its status before trying again.";
 /** Read to assistive technology while the wallet is being reconnected; the button only spins. */
 export const SWAP_ENTRY_RECONNECTING = "Reconnecting wallet";
 /**

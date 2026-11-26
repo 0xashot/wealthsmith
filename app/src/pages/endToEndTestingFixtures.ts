@@ -59,8 +59,28 @@ function tail(id: string, symbol: string, mint: string, uiAmount: number, priceU
   } as unknown as WalletPosition;
 }
 
-const BONK_MINT = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
-const WIF_MINT = "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm";
+export const BONK_MINT = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
+export const WIF_MINT = "EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm";
+/** A thinly traded token for the walkthrough: its sale is refused on price impact. */
+export const MOBY_MINT = "Cy1GS2FqefgaMbi45UunrUzin1rfEmTUYnomddzBpump";
+
+/**
+ * Trim rails for the swap walkthrough's live simulation: the same near-target wallet the Trim
+ * scenario below uses, holding one, or three, long-tail tokens. Built by the real pipeline; the
+ * walkthrough supplies its own pretend quotes.
+ */
+export function buildTrimWalkthroughRail(tokens: "three" | "one"): RailSuggestions {
+  const positions = tokens === "one"
+    ? [sol(8000 / 150), usdc(5748), tail("e2e-bonk", "BONK", BONK_MINT, 2000 / 0.00003, 0.00003)]
+    : [
+        sol(8000 / 150),
+        usdc(5748),
+        tail("e2e-bonk", "BONK", BONK_MINT, 1200 / 0.00003, 0.00003),
+        tail("e2e-wif", "WIF", WIF_MINT, 800 / 3, 3),
+        tail("e2e-moby", "MOBY", MOBY_MINT, 300 / 0.002, 0.002),
+      ];
+  return buildDemoContributionRail(DEMO_GOAL, positions);
+}
 
 /**
  * Risk `high` puts the buffer target at ONE month of expenses and no monthly

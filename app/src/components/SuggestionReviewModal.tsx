@@ -20,7 +20,7 @@ import { useIsMobileViewport } from "./useIsMobileViewport";
 import SolStakingLeaderExplanation from "./SolStakingLeaderExplanation";
 import closeUrl from "../../../assets/icons/ui/close.svg";
 import chevronLeftUrl from "../../../assets/icons/ui/chevron-left.svg";
-import { SWAP_CONFIRM_BACK_LABEL } from "../state/approvedCopy";
+import { SWAP_CONFIRM_BACK_LABEL, TRIM_ACTION_LABEL } from "../state/approvedCopy";
 import externalLinkUrl from "../../../assets/icons/ui/external-link.svg";
 import { resolveTokenIcon, resolveProtocolIcon } from "../state/iconRegistry";
 import fallbackTokenUrl from "../../../assets/icons/fallback/fallback-token.svg";
@@ -34,7 +34,8 @@ import { cardProtocolName } from "../suggestions/yieldStrategyPlanPresentation";
 import type { SwapActionContext, SwapActionReadiness, SwapQuoteComparisonAssessment } from "../suggestions/swapQuote/swapQuoteContracts";
 import type { DemoExecutionOutcome } from "../suggestions/swapExecution/demoOutcomes";
 import type { SwapQuoteFetcher } from "../suggestions/swapQuote/swapQuoteClient";
-import SwapQuoteComparisonSection, { type SwapQuoteState } from "./swapQuote/SwapQuoteComparisonSection";
+import SwapQuoteComparisonSection, { type SwapQuoteState, type SwapPlanState } from "./swapQuote/SwapQuoteComparisonSection";
+import TrimFlowSection from "./trim/TrimFlowSection";
 import SwapExecutionSection from "./swapExecution/SwapExecutionSection";
 import InfoBanner from "./InfoBanner";
 import AssetIdentity from "./AssetIdentity";
@@ -179,7 +180,18 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
    * step vanished the instant it was asked for. Hiding also keeps the quote it already
    * fetched, so Back does not pay for a refetch.
    */
-  const [swapStep, setSwapStep] = useState<{ active: boolean; onBack: () => void; title: string } | null>(null);
+  const [swapStep, setSwapStep] = useState<{ active: boolean; onBack?: () => void; title: string } | null>(null);
+  /**
+   * A TRIM NAMING SEVERAL TOKENS. Each token is its own sale, so there is no single swap for
+   * this review to offer; instead its footer is "Trim", which opens a token selector and then
+   * swaps the chosen tokens one at a time (see TrimFlowSection). Null for every other review.
+   */
+  const trimLegs: SwapActionContext[] | null =
+    swapAction && !details?.hideSwapRoute && swapAction.status === "ready" && swapAction.legs.length > 1 &&
+    swapAction.legs.every((l) => l.suggestionCategory === "trim")
+      ? swapAction.legs
+      : null;
+  const [planState, setPlanState] = useState<SwapPlanState | null>(null);
   const swapStepActive = swapStep?.active === true;
   const bodyClass = `review-modal__body${swapStepActive ? " review-modal__body--behind-subpage" : ""}`;
 
@@ -196,6 +208,8 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       nowMs={swapQuoteNowMs}
       onExecutionContext={setQuoteState}
       hostShowsNotice={swapLeg != null}
+      onPlanContext={setPlanState}
+      hostShowsPlan={trimLegs != null}
     />
   ) : null;
 
@@ -227,6 +241,24 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       onExpiredGiveUp={onSwapQuoteGaveUp}
       onConnectWallet={onConnectWallet}
       onStepChange={setSwapStep}
+      continueLabel={swapLeg.suggestionCategory === "trim" ? TRIM_ACTION_LABEL : undefined}
+    />
+  ) : null;
+
+  // The footer — and the steps behind it — of a multi-token Trim.
+  const trimFlow = trimLegs && details ? (
+    <TrimFlowSection
+      legs={trimLegs}
+      plan={planState}
+      assets={details.involvedAssets}
+      fetcher={swapQuoteFetcher}
+      nowMs={swapQuoteNowMs}
+      demo={demo}
+      onClose={onClose}
+      onConnectWallet={onConnectWallet}
+      onStepChange={setSwapStep}
+      // The gallery's fixed presets have nothing to run against; its selector is for looking at.
+      canRun={swapQuotePresetAssessments == null}
     />
   ) : null;
 
@@ -895,8 +927,10 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             }}
           />
         )}
-        {/* The Swap footer (Rebalance / Trim; DCA uses its own branch). */}
+        {/* The Swap footer (Rebalance / single-token Trim; DCA uses its own branch). */}
         {executionSection}
+        {/* A Trim naming several tokens: Trim → choose tokens → one at a time. */}
+        {trimFlow}
         {/* Sticky footer for an OBSERVATION. There is no action to hand off here —
             reviewing IS the action — so the primary control acknowledges it. Dismiss
             hides only THIS situation; the card returns by itself once the underlying
@@ -925,12 +959,16 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
  * the close button on the same baseline, and so the title is a `modal__title` like every other
  * modal heading — a step that looked like a section heading sat at the wrong size and indent.
  */
-function SubpageHeading({ onBack, title, titleId }: { onBack: () => void; title: string; titleId: string }) {
+function SubpageHeading({ onBack, title, titleId }: { onBack?: () => void; title: string; titleId: string }) {
   return (
     <div className="review-modal__subpage-heading">
-      <button type="button" className="review-modal__back" onClick={onBack} aria-label={SWAP_CONFIRM_BACK_LABEL}>
-        <ButtonIcon src={chevronLeftUrl} size={18} />
-      </button>
+      {/* No back control where going back makes no sense: a Trim that is under way, or its
+          summary. A control that does nothing, or that abandons a run, is worse than none. */}
+      {onBack && (
+        <button type="button" className="review-modal__back" onClick={onBack} aria-label={SWAP_CONFIRM_BACK_LABEL}>
+          <ButtonIcon src={chevronLeftUrl} size={18} />
+        </button>
+      )}
       {/* The step's own title: "Review Swap" normally, or the failure's name when it failed,
           so the header never announces a review of terms that do not exist. */}
       <h2 id={titleId} className="modal__title">{title}</h2>

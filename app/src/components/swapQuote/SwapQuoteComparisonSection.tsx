@@ -62,6 +62,29 @@ export interface SwapQuoteComparisonSectionProps {
    * here in place.
    */
   hostShowsNotice?: boolean;
+  /**
+   * Reports a MULTI-LEG plan's comparisons — one entry per leg, in leg order — to a host that
+   * runs the legs itself (Trim: choose tokens, then one at a time). Null for anything else.
+   */
+  onPlanContext?: (ctx: SwapPlanState | null) => void;
+  /**
+   * The host shows the multi-leg plan itself (its own token list, with each token's route or
+   * reason), so this section renders nothing for one.
+   */
+  hostShowsPlan?: boolean;
+}
+
+/** One leg of a multi-leg plan and where its comparison stands. */
+export interface SwapPlanLegState {
+  action: SwapActionContext;
+  /** Null until this leg's comparison has answered, and null if it failed. */
+  assessment: SwapQuoteComparisonAssessment | null;
+}
+/** What a host running the legs itself needs to know about the plan's comparisons. */
+export interface SwapPlanState {
+  legs: SwapPlanLegState[];
+  /** A request is in flight for the plan. */
+  loading: boolean;
 }
 
 /** Why no swap can be offered right now, in words for the reader. */
@@ -147,6 +170,30 @@ export default function SwapQuoteComparisonSection(props: SwapQuoteComparisonSec
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [executionKey]);
 
+  // A multi-leg plan, for a host that runs the legs itself. Reported like the single-leg state
+  // above: from the first render, in a layout effect, keyed on what would change the host's view.
+  const onPlanContext = props.onPlanContext;
+  const planCtx: SwapPlanState | null =
+    multiLeg && readiness.status === "ready"
+      ? {
+          legs: legs.map((leg) => {
+            const lr = usePreset ? null : legResults.find((r) => r.legId === leg.legId);
+            const assessment = usePreset ? (props.presetAssessments?.[leg.legId] ?? null) : (lr?.result.ok ? lr.result.assessment : null);
+            return { action: leg, assessment };
+          }),
+          loading: quoteLoading,
+        }
+      : null;
+  const planKey = planCtx
+    ? `${planCtx.loading}|${planCtx.legs.map((l) => `${l.action.legId}:${l.action.inputAmountRaw}:${l.assessment?.comparedAt ?? "none"}:${l.assessment?.status ?? ""}`).join(",")}`
+    : null;
+  useLayoutEffect(() => {
+    onPlanContext?.(planCtx);
+    return () => onPlanContext?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planKey]);
+  const planShownByHost = props.hostShowsPlan === true && multiLeg;
+
   // ---- render ----
   if (readiness.status === "not_ready_for_quote") return renderView(notReadyView(isDca, readiness.reasons));
   if (readiness.status === "not_required") return renderView(notRequiredView());
@@ -155,12 +202,14 @@ export default function SwapQuoteComparisonSection(props: SwapQuoteComparisonSec
   const noticeShownByHost = props.hostShowsNotice === true && notice != null;
 
   if (usePreset) {
+    if (planShownByHost) return null;
     if (props.presetLoading) return <SwapQuoteLoadingState />;
     if (multiLeg) return <SwapPlanQuoteSummary legs={legs} assessments={props.presetAssessments ?? {}} nowMs={props.nowMs} />;
     if (noticeShownByHost) return null;
     return renderView(resolvedView ?? unavailableView());
   }
 
+  if (planShownByHost) return null;
   if (phase === "idle" || phase === "loading") return <SwapQuoteLoadingState />;
 
   if (multiLeg) {

@@ -52,7 +52,8 @@ function tokensFromRaw(raw: string, decimals: number): string {
   }
 }
 
-function demoAssessment(action: SwapActionContext, nowMs: number): SwapQuoteComparisonAssessment | null {
+/** Exported for the walkthrough's simulation, which shapes it per token. Offline; talks to nothing. */
+export function demoAssessment(action: SwapActionContext, nowMs: number): SwapQuoteComparisonAssessment | null {
   const quotedAt = new Date(nowMs - 8_000).toISOString();
   /**
    * Deliberately long. A demo quote is a FIXTURE — it is computed from the action, it talks to

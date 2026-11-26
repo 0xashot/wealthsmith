@@ -21,7 +21,23 @@ export interface ExecutionOfferInput {
   action: SwapActionContext;
   assessment: SwapQuoteComparisonAssessment | null;
   nowMs: number;
+  /**
+   * This leg is approved BY ITSELF — its own terms, its own transaction, its own wallet prompt —
+   * as one step of a sequence the user chose (Trim: one token at a time).
+   *
+   * The Boundary's rule is one approval = one transaction doing one thing, and it refuses a
+   * multi-leg action because "approve this" would stop being a single honest question. Asked
+   * one leg at a time it IS a single question, so the leg is judged as the one transaction it
+   * is. Never set for a flow that would approve several legs at once.
+   */
+  perLegApproval?: boolean;
 }
+
+/**
+ * Categories whose legs may be offered on a SINGLE eligible route. See `allowSingleRoute` in
+ * executionEligibility for the reasoning; Trim only.
+ */
+export const SINGLE_ROUTE_EXECUTION_CATEGORIES: readonly string[] = ["trim"] as const;
 
 export type ExecutionOffer =
   | { offered: true; action: SwapActionContext }
@@ -46,8 +62,9 @@ export function deriveExecutionOffer(input: ExecutionOfferInput): ExecutionOffer
   const eligibility = deriveExecutionEligibility({
     assessment,
     handoffType,
-    totalLegs: action.totalLegs,
+    totalLegs: input.perLegApproval === true ? 1 : action.totalLegs,
     nowMs,
+    allowSingleRoute: SINGLE_ROUTE_EXECUTION_CATEGORIES.includes(action.suggestionCategory),
   });
 
   return eligibility.executable

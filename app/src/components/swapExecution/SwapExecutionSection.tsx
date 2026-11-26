@@ -42,6 +42,7 @@ import { failureCopy, rawToTokenString } from "./swapConfirmPresentation";
 import { demoConfirmTerms } from "../../suggestions/swapExecution/demoConfirmTerms";
 import type { SwapExecutionEmitter } from "../../suggestions/swapExecution/swapExecutionEvents";
 import type { DemoExecutionOutcome } from "../../suggestions/swapExecution/demoOutcomes";
+import type { ExecutionFailureKey } from "../../suggestions/swapExecution/executionLifecycle";
 
 export interface SwapExecutionSectionProps {
   action: SwapActionContext;
@@ -111,7 +112,36 @@ export interface SwapExecutionSectionProps {
    * to its last step instead of hitting a dead end where the interesting part should be.
    */
   demo?: boolean;
+  /**
+   * The entry button's label. "Swap" by default; a Trim review says "Trim" — it is the same
+   * step (see the terms, then approve), named by what the user came to do.
+   */
+  continueLabel?: string;
+  /**
+   * ONE STEP OF A SEQUENCE. The three below turn this section into the per-token step of a
+   * multi-token Trim: the user has already chosen to sell this token, so the step starts by
+   * itself, is judged as the single transaction it is, and reports how it ended instead of
+   * resting on a result screen.
+   *
+   * `perLegApproval` — judge this leg alone (see `deriveExecutionOffer`).
+   * `autoStart`      — begin as if Swap had been pressed, including reopening the wallet link.
+   * `onSettled`      — called ONCE when the step is over: the swap landed, it failed, or it
+   *                    could not be offered. The host moves on; this section then draws nothing.
+   */
+  perLegApproval?: boolean;
+  autoStart?: boolean;
+  onSettled?: (result: SwapSettled) => void;
 }
+
+/** How one step of a sequence ended. */
+export type SwapSettled =
+  | { status: "confirmed"; receivedTokens: string | null; signature: string | null }
+  | { status: "failed"; failure: ExecutionFailureKey; signature: string | null }
+  /** No swap could be offered for this leg right now — nothing was requested or sent. */
+  | { status: "not_offered" };
+
+/** How long a landed swap may wait for its delivered amount before it is reported without one. */
+export const SETTLED_FACTS_GRACE_MS = 4_000;
 
 /** How long a reconnect may go unanswered before the button stops spinning and offers a retry. */
 export const WALLET_RECONNECT_CAP_MS = 30_000;
@@ -152,10 +182,13 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
   // this component knows how to leave the step.
   const leaveStep = useCallback(() => { setStarted(false); setDemoRefreshed(false); }, []);
 
+  const perLegApproval = props.perLegApproval === true;
+  const continueLabel = props.continueLabel ?? SWAP_CONFIRM_CONTINUE_LABEL;
   const offer = deriveExecutionOffer({
     action,
     assessment,
     nowMs: props.nowMs ?? Date.now(),
+    perLegApproval,
   });
 
   const takerPublicKey = seam ? seam.takerPublicKey : publicKey?.toBase58() ?? null;
@@ -239,13 +272,13 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
   const entryNow = useCallback((): SwapEntry => {
     const nowMs = props.nowMs ?? Date.now();
     return deriveSwapEntry({
-      offer: deriveExecutionOffer({ action, assessment, nowMs }),
+      offer: deriveExecutionOffer({ action, assessment, nowMs, perLegApproval }),
       assessment,
       comparisonLoading: false,
       walletReady,
       nowMs,
     });
-  }, [action, assessment, walletReady, props.nowMs]);
+  }, [action, assessment, walletReady, props.nowMs, perLegApproval]);
 
   /**
    * THE WALLET LINK IS REOPENED BY THE PRESS THAT NEEDS IT.
@@ -351,19 +384,67 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     if (started && awaitingFirstPlan && !walletReady) setStarted(false);
   }, [started, awaitingFirstPlan, walletReady]);
 
+  // A STEP OF A SEQUENCE STARTS ITSELF. The user chose this token on the previous screen, so
+  // asking them to press Swap again would be a second confirmation of the same decision. It
+  // waits for the comparison's first answer, then does exactly what a press would — or reports
+  // that there is nothing to offer, so the sequence can move on.
+  const onSettled = props.onSettled;
+  const autoStartedRef = useRef(false);
+  useEffect(() => {
+    if (props.autoStart !== true || autoStartedRef.current) return;
+    const at = entryNow();
+    if (at.kind === "swap" || at.kind === "wallet_unavailable") { autoStartedRef.current = true; onSwap(); return; }
+    if (comparisonLoading) return;
+    autoStartedRef.current = true;
+    onSettled?.({ status: "not_offered" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.autoStart, props.demo, comparisonLoading, assessment, walletReady]);
+
+  // …AND SAYS HOW IT ENDED, once. A landed swap waits a moment for the amount the chain says
+  // arrived — the confirmation and the delivered figure are read separately — and is reported
+  // without one rather than held up for it.
+  const settledRef = useRef(false);
+  const livePhase = props.demo ? null : execution.phase;
+  const settledFailure = execution.failure;
+  const liveDelivered = execution.deliveredRaw;
+  const liveSignature = execution.signature;
+  const outputDecimals = execution.plan?.verification.outputDecimals ?? null;
+  useEffect(() => {
+    if (onSettled == null || settledRef.current) return;
+    if (livePhase === "failed" && settledFailure != null) {
+      settledRef.current = true;
+      onSettled({ status: "failed", failure: settledFailure, signature: liveSignature });
+      return;
+    }
+    if (livePhase !== "confirmed") return;
+    const report = () => {
+      if (settledRef.current) return;
+      settledRef.current = true;
+      onSettled({
+        status: "confirmed",
+        receivedTokens: liveDelivered != null && outputDecimals != null ? rawToTokenString(liveDelivered, outputDecimals) : null,
+        signature: liveSignature,
+      });
+    };
+    if (liveDelivered != null) { report(); return; }
+    const timer = setTimeout(report, SETTLED_FACTS_GRACE_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [livePhase, settledFailure, liveDelivered, liveSignature, outputDecimals]);
+
   // The footer before the step is open — never nothing.
   const entryFooter = () => {
     // First, because a re-run passes through "loading": the button that was pressed keeps the
     // wait, instead of the footer turning into a spinning Swap for the length of the request.
     if (checkingAgain) return <CheckAgainFooter onClose={onClose} busy onCheckAgain={onCheckAgain} />;
     if (entry.kind === "swap") {
-      return <ContinueFooter onClose={onClose} busy={awaitingQuote} onContinue={onSwap} />;
+      return <ContinueFooter onClose={onClose} busy={awaitingQuote || props.autoStart === true} onContinue={onSwap} label={continueLabel} />;
     }
-    if (entry.kind === "loading") return <ContinueFooter onClose={onClose} busy onContinue={onSwap} />;
+    if (entry.kind === "loading") return <ContinueFooter onClose={onClose} busy onContinue={onSwap} label={continueLabel} />;
     if (entry.kind === "wallet_unavailable") {
       // Swap itself reopens the link — see `awaitingWallet`.
       if (walletLink.canReconnect && !walletFailed) {
-        return <ContinueFooter onClose={onClose} busy={awaitingWallet === "swap"} onContinue={onSwap} />;
+        return <ContinueFooter onClose={onClose} busy={awaitingWallet === "swap" || props.autoStart === true} onContinue={onSwap} label={continueLabel} />;
       }
       // That was tried and did not work: the remedy takes Swap's place.
       if (walletLink.canReconnect) {
@@ -372,7 +453,7 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
       // No wallet is known here to reconnect to, so the way forward is choosing one: the app's
       // own Connect Wallet dialog. Without a host to open it, greyed, with the reason on hover.
       if (props.onConnectWallet) return <ConnectWalletFooter onClose={onClose} onConnectWallet={props.onConnectWallet} />;
-      return <ContinueFooter onClose={onClose} unavailableTooltip={SWAP_ENTRY_WALLET_TOOLTIP} onContinue={onSwap} />;
+      return <ContinueFooter onClose={onClose} unavailableTooltip={SWAP_ENTRY_WALLET_TOOLTIP} onContinue={onSwap} label={continueLabel} />;
     }
     // Nothing to offer. Asking again is the one thing that can change that, so it is the
     // primary action — unless there is nothing to ask (the gallery's presets).
@@ -463,7 +544,11 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
   if (!started) return entryFooter();
 
   // Same button, same place, spinning — until the first plan is here. See `awaitingFirstPlan`.
-  if (awaitingFirstPlan) return <ContinueFooter onClose={onClose} busy onContinue={onSwap} />;
+  if (awaitingFirstPlan) return <ContinueFooter onClose={onClose} busy onContinue={onSwap} label={continueLabel} />;
+
+  // In a sequence the result belongs to the host: it records it and moves to the next token.
+  // Resting on "Swap Completed" with a Done button here would stop the sequence after one.
+  if (onSettled != null && (execution.phase === "confirmed" || execution.phase === "failed")) return null;
 
   return (
     <SwapConfirmSheet
@@ -512,11 +597,14 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
 function ContinueFooter({
   onClose,
   onContinue,
+  label = SWAP_CONFIRM_CONTINUE_LABEL,
   busy = false,
   unavailableTooltip,
 }: {
   onClose: () => void;
   onContinue: () => void;
+  /** The button's label. Defaults to "Swap". */
+  label?: string;
   /** Terms are being fetched. The button holds the wait in place of an empty sheet. */
   busy?: boolean;
   /**
@@ -543,7 +631,7 @@ function ContinueFooter({
             aria-describedby={tipId}
             onClick={(e) => e.preventDefault()}
           >
-            <span>{SWAP_CONFIRM_CONTINUE_LABEL}</span>
+            <span>{label}</span>
           </button>
           <span className="swap-confirm__approve-tip" role="tooltip" id={tipId}>
             {unavailableTooltip}
@@ -561,7 +649,7 @@ function ContinueFooter({
         >
           {/* The label stays, invisible, so the button is exactly the size "Swap" was and the
               footer does not move when it starts or stops spinning. */}
-          <span className="cta-hold__label" aria-hidden="true">{SWAP_CONFIRM_CONTINUE_LABEL}</span>
+          <span className="cta-hold__label" aria-hidden="true">{label}</span>
           <span className="swap-confirm__spinner cta-hold__spinner" aria-hidden="true" />
           {/* Spinner only. Nothing is at stake while terms are fetched — no transaction, and
               nothing approved — so words would narrate our plumbing. The label stays in the
@@ -570,7 +658,7 @@ function ContinueFooter({
         </button>
       ) : (
         <button type="button" className="review-modal__primary-action" onClick={onContinue}>
-          <span>{SWAP_CONFIRM_CONTINUE_LABEL}</span>
+          <span>{label}</span>
         </button>
       )}
     </div>
