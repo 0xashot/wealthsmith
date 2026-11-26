@@ -24,6 +24,7 @@ import { useSwapExecutionPlan } from "./useSwapExecutionPlan";
 import { useWalletSwapSubmitter } from "./useWalletSwapSubmitter";
 import { SwapExecutionSeamContext } from "./swapExecutionSeam";
 import { useWalletReconnect } from "./useWalletReconnect";
+import { SwapFlowEventsContext } from "./swapFlowEvents";
 import SwapConfirmSheet from "./SwapConfirmSheet";
 import {
   SWAP_CONFIRM_CHECKING,
@@ -154,6 +155,7 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
   // The walkthrough's stand-ins, when it provides them. With a seam present the real wallet's
   // key and submitter are not used at all — see swapExecutionSeam.ts.
   const seam = useContext(SwapExecutionSeamContext);
+  const flowEmit = useContext(SwapFlowEventsContext);
   const submit = seam ? seam.submit : walletSubmit;
   const [started, setStarted] = useState(false);
   /**
@@ -212,7 +214,8 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     // Only an offered route reaches the hook, and an offer requires a selected provider, so the
     // fallback is unreachable rather than a default anyone relies on.
     provider: assessment?.selectedProviderId ?? "jupiter",
-    emit: props.emit,
+    // The caller's emitter, or the host app's (see swapFlowEvents). Neither → nothing is emitted.
+    emit: props.emit ?? flowEmit ?? undefined,
     takerPublicKey,
     slippageBps: props.slippageBps ?? 50,
     enabled: started,

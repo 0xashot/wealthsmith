@@ -20,7 +20,7 @@
  * A FAILURE DOES NOT STOP THE OTHERS, and a token whose swap was sent but not confirmed is
  * never offered a retry: it may still land, and a second swap beside it could execute both.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { SwapActionContext, SwapQuoteComparisonAssessment } from "../../suggestions/swapQuote/swapQuoteContracts";
 import type { SwapQuoteFetcher } from "../../suggestions/swapQuote/swapQuoteClient";
 import type { ReviewAsset } from "../../suggestions/engineTypes";
@@ -28,6 +28,8 @@ import { deriveTrimRows, isTrimRetryable, sumTokenStrings, type TrimResult } fro
 import type { SwapPlanState } from "../swapQuote/SwapQuoteComparisonSection";
 import { useSwapQuoteComparison } from "../swapQuote/useSwapQuoteComparison";
 import SwapExecutionSection, { type SwapSettled } from "../swapExecution/SwapExecutionSection";
+import { SwapFlowEventsContext } from "../swapExecution/swapFlowEvents";
+import { trimFinishedEvent } from "../../suggestions/swapExecution/trimEvents";
 import { failureCopy, formatSettledAmount, formatUsd, solscanTransactionUrl } from "../swapExecution/swapConfirmPresentation";
 import ButtonIcon from "../ButtonIcon";
 import { resolveTokenIcon } from "../../state/iconRegistry";
@@ -139,9 +141,12 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
   useEffect(() => () => onStepChange(null), [onStepChange]);
 
   // ---- review → select ----------------------------------------------------
+  const emit = useContext(SwapFlowEventsContext);
   const openSelector = () => {
-    setSelected(new Set(rows.filter((r) => r.sellable).map((r) => r.key)));
+    const sellable = rows.filter((r) => r.sellable);
+    setSelected(new Set(sellable.map((r) => r.key)));
     setStage("select");
+    emit?.({ name: "trim_selector_opened", listed: rows.length, sellable: sellable.length });
   };
   const toggle = (key: string) =>
     setSelected((prev) => {
@@ -158,6 +163,7 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
     if (fresh) { setChosen(keys); setResults({}); }
     else setResults((prev) => { const next = { ...prev }; for (const k of keys) delete next[k]; return next; });
     setStage("run");
+    emit?.({ name: "trim_started", selected: keys.length, retry: !fresh });
   };
   const startSelected = () => startRun(rows.filter((r) => r.sellable && selected.has(r.key)).map((r) => r.key), true);
 
@@ -172,6 +178,15 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
       setIndex((i) => i + 1);
     }, TRIM_ADVANCE_DELAY_MS);
   }, []);
+  // Each time a run reaches its summary, say how it ended — counts only (see trimEvents).
+  const reportedRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (stage !== "summary") { reportedRunRef.current = null; return; }
+    const runKey = chosen.map((k) => `${k}:${results[k]?.status ?? "none"}`).join("|");
+    if (reportedRunRef.current === runKey) return;
+    reportedRunRef.current = runKey;
+    emit?.(trimFinishedEvent(chosen, results));
+  }, [stage, chosen, results, emit]);
   // Past the last token → the summary.
   useEffect(() => {
     if (stage === "run" && index >= queue.length && queue.length > 0) setStage("summary");

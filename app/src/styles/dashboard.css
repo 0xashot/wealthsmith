@@ -5971,3 +5971,21 @@ td.vetting-scores-table__date {
     align-items: flex-start;
   }
 }
+
+/* The swap walkthrough's analytics panel — a reviewer's aid on a testing page, not product UI. */
+.walkthrough-events {
+  margin-top: var(--spacing-stack-gap-md);
+  padding: var(--spacing-card-padding-sm);
+  border: 1px dashed var(--color-border-subtle);
+  border-radius: var(--radius-surface-lg);
+  color: var(--color-text-secondary);
+  font: var(--typography-body-sm-font);
+}
+.walkthrough-events ol {
+  margin: var(--spacing-stack-gap-xs) 0 0;
+  padding-left: 1.5em;
+}
+.walkthrough-events code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

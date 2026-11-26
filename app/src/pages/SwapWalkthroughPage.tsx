@@ -31,13 +31,14 @@
  *
  * Gated behind the same build-time flag as /testing, so a public build never registers it.
  */
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import ToastHost, { type ToastData } from "../components/ToastHost";
 import { END_TO_END_SCENARIOS, buildTrimWalkthroughRail, WIF_MINT, MOBY_MINT } from "./endToEndTestingFixtures";
 import { DEMO_OUTCOMES } from "../suggestions/swapExecution/demoOutcomes";
 import { SWAP_CONFIRM_EXPIRED_TOAST } from "../state/approvedCopy";
 import { SwapExecutionSeamContext } from "../components/swapExecution/swapExecutionSeam";
+import { SwapFlowEventsContext, type SwapFlowEvent } from "../components/swapExecution/swapFlowEvents";
 import {
   buildLiveSimulationSeam,
   noRouteQuoteFetcher,
@@ -82,6 +83,10 @@ export default function SwapWalkthroughPage() {
   const outcome = DEMO_OUTCOMES.find((o) => o.key === outcomeKey) ?? DEMO_OUTCOMES[0];
   const pushToast = (message: string, helper?: string) =>
     setToasts((t) => [...t, { id: Date.now(), message, helper, variant: "info" }]);
+
+  // The simulation's analytics receiver: a list on the page. See the events panel under the rail.
+  const [flowEvents, setFlowEvents] = useState<SwapFlowEvent[]>([]);
+  const recordFlowEvent = useCallback((e: SwapFlowEvent) => setFlowEvents((prev) => [...prev, e]), []);
 
   const simKey = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("sim");
   const simulation = SIMULATIONS.find((x) => x.key === simKey) ?? null;
@@ -199,6 +204,7 @@ export default function SwapWalkthroughPage() {
           // LIVE branch, stand-in edges. `demo` is NOT passed: this is the path a connected
           // wallet takes, and the seam is what keeps it away from a real one.
           <SwapExecutionSeamContext.Provider value={seam}>
+           <SwapFlowEventsContext.Provider value={recordFlowEvent}>
             <RealWalletSuggestionsRail
               rail={simParts.rail}
               railLabel="Suggestions"
@@ -211,6 +217,19 @@ export default function SwapWalkthroughPage() {
                 void simWait(SIM_RECONNECT_DELAY_MS).then(() => { setWalletLinked(true); onConnected?.(); });
               }}
             />
+            {/* What the flow WOULD send to analytics, in order. Nothing leaves the page: the
+                walkthrough has no analytics, so this list is the only receiver. It is here so
+                the events can be read — and their contents checked — alongside the screens. */}
+            <details className="walkthrough-events" open={flowEvents.length > 0}>
+              <summary>Analytics events ({flowEvents.length}) — shown here only, sent nowhere</summary>
+              <ol>
+                {flowEvents.map((e, i) => {
+                  const { name, ...props } = e;
+                  return <li key={i}><code>{name}</code> {Object.keys(props).length > 0 ? <code>{JSON.stringify(props)}</code> : null}</li>;
+                })}
+              </ol>
+            </details>
+           </SwapFlowEventsContext.Provider>
           </SwapExecutionSeamContext.Provider>
         ) : (
           <RealWalletSuggestionsRail

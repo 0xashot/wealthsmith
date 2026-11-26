@@ -39,6 +39,7 @@ import { validateExecutionPlan } from "../swapExecution/swapExecutionClient";
 import { eventsForPlanResult } from "../swapExecution/planResolution";
 import { deriveExecutionOffer, deriveSwapEntry, SINGLE_ROUTE_EXECUTION_CATEGORIES } from "../swapExecution/executionOffer";
 import { deriveTrimRows, isTrimRetryable, sumTokenStrings } from "../swapExecution/trimFlow";
+import { trimFinishedEvent } from "../swapExecution/trimEvents";
 import { comparisonSelectedARoute } from "../../components/swapQuote/useSwapQuoteComparison";
 import { SWAP_IN_APP_PROVIDER_IDS } from "../swapQuote/swapQuotePolicy";
 import { presentSwapQuote } from "../swapQuote/quotePresentation";
@@ -2857,6 +2858,58 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       // A blocked sale is about THIS amount where a smaller one might pass.
       /for this amount/.test(TRIM_BLOCKED_REASON.price_impact_high) && /for this amount/.test(TRIM_BLOCKED_REASON.estimated_cost_high);
   })(), "the user picks, the user approves");
+
+  /* ---- Analytics for the swap and Trim flows (SWTR-13..16) ----
+   * The swap events existed for weeks with nothing receiving them: the first real swap left no
+   * trace. These pin the seam that carries them, and that a Trim reports COUNTS and nothing else. */
+  add("SWTR-13: a Trim's summary counts every chosen token exactly once — swapped, failed, or cancelled by the user", (() => {
+    const failed = (failure: string) => ({ status: "failed", failure, signature: null }) as never;
+    const e = trimFinishedEvent(["a", "b", "c", "d", "e", "f"], {
+      a: { status: "confirmed", receivedTokens: "1", signature: "s" },
+      b: failed("plan_unavailable"),
+      c: failed("declined"),
+      d: { status: "not_started" },
+      e: { status: "not_offered" },
+      // f never got a result at all: the run was stopped before its turn.
+    });
+    if (e.name !== "trim_finished") return false;
+    return e.selected === 6 && e.swapped === 1 && e.failed === 2 && e.cancelled === 3 && e.stopped === true &&
+      e.swapped + e.failed + e.cancelled === e.selected &&
+      // A clean run is not "stopped".
+      (trimFinishedEvent(["a"], { a: { status: "confirmed", receivedTokens: null, signature: null } }) as { stopped: boolean }).stopped === false;
+  })(), "every token accounted for");
+  add("SWTR-14: Trim events carry COUNTS ONLY — never a token, a mint, an amount, an address or a signature", (() => {
+    const src = stripComments(readSrc("src/suggestions/swapExecution/trimEvents.ts"));
+    const union = src.slice(src.indexOf("export type TrimEvent ="), src.indexOf("export type TrimEventName"));
+    // Every field of every event is `name`, a number, or a boolean. A string field is how a
+    // symbol or a mint would get in, and what someone holds fingerprints a wallet.
+    const fields = [...union.matchAll(/(\w+): (\w+|"[a-z_]+")/g)].map((m) => [m[1], m[2]]);
+    const onlyCounts = fields.length > 0 && fields.every(([k, t]) => (k === "name" ? /^"trim_/.test(t) : t === "number" || t === "boolean"));
+    const built = trimFinishedEvent(["k"], { k: { status: "confirmed", receivedTokens: "1998.60", signature: "5h3...sig" } });
+    const leaks = JSON.stringify(built);
+    return onlyCounts && !/1998|sig|receivedTokens|signature|mint|symbol/.test(leaks) &&
+      Object.values(built).every((v) => typeof v === "number" || typeof v === "boolean" || v === "trim_finished");
+  })(), "counts, nothing else");
+  add("SWTR-15: the flows emit to the HOST's receiver — and import no analytics transport themselves", (() => {
+    const seam = readSrc("src/components/swapExecution/swapFlowEvents.ts");
+    const section = stripComments(readSrc("src/components/swapExecution/SwapExecutionSection.tsx"));
+    const flow = stripComments(readSrc("src/components/trim/TrimFlowSection.tsx"));
+    // Nothing is emitted unless a host provides a receiver: the default is null.
+    const defaultNull = /createContext<SwapFlowEmitter \| null>\(null\)/.test(seam);
+    // The swap step uses the caller's emitter, else the host's — so a single swap reports too.
+    const swapUses = /const flowEmit = useContext\(SwapFlowEventsContext\);/.test(section) && /emit: props\.emit \?\? flowEmit \?\? undefined,/.test(section);
+    // The Trim flow reports the selector, each run, and each summary.
+    const trimEmits = /emit\?\.\(\{ name: "trim_selector_opened", listed: rows\.length, sellable: sellable\.length \}\);/.test(flow) &&
+      /emit\?\.\(\{ name: "trim_started", selected: keys\.length, retry: !fresh \}\);/.test(flow) &&
+      /emit\?\.\(trimFinishedEvent\(chosen, results\)\);/.test(flow);
+    const noTransport = [seam, section, flow, readSrc("src/suggestions/swapExecution/trimEvents.ts")].every((f) => !/posthog|analytics\/analytics/i.test(stripComments(f)));
+    return defaultNull && swapUses && trimEmits && noTransport;
+  })(), "one seam, no transport");
+  add("SWTR-16: a summary is reported ONCE per run — a re-render does not count it again, and a Try Again run is reported as its own", (() => {
+    const flow = stripComments(readSrc("src/components/trim/TrimFlowSection.tsx"));
+    return /if \(stage !== "summary"\) \{ reportedRunRef\.current = null; return; \}/.test(flow) &&
+      /if \(reportedRunRef\.current === runKey\) return;\s*reportedRunRef\.current = runKey;/.test(flow);
+  })(), "once per run");
 
   return checks;
 }
