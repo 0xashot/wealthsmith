@@ -409,6 +409,7 @@ function MainApp() {
         pushToast={pushToast}
         onNavigate={navigate}
         onDisconnect={disconnectWallet}
+        onConnectWallet={openConnectModal}
         savedGoal={savedGoal}
       />
     );

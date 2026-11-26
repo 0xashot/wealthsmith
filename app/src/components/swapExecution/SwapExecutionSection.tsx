@@ -33,6 +33,7 @@ import {
   SWAP_CONFIRM_SUBPAGE_TITLE,
   SWAP_ENTRY_CHECK_AGAIN_LABEL,
   SWAP_ENTRY_CHECKING_AGAIN,
+  SWAP_ENTRY_CONNECT_LABEL,
   SWAP_ENTRY_RECONNECT_LABEL,
   SWAP_ENTRY_RECONNECTING,
   SWAP_ENTRY_WALLET_TOOLTIP,
@@ -61,6 +62,14 @@ export interface SwapExecutionSectionProps {
   onRefreshComparison?: () => void;
   /** Closes the whole review. Cancelling the confirm step alone returns here instead. */
   onClose: () => void;
+  /**
+   * Opens the app's own Connect Wallet dialog (the host closes the review first).
+   *
+   * Offered when a swap could be made but no wallet is known to reconnect to — the session's
+   * wallet is not installed in this browser. Absent, that state keeps a greyed Swap with the
+   * reason on hover, because a button that opens nothing is worse than none.
+   */
+  onConnectWallet?: () => void;
   /** Receives funnel events. Absent emits none. */
   emit?: SwapExecutionEmitter;
   /**
@@ -360,7 +369,9 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
       if (walletLink.canReconnect) {
         return <ReconnectFooter onClose={onClose} busy={awaitingWallet === "reconnect"} onReconnect={onReconnect} />;
       }
-      // No wallet is known here to reconnect to. Greyed, with the reason on hover.
+      // No wallet is known here to reconnect to, so the way forward is choosing one: the app's
+      // own Connect Wallet dialog. Without a host to open it, greyed, with the reason on hover.
+      if (props.onConnectWallet) return <ConnectWalletFooter onClose={onClose} onConnectWallet={props.onConnectWallet} />;
       return <ContinueFooter onClose={onClose} unavailableTooltip={SWAP_ENTRY_WALLET_TOOLTIP} onContinue={onSwap} />;
     }
     // Nothing to offer. Asking again is the one thing that can change that, so it is the
@@ -645,6 +656,26 @@ function ReconnectFooter({
           <span>{SWAP_ENTRY_RECONNECT_LABEL}</span>
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * A swap could be offered, but there is no wallet here to reconnect to.
+ *
+ * Connect Wallet in Swap's place. It leaves the review: choosing a wallet signs a session in,
+ * possibly for a different wallet than this review was drawn for, so the review is closed
+ * rather than kept open over amounts that may no longer be this wallet's.
+ */
+function ConnectWalletFooter({ onClose, onConnectWallet }: { onClose: () => void; onConnectWallet: () => void }) {
+  return (
+    <div className="review-modal__footer review-modal__footer--actions">
+      <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
+        Cancel
+      </button>
+      <button type="button" className="review-modal__primary-action" onClick={onConnectWallet}>
+        <span>{SWAP_ENTRY_CONNECT_LABEL}</span>
+      </button>
     </div>
   );
 }

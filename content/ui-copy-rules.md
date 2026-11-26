@@ -972,7 +972,7 @@ The footer never renders nothing. Its states:
 A swap can be offered            [Cancel]  [Swap]
 A wait is in flight              [Cancel]  [ ◌ ]                 spinner, same size as the button pressed
 Wallet link could not be opened  [Cancel]  [Reconnect Wallet]
-No wallet known to reconnect to  [Cancel]  [Swap] (greyed)       reason in a tooltip on the button
+No wallet known to reconnect to  [Cancel]  [Connect Wallet]      closes the review, opens the Connect Wallet dialog
 No swap can be offered           [Close]   [Check Again]         a banner under the title says why
 Checking again                   [Close]   [ ◌ ]                 spinner, same size as Check Again
 ```
@@ -994,9 +994,15 @@ When a wallet that can sign is connected, the footer is Cancel and Swap again.
 Never show a greyed Swap beside a header that says the wallet is connected.
 ```
 
-**No wallet known to reconnect to** (a last resort that a signed-in session
-should not reach). The greyed Swap carries its reason as a tooltip, on hover and
-on focus — nothing is written beside it:
+**No wallet known to reconnect to** (the session's wallet is not installed in
+this browser). Connect Wallet takes Swap's place. It closes the review and
+opens the app's own Connect Wallet dialog: choosing a wallet signs a session
+in, possibly for a different wallet than the review was drawn for, so the
+review is not kept open behind it. Use the same label as the header and the
+dialog — it is the same action.
+
+Only on a surface that cannot open that dialog does a greyed Swap remain, with
+its reason as a tooltip on hover and on focus — nothing is written beside it:
 
 ```text
 Reconnect your wallet to swap

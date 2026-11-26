@@ -95,7 +95,9 @@ import {
   SWAP_CONFIRM_APPROVE_LABEL,
   SWAP_CONFIRM_CANCEL_LABEL,
   SWAP_CONFIRM_CLOSE_LABEL,
+  CONNECT_WALLET_LABEL,
   SWAP_ENTRY_CHECK_AGAIN_LABEL,
+  SWAP_ENTRY_CONNECT_LABEL,
   SWAP_ENTRY_RECONNECT_LABEL,
   SWAP_ENTRY_WALLET_TOOLTIP,
   SWAP_CONFIRM_RETRY_LABEL,
@@ -2593,6 +2595,24 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const mounted = /useEffect\(\(\) => \{\s*mountedRef\.current = true;\s*return \(\) => \{ mountedRef\.current = false; \};\s*\}, \[\]\);/.test(hook);
     return connectOnly && seamFirst && ordered && mounted;
   })(), "connect only");
+  add("SWXE-29: with no wallet to reconnect to, CONNECT WALLET takes Swap's place — it leaves the review, and is never a dead button", (() => {
+    const src = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    const section = stripComments(src);
+    const footer = section.slice(section.indexOf("const entryFooter = () => {"), section.indexOf("// DEMO MODE."));
+    // Only when a host can open the dialog; otherwise the greyed Swap with its tooltip stays.
+    const offered = /if \(props\.onConnectWallet\) return <ConnectWalletFooter onClose=\{onClose\} onConnectWallet=\{props\.onConnectWallet\} \/>;\s*return <ContinueFooter onClose=\{onClose\} unavailableTooltip=\{SWAP_ENTRY_WALLET_TOOLTIP\}/.test(footer);
+    // After the reconnect paths: a wallet that CAN be reconnected is never sent to the dialog.
+    const last = footer.indexOf("<ConnectWalletFooter") > footer.indexOf("<ReconnectFooter");
+    // The review closes before the dialog opens — a new sign-in may be a different wallet.
+    const rail = stripComments(readSrc("src/components/RealWalletSuggestionsRail.tsx"));
+    const closesFirst = (rail.match(/onConnectWallet=\{onConnectWallet \? \(\) => \{ close\(\); onConnectWallet\(\); \} : undefined\}/g) ?? []).length === 2;
+    // And the real pages supply it.
+    const wired = /onConnectWallet=\{connectWallet\}/.test(readSrc("src/pages/DashboardPage.tsx")) &&
+      /onConnectWallet=\{onConnectWallet\}/.test(readSrc("src/pages/PortfolioPage.tsx")) &&
+      /<PortfolioPage[\s\S]{0,200}onConnectWallet=\{openConnectModal\}/.test(readSrc("src/App.tsx"));
+    // One label for one action: the same words the header and the dialog use.
+    return offered && last && closesFirst && wired && SWAP_ENTRY_CONNECT_LABEL === CONNECT_WALLET_LABEL && SWAP_ENTRY_CONNECT_LABEL === "Connect Wallet";
+  })(), "a way forward");
 
   add("SWXE-17: the route on screen is presented as of ITS OWN time, so it cannot age into 'unavailable'", (() => {
     const section = readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx");

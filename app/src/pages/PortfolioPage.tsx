@@ -38,6 +38,8 @@ interface Props {
   pushToast: (message: string, helper?: string) => void;
   onNavigate: (id: string) => void;
   onDisconnect: () => void;
+  /** Opens the Connect Wallet dialog — used by a swap review with no wallet to reconnect to. */
+  onConnectWallet?: () => void;
   /** Saved plan — drives the same real-wallet Suggestion Engine rail as Dashboard. */
   savedGoal?: SavedGoal;
 }
@@ -46,6 +48,7 @@ export default function PortfolioPage({
   pushToast,
   onNavigate,
   onDisconnect,
+  onConnectWallet,
   savedGoal,
 }: Props) {
   const [smithOpen, setSmithOpen] = useState(false);
@@ -114,6 +117,7 @@ export default function PortfolioPage({
             onSwapQuoteGaveUp={() =>
               pushToast(SWAP_CONFIRM_EXPIRED_TOAST)
             }
+            onConnectWallet={onConnectWallet}
           />
         )}
       </div>

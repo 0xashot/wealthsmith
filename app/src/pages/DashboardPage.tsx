@@ -137,6 +137,7 @@ export default function DashboardPage({
             onSwapQuoteGaveUp={() =>
               pushToast(SWAP_CONFIRM_EXPIRED_TOAST)
             }
+            onConnectWallet={connectWallet}
           />
         ) : (
           <aside className="suggestion-rail" aria-label={s.accessibility.right_rail_label}>

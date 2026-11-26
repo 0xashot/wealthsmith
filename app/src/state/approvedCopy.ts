@@ -1375,6 +1375,12 @@ export const SWAP_ENTRY_WALLET_TOOLTIP = "Reconnect your wallet to swap";
  * connected, Swap returns.
  */
 export const SWAP_ENTRY_RECONNECT_LABEL = "Reconnect Wallet";
+/**
+ * The review's primary action when a swap could be made but no wallet is known to reconnect to
+ * (the session's wallet is not installed in this browser). Opens the app's own Connect Wallet
+ * dialog — the same label that dialog and the header use, because it is the same action.
+ */
+export const SWAP_ENTRY_CONNECT_LABEL = CONNECT_WALLET_LABEL;
 /** Read to assistive technology while the wallet is being reconnected; the button only spins. */
 export const SWAP_ENTRY_RECONNECTING = "Reconnecting wallet";
 /**

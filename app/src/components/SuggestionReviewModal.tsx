@@ -85,6 +85,8 @@ interface Props {
    * leaves the expired card in place instead, so a host that has no toast still behaves.
    */
   onSwapQuoteGaveUp?: () => void;
+  /** Opens the app's Connect Wallet dialog from the swap footer. See SwapExecutionSection. */
+  onConnectWallet?: () => void;
   /**
    * Demo Mode. The confirm step still opens, built from the demo quote, with Approve shown
    * unavailable and the reason on hover — so an evaluator sees the flow through to its last
@@ -135,7 +137,7 @@ function formatCalcValue(v: number, unit?: string): string {
   return `${num1(v)}${unit ? ` ${unit}` : ""}`;
 }
 
-export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onDismiss, onClose, onSwapQuoteGaveUp, demo, demoOutcome }: Props) {
+export default function SuggestionReviewModal({ details, contributionReview, stableYieldReview, showGuardrails, swapAction, swapQuoteIsDca, swapQuoteFetcher, swapQuotePresetAssessments, swapQuotePresetLoading, swapQuoteNowMs, onDismiss, onClose, onSwapQuoteGaveUp, onConnectWallet, demo, demoOutcome }: Props) {
   useScrollLock();
   // Mobile: token amounts in the modal tables are shown whole (no decimals).
   const isMobile = useIsMobileViewport();
@@ -223,6 +225,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       nowMs={swapQuoteNowMs}
       onClose={onClose}
       onExpiredGiveUp={onSwapQuoteGaveUp}
+      onConnectWallet={onConnectWallet}
       onStepChange={setSwapStep}
     />
   ) : null;

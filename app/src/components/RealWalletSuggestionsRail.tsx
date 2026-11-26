@@ -51,6 +51,11 @@ interface Props {
    * simply keeps the expired card, which is what every other expiry shows anyway.
    */
   onSwapQuoteGaveUp?: () => void;
+  /**
+   * Opens the app's Connect Wallet dialog, for a swap review with no wallet to reconnect to.
+   * The review closes itself first. Optional: without it that state keeps a greyed Swap.
+   */
+  onConnectWallet?: () => void;
   /** Demo Mode — forwarded to the review so the confirm step is reviewable without a wallet. */
   demo?: boolean;
   /** Demo Mode only — forwarded to the review. See SwapExecutionSection. */
@@ -79,7 +84,7 @@ interface OpenedReview {
   swapQuoteFetcher?: SwapQuoteFetcher;
 }
 
-export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuoteGaveUp, demo, demoOutcome }: Props) {
+export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuoteGaveUp, onConnectWallet, demo, demoOutcome }: Props) {
   // The open review, as a snapshot (see OpenedReview). Read-only — opening the modal never
   // transacts, signs, or hands off to a protocol.
   const [opened, setOpened] = useState<OpenedReview | null>(null);
@@ -163,6 +168,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       demo={demo}
       demoOutcome={demoOutcome}
       onSwapQuoteGaveUp={() => { close(); onSwapQuoteGaveUp?.(); }}
+      onConnectWallet={onConnectWallet ? () => { close(); onConnectWallet(); } : undefined}
     />
   ) : detailsForModal ? (
     <SuggestionReviewModal
@@ -175,6 +181,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       demo={demo}
       demoOutcome={demoOutcome}
       onSwapQuoteGaveUp={() => { close(); onSwapQuoteGaveUp?.(); }}
+      onConnectWallet={onConnectWallet ? () => { close(); onConnectWallet(); } : undefined}
     />
   ) : null;
 
