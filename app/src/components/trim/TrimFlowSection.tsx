@@ -32,6 +32,7 @@ import { SwapFlowEventsContext } from "../swapExecution/swapFlowEvents";
 import { trimFinishedEvent } from "../../suggestions/swapExecution/trimEvents";
 import { failureCopy, formatSettledAmount, formatUsd, solscanTransactionUrl } from "../swapExecution/swapConfirmPresentation";
 import ButtonIcon from "../ButtonIcon";
+import InfoBanner from "../InfoBanner";
 import { resolveTokenIcon } from "../../state/iconRegistry";
 import fallbackTokenUrl from "../../../../assets/icons/fallback/fallback-token.svg";
 import checkBadgeUrl from "../../../../assets/icons/ui/check-badge-solid.svg";
@@ -379,13 +380,18 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
           <ButtonIcon src={checkBadgeUrl} size={40} />
         </span>
       )}
-      <p className="modal__intro trim-summary__line">
-        {swappedKeys.length === 0
-          ? (pending ? TRIM_SUMMARY_PENDING_NOTE : TRIM_SUMMARY_NONE_DESC)
-          : total
+      {swappedKeys.length === 0 ? (
+        // Nothing landed: the same Info banner the review uses for "no swap meets our limits",
+        // in the same place — directly under the title. A swap still awaiting confirmation
+        // may yet land, so that case may not say nothing moved.
+        <InfoBanner title={pending ? TRIM_SUMMARY_PENDING_NOTE : TRIM_SUMMARY_NONE_DESC} />
+      ) : (
+        <p className="modal__intro trim-summary__line">
+          {total
             ? trimSummaryReceived(total, swappedKeys.length, chosen.length)
             : trimSummarySwapped(swappedKeys.length, chosen.length)}
-      </p>
+        </p>
+      )}
       {tokenList(chosen, undefined)}
       {pending && swappedKeys.length > 0 && <p className="review-modal__guardrail-hint">{TRIM_SUMMARY_PENDING_NOTE}</p>}
       <div className="review-modal__footer review-modal__footer--actions">

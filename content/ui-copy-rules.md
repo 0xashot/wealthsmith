@@ -1152,6 +1152,11 @@ Trim Partly Completed     You received 1,199.16 USDC from 1 of 2 tokens.      [D
 Nothing Was Trimmed       No token was swapped, and your funds haven’t moved. [Done] [Try Again]   or [Close] when cancelled
 ```
 
+When nothing was swapped, the line is shown in the Info banner directly under the
+title — the same banner the review uses for "No swap currently meets our limits" —
+not as a loose centred sentence. The same slot carries the "still awaiting
+confirmation" note when a sent swap was not confirmed.
+
 The total is the sum of what the chain says arrived, never the estimates. If an
 amount could not be read, the summary says how many tokens were swapped and gives
 no figure.

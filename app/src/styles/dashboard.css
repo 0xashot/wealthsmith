@@ -5948,6 +5948,11 @@ td.vetting-scores-table__date {
 .trim-summary__line {
   text-align: center;
 }
+/* The summary is a centred column; its banner is not — it spans the modal like the review's. */
+.swap-confirm--settled.trim-step .alert {
+  align-self: stretch;
+  text-align: left;
+}
 .swap-confirm--settled.trim-step .trim-list {
   align-self: stretch;
 }

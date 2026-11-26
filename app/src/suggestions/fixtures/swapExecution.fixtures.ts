@@ -2832,7 +2832,8 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // "Completed" only when every chosen token was swapped.
     const honestTitle = /swappedKeys\.length === 0 \? TRIM_SUMMARY_NONE_TITLE\s*: swappedKeys\.length === chosen\.length \? TRIM_SUMMARY_ALL_TITLE\s*: TRIM_SUMMARY_SOME_TITLE/.test(flow);
     // And a pending swap means the summary may not say that nothing moved.
-    const pendingAware = /swappedKeys\.length === 0\s*\? \(pending \? TRIM_SUMMARY_PENDING_NOTE : TRIM_SUMMARY_NONE_DESC\)/.test(flow);
+    // It is said in the Info banner the review already uses, not as a loose centred line.
+    const pendingAware = /swappedKeys\.length === 0 \? \(\s*<InfoBanner title=\{pending \? TRIM_SUMMARY_PENDING_NOTE : TRIM_SUMMARY_NONE_DESC\} \/>/.test(flow);
     return advances && stops && honestTitle && pendingAware;
   })(), "carry on, account for everything");
   add("SWTR-11: only a Trim naming SEVERAL tokens gets the selector; one token goes straight to its terms, labelled Trim", (() => {
