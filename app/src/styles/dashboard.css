@@ -880,6 +880,32 @@ td.vetting-scores-table__date {
   color: var(--color-feedback-warning-text-tint);
 }
 
+/* Info variant — neutral context that stays on screen while it applies (e.g. "no swap currently
+   meets our limits" at the top of a review). Tinted rather than raised, with no severity stripe:
+   it is not something that went wrong, and inside a modal a shadowed card would read as another
+   surface to act on. */
+.alert--info {
+  align-items: flex-start;
+  /* Even padding and a tighter icon gap than the raised alert: at phone width the wider side
+     padding left the text a column of two or three words. */
+  gap: var(--spacing-inline-gap-sm);
+  padding: var(--spacing-card-padding-sm);
+  background: var(--color-feedback-info-background-tint);
+  border-color: transparent;
+  border-left-width: 1px;
+  box-shadow: none;
+}
+.alert--info .alert__title {
+  color: var(--color-text-primary);
+}
+.alert__icon {
+  display: inline-flex;
+  flex: none;
+  /* Sits on the title's first line rather than centred against the whole block. */
+  padding-top: 1px;
+  color: var(--color-feedback-info-text-tint);
+}
+
 .alert__content {
   display: grid;
   gap: var(--spacing-stack-gap-xs);
@@ -3262,6 +3288,10 @@ td.vetting-scores-table__date {
   padding-right: var(--spacing-inline-gap-sm);
 }
 
+.review-modal__body > .alert {
+  flex: none;
+}
+
 .review-modal__section {
   display: flex;
   flex-direction: column;
@@ -5215,22 +5245,11 @@ td.vetting-scores-table__date {
   justify-content: flex-end;
   gap: var(--spacing-inline-gap-sm);
 }
-/* Why the primary action cannot be pressed, beside the control it explains. Pushed to the left
-   edge so the buttons keep their place whether or not a note is showing. */
-.review-modal__footer-note {
-  /* Beside the buttons when there is room for a readable line; on its own row above them when
-     there is not — a phone-width footer squeezed it into a three-word column otherwise. */
-  flex: 1 1 14rem;
-  margin: 0;
-  align-self: center;
-  color: var(--color-text-secondary);
-  font: var(--typography-body-sm-font);
-}
-.review-modal__footer--noted {
-  flex-wrap: wrap;
-  row-gap: var(--spacing-inline-gap-sm);
-}
-.review-modal__primary-action:disabled {
+/* A primary action that cannot be taken right now, in the design system's disabled colours.
+   A CLASS, not `:disabled`: the button carries `aria-disabled` so it stays focusable and its
+   tooltip — the only place the reason is given — can be reached by hover, Tab and tap. */
+.review-modal__primary-action.review-modal__primary-action--disabled,
+.review-modal__primary-action.review-modal__primary-action--disabled:hover {
   border-color: var(--color-disabled-background-default);
   background: var(--color-disabled-background-default);
   color: var(--color-text-secondary);

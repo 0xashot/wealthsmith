@@ -62,11 +62,18 @@ export function shortLivedFirstQuoteFetcher(inner: SwapQuoteFetcher, lifeMs = 2_
   };
 }
 
-/** A quote source that finds no route within limits — the review's Close-only footer. */
-export function noRouteQuoteFetcher(inner: SwapQuoteFetcher): SwapQuoteFetcher {
+/**
+ * A quote source that finds no route within limits — the review's banner, with Close and Check
+ * Again. With `blockedCalls` it relents after that many answers, so Check Again can be seen
+ * FINDING a route: opening a review asks twice (the first request and its one retry), so 2
+ * leaves the review blocked on open and lets the first Check Again succeed.
+ */
+export function noRouteQuoteFetcher(inner: SwapQuoteFetcher, blockedCalls = Number.POSITIVE_INFINITY): SwapQuoteFetcher {
+  let calls = 0;
   return async (action, opts) => {
     const result = await inner(action, opts);
-    if (!result.ok) return result;
+    calls += 1;
+    if (!result.ok || calls > blockedCalls) return result;
     return {
       ok: true,
       assessment: {

@@ -10,11 +10,12 @@
  * and the plan is fetched when the user signals intent. The countdown then measures what it is
  * supposed to measure: the time between seeing the terms and approving them.
  *
- * It renders NOTHING unless the offer stands. No wallet, no permitted rail, an expired quote, a
- * provider we cannot build for — any of them and this is absent, and the modal keeps its
- * ordinary handoff footer. That is the fallback working, not a degraded state.
+ * IT ALWAYS RENDERS A FOOTER. Swap while a swap can be offered; a greyed Swap with the reason on
+ * hover when the wallet cannot sign; Close and Check Again when the comparison offers nothing.
+ * There is no link out to a provider anywhere in it — not before the step, and not on its
+ * failure screens.
  */
-import { useCallback, useContext, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { SwapActionContext, SwapQuoteComparisonAssessment } from "../../suggestions/swapQuote/swapQuoteContracts";
 import { deriveExecutionOffer, deriveSwapEntry, type SwapEntry } from "../../suggestions/swapExecution/executionOffer";
@@ -28,10 +29,11 @@ import {
   SWAP_CONFIRM_COMPLETE_TITLE,
   SWAP_CONFIRM_CONTINUE_LABEL,
   SWAP_CONFIRM_SUBPAGE_TITLE,
-  SWAP_ENTRY_WALLET_NOTE,
+  SWAP_ENTRY_CHECK_AGAIN_LABEL,
+  SWAP_ENTRY_CHECKING_AGAIN,
+  SWAP_ENTRY_WALLET_TOOLTIP,
 } from "../../state/approvedCopy";
 import { failureCopy, rawToTokenString } from "./swapConfirmPresentation";
-import { buildSwapHandoff } from "../../suggestions/swapQuote/providerSwapLinks";
 import { demoConfirmTerms } from "../../suggestions/swapExecution/demoConfirmTerms";
 import type { SwapExecutionEmitter } from "../../suggestions/swapExecution/swapExecutionEvents";
 import type { DemoExecutionOutcome } from "../../suggestions/swapExecution/demoOutcomes";
@@ -47,9 +49,10 @@ export interface SwapExecutionSectionProps {
    */
   comparisonLoading?: boolean;
   /**
-   * Re-run the route comparison without blanking the route on screen. Pressing Swap calls it
-   * when the comparison has expired, and continues once it answers. Absent where there is
-   * nothing to re-run (the gallery's presets) — Swap then proceeds on what is shown.
+   * Re-run the route comparison without blanking what is on screen. Pressing Swap calls it
+   * when the comparison has expired, and continues once it answers; Check Again calls it when
+   * the comparison offered nothing. Absent where there is nothing to re-run (the gallery's
+   * presets) — Swap then proceeds on what is shown, and a blocked review offers only Close.
    */
   onRefreshComparison?: () => void;
   /** Closes the whole review. Cancelling the confirm step alone returns here instead. */
@@ -204,8 +207,15 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
    * When the comparison has EXPIRED it is re-run first, quietly, with the button spinning in
    * place; the effect below continues once it answers. Opening the step is all that is needed
    * to start the plan — `useSwapExecutionPlan` requests it when `enabled` turns true.
+   *
+   * CHECK AGAIN is the same re-run asked for by name, from a review that could offer nothing.
+   * It differs only in what happens next: Swap continues into the step, Check Again stops and
+   * lets the footer and the notice redraw from the new answer. One mechanism for both, so the
+   * wait is held the same way — the pressed button spins where it is and nothing else moves.
    */
-  const [awaitingQuote, setAwaitingQuote] = useState(false);
+  const [awaitingRefresh, setAwaitingRefresh] = useState<"swap" | "check" | null>(null);
+  const awaitingQuote = awaitingRefresh === "swap";
+  const checkingAgain = awaitingRefresh === "check";
   const awaitingQuoteRef = useRef<{ comparedAt: string | null; sawLoading: boolean } | null>(null);
   const entryNow = useCallback((): SwapEntry => {
     const nowMs = props.nowMs ?? Date.now();
@@ -224,29 +234,42 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     if (at.kind !== "swap") return;
     if (at.refreshFirst && onRefreshComparison) {
       awaitingQuoteRef.current = { comparedAt: assessment?.comparedAt ?? null, sawLoading: false };
-      setAwaitingQuote(true);
+      setAwaitingRefresh("swap");
       onRefreshComparison();
       return;
     }
     setStarted(true);
   };
+  const onCheckAgain = () => {
+    if (!onRefreshComparison || awaitingRefresh != null) return;
+    awaitingQuoteRef.current = { comparedAt: assessment?.comparedAt ?? null, sawLoading: false };
+    setAwaitingRefresh("check");
+    onRefreshComparison();
+  };
 
-  useEffect(() => {
+  // A LAYOUT effect: the notice and the route above are redrawn from the new answer before
+  // paint, and the footer has to change in that same frame — otherwise one frame shows a found
+  // route beside a Check Again that is still spinning.
+  useLayoutEffect(() => {
     const waiting = awaitingQuoteRef.current;
-    if (!awaitingQuote || waiting == null) return;
+    if (awaitingRefresh == null || waiting == null) return;
     if (comparisonLoading) { waiting.sawLoading = true; return; }
     // Not loading — but is that "answered" or "not started yet"? The refresh reaches this
     // component a render after it was asked for, so until a load has been SEEN, or the answer
     // has visibly changed, there is nothing to conclude.
     const changed = (assessment?.comparedAt ?? null) !== waiting.comparedAt;
     if (!waiting.sawLoading && !changed) return;
+    const was = awaitingRefresh;
     awaitingQuoteRef.current = null;
-    setAwaitingQuote(false);
-    // Continue only if the fresh comparison still offers this swap outright. If it does not,
-    // the footer redraws from the new answer and the route section says why.
+    setAwaitingRefresh(null);
+    // Check Again ends here: the footer and the notice redraw from the new answer, and if it
+    // found a route the reader sees it and presses Swap themselves.
+    if (was !== "swap") return;
+    // Swap continues only if the fresh comparison still offers this swap outright. If it does
+    // not, the footer redraws from the new answer and the notice says why.
     const at = entryNow();
     if (at.kind === "swap" && !at.refreshFirst) setStarted(true);
-  }, [awaitingQuote, comparisonLoading, assessment, entryNow]);
+  }, [awaitingRefresh, comparisonLoading, assessment, entryNow]);
 
   // A wallet that goes away before there is anything to show takes the step back to its entry
   // footer, which says so. Without this the button would spin for a plan nobody can request.
@@ -254,16 +277,23 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
     if (started && awaitingFirstPlan && !walletReady) setStarted(false);
   }, [started, awaitingFirstPlan, walletReady]);
 
-  // The footer before the step is open — one of four, never nothing.
+  // The footer before the step is open — one of five, never nothing.
   const entryFooter = () => {
+    // First, because a re-run passes through "loading": the button that was pressed keeps the
+    // wait, instead of the footer turning into a spinning Swap for the length of the request.
+    if (checkingAgain) return <CheckAgainFooter onClose={onClose} busy onCheckAgain={onCheckAgain} />;
     if (entry.kind === "swap") {
       return <ContinueFooter onClose={onClose} busy={awaitingQuote} onContinue={onSwap} />;
     }
     if (entry.kind === "loading") return <ContinueFooter onClose={onClose} busy onContinue={onSwap} />;
     if (entry.kind === "wallet_unavailable") {
-      return <ContinueFooter onClose={onClose} unavailableNote={SWAP_ENTRY_WALLET_NOTE} onContinue={onSwap} />;
+      return <ContinueFooter onClose={onClose} unavailableTooltip={SWAP_ENTRY_WALLET_TOOLTIP} onContinue={onSwap} />;
     }
-    return <CloseFooter onClose={onClose} />;
+    // Nothing to offer. Asking again is the one thing that can change that, so it is the
+    // primary action — unless there is nothing to ask (the gallery's presets).
+    return onRefreshComparison
+      ? <CheckAgainFooter onClose={onClose} onCheckAgain={onCheckAgain} />
+      : <CloseFooter onClose={onClose} />;
   };
   /**
    * REVIEW SURFACE ONLY. The chosen demo outcome is the give-up ending, so pressing Swap
@@ -285,15 +315,6 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
 
   // Leaving the review entirely must not leave it hidden behind a step that is gone.
   useEffect(() => () => onStepChange?.({ active: false, onBack: leaveStep, title: SWAP_CONFIRM_SUBPAGE_TITLE }), [onStepChange, leaveStep]);
-
-  // The provider's own page, offered when we could not prepare a swap ourselves. Built from
-  // the comparison's winner and this leg's exact pair, so the hand-off lands on the same swap.
-  const handoff = buildSwapHandoff(
-    assessment?.selectedProviderId ?? null,
-    action.inputAsset.mint,
-    action.outputAsset.mint,
-    action.inputAmountTokens,
-  );
 
   // DEMO MODE. There is no wallet, so the real flow cannot run — but the confirm step is the
   // part someone evaluating the product most needs to see, and the wallet check below would
@@ -338,7 +359,6 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
           ? { lamports: activeOutcome.feeLamports, usd: activeOutcome.feeUsd ?? null }
           : null}
         onRefresh={() => setDemoRefreshed(true)}
-        handoff={handoff}
         subpage
         // Cancel LEAVES; back returns to the review. Two exits, because they answer different
         // questions: "not this swap" and "let me re-read why you suggested it".
@@ -386,7 +406,6 @@ export default function SwapExecutionSection(props: SwapExecutionSectionProps) {
       subpage
       onApprove={execution.approve}
       onRefresh={() => execution.prepare()}
-      handoff={handoff}
       onCancel={() => {
         // Abandon anything in flight first — nothing is submitted at this stage, so leaving
         // costs the user nothing — then close the review entirely. The back control is what
@@ -409,31 +428,42 @@ function ContinueFooter({
   onClose,
   onContinue,
   busy = false,
-  unavailableNote,
+  unavailableTooltip,
 }: {
   onClose: () => void;
   onContinue: () => void;
   /** Terms are being fetched. The button holds the wait in place of an empty sheet. */
   busy?: boolean;
   /**
-   * Swap cannot be pressed, and this says why. The button stays — greyed, in its place — so the
-   * footer is the same footer, and the reason sits beside the control it explains.
+   * Swap cannot be pressed, and this says why — as a tooltip on the button itself, on hover and
+   * on focus. The button stays, greyed, in its place, so the footer is the same footer.
    */
-  unavailableNote?: string;
+  unavailableTooltip?: string;
 }) {
-  const noteId = useId();
+  const tipId = useId();
   return (
-    <div className={`review-modal__footer review-modal__footer--actions${unavailableNote ? " review-modal__footer--noted" : ""}`}>
-      {unavailableNote && (
-        <p id={noteId} className="review-modal__footer-note" role="status">{unavailableNote}</p>
-      )}
+    <div className="review-modal__footer review-modal__footer--actions">
       <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
         Cancel
       </button>
-      {unavailableNote ? (
-        <button type="button" className="review-modal__primary-action" disabled aria-describedby={noteId}>
-          <span>{SWAP_CONFIRM_CONTINUE_LABEL}</span>
-        </button>
+      {unavailableTooltip ? (
+        // The same construction as Approve in Demo Mode: `aria-disabled`, not `disabled`. A truly
+        // disabled button leaves the tab order and fires no pointer events, so its tooltip
+        // would be unreachable by keyboard, by touch, and in some browsers by hover too.
+        <span className="swap-confirm__approve-wrap">
+          <button
+            type="button"
+            className="review-modal__primary-action review-modal__primary-action--disabled"
+            aria-disabled="true"
+            aria-describedby={tipId}
+            onClick={(e) => e.preventDefault()}
+          >
+            <span>{SWAP_CONFIRM_CONTINUE_LABEL}</span>
+          </button>
+          <span className="swap-confirm__approve-tip" role="tooltip" id={tipId}>
+            {unavailableTooltip}
+          </span>
+        </span>
       ) : busy ? (
         // Same button, same place, same label — only now it spins and cannot be pressed twice.
         // `aria-disabled` so the label change is still announced; see SwapConfirmSheet's busy
@@ -463,10 +493,50 @@ function ContinueFooter({
 }
 
 /**
- * No swap can be offered for this route, so there is nothing to continue to.
+ * No swap can be offered right now, and asking again might change that.
  *
- * Close, alone — not Cancel beside a dead button, and not a link out to a provider. The route
- * section above says what happened and carries its own Refresh.
+ * Close, and Check Again as the primary action — not a greyed Swap, which would present a
+ * rejected quote as something nearly executable, and not a link out to a provider. The banner
+ * under the review's title says what happened. While the re-run is in flight the button spins
+ * in place, exactly as Swap does, and the review does not change until the answer is in.
+ */
+function CheckAgainFooter({
+  onClose,
+  onCheckAgain,
+  busy = false,
+}: {
+  onClose: () => void;
+  onCheckAgain: () => void;
+  busy?: boolean;
+}) {
+  return (
+    <div className="review-modal__footer review-modal__footer--actions">
+      <button type="button" className="review-modal__tertiary-action" onClick={onClose}>
+        {SWAP_CONFIRM_CLOSE_LABEL}
+      </button>
+      {busy ? (
+        <button
+          type="button"
+          className="review-modal__primary-action review-modal__primary-action--busy cta-hold"
+          aria-disabled="true"
+          onClick={(e) => e.preventDefault()}
+        >
+          <span className="cta-hold__label" aria-hidden="true">{SWAP_ENTRY_CHECK_AGAIN_LABEL}</span>
+          <span className="swap-confirm__spinner cta-hold__spinner" aria-hidden="true" />
+          <span role="status" aria-live="polite" className="sr-only">{SWAP_ENTRY_CHECKING_AGAIN}</span>
+        </button>
+      ) : (
+        <button type="button" className="review-modal__primary-action" onClick={onCheckAgain}>
+          <span>{SWAP_ENTRY_CHECK_AGAIN_LABEL}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Nothing to offer and nothing to re-run (the gallery's fixed presets, a demo quote with no
+ * guaranteed minimum). Close, alone — not Cancel beside a dead button.
  */
 function CloseFooter({ onClose }: { onClose: () => void }) {
   return (

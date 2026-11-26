@@ -6,16 +6,22 @@
  * platform on the card face, never prepares/executes a transaction, and never changes the financial suggestion.
  *
  * It reports the single-leg QUOTE STATE up to the modal via `onExecutionContext` — the action, its assessment
- * (null until one exists), whether a request is in flight, and a quiet refresh. The modal's footer is drawn from
- * that and nothing else: there is no "Swap on <provider>" link out any more, so this section no longer builds one.
- * Multi-leg plans report nothing (no single transaction to approve).
+ * (null until one exists), whether a request is in flight, a quiet refresh, and — when no swap can be offered —
+ * the NOTICE saying so. The modal's footer is drawn from that and nothing else: there is no "Swap on <provider>"
+ * link out any more, so this section no longer builds one. Multi-leg plans report nothing (no single transaction
+ * to approve).
+ *
+ * WHEN NOTHING CAN BE OFFERED, THE REVIEW SAYS SO AT THE TOP. With `hostShowsNotice` the section renders nothing
+ * for a blocked comparison and hands the notice up instead, so the review can show it as a banner directly under
+ * its title. It used to sit here, at the very bottom of the body — a reader saw the amounts to send and receive
+ * first and learned only after scrolling that none of it could be executed.
  *
  * Data source is pluggable: real client by default; the /testing gallery passes `presetAssessments` (or a preset
  * status) so gallery cases are deterministic and never call live providers.
  */
 import { useLayoutEffect } from "react";
 import type { SwapActionReadiness, SwapActionContext, SwapQuoteComparisonAssessment } from "../../suggestions/swapQuote/swapQuoteContracts";
-import { presentSwapQuote, notReadyView, notRequiredView, unavailableView, isEligibleResultKind, type QuoteView } from "../../suggestions/swapQuote/quotePresentation";
+import { presentSwapQuote, notReadyView, notRequiredView, unavailableView, isEligibleResultKind, isBlockedView, type QuoteView } from "../../suggestions/swapQuote/quotePresentation";
 import type { SwapQuoteFetcher } from "../../suggestions/swapQuote/swapQuoteClient";
 import { useSwapQuoteComparison } from "./useSwapQuoteComparison";
 import SwapQuoteLoadingState from "./SwapQuoteLoadingState";
@@ -23,10 +29,10 @@ import SwapQuoteSelectedState from "./SwapQuoteSelectedState";
 import SwapQuoteUnavailableState from "./SwapQuoteUnavailableState";
 import SwapPlanQuoteSummary from "./SwapPlanQuoteSummary";
 
-function renderView(view: QuoteView, onRefresh?: () => void, headingOverride?: string) {
+function renderView(view: QuoteView, headingOverride?: string) {
   return isEligibleResultKind(view.kind)
     ? <SwapQuoteSelectedState view={view} headingOverride={headingOverride} />
-    : <SwapQuoteUnavailableState view={view} onRefresh={view.showRefresh ? onRefresh : undefined} />;
+    : <SwapQuoteUnavailableState view={view} />;
 }
 
 export interface SwapQuoteComparisonSectionProps {
@@ -50,6 +56,18 @@ export interface SwapQuoteComparisonSectionProps {
    * the Boundary's answer in one place: this section does not decide, it supplies.
    */
   onExecutionContext?: (ctx: SwapQuoteState | null) => void;
+  /**
+   * The host shows a blocked comparison's notice itself (a banner under the review's title), so this section
+   * renders nothing for one. Absent — the gallery, which has no header or footer of its own — it is rendered
+   * here in place.
+   */
+  hostShowsNotice?: boolean;
+}
+
+/** Why no swap can be offered right now, in words for the reader. */
+export interface SwapQuoteNotice {
+  heading: string;
+  body: string | null;
 }
 
 /** What the footer needs to know about the route comparison. */
@@ -59,8 +77,18 @@ export interface SwapQuoteState {
   assessment: SwapQuoteComparisonAssessment | null;
   /** A request is in flight — the first one, or a refresh of either kind. */
   loading: boolean;
-  /** Re-request WITHOUT blanking the route on screen. For the Swap button's own use. */
-  refresh: () => void;
+  /**
+   * Re-request WITHOUT blanking what is on screen. For the footer's own use: Swap, and Check Again.
+   * Absent where there is nothing to re-run — the gallery's fixed presets — so the footer never offers, or
+   * waits on, a refresh that cannot answer.
+   */
+  refresh?: () => void;
+  /**
+   * Set when the comparison has answered and offers no swap that asking again could change. The review shows
+   * it under its title and offers Check Again; null while a route is selected, and null while the first
+   * comparison is still loading.
+   */
+  notice: SwapQuoteNotice | null;
 }
 
 export default function SwapQuoteComparisonSection(props: SwapQuoteComparisonSectionProps) {
@@ -95,14 +123,20 @@ export default function SwapQuoteComparisonSection(props: SwapQuoteComparisonSec
   // existed, and in the gap the modal showed a different footer that was then replaced.
   const quoteLoading = usePreset ? props.presetLoading === true : phase !== "done" || refreshing;
   const quietRefresh = () => refresh({ quiet: true });
-  // The reader's own Refresh blanks the section on purpose: they asked for a new answer and should see it arrive.
+  // The multi-leg summary's own Refresh blanks the section on purpose: it has no footer action to hold the wait.
   const loudRefresh = () => refresh();
+  // What a single-leg comparison has to show once it has ANSWERED — a failed request is an answer too. Null
+  // until then, so a notice is never raised over a comparison that is merely still loading.
+  const answered = usePreset ? props.presetLoading !== true : phase === "done";
+  const resolvedView: QuoteView | null = singleLeg && answered ? (singleView ?? unavailableView()) : null;
+  const notice: SwapQuoteNotice | null =
+    resolvedView && isBlockedView(resolvedView) ? { heading: resolvedView.heading, body: resolvedView.body } : null;
   const executionCtx: SwapQuoteState | null =
     singleLeg && readiness.status === "ready"
-      ? { action: singleLeg, assessment: singleAssessment, loading: quoteLoading, refresh: quietRefresh }
+      ? { action: singleLeg, assessment: singleAssessment, loading: quoteLoading, refresh: usePreset ? undefined : quietRefresh, notice }
       : null;
   const executionKey = executionCtx
-    ? `${executionCtx.action.legId}|${executionCtx.action.inputAmountRaw}|${executionCtx.assessment?.comparedAt ?? "none"}|${quoteLoading}`
+    ? `${executionCtx.action.legId}|${executionCtx.action.inputAmountRaw}|${executionCtx.assessment?.comparedAt ?? "none"}|${quoteLoading}|${notice?.heading ?? ""}`
     : null;
   // A LAYOUT effect: the footer is drawn from this report, and a passive effect would let one
   // frame paint with the previous report — a Swap button spinning for a comparison that has
@@ -117,10 +151,14 @@ export default function SwapQuoteComparisonSection(props: SwapQuoteComparisonSec
   if (readiness.status === "not_ready_for_quote") return renderView(notReadyView(isDca, readiness.reasons));
   if (readiness.status === "not_required") return renderView(notRequiredView());
 
+  // The host is showing this notice under its title; repeating it down here would say it twice.
+  const noticeShownByHost = props.hostShowsNotice === true && notice != null;
+
   if (usePreset) {
     if (props.presetLoading) return <SwapQuoteLoadingState />;
     if (multiLeg) return <SwapPlanQuoteSummary legs={legs} assessments={props.presetAssessments ?? {}} nowMs={props.nowMs} />;
-    return singleView ? renderView(singleView, loudRefresh) : renderView(unavailableView(), loudRefresh);
+    if (noticeShownByHost) return null;
+    return renderView(resolvedView ?? unavailableView());
   }
 
   if (phase === "idle" || phase === "loading") return <SwapQuoteLoadingState />;
@@ -131,7 +169,6 @@ export default function SwapQuoteComparisonSection(props: SwapQuoteComparisonSec
     return <SwapPlanQuoteSummary legs={legs} assessments={assessments} onRefresh={loudRefresh} nowMs={props.nowMs} />;
   }
 
-  const lr = legResults[0];
-  if (!lr || !lr.result.ok) return renderView(unavailableView(), loudRefresh);
-  return singleView ? renderView(singleView, loudRefresh) : renderView(unavailableView(), loudRefresh);
+  if (noticeShownByHost) return null;
+  return renderView(resolvedView ?? unavailableView());
 }

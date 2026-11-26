@@ -67,7 +67,6 @@ import {
   busyPresentationFor,
   showsExplorerLink,
   failureMarkFor,
-  offersProviderHandoff,
   offersRetry,
   formatSettledAmount,
   rawToTokenString,
@@ -120,12 +119,6 @@ export interface SwapConfirmSheetProps {
    */
   subpage?: boolean;
   /**
-   * The provider's own swap page, for the hand-off offered when we could not prepare one
-   * ourselves. Absent when no provider was selected, and the footer then offers only Cancel —
-   * a dead "Swap on" button would be worse than none.
-   */
-  handoff?: { providerName: string; swapUrl: string } | null;
-  /**
    * Demo Mode. Approve is shown but unavailable, with the reason on hover and focus — the one
    * place this sheet renders an action that cannot be taken. See the footer for why.
    */
@@ -135,7 +128,7 @@ export interface SwapConfirmSheetProps {
 export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
   const {
     phase, terms, failure, signature, receivedTokens = null,
-    onCancel, onRefresh, onApprove, onDone, fee = null, subpage = false, demo = false, handoff = null,
+    onCancel, onRefresh, onApprove, onDone, fee = null, subpage = false, demo = false,
   } = props;
   const demoTipId = useId();
 
@@ -245,12 +238,12 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
             </a>
           </p>
         )}
-        {/* Expiry is the one failure a fresh quote fixes, so it gets Refresh. The endings WE
-            caused get the provider's own page — we could not do this for them, so the honest
-            offer is the place they can do it themselves. A decline gets neither: the user is
-            not blocked, and offering another venue for the thing they just refused reads as
-            asking twice. Nothing is shown without the means to deliver it: no handler, no
-            button. */}
+        {/* Expiry is the one failure a fresh quote fixes, so it gets Refresh; a swap that was
+            not sent, or could not be prepared, gets Try Again. Every other ending gets Close.
+            NONE of them links out to a provider: a swap WealthSmith suggests is approved here
+            or not at all, and a door to another venue — where none of the checks on this
+            screen apply — is not a remedy we offer. Nothing is shown without the means to
+            deliver it: no handler, no button. */}
         {onRefresh && offersRetry(failure, reachedChain) ? (
           <ModalActionsFooter
             secondaryLabel={SWAP_CONFIRM_CANCEL_LABEL}
@@ -262,18 +255,6 @@ export default function SwapConfirmSheet(props: SwapConfirmSheetProps) {
             secondaryLabel={SWAP_CONFIRM_CANCEL_LABEL}
             onSecondary={onCancel}
             primary={{ kind: "button", label: SWAP_CONFIRM_REFRESH_LABEL, onClick: onRefresh }}
-          />
-        ) : handoff && offersProviderHandoff(failure) ? (
-          <ModalActionsFooter
-            secondaryLabel={SWAP_CONFIRM_CANCEL_LABEL}
-            onSecondary={onCancel}
-            primary={{
-              kind: "external-link",
-              label: `Swap on ${handoff.providerName}`,
-              href: handoff.swapUrl,
-              newTab: true,
-              ariaLabel: `Swap on ${handoff.providerName}. Opens ${handoff.providerName} in a new tab. No transaction is prepared.`,
-            }}
           />
         ) : (
           /* A lone button that only dismisses says Close, not Cancel — there is nothing left

@@ -140,7 +140,7 @@ export function presentSwapQuote(a: SwapQuoteComparisonAssessment, opts: Present
     case "only_route_available":
       return { kind: "only_route", heading: "Suggested route", providerLabel: `${selName} — Only eligible route found`, body: "WealthSmith found one route that met the current cost, liquidity, price-impact, and freshness requirements.", disclosure: "Because no second eligible route was available, WealthSmith could not verify that this was the lowest-cost option.", metrics: selectedMetrics(a, nowMs), showRefresh: true, ...base };
     case "no_valid_route":
-      return { kind: "no_valid_route", heading: "No route currently meets WealthSmith’s limits", providerLabel: null, body: "WealthSmith compared available read-only quotes, but none met the current cost, liquidity, price-impact, and freshness requirements. You can review the suggestion again later.", disclosure: null, metrics: [], showRefresh: true, ...base, liquidityProxyNote: null };
+      return { kind: "no_valid_route", heading: "No swap currently meets our limits", providerLabel: null, body: "None of the available quotes met WealthSmith’s execution limits. No transaction was submitted. Check again for updated quotes.", disclosure: null, metrics: [], showRefresh: true, ...base, liquidityProxyNote: null };
     case "not_ready_for_quote":
       return { kind: "not_ready_for_quote", heading: "Route comparison not available yet", providerLabel: null, body: "WealthSmith needs an exact transferable source asset and amount before comparing routes.", disclosure: null, metrics: [], showRefresh: false, ...base, alternatives: [], comparedProviderNames: [], unavailableProviderNames: [], liquidityProxyNote: null };
     case "not_required":
@@ -185,6 +185,15 @@ export function unavailableView(): QuoteView {
 /** True for the eligible-result kinds (rendered by SwapQuoteSelectedState). */
 export function isEligibleResultKind(kind: QuoteViewKind): boolean {
   return kind === "selected" || kind === "partial" || kind === "only_route" || kind === "equivalent";
+}
+
+/**
+ * A comparison that offers no swap and could offer one if asked again: no route within limits, a comparison
+ * that failed, one that aged out. NOT the states with nothing to re-run (no exact source yet, no swap needed).
+ * A review shows a blocked view as a banner under its title and offers "Check Again".
+ */
+export function isBlockedView(view: Pick<QuoteView, "kind" | "showRefresh">): boolean {
+  return !isEligibleResultKind(view.kind) && view.showRefresh;
 }
 
 /** Whether two routes share an underlying venue (for the overlap disclosure). */

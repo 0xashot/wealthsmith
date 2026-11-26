@@ -1,8 +1,16 @@
 /**
- * SwapQuoteUnavailableState — Step 23C. Renders the non-eligible views: no-valid-route, not-ready, not-required,
- * unavailable, expired. The underlying financial suggestion is unchanged. A safe "Refresh comparison" control
- * (keyboard-accessible) may ONLY repeat the read-only quote request — it never opens a provider, prepares a
- * transaction, connects a wallet, or executes anything.
+ * SwapQuoteUnavailableState — Step 23C. Renders the non-eligible views IN PLACE: no-valid-route, not-ready,
+ * not-required, unavailable, expired. The underlying financial suggestion is unchanged.
+ *
+ * IN A SINGLE-SWAP REVIEW IT CARRIES NO CONTROL, and is usually not rendered at all: the notice is shown as a
+ * banner under the review's title (see `SwapQuoteState.notice`) and re-running the comparison is the review's
+ * primary action, "Check Again", in the footer. It used to end in a "Refresh comparison" text button here, at
+ * the bottom of the body — below the fold on most screens.
+ *
+ * `onRefresh` remains for the MULTI-LEG summary only. A plan of several swaps has no single transaction to
+ * approve and so no footer action to carry the re-run; its legs keep a safe, keyboard-accessible Refresh that
+ * may ONLY repeat the read-only quote request — it never opens a provider, prepares a transaction, connects a
+ * wallet, or executes anything.
  */
 import type { QuoteView } from "../../suggestions/swapQuote/quotePresentation";
 

@@ -1315,8 +1315,7 @@ export const SWAP_CONFIRM_TIMEOUT_TITLE = "Awaiting Confirmation";
  *
  * The last sentence is the operative one. The real risk on this screen is not confusion, it
  * is a SECOND swap: someone who reads "we don't know" and starts again can end up executing
- * both. So the screen tells them to check first, and offers no button that would start one —
- * `offersProviderHandoff` returns false here for the same reason.
+ * both. So the screen tells them to check first, and offers no button that would start one.
  */
 export const SWAP_CONFIRM_TIMEOUT_DESC =
   "Confirmation is taking longer than expected. Your swap may still complete. Check its status before starting another swap.";
@@ -1362,9 +1361,17 @@ export const SWAP_CONFIRM_SUBMITTING = "Confirming";
  */
 export const SWAP_CONFIRM_CONTINUE_LABEL = "Swap";
 /**
- * Beside a greyed Swap button when no connected wallet can sign for this session — the wallet
- * extension is not connected to the page, or it is on a different account from the one signed
- * in. Names the remedy, not the mechanism. Before this the button simply was not there, with
- * nothing to say why.
+ * The tooltip on a greyed Swap button when no connected wallet can sign for this session — the
+ * wallet extension is not connected to the page, or it is on a different account from the one
+ * signed in. Names the remedy, not the mechanism. Shown on hover and on focus, so a tap or a
+ * Tab reaches it as well as a mouse.
  */
-export const SWAP_ENTRY_WALLET_NOTE = "Reconnect your wallet to swap.";
+export const SWAP_ENTRY_WALLET_TOOLTIP = "Reconnect your wallet to swap";
+/**
+ * The review's primary action when no swap can be offered right now: re-run the route
+ * comparison. It replaced a "Refresh comparison" text button at the bottom of the body, which
+ * sat below the fold and named our mechanism instead of what the reader gets.
+ */
+export const SWAP_ENTRY_CHECK_AGAIN_LABEL = "Check Again";
+/** Read to assistive technology while that re-run is in flight; the button itself only spins. */
+export const SWAP_ENTRY_CHECKING_AGAIN = "Checking for updated quotes";

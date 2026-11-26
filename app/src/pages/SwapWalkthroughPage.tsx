@@ -49,8 +49,9 @@ import {
 const SIMULATIONS = [
   { key: "swap", label: "Full swap", note: "The whole live flow: Review waits for the route, Swap waits in place for terms, Approve hands to a pretend wallet, and the swap lands." },
   { key: "expired-quote", label: "Aged quote", note: "The route comparison goes stale a moment after the review opens. Wait three seconds, then press Swap: it re-runs the comparison first, still spinning in place." },
-  { key: "no-route", label: "No route", note: "No route meets the limits. The review says so and offers Close — no Swap, and no link out." },
-  { key: "no-wallet", label: "No wallet", note: "A swap could be offered, but no connected wallet can sign. Swap is greyed, with the reason beside it." },
+  { key: "no-route", label: "No route", note: "No route meets the limits. The review says so in a banner under its title and offers Close and Check Again — no Swap, and no link out. Check Again spins in place and, here, finds nothing new." },
+  { key: "route-returns", label: "Route returns", note: "No route when the review opens. Press Check Again: this time one is found, the banner goes, and the review shows the route with Cancel and Swap." },
+  { key: "no-wallet", label: "No wallet", note: "A swap could be offered, but no connected wallet can sign. Swap is greyed; hover or focus it for the reason." },
 ] as const;
 type SimulationKey = (typeof SIMULATIONS)[number]["key"];
 
@@ -86,7 +87,8 @@ export default function SwapWalkthroughPage() {
     const shaped =
       variant === "expired-quote" ? shortLivedFirstQuoteFetcher(inner)
         : variant === "no-route" ? noRouteQuoteFetcher(inner)
-          : inner;
+          : variant === "route-returns" ? noRouteQuoteFetcher(inner, 2)
+            : inner;
     return {
       rail: { ...baseRail, swapQuoteFetcher: slowedQuoteFetcher(shaped) },
       // The plan's terms come from the UNSHAPED quotes: a simulated plan service always answers.

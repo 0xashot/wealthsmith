@@ -327,50 +327,21 @@ export function showsExplorerLink(phase: ExecutionPhase, signature: string | nul
  * — see SWAP_CONFIRM_REVERTED_RETRY_NOTE — which is the same trade this product makes
  * everywhere else: state the cost and let the person decide.
  *
- * Every other ending either has a better remedy (a new quote, the provider's own page) or
- * nothing to retry at all.
+ * `plan_unavailable` is the other one. We could not load a quote — an outage, a timeout — and
+ * nothing was built, shown or sent, so asking again risks nothing and is the only remedy
+ * there is. It used to hand off to the provider's own page instead; that link is gone (a swap
+ * WealthSmith suggests is approved here or not at all), and without a retry the screen was a
+ * dead end for a fault that usually clears in seconds.
+ *
+ * Every other ending either has a better remedy (a new quote) or nothing to retry at all: a
+ * refused verification will be refused again, a decline was the user's own choice, and a
+ * confirmation we stopped watching may still land.
  *
  * The retry RE-QUOTES rather than resending: terms that failed are older than the ones the
  * user would be agreeing to now, which is also why the note says "review a new quote".
  */
 export function offersRetry(failure: ExecutionFailureKey | null, _reachedChain: boolean): boolean {
-  return failure === "submit_failed";
-}
-
-/**
- * Whether a failure should offer the provider's own swap page.
- *
- * The handoff is an apology with a door attached: we could not do this for you, so here is
- * where you can do it yourself. That is the right offer when WE are the reason the swap did
- * not happen — an outage, a refused verification, a failed send, a quote we could not renew.
- *
- * It is the wrong offer in two cases. When the USER is the reason — someone who has just
- * pressed Reject in their wallet is not blocked and does not need a door; putting "Swap on
- * Jupiter" under their own decision reads as a second attempt at the same ask, in a venue
- * where none of the checks on this screen apply. And when WE DO NOT KNOW the outcome: a
- * confirmation that outran our deadline may still land, and a second swap started beside it
- * can execute twice. Both get one button, and that button closes the screen.
- */
-export function offersProviderHandoff(failure: ExecutionFailureKey | null): boolean {
-  switch (failure) {
-    case "declined":
-    case "cancelled":
-      return false;
-    case "plan_unavailable":
-    case "verification_failed":
-    case "submit_failed":
-    case "expired":
-      return true;
-    // NOT a timeout. There the hand-off is not an apology with a door attached, it is a
-    // second swap offered while the first may still be in flight — and if the original lands
-    // a minute later the user has executed both. Unlike a revert we cannot even warn them
-    // what it costs, because we do not yet know whether the first one cost anything. The
-    // screen says to check the status first, and offers nothing that would start another.
-    case "confirm_timeout":
-      return false;
-    case null:
-      return false;
-  }
+  return failure === "submit_failed" || failure === "plan_unavailable";
 }
 
 /**

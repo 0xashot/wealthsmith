@@ -77,7 +77,6 @@ import {
   busyPresentationFor,
   showsExplorerLink,
   failureMarkFor,
-  offersProviderHandoff,
   offersRetry,
   formatSettledAmount,
   formatFeeUsd,
@@ -96,6 +95,8 @@ import {
   SWAP_CONFIRM_APPROVE_LABEL,
   SWAP_CONFIRM_CANCEL_LABEL,
   SWAP_CONFIRM_CLOSE_LABEL,
+  SWAP_ENTRY_CHECK_AGAIN_LABEL,
+  SWAP_ENTRY_WALLET_TOOLTIP,
   SWAP_CONFIRM_RETRY_LABEL,
   SWAP_CONFIRM_REVERTED_RETRY_NOTE,
   SWAP_CONFIRM_AWAITING_WALLET,
@@ -708,19 +709,21 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
   add("SWCC-7: the minimum's explanation states on-chain enforcement — the one claim that makes it meaningful",
     /enforced by the network/i.test(SWAP_CONFIRM_MINIMUM_INFO) &&
       /stay in your wallet/i.test(SWAP_CONFIRM_MINIMUM_INFO), "on-chain minimum");
-  add("SWCC-8: the verification refusal says WE stopped, and the hand-off is still offered", (() => {
+  add("SWCC-8: the verification refusal says WE stopped, and ends in Close — no retry, and no door to another venue", (() => {
     const d = SWAP_CONFIRM_VERIFICATION_FAILED_DESC.toLowerCase();
     // WE stopped — not "verification failed", not the provider's fault. The user is owed the
     // actor, because a swap they asked for did not reach their wallet and we are the reason.
     const weStopped = /we stopped/.test(d) && /before requesting your approval/.test(d);
     // And it accounts for the money, like every other ending that did not happen.
     const accountsForFunds = /no transaction was submitted/.test(d);
-    // The hand-off used to be a SENTENCE here and is a button now, so it is checked where it
-    // actually lives. Dropping this assertion with the sentence would have lost the guarantee
-    // rather than relocated it.
-    const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
-    const handoffOffered = /label: `Swap on \$\{handoff\.providerName\}`/.test(sheet);
-    return weStopped && accountsForFunds && handoffOffered;
+    // This ending once handed off to the provider's own page, first as a sentence and then as
+    // a button. Both are gone on purpose: a transaction that did not match its quote is not
+    // something to go and do elsewhere with none of these checks, and it is not something a
+    // retry fixes. What is pinned now is the absence — checked where the button used to live.
+    const sheet = stripComments(readSrc("src/components/swapExecution/SwapConfirmSheet.tsx"));
+    const noDoor = !/Swap on /.test(sheet) && !/handoff/i.test(sheet);
+    const noRetry = !offersRetry("verification_failed", false);
+    return weStopped && accountsForFunds && noDoor && noRetry;
   })(), "refusal is explicit");
   add("SWCC-9: success copy is a template needing the ACTUAL received amount — it cannot render the estimate by default", (() => {
     // A function, not a constant: there is no way to show the success line without supplying a
@@ -1052,32 +1055,26 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       // so the comment describing it was the only place it existed.
       /\.swap-confirm__alert::after \{[^}]*background: currentColor/.test(block);
   })(), "system colours, settled once, actually painted");
-  add("SWCS-5f: a decline is offered no second venue, and its one button says Close", (() => {
+  add("SWCS-5f: NO ending is offered a second venue — the provider link is gone from the sheet — and a lone button says Close", (() => {
     const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
-    // The handoff is an apology with a door attached, and it belongs on the endings WE caused.
-    // A reader who just pressed Reject in their wallet is not blocked: putting "Swap on
-    // Jupiter" under their own decision asks the same question again, in a venue where none
-    // of this screen's checks apply.
-    const weCaused: ExecutionFailureKey[] = [
-      "plan_unavailable", "verification_failed", "submit_failed", "expired",
-    ];
-    const rulePresent = weCaused.every((f) => offersProviderHandoff(f)) &&
-      !offersProviderHandoff("declined") &&
-      !offersProviderHandoff("cancelled") &&
-      // Nor a timeout, and for a sharper reason: the first swap may still be in flight, so a
-      // second one started beside it can execute both. A revert can be retried with a cost
-      // warning because we KNOW the first attempt is dead; here we know nothing yet.
-      !offersProviderHandoff("confirm_timeout") &&
-      !offersProviderHandoff(null);
-    // The rule has to be WIRED, not merely written: the handoff branch is gated on it, and
-    // the fallback footer's single button is a dismissal rather than a Cancel.
-    const wired = /handoff && offersProviderHandoff\(failure\) \?/.test(sheet);
+    const pres = readSrc("src/components/swapExecution/swapConfirmPresentation.ts");
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    // It used to be offered on the endings WE caused ("Swap on Jupiter" under an outage or a
+    // refused verification). A swap WealthSmith suggests is approved here or not at all: the
+    // sheet takes no handoff, builds no external link, and the rule that gated it is deleted.
+    const code = stripComments(sheet);
+    // The one external link left in the sheet is the explorer, on a transaction that exists.
+    const externals = code.match(/kind: "external-link",\s*label: ([A-Z_]+)/g) ?? [];
+    const noLink = !/handoff/i.test(code) && !/Swap on /.test(code) &&
+      externals.length === 1 && /SWAP_CONFIRM_VIEW_TRANSACTION/.test(externals[0]);
+    const ruleGone = !/offersProviderHandoff/.test(pres) && !/offersProviderHandoff/.test(sheet);
+    const notPassed = !/handoff|buildSwapHandoff|providerSwapLinks/.test(stripComments(section));
     const closes = /review-modal__tertiary-action[\s\S]{0,120}SWAP_CONFIRM_CLOSE_LABEL/.test(sheet) &&
       SWAP_CONFIRM_CLOSE_LABEL === "Close" &&
       // "Cancel" keeps its job beside a primary action; this is about the lone button.
       SWAP_CONFIRM_CANCEL_LABEL === "Cancel";
-    return rulePresent && wired && closes;
-  })(), "no second ask, and a Close that closes");
+    return noLink && ruleGone && notPassed && closes;
+  })(), "no second venue, and a Close that closes");
   add("SWCS-5g: every ending a reader can reach is reviewable, and none is faked into existence", (() => {
     // The four endings that happen AFTER Approve went unreviewed for exactly as long as the
     // review surface could not reach them — it took one failure KEY, and those four are
@@ -1244,14 +1241,16 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     // somebody whose swap reverted still wants the swap, and would otherwise go and retry it
     // somewhere with no warning at all.
     const both = offersRetry("submit_failed", false) && offersRetry("submit_failed", true);
+    // And a quote we could not LOAD: nothing was built, shown or sent, so asking again risks
+    // nothing — and with the provider link gone it is the only remedy that screen has.
+    const unprepared = offersRetry("plan_unavailable", false);
     const nowhereElse =
-      (["plan_unavailable", "verification_failed", "declined", "expired", "confirm_timeout", "cancelled"] as ExecutionFailureKey[])
+      (["verification_failed", "declined", "expired", "confirm_timeout", "cancelled"] as ExecutionFailureKey[])
         .every((f) => !offersRetry(f, false) && !offersRetry(f, true)) && !offersRetry(null, false);
-    // Wired, and BEFORE the hand-off branch — otherwise "Swap on Jupiter" claims these
-    // endings first and the retry is unreachable code.
+    // Wired, and FIRST among the footers — nothing ahead of it can claim these endings.
     const retryIndex = sheet.indexOf("offersRetry(failure, reachedChain) ?");
-    const handoffIndex = sheet.indexOf("handoff && offersProviderHandoff(failure) ?");
-    const ordered = retryIndex > 0 && handoffIndex > retryIndex;
+    const expiredIndex = sheet.indexOf('failure === "expired" ?');
+    const ordered = retryIndex > 0 && expiredIndex > retryIndex && unprepared;
     const labelled = /label: SWAP_CONFIRM_RETRY_LABEL, onClick: onRefresh/.test(sheet) &&
       SWAP_CONFIRM_RETRY_LABEL === "Try Again";
     // The never-sent screen asks for a retry and now has one.
@@ -2461,23 +2460,90 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const modal = readSrc("src/components/SuggestionReviewModal.tsx");
     const section = readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx");
     const rebalance = readSrc("src/suggestions/rebalanceSuggestion.ts");
-    const links = readSrc("src/suggestions/swapQuote/providerSwapLinks.ts");
+    const sheet = readSrc("src/components/swapExecution/SwapConfirmSheet.tsx");
+    const execution = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
     const code = (src: string) => stripComments(src);
     return !/Swap on /.test(code(modal)) && !/swapHandoff|swapFooter|onHandoff/.test(code(modal)) &&
       !/buildSwapHandoff|onHandoff/.test(code(section)) &&
       !/jupiterRebalanceFallbackLink|Swap on Jupiter/.test(code(rebalance)) &&
-      !/jupiterRebalanceFallbackLink/.test(code(links));
+      // Nor in the confirm step, on any of its screens — and the URL builder itself is deleted.
+      !/Swap on /.test(code(sheet)) && !/Swap on |handoff/i.test(code(execution)) &&
+      readSrc("src/suggestions/swapQuote/providerSwapLinks.ts") === "";
   })(), "no link out");
-  add("SWXE-16: the entry footer never renders nothing — four states, each with a control", (() => {
+  add("SWXE-16: the entry footer never renders nothing — five states, each with a control", (() => {
     const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
     const body = section.slice(section.indexOf("const entryFooter = () => {"), section.indexOf("// DEMO MODE."));
     const stripped = stripComments(body);
     return /entry\.kind === "swap"/.test(stripped) && /entry\.kind === "loading"/.test(stripped) &&
-      /entry\.kind === "wallet_unavailable"/.test(stripped) && /return <CloseFooter onClose=\{onClose\} \/>;/.test(stripped) &&
+      /entry\.kind === "wallet_unavailable"/.test(stripped) &&
+      // Nothing to offer: Check Again where a re-run exists, Close alone where it does not.
+      /\? <CheckAgainFooter onClose=\{onClose\} onCheckAgain=\{onCheckAgain\} \/>\s*: <CloseFooter onClose=\{onClose\} \/>;/.test(stripped) &&
       !/return null/.test(stripped) &&
       // And neither branch of the component returns null any more.
       !/return null;/.test(stripComments(section.slice(section.indexOf("export default function SwapExecutionSection"), section.indexOf("function ContinueFooter"))).replace(/if \(demoGaveUp\) return null;/, ""));
   })(), "never empty");
+  add("SWXE-22: CHECK AGAIN holds its own wait — the footer does not turn into a spinning Swap while the comparison re-runs", (() => {
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    const body = stripComments(section.slice(section.indexOf("const entryFooter = () => {"), section.indexOf("// DEMO MODE.")));
+    // A re-run passes through "loading", which on its own draws Cancel + a spinning Swap. The
+    // check for a pending Check Again has to come BEFORE every entry kind.
+    const first = body.indexOf("if (checkingAgain) return <CheckAgainFooter onClose={onClose} busy");
+    const anyKind = body.indexOf("entry.kind ===");
+    const footer = section.slice(section.indexOf("function CheckAgainFooter("), section.indexOf("function CloseFooter("));
+    // Same construction as the busy Swap: label kept invisibly for size, spinner over it,
+    // `aria-disabled` so a second press is a no-op and the status is still announced.
+    const holds = /cta-hold__label[^>]*>\{SWAP_ENTRY_CHECK_AGAIN_LABEL\}/.test(footer) && /cta-hold__spinner/.test(footer) &&
+      /aria-disabled="true"/.test(footer) && /\{SWAP_ENTRY_CHECKING_AGAIN\}/.test(footer);
+    // Close beside it, not Cancel: nothing is in progress to cancel.
+    const closeBeside = /review-modal__tertiary-action[\s\S]{0,80}\{SWAP_CONFIRM_CLOSE_LABEL\}/.test(footer) && !/>\s*Cancel\s*</.test(footer);
+    return first > 0 && anyKind > first && holds && closeBeside && SWAP_ENTRY_CHECK_AGAIN_LABEL === "Check Again";
+  })(), "the pressed button keeps the wait");
+  add("SWXE-23: Check Again STOPS when the answer is in — only a pressed Swap continues into the step", (() => {
+    const section = stripComments(readSrc("src/components/swapExecution/SwapExecutionSection.tsx"));
+    // One mechanism re-runs the comparison for both buttons; what differs is what happens next.
+    // If Check Again opened the step, a reader who asked "is there a route now?" would be
+    // handed terms to approve without having pressed Swap.
+    const oneMechanism = /useState<"swap" \| "check" \| null>\(null\)/.test(section) &&
+      /setAwaitingRefresh\("check"\);\s*onRefreshComparison\(\);/.test(section);
+    const stops = /const was = awaitingRefresh;[\s\S]{0,200}setAwaitingRefresh\(null\);[\s\S]{0,40}if \(was !== "swap"\) return;[\s\S]{0,200}setStarted\(true\)/.test(section);
+    // And it cannot be double-fired or fired with nothing to ask.
+    const guarded = /const onCheckAgain = \(\) => \{\s*if \(!onRefreshComparison \|\| awaitingRefresh != null\) return;/.test(section);
+    return oneMechanism && stops && guarded;
+  })(), "asking is not approving");
+  add("SWXE-24: the blocked NOTICE is reported up and shown as an info banner FIRST in the review's body — not left at the bottom", (() => {
+    const section = readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx");
+    const modal = readSrc("src/components/SuggestionReviewModal.tsx");
+    const banner = readSrc("src/components/InfoBanner.tsx");
+    const code = stripComments(section);
+    // Raised only once the comparison has ANSWERED, so it never sits over one that is loading.
+    const reported = /const answered = usePreset \? props\.presetLoading !== true : phase === "done";/.test(code) &&
+      /resolvedView && isBlockedView\(resolvedView\) \? \{ heading: resolvedView\.heading, body: resolvedView\.body \} : null/.test(code) &&
+      /refresh: usePreset \? undefined : quietRefresh, notice \}/.test(code);
+    // A change of notice is a change of report — without it in the key the banner would lag.
+    const keyed = /\|\$\{notice\?\.heading \?\? ""\}`/.test(code);
+    // The section stands aside for the host, in both the live and the preset path.
+    const standsAside = (code.match(/if \(noticeShownByHost\) return null;/g) ?? []).length === 2 &&
+      /hostShowsNotice=\{swapLeg != null\}/.test(modal);
+    // First child of the body, in BOTH review layouts that carry a route section.
+    const first = (modal.match(/<div className=\{bodyClass\}>\s*\{blockedNotice\}/g) ?? []).length === 2;
+    const isInfo = /className="alert alert--info" role="status"/.test(banner) &&
+      /<InfoBanner title=\{quoteState\.notice\.heading\} description=\{quoteState\.notice\.body\} \/>/.test(modal);
+    return reported && keyed && standsAside && first && isInfo;
+  })(), "said first");
+  add("SWXE-25: without a wallet the reason is a TOOLTIP on the greyed Swap — reachable by hover, Tab and tap, and nowhere else in the footer", (() => {
+    const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
+    const css = readSrc("src/styles/dashboard.css");
+    const footer = section.slice(section.indexOf("function ContinueFooter("), section.indexOf("function CheckAgainFooter("));
+    const code = stripComments(footer);
+    // `aria-disabled`, never `disabled`: a truly disabled button leaves the tab order and fires
+    // no pointer events, and the tooltip is the ONLY place the reason is given.
+    const focusable = /review-modal__primary-action--disabled"\s*aria-disabled="true"\s*aria-describedby=\{tipId\}/.test(code) &&
+      !/<button[^>]*\sdisabled[\s>]/.test(code);
+    const tip = /className="swap-confirm__approve-tip" role="tooltip" id=\{tipId\}>\s*\{unavailableTooltip\}/.test(code);
+    const noNote = !/footer-note|footer--noted|unavailableNote/.test(section) && !/review-modal__footer-note|review-modal__footer--noted/.test(css);
+    const shownOnHoverAndFocus = /\.swap-confirm__approve-wrap:hover \.swap-confirm__approve-tip,\s*\.swap-confirm__approve-wrap:focus-within \.swap-confirm__approve-tip/.test(css);
+    return focusable && tip && noNote && shownOnHoverAndFocus && SWAP_ENTRY_WALLET_TOOLTIP === "Reconnect your wallet to swap";
+  })(), "the reason is on the button");
 
   add("SWXE-17: the route on screen is presented as of ITS OWN time, so it cannot age into 'unavailable'", (() => {
     const section = readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx");

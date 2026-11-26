@@ -23,15 +23,14 @@ import { usdToRaw, tokensToRaw, rawToTokens } from "./swapAmountMath";
 import { SWAP_PROVIDER_PRIORITY_ORDER } from "./swapQuotePolicy";
 import type { WalletPosition } from "../../wallet/walletPosition";
 import { deriveNativeSolRebalanceSource, REBALANCE_NATIVE_SOL_RESERVE_POLICY } from "../rebalanceAssessment";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import type { SwapQuoteComparisonAssessment, SwapComparisonStatus } from "./swapQuoteContracts";
-import { presentSwapQuote, notReadyView, notRequiredView, unavailableView, EXCLUSION_REASON_COPY, LOADING_VIEW } from "./quotePresentation";
+import { presentSwapQuote, notReadyView, notRequiredView, unavailableView, isBlockedView, EXCLUSION_REASON_COPY, LOADING_VIEW } from "./quotePresentation";
 import { validateSanitizedAssessment, swapQuoteRequestKey } from "./swapQuoteClient";
 import { deriveRailSwapActions } from "./railSwapActions";
 import { CARD_TYPE, CARD_CATEGORY } from "../toSuggestionCard";
 import type { SuggestionCategory } from "../engineTypes";
 import type { SuggestionCardState } from "../../types/dashboard";
-import { buildProviderSwapUrl, buildSwapHandoff } from "./providerSwapLinks";
 
 export interface SwapFixtureCheck { name: string; pass: boolean; detail: string; }
 
@@ -485,7 +484,7 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
   add("SWC-2: partial → discloses incomplete comparison; NEVER 'cheapest across all'", (() => { const v = presentSwapQuote(partial, { nowMs: NOW }); return v.kind === "partial" && v.incompleteComparison && /could not verify every supported platform/.test(v.disclosure ?? "") && !/cheapest across|lowest total cost across all|best overall/i.test(JSON.stringify(v)); })(), "partial copy");
   add("SWC-3: only route → 'Only eligible route found'; never 'cheapest'/'lowest estimated total cost'", (() => { const v = presentSwapQuote(onlyRoute, { nowMs: NOW }); return v.kind === "only_route" && /Only eligible route found/.test(v.providerLabel ?? "") && !/cheapest|lowest estimated total cost/i.test(v.providerLabel ?? ""); })(), "only route copy");
   add("SWC-4: economically equivalent → 'Similar estimated cost' + tie-break disclosure", (() => { const v = presentSwapQuote(equivalent, { nowMs: NOW }); return v.kind === "equivalent" && /Similar estimated cost/.test(v.providerLabel ?? "") && /deterministic platform tie-break/.test(v.body ?? ""); })(), "equivalent copy");
-  add("SWC-5: no valid route → limits heading, suggestion unchanged, no fallback/CTA", (() => { const v = presentSwapQuote(noRoute, { nowMs: NOW }); return v.kind === "no_valid_route" && /No route currently meets/.test(v.heading) && v.providerLabel === null; })(), "no route copy");
+  add("SWC-5: no valid route → the approved notice, word for word: nothing met the limits, nothing was submitted, check again", (() => { const v = presentSwapQuote(noRoute, { nowMs: NOW }); return v.kind === "no_valid_route" && v.heading === "No swap currently meets our limits" && v.body === "None of the available quotes met WealthSmith\u2019s execution limits. No transaction was submitted. Check again for updated quotes." && v.providerLabel === null && v.selectedProviderId === null && v.metrics.length === 0 && v.showRefresh === true; })(), "no route copy");
   add("SWC-6: not-ready (DCA) → funded-contribution copy; not-ready (generic) → exact-source copy", notReadyView(true).body!.includes("present in your wallet") && notReadyView(false).body!.includes("exact transferable source"), "not ready copy");
   add("SWC-6b: not-ready (withdraw-first) → 'Withdraw the USDC from Kamino first' copy; never a quoted route", (() => { const v = notReadyView(false, ["usdc_source_requires_prior_withdrawal"]); return v.kind === "not_ready_for_quote" && v.body!.includes("Withdraw the USDC from Kamino first") && v.metrics.length === 0 && v.showRefresh === false; })(), "withdraw-first copy");
   add("SWC-7: not-required → 'No swap route is needed'", notRequiredView().body === "No swap route is needed for this contribution.", "not required copy");
@@ -515,17 +514,26 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
   const compFiles = ["src/components/swapQuote/SwapQuoteComparisonSection.tsx", "src/components/swapQuote/SwapQuoteSelectedState.tsx", "src/components/swapQuote/SwapQuoteUnavailableState.tsx", "src/components/swapQuote/useSwapQuoteComparison.ts", "src/components/SuggestionReviewModal.tsx"].map((f) => stripComments(readSrc(f))).join("\n");
   add("SWC-21: UI components import NO server tree / provider client / SDK / RPC", !/server\/swapQuote|jupiterQuoteClient|raydiumQuoteClient|orcaQuoteClient|@orca-so|@solana\/web3|SOLANA_RPC/.test(compFiles), "no server/provider import");
   add("SWC-22: UI code performs NO IN-APP execution (no sign/send/simulate/build-transaction/wallet-adapter/execute) and makes no guaranteed/executable-depth claim (comments stripped)", !/signTransaction|signAllTransactions|sendTransaction|simulateTransaction|new Transaction|VersionedTransaction|@solana\/wallet-adapter|\.execute\(|Connect to execute/i.test(compFiles) && !/guaranteed|executable depth/i.test(compFiles), "no in-app execution");
-  add("SWC-23: Refresh control only re-requests (no wallet connect / provider open / transaction) — code, comments stripped", (() => { const u = stripComments(readSrc("src/components/swapQuote/SwapQuoteUnavailableState.tsx")); return /Refresh comparison/.test(u) && !/connect|signTransaction|sendTransaction|window\.open/i.test(u); })(), "refresh safe");
+  add("SWC-23: the in-place Refresh is the MULTI-LEG summary's only — a single-swap review is never handed one, and it still only re-requests", (() => {
+    const u = stripComments(readSrc("src/components/swapQuote/SwapQuoteUnavailableState.tsx"));
+    const section = stripComments(readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx"));
+    const plan = stripComments(readSrc("src/components/swapQuote/SwapPlanQuoteSummary.tsx"));
+    // The single-leg render path passes the view alone; only the plan summary supplies a handler.
+    const singleLegHasNone = /function renderView\(view: QuoteView, headingOverride\?: string\)/.test(section) && !/<SwapQuoteUnavailableState[^>]*onRefresh/.test(section);
+    const planKeepsIt = /<SwapQuoteUnavailableState[^>]*onRefresh=\{view\.showRefresh \? onRefresh : undefined\}/.test(plan);
+    return singleLegHasNone && planKeepsIt && /view\.showRefresh && onRefresh &&/.test(u) && !/connect|signTransaction|sendTransaction|window\.open/i.test(u);
+  })(), "refresh safe");
   add("SWC-24: the section is placed INSIDE the Review modal (SuggestionReviewModal renders SwapQuoteComparisonSection)", /SwapQuoteComparisonSection/.test(readSrc("src/components/SuggestionReviewModal.tsx")), "in modal");
   add("SWC-25: the suggestion CARD face does NOT render the route section (card unchanged)", !/SwapQuoteComparisonSection/.test(readSrc("src/components/SuggestionCard.tsx")), "card unchanged");
   add("SWC-26: the view exposes the SELECTED provider id (for the logo) on eligible states, null otherwise", presentSwapQuote(selected, { nowMs: NOW }).selectedProviderId === "raydium" && presentSwapQuote(equivalent, { nowMs: NOW }).selectedProviderId === "jupiter" && presentSwapQuote(noRoute, { nowMs: NOW }).selectedProviderId === null, "selected provider id");
   add("SWC-27: the selected-route logo is decorative (aria-hidden) — the provider NAME is in text, never conveyed by icon alone", (() => { const s = readSrc("src/components/swapQuote/SwapQuoteSelectedState.tsx"); return /swap-quote__provider-logo/.test(s) && /aria-hidden="true"/.test(s) && /SWAP_PROVIDER_NAME/.test(s) && /<span>\{providerName\}<\/span>/.test(s) && /resolveProtocolIcon/.test(s); })(), "logo a11y");
 
-  // ---- 23C.2: read-only "Swap on <provider>" handoff ----
-  add("SWC-28: handoff links out to the SELECTED provider's OWN swap page (per-provider URL), reflecting the live winner", (() => {
-    const ray = buildSwapHandoff("raydium", USDC, WSOL, "1000"); const jup = buildSwapHandoff("jupiter", USDC, WSOL, "1000"); const orc = buildSwapHandoff("orca", USDC, WSOL, "1000");
-    return ray?.providerName === "Raydium" && /raydium\.io\/swap/.test(ray?.swapUrl ?? "") && jup?.providerName === "Jupiter" && /jup\.ag\/swap/.test(jup?.swapUrl ?? "") && /orca\.so/.test(orc?.swapUrl ?? "") && buildSwapHandoff(null, USDC, WSOL) === null;
-  })(), "provider handoff url");
+  // ---- 23C.2 built a read-only "Swap on <provider>" handoff. It is gone, builder and all. ----
+  add("SWC-28: nothing builds a provider swap-page URL any more — the module is deleted and nothing imports it", (() => {
+    const gone = !existsSync(`${process.cwd()}/src/suggestions/swapQuote/providerSwapLinks.ts`);
+    const users = ["src/components/swapExecution/SwapExecutionSection.tsx", "src/components/swapExecution/SwapConfirmSheet.tsx", "src/components/SuggestionReviewModal.tsx", "src/components/swapQuote/SwapQuoteComparisonSection.tsx"];
+    return gone && users.every((f) => { const c = readSrc(f); return c.length > 0 && !/providerSwapLinks|buildSwapHandoff|buildProviderSwapUrl|jup\.ag\/swap|raydium\.io\/swap/.test(c); });
+  })(), "no provider url builder");
   // SWC-29/30 pinned a "Swap on <provider>" link out as the modal's footer. That link is gone: a swap
   // WealthSmith suggests is approved in the review (Swap → terms → the user's own wallet), and where no
   // swap can be offered the review says so. They now pin its ABSENCE, and what replaced it.
@@ -540,7 +548,7 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
   })(), "no swap link-out");
   add("SWC-30: the route section reports QUOTE STATE for a single-leg ready action only (multi-leg + not-ready report nothing), and builds no handoff", (() => {
     const s = stripComments(readSrc("src/components/swapQuote/SwapQuoteComparisonSection.tsx"));
-    return /singleLeg && readiness\.status === "ready"\s*\? \{ action: singleLeg, assessment: singleAssessment, loading: quoteLoading, refresh: quietRefresh \}\s*: null/.test(s)
+    return /singleLeg && readiness\.status === "ready"\s*\? \{ action: singleLeg, assessment: singleAssessment, loading: quoteLoading, refresh: usePreset \? undefined : quietRefresh, notice \}\s*: null/.test(s)
       && /onExecutionContext\?\.\(null\)/.test(s) && !/buildSwapHandoff|onHandoff/.test(s);
   })(), "quote state single-leg");
   // --- decidedBy: the MECHANISM, not the margin (SWC-35..39) -----------------
@@ -627,7 +635,11 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
     return a.decidedBy === null;
   })(), "nothing to decide");
 
-  add("SWC-31: buildProviderSwapUrl maps native SOL to the wrapped-SOL alias for Raydium and includes the amount when supported", (() => { const u = buildProviderSwapUrl("raydium", WSOL, USDC, "5"); return /inputMint=sol/.test(u) && /inputAmount=5/.test(u); })(), "sol alias + amount");
+  add("SWC-31: a BLOCKED comparison is one that offers nothing AND could if asked again — the states with nothing to re-run are not", (() => {
+    const blocked = isBlockedView;
+    return blocked(presentSwapQuote(noRoute, { nowMs: NOW })) && blocked(unavailableView()) && blocked(presentSwapQuote(selected, { expired: true }))
+      && !blocked(presentSwapQuote(selected, { nowMs: NOW })) && !blocked(notReadyView()) && !blocked(notRequiredView());
+  })(), "blocked = refusable and re-runnable");
 
   return checks;
 }

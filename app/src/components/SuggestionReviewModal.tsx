@@ -36,6 +36,7 @@ import type { DemoExecutionOutcome } from "../suggestions/swapExecution/demoOutc
 import type { SwapQuoteFetcher } from "../suggestions/swapQuote/swapQuoteClient";
 import SwapQuoteComparisonSection, { type SwapQuoteState } from "./swapQuote/SwapQuoteComparisonSection";
 import SwapExecutionSection from "./swapExecution/SwapExecutionSection";
+import InfoBanner from "./InfoBanner";
 import AssetIdentity from "./AssetIdentity";
 import ModalActionsFooter from "./ModalActionsFooter";
 
@@ -192,11 +193,23 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
       presetLoading={swapQuotePresetLoading}
       nowMs={swapQuoteNowMs}
       onExecutionContext={setQuoteState}
+      hostShowsNotice={swapLeg != null}
     />
   ) : null;
 
+  /**
+   * NO SWAP CAN BE OFFERED RIGHT NOW — said first, directly under the title.
+   *
+   * The recommendation below it still stands; what is blocked is executing it. That used to be
+   * the last thing in the body, under the amounts to send and receive, so the review read as a
+   * swap ready to go until someone scrolled. Null while a route is selected or still loading.
+   */
+  const blockedNotice = swapLeg && quoteState?.notice ? (
+    <InfoBanner title={quoteState.notice.heading} description={quoteState.notice.body} />
+  ) : null;
+
   // Phase 6 — the footer of a single-leg swap review, in every state: Swap while a swap can be
-  // offered (spinning while terms load), Close when it cannot. It owns the footer from the
+  // offered (spinning while terms load), Close and Check Again when it cannot. It owns the footer from the
   // first render and never renders nothing, so there is no moment with a different footer or
   // none. Null only when this review has no single swap to offer.
   const executionSection = swapLeg ? (
@@ -365,6 +378,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
             </button>
           </div>
           <div className={bodyClass}>
+            {blockedNotice}
             <section className="review-modal__section" aria-label="Why this fits your plan">
               {!cr.focusedLayout && <h3 className="review-modal__section-title">Why this fits your plan</h3>}
               <p id={reasonId} className="modal__intro">{cr.whySection.body}</p>
@@ -469,6 +483,7 @@ export default function SuggestionReviewModal({ details, contributionReview, sta
         </div>
 
         <div className={bodyClass}>
+          {blockedNotice}
           {details.demoLabel && (
             <div className="review-modal__demo-badge">
               <Badge label={details.demoLabel} tone="warning" />

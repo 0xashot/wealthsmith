@@ -962,16 +962,68 @@ step has terms to show. The review keeps its heading and its body the whole
 time.
 
 The review's footer is Cancel and Swap. There is NO link out to a swap
-provider — no "Swap on Jupiter", "Swap on Raydium" or similar — in any state.
+provider — no "Swap on Jupiter", "Swap on Raydium" or similar — in any state,
+including the confirm step's failure screens.
 ```
 
-The footer has exactly four states and never renders nothing:
+The footer has exactly five states and never renders nothing:
 
 ```text
 A swap can be offered            [Cancel]  [Swap]
-A comparison is in flight        [Cancel]  [ ◌ ]          spinner, same size as Swap
-No wallet here can sign          Reconnect your wallet to swap.   [Cancel]  [Swap] (greyed)
-No swap can be offered           [Close]                   the route section says why
+A comparison is in flight        [Cancel]  [ ◌ ]            spinner, same size as Swap
+No wallet here can sign          [Cancel]  [Swap] (greyed)  reason in a tooltip on the button
+No swap can be offered           [Close]   [Check Again]    a banner under the title says why
+Checking again                   [Close]   [ ◌ ]            spinner, same size as Check Again
+```
+
+**No wallet.** The greyed Swap carries its reason as a tooltip, on hover and on
+focus — nothing is written beside it:
+
+```text
+Reconnect your wallet to swap
+```
+
+Use `aria-disabled`, not `disabled`, so the button stays focusable: the tooltip
+is the only place the reason is given, and a truly disabled button would put it
+out of reach of a keyboard and of a tap.
+
+**No swap can be offered.** Said first: an Info banner directly under the
+review's title, above the recommendation. The recommendation still stands; what
+is blocked is executing it, and the reader should learn that before reading
+the amounts to send and receive.
+
+```text
+(i)  No swap currently meets our limits
+     None of the available quotes met WealthSmith’s execution limits. No
+     transaction was submitted. Check again for updated quotes.
+
+                                                  [Close]  [Check Again]
+```
+
+Hard Rules:
+
+```text
+A rejected quote is never shown as executable. In this state there is no Swap
+button (not even greyed), no selected route, no provider, and no quote figures.
+
+The notice is not repeated lower in the review, and there is no "Refresh
+comparison" control in the body. Re-running the comparison is the footer's
+primary action, Check Again.
+
+Check Again waits in place like Swap does: the button spins at its own size,
+and the banner and the rest of the review do not change until the answer is in.
+If a route is found, the banner goes, the route appears and the footer becomes
+Cancel and Swap — in one change. Check Again never opens the confirm step by
+itself: asking whether a route exists is not pressing Swap.
+```
+
+When the comparison itself could not be completed (a failed request), the same
+banner and footer are used with this copy:
+
+```text
+(i)  Route comparison is unavailable right now
+     Your financial suggestion is unchanged. You can try the comparison again
+     later.
 ```
 
 An aged comparison is not a reason to take Swap away: the terms someone
@@ -983,8 +1035,7 @@ can be approved in WealthSmith is the one selected. A route that is better by
 more than that still wins on its price, whoever provides it.
 
 These rules cover the REVIEW. The confirm step's own failure screens are
-governed below, and two of them ("Couldn't Prepare Your Swap", a refused
-verification) still offer the provider's page — see "Refusals".
+governed below; none of them links out to a provider either — see "Refusals".
 
 ### Terms
 
@@ -1336,10 +1387,9 @@ decision was made, because the wallet and this screen are two surfaces, and
 accounts for the money twice — nothing submitted, nothing moved — which are
 separate reassurances, since a transaction can be submitted and still fail.
 
-No provider hand-off here. The hand-off is an apology with a door attached and
-belongs on the endings **we** caused; a reader who just pressed Reject is not
-blocked, and "Swap on Jupiter" under their own decision asks the same question
-again in a venue where none of this screen's checks apply.
+No provider hand-off here — or on any other ending. A link to the provider's
+own page under a refusal asks the same question again in a venue where none of
+this screen's checks apply.
 
 The one remaining button says **Close**, not Cancel. "Cancel" is correct beside
 a primary action, where it means "not that one". Standing alone, with nothing
@@ -1407,13 +1457,24 @@ Couldn't Prepare Your Swap
 We couldn't load a swap quote right now. No transaction was submitted, and
 your funds haven't moved.
 
-                                        [Cancel]  [Swap on Jupiter ↗]
+                                              [Cancel]  [Try Again]
 ```
 
-Every failure we could not fix offers the provider's own page, because we could
-not do this for the user and the honest offer is the place they can do it
-themselves. Expiry is the exception: a fresh quote fixes it, so it offers
-Refresh instead. Neither button appears without the means to deliver it.
+No failure offers the provider's own page (decided 2026-11-26: a swap
+WealthSmith suggests is approved here or not at all). Each ending gets the
+remedy that actually fixes it, or Close:
+
+```text
+Couldn't Prepare Your Swap       [Cancel]  [Try Again]       nothing was built or sent; asking again is free
+Your Swap Wasn't Sent            [Cancel]  [Try Again]
+Your Swap Failed (reverted)      [Cancel]  [Try Again]       with the network-fee warning
+Your Swap Quote Expired          [Cancel]  [Get New Quote]
+We Couldn't Verify This Swap     [Close]                     a retry would be refused again
+Swap Canceled                    [Close]
+Awaiting Confirmation            [Close]                     the first swap may still land
+```
+
+No button appears without the means to deliver it.
 
 **The passed state says nothing at all.** It is the resting state — terms on
 screen, Approve available — and that is already the message. The word
@@ -1476,12 +1537,14 @@ swap. Label it plainly and never as a required step.
 ### Refusals
 
 When a check fails, the copy says what WE refused and why, without blaming the
-user or the provider, and offers the handoff:
+user or the provider. It does not send the reader to the provider's own page:
 
 ```text
-We couldn’t verify these terms.
-The transaction we were given doesn’t match the terms we’d show you, so we’re not
-asking you to approve it. You can swap on Jupiter directly.
+We Couldn’t Verify This Swap
+The transaction details didn’t match the swap quote, so we stopped before
+requesting your approval. No transaction was submitted.
+
+                                                              [Close]
 ```
 
 This is the one place the copy should feel slightly alarming. A refusal the user
