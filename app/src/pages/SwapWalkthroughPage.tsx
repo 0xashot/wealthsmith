@@ -34,8 +34,10 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import RealWalletSuggestionsRail from "../components/RealWalletSuggestionsRail";
 import ToastHost, { type ToastData } from "../components/ToastHost";
-import { END_TO_END_SCENARIOS, buildTrimWalkthroughRail, WIF_MINT, MOBY_MINT } from "./endToEndTestingFixtures";
-import { DEMO_OUTCOMES } from "../suggestions/swapExecution/demoOutcomes";
+import { END_TO_END_SCENARIOS, buildTrimWalkthroughRail, BONK_MINT, WIF_MINT, MOBY_MINT, PENGU_MINT, FARTCOIN_MINT } from "./endToEndTestingFixtures";
+import type { TrimFlowPreset } from "../components/trim/TrimFlowSection";
+import type { TrimResult } from "../suggestions/swapExecution/trimFlow";
+import { DEMO_OUTCOMES, DEMO_SIGNATURE } from "../suggestions/swapExecution/demoOutcomes";
 import { SWAP_CONFIRM_EXPIRED_TOAST } from "../state/approvedCopy";
 import { SwapExecutionSeamContext } from "../components/swapExecution/swapExecutionSeam";
 import { SwapFlowEventsContext, type SwapFlowEvent } from "../components/swapExecution/swapFlowEvents";
@@ -66,6 +68,53 @@ const SIMULATIONS = [
 type SimulationKey = (typeof SIMULATIONS)[number]["key"];
 
 /**
+ * EVERY TRIM STATE, each opened directly (`?trim=…`).
+ *
+ * The simulations above show a Trim in motion; reaching its fifth screen means running four.
+ * These open the same real review already AT a state — the selector, a token's terms, each
+ * kind of summary — so all of them can be read side by side, one click each. The review opens
+ * by itself. Everything is still the production components on the pretend wallet and server:
+ * where a state has a button (Trim, Approve, Try Again), pressing it carries on for real.
+ */
+const SIG = DEMO_SIGNATURE;
+const got = (receivedTokens: string | null): TrimResult => ({ status: "confirmed", receivedTokens, signature: SIG });
+const failed = (failure: "plan_unavailable" | "declined" | "confirm_timeout" | "submit_failed", sent = false): TrimResult =>
+  ({ status: "failed", failure, signature: sent ? SIG : null });
+const TRIM_STATES: Array<{
+  key: string;
+  group: string;
+  label: string;
+  note: string;
+  rail: "three" | "one" | "listed" | "frozen";
+  /** Tokens whose sale is refused for price impact. Default: MOBY only. */
+  blocked?: "all";
+  preset?: TrimFlowPreset;
+}> = [
+  { key: "review", group: "Start", label: "Review", rail: "three", note: "The suggestion's review. The footer is Cancel and Trim; Trim spins in place while the routes are checked." },
+  { key: "single", group: "Start", label: "One token", rail: "one", note: "A Trim naming a single token. There is no selector: Trim goes straight to that token's terms." },
+  { key: "listed", group: "Start", label: "Verified meme coins", rail: "listed", note: "Two meme coins outside our approved list, verified and tagged meme by Jupiter, beside BONK. They are named by their listing; PENGU shows its listed icon, Fartcoin's icon host is not one we load from, so it gets the generic mark." },
+
+  { key: "select", group: "Choose tokens", label: "Selector", rail: "three", preset: { stage: "select" }, note: "Every token the Trim names. The two that can be sold are ticked; MOBY cannot, and says why. The button counts what is ticked." },
+  { key: "select-listed", group: "Choose tokens", label: "Selector, verified meme coins", rail: "listed", preset: { stage: "select" }, note: "The same selector with verified meme coins from outside our list." },
+  { key: "select-frozen", group: "Choose tokens", label: "A token that can't be moved", rail: "frozen", preset: { stage: "select" }, note: "FRZN is frozen in the wallet. It stays in the list, greyed, with the reason, so the total still adds up." },
+  { key: "select-none", group: "Choose tokens", label: "Nothing can be sold", rail: "three", blocked: "all", preset: { stage: "select" }, note: "No token has a route inside our limits right now. Every row says why and the button stays greyed." },
+
+  { key: "run-first", group: "Swapping", label: "Terms, 1 of 2", rail: "three", preset: { stage: "run", chosen: ["BONK", "WIF"] }, note: "The first token's terms, with the list of chosen tokens above. Approve hands it to the (pretend) wallet." },
+  { key: "run-second", group: "Swapping", label: "Terms, 2 of 2", rail: "three", preset: { stage: "run", chosen: ["BONK", "WIF"], results: { BONK: got("1199.16") } }, note: "BONK has landed and shows what arrived; WIF's terms are up." },
+
+  { key: "done-all", group: "Summary", label: "Completed", rail: "three", preset: { stage: "summary", chosen: ["BONK", "WIF"], results: { BONK: got("1199.16"), WIF: got("799.44") } }, note: "Every chosen token was swapped. The total is the sum of what the chain says arrived." },
+  { key: "done-unread", group: "Summary", label: "Completed, an amount unread", rail: "three", preset: { stage: "summary", chosen: ["BONK", "WIF"], results: { BONK: got("1199.16"), WIF: got(null) } }, note: "Both landed but one delivered amount could not be read: the summary says how many were swapped and gives no figure." },
+  { key: "partly-failed", group: "Summary", label: "Partly: one failed", rail: "three", preset: { stage: "summary", chosen: ["BONK", "WIF"], results: { BONK: got("1199.16"), WIF: failed("plan_unavailable") } }, note: "WIF could not be prepared. BONK stays swapped; Try Again runs only WIF." },
+  { key: "partly-declined", group: "Summary", label: "Partly: one declined", rail: "three", preset: { stage: "summary", chosen: ["BONK", "WIF"], results: { BONK: got("1199.16"), WIF: failed("declined") } }, note: "WIF was declined in the wallet. That was the user's choice, so there is no Try Again." },
+  { key: "partly-stopped", group: "Summary", label: "Partly: stopped with Cancel", rail: "three", preset: { stage: "summary", chosen: ["BONK", "WIF"], results: { BONK: got("1199.16"), WIF: { status: "not_started" } } }, note: "Cancel was pressed after BONK landed. WIF was never started; no Try Again." },
+  { key: "partly-reverted", group: "Summary", label: "Partly: one didn't go through", rail: "three", preset: { stage: "summary", chosen: ["BONK", "WIF"], results: { BONK: got("1199.16"), WIF: failed("submit_failed", true) } }, note: "WIF was sent and failed on-chain. It links to the transaction; Try Again runs it again." },
+  { key: "partly-pending", group: "Summary", label: "Partly: one still pending", rail: "three", preset: { stage: "summary", chosen: ["BONK", "WIF"], results: { BONK: got("1199.16"), WIF: failed("confirm_timeout", true) } }, note: "WIF was sent and not confirmed in time. It may still land, so it is not called a failure and is not retried." },
+  { key: "none-failed", group: "Summary", label: "Nothing: couldn't prepare", rail: "three", preset: { stage: "summary", chosen: ["BONK", "WIF"], results: { BONK: failed("plan_unavailable"), WIF: failed("plan_unavailable") } }, note: "Neither swap could be prepared. The banner says nothing moved; Try Again runs both." },
+  { key: "none-declined", group: "Summary", label: "Nothing: declined", rail: "three", preset: { stage: "summary", chosen: ["WIF"], results: { WIF: failed("declined") } }, note: "The only chosen token was declined in the wallet. Banner, and Close alone." },
+  { key: "none-pending", group: "Summary", label: "Nothing: still pending", rail: "three", preset: { stage: "summary", chosen: ["WIF"], results: { WIF: failed("confirm_timeout", true) } }, note: "The only swap was sent and not confirmed. The banner does NOT say nothing moved — it may yet land." },
+];
+
+/**
  * The crypto-heavy scenario the End-to-End tab already lists, reused rather than rebuilt.
  *
  * A second hand-written portfolio here would be a second thing to keep in step with the
@@ -91,22 +140,32 @@ export default function SwapWalkthroughPage() {
   const simKey = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("sim");
   const simulation = SIMULATIONS.find((x) => x.key === simKey) ?? null;
 
+  // A Trim state opened directly. It runs on the same live branch as a simulation.
+  const trimKey = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("trim");
+  const trimState = simulation == null ? TRIM_STATES.find((x) => x.key === trimKey) ?? null : null;
+
   // The scenario already carries the offline demo fetcher; the live client is never used here.
-  const isTrimSim = simulation != null && simulation.key.startsWith("trim");
+  const isTrimSim = trimState != null || (simulation != null && simulation.key.startsWith("trim"));
+  const trimRailKind = trimState?.rail ?? (simulation?.key === "trim-single" ? "one" : "three");
   const baseRail = useMemo(
-    () => (isTrimSim ? buildTrimWalkthroughRail(simulation?.key === "trim-single" ? "one" : "three") : CRYPTO_HEAVY?.rail ?? null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isTrimSim, simulation?.key],
+    () => (isTrimSim ? buildTrimWalkthroughRail(trimRailKind) : CRYPTO_HEAVY?.rail ?? null),
+    [isTrimSim, trimRailKind],
   );
   // The offline quote source: the scenario's own, or — for a Trim — pretend quotes per token.
+  const blockAll = trimState?.blocked === "all";
   const innerFetcher = useMemo(
-    () => (isTrimSim ? trimSimQuoteFetcher({ singleRoute: [WIF_MINT], blocked: [MOBY_MINT] }) : baseRail?.swapQuoteFetcher),
-    [isTrimSim, baseRail],
+    () => (isTrimSim
+      ? trimSimQuoteFetcher({ singleRoute: [WIF_MINT], blocked: blockAll ? [BONK_MINT, WIF_MINT, MOBY_MINT, PENGU_MINT, FARTCOIN_MINT] : [MOBY_MINT] })
+      : baseRail?.swapQuoteFetcher),
+    [isTrimSim, baseRail, blockAll],
   );
   // In a simulation the same offline quotes arrive after a realistic delay, shaped per variant.
+  // A Trim state is opened to be LOOKED at, so its quotes are not slowed.
   const simParts = useMemo(() => {
     const inner = innerFetcher;
-    if (simulation == null || baseRail == null || inner == null) return null;
+    if (baseRail == null || inner == null) return null;
+    if (trimState != null) return { rail: { ...baseRail, swapQuoteFetcher: inner } };
+    if (simulation == null) return null;
     const variant: SimulationKey = simulation.key;
     const shaped =
       variant === "expired-quote" ? shortLivedFirstQuoteFetcher(inner)
@@ -114,7 +173,12 @@ export default function SwapWalkthroughPage() {
           : variant === "route-returns" ? noRouteQuoteFetcher(inner, 2)
             : inner;
     return { rail: { ...baseRail, swapQuoteFetcher: slowedQuoteFetcher(shaped) } };
-  }, [baseRail, simulation, innerFetcher]);
+  }, [baseRail, simulation, trimState, innerFetcher]);
+  // The Trim card of this rail — the one a Trim state opens by itself.
+  const trimCardId = useMemo(() => {
+    const entry = Object.entries(baseRail?.swapActionById ?? {}).find(([, a]) => a.status === "ready" && a.legs[0]?.suggestionCategory === "trim");
+    return entry?.[0];
+  }, [baseRail]);
   const rail = simParts?.rail ?? baseRail;
 
   // The pretend wallet link. It starts closed in the wallet variants and is opened by the
@@ -125,8 +189,8 @@ export default function SwapWalkthroughPage() {
   const reconnectAttempts = useRef(0);
   const seam = useMemo(() => {
     const inner = innerFetcher;
-    if (simulation == null || inner == null) return null;
-    const variant: SimulationKey = simulation.key;
+    if ((simulation == null && trimState == null) || inner == null) return null;
+    const variant: SimulationKey | null = simulation?.key ?? null;
     return buildLiveSimulationSeam({
       failPlanOnce: variant === "trim-fail" ? [WIF_MINT] : undefined,
       declineOnce: variant === "trim-decline" ? [WIF_MINT] : undefined,
@@ -142,7 +206,7 @@ export default function SwapWalkthroughPage() {
         return true;
       },
     });
-  }, [innerFetcher, simulation, startsUnlinked, walletLinked]);
+  }, [innerFetcher, simulation, trimState, startsUnlinked, walletLinked]);
 
   if (rail == null) {
     return <p className="modal__intro">The e2e-crypto-heavy scenario is missing — it was renamed or removed.</p>;
@@ -166,8 +230,8 @@ export default function SwapWalkthroughPage() {
               <a
                 key={o.key}
                 href={`?outcome=${o.key}`}
-                className={`swap-walkthrough__outcome${simulation == null && o.key === outcome.key ? " swap-walkthrough__outcome--current" : ""}`}
-                aria-current={simulation == null && o.key === outcome.key ? "page" : undefined}
+                className={`swap-walkthrough__outcome${simulation == null && trimState == null && o.key === outcome.key ? " swap-walkthrough__outcome--current" : ""}`}
+                aria-current={simulation == null && trimState == null && o.key === outcome.key ? "page" : undefined}
               >
                 {o.label}
               </a>
@@ -189,9 +253,30 @@ export default function SwapWalkthroughPage() {
               </a>
             ))}
           </nav>
-          {simulation
-            ? <p className="modal__intro"><strong>{simulation.label}.</strong> {simulation.note}</p>
-            : <p className="modal__intro"><strong>{outcome.label}.</strong> {outcome.note}</p>}
+          <p className="modal__intro">
+            <strong>Trim states</strong> — every state of a Trim, each opened directly. The
+            review opens by itself; buttons still work and carry on in the pretend wallet.
+          </p>
+          {[...new Set(TRIM_STATES.map((x) => x.group))].map((group) => (
+            <nav key={group} className="swap-walkthrough__outcomes" aria-label={`Trim states: ${group}`}>
+              <span className="swap-walkthrough__group">{group}</span>
+              {TRIM_STATES.filter((x) => x.group === group).map((x) => (
+                <a
+                  key={x.key}
+                  href={`?trim=${x.key}`}
+                  className={`swap-walkthrough__outcome${x.key === trimState?.key ? " swap-walkthrough__outcome--current" : ""}`}
+                  aria-current={x.key === trimState?.key ? "page" : undefined}
+                >
+                  {x.label}
+                </a>
+              ))}
+            </nav>
+          ))}
+          {trimState
+            ? <p className="modal__intro"><strong>{trimState.label}.</strong> {trimState.note}</p>
+            : simulation
+              ? <p className="modal__intro"><strong>{simulation.label}.</strong> {simulation.note}</p>
+              : <p className="modal__intro"><strong>{outcome.label}.</strong> {outcome.note}</p>}
           <p className="modal__intro">
             Pipeline produced <strong>{rail.cards.length}</strong> card(s) and{" "}
             <strong>{swapActions}</strong> swap action(s).
@@ -208,6 +293,9 @@ export default function SwapWalkthroughPage() {
             <RealWalletSuggestionsRail
               rail={simParts.rail}
               railLabel="Suggestions"
+              // A Trim state opens its own review, already at that state.
+              autoOpenId={trimState != null ? trimCardId : undefined}
+              trimPreset={trimState?.preset}
               onSwapQuoteGaveUp={() => pushToast(SWAP_CONFIRM_EXPIRED_TOAST)}
               // The walkthrough has no Connect Wallet dialog of its own. This marks where it
               // opens, then reports a (pretend) wallet connected, as the app does when its

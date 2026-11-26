@@ -5774,6 +5774,14 @@ td.vetting-scores-table__date {
   color: var(--color-text-secondary);
   text-decoration: none;
 }
+.swap-walkthrough__group {
+  flex: none;
+  min-width: 104px;
+  align-self: center;
+  font: var(--typography-body-sm-font);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
 .swap-walkthrough__outcome--current {
   border-color: var(--color-action-primary-background-default);
   color: var(--color-action-primary-background-default);

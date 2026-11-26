@@ -95,6 +95,20 @@ export interface TrimFlowSectionProps {
    * still opens, for looking at; its button stays greyed.
    */
   canRun?: boolean;
+  /**
+   * REVIEW SURFACES ONLY (the walkthrough's "Trim states"). Opens the flow already at a given
+   * step, with given results on the board, so every state can be looked at without running a
+   * Trim to reach it. Applied once, when the routes have answered. Never set by the app.
+   */
+  preset?: TrimFlowPreset;
+}
+
+export interface TrimFlowPreset {
+  stage: "select" | "run" | "summary";
+  /** The chosen tokens, by symbol, in order. Default: every token that can be sold. */
+  chosen?: string[];
+  /** Results already known, by token symbol. In `run`, the first token without one is current. */
+  results?: Record<string, TrimResult>;
 }
 
 type Stage = "review" | "select" | "run" | "summary";
@@ -162,6 +176,31 @@ export default function TrimFlowSection(props: TrimFlowSectionProps) {
   }, [stage, index, queue.length, summaryTitle, onStepChange, backToReview]);
   // Leaving the review entirely must not leave it hidden behind a step that is gone.
   useEffect(() => () => onStepChange(null), [onStepChange]);
+
+  // ---- a preset state, for review surfaces ------------------------------------
+  const presetAppliedRef = useRef(false);
+  useEffect(() => {
+    const preset = props.preset;
+    if (preset == null || presetAppliedRef.current || !answered) return;
+    presetAppliedRef.current = true;
+    const sellable = rows.filter((r) => r.sellable);
+    const keyBySymbol = new Map(rows.map((r) => [r.symbol, r.key]));
+    setSelected(new Set(sellable.map((r) => r.key)));
+    if (preset.stage === "select") { setStage("select"); return; }
+    const keys = (preset.chosen ?? sellable.map((r) => r.symbol)).map((s) => keyBySymbol.get(s)).filter((k): k is string => k != null);
+    const known: Record<string, TrimResult> = {};
+    for (const [symbol, result] of Object.entries(preset.results ?? {})) {
+      const k = keyBySymbol.get(symbol);
+      if (k != null) known[k] = result;
+    }
+    const firstOpen = keys.findIndex((k) => known[k] == null);
+    setChosen(keys);
+    setQueue(keys);
+    setResults(known);
+    setIndex(preset.stage === "summary" || firstOpen < 0 ? keys.length : firstOpen);
+    setStage(preset.stage === "summary" || firstOpen < 0 ? "summary" : "run");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answered, props.preset]);
 
   // ---- review → select ----------------------------------------------------
   const emit = useContext(SwapFlowEventsContext);

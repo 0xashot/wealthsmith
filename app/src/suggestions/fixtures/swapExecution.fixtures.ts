@@ -2947,5 +2947,27 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return filter && stamp && fromRead && shown;
   })(), "same read → hidden; newer read → the engine decides");
 
+  // EVERY TRIM STATE IN ONE PLACE (the walkthrough's `?trim=…`). A review surface is only worth
+  // keeping if it cannot quietly lose a state.
+  add("SWTR-21: the walkthrough lists every Trim state — start, selector, both run steps and each kind of summary", (() => {
+    const page = readSrc("src/pages/SwapWalkthroughPage.tsx");
+    const keys = [...page.matchAll(/\{ key: "([a-z-]+)", group: "(Start|Choose tokens|Swapping|Summary)"/g)].map((m) => m[1]);
+    const must = ["review", "single", "listed", "select", "select-listed", "select-frozen", "select-none", "run-first", "run-second",
+      "done-all", "done-unread", "partly-failed", "partly-declined", "partly-stopped", "partly-reverted", "partly-pending",
+      "none-failed", "none-declined", "none-pending"];
+    return must.every((k) => keys.includes(k)) && new Set(keys).size === keys.length &&
+      /autoOpenId=\{trimState != null \? trimCardId : undefined\}/.test(page) && /trimPreset=\{trimState\?\.preset\}/.test(page);
+  })(), "19 states");
+  add("SWTR-22: a preset state is applied once, after the routes answer, and only review surfaces can set one", (() => {
+    const flow = stripComments(readSrc("src/components/trim/TrimFlowSection.tsx"));
+    const rail = stripComments(readSrc("src/components/RealWalletSuggestionsRail.tsx"));
+    const once = /if \(preset == null \|\| presetAppliedRef\.current \|\| !answered\) return;\s*presetAppliedRef\.current = true;/.test(flow);
+    const opensOnce = /if \(autoOpenId == null \|\| autoOpenedRef\.current \|\| !rail \|\| !rail\.available\) return;/.test(rail) && /autoOpenedRef\.current = true;\s*onReviewSuggestion\(card\);/.test(rail);
+    // The app's own pages never pass either prop.
+    const appPages = ["src/pages/DashboardPage.tsx", "src/pages/PortfolioPage.tsx", "src/pages/DemoDashboardPage.tsx", "src/App.tsx"]
+      .map((f) => { try { return readSrc(f); } catch { return ""; } }).join("\n");
+    return once && opensOnce && !/trimPreset|autoOpenId/.test(appPages);
+  })(), "review surfaces only");
+
   return checks;
 }

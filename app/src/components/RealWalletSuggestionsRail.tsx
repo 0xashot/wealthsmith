@@ -30,6 +30,7 @@ import type { RightRailState, SuggestionCardState } from "../types/dashboard";
 import { railOnTrackUnavailableMessage } from "./portfolioCompletenessUi";
 import { useDismissedSuggestions } from "../state/dismissedSuggestions";
 import type { SwapProgress } from "./swapExecution/SwapExecutionSection";
+import type { TrimFlowPreset } from "./trim/TrimFlowSection";
 import { requestWalletPortfolioRefresh } from "../wallet/useWalletPortfolio";
 import {
   REAL_WALLET_SUGGESTIONS_TITLE,
@@ -65,6 +66,13 @@ interface Props {
    * over. A host that never calls it simply leaves them on the page, as before.
    */
   onConnectWallet?: (onConnected?: () => void) => void;
+  /**
+   * REVIEW SURFACES ONLY (the swap walkthrough). `autoOpenId` opens that suggestion's review as
+   * soon as the rail has it, once; `trimPreset` opens a multi-token Trim at a given step. The
+   * app sets neither.
+   */
+  autoOpenId?: string;
+  trimPreset?: TrimFlowPreset;
   /** Demo Mode — forwarded to the review so the confirm step is reviewable without a wallet. */
   demo?: boolean;
   /** Demo Mode only — forwarded to the review. See SwapExecutionSection. */
@@ -103,7 +111,7 @@ export function portfolioStampOf(swapAction: SwapActionReadiness | undefined): s
   return swapAction?.status === "ready" ? swapAction.legs.map((l) => l.generatedAt).join("|") : "";
 }
 
-export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuoteGaveUp, onConnectWallet, demo, demoOutcome }: Props) {
+export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuoteGaveUp, onConnectWallet, autoOpenId, trimPreset, demo, demoOutcome }: Props) {
   // The open review, as a snapshot (see OpenedReview). Read-only — opening the modal never
   // transacts, signs, or hands off to a protocol.
   const [opened, setOpened] = useState<OpenedReview | null>(null);
@@ -196,6 +204,17 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
     if (card) onReviewSuggestion(card);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeId, rail]);
+  // A review surface asking for one suggestion to be open on arrival — through the same path as
+  // pressing Review, once.
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenId == null || autoOpenedRef.current || !rail || !rail.available) return;
+    const card = rail.cards.find((c) => c.id === autoOpenId);
+    if (!card) return;
+    autoOpenedRef.current = true;
+    onReviewSuggestion(card);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenId, rail]);
   // A rail that never comes back must not reopen a review minutes later, out of nowhere.
   useEffect(() => {
     if (resumeId == null) return;
@@ -256,6 +275,7 @@ export default function RealWalletSuggestionsRail({ rail, railLabel, onSwapQuote
       onSwapQuoteGaveUp={() => { close(); onSwapQuoteGaveUp?.(); }}
       onConnectWallet={leaveToConnectWallet}
       onSwapProgress={onSwapProgress}
+      trimPreset={trimPreset}
     />
   ) : null;
 

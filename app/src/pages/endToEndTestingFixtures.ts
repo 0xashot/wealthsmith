@@ -50,6 +50,21 @@ export interface EndToEndScenario {
   rail: RailSuggestions;
 }
 
+export const PENGU_MINT = "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv";
+export const FARTCOIN_MINT = "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump";
+const FROZEN_MINT = "FRZNvQ7mXh3kJ2pLw8sT5yBn4cRd6eUa9gHiKoMzPq1x";
+const LISTED_ICON = "https://static.datapi.jup.ag/token-icons/0817b3345e648b1663385bac48eb086877635ee27639c3d5da2a4d9dfd8603b1.webp";
+
+/** A wallet token the registry cannot name, carrying a Jupiter-verified MEME listing. */
+function listedMeme(id: string, mint: string, symbol: string, name: string, uiAmount: number, priceUsd: number, iconUrl: string | null): WalletPosition {
+  return {
+    id, source: "wallet", type: "token", symbol: `${mint.slice(0, 4)}…${mint.slice(-4)}`, name: "Unknown token", mint,
+    uiAmount, decimals: 6, amount: String(Math.round(uiAmount * 1e6)),
+    priceUsd, valueUsd: uiAmount * priceUsd, detection: "direct_wallet_balance",
+    listing: { symbol, name, iconUrl, meme: true, source: "jupiter_verified" },
+  } as unknown as WalletPosition;
+}
+
 /** A non-core long-tail token, the input the Trim rule looks for. */
 function tail(id: string, symbol: string, mint: string, uiAmount: number, priceUsd: number): WalletPosition {
   return {
@@ -69,9 +84,31 @@ export const MOBY_MINT = "Cy1GS2FqefgaMbi45UunrUzin1rfEmTUYnomddzBpump";
  * scenario below uses, holding one, or three, long-tail tokens. Built by the real pipeline; the
  * walkthrough supplies its own pretend quotes.
  */
-export function buildTrimWalkthroughRail(tokens: "three" | "one"): RailSuggestions {
+export function buildTrimWalkthroughRail(tokens: "three" | "one" | "listed" | "frozen"): RailSuggestions {
   const positions = tokens === "one"
     ? [sol(8000 / 150), usdc(5748), tail("e2e-bonk", "BONK", BONK_MINT, 2000 / 0.00003, 0.00003)]
+    : tokens === "listed"
+      // Two meme coins OUTSIDE the approved list that Jupiter has verified and tagged meme, beside
+      // BONK from the list. The engine still sees an address and "Unknown token" for the first two;
+      // their identity, name and icon come from the listing (wallet/verifiedMemeIdentity.ts).
+      ? [
+          sol(8000 / 150),
+          usdc(5748),
+          tail("e2e-bonk", "BONK", BONK_MINT, 900 / 0.00003, 0.00003),
+          listedMeme("e2e-pengu", PENGU_MINT, "PENGU", "Pudgy Penguins", 800 / 0.012, 0.012, LISTED_ICON),
+          // Verified, but its icon is on a host we do not load from: its name, and the generic icon.
+          listedMeme("e2e-fart", FARTCOIN_MINT, "Fartcoin", "Fartcoin", 600 / 0.3, 0.3, null),
+        ]
+    : tokens === "frozen"
+      // One token that can be sold and one Token-2022 token frozen in the wallet: it stays in the
+      // list, greyed, with the reason — the total above still adds up.
+      ? [
+          sol(8000 / 150),
+          usdc(5748),
+          tail("e2e-bonk", "BONK", BONK_MINT, 1200 / 0.00003, 0.00003),
+          tail("e2e-wif", "WIF", WIF_MINT, 800 / 3, 3),
+          { ...tail("e2e-frzn", "FRZN", FROZEN_MINT, 300 / 2, 2), tokenProgram: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb", transferabilityState: "frozen" } as unknown as WalletPosition,
+        ]
     : [
         sol(8000 / 150),
         usdc(5748),
