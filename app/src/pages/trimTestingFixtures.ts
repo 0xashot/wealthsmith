@@ -30,7 +30,8 @@ const staleTok = (v: number) => w({ id: "st", symbol: "TKst", name: "Stale token
 const PENGU = "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv";
 const FARTCOIN = "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump";
 const PYUSD = "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo";
-const JUP_ICON = "https://static.datapi.jup.ag/token-icons/0817b3345e648b1663385bac48eb086877635ee27639c3d5da2a4d9dfd8603b1.webp";
+const JUP_ICON = "https://static.datapi.jup.ag/token-icons/108a00de537962c1ee525997222af5639243507d92d4a7a116deb77226f7bf87.webp";
+const FART_ICON = "https://static.datapi.jup.ag/token-icons/9143de2479fd1d3cb732b764234b75fd68a505993b7ff091d20eace5147452d2.webp";
 const unlisted = (v: number, id: string, mint = `Unlisted1111111111111111111111111111${id}`) =>
   w({ id, symbol: `${mint.slice(0, 4)}…${mint.slice(-4)}`, name: "Unknown token", mint, amount: String(Math.round(v * 1e6)), uiAmount: v, decimals: 6, priceUsd: 1, valueUsd: v });
 const listed = (v: number, id: string, mint: string, symbol: string, name: string, meme: boolean, iconUrl: string | null = JUP_ICON) =>
@@ -81,7 +82,7 @@ export function getTrimTestingFixtures(): TrimTestingFixture[] {
     // Tokens OUTSIDE the approved registry (wallet/verifiedMemeIdentity.ts): only one Jupiter has verified AND
     // tags a meme coin has an identity. It is then an ordinary non-core token, shown by its listed name and icon.
     fx("verified_meme", "21. Verified meme coin outside our list — card, with its listed name and icon", [usdc(1000), listed(300, "pengu", PENGU, "PENGU", "Pudgy Penguins", true)]),
-    fx("verified_meme_multi", "22. Two verified meme coins + a registry one — one Trim listing all three", [usdc(3000), listed(260, "pengu", PENGU, "PENGU", "Pudgy Penguins", true), listed(180, "fart", FARTCOIN, "Fartcoin", "Fartcoin", true, null), tok(200, "a")]),
+    fx("verified_meme_multi", "22. Two verified meme coins + a registry one — one Trim listing all three", [usdc(3000), listed(260, "pengu", PENGU, "PENGU", "Pudgy Penguins", true), listed(180, "fart", FARTCOIN, "Fartcoin", "Fartcoin", true, FART_ICON), tok(200, "a")]),
     fx("verified_not_meme", "23. Verified but not a meme coin (PYUSD) — not a candidate; its value is unverified, so no card", [usdc(1000), tok(300, "a"), listed(300, "pyusd", PYUSD, "PYUSD", "PayPal USD", false)]),
     fx("unverified_beside_meme", "24. Verified meme coin beside an unverified token — no card (the unverified value blocks the portfolio)", [usdc(1000), listed(300, "pengu", PENGU, "PENGU", "Pudgy Penguins", true), unlisted(40, "spam")]),
   ];

@@ -92,7 +92,7 @@ const TRIM_STATES: Array<{
 }> = [
   { key: "review", group: "Start", label: "Review", rail: "three", note: "The suggestion's review. The footer is Cancel and Trim; Trim spins in place while the routes are checked." },
   { key: "single", group: "Start", label: "One token", rail: "one", note: "A Trim naming a single token. There is no selector: Trim goes straight to that token's terms." },
-  { key: "listed", group: "Start", label: "Verified meme coins", rail: "listed", note: "Two meme coins outside our approved list, verified and tagged meme by Jupiter, beside BONK. They are named by their listing; PENGU shows its listed icon, Fartcoin's icon host is not one we load from, so it gets the generic mark." },
+  { key: "listed", group: "Start", label: "Verified meme coins", rail: "listed", note: "Two meme coins outside our approved list, verified and tagged meme by Jupiter, beside BONK. They are named and pictured by their listing." },
 
   { key: "select", group: "Choose tokens", label: "Selector", rail: "three", preset: { stage: "select" }, note: "Every token the Trim names. The two that can be sold are ticked; MOBY cannot, and says why. The button counts what is ticked." },
   { key: "select-listed", group: "Choose tokens", label: "Selector, verified meme coins", rail: "listed", preset: { stage: "select" }, note: "The same selector with verified meme coins from outside our list." },

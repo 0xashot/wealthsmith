@@ -11,6 +11,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   TOKEN_LISTING_ICON_HOSTS,
+  TOKEN_LISTING_ICON_HOST_SUFFIXES,
   TOKEN_LISTING_MAX_MINTS_PER_REQUEST,
   TOKEN_LISTING_UNLISTED_TTL_MS,
   TOKEN_LISTING_VERIFIED_TTL_MS,
@@ -127,8 +128,13 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
       "http://static.datapi.jup.ag/x.webp", "https://evil.example/x.png", "https://static.datapi.jup.ag.evil.example/x.png",
       "https://user:pw@static.datapi.jup.ag/x.png", "https://static.datapi.jup.ag:8443/x.png", "javascript:alert(1)",
       "data:image/svg+xml;base64,AAAA", "//static.datapi.jup.ag/x.png", "not a url", "", null, 12, `https://ipfs.io/${"a".repeat(400)}`,
+      // A per-project subdomain is matched as a dot-prefixed suffix — not as a substring, and not bare.
+      "https://evilmypinata.cloud/x.png", "https://mypinata.cloud/x.png", "https://x.mypinata.cloud.evil.example/x.png",
+      "https://myfilebase.com.evil.example/x.png", "https://ipfs.nftstorage.link/x.png",
     ].every((v) => { const l = icon(v); return l != null && l.iconUrl === null && l.symbol === "PYUSD"; });
-    return kept && dropped && TOKEN_LISTING_ICON_HOSTS.length === 6;
+    const subdomains = ["https://aqua-junior-shark-690.mypinata.cloud/ipfs/x", "https://bafkreigmu65.ipfs.nftstorage.link/", "https://desperate-moccasin-minnow.myfilebase.com/ipfs/x"]
+      .every((u) => icon(u)?.iconUrl === u);
+    return kept && dropped && subdomains && TOKEN_LISTING_ICON_HOSTS.length === 11 && TOKEN_LISTING_ICON_HOST_SUFFIXES.every((x) => x.startsWith("."));
   })(), "https + allow-list");
 
   // ---- 2. the lookup ---------------------------------------------------------------------

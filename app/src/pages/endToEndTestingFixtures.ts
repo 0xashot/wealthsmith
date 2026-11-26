@@ -53,7 +53,9 @@ export interface EndToEndScenario {
 export const PENGU_MINT = "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv";
 export const FARTCOIN_MINT = "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump";
 const FROZEN_MINT = "FRZNvQ7mXh3kJ2pLw8sT5yBn4cRd6eUa9gHiKoMzPq1x";
-const LISTED_ICON = "https://static.datapi.jup.ag/token-icons/0817b3345e648b1663385bac48eb086877635ee27639c3d5da2a4d9dfd8603b1.webp";
+// The icons Jupiter's verified list gives these two mints (read 2026-11-26).
+const PENGU_ICON = "https://static.datapi.jup.ag/token-icons/108a00de537962c1ee525997222af5639243507d92d4a7a116deb77226f7bf87.webp";
+const FARTCOIN_ICON = "https://static.datapi.jup.ag/token-icons/9143de2479fd1d3cb732b764234b75fd68a505993b7ff091d20eace5147452d2.webp";
 
 /** A wallet token the registry cannot name, carrying a Jupiter-verified MEME listing. */
 function listedMeme(id: string, mint: string, symbol: string, name: string, uiAmount: number, priceUsd: number, iconUrl: string | null): WalletPosition {
@@ -95,9 +97,8 @@ export function buildTrimWalkthroughRail(tokens: "three" | "one" | "listed" | "f
           sol(8000 / 150),
           usdc(5748),
           tail("e2e-bonk", "BONK", BONK_MINT, 900 / 0.00003, 0.00003),
-          listedMeme("e2e-pengu", PENGU_MINT, "PENGU", "Pudgy Penguins", 800 / 0.012, 0.012, LISTED_ICON),
-          // Verified, but its icon is on a host we do not load from: its name, and the generic icon.
-          listedMeme("e2e-fart", FARTCOIN_MINT, "Fartcoin", "Fartcoin", 600 / 0.3, 0.3, null),
+          listedMeme("e2e-pengu", PENGU_MINT, "PENGU", "Pudgy Penguins", 800 / 0.012, 0.012, PENGU_ICON),
+          listedMeme("e2e-fart", FARTCOIN_MINT, "Fartcoin", "Fartcoin", 600 / 0.3, 0.3, FARTCOIN_ICON),
         ]
     : tokens === "frozen"
       // One token that can be sold and one Token-2022 token frozen in the wallet: it stays in the

@@ -59,16 +59,33 @@ export const TOKEN_LISTING_CACHE_MAX = 5000;
 
 /**
  * Hosts an icon may be loaded from. The browser fetches the image directly, so every host here
- * learns that someone is viewing that token. These six served ~85% of the verified list's icons
- * when sampled (2026-11-26); anything else gets the generic icon and its real name.
+ * learns that someone is viewing that token. Chosen from where the verified list's icons
+ * actually are (sampled 2026-11-26): Jupiter's own image hosts, the public IPFS / Arweave
+ * gateways, and the few CDNs token projects use. Together they serve ~90% of the verified
+ * meme coins' icons; anything else gets the generic icon and its real name.
  */
 export const TOKEN_LISTING_ICON_HOSTS: readonly string[] = [
   "static.datapi.jup.ag",
+  "static-create.jup.ag",
   "raw.githubusercontent.com",
   "arweave.net",
+  "gateway.irys.xyz",
   "ipfs.io",
+  "gateway.pinata.cloud",
+  "res.cloudinary.com",
+  "cdn.dexscreener.com",
   "cdn.ondo.finance",
   "xstocks-metadata.backed.fi",
+];
+/**
+ * Pinning services that give every project its own subdomain. Matched as a SUFFIX that begins
+ * with a dot, so "x.mypinata.cloud" passes and "evilmypinata.cloud" or
+ * "mypinata.cloud.evil.example" do not.
+ */
+export const TOKEN_LISTING_ICON_HOST_SUFFIXES: readonly string[] = [
+  ".mypinata.cloud",
+  ".ipfs.nftstorage.link",
+  ".myfilebase.com",
 ];
 
 const SYMBOL_RE = /^[A-Za-z0-9$._+-]{1,12}$/;
@@ -98,7 +115,10 @@ function cleanIconUrl(value: unknown): string | null {
   let url: URL;
   try { url = new URL(value); } catch { return null; }
   if (url.protocol !== "https:" || url.username !== "" || url.password !== "" || url.port !== "") return null;
-  return TOKEN_LISTING_ICON_HOSTS.includes(url.hostname) ? url.toString() : null;
+  const host = url.hostname;
+  const allowed = TOKEN_LISTING_ICON_HOSTS.includes(host) ||
+    TOKEN_LISTING_ICON_HOST_SUFFIXES.some((suffix) => host.length > suffix.length && host.endsWith(suffix));
+  return allowed ? url.toString() : null;
 }
 
 /**
