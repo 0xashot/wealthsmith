@@ -58,7 +58,7 @@ const SIMULATIONS = [
   { key: "wallet-declined", label: "Reconnect declined", note: "Same start, but the wallet declines the first request. Swap is replaced by Reconnect Wallet; press it and the link opens, and Swap returns." },
   { key: "trim", label: "Trim: three tokens", note: "A Trim naming three tokens. Press Trim: the selector ticks the two that can be sold (WIF has one route only, and is offered like any other) and shows why MOBY cannot. Trim 2 Tokens runs them one at a time — terms, approval, result — and ends on a summary." },
   { key: "trim-fail", label: "Trim: one fails", note: "Same Trim, but WIF's swap cannot be prepared the first time. The run carries on, the summary says which token failed, and Try Again runs only that one." },
-  { key: "trim-decline", label: "Trim: one declined", note: "Same Trim, but the wallet declines WIF's approval. BONK stays swapped; the summary says WIF was canceled and offers Try Again." },
+  { key: "trim-decline", label: "Trim: one declined", note: "Same Trim, but the wallet declines WIF's approval. BONK stays swapped; the summary says WIF was canceled, and — because that was the user's own choice — offers no Try Again." },
   { key: "trim-single", label: "Trim: one token", note: "A Trim naming a single token. No selector: Trim goes straight to that token's terms." },
   { key: "wallet-unknown", label: "No wallet known", note: "No wallet is known to reconnect to. Swap is replaced by Connect Wallet, which closes the review and opens the app's Connect Wallet dialog. A moment later a wallet is 'connected' and the same review reopens, now with Swap." },
 ] as const;

@@ -1101,9 +1101,15 @@ swapped, and the summary says exactly which.
 "Trim Completed" only when every chosen token was swapped. Otherwise "Trim Partly
 Completed" or "Nothing Was Trimmed".
 
-Try Again never includes a swap that was sent and not confirmed — it may still
-land, and a second swap beside it could execute both — and never one whose
-verification was refused.
+Try Again is offered only for what went wrong on our side or the network's: a
+swap that could not be prepared, was not sent, failed on-chain, or whose quote
+expired. It is never offered for:
+  - what the user cancelled — a swap declined in the wallet, or tokens not
+    reached because they pressed Cancel. Their no is not asked twice; the Trim
+    stays on the dashboard if they change their mind;
+  - a swap that was sent and not confirmed — it may still land, and a second swap
+    beside it could execute both;
+  - a swap whose verification was refused — it would be refused again.
 
 WealthSmith is never the actor: the user picks the tokens and approves each one.
 ```
@@ -1141,8 +1147,9 @@ Summary:
 
 ```text
 Trim Completed            You received 1,998.60 USDC from 2 of 2 tokens.      [Done]
-Trim Partly Completed     You received 1,199.16 USDC from 1 of 2 tokens.      [Done] [Try Again]
-Nothing Was Trimmed       No token was swapped, and your funds haven’t moved. [Done] [Try Again]
+Trim Partly Completed     You received 1,199.16 USDC from 1 of 2 tokens.      [Done] [Try Again]   a swap failed
+Trim Partly Completed     You received 1,199.16 USDC from 1 of 2 tokens.      [Done]               the rest was cancelled by the user
+Nothing Was Trimmed       No token was swapped, and your funds haven’t moved. [Done] [Try Again]   or [Close] when cancelled
 ```
 
 The total is the sum of what the chain says arrived, never the estimates. If an

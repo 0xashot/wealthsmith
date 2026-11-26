@@ -2785,13 +2785,15 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return rows.length === 2 && frozen != null && frozen.leg === null && !frozen.sellable &&
       frozen.blockedReason === TRIM_BLOCKED_REASON.not_transferable && rows[0].symbol === "FRZ";
   })(), "listed, never sold");
-  add("SWTR-7: Try Again never includes a swap that may still land, or one that would be refused again", (() => {
+  add("SWTR-7: Try Again is for what WENT WRONG — never what the user cancelled, a swap that may still land, or one that would be refused again", (() => {
     const failed = (failure: string) => ({ status: "failed", failure, signature: null }) as never;
     return !isTrimRetryable(failed("confirm_timeout")) && !isTrimRetryable(failed("verification_failed")) &&
-      isTrimRetryable(failed("declined")) && isTrimRetryable(failed("plan_unavailable")) && isTrimRetryable(failed("submit_failed")) && isTrimRetryable(failed("expired")) &&
-      isTrimRetryable({ status: "not_started" }) && isTrimRetryable({ status: "not_offered" }) &&
+      // The user's own no: declined in the wallet, cancelled, or never started because they stopped the run.
+      !isTrimRetryable(failed("declined")) && !isTrimRetryable(failed("cancelled")) && !isTrimRetryable({ status: "not_started" }) &&
+      isTrimRetryable(failed("plan_unavailable")) && isTrimRetryable(failed("submit_failed")) && isTrimRetryable(failed("expired")) &&
+      isTrimRetryable({ status: "not_offered" }) &&
       !isTrimRetryable({ status: "confirmed", receivedTokens: "1", signature: "s" }) && !isTrimRetryable(undefined);
-  })(), "no second swap beside a pending one");
+  })(), "retry what failed, not what was refused");
   add("SWTR-8: the summary's total is added EXACTLY — as integers, never through a float", (() =>
     sumTokenStrings(["1199.16", "799.44"], 6) === "1998.6" &&
     sumTokenStrings(["0.1", "0.2"], 6) === "0.3" &&

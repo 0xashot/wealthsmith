@@ -93,14 +93,31 @@ export function deriveTrimRows(input: {
   return rows.sort((a, b) => (b.valueUsd ?? 0) - (a.valueUsd ?? 0));
 }
 
-/** May this outcome be tried again? Never a swap that was sent and may still land. */
+/**
+ * May this outcome be tried again? Only where trying again is the remedy for something that
+ * went wrong on OUR side or the network's.
+ *
+ * Never what the USER cancelled — a swap they declined in their wallet, or tokens the run never
+ * reached because they pressed Cancel. They said no; a Try Again button under their own
+ * decision asks the same question twice. The Trim stays on the dashboard if they change their
+ * mind.
+ *
+ * Never a swap that was sent and may still land (a retry could execute both), and never one
+ * whose verification was refused (the same transaction would be refused again).
+ */
 export function isTrimRetryable(result: TrimResult | undefined): boolean {
   if (result == null) return false;
-  if (result.status === "not_started" || result.status === "not_offered") return true;
+  if (result.status === "not_offered") return true;
   if (result.status !== "failed") return false;
-  // `confirm_timeout`: the transaction is on-chain and may complete — a retry could execute both.
-  // `verification_failed`: the same transaction would be refused again.
-  return result.failure !== "confirm_timeout" && result.failure !== "verification_failed";
+  switch (result.failure) {
+    case "declined":
+    case "cancelled":
+    case "confirm_timeout":
+    case "verification_failed":
+      return false;
+    default:
+      return true;
+  }
 }
 
 /** Add decimal token strings exactly (as integers at `decimals`), never through a float. */
