@@ -25,6 +25,7 @@
  * address. It never throws and never delays a portfolio beyond its own short timeout.
  */
 import { TOKEN_REGISTRY, type WalletPosition } from "./walletPosition";
+import { jupiterUrl, readJupiterApiKey, withJupiterApiKey } from "./jupiterApi";
 
 export interface TokenListing {
   /** The ticker Jupiter's verified list gives this exact mint. Display only. */
@@ -43,8 +44,13 @@ export interface TokenListing {
   source: "jupiter_verified";
 }
 
-/** Jupiter's token lookup. Accepts comma-separated mints; returns verified and unverified alike. */
-export const TOKEN_LISTING_ENDPOINT = "https://lite-api.jup.ag/tokens/v2/search";
+/**
+ * Jupiter's token lookup. Accepts comma-separated mints; returns verified and unverified alike.
+ * Asked of api.jup.ag with our key when one is configured, otherwise of the keyless host it has
+ * always used (see jupiterApi.ts).
+ */
+export const TOKEN_LISTING_PATH = "/tokens/v2/search";
+export const TOKEN_LISTING_ENDPOINT = `https://lite-api.jup.ag${TOKEN_LISTING_PATH}`;
 /** Measured 2026-11-26: 100 mints are answered; a 101st is silently dropped. */
 export const TOKEN_LISTING_MAX_MINTS_PER_REQUEST = 100;
 /** One request per wallet read, never more — a wallet full of airdropped spam does not fan out. */
@@ -153,9 +159,11 @@ export function createTokenListingSource(deps: {
   now?: () => number;
   endpoint?: string;
   timeoutMs?: number;
+  /** The Jupiter API key reader. Default: the server environment; null in a browser. */
+  getApiKey?: () => string | null;
 } = {}): TokenListingSource {
   const now = deps.now ?? Date.now;
-  const endpoint = deps.endpoint ?? TOKEN_LISTING_ENDPOINT;
+  const getKey = deps.getApiKey ?? (() => readJupiterApiKey());
   const timeoutMs = deps.timeoutMs ?? TOKEN_LISTING_TIMEOUT_MS;
   const cache = new Map<string, CacheEntry>();
 
@@ -171,8 +179,11 @@ export function createTokenListingSource(deps: {
 
   async function fetchBatch(mints: string[]): Promise<boolean> {
     // Resolved at call time, not at import: a host without a global fetch can still load this module.
-    const fetchImpl = deps.fetchImpl ?? (globalThis as { fetch?: typeof fetch }).fetch;
-    if (typeof fetchImpl !== "function") return false;
+    const baseFetch = deps.fetchImpl ?? (globalThis as { fetch?: typeof fetch }).fetch;
+    if (typeof baseFetch !== "function") return false;
+    const key = getKey();
+    const endpoint = deps.endpoint ?? jupiterUrl(TOKEN_LISTING_PATH, key);
+    const fetchImpl = withJupiterApiKey(baseFetch, () => key);
     const controller = typeof AbortController === "function" ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
     try {

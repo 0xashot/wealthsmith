@@ -26,7 +26,9 @@ export const SWAP_ADAPTER_VERSIONS: Record<SwapProviderId, string> = {
  * state via an approved server-only RPC.
  */
 export const SWAP_PROVIDER_ENDPOINTS = {
-  jupiter: { quoteEndpoint: "https://api.jup.ag/swap/v1/quote", envKey: "JUPITER_QUOTE_API_KEY", envUrlKey: "JUPITER_QUOTE_URL", requiresSecret: false },
+  // One key covers every Jupiter API we call (quotes, swap build, prices, token listings). It is
+  // OPTIONAL: without it the same requests are made keyless, at Jupiter's anonymous rate limit.
+  jupiter: { quoteEndpoint: "https://api.jup.ag/swap/v1/quote", envKey: "JUPITER_API_KEY", envUrlKey: "JUPITER_QUOTE_URL", requiresSecret: false },
   raydium: { quoteEndpoint: "https://transaction-v1.raydium.io/compute/swap-base-in", envKey: "RAYDIUM_QUOTE_API_KEY", envUrlKey: "RAYDIUM_QUOTE_URL", requiresSecret: false },
   orca: { quoteEndpoint: null as string | null, envKey: "SOLANA_RPC_URL", envUrlKey: "SOLANA_RPC_URL", requiresSecret: true },
 } as const;
@@ -34,6 +36,7 @@ export const SWAP_PROVIDER_ENDPOINTS = {
 /** Env keys that would leak a swap secret into the browser bundle. Their presence is a hard misconfiguration. */
 export const FORBIDDEN_SWAP_ENV_KEYS: readonly string[] = [
   "VITE_JUPITER_QUOTE_API_KEY",
+  "VITE_JUPITER_API_KEY",
   "VITE_RAYDIUM_QUOTE_API_KEY",
   "VITE_SOLANA_RPC_URL",
   "VITE_SWAP_RPC_URL",

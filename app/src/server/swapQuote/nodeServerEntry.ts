@@ -7,6 +7,7 @@
  */
 import { createSwapQuoteHandler, type SwapQuoteHttpRequest, type SwapQuoteHttpResponse } from "./httpHandler";
 import { createJupiterPriceSource, JUPITER_PRICE_V3_URL } from "./jupiterPriceSource";
+import { readJupiterApiKey, withJupiterApiKey } from "../../wallet/jupiterApi";
 import { createResilientPriceSource } from "./resilientPriceSource";
 import { createRaydiumLiquiditySource, RAYDIUM_POOLS_INFO_URL } from "./raydiumLiquiditySource";
 import { SwapQuoteCache } from "./swapQuoteCache";
@@ -28,7 +29,9 @@ export function createSwapQuoteRequestHandler(deps: NodeServerDeps = {}) {
   const env = deps.env ?? nodeEnvReader;
   const leaked = detectLeakedSwapEnv(env);
   if (leaked.length > 0) throw new Error(`swap_quote_env_leak: ${leaked.join(",")}`);
-  const fetchImpl = deps.fetchImpl ?? fetch;
+  // Requests to api.jup.ag — and only those — carry the Jupiter API key when one is configured
+  // (wallet/jupiterApi.ts). Raydium, the RPC and any URL override are untouched.
+  const fetchImpl = withJupiterApiKey(deps.fetchImpl ?? fetch, () => readJupiterApiKey(env));
   const cache = new SwapQuoteCache(SWAP_QUOTE_OPERATIONAL_POLICY.cacheDurationMs, deps.now);
   // Approved production sources: Jupiter Price v3 (shared USD snapshot) + Raydium pool-TVL (per-leg liquidity).
   // A server env var may point at an approved mirror; otherwise the canonical public endpoints are used.

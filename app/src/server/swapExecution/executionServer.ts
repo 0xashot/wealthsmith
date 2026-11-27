@@ -24,6 +24,7 @@ import { createSwapExecuteHandler, isExecutionEnabled } from "./executionHandler
 import { createConfirmationChecker } from "./confirmationStatus";
 import { createJupiterPriceSource } from "../swapQuote/jupiterPriceSource";
 import { createResilientPriceSource } from "../swapQuote/resilientPriceSource";
+import { readJupiterApiKey, withJupiterApiKey } from "../../wallet/jupiterApi";
 import { SwapRateLimiter, SWAP_RATE_LIMIT_CONFIG } from "../swapQuote/rateLimit";
 import { nodeEnvReader, detectLeakedSwapEnv, SWAP_PROVIDER_ENDPOINTS, type EnvReader } from "../swapQuote/providerConfig";
 
@@ -76,11 +77,14 @@ export function createExecutionRequestListener(opts: ExecutionServerOptions = {}
   // lookups and its short cache, instead of each making calls of their own against an API that
   // refuses after about five in ten seconds. The same public source the quote lane uses, so the
   // USD under an amount here and in the route comparison are the same number from the same place.
-  const prices = createResilientPriceSource(createJupiterPriceSource(opts.fetchImpl ?? fetch));
+  // Requests to api.jup.ag — the plan's quote, the swap build and the prices — carry the Jupiter
+  // API key when one is configured (wallet/jupiterApi.ts). Nothing else does.
+  const jupiterFetch = withJupiterApiKey(opts.fetchImpl ?? fetch, () => readJupiterApiKey(env));
+  const prices = createResilientPriceSource(createJupiterPriceSource(jupiterFetch));
   const handler = createSwapExecuteHandler({
     quoteEndpoint,
     env,
-    fetchImpl: opts.fetchImpl,
+    fetchImpl: jupiterFetch,
     now: opts.now,
     priceSource: prices,
   });

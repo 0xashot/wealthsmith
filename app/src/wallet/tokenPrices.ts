@@ -17,6 +17,7 @@
  * "—" (never zero, never a guess). Best-effort: a failed feed degrades to fewer
  * prices, never an error. Lazy-imported so it stays off the main bundle.
  */
+import { jupiterUrl, readJupiterApiKey, withJupiterApiKey } from "./jupiterApi";
 
 /** Canonical wrapped-SOL mint — used to price native SOL and native stake. */
 export const SOL_MINT = "So11111111111111111111111111111111111111112";
@@ -32,7 +33,8 @@ export interface PriceInfo {
 }
 
 const LLAMA = "https://coins.llama.fi/prices/current/";
-const JUP = "https://lite-api.jup.ag/price/v3?ids=";
+/** Jupiter Price v3 — api.jup.ag with our key when one is configured, else the keyless host (jupiterApi.ts). */
+const JUP_PRICE_PATH = "/price/v3?ids=";
 /** Drop DefiLlama prices below this confidence (fall back to Jupiter or "—"). */
 const MIN_CONFIDENCE = 0.8;
 
@@ -55,12 +57,13 @@ export async function fetchTokenPrices(mints: string[]): Promise<Map<string, Pri
   const unique = [...new Set(mints)].filter((m) => typeof m === "string" && m.length > 0);
   if (unique.length === 0) return out;
 
+  const jupiterKey = readJupiterApiKey();
   // Both feeds in parallel — each is independently best-effort.
   const [llamaRes, jupRes] = await Promise.allSettled([
     fetch(LLAMA + unique.map((m) => "solana:" + m).join(",")).then(async (r) =>
       r.ok ? ((await r.json()) as LlamaCoins) : undefined
     ),
-    fetch(JUP + unique.join(",")).then(async (r) =>
+    withJupiterApiKey(fetch, () => jupiterKey)(jupiterUrl(JUP_PRICE_PATH, jupiterKey) + unique.join(",")).then(async (r) =>
       r.ok ? ((await r.json()) as JupPrices) : undefined
     ),
   ]);
