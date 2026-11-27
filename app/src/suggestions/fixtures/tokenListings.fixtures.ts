@@ -28,12 +28,15 @@ import { sortPositions } from "../../wallet/portfolioPositionDerivation";
 import { deriveAssetAllocation } from "../../wallet/assetAllocation";
 import { groupPositionsByCategory, isStablecoin } from "../../wallet/walletSummary";
 import { formatAmount } from "../../components/deployTable";
-import { VERIFIED_IDENTITY_EXTRA_MINTS, VERIFIED_MEME_LISTING_IS_IDENTITY, verifiedMemeIdentity } from "../../wallet/verifiedMemeIdentity";
+import { VERIFIED_IDENTITY_EXTRA_MINTS, VERIFIED_LISTING_IS_IDENTITY, isCountedVerifiedToken, isLeftOutToken, isVerifiedStableToken, splitCountedPositions, verifiedMemeIdentity } from "../../wallet/verifiedTokenIdentity";
+import { computeSafetyBufferCoverage } from "../../wallet/safetyBufferCoverage";
+import { deriveStableValue } from "../../wallet/walletSummary";
 import { computePortfolioCompleteness } from "../../wallet/portfolioCompleteness";
 import { deriveTrimAssessment } from "../trimAssessment";
 import { buildTrimCardFromAssessment } from "../trimSuggestion";
 import { deriveTrimRows } from "../swapExecution/trimFlow";
 import { getTrimTestingFixtures } from "../../pages/trimTestingFixtures";
+import { LEFT_OUT_TOKEN_ROW_NOTE, leftOutTokensNote } from "../../state/approvedCopy";
 import type { FixtureCheck } from "./fixtureCheck";
 
 const PYUSD = "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo";
@@ -53,9 +56,9 @@ const usdcPos: WalletPosition = {
   id: `mint-${USDC}`, source: "wallet", type: "token", symbol: "USDC", name: "USD Coin", mint: USDC, icon: "assets/icons/token/usdc.svg",
   amount: "2491201", uiAmount: 2.491201, decimals: 6, detection: "direct_wallet_balance", valueUsd: 2.49, apy: null,
 };
-const PYUSD_LISTING: TokenListing = { symbol: "PYUSD", name: "PayPal USD", iconUrl: JUP_ICON, meme: false, source: "jupiter_verified" };
+const PYUSD_LISTING: TokenListing = { symbol: "PYUSD", name: "PayPal USD", iconUrl: JUP_ICON, meme: false, stable: true, source: "jupiter_verified" };
 const PENGU = "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv";
-const PENGU_LISTING: TokenListing = { symbol: "PENGU", name: "Pudgy Penguins", iconUrl: JUP_ICON, meme: true, source: "jupiter_verified" };
+const PENGU_LISTING: TokenListing = { symbol: "PENGU", name: "Pudgy Penguins", iconUrl: JUP_ICON, meme: true, stable: false, source: "jupiter_verified" };
 
 /** A stubbed lookup endpoint that records what it was asked. */
 function endpoint(answer: (mints: string[]) => unknown, o: { ok?: boolean; throws?: boolean } = {}) {
@@ -86,7 +89,7 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
   // ---- 1. what may become a listing ------------------------------------------------------
   add("TL-1: a mint Jupiter has verified becomes a listing — its ticker, name and icon", (() => {
     const l = sanitizeTokenListing(row(), PYUSD);
-    return l != null && l.symbol === "PYUSD" && l.name === "PayPal USD" && l.iconUrl === JUP_ICON && l.source === "jupiter_verified" && l.meme === false;
+    return l != null && l.symbol === "PYUSD" && l.name === "PayPal USD" && l.iconUrl === JUP_ICON && l.source === "jupiter_verified" && l.meme === false && l.stable === false;
   })(), "verified → listing");
 
   add("TL-2: not verified, verified-looking, or a row for another mint → no listing", (() => {
@@ -213,42 +216,53 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
     positionDisplaySymbol(after[0]) === "USDC" && positionDisplayName(after[0]) === "USD Coin" && formatAmount(after[0]) === "2.49 USDC"
   )(), "display helpers");
 
-  add("TL-13: the engine sees the same wallet with and without listings", (() => {
-    const same = <T,>(f: (ps: WalletPosition[]) => T) => JSON.stringify(f(before)) === JSON.stringify(f(after.map(({ listing: _l, ...p }) => p as WalletPosition)));
+  add("TL-13: a listing changes ONE thing for the engine — a verified token with a price is an ordinary token; nothing else moves", (() => {
     const classes = (ps: WalletPosition[]) => ps.map(classifyPositionClass).join(",");
     const stables = (ps: WalletPosition[]) => ps.map(isStablecoin).join(",");
     const order = (ps: WalletPosition[]) => sortPositions(ps).map((p) => p.id).join(",");
     const groups = (ps: WalletPosition[]) => Object.fromEntries(Object.entries(groupPositionsByCategory(ps)).map(([k, v]) => [k, (v as WalletPosition[]).map((p) => p.id)]));
-    // Identical classification of the LISTED positions themselves, not only of the stripped copy.
-    return same(classes) && classes(after) === classes(before) && classes(after).split(",")[1] === "unknown_token" &&
-      stables(after) === stables(before) && isStablecoin(after[1]) === false && // "PayPal USD" is not made a stablecoin by its listing
+    // before: USDC, PYUSD (unnamed), PUMP (unnamed).  after: the same, PYUSD now carrying a verified listing.
+    const [, pyusdBefore, pumpBefore] = classes(before).split(",");
+    const [usdcAfter, pyusdAfter, pumpAfter] = classes(after).split(",");
+    return pyusdBefore === "unknown_token" && pumpBefore === "unknown_token" &&
+      usdcAfter === "stablecoin" && pyusdAfter !== "unknown_token" && pumpAfter === "unknown_token" && // only the listed, priced one
+      // The registry stablecoin test — what the Safety Buffer asks — is unmoved: "PayPal USD" is not one of ours.
+      stables(after) === stables(before) && isStablecoin(after[1]) === false &&
+      // Display ordering and the by-name grouping still read the position's own name.
       order(after) === order(before) && JSON.stringify(groups(after)) === JSON.stringify(groups(before)) &&
       groupPositionsByCategory(after).unknown.length === 2;
-  })(), "classification, stable test, ordering, grouping");
+  })(), "classification by the counted rule only");
 
-  add("TL-14: the allocation chart keeps its slices and sizes; only the label of a listed token changes", (() => {
+  add("TL-14: the allocation chart keeps its slices and sizes; a listed token gets its ticker, and a listed STABLECOIN the stables colour", (() => {
     const a = deriveAssetAllocation(before);
     const b = deriveAssetAllocation(after);
-    const shape = (x: typeof a) => x.segments.map((s) => `${s.id}:${s.valueUsd}:${s.percent}:${s.colorToken}`).join("|");
-    return shape(a) === shape(b) && a.totalUsd === b.totalUsd &&
+    const sizes = (x: typeof a) => x.segments.map((s) => `${s.id}:${s.valueUsd}:${s.percent}`).join("|");
+    const colour = (x: typeof a, label: string) => x.segments.find((s) => s.label === label)?.colorToken;
+    return sizes(a) === sizes(b) && a.totalUsd === b.totalUsd &&
       a.segments.some((s) => s.label === shortMint(PYUSD)) && b.segments.some((s) => s.label === "PYUSD") &&
-      !b.segments.some((s) => s.label === shortMint(PYUSD)) && b.segments.some((s) => s.label === shortMint(PUMP));
-  })(), "same slices, new label");
+      !b.segments.some((s) => s.label === shortMint(PYUSD)) && b.segments.some((s) => s.label === shortMint(PUMP)) &&
+      colour(b, "PYUSD") === colour(b, "USDC") && colour(a, shortMint(PYUSD)) !== colour(a, "USDC") &&
+      colour(b, shortMint(PUMP)) !== colour(b, "USDC");
+  })(), "same slices, new label, stables colour");
 
-  add("TL-15: the engine reads a listing in exactly one module, and exactly two files use that module", (() => {
+  add("TL-15: only one module looks inside a listing, and every engine file that asks it a question is named here", (() => {
     const src = join(process.cwd(), "src");
     const engine = [...sourceFiles(join(src, "suggestions")), ...sourceFiles(join(src, "wallet"))]
       .filter((f) => !/[\\/]fixtures[\\/]|[Ff]ixtures\.ts$|ownerTest/.test(f));
     const rel = (f: string) => f.slice(src.length + 1).replace(/\\/g, "/");
     const matching = (re: RegExp) => engine.filter((f) => re.test(readFileSync(f, "utf8"))).map(rel).sort();
-    // `.listing` appears in: the module that attaches it, the two display helpers' home, the chart label,
-    // and the one identity module. Nowhere under suggestions/.
+    const asks = (fn: string) => matching(new RegExp(`\\b${fn}\\(`)).filter((f) => f !== "wallet/verifiedTokenIdentity.ts");
+    // `.listing` appears in: the module that attaches it, the display helpers' home, the chart label, and
+    // the identity module. Nowhere under suggestions/.
     const readers = matching(/\.listing\b/);
-    // The identity module is used by completeness (the value counts) and Trim (it is a candidate) — nothing else.
-    const users = matching(/verifiedMemeIdentity\(/).filter((f) => f !== "wallet/verifiedMemeIdentity.ts");
     const display = matching(/positionDisplaySymbol|positionDisplayName/).filter((f) => f.startsWith("suggestions/"));
-    return JSON.stringify(readers) === JSON.stringify(["wallet/assetAllocation.ts", "wallet/tokenListings.ts", "wallet/verifiedMemeIdentity.ts", "wallet/walletPosition.ts"]) &&
-      JSON.stringify(users) === JSON.stringify(["suggestions/trimAssessment.ts", "wallet/portfolioCompleteness.ts"]) &&
+    return JSON.stringify(readers) === JSON.stringify(["wallet/assetAllocation.ts", "wallet/tokenListings.ts", "wallet/verifiedTokenIdentity.ts", "wallet/walletPosition.ts"]) &&
+      // counted → completeness (its value counts) and Trim (known, but out of scope unless a meme coin);  Trim identity → Trim;  stables side → the three places that draw the crypto/stables line;
+      // left out → the wallet hook.  A new reader has to be added here on purpose.
+      JSON.stringify(asks("isCountedVerifiedToken")) === JSON.stringify(["suggestions/trimAssessment.ts", "wallet/portfolioCompleteness.ts"]) &&
+      JSON.stringify(asks("verifiedMemeIdentity")) === JSON.stringify(["suggestions/trimAssessment.ts"]) &&
+      JSON.stringify(asks("isVerifiedStableToken")) === JSON.stringify(["suggestions/rebalanceAssessment.ts", "wallet/assetAllocation.ts", "wallet/walletSummary.ts"]) &&
+      JSON.stringify(asks("splitCountedPositions")) === JSON.stringify(["wallet/useWalletPortfolio.ts"]) &&
       display.length === 0;
   })(), "static");
 
@@ -293,21 +307,24 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
       { ...memePos, source: "kamino" as const },
       { ...memePos, mint: undefined },
     ];
-    return VERIFIED_MEME_LISTING_IS_IDENTITY === true && id != null && id.symbol === "PENGU" && id.name === "Pudgy Penguins" && id.iconUrl === JUP_ICON &&
+    return VERIFIED_LISTING_IS_IDENTITY === true && id != null && id.symbol === "PENGU" && id.name === "Pudgy Penguins" && id.iconUrl === JUP_ICON &&
       none.every((p) => verifiedMemeIdentity(p as WalletPosition) === null);
   })(), "verified + meme, nothing else");
 
-  add("TL-20: its value counts — it is an ordinary token to completeness, where any other unnamed token leaves net worth unresolved", (() => {
+  add("TL-20: a verified token WITH A PRICE counts, meme or not; one without a price, or unverified, is still unknown to the engine", (() => {
     const usdc1000: WalletPosition = { ...usdcPos, amount: "1000000000", uiAmount: 1000, priceUsd: 1, valueUsd: 1000 };
-    const withMeme = computePortfolioCompleteness([usdc1000, memePos], { requiredBufferUsd: 500 });
-    const withNonMeme = computePortfolioCompleteness([usdc1000, unnamed(PYUSD, 300, { listing: PYUSD_LISTING })], { requiredBufferUsd: 500 });
-    const withUnlisted = computePortfolioCompleteness([usdc1000, unnamed(PUMP, 300)], { requiredBufferUsd: 500 });
-    return classifyPositionClass(memePos) === "classic_spl" && isStablecoin(memePos) === false &&
-      memePos.symbol === shortMint(PENGU) && memePos.name === "Unknown token" &&
-      withMeme.netWorthState === "complete" && withMeme.hasUnknownMagnitudeValue === false &&
-      withNonMeme.netWorthState === "unresolved" && withNonMeme.hasUnknownMagnitudeValue === true &&
-      withUnlisted.netWorthState === "unresolved";
-  })(), "counted; others still block");
+    const complete = (p: WalletPosition) => computePortfolioCompleteness([usdc1000, p], { requiredBufferUsd: 500 });
+    const pyusd = unnamed(PYUSD, 300, { listing: PYUSD_LISTING });
+    const unpriced = unnamed(PENGU, null, { listing: PENGU_LISTING });
+    const unverified = unnamed(PUMP, 300);
+    return isCountedVerifiedToken(memePos) && classifyPositionClass(memePos) === "classic_spl" && complete(memePos).netWorthState === "complete" &&
+      isCountedVerifiedToken(pyusd) && classifyPositionClass(pyusd) !== "unknown_token" && complete(pyusd).netWorthState === "complete" && complete(pyusd).hasUnknownMagnitudeValue === false &&
+      // The position itself is not renamed, and is not one of OUR stablecoins.
+      memePos.symbol === shortMint(PENGU) && memePos.name === "Unknown token" && isStablecoin(pyusd) === false &&
+      // Fail-closed inside the engine: if one of these ever reaches it, it blocks exactly as before.
+      !isCountedVerifiedToken(unpriced) && classifyPositionClass(unpriced) === "unknown_token" && complete(unpriced).netWorthState === "unresolved" &&
+      !isCountedVerifiedToken(unverified) && classifyPositionClass(unverified) === "unknown_token" && complete(unverified).netWorthState === "unresolved";
+  })(), "verified + priced counts");
 
   const trimOf = (positions: WalletPosition[]) => {
     const assessment = deriveTrimAssessment({ positions, requiredBufferUsd: 500, generatedAt: 1_700_000_000_000 });
@@ -337,7 +354,7 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
   })(), "no identity → no Trim");
 
   add("TL-24: PUMP is trimmed with the meme coins although Jupiter tags it defi — but only while Jupiter verifies it", (() => {
-    const PUMP_LISTING: TokenListing = { symbol: "PUMP", name: "Pump", iconUrl: JUP_ICON, meme: false, source: "jupiter_verified" };
+    const PUMP_LISTING: TokenListing = { symbol: "PUMP", name: "Pump", iconUrl: JUP_ICON, meme: false, stable: false, source: "jupiter_verified" };
     const pump = unnamed(PUMP, 300, { listing: PUMP_LISTING, priceUsd: 1, uiAmount: 300, amount: "300000000" });
     const { assessment, card } = trimOf([usdc1000, pump]);
     // The list names exact mints, and is short on purpose.
@@ -352,6 +369,73 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
       verifiedMemeIdentity(unnamed(PUMP, 300)) === null && unverifiedPump.card === null;
   })(), "meme tag OR the named mint, always verified");
 
+  add("TL-25: unnamed tokens that are not counted are LEFT OUT — split away once, with no value left on them", (() => {
+    const scam = unnamed(PUMP, 50_000);                                             // unverified, with a quoted "value"
+    const dust = unnamed("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", null);    // unverified, unpriced
+    const verifiedUnpriced = unnamed(PENGU, null, { listing: PENGU_LISTING });      // verified, no sourced price
+    const pyusd = unnamed(PYUSD, 300, { listing: PYUSD_LISTING });                  // verified, priced → counted
+    const lp: WalletPosition = { ...unnamed("LPmint1111111111111111111111111111111111111", 900), type: "protocol", name: "Raydium LP", source: "raydium" };
+    const sol: WalletPosition = { id: "sol", source: "wallet", type: "native", symbol: "SOL", name: "Solana", amount: "1000000000", uiAmount: 1, decimals: 9, detection: "direct_wallet_balance", priceUsd: 70, valueUsd: 70, apy: null };
+    const all = [sol, usdcPos, scam, pyusd, dust, verifiedUnpriced, lp, memePos];
+    const { counted, leftOut } = splitCountedPositions(all);
+    const ids = (ps: WalletPosition[]) => ps.map((p) => p.id).join(",");
+    return ids(counted) === ids([sol, usdcPos, pyusd, lp, memePos]) && ids(leftOut) === ids([scam, dust, verifiedUnpriced]) &&
+      [scam, dust, verifiedUnpriced].every(isLeftOutToken) && [sol, usdcPos, pyusd, lp, memePos].every((p) => !isLeftOutToken(p)) &&
+      // No number survives on a left-out row — not the quoted value, not the price — and the input is untouched.
+      leftOut.every((p) => p.valueUsd === null && p.priceUsd === null) && scam.valueUsd === 50_000 &&
+      counted[2] === pyusd && all.length === 8;
+  })(), "counted vs left out");
+
+  add("TL-26: a verified stablecoin sits on the STABLES side of the allocation and is not part of the Safety Buffer", (() => {
+    const usdc1000: WalletPosition = { ...usdcPos, amount: "1000000000", uiAmount: 1000, priceUsd: 1, valueUsd: 1000 };
+    const pyusd = unnamed(PYUSD, 300, { listing: PYUSD_LISTING });
+    const untagged = unnamed(PYUSD, 300, { listing: { ...PYUSD_LISTING, stable: false } });
+    const unpricedStable = unnamed(PYUSD, null, { listing: PYUSD_LISTING });
+    const buffer = computeSafetyBufferCoverage([usdc1000, pyusd], 2000);
+    const rebalance = readFileSync(join(process.cwd(), "src/suggestions/rebalanceAssessment.ts"), "utf8");
+    return isVerifiedStableToken(pyusd) && !isVerifiedStableToken(untagged) && !isVerifiedStableToken(unpricedStable) && !isVerifiedStableToken(memePos) &&
+      deriveStableValue([usdc1000, pyusd]) === 1300 && deriveStableValue([usdc1000, untagged]) === 1000 && deriveStableValue([usdc1000, memePos]) === 1000 &&
+      // The buffer still sees $1,000 of approved stablecoin, and is still short of a $2,000 target.
+      buffer.verifiedLiquidStableValueUsd === 1000 && buffer.recognizedStableValueUsd === 1000 && buffer.fullyFunded === false &&
+      // A stablecoin is never trimmed, even one that also carried the meme tag.
+      verifiedMemeIdentity(pyusd) === null && verifiedMemeIdentity(unnamed(PYUSD, 300, { listing: { ...PYUSD_LISTING, meme: true } })) === null &&
+      /if \(isStablecoin\(p\)\) return true;\s*\/\/[^\n]*\n\s*if \(isVerifiedStableToken\(p\)\) return true;/.test(rebalance);
+  })(), "stables side, not the buffer");
+
+  add("TL-27: a real-shaped wallet — the portfolio is whole, Trim names only the meme coin, and two tokens are left out", (() => {
+    const usdc1000: WalletPosition = { ...usdcPos, amount: "1000000000", uiAmount: 1000, priceUsd: 1, valueUsd: 1000 };
+    const pyusd = unnamed(PYUSD, 300, { listing: PYUSD_LISTING });
+    const scam = unnamed(PUMP, 50_000);
+    const dust = unnamed("9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", null);
+    const wallet = [usdc1000, memePos, pyusd, scam, dust];
+    // Before the rule: the engine saw everything, and one unnamed token was enough to stop it.
+    const raw = trimOf(wallet);
+    const { counted, leftOut } = splitCountedPositions(wallet);
+    const completeness = computePortfolioCompleteness(counted, { requiredBufferUsd: 500 });
+    const { assessment, card } = trimOf(counted);
+    return raw.card === null &&
+      leftOut.length === 2 && completeness.netWorthState === "complete" && completeness.recognizedPortfolioValueUsd === 1600 &&
+      card != null && assessment.candidateHoldings.map((h) => h.symbol).join(",") === "PENGU" &&
+      // The verified stablecoin is known and simply outside Trim's scope — not an unresolved identity.
+      assessment.excludedHoldings.some((h) => h.mint === PYUSD && h.reviewEligibilityState === "excluded_scope") &&
+      assessment.unresolvedHoldings.length === 0 && assessment.overallReadiness.status === "allowed" &&
+      deriveStableValue(counted) === 1300;
+  })(), "end to end");
+
+  add("TL-28: the wallet hook is where tokens are left out, and the list says how many — with no value on their rows", (() => {
+    const hook = readFileSync(join(process.cwd(), "src/wallet/useWalletPortfolio.ts"), "utf8");
+    const card = readFileSync(join(process.cwd(), "src/components/LiquidAssetsCard.tsx"), "utf8");
+    const page = readFileSync(join(process.cwd(), "src/components/RealWalletPortfolio.tsx"), "utf8");
+    const split = /const split = useMemo\(\(\) => splitCountedPositions\(state\.positions\), \[state\.positions\]\);\s*return \{ \.\.\.state, positions: split\.counted, leftOutTokens: split\.leftOut, refresh \};/.test(hook);
+    // The total is the COUNTED rows' sum; left-out rows are appended after it is taken.
+    const total = /const priced = counted\.filter\(\(p\) => typeof p\.valueUsd === "number"\);/.test(card) && /const rows = \[\.\.\.counted, \.\.\.leftOut\];/.test(card) &&
+      /leftOut\.length > 0 \? ` \$\{leftOutTokensNote\(leftOut\.length\)\}` : ""/.test(card) && /if \(leftOutIds\.has\(p\.id\)\) return \{ note: LEFT_OUT_TOKEN_ROW_NOTE \};/.test(card);
+    const passed = /<LiquidAssetsCard positions=\{liquid\} leftOut=\{settled \? leftOutTokens : \[\]\}/.test(page);
+    return split && total && passed &&
+      leftOutTokensNote(1) === "1 token we couldn\u2019t verify isn\u2019t included in your totals." &&
+      leftOutTokensNote(12) === "12 tokens we couldn\u2019t verify aren\u2019t included in your totals." && LEFT_OUT_TOKEN_ROW_NOTE === "Not included in totals";
+  })(), "wiring + copy");
+
   add("TL-23: the Trim rows and the gallery carry the listed icon; a registry token keeps its own", (() => {
     const { card } = trimOf([{ ...usdc1000, valueUsd: 3000, uiAmount: 3000, amount: "3000000000" }, memePos]);
     const assets = card?.reviewDetails?.involvedAssets ?? [];
@@ -360,7 +444,12 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
     const byId = (id: string) => gallery.find((f) => f.id === id);
     return rows.length === 1 && rows[0].symbol === "PENGU" && rows[0].iconUrl === JUP_ICON && rows[0].icon === null &&
       byId("verified_meme")?.card != null && byId("verified_meme_multi")?.card?.reviewDetails?.involvedAssets?.length === 3 &&
-      byId("verified_not_meme")?.card === null && byId("unverified_beside_meme")?.card === null;
+      // PYUSD is counted and out of scope: the card is for the OTHER token only.
+      byId("verified_not_meme")?.card?.reviewDetails?.involvedAssets?.map((a) => a.symbol).join(",") === "TKa" &&
+      byId("unverified_beside_meme")?.card?.titleOverride === "Reduce PENGU exposure" &&
+      byId("pump")?.card?.titleOverride === "Reduce PUMP exposure" &&
+      // The engine's own answer to an unnamed token that reaches it has not changed: no card.
+      byId("unknown")?.card === null;
   })(), "icons + gallery");
 
   return checks;

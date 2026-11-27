@@ -23,7 +23,7 @@
  * re-reads happen on manual refresh and on window focus (throttled), so returning
  * from an external handoff (e.g. a Kamino withdrawal) picks up the new balances.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { PublicKey, type Connection } from "@solana/web3.js";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import {
@@ -54,6 +54,7 @@ import type { VrtInfo } from "./jitoRestaking";
 import type { SanctumLstInfo } from "./sanctumLsts";
 import { applyPrice, buildPositions, sortPositions, accountsOf, priceMintFor } from "./portfolioPositionDerivation";
 import { withTokenListings } from "./tokenListings";
+import { splitCountedPositions } from "./verifiedTokenIdentity";
 import type { ParsedTokenAccount } from "./portfolioPositionDerivation";
 import {
   LIVE_WALLET_WARNING_TOKENS,
@@ -280,6 +281,13 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: ReadName): Promi
 
 export interface WalletPortfolio extends PortfolioState {
   refresh: () => void;
+  /**
+   * Tokens left out of the portfolio (verifiedTokenIdentity.ts): the registry cannot name them and
+   * Jupiter has not verified them, or there is no sourced price. `positions` above NEVER contains
+   * them, so every total, assessment and suggestion built from it leaves them out without having to
+   * know. These rows are for DISPLAY only — their quoted price and value are already removed.
+   */
+  leftOutTokens: WalletPosition[];
 }
 
 /**
@@ -808,5 +816,8 @@ export function useWalletPortfolio(): WalletPortfolio {
     };
   }, [connection, publicKey, connected, refreshKey]);
 
-  return { ...state, refresh };
+  // Split here, once, so no consumer can forget to. A token moves from "left out" to "counted" when
+  // its verified listing and price arrive, which is the last step of a read.
+  const split = useMemo(() => splitCountedPositions(state.positions), [state.positions]);
+  return { ...state, positions: split.counted, leftOutTokens: split.leftOut, refresh };
 }

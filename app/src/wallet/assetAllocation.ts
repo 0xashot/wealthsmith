@@ -9,6 +9,7 @@
  */
 import { positionDisplaySymbol, type WalletPosition } from "./walletPosition";
 import { STABLE_SYMBOLS } from "./walletSummary";
+import { isVerifiedStableToken } from "./verifiedTokenIdentity";
 import type { DonutSegment } from "../components/DonutAllocationChart";
 
 /** Non-stable asset palette (descending value). Skips series 3 (near-teal) and 4
@@ -44,7 +45,7 @@ export function deriveAssetAllocation(positions: WalletPosition[]): AssetAllocat
     if (typeof p.valueUsd === "number" && p.valueUsd > 0) {
       const key = p.symbol && p.symbol.trim() !== "" ? p.symbol : "Unknown";
       // Color a stablecoin teal regardless of where it sits (wallet-held or supplied).
-      const isStable = STABLE_SYMBOLS.has(p.symbol);
+      const isStable = STABLE_SYMBOLS.has(p.symbol) || isVerifiedStableToken(p);
       // Grouped and coloured by the engine's own symbol; a verified listing changes only the label.
       const cur = bySymbol.get(key) ?? { valueUsd: 0, isStable, label: p.listing ? positionDisplaySymbol(p) : key };
       cur.valueUsd += p.valueUsd;

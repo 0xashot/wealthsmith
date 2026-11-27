@@ -674,6 +674,18 @@ export const PRICES_SOURCE_NOTE = "Live prices via DefiLlama and Jupiter.";
 export const ALLOCATION_BY_VALUE_CAPTION =
   "Allocation by USD value. Excludes positions without a sourced price.";
 export const VALUE_EXCLUDES_UNPRICED = "Excludes positions without a sourced price.";
+/**
+ * Tokens left out of the portfolio: not on our approved list and not verified by Jupiter (or
+ * with no sourced price). They are listed without a value and never counted. Said once, in the
+ * Liquid Assets card, with the number — so a total that is smaller than the wallet looks is
+ * explained where the tokens are.
+ */
+export const leftOutTokensNote = (count: number): string =>
+  count === 1
+    ? "1 token we couldn\u2019t verify isn\u2019t included in your totals."
+    : `${count} tokens we couldn\u2019t verify aren\u2019t included in your totals.`;
+/** Under a left-out token's name in the list. */
+export const LEFT_OUT_TOKEN_ROW_NOTE = "Not included in totals";
 /** Current vs Recommended Allocation — current is live; recommended is unavailable. */
 export const ALLOCATION_CURRENT_CAPTION =
   "Your current mix by USD value. A recommended target mix needs your plan's allocation logic.";

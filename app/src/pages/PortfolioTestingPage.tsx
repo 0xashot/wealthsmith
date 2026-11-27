@@ -22,6 +22,7 @@ import {
   PORT_YIELD_CAPTION,
 } from "../state/approvedCopy";
 import type { WalletPosition } from "../wallet/walletPosition";
+import { splitCountedPositions } from "../wallet/verifiedTokenIdentity";
 import "../styles/dashboard.css";
 import "./testingPage.css";
 
@@ -41,7 +42,7 @@ const LISTED_TOKEN_POSITIONS: WalletPosition[] = [
     icon: "assets/icons/token/usdc.svg", amount: "1250000000", uiAmount: 1250, decimals: 6, detection: "direct_wallet_balance", priceUsd: 1, valueUsd: 1250, apy: null,
   },
   unnamedToken("listed-pyusd", "2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo", 400, 400, {
-    symbol: "PYUSD", name: "PayPal USD", source: "jupiter_verified",
+    symbol: "PYUSD", name: "PayPal USD", source: "jupiter_verified", stable: true,
     iconUrl: "https://static.datapi.jup.ag/token-icons/0817b3345e648b1663385bac48eb086877635ee27639c3d5da2a4d9dfd8603b1.webp",
   }),
   // Verified, but its icon is on a host we do not load from: real name, generic icon.
@@ -50,9 +51,13 @@ const LISTED_TOKEN_POSITIONS: WalletPosition[] = [
   unnamedToken("listed-broken-icon", "pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn", 20000, 90, {
     symbol: "PUMP", name: "Pump", source: "jupiter_verified", iconUrl: "https://static.datapi.jup.ag/token-icons/this-image-does-not-exist.webp",
   }),
-  // Not verified by Jupiter: keeps its address.
-  unnamedToken("unlisted", "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", 1200, 35),
+  // Not verified by Jupiter, with a quoted price that would add $35,000 to the wallet: left out.
+  unnamedToken("unlisted", "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", 1200, 35000),
+  // Not verified and not priced (a typical airdrop): left out.
+  unnamedToken("unlisted-dust", "DusT9mH4vQ2xKp7LwYc3RnBf6sZeUa8gJiNoTqXr5VbE", 5000000, null),
 ];
+// The same split the wallet hook makes: what counts, and what is left out (shown with no value).
+const LISTED_SPLIT = splitCountedPositions(LISTED_TOKEN_POSITIONS);
 
 /** The three Asset Deployment category tables, driven by the same components as the real page. */
 function DeploymentSection({ loading }: { loading?: boolean }) {
@@ -103,12 +108,13 @@ export default function PortfolioTestingPage() {
       <section className="portfolio-testing__group">
         <h2 className="portfolio-testing__group-title">Tokens outside the approved list</h2>
         <p className="testing-page__subtext">
-          A token Jupiter has verified shows its listed ticker and icon; one it has not keeps its
-          shortened address. The chart and the table are labelled the same way.
+          A token Jupiter has verified, with a price, is counted and shows its listed ticker and
+          icon. Anything else outside our list is left out: it stays in the table with no value,
+          is in no total and no chart, and the card says how many there are.
         </p>
         <div className="portfolio-testing__stage">
-          <PortfolioAllocationDonuts positions={LISTED_TOKEN_POSITIONS} completeness={null} />
-          <LiquidAssetsCard positions={LISTED_TOKEN_POSITIONS} completeness={null} />
+          <PortfolioAllocationDonuts positions={LISTED_SPLIT.counted} completeness={null} />
+          <LiquidAssetsCard positions={LISTED_SPLIT.counted} leftOut={LISTED_SPLIT.leftOut} completeness={null} />
         </div>
       </section>
 

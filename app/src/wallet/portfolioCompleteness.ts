@@ -15,7 +15,7 @@ import type { WalletPosition } from "./walletPosition";
 import { computeSafetyBufferCoverage, type SafetyBufferCoverage } from "./safetyBufferCoverage";
 import { SUPPORTED_LSTS, isSupportedLstMint } from "./lstUnderlyingNormalization";
 import { isStablecoin } from "./walletSummary";
-import { verifiedMemeIdentity } from "./verifiedMemeIdentity";
+import { isCountedVerifiedToken } from "./verifiedTokenIdentity";
 
 export const PORTFOLIO_COMPLETENESS_VERSION = "1.0.0" as const;
 const MSOL_MINT = SUPPORTED_LSTS.msol.mint;
@@ -107,9 +107,11 @@ export function classifyPositionClass(p: WalletPosition): PositionClass {
     return "protocol_other";
   }
   if (p.type === "token") {
-    // A token the registry cannot name is unknown — unless Jupiter has verified that exact mint and tags
-    // it a meme coin (verifiedMemeIdentity.ts). That one is an ordinary token: its sourced value counts.
-    if (p.name === "Unknown token" && verifiedMemeIdentity(p) == null) return "unknown_token";
+    // A token the registry cannot name is unknown — unless Jupiter has verified that exact mint and we
+    // have a sourced price for it (verifiedTokenIdentity.ts). That one is an ordinary token: its value counts.
+    // Every OTHER unnamed token is left out before it gets here (splitCountedPositions); one that does
+    // reach this line is still an unknown token and still blocks, as it always did.
+    if (p.name === "Unknown token" && !isCountedVerifiedToken(p)) return "unknown_token";
     if (typeof p.tokenProgram === "string" && p.tokenProgram === "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb") return "token_2022";
     if (typeof p.transferabilityState === "string") return "token_2022";
     return isStablecoin(p) ? "stablecoin" : "classic_spl";

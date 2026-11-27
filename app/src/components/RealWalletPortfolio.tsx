@@ -48,7 +48,7 @@ interface Props {
 }
 
 export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: Props) {
-  const { status, positions, error, pricedAsOf, loading: reading } = useWalletPortfolio();
+  const { status, positions, leftOutTokens, error, pricedAsOf, loading: reading } = useWalletPortfolio();
   // Manually added External Holdings (BTC/ETH) — display + allocation measurement.
   const manual = useManualAssets();
   // "Settled" = the wallet read, its pricing pass, AND the external BTC/ETH price
@@ -103,7 +103,8 @@ export default function RealWalletPortfolio({ pushToast, goal, onSuggestions }: 
             <h2 className="dash-section__title">{PORT_DEPLOYMENT_TITLE}</h2>
 
             {/* Liquid Assets — native + wallet-held tokens (incl. stables). */}
-            <LiquidAssetsCard positions={liquid} loading={!settled} completeness={rail.portfolioCompleteness} />
+            {/* Tokens we could not verify are listed last, with no value, and are never in a total. */}
+            <LiquidAssetsCard positions={liquid} leftOut={settled ? leftOutTokens : []} loading={!settled} completeness={rail.portfolioCompleteness} />
 
             {/* Staked Assets — recognized LSTs + native stake; APY sourced or "—".
                 The asset sub-label is the PROTOCOL: an LST's protocol (Marinade/…),

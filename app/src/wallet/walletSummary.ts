@@ -10,6 +10,7 @@
  * the UI shows safe "unavailable" states instead of fixture values.
  */
 import { lookupMint, type WalletPosition } from "./walletPosition";
+import { isVerifiedStableToken } from "./verifiedTokenIdentity";
 
 export interface WalletSummary {
   /** Total detected positions (native SOL + non-zero token accounts). */
@@ -260,6 +261,10 @@ function isStableMint(mint: string): boolean {
 function stableValueOf(p: WalletPosition): number {
   if (typeof p.valueUsd !== "number") return 0;
   if (isStablecoin(p)) return p.valueUsd;
+  // A stablecoin outside our registry that Jupiter has verified and tagged stable (PYUSD, USD1…): the
+  // stables side of the ALLOCATION. The Safety Buffer does not use this function's answer for it —
+  // buffer coverage asks `isStablecoin`, which stays registry-only.
+  if (isVerifiedStableToken(p)) return p.valueUsd;
   // A borrowed balance is a liability, never stable ASSET value.
   if (p.side === "borrowed") return 0;
   if (p.type === "protocol") {

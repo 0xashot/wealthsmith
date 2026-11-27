@@ -20,7 +20,7 @@ import { classifyPositionClass, type PortfolioCompletenessResult, computePortfol
 import { resolveAssetOwner } from "./productAssetOwnership";
 import { computeSafetyBufferCoverage, type SafetyBufferCoverage } from "../wallet/safetyBufferCoverage";
 import { derivePortfolioAssetAccounting } from "../wallet/portfolioAssetAccounting";
-import { verifiedMemeIdentity } from "../wallet/verifiedMemeIdentity";
+import { isCountedVerifiedToken, verifiedMemeIdentity } from "../wallet/verifiedTokenIdentity";
 import {
   MIN_TRIM_SUGGESTION_USD,
   TRIM_PORTFOLIO_SHARE_THRESHOLD,
@@ -232,10 +232,15 @@ export function deriveTrimAssessment(input: TrimInput): TrimAssessment {
     const ca = completenessFor(completeness, first.id);
     const stale = ca?.freshnessState === "stale";
     // A token the registry cannot name is unresolved — UNLESS Jupiter has verified that exact mint and
-    // tags it a meme coin (wallet/verifiedMemeIdentity.ts: the one recorded exception, which the
-    // completeness classification applies too). Its own name is still "Unknown token".
+    // tags it a meme coin, or it is PUMP (wallet/verifiedTokenIdentity.ts). Its own name is still
+    // "Unknown token". A verified token that is NOT a meme coin is counted in the portfolio but is not a
+    // Trim candidate: its identity stays unresolved HERE.
     const listed = verifiedMemeIdentity(first);
-    const identityUnresolved = !mint || (listed == null && (ca?.identityState === "unresolved" || cls === "unknown_token" || first.name === "Unknown token"));
+    // Counted in the portfolio, but not a meme coin: a verified stablecoin, DeFi token, stock… Its identity IS
+    // resolved — we know what it is — and what it is, is outside Trim's scope. It must not read as an
+    // unresolved identity, which would make the whole Trim "unresolved" and hide it.
+    const countedOutOfScope = listed == null && isCountedVerifiedToken(first);
+    const identityUnresolved = !mint || (listed == null && !countedOutOfScope && (ca?.identityState === "unresolved" || cls === "unknown_token" || first.name === "Unknown token"));
     const dedupeInvalid = ca?.dedupeState === "invalid";
 
     // Transferability → actionability (review eligibility is separate; §7). Classic SPL is transferable;
@@ -261,6 +266,7 @@ export function deriveTrimAssessment(input: TrimInput): TrimAssessment {
     const productOwner = resolveAssetOwner(mint ?? undefined, first.tokenProgram);
     if (core) { reviewEligibilityState = "excluded_core"; exclusionReasons.push(`canonical core asset (${core.assetId}) by exact mint + program`); }
     else if (productOwner === "jup_staking") { reviewEligibilityState = "excluded_scope"; exclusionReasons.push(`owned by the ${productOwner} product (out of Trim scope) by exact mint + program`); }
+    else if (countedOutOfScope) { reviewEligibilityState = "excluded_scope"; exclusionReasons.push("verified token that is not a meme coin (out of Trim scope)"); }
     else if (dedupeInvalid) { reviewEligibilityState = "duplicate_invalid"; unresolvedReasons.push("duplicate economic identity"); }
     else if (identityUnresolved) { reviewEligibilityState = "unresolved_identity"; unresolvedReasons.push("token identity unresolved (unknown mint/registry)"); }
     else if (recognizedValueUsd === null) { reviewEligibilityState = "unresolved_value"; unresolvedReasons.push("no fresh recognized market value"); }

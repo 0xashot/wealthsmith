@@ -24,6 +24,8 @@ import {
   PORT_LIQUID_TITLE,
   PORT_LIQUID_CAPTION,
   VALUE_EXCLUDES_UNPRICED,
+  LEFT_OUT_TOKEN_ROW_NOTE,
+  leftOutTokensNote,
 } from "../state/approvedCopy";
 
 const ROWS_PER_PAGE_OPTIONS = [5, 10, 25];
@@ -50,9 +52,14 @@ interface Props {
   loading?: boolean;
   /** Step 17H.3 — mounted completeness result (never recomputed here); drives per-row notes. */
   completeness?: PortfolioCompletenessResult | null;
+  /**
+   * Tokens left out of the portfolio (see verifiedTokenIdentity.ts), already stripped of any quoted
+   * value. Listed after everything that counts, with no value and a note; never part of the total.
+   */
+  leftOut?: WalletPosition[];
 }
 
-export default function LiquidAssetsCard({ positions, loading, completeness }: Props) {
+export default function LiquidAssetsCard({ positions, loading, completeness, leftOut = [] }: Props) {
   // While the portfolio is still loading, skeleton the whole card rather than
   // flashing "—" values or a premature "none detected" empty state.
   if (loading) {
@@ -70,12 +77,17 @@ export default function LiquidAssetsCard({ positions, loading, completeness }: P
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS_PER_PAGE);
 
   // Priced rows first (largest value on top), unpriced after in detected order.
-  const rows = [...positions].sort((a, b) => (b.valueUsd ?? -1) - (a.valueUsd ?? -1));
+  const counted = [...positions].sort((a, b) => (b.valueUsd ?? -1) - (a.valueUsd ?? -1));
 
-  const priced = rows.filter((p) => typeof p.valueUsd === "number");
+  const priced = counted.filter((p) => typeof p.valueUsd === "number");
   const totalUsd =
     priced.length > 0 ? priced.reduce((s, p) => s + (p.valueUsd as number), 0) : null;
-  const anyUnpriced = priced.length < rows.length;
+  // "Unpriced" means a COUNTED position we could not price. Left-out tokens are a different thing
+  // with their own sentence, so they do not also trigger this one.
+  const anyUnpriced = priced.length < counted.length;
+  // Left-out tokens come last, after everything that counts. They carry no value by construction.
+  const leftOutIds = new Set(leftOut.map((p) => p.id));
+  const rows = [...counted, ...leftOut];
 
   const pageCount = Math.max(1, Math.ceil(rows.length / rowsPerPage));
   const currentPage = Math.min(page, pageCount - 1);
@@ -88,11 +100,12 @@ export default function LiquidAssetsCard({ positions, loading, completeness }: P
         {PORT_LIQUID_TITLE}
       </h3>
       <p className="deploy-card__total">
-        {rows.length === 0 ? "$0" : totalUsd != null ? usd0(totalUsd) : "—"}
+        {counted.length === 0 ? "$0" : totalUsd != null ? usd0(totalUsd) : "—"}
       </p>
       <p className="card__caption">
         {PORT_LIQUID_CAPTION}
         {anyUnpriced ? ` ${VALUE_EXCLUDES_UNPRICED}` : ""}
+        {leftOut.length > 0 ? ` ${leftOutTokensNote(leftOut.length)}` : ""}
       </p>
 
       {/* Empty category: just the $0 total + caption above — no table, no "none detected". */}
@@ -133,6 +146,7 @@ export default function LiquidAssetsCard({ positions, loading, completeness }: P
                           label={positionDisplaySymbol(p)}
                           {...(url ? { href: url } : {})}
                           {...(() => {
+                            if (leftOutIds.has(p.id)) return { note: LEFT_OUT_TOKEN_ROW_NOTE };
                             const note = positionCompletenessNote(completeness, p.id);
                             return note ? { note } : {};
                           })()}

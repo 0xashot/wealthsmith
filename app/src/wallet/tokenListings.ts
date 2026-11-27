@@ -10,8 +10,9 @@
  *
  * ONE EXCEPTION, decided by the product owner on 2026-11-26: a verified listing that Jupiter
  * itself tags `meme` gives the token an identity: its value counts and it is a Trim candidate.
- * That lives in exactly one module, wallet/verifiedMemeIdentity.ts — the only place the engine
- * may read a listing.
+ * That lives in exactly one module, wallet/verifiedTokenIdentity.ts — the only place the engine
+ * may read a listing. Since 2026-11-27 the same module also decides that a verified token WITH
+ * A PRICE is counted in the portfolio, and that everything else unnamed is left out.
  *
  * WHAT THIS IS NOT. It does not rename the position. `symbol` stays the shortened address and
  * `name` stays "Unknown token", because the engine reads both as identity: liquidity-pool
@@ -37,10 +38,15 @@ export interface TokenListing {
   /**
    * Jupiter's own `meme` tag for this mint. The ONE fact about a listing the engine is allowed
    * to act on, and only in one place: a verified meme coin outside the registry is a Trim
-   * candidate and its value counts (wallet/verifiedMemeIdentity.ts, decided 2026-11-26).
+   * candidate (wallet/verifiedTokenIdentity.ts, decided 2026-11-26).
    * Everything else about a listing stays display-only.
    */
   meme: boolean;
+  /**
+   * Jupiter's own `stable` tag. Read only by verifiedTokenIdentity.ts: a counted stablecoin sits
+   * on the stables side of the allocation (never in the Safety Buffer) and is never trimmed.
+   */
+  stable: boolean;
   source: "jupiter_verified";
 }
 
@@ -144,7 +150,8 @@ export function sanitizeTokenListing(raw: unknown, mint: string): TokenListing |
   const name = rawName.length > NAME_MAX ? `${rawName.slice(0, NAME_MAX - 1).trimEnd()}…` : rawName;
   // Exactly the tag, exactly as a string in an array — a missing or malformed `tags` is "not a meme".
   const meme = Array.isArray(r.tags) && r.tags.includes("meme");
-  return { symbol, name, iconUrl: cleanIconUrl(r.icon), meme, source: "jupiter_verified" };
+  const stable = Array.isArray(r.tags) && r.tags.includes("stable");
+  return { symbol, name, iconUrl: cleanIconUrl(r.icon), meme, stable, source: "jupiter_verified" };
 }
 
 export interface TokenListingSource {

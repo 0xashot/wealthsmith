@@ -1178,9 +1178,41 @@ pictured by its listing in the Trim card, review and selector.
     tags it defi rather than meme, so it is listed by its exact mint; it must
     still be Jupiter-verified. Stablecoins, JUP and LP tokens are never trimmed:
     none of them carries the meme tag (checked against Jupiter's list).
-  - Still true, and unchanged: one token whose value cannot be verified — any
-    other token outside the approved list, priced or not — leaves the portfolio's
-    net worth unresolved, and Trim (like Rebalance) is not shown at all.
+  - Superseded 2026-11-27 by "Tokens outside the approved list: counted or left
+    out" below: other tokens outside the list no longer stop Trim or Rebalance.
+
+### Tokens outside the approved list: counted or left out
+
+Decided 2026-11-27. The approved list is twelve tokens, and a wallet holding
+anything else used to get no portfolio total, no On Track, no Rebalance and no
+Trim (34 of 40 real wallets sampled). Jupiter's verified list now decides, by
+exact mint:
+
+  - **Counted** — verified by Jupiter and we have a sourced price. Its value is
+    part of every total. Tagged a stablecoin by Jupiter (PYUSD, USD1, EURC): it
+    sits on the stables side of the crypto/stables split, and is **not** part of
+    the Safety Buffer, which stays limited to our approved stablecoins. Anything
+    else: the crypto side.
+  - **Left out** — everything else: not verified, or verified with no sourced
+    price. It is in no total, no chart and no suggestion, and it never blocks
+    one. A quoted price does not change this: anyone can airdrop a token with a
+    price nobody can sell at.
+
+Where the user sees it — the Liquid Assets card:
+
+```text
+Liquid Assets
+$1,880
+Assets sitting in connected wallet, not earning passive income. 2 tokens we
+couldn't verify aren't included in your totals.
+
+9xQe…VFin                      1,200 9xQe…VFin        —
+Not included in totals
+```
+
+Left-out tokens are listed after everything that counts, with no value, and the
+note under the name. The sentence is singular for one ("1 token we couldn't
+verify isn't included in your totals.").
 
 ### After a swap lands
 

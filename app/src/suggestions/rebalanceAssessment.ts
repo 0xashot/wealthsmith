@@ -16,6 +16,7 @@
  * PortfolioCompletenessResult + SafetyBufferCoverage (never recomputes them when supplied).
  */
 import type { WalletPosition } from "../wallet/walletPosition";
+import { isVerifiedStableToken } from "../wallet/verifiedTokenIdentity";
 import type { CanonicalTargetAllocation } from "./canonicalTargetAllocation";
 import { TARGET_ALLOCATION_ASSESSMENT_VERSION } from "./targetAllocationAssessment";
 import { REBALANCE_DELTA_THRESHOLD_PCT, MIN_SUGGESTION_AMOUNT_USD } from "./engineThresholds";
@@ -169,6 +170,8 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
 function isStableAsset(p: WalletPosition): boolean {
   if (p.side === "borrowed") return false;
   if (isStablecoin(p)) return true;
+  // A Jupiter-verified stablecoin outside our registry: stable for the allocation split.
+  if (isVerifiedStableToken(p)) return true;
   if (p.type === "protocol" && typeof p.valueUsd === "number") {
     if (p.candidateId === "kamino_usdc_lending" || p.candidateId === "kamino_steakhouse_usdc") return true;
     if (p.legs && p.legs.length > 0 && p.legs.every((l) => l.side !== "debt") && p.legs.every((l) => /USDC|USDT|USDH|DAI/i.test(l.mint) || false)) return true;
