@@ -22,6 +22,7 @@ import {
   lookupTableAddresses,
   tokensToRaw,
   verifyTransactionStructure,
+  type ExecutionProviderId,
   type StructuralFailure,
   type ValueFailure,
 } from "../../suggestions/swapExecution/executionVerification";
@@ -51,6 +52,10 @@ export interface VerifyPlanInput {
   outputDecimals: number;
   /** As it will be displayed. Converted here so the check uses the number the user will see. */
   minimumOutputTokens: string;
+  /** Which provider built it — selects the structural rule set. Absent → Jupiter. */
+  providerId?: ExecutionProviderId;
+  /** The exact input amount requested, in base units. Required for Raydium's rule set. */
+  inputAmountRaw?: string;
 }
 
 export interface VerifyPlanDeps {
@@ -81,14 +86,20 @@ export async function verifyPlanBeforeOffering(
   input: VerifyPlanInput,
   deps: VerifyPlanDeps,
 ): Promise<PlanVerificationResult> {
-  const structural = verifyTransactionStructure(input.unsignedTransaction, input.takerPublicKey);
-  if (!structural.ok) {
-    return { ok: false, failure: { stage: "structural", reason: structural.reason, detail: structural.detail } };
-  }
-
   const promisedMinimumRaw = tokensToRaw(input.minimumOutputTokens, input.outputDecimals);
   if (promisedMinimumRaw == null) {
     return { ok: false, failure: { stage: "terms", reason: "minimum_unparseable", detail: null } };
+  }
+
+  // The provider's own rule set. For Raydium the amount in and the minimum out are part of the
+  // structure — its swap instruction states both — so they are checked here, before any network.
+  const structural = verifyTransactionStructure(input.unsignedTransaction, input.takerPublicKey, {
+    providerId: input.providerId ?? "jupiter",
+    inputAmountRaw: input.inputAmountRaw,
+    minimumOutputRaw: promisedMinimumRaw.toString(),
+  });
+  if (!structural.ok) {
+    return { ok: false, failure: { stage: "structural", reason: structural.reason, detail: structural.detail } };
   }
 
   const rpc = deps.rpc ?? resolveSimulationRpc(deps.env);

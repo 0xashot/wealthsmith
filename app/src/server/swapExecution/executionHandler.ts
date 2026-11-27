@@ -15,6 +15,8 @@
  * fresh environment that forgot to configure this does not quietly start executing swaps.
  */
 import { buildJupiterSwapTransaction, type JupiterSwapContext } from "./jupiterSwapClient";
+import { buildRaydiumSwapTransaction, type RaydiumSwapContext } from "./raydiumSwapClient";
+import { VERIFIABLE_EXECUTION_PROVIDER_IDS, type ExecutionProviderId } from "../../suggestions/swapExecution/executionVerification";
 import { sanitizeExecutionPlan } from "./executionSanitizer";
 import { classifySwapPair } from "../../suggestions/swapQuote/swapPairRegistry";
 import { SWAP_COST_THRESHOLDS } from "../../suggestions/swapQuote/swapQuotePolicy";
@@ -25,6 +27,18 @@ import type { SwapExecutionPlan } from "../../suggestions/swapExecution/executio
 import type { EnvReader } from "../swapQuote/providerConfig";
 
 export const SWAP_EXECUTION_ENABLED_KEY = "SWAP_EXECUTION_ENABLED" as const;
+
+/**
+ * PER-PROVIDER OFF SWITCH. A comma-separated list of providers this server must not build for,
+ * e.g. `SWAP_EXECUTION_DISABLED_PROVIDERS=raydium`. Unset → none disabled. It answers 503, which
+ * the client already treats as "couldn't prepare this swap". Like the main kill switch it takes
+ * an env change and a restart — no deploy — so one provider can be taken out without the other.
+ */
+export const SWAP_EXECUTION_DISABLED_PROVIDERS_KEY = "SWAP_EXECUTION_DISABLED_PROVIDERS" as const;
+
+export function disabledExecutionProviders(env: EnvReader): string[] {
+  return (env(SWAP_EXECUTION_DISABLED_PROVIDERS_KEY) ?? "").split(",").map((s) => s.trim().toLowerCase()).filter((s) => s.length > 0);
+}
 
 /** How long a plan is offered before it must be rebuilt. Shorter than a blockhash's life on
  *  purpose: the user needs time to read and approve INSIDE this window, not at the end of it. */
@@ -54,7 +68,12 @@ interface ExecuteBody {
   inputAmountRaw?: unknown;
   slippageBps?: unknown;
   takerPublicKey?: unknown;
+  /** Which provider to build with — the one whose route won the comparison. Absent → Jupiter. */
+  providerId?: unknown;
 }
+
+const isExecutionProvider = (v: unknown): v is ExecutionProviderId =>
+  typeof v === "string" && (VERIFIABLE_EXECUTION_PROVIDER_IDS as readonly string[]).includes(v);
 
 function validate(req: SwapExecuteHttpRequest): string | null {
   if (req.method && req.method.toUpperCase() !== "POST") return "method_not_allowed";
@@ -88,6 +107,9 @@ function validate(req: SwapExecuteHttpRequest): string | null {
     return "invalid_slippage";
   }
   if (typeof b.takerPublicKey !== "string" || !PUBKEY_RE.test(b.takerPublicKey)) return "invalid_taker";
+  // A provider we cannot build AND verify for is refused by name — never silently swapped for
+  // another, which would hand back terms from a route the user was not shown.
+  if (b.providerId !== undefined && !isExecutionProvider(b.providerId)) return "provider_not_supported";
   return null;
 }
 
@@ -103,6 +125,12 @@ export function createSwapExecuteHandler(deps: {
   planId?: () => string;
   /** Injectable simulation RPC. The real path builds one from SOLANA_RPC_URL. */
   simulationRpc?: VerifyPlanDeps["rpc"];
+  /**
+   * What the Raydium builder needs beyond a fetch: its quote endpoint and a way to read the
+   * taker's input token account from the chain. Absent → Raydium plans are unavailable (503),
+   * exactly as an environment with no RPC offers no plan at all.
+   */
+  raydium?: Pick<RaydiumSwapContext, "quoteEndpoint" | "findInputTokenAccount" | "priorityFeeUrl">;
   /**
    * Prices the two USD sub-lines. OPTIONAL on purpose: without it both render "—" and everything
    * else about the plan is identical, so a deployment that cannot price mints still executes.
@@ -131,20 +159,30 @@ export function createSwapExecuteHandler(deps: {
       now,
     };
 
-    const built = await buildJupiterSwapTransaction(
-      {
-        inputMint: b.inputMint as string,
-        outputMint: b.outputMint as string,
-        inputAmountRaw: b.inputAmountRaw as string,
-        slippageBps: b.slippageBps as number,
-        userPublicKey: b.takerPublicKey as string,
-        inputSymbol: b.inputSymbol as string,
-        outputSymbol: b.outputSymbol as string,
-        inputDecimals: b.inputDecimals as number,
-        outputDecimals: b.outputDecimals as number,
-      },
-      context,
-    );
+    // THE PROVIDER THAT WON IS THE PROVIDER THAT BUILDS. Never a fallback to another: a plan from
+    // a different provider would be terms the user was not shown under a route name they did not see.
+    const providerId: ExecutionProviderId = isExecutionProvider(b.providerId) ? b.providerId : "jupiter";
+    if (disabledExecutionProviders(deps.env).includes(providerId)) {
+      return { status: 503, body: { error: "unavailable" } };
+    }
+    if (providerId === "raydium" && deps.raydium == null) {
+      return { status: 503, body: { error: "unavailable" } };
+    }
+
+    const swapRequest = {
+      inputMint: b.inputMint as string,
+      outputMint: b.outputMint as string,
+      inputAmountRaw: b.inputAmountRaw as string,
+      slippageBps: b.slippageBps as number,
+      userPublicKey: b.takerPublicKey as string,
+      inputSymbol: b.inputSymbol as string,
+      outputSymbol: b.outputSymbol as string,
+      inputDecimals: b.inputDecimals as number,
+      outputDecimals: b.outputDecimals as number,
+    };
+    const built = providerId === "raydium"
+      ? await buildRaydiumSwapTransaction(swapRequest, { ...(deps.raydium as NonNullable<typeof deps.raydium>), fetchImpl: deps.fetchImpl, now })
+      : await buildJupiterSwapTransaction(swapRequest, context);
 
     if (built.kind === "no_route") return { status: 422, body: { error: "no_route" } };
     if (built.kind === "unavailable") {
@@ -175,6 +213,8 @@ export function createSwapExecuteHandler(deps: {
         outputMint: b.outputMint as string,
         outputDecimals: b.outputDecimals as number,
         minimumOutputTokens: built.terms.minimumOutputTokens,
+        providerId,
+        inputAmountRaw: b.inputAmountRaw as string,
       },
       { env: deps.env, rpc: deps.simulationRpc, now },
     );

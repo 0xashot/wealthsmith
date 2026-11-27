@@ -45,6 +45,51 @@ export const ALLOWED_SWAP_PROGRAM_IDS: readonly string[] = [
 
 export const JUPITER_PROGRAM_ID = "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" as const;
 
+/**
+ * RAYDIUM. Programs a Raydium Trade API swap transaction may invoke at the top level.
+ *
+ * Derived by decoding real `POST /transaction/swap-base-in` responses on 2026-11-27 — SOL→USDC,
+ * USDC→SOL and seven token→USDC sales, one and two pools, classic and Token-2022: every one was
+ * a single V0 transaction whose only top-level programs were Raydium's router and ComputeBudget
+ * (twice). The pool programs (CLMM, AMM v4, CPMM), the token programs, the associated-token
+ * program and System all ran INSIDE the router, so none of them is allowed at the top level.
+ * The router's address is the one Raydium publishes (docs.raydium.io/reference/program-addresses:
+ * "if a program ID in the wild does not match the table below, do not sign the transaction").
+ */
+export const RAYDIUM_ROUTER_PROGRAM_ID = "routeUGWgWzqBWFcrCfv8tritsqukccJPu3q5GPP3xS" as const;
+export const RAYDIUM_ALLOWED_PROGRAM_IDS: readonly string[] = [
+  RAYDIUM_ROUTER_PROGRAM_ID,
+  "ComputeBudget111111111111111111111111111111", // compute unit limit + price
+] as const;
+
+/**
+ * The router instructions a swap transaction may contain, by their first data byte. Observed,
+ * not assumed: 5 wraps native SOL for the swap (tag + amount), 0 is the swap itself (tag +
+ * amount in + minimum out), 6 closes the temporary wrapped-SOL account (tag only). Anything else
+ * is an instruction we have never seen and is refused.
+ */
+export const RAYDIUM_ROUTER_INSTRUCTION = {
+  swap: { tag: 0, dataLength: 17 },
+  wrapSol: { tag: 5, dataLength: 9 },
+  closeWrappedSol: { tag: 6, dataLength: 1 },
+} as const;
+
+/** The providers whose transactions this module knows how to check. */
+export type ExecutionProviderId = "jupiter" | "raydium";
+export const VERIFIABLE_EXECUTION_PROVIDER_IDS: readonly ExecutionProviderId[] = ["jupiter", "raydium"] as const;
+
+/**
+ * What the transaction is supposed to be. The provider decides which rule set applies; for
+ * Raydium the amounts are part of the structure, because its swap instruction states them.
+ */
+export interface StructuralExpectation {
+  providerId: ExecutionProviderId;
+  /** The exact input amount the user was shown, in base units. Required for Raydium. */
+  inputAmountRaw?: string;
+  /** The exact minimum output the user was promised, in base units. Required for Raydium. */
+  minimumOutputRaw?: string;
+}
+
 export type StructuralFailure =
   | "undecodable"
   | "not_versioned"
@@ -54,7 +99,14 @@ export type StructuralFailure =
   | "program_not_allowed"
   | "program_hidden_in_lookup_table"
   | "jupiter_not_invoked"
-  | "jupiter_invoked_more_than_once";
+  | "jupiter_invoked_more_than_once"
+  | "provider_not_verifiable"
+  | "raydium_terms_missing"
+  | "raydium_instruction_not_recognized"
+  | "raydium_swap_count"
+  | "raydium_amount_mismatch"
+  | "raydium_minimum_mismatch"
+  | "raydium_wrap_mismatch";
 
 export type StructuralResult =
   | { ok: true; transaction: VersionedTransaction; programIds: string[] }
@@ -69,7 +121,13 @@ export type StructuralResult =
 export function verifyTransactionStructure(
   unsignedTransactionBase64: string,
   takerPublicKey: string,
+  // Jupiter by default: every caller written before Raydium existed means Jupiter.
+  expectation: StructuralExpectation = { providerId: "jupiter" },
 ): StructuralResult {
+  if (!VERIFIABLE_EXECUTION_PROVIDER_IDS.includes(expectation.providerId)) {
+    return { ok: false, reason: "provider_not_verifiable", detail: String(expectation.providerId) };
+  }
+
   let tx: VersionedTransaction;
   try {
     tx = VersionedTransaction.deserialize(Buffer.from(unsignedTransactionBase64, "base64"));
@@ -110,6 +168,10 @@ export function verifyTransactionStructure(
     programIds.push(message.staticAccountKeys[ix.programIdIndex].toBase58());
   }
 
+  if (expectation.providerId === "raydium") {
+    return verifyRaydiumInstructions(tx, programIds, expectation);
+  }
+
   const disallowed = programIds.find((id) => !ALLOWED_SWAP_PROGRAM_IDS.includes(id));
   if (disallowed != null) {
     return { ok: false, reason: "program_not_allowed", detail: disallowed };
@@ -119,6 +181,95 @@ export function verifyTransactionStructure(
   if (jupiterCalls === 0) return { ok: false, reason: "jupiter_not_invoked", detail: null };
   // One swap, one Jupiter instruction. Two would be two swaps under one approval.
   if (jupiterCalls > 1) return { ok: false, reason: "jupiter_invoked_more_than_once", detail: String(jupiterCalls) };
+
+  return { ok: true, transaction: tx, programIds };
+}
+
+const U64_MAX = (1n << 64n) - 1n;
+function readU64LE(data: Uint8Array, offset: number): bigint {
+  let value = 0n;
+  for (let i = 7; i >= 0; i--) value = (value << 8n) | BigInt(data[offset + i]);
+  return value;
+}
+function parseRaw(value: string | undefined): bigint | null {
+  if (typeof value !== "string" || !/^[0-9]+$/.test(value)) return null;
+  const n = BigInt(value);
+  return n > 0n && n <= U64_MAX ? n : null;
+}
+
+/**
+ * The Raydium rule set. Stricter than Jupiter's in one respect and for a reason: Raydium's swap
+ * instruction carries the amount in and the minimum out as plain numbers, so the transaction can
+ * be checked against the terms WITHOUT a simulation. The transaction must contain
+ *
+ *   - only the router and ComputeBudget at the top level;
+ *   - exactly ONE swap instruction, whose amount in is the amount the user was shown and whose
+ *     minimum out is the minimum they were promised — to the unit;
+ *   - at most one "wrap SOL" for exactly that amount, and at most one "close wrapped SOL";
+ *   - nothing else from the router.
+ *
+ * A second swap, a different amount, a lower floor, or an instruction we have never seen is a
+ * refusal. The value simulation still runs after this; this is the half that needs no chain.
+ */
+function verifyRaydiumInstructions(
+  tx: VersionedTransaction,
+  programIds: string[],
+  expectation: StructuralExpectation,
+): StructuralResult {
+  const expectedIn = parseRaw(expectation.inputAmountRaw);
+  const expectedMin = parseRaw(expectation.minimumOutputRaw);
+  // Without the terms there is nothing to hold the instruction to, and "it has a swap in it" is
+  // not a check.
+  if (expectedIn == null || expectedMin == null) {
+    return { ok: false, reason: "raydium_terms_missing", detail: null };
+  }
+
+  const disallowed = programIds.find((id) => !RAYDIUM_ALLOWED_PROGRAM_IDS.includes(id));
+  if (disallowed != null) {
+    return { ok: false, reason: "program_not_allowed", detail: disallowed };
+  }
+
+  const kinds = RAYDIUM_ROUTER_INSTRUCTION;
+  let swaps = 0, wraps = 0, closes = 0;
+  tx.message.compiledInstructions.forEach((ix, i) => {
+    if (programIds[i] !== RAYDIUM_ROUTER_PROGRAM_ID) return;
+    const data = ix.data;
+    const tag = data.length > 0 ? data[0] : -1;
+    if (tag === kinds.swap.tag && data.length === kinds.swap.dataLength) swaps += 1;
+    else if (tag === kinds.wrapSol.tag && data.length === kinds.wrapSol.dataLength) wraps += 1;
+    else if (tag === kinds.closeWrappedSol.tag && data.length === kinds.closeWrappedSol.dataLength) closes += 1;
+    else swaps = Number.NaN; // an instruction we do not recognise poisons the count
+  });
+  if (Number.isNaN(swaps)) {
+    return { ok: false, reason: "raydium_instruction_not_recognized", detail: null };
+  }
+  // One swap, one approval. None is not a swap; two is two swaps under one signature.
+  if (swaps !== 1 || wraps > 1 || closes > 1) {
+    return { ok: false, reason: "raydium_swap_count", detail: `${swaps}/${wraps}/${closes}` };
+  }
+
+  const routerInstructions = tx.message.compiledInstructions.filter((_, i) => programIds[i] === RAYDIUM_ROUTER_PROGRAM_ID);
+  // The swap first: its two numbers are the terms.
+  const swap = routerInstructions.find((ix) => ix.data[0] === kinds.swap.tag);
+  if (swap != null) {
+    const amountIn = readU64LE(swap.data, 1);
+    const minimumOut = readU64LE(swap.data, 9);
+    if (amountIn !== expectedIn) {
+      return { ok: false, reason: "raydium_amount_mismatch", detail: `${amountIn.toString()} != ${expectedIn.toString()}` };
+    }
+    if (minimumOut !== expectedMin) {
+      return { ok: false, reason: "raydium_minimum_mismatch", detail: `${minimumOut.toString()} != ${expectedMin.toString()}` };
+    }
+  }
+  // Then the wrap: wrapping more SOL than the swap spends would leave the user's SOL somewhere
+  // they did not ask for it to go.
+  const wrap = routerInstructions.find((ix) => ix.data[0] === kinds.wrapSol.tag);
+  if (wrap != null) {
+    const wrapped = readU64LE(wrap.data, 1);
+    if (wrapped !== expectedIn) {
+      return { ok: false, reason: "raydium_wrap_mismatch", detail: `${wrapped.toString()} != ${expectedIn.toString()}` };
+    }
+  }
 
   return { ok: true, transaction: tx, programIds };
 }

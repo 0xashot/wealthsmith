@@ -44,3 +44,49 @@ export const REAL_SWAP_TX_SOL_INPUT =
 
 /** The fee payer / taker both transactions were built for. A public key; it signs nothing here. */
 export const REAL_SWAP_TAKER = "GdxxRejTS1VWftHBxecT6nGpNzqfDKHBYk6ddfurCu9L";
+
+/* ------------------------------------------------------------------ *
+ * RAYDIUM. Real, UNSIGNED transactions from Raydium's Trade API
+ * (`POST /transaction/swap-base-in`), captured 2026-11-27 for the same
+ * public wallet. Never signed, never submitted. Each comes with the
+ * amounts its quote stated, because Raydium's swap instruction carries
+ * them and the structural check compares them to the unit.
+ * ------------------------------------------------------------------ */
+
+/** SOL → USDC, 0.01 SOL, 50 bps. Three router instructions: wrap SOL, the swap, close the wrapped-SOL account. */
+export const REAL_RAYDIUM_TX_SOL_TO_USDC =
+  "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQADEOhXe3MT5v9275mWMq" +
+  "2yky+jWowiU1YM/q7XNKUDiaL7QJ4lEHa31fBvHrYlaXHD9WwyXfWMrWifua8fW+oMRgcGm4hX/quBhPtof2NGGMA12sQ53BrrO1WYoPAAAAAA" +
+  "AQPpQTNdW4CC+xvvuncx2f/DJP6zfivf0ihxNO6WYcW0xvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWGBbmZjDDu3JNxZ5J9sxDBuYD" +
+  "pqrMoG+j404rQK1ZedjXTnAJwTH4VqMGLaHLJe7Bu1GJFzX99HVtv9fCf1Zi+AT/Gd5oSMoL8hbRWvfxMMzjWV6kSzlNnY9gEtko4R3i1VpGi6" +
+  "tchCxp9FOlhjS9xDpoGWSbW8vILH4UMLkvu2VSMP3evEQocTG/2d/HXosYcN8j2rRbUhYeFutrNaNEulvi7dD3nWPTYEEN+rrd0uHtaEKsZBv4" +
+  "0pN+PWHCPS9LBqOHsObbXkXce6EMn6qS0QC6Pw8NYarYBqM90SNwrR5t0v1/LjiM4/rlTAZczRSDGmxs2fhwI24TnW8NAoRso8DMKAy2vjGSxQ" +
+  "ODgBz0QwGA+eP4ZjIjrIAQaXENv31QcFSlNamSkhBk0k6HFg2jh8fDW13bySu4HkH6hAQQVEjQMGRm/lIRcy/+ytunLDm+e8jOW7xfcSayxDmz" +
+  "pAAAAAEj/s6PczyV17lhTdKnKuxoH7OXz71+QVfsc+2aOAS/AFDQYAAQIQERIJBYCWmAAAAAAADRQQExESAAEDFAMCBAUGBwgJDgoLDBEAgJaY" +
+  "AAAAAAAw6AoAAAAAAA0GAAEAEBESAQYPAAkD7SUBAAAAAAAPAAUCJAcCAAEZjx9MOkUiY9QTss0X68vBoOWIc2TmJhoSqBeS6hZaPgAFAgcAAx" +
+  "A=";
+export const REAL_RAYDIUM_SOL_TO_USDC_TERMS = { inputAmountRaw: "10000000", minimumOutputRaw: "714800", outputAmountRaw: "718392" } as const;
+
+/** USDC → SOL, 5 USDC, 50 bps. Two router instructions: the swap, then close (unwrap) the wrapped-SOL account. */
+export const REAL_RAYDIUM_TX_USDC_TO_SOL =
+  "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQADD+hXe3MT5v9275mWMq" +
+  "2yky+jWowiU1YM/q7XNKUDiaL7A+lBM11bgIL7G++6dzHZ/8Mk/rN+K9/SKHE07pZhxbRAniUQdrfV8G8etiVpccP1bDJd9YytaJ+5rx9b6gxG" +
+  "B8b6evO+2606PWXzaqvJdDGxu+TC0vbg5HymAgNFL11hBpuIV/6rgYT7aH9jRhjANdrEOdwa6ztVmKDwAAAAAAGBbmZjDDu3JNxZ5J9sxDBuYD" +
+  "pqrMoG+j404rQK1ZedjXTnAJwTH4VqMGLaHLJe7Bu1GJFzX99HVtv9fCf1Zi+AVaRourXIQsafRTpYY0vcQ6aBlkm1vLyCx+FDC5L7tlVP8Z3m" +
+  "hIygvyFtFa9/EwzONZXqRLOU2dj2AS2SjhHeLSMP3evEQocTG/2d/HXosYcN8j2rRbUhYeFutrNaNEulvi7dD3nWPTYEEN+rrd0uHtaEKsZBv4" +
+  "0pN+PWHCPS9LBqOHsObbXkXce6EMn6qS0QC6Pw8NYarYBqM90SNwrR5gzCgMtr4xksUDg4Ac9EMBgPnj+GYyI6yAEGlxDb99UHBUpTWpkpIQZN" +
+  "JOhxYNo4fHw1td28kruB5B+oQEEFRI0DBkZv5SEXMv/srbpyw5vnvIzlu8X3EmssQ5s6QAAAAIZftsjALakKAV9oGBa6a2ugn1XyBkjhk9nN9t" +
+  "jKSoP8BAwTDxAREgABAhMCAwQFBgcICQ0KCxEAQEtMAAAAAACwfCAEAAAAAAwGAAIADxESAQYOAAkD7VgBAAAAAAAOAAUCYroBAAEZjx9MOkUi" +
+  "Y9QTss0X68vBoOWIc2TmJhoSqBeS6hZaPgAFAgMHABA=";
+export const REAL_RAYDIUM_USDC_TO_SOL_TERMS = { inputAmountRaw: "5000000", minimumOutputRaw: "69237936", outputAmountRaw: "69585866" } as const;
+
+/** BONK → USDC, 50 bps, built for a wallet that holds no BONK (structure only — it would not simulate). One router instruction: the swap. */
+export const REAL_RAYDIUM_TX_TOKEN_TO_USDC =
+  "AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAQADC+hXe3MT5v9275mWMq" +
+  "2yky+jWowiU1YM/q7XNKUDiaL7rXPLgQuWHPXvuML1HRfw6iMWDwcyy8qUpn8I8jWXSqkD6UEzXVuAgvsb77p3Mdn/wyT+s34r39IocTTulmHF" +
+  "tLwHxW5grT0/F3OC6sZUj7of0yz9kMoCs+fPoYX9znOYxvp6877brTo9ZfNqq8l0MbG75MLS9uDkfKYCA0UvXWHgm5e3XiUsI/5R+edpbdvO8h" +
+  "cJ+PDQgil+618UF85bvpWLR3oJIzAhzkSrpAiVN5H2pV1/V+nM5pmLNMDBXg5dPjgelVOHjEXnnzPW02x4QaEqWIOPU2qyEkaYjAYLHJsMwoDL" +
+  "a+MZLFA4OAHPRDAYD54/hmMiOsgBBpcQ2/fVB0FXsFgPMcX85EpiWC28+deO51lDoISjk7NQNo0iiZMIAwZGb+UhFzL/7K26csOb57yM5bvF9x" +
+  "JrLEObOkAAAADY6pAYMW+5J1FvhhGa0J0QOskayarzcPtccGJ/R5bEMAMIGAsMDQ4AAQIPAgMEBQkFBQUGBwUFBQUFBREAACgujNEAAABm6yUB" +
+  "AAAAAAoACQP5PAUAAAAAAAoABQLKcQAAARmPH0w6RSJj1BOyzRfry8Gg5YhzZOYmGhKoF5LqFlo+AAUCAwcADg==";
+export const REAL_RAYDIUM_TOKEN_TO_USDC_TERMS = { inputAmountRaw: "900000000000", minimumOutputRaw: "19262310", outputAmountRaw: "19359106" } as const;

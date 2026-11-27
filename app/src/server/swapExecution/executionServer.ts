@@ -25,6 +25,8 @@ import { createConfirmationChecker } from "./confirmationStatus";
 import { createJupiterPriceSource } from "../swapQuote/jupiterPriceSource";
 import { createResilientPriceSource } from "../swapQuote/resilientPriceSource";
 import { readJupiterApiKey, withJupiterApiKey } from "../../wallet/jupiterApi";
+import { createInputTokenAccountFinder } from "./tokenAccountLookup";
+import { EXECUTION_RPC_ENV_KEY } from "./planVerification";
 import { SwapRateLimiter, SWAP_RATE_LIMIT_CONFIG } from "../swapQuote/rateLimit";
 import { nodeEnvReader, detectLeakedSwapEnv, SWAP_PROVIDER_ENDPOINTS, type EnvReader } from "../swapQuote/providerConfig";
 
@@ -81,9 +83,19 @@ export function createExecutionRequestListener(opts: ExecutionServerOptions = {}
   // API key when one is configured (wallet/jupiterApi.ts). Nothing else does.
   const jupiterFetch = withJupiterApiKey(opts.fetchImpl ?? fetch, () => readJupiterApiKey(env));
   const prices = createResilientPriceSource(createJupiterPriceSource(jupiterFetch));
+  // Raydium can be built for only where the taker's token account can be read from the chain —
+  // the same server-only RPC the simulation uses. No RPC → no Raydium plans (and no plans at all).
+  const rpcUrl = env(EXECUTION_RPC_ENV_KEY);
+  const raydium = rpcUrl
+    ? {
+        quoteEndpoint: env("RAYDIUM_QUOTE_URL") ?? (SWAP_PROVIDER_ENDPOINTS.raydium.quoteEndpoint as string),
+        findInputTokenAccount: createInputTokenAccountFinder(rpcUrl),
+      }
+    : undefined;
   const handler = createSwapExecuteHandler({
     quoteEndpoint,
     env,
+    raydium,
     fetchImpl: jupiterFetch,
     now: opts.now,
     priceSource: prices,

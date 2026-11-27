@@ -37,7 +37,7 @@ export const SWAP_PROVIDER_PRIORITY_ORDER: readonly SwapProviderId[] = ["jupiter
  * separate lists because this one belongs to the quote layer, which the server runs without the
  * execution modules; fixture SWXE-20 fails if they ever differ.
  */
-export const SWAP_IN_APP_PROVIDER_IDS: readonly SwapProviderId[] = ["jupiter"] as const;
+export const SWAP_IN_APP_PROVIDER_IDS: readonly SwapProviderId[] = ["jupiter", "raydium"] as const;
 
 /* ------------------------------------------------------------------ *
  * Cost + risk thresholds (documented Protocol Decision Logic — authoritative, not inferred).

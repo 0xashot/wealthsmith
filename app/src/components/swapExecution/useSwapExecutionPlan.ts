@@ -141,7 +141,7 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
 
   // Identity of the thing being approved. A change to any of it invalidates a plan in flight:
   // the terms on screen would no longer describe what the user asked for.
-  const requestKey = `${action.legId}|${action.inputAmountRaw}|${slippageBps}|${takerPublicKey ?? ""}`;
+  const requestKey = `${action.legId}|${action.inputAmountRaw}|${slippageBps}|${takerPublicKey ?? ""}|${provider}`;
 
   const prepare = useCallback(() => {
     if (!enabled || takerPublicKey == null) return;
@@ -154,7 +154,8 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
 
     void (async () => {
       const result = await fetcher(
-        { action, takerPublicKey, slippageBps },
+        // The provider whose route won is the one asked to build the transaction.
+        { action, takerPublicKey, slippageBps, providerId: provider },
         { ...opts.fetchOptions, signal: controller.signal },
       );
       if (generation !== generationRef.current) return;
@@ -162,7 +163,7 @@ export function useSwapExecutionPlan(opts: UseSwapExecutionPlanOptions): UseSwap
       // Every decision about what this result MEANS lives in `eventsForPlanResult`, which is
       // pure and fixtured. This loop only delivers what it decided — so the behaviour under
       // test and the behaviour in the browser are the same code, not two readings of it.
-      for (const event of eventsForPlanResult(result, { takerPublicKey, nowMs: now() })) {
+      for (const event of eventsForPlanResult(result, { takerPublicKey, nowMs: now(), providerId: provider, inputAmountRaw: action.inputAmountRaw })) {
         if (generation !== generationRef.current) return;
         dispatch(event);
       }

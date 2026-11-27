@@ -118,6 +118,8 @@ export async function fetchSwapExecutionPlan(
     inputAmountRaw: action.inputAmountRaw,
     slippageBps,
     takerPublicKey,
+    // Which provider to build with: the one whose route won. Omitted → the server's default (Jupiter).
+    ...(typeof request.providerId === "string" && request.providerId.length > 0 ? { providerId: request.providerId } : {}),
   };
 
   let res: Response;

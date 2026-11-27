@@ -1214,6 +1214,22 @@ Left-out tokens are listed after everything that counts, with no value, and the
 note under the name. The sentence is singular for one ("1 token we couldn't
 verify isn't included in your totals.").
 
+### Raydium is an executable route
+
+Since 2026-11-27 a route through Raydium can be approved in the app, like one
+through Jupiter. The route that wins the comparison is the one that is executed;
+the terms read "Route: Raydium". Nothing else on screen changes.
+
+  - The server builds the transaction with the provider that won, and never with
+    another: a plan from a different provider would carry terms the user was not
+    shown. If it cannot be built, the user sees "Couldn't Prepare Your Swap" and
+    Try Again re-runs the comparison.
+  - A Raydium transaction is offered only if it is one transaction, calls only
+    Raydium's router, and contains exactly one swap whose amount in and minimum
+    out equal the displayed terms to the unit — and then passes the same
+    simulation as a Jupiter one.
+  - Orca is still shown in the comparison and cannot be executed here.
+
 ### One route is enough
 
 Decided 2026-11-27: any suggestion with a swap — Rebalance, Trim, a scheduled buy —

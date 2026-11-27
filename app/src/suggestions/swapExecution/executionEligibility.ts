@@ -19,14 +19,19 @@ import type {
 import type { ExecutionBlockReason } from "./executionContracts";
 
 /**
- * Providers whose routes we can construct a COMPLETE transaction for.
+ * Providers whose routes we can construct — and VERIFY — a complete transaction for.
  *
- * Jupiter only, today. Raydium and Orca appear as execution surfaces in the quote comparison —
- * a user may be shown "Raydium is the better route" — but being the better route does not make
- * it executable here. Showing a route and building its transaction are different capabilities,
+ * Jupiter, and since 2026-11-27 Raydium: the server builds its transaction (raydiumSwapClient),
+ * and its rule set exists in executionVerification — the router alone at the top level, one swap
+ * whose amount in and minimum out equal the terms to the unit. Orca still appears as an
+ * execution surface in the quote comparison and is NOT here: being the better route does not
+ * make it executable. Showing a route and building its transaction are different capabilities,
  * and conflating them is how a confirm button ends up over a route nobody can build.
+ *
+ * Must stay a subset of `VERIFIABLE_EXECUTION_PROVIDER_IDS`: a provider we cannot verify is one
+ * we do not offer to execute.
  */
-export const EXECUTABLE_PROVIDER_IDS: readonly string[] = ["jupiter"] as const;
+export const EXECUTABLE_PROVIDER_IDS: readonly string[] = ["jupiter", "raydium"] as const;
 
 /**
  * Minimum life left on a quote before we will put a confirm step in front of someone.

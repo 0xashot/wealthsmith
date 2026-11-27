@@ -46,13 +46,14 @@ export const DEFAULT_SWAP_HANDOFF_TYPE: SwapHandoffType = "external_new_tab";
 /**
  * Providers Protocol Logic permits a confirm step for.
  *
- * Jupiter only. This is a DIFFERENT list from `EXECUTABLE_PROVIDER_IDS` in `executionEligibility`,
- * even though both currently read `["jupiter"]`, and they are not merged on purpose: one is a
+ * Jupiter, and Raydium since 2026-11-27 (product owner: after Trim with Jupiter, "all similar
+ * cases with Raydium and then with Orca"). This is a DIFFERENT list from `EXECUTABLE_PROVIDER_IDS`
+ * in `executionEligibility`, even though both currently read the same, and they are not merged on purpose: one is a
  * product decision about which protocols we offer to execute, the other an engineering fact about
  * which transactions we can build and verify. They will diverge — a provider we can technically
  * build for but have not approved, or vice versa — and collapsing them now would hide that.
  */
-export const IN_APP_CONFIRM_PROVIDER_IDS: readonly SwapProviderId[] = ["jupiter"] as const;
+export const IN_APP_CONFIRM_PROVIDER_IDS: readonly SwapProviderId[] = ["jupiter", "raydium"] as const;
 
 /**
  * Suggestion categories that are token swaps.

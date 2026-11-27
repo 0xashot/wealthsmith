@@ -165,6 +165,12 @@ export interface SwapExecutionRequest {
   /** The wallet that will sign and receive. A public key — never a secret, never a signer. */
   takerPublicKey: string;
   slippageBps: number;
+  /**
+   * The provider whose route WON the comparison. The server builds the transaction with that
+   * provider and no other — a plan from a different provider would carry different terms from
+   * the route the user was shown. Absent means Jupiter (every request before Raydium existed).
+   */
+  providerId?: string;
 }
 
 /** Where a plan ended up. `expired` is deliberately NOT a failure — nothing was submitted. */

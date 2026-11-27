@@ -591,29 +591,36 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
     // 0.1% better: twice the band. Raydium wins on its economics and nothing promotes Jupiter.
     return a.ranked[0].candidate.providerId === "raydium" && a.decidedBy === "net_output" && !a.economicallyEquivalent;
   })(), "economics win");
+  // Raydium became approvable in-app on 2026-11-27, so the provider that can only be SHOWN is now Orca.
   add("SWC-40: INSIDE the band, the route that can be approved in-app is selected, and the result says so", (() => {
     const a = rankEligibleCandidates([
       { candidate: cand("jupiter", {}), cost: { netOutputUsd: 99.999999, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("orca", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
+    ]);
+    // Between two routes that can BOTH be approved here there is nothing to prefer: economics decide.
+    const bothInApp = rankEligibleCandidates([
+      { candidate: cand("jupiter", {}), cost: { netOutputUsd: 99.999999, estimatedTotalCostPct: 0.1 } as never },
       { candidate: cand("raydium", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
     ]);
-    return a.ranked[0].candidate.providerId === "jupiter" && a.ranked[1].candidate.providerId === "raydium" &&
-      a.decidedBy === "in_app_execution" && a.economicallyEquivalent === true;
+    return a.ranked[0].candidate.providerId === "jupiter" && a.ranked[1].candidate.providerId === "orca" &&
+      a.decidedBy === "in_app_execution" && a.economicallyEquivalent === true &&
+      bothInApp.ranked[0].candidate.providerId === "raydium" && bothInApp.decidedBy !== "in_app_execution";
   })(), "near-tie → in-app");
   add("SWC-41: the band's edge is the policy epsilon — just inside promotes, just outside does not", (() => {
     const eps = SWAP_QUOTE_OPERATIONAL_POLICY.economicallyEquivalentEpsilon;
     const pair = (jup: number) => rankEligibleCandidates([
       { candidate: cand("jupiter", {}), cost: { netOutputUsd: jup, estimatedTotalCostPct: 0.1 } as never },
-      { candidate: cand("raydium", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("orca", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
     ]);
     const inside = pair(100 * (1 - eps * 0.9));
     const outside = pair(100 * (1 - eps * 1.1));
     return inside.ranked[0].candidate.providerId === "jupiter" && inside.decidedBy === "in_app_execution" &&
-      outside.ranked[0].candidate.providerId === "raydium" && outside.decidedBy === "net_output";
+      outside.ranked[0].candidate.providerId === "orca" && outside.decidedBy === "net_output";
   })(), "band edge");
   add("SWC-42: the preference never reorders anything else — an in-app winner is untouched, and a three-way keeps the rest in economic order", (() => {
     const inAppAlreadyWins = rankEligibleCandidates([
       { candidate: cand("jupiter", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
-      { candidate: cand("raydium", {}), cost: { netOutputUsd: 99.99, estimatedTotalCostPct: 0.1 } as never },
+      { candidate: cand("orca", {}), cost: { netOutputUsd: 99.99, estimatedTotalCostPct: 0.1 } as never },
     ]);
     const threeWay = rankEligibleCandidates([
       { candidate: cand("orca", {}), cost: { netOutputUsd: 100, estimatedTotalCostPct: 0.1 } as never },
@@ -621,7 +628,9 @@ export function runSwapQuoteUiFixtureChecks(): SwapFixtureCheck[] {
       { candidate: cand("jupiter", {}), cost: { netOutputUsd: 99.98, estimatedTotalCostPct: 0.1 } as never },
     ]);
     return inAppAlreadyWins.decidedBy === "net_output" && inAppAlreadyWins.ranked[0].candidate.providerId === "jupiter" &&
-      threeWay.ranked.map((r) => r.candidate.providerId).join(">") === "jupiter>orca>raydium" && threeWay.decidedBy === "in_app_execution";
+      // Orca leads on economics but can only be shown; the BEST route that can be approved here inside the band
+      // is promoted — Raydium, not Jupiter — and the other two keep their economic order.
+      threeWay.ranked.map((r) => r.candidate.providerId).join(">") === "raydium>orca>jupiter" && threeWay.decidedBy === "in_app_execution";
   })(), "minimal reorder");
   add("SWC-43: an unpriced route is never 'within the band' — an unknown is not a tie", (() => {
     const a = rankEligibleCandidates([

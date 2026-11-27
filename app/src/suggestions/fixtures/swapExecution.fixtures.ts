@@ -12,6 +12,7 @@
  *      for adding execution without weakening anything: not "we were careful", but "a payload
  *      that satisfies one lane provably cannot pass the other".
  */
+import { VERIFIABLE_EXECUTION_PROVIDER_IDS } from "../swapExecution/executionVerification";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import type { FixtureCheck } from "./fixtureCheck";
 import type {
@@ -367,13 +368,18 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     ] });
     return eligible({ assessment: a }).blockReasons.includes("liquidity_unverified");
   })(), "liquidity required");
-  add("SWX-10: a non-Jupiter winner blocks — Raydium being the better route does not make it buildable, and the user gets the handoff", (() => {
-    const a = assessment({
+  add("SWX-10: a winner we cannot build for blocks — Orca being the better route does not make it buildable; a Raydium winner is buildable", (() => {
+    const orca = assessment({
+      selectedProviderId: "orca",
+      candidates: [candidate({ providerId: "orca", providerName: "Orca", executionSurface: "orca" }), candidate()],
+    });
+    const raydium = assessment({
       selectedProviderId: "raydium",
       candidates: [candidate({ providerId: "raydium", providerName: "Raydium", executionSurface: "raydium" }), candidate()],
     });
-    return eligible({ assessment: a }).blockReasons.includes("provider_not_executable");
-  })(), "jupiter only");
+    return eligible({ assessment: orca }).blockReasons.includes("provider_not_executable") &&
+      !eligible({ assessment: raydium, handoffType: "in_app_confirm" as never }).blockReasons.includes("provider_not_executable");
+  })(), "buildable providers only");
   add("SWX-11: a missing minimumOutputTokens blocks — it is the only number the user is guaranteed",
     eligible({ assessment: assessment({ minimumOutputTokens: null }) }).blockReasons.includes("terms_incomplete"), "minimum required");
   add("SWX-12: an already-expired quote blocks",
@@ -483,8 +489,9 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const section = readSrc("src/components/swapExecution/SwapExecutionSection.tsx");
     return /enabled: started/.test(section) && /setStarted\(true\)/.test(section);
   })(), "clock starts on intent");
-  add("SWX-27: Jupiter is the ONLY executable provider, and the list is explicit rather than inferred from the comparison",
-    EXECUTABLE_PROVIDER_IDS.length === 1 && EXECUTABLE_PROVIDER_IDS[0] === "jupiter", `providers=${EXECUTABLE_PROVIDER_IDS.join(",")}`);
+  add("SWX-27: Jupiter and Raydium are the ONLY executable providers — an explicit list, and never one we cannot verify",
+    EXECUTABLE_PROVIDER_IDS.join(",") === "jupiter,raydium" && EXECUTABLE_PROVIDER_IDS.every((id) => (VERIFIABLE_EXECUTION_PROVIDER_IDS as readonly string[]).includes(id)),
+    `providers=${EXECUTABLE_PROVIDER_IDS.join(",")}`);
   add("SWX-28: the Boundary has ONE implementation — no other module re-derives executability", (() => {
     const elig = readSrc("src/suggestions/swapExecution/executionEligibility.ts");
     const guard = readSrc("src/suggestions/swapExecution/executionGuard.ts");
@@ -502,8 +509,9 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     IN_APP_CONFIRM_CATEGORIES.every((c) => resolveSwapHandoffType({ providerId: "jupiter", suggestionCategory: c }) === "in_app_confirm"),
     `categories=${IN_APP_CONFIRM_CATEGORIES.join(",")}`);
   add("SWH-2: a provider outside the allowlist is a handoff, even on a category that permits confirm",
-    (["raydium", "orca"] as const).every((p) => resolveSwapHandoffType({ providerId: p, suggestionCategory: "rebalance" }) === "external_new_tab"),
-    "non-jupiter = handoff");
+    (["orca", "meteora", "", null] as const).every((p) => resolveSwapHandoffType({ providerId: p as never, suggestionCategory: "rebalance" }) === "external_new_tab") &&
+      resolveSwapHandoffType({ providerId: "raydium", suggestionCategory: "rebalance" }) === "in_app_confirm",
+    "outside the allowlist = handoff");
   add("SWH-3: jupiter does NOT carry its permission to a non-swap category — 'token swaps only' is a restriction",
     (["stable_yield", "buffer", "position_optimization", "staking"]).every((c) => resolveSwapHandoffType({ providerId: "jupiter", suggestionCategory: c }) === "external_new_tab"),
     "category-scoped");
@@ -2206,8 +2214,8 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     const act = { ...action(), suggestionCategory: "rebalance" as const, totalLegs: 1 };
     return deriveExecutionOffer({ action: act, assessment: a, nowMs: NOW }).offered;
   })(), "both layers");
-  add("SWXO-2: a non-jupiter winner is not offered, however good the quote", (() => {
-    const a = assessment({ selectedProviderId: "raydium" });
+  add("SWXO-2: a winner we cannot build for is not offered, however good the quote", (() => {
+    const a = assessment({ selectedProviderId: "orca" });
     const r = deriveExecutionOffer({ action: { ...action(), totalLegs: 1 }, assessment: a, nowMs: NOW });
     return !r.offered;
   })(), "permission first");
@@ -2399,7 +2407,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return e.kind === "swap" && e.refreshFirst === true;
   })(), "expired refreshes first");
   add("SWXE-4: age is the ONLY refusal that keeps the button — every other one stands", (() => {
-    const notJupiter = entryFor(assessment({ selectedProviderId: "raydium" }));
+    const notJupiter = entryFor(assessment({ selectedProviderId: "orca" }));
     const noMinimum = entryFor(assessment({ minimumOutputTokens: null }));
     const twoFaults = entryFor(assessment({ minimumOutputTokens: null, expiresAt: new Date(NOW - 1).toISOString() }));
     return notJupiter.kind === "unavailable" && noMinimum.kind === "unavailable" && twoFaults.kind === "unavailable";
@@ -2408,7 +2416,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return entryFor(null, { loading: true }).kind === "loading" && entryFor(null, { loading: false }).kind === "unavailable";
   })(), "loading vs unavailable");
   add("SWXE-6: a refused route that is being re-requested spins rather than offering Close mid-refresh", (() => {
-    return entryFor(assessment({ selectedProviderId: "raydium" }), { loading: true }).kind === "loading";
+    return entryFor(assessment({ selectedProviderId: "orca" }), { loading: true }).kind === "loading";
   })(), "refresh in flight");
   add("SWXE-7: without a wallet that can sign, an offerable swap says so — it never becomes pressable", (() => {
     const fresh = entryFor(assessment(), { wallet: false });
@@ -2416,7 +2424,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     return fresh.kind === "wallet_unavailable" && expired.kind === "wallet_unavailable";
   })(), "wallet required");
   add("SWXE-8: a missing wallet never upgrades a refused route — the refusal is reported, not the wallet", (() => {
-    return entryFor(assessment({ selectedProviderId: "raydium" }), { wallet: false }).kind === "unavailable";
+    return entryFor(assessment({ selectedProviderId: "orca" }), { wallet: false }).kind === "unavailable";
   })(), "refusal first");
 
   add("SWXE-9: THE STEP OPENING REQUESTS THE PLAN — an effect on `enabled`, not the click handler", (() => {
@@ -2733,7 +2741,12 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
   })(), "one route is enough");
   add("SWTR-2: a lone route is still held to every OTHER check — a blocked one stays blocked", (() => {
     const noRoute = deriveExecutionOffer({ action: trimLeg(0, BONK, "BONK", 300, 1), assessment: impactBlocked(), nowMs: NOW });
+    // A lone route from a provider we cannot build for is still refused; a lone RAYDIUM route is offered.
     const raydiumOnly = deriveExecutionOffer({
+      action: trimLeg(0, BONK, "BONK", 300, 1), nowMs: NOW,
+      assessment: assessment({ status: "only_route_available", selectedProviderId: "orca", candidates: [candidate({ providerId: "orca", providerName: "Orca", executionSurface: "orca" })] }),
+    });
+    const loneRaydium = deriveExecutionOffer({
       action: trimLeg(0, BONK, "BONK", 300, 1), nowMs: NOW,
       assessment: assessment({ status: "only_route_available", selectedProviderId: "raydium", candidates: [candidate({ providerId: "raydium", providerName: "Raydium", executionSurface: "raydium" })] }),
     });
@@ -2746,7 +2759,7 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
       action: trimLeg(0, BONK, "BONK", 300, 1), nowMs: NOW,
       assessment: assessment({ status: "only_route_available", candidates: [candidate({ eligible: false, exclusionReasons: ["price_impact_high"] })] }),
     });
-    return noRoute.offered === false && raydiumOnly.offered === false && unverified.offered === false && noneEligible.offered === false;
+    return noRoute.offered === false && raydiumOnly.offered === false && unverified.offered === false && noneEligible.offered === false && loneRaydium.offered === true;
   })(), "nothing else is relaxed");
   add("SWTR-3: a leg of several is refused as one action, and offered only when it is approved BY ITSELF", (() => {
     const leg = trimLeg(1, BONK, "BONK", 300, 3);

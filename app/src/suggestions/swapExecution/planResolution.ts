@@ -16,12 +16,19 @@
  */
 import type { ExecutionEvent } from "./executionLifecycle";
 import type { SwapExecutionClientResult } from "./swapExecutionClient";
-import { verifyTransactionStructure } from "./executionVerification";
+import { tokensToRaw, verifyTransactionStructure, VERIFIABLE_EXECUTION_PROVIDER_IDS, type ExecutionProviderId } from "./executionVerification";
+
+const isVerifiableProvider = (id: string): id is ExecutionProviderId =>
+  (VERIFIABLE_EXECUTION_PROVIDER_IDS as readonly string[]).includes(id);
 import { assertPlanWasVerified } from "./executionGuard";
 
 export interface PlanResolutionContext {
   takerPublicKey: string;
   nowMs: number;
+  /** The provider this plan was requested from. Absent → Jupiter. */
+  providerId?: string;
+  /** The exact input amount that was requested, in base units. */
+  inputAmountRaw?: string;
 }
 
 /**
@@ -52,9 +59,30 @@ export function eventsForPlanResult(
   const plan = result.plan;
   const received: ExecutionEvent = { type: "plan_received", plan };
 
+  // 0. The plan must be FROM the provider that was asked, FOR the amount that was asked. A plan
+  //    from another provider carries other terms than the route the user chose to act on; one for
+  //    another amount is not the swap they are looking at.
+  const requestedProvider = ctx.providerId ?? "jupiter";
+  if (plan.terms.providerId !== requestedProvider) {
+    return [received, { type: "verification_failed", detail: "provider_mismatch" }];
+  }
+  if (ctx.inputAmountRaw != null && plan.terms.inputAmountRaw !== ctx.inputAmountRaw) {
+    return [received, { type: "verification_failed", detail: "input_amount_mismatch" }];
+  }
+  if (!isVerifiableProvider(requestedProvider)) {
+    return [received, { type: "verification_failed", detail: "provider_not_verifiable" }];
+  }
+
   // 1. Structural, against the bytes we hold — independent of anything the server claimed about
-  //    them. One signer, this wallet as fee payer, allowlisted programs, Jupiter invoked once.
-  const structural = verifyTransactionStructure(plan.unsignedTransaction, ctx.takerPublicKey);
+  //    them. One signer, this wallet as fee payer, and the provider's own rule set: for Jupiter,
+  //    allowlisted programs with Jupiter invoked once; for Raydium, the router alone, with one
+  //    swap whose amount in and minimum out equal the terms about to be DISPLAYED, to the unit.
+  const displayedMinimumRaw = tokensToRaw(plan.terms.minimumOutputTokens, plan.verification.outputDecimals);
+  const structural = verifyTransactionStructure(plan.unsignedTransaction, ctx.takerPublicKey, {
+    providerId: requestedProvider,
+    inputAmountRaw: plan.terms.inputAmountRaw,
+    ...(displayedMinimumRaw != null ? { minimumOutputRaw: displayedMinimumRaw.toString() } : {}),
+  });
   if (!structural.ok) {
     return [received, { type: "verification_failed", detail: structural.reason }];
   }
