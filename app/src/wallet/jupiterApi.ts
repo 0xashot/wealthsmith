@@ -87,7 +87,7 @@ export function withJupiterApiKey(fetchImpl: typeof fetch, getKey: () => string 
   return ((input: unknown, init?: { headers?: unknown } & Record<string, unknown>) => {
     const url = urlOf(input);
     const key = url != null && isJupiterApiUrl(url) ? getKey() : null;
-    if (key == null) return (fetchImpl as (i: unknown, n?: unknown) => Promise<Response>)(input, init);
+    if (key == null) return (fetchImpl as (i: unknown, n?: unknown) => ReturnType<typeof fetch>)(input, init);
     const headers: Record<string, string> = {};
     const given = init?.headers;
     if (given != null && typeof given === "object") {
@@ -99,6 +99,6 @@ export function withJupiterApiKey(fetchImpl: typeof fetch, getKey: () => string 
     // Ours wins over anything a caller put under the same name, in any letter case.
     for (const k of Object.keys(headers)) if (k.toLowerCase() === JUPITER_API_KEY_HEADER) delete headers[k];
     headers[JUPITER_API_KEY_HEADER] = key;
-    return (fetchImpl as (i: unknown, n?: unknown) => Promise<Response>)(input, { ...(init ?? {}), headers });
+    return (fetchImpl as (i: unknown, n?: unknown) => ReturnType<typeof fetch>)(input, { ...(init ?? {}), headers });
   }) as unknown as typeof fetch;
 }
