@@ -35,9 +35,18 @@ export interface ExecutionOfferInput {
 
 /**
  * Categories whose legs may be offered on a SINGLE eligible route. See `allowSingleRoute` in
- * executionEligibility for the reasoning; Trim only.
+ * executionEligibility.
+ *
+ * Trim only at first (2026-11-26). Since 2026-11-27 every category — product owner: "any
+ * suggestion can work if at least 1 route is available." Every available route is still compared
+ * and the best one taken; this only decides what happens when just one survives. The route
+ * section says so in its own words ("Only eligible route found", and that no second route was
+ * there to compare against), and every limit — cost, price impact, liquidity, freshness, the
+ * verified and simulated plan — applies to that one route exactly as it would to a winner.
+ *
+ * Kept as a list rather than removed, so a category can be taken back out by deleting a word.
  */
-export const SINGLE_ROUTE_EXECUTION_CATEGORIES: readonly string[] = ["trim"] as const;
+export const SINGLE_ROUTE_EXECUTION_CATEGORIES: readonly string[] = ["trim", "rebalance", "dca"] as const;
 
 export type ExecutionOffer =
   | { offered: true; action: SwapActionContext }

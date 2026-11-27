@@ -1214,6 +1214,15 @@ Left-out tokens are listed after everything that counts, with no value, and the
 note under the name. The sentence is singular for one ("1 token we couldn't
 verify isn't included in your totals.").
 
+### One route is enough
+
+Decided 2026-11-27: any suggestion with a swap — Rebalance, Trim, a scheduled buy —
+may go ahead when at least one route meets our limits. Every available route is
+still compared and the best taken; this only covers the case where one survives.
+The route section then reads "Only eligible route found" and says no second route
+was available to compare against. Every limit applies to that one route as it
+would to a winner. (Until this date a lone route was enough for Trim only.)
+
 ### After a swap lands
 
 A suggestion whose swap landed is out of date the moment it lands. When its review

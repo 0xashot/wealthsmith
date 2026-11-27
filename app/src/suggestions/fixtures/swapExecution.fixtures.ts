@@ -2720,15 +2720,17 @@ export function runSwapExecutionFixtureChecks(): FixtureCheck[] {
     blockingReasons: ["price_impact_high"],
     candidates: [candidate({ eligible: false, exclusionReasons: ["price_impact_high"] })],
   });
-  add("SWTR-1: a LONE eligible route is executable for Trim — and for nothing else", (() => {
+  // Trim only at first; every category since 2026-11-27 ("any suggestion can work if at least 1 route is
+  // available"). The lower-level rule is unchanged: without the allowance one route is still not enough (SWX-8).
+  add("SWTR-1: a LONE eligible route is executable for every swap category — Trim, Rebalance and scheduled buys", (() => {
     const trim = deriveExecutionOffer({ action: trimLeg(0, BONK, "BONK", 300, 1), assessment: onlyRoute(), nowMs: NOW });
     const rebalance = deriveExecutionOffer({ action: { ...action(), suggestionCategory: "rebalance", totalLegs: 1 }, assessment: onlyRoute(), nowMs: NOW });
     const dca = deriveExecutionOffer({ action: { ...action(), suggestionCategory: "dca", totalLegs: 1 }, assessment: onlyRoute(), nowMs: NOW });
-    return trim.offered === true &&
-      rebalance.offered === false && rebalance.blockReasons.includes("no_selected_route") &&
-      dca.offered === false &&
-      SINGLE_ROUTE_EXECUTION_CATEGORIES.length === 1 && SINGLE_ROUTE_EXECUTION_CATEGORIES[0] === "trim";
-  })(), "one route, Trim only");
+    // A category the list does not name gets no allowance — the list, not a blanket "true", decides.
+    const other = deriveExecutionOffer({ action: { ...action(), suggestionCategory: "something_else" as never, totalLegs: 1 }, assessment: onlyRoute(), nowMs: NOW });
+    return trim.offered === true && rebalance.offered === true && dca.offered === true && other.offered === false &&
+      [...SINGLE_ROUTE_EXECUTION_CATEGORIES].sort().join(",") === "dca,rebalance,trim";
+  })(), "one route is enough");
   add("SWTR-2: a lone route is still held to every OTHER check — a blocked one stays blocked", (() => {
     const noRoute = deriveExecutionOffer({ action: trimLeg(0, BONK, "BONK", 300, 1), assessment: impactBlocked(), nowMs: NOW });
     const raydiumOnly = deriveExecutionOffer({
