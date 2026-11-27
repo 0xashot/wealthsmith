@@ -1174,6 +1174,10 @@ pictured by its listing in the Trim card, review and selector.
     anything unverified; JUP, which belongs to JUP staking.
   - "Almost all" meme coins, not all: a meme coin Jupiter has not tagged is not
     listed.
+  - Plus PUMP, by name (decided 2026-11-27: "all meme tokens + PUMP"). Jupiter
+    tags it defi rather than meme, so it is listed by its exact mint; it must
+    still be Jupiter-verified. Stablecoins, JUP and LP tokens are never trimmed:
+    none of them carries the meme tag (checked against Jupiter's list).
   - Still true, and unchanged: one token whose value cannot be verified — any
     other token outside the approved list, priced or not — leaves the portfolio's
     net worth unresolved, and Trim (like Rebalance) is not shown at all.

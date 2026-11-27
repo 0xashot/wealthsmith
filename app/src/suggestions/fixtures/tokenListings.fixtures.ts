@@ -28,7 +28,7 @@ import { sortPositions } from "../../wallet/portfolioPositionDerivation";
 import { deriveAssetAllocation } from "../../wallet/assetAllocation";
 import { groupPositionsByCategory, isStablecoin } from "../../wallet/walletSummary";
 import { formatAmount } from "../../components/deployTable";
-import { VERIFIED_MEME_LISTING_IS_IDENTITY, verifiedMemeIdentity } from "../../wallet/verifiedMemeIdentity";
+import { VERIFIED_IDENTITY_EXTRA_MINTS, VERIFIED_MEME_LISTING_IS_IDENTITY, verifiedMemeIdentity } from "../../wallet/verifiedMemeIdentity";
 import { computePortfolioCompleteness } from "../../wallet/portfolioCompleteness";
 import { deriveTrimAssessment } from "../trimAssessment";
 import { buildTrimCardFromAssessment } from "../trimSuggestion";
@@ -335,6 +335,22 @@ export async function runTokenListingsFixtureChecks(): Promise<FixtureCheck[]> {
       return assessment.candidateHoldings.length === 0 && card === null;
     });
   })(), "no identity → no Trim");
+
+  add("TL-24: PUMP is trimmed with the meme coins although Jupiter tags it defi — but only while Jupiter verifies it", (() => {
+    const PUMP_LISTING: TokenListing = { symbol: "PUMP", name: "Pump", iconUrl: JUP_ICON, meme: false, source: "jupiter_verified" };
+    const pump = unnamed(PUMP, 300, { listing: PUMP_LISTING, priceUsd: 1, uiAmount: 300, amount: "300000000" });
+    const { assessment, card } = trimOf([usdc1000, pump]);
+    // The list names exact mints, and is short on purpose.
+    const listOk = VERIFIED_IDENTITY_EXTRA_MINTS.has(PUMP) && VERIFIED_IDENTITY_EXTRA_MINTS.size === 1;
+    // Another verified non-meme token (a stablecoin) with the SAME listing shape is still not a candidate…
+    const stable = trimOf([usdc1000, unnamed(PYUSD, 300, { listing: PYUSD_LISTING })]);
+    // …and PUMP with no verified listing is just an unnamed token.
+    const unverifiedPump = trimOf([usdc1000, unnamed(PUMP, 300)]);
+    return listOk && verifiedMemeIdentity(pump)?.symbol === "PUMP" && classifyPositionClass(pump) === "classic_spl" &&
+      assessment.candidateHoldings.length === 1 && assessment.candidateHoldings[0].symbol === "PUMP" && card?.titleOverride === "Reduce PUMP exposure" &&
+      stable.assessment.candidateHoldings.length === 0 && stable.card === null &&
+      verifiedMemeIdentity(unnamed(PUMP, 300)) === null && unverifiedPump.card === null;
+  })(), "meme tag OR the named mint, always verified");
 
   add("TL-23: the Trim rows and the gallery carry the listed icon; a registry token keeps its own", (() => {
     const { card } = trimOf([{ ...usdc1000, valueUsd: 3000, uiAmount: 3000, amount: "3000000000" }, memePos]);
